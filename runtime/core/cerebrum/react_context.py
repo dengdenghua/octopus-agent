@@ -562,21 +562,31 @@ def _collect_initial_diagnostics(profile: Any, workspace_path: str) -> list[str]
             root=profile.root,
             checks=fast_checks[:1],
         )
+        from runtime.execution.suckers.verify_skills import (
+            output_indicates_missing_tool,
+        )
+
         results = run_checks(fast_profile, timeout_per_check=15, max_output=2000)
         diag_lines: list[str] = []
+        real_failures = 0
         for r in results:
             if r.passed:
                 diag_lines.append(f"  ✓ {r.name}: 通过")
-            else:
-                output = (r.stderr or r.stdout or "").strip()
-                if len(output) > 800:
-                    output = output[:800] + "\n  ...(截断)"
-                diag_lines.append(f"  ✗ {r.name}: 失败")
-                if output:
-                    for line in output.split("\n")[:12]:
-                        diag_lines.append(f"    {line}")
-        has_failure = any(not r.passed for r in results)
-        return diag_lines if has_failure else []
+                continue
+            output = (r.stderr or r.stdout or "").strip()
+            # A missing checker (no cargo/go/etc.) is an environment gap,
+            # not a code failure — same suppression as the post-write
+            # _run_auto_diagnostics path, which previously diverged.
+            if output_indicates_missing_tool(output):
+                continue
+            real_failures += 1
+            if len(output) > 800:
+                output = output[:800] + "\n  ...(截断)"
+            diag_lines.append(f"  ✗ {r.name}: 失败")
+            if output:
+                for line in output.split("\n")[:12]:
+                    diag_lines.append(f"    {line}")
+        return diag_lines if real_failures else []
     except (OSError, TypeError, ValueError) as exc:
         _logger.debug("_collect_initial_diagnostics failed: %s", exc)
         return []

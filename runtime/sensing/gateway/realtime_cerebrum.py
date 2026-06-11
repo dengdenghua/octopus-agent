@@ -1825,7 +1825,11 @@ class CerebrumRuntime:
             raw_limit = params.get("limit")
             window, has_more = EventLog.paginate_turns(
                 turns,
-                limit=raw_limit if isinstance(raw_limit, int) else None,
+                limit=(
+                    raw_limit
+                    if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
+                    else None
+                ),
                 before_turn_id=(
                     params.get("beforeTurnId")
                     if isinstance(params.get("beforeTurnId"), str)

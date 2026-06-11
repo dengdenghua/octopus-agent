@@ -85,6 +85,16 @@ class TestPersistence:
         mem = AttackMemory(path)
         assert mem.snapshot() == []
 
+    def test_valid_json_wrong_shape_starts_clean(self, tmp_path: Path):
+        # Valid JSON but not an object (list/null/number): raw.get()
+        # would raise AttributeError and escape startup. Must degrade
+        # to empty, not crash.
+        for content in ("[1, 2, 3]", "null", "42", '"a string"'):
+            path = tmp_path / f"ab_{abs(hash(content))}.json"
+            path.write_text(content, encoding="utf-8")
+            mem = AttackMemory(path)
+            assert mem.snapshot() == []
+
 
 class TestTrustEngineIntegration:
     def test_memory_rejects_before_trusted_allow(self):

@@ -228,19 +228,12 @@ def _run_auto_diagnostics(stack: Any, workspace_path: str | None = None) -> str 
         return None
 
 
-_TOOL_MISSING_MARKERS = (
-    "no module named",
-    "command not found",
-    "not recognized as an internal or external command",
-    "could not determine executable to run",
-    "npx: not found",
-    "enoent",
-)
-
-
 def _output_indicates_missing_tool(output: str) -> bool:
-    lowered = output.lower()
-    return any(marker in lowered for marker in _TOOL_MISSING_MARKERS)
+    # Thin alias over the shared verify_skills helper so both
+    # diagnostics paths agree on what "checker missing" looks like.
+    from runtime.execution.suckers.verify_skills import output_indicates_missing_tool
+
+    return output_indicates_missing_tool(output)
 
 
 def _update_working_set(

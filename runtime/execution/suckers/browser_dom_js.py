@@ -49,10 +49,11 @@ const selectorFor = (el) => {
         if (uniqueMatch(sel, el)) return sel;
     }
     // Structural fallback: tag:nth-of-type chain, extended upwards
-    // until unique (max 4 levels keeps selectors readable).
+    // until unique. 8 levels is generous enough to disambiguate deep
+    // trees while keeping selectors bounded.
     let node = el;
     const path = [];
-    while (node && node.nodeType === 1 && path.length < 4) {
+    while (node && node.nodeType === 1 && path.length < 8) {
         let part = node.tagName.toLowerCase();
         const parent = node.parentElement;
         if (parent) {
@@ -64,26 +65,40 @@ const selectorFor = (el) => {
         if (uniqueMatch(sel, el)) return sel;
         node = parent;
     }
+    // Could not produce a verified-unique selector. Return the
+    // best-effort string anyway — describe() flags it via
+    // selectorUnique:false so the agent knows it may match siblings
+    // and should not blindly act on it.
     return candidates[0] || path.join(' > ') || tag;
 };
+const typeOf = (el) => (el.type || el.getAttribute('type') || '').toLowerCase();
 const visible = (el) => {
     const r = el.getBoundingClientRect();
     const s = window.getComputedStyle(el);
     return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
 };
-const describe = (el) => ({
-    tag: el.tagName.toLowerCase(),
-    text: textOf(el).slice(0, 120),
-    selector: selectorFor(el),
-    href: el.href || null,
-    type: el.getAttribute('type') || null,
-    placeholder: el.getAttribute('placeholder') || null,
-    disabled: (el.disabled === true || el.getAttribute('aria-disabled') === 'true') ? true : null,
-    value: (typeof el.value === 'string' && el.value && (el.getAttribute('type') || '').toLowerCase() !== 'password') ? el.value.slice(0, 80) : null,
-    checked: (typeof el.checked === 'boolean' && ['checkbox', 'radio'].includes((el.getAttribute('type') || '').toLowerCase())) ? el.checked : null,
-    role: el.getAttribute('role') || null,
-    ariaLabel: el.getAttribute('aria-label') || null
-});
+const describe = (el) => {
+    // typeOf() reads the .type DOM PROPERTY first, then the attribute.
+    // A show/hide-password toggle or a JS-built form sets type via the
+    // property; getAttribute('type') returns null there, which would
+    // leak the password value. Property-first closes that gap.
+    const t = typeOf(el);
+    const sel = selectorFor(el);
+    return {
+        tag: el.tagName.toLowerCase(),
+        text: textOf(el).slice(0, 120),
+        selector: sel,
+        selectorUnique: uniqueMatch(sel, el),
+        href: el.href || null,
+        type: t || null,
+        placeholder: el.getAttribute('placeholder') || null,
+        disabled: (el.disabled === true || el.getAttribute('aria-disabled') === 'true') ? true : null,
+        value: (typeof el.value === 'string' && el.value && t !== 'password') ? el.value.slice(0, 80) : null,
+        checked: (typeof el.checked === 'boolean' && ['checkbox', 'radio'].includes(t)) ? el.checked : null,
+        role: el.getAttribute('role') || null,
+        ariaLabel: el.getAttribute('aria-label') || null
+    };
+};
 const pickElements = (selector, limit) => Array.from(document.querySelectorAll(selector))
     .filter(visible)
     .slice(0, limit)

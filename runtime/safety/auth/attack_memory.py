@@ -146,6 +146,9 @@ class AttackMemory:
                     first_seen=now,
                     last_hit=now,
                 )
+            # Promoted directly — drop any in-progress violation window
+            # so it doesn't linger unbounded.
+            self._violations.pop(entity_id, None)
             self._save_locked()
 
     def forget(self, entity_id: str) -> bool:
@@ -169,6 +172,11 @@ class AttackMemory:
             return
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                # Valid JSON but wrong shape (top-level list/null/number):
+                # raw.get below would raise AttributeError and escape the
+                # except tuple, crashing startup. Treat as corrupt.
+                raise ValueError("antibody file is not a JSON object")
             for entry in raw.get("patterns", []):
                 if isinstance(entry, dict) and isinstance(entry.get("entity_id"), str):
                     self._patterns[entry["entity_id"]] = AttackPattern(
@@ -178,7 +186,7 @@ class AttackMemory:
                         first_seen=float(entry.get("first_seen", 0.0)),
                         last_hit=float(entry.get("last_hit", 0.0)),
                     )
-        except (OSError, ValueError, TypeError) as exc:
+        except (OSError, ValueError, TypeError, AttributeError) as exc:
             # A corrupt antibody file must not take the engine down;
             # starting clean only loses memory, not safety (innate
             # policy still applies).

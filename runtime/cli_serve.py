@@ -245,7 +245,17 @@ def run_serve(
         from runtime.safety.validation.bootstrap import maybe_register_llm_judge
 
         judge_router = getattr(getattr(stack, "planner", None), "router", None)
-        if maybe_register_llm_judge(judge_router):
+        # Read the flag off the LOADED config (respects --config outside
+        # cwd). enabled=None would fall back to the env var / cwd yaml,
+        # which silently ignored a non-cwd --config; explicit-wins
+        # precedence in llm_judge_enabled honours this value, while the
+        # env var can still force-disable in an emergency.
+        safety_cfg = getattr(cfg, "safety", None)
+        judge_cfg_value = getattr(safety_cfg, "enable_llm_judge", None)
+        judge_model = getattr(safety_cfg, "llm_judge_model", None)
+        if maybe_register_llm_judge(
+            judge_router, config_value=judge_cfg_value, model=judge_model
+        ):
             print(_yellow(color, "constitution LLM judge: enabled"))
     except Exception:  # noqa: BLE001 — never block startup on judge wiring
         logging.getLogger(__name__).debug("llm judge bootstrap failed", exc_info=True)

@@ -373,6 +373,11 @@ def create_browser_router() -> APIRouter:
             with contextlib.suppress(Exception):
                 if playwright is not None:
                     playwright.stop()
+            # The sentinel was written before launch; a launch failure
+            # here is NOT a crash to recover from. Clear it so the next
+            # attempt doesn't falsely report recovered_from_crash (common
+            # when the chromium profile is locked).
+            mark_session_closed(session.get("profile_dir"))
             return False
         session["playwright"] = playwright
         session["browser"] = browser

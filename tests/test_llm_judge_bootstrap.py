@@ -66,6 +66,21 @@ class TestFlagResolution:
         )
         assert llm_judge_enabled() is True
 
+    def test_config_value_respected_when_env_silent(self, monkeypatch):
+        # A flag from the loaded --config (config_value) takes effect
+        # when the env var is silent — this is the cross-cwd fix.
+        monkeypatch.delenv("OCTOPUS_ENABLE_LLM_JUDGE", raising=False)
+        assert llm_judge_enabled(config_value=True) is True
+        assert llm_judge_enabled(config_value=False) is False
+        assert llm_judge_enabled(config_value=None) is False
+
+    def test_env_overrides_config_value(self, monkeypatch):
+        # The env var stays an emergency override above the config file.
+        monkeypatch.setenv("OCTOPUS_ENABLE_LLM_JUDGE", "0")
+        assert llm_judge_enabled(config_value=True) is False
+        monkeypatch.setenv("OCTOPUS_ENABLE_LLM_JUDGE", "1")
+        assert llm_judge_enabled(config_value=False) is True
+
 
 class TestRegistration:
     def test_disabled_registers_nothing(self):

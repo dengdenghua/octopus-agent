@@ -53,9 +53,18 @@ def _read_safety_value(key: str) -> Any:
     return None
 
 
-def llm_judge_enabled(explicit: bool | None = None) -> bool:
-    """Same 3-layer precedence as the trust signal: explicit kwarg >
-    env var > ``safety.enable_llm_judge`` yaml. Default False."""
+def llm_judge_enabled(
+    explicit: bool | None = None,
+    *,
+    config_value: bool | None = None,
+) -> bool:
+    """Resolve the judge opt-in. Precedence, highest first:
+    1. ``explicit`` kwarg (tests).
+    2. ``OCTOPUS_ENABLE_LLM_JUDGE`` env var (emergency override).
+    3. ``config_value`` from the LOADED ``--config`` (respects a config
+       file outside cwd — the bug this fixed).
+    4. ``safety.enable_llm_judge`` re-read from a cwd yaml (legacy).
+    Default False."""
     if explicit is not None:
         return explicit
     raw_env = os.environ.get(_ENV_VAR, "").strip().lower()
@@ -63,6 +72,8 @@ def llm_judge_enabled(explicit: bool | None = None) -> bool:
         return True
     if raw_env in ("0", "false", "no", "off"):
         return False
+    if config_value is not None:
+        return bool(config_value)
     value = _read_safety_value(_YAML_KEY)
     return value is True
 
@@ -71,15 +82,18 @@ def maybe_register_llm_judge(
     router: Any,
     *,
     enabled: bool | None = None,
+    config_value: bool | None = None,
     model: str | None = None,
 ) -> bool:
     """Register the LLM judge when enabled and a router is available.
 
-    Returns True when a judge was registered. Never raises — a broken
-    judge bootstrap must not take down serve startup; the rule layer
-    keeps protecting outbound traffic regardless.
+    ``config_value`` carries the flag read off the loaded ``--config``;
+    see :func:`llm_judge_enabled` for precedence. Returns True when a
+    judge was registered. Never raises — a broken judge bootstrap must
+    not take down serve startup; the rule layer keeps protecting
+    outbound traffic regardless.
     """
-    if not llm_judge_enabled(enabled):
+    if not llm_judge_enabled(enabled, config_value=config_value):
         return False
     if router is None:
         _log.warning("%s set but no model router available · judge not registered", _ENV_VAR)

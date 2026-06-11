@@ -77,6 +77,29 @@ class MCPServerConfigEntry(BaseModel):
     name_prefix: str | None = None       # Implementation note.
 
 
+class SafetyConfig(BaseModel):
+    """Typed backing for the ``safety:`` config block.
+
+    Without this, the whole ``safety:`` section was dropped by Pydantic
+    (AgentConfig had no field for it), so a typo like ``enabled_llm_judge``
+    silently disabled the constitution judge with zero feedback, and a
+    judge flag in a ``--config`` file outside cwd was ignored entirely
+    (the bootstrap re-read cwd yaml). Reading it off the loaded config
+    fixes both.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    # None = "not set in config" (defer to env var / legacy yaml).
+    # True/False = an explicit choice in the loaded --config file.
+    enable_llm_judge: bool | None = None
+    llm_judge_model: str | None = None
+    # Other safety knobs (enable_trust_signal, disabled_guards, …) are
+    # still read via their own paths; declared here so a populated
+    # ``safety:`` block validates instead of being silently dropped.
+    enable_trust_signal: bool | None = None
+
+
 class LearnConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
@@ -250,6 +273,7 @@ class AgentConfig(BaseModel):
     planner: PlannerConfig = Field(default_factory=PlannerConfig)
     budget: BudgetConfig = Field(default_factory=BudgetConfig)
     immunity: ImmunityConfig = Field(default_factory=ImmunityConfig)
+    safety: SafetyConfig = Field(default_factory=SafetyConfig)
     learn: LearnConfig = Field(default_factory=LearnConfig)
     credential_pool: CredentialPoolConfig = Field(default_factory=CredentialPoolConfig)
     hot_cache: HotCacheConfig = Field(default_factory=HotCacheConfig)

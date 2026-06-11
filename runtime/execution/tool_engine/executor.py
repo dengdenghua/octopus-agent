@@ -644,6 +644,19 @@ class ToolExecutor:
                     latency_ms=latency_ms,
                 )
             budget.commit(reservation, actual_cost)
+            # Feed the adaptive-immunity baseline (protocols/immunity.md
+            # Execute-time learning loop). No-op unless the adaptive tier
+            # is enabled; builds the per-sucker latency/token baseline
+            # from observed cost. Best-effort — must never break a
+            # successful tool result.
+            learn = getattr(self.immunity, "learn", None)
+            if callable(learn):
+                with contextlib.suppress(Exception):
+                    learn(
+                        call,
+                        latency_ms=latency_ms,
+                        tokens=float(actual_cost.tokens_in + actual_cost.tokens_out),
+                    )
             self.journal.write_budget(
                 "budget_commit",
                 task_id=task_id,

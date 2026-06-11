@@ -96,8 +96,14 @@ class AdaptiveImmunity:
         cold_start_score: float = _COLD_START_SCORE,
     ) -> None:
         self._window = max(_MIN_SAMPLES, int(window_size))
-        self.quarantine_threshold = float(quarantine_threshold)
         self._cold_start = float(cold_start_score)
+        # The threshold must sit ABOVE the cold-start score, or every
+        # cold-start call (no baseline yet) would quarantine — and with
+        # no recovery path, since a quarantined call never executes to
+        # feed learn(). Floor it just above cold-start.
+        self.quarantine_threshold = max(
+            float(quarantine_threshold), self._cold_start + 1e-3
+        )
         self._baselines: dict[str, _Baseline] = {}
         self._lock = threading.Lock()
 
@@ -120,6 +126,20 @@ class AdaptiveImmunity:
     ) -> RiskScore:
         """Risk in [0, 1] for an about-to-run call. Cold start ⇒
         ``cold_start_score`` (I4)."""
+        # No prediction supplied (the runtime doesn't populate
+        # ToolCall.predicted_cost today, so both arrive 0). A zero
+        # prediction means "unknown", NOT "an instant free call" — and
+        # 0 sits many sigma below any real baseline, which would flag
+        # EVERY normal call as a 6σ anomaly and quarantine all traffic.
+        # Treat absent prediction as cold-start (non-anomalous). The
+        # tier stays inert until a real predicted cost is wired; until
+        # then learn() still accumulates baselines for that future.
+        if predicted_latency_ms <= 0.0 and predicted_tokens <= 0.0:
+            return RiskScore(
+                sucker_id=sucker_id,
+                composite=self._cold_start,
+                reason="no_prediction (cold_start)",
+            )
         with self._lock:
             bl = self._baselines.get(sucker_id)
             n = len(bl.latency) if bl else 0
@@ -133,11 +153,15 @@ class AdaptiveImmunity:
             tok_mean, tok_std = _mean_std(bl.tokens)
             z_lat = _abs_z(predicted_latency_ms, lat_mean, lat_std)
             z_tok = _abs_z(predicted_tokens, tok_mean, tok_std)
-        # Centre the logistic so an average call (z≈0) maps near 0, and
-        # a ~3σ deviation pushes toward 1. 0.5/0.5 weights latency/tokens
-        # per the protocol's composite (it also weights arg-outlier;
-        # that signal isn't modelled here yet — see implementation-status).
-        composite = _sigmoid(0.5 * z_lat + 0.5 * z_tok - 3.0)
+        # Drive the composite off the MOST anomalous axis, not the
+        # average. A tool that suddenly costs 100x tokens (a classic
+        # exfil/abuse signature) or hangs (latency spike) is anomalous
+        # on ONE axis; averaging two axes halved a single 6σ signal to
+        # below threshold, making single-axis anomalies invisible.
+        # max-of-axes with the same logistic centring: a ~3σ deviation
+        # on either axis crosses 0.5, a 6σ approaches 0.95.
+        z_max = max(z_lat, z_tok)
+        composite = _sigmoid(z_max - 3.0)
         return RiskScore(
             sucker_id=sucker_id,
             z_score_latency=z_lat,

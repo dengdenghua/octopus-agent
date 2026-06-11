@@ -23,6 +23,28 @@ from typing import Any
 _logger = logging.getLogger(__name__)
 
 
+# Shared by every diagnostics path that injects check output into the
+# model's context (react_execution._run_auto_diagnostics and
+# react_context._collect_initial_diagnostics). A missing checker binary
+# is an environment gap, not a code failure — surfacing it as one sends
+# the model chasing phantom errors.
+_TOOL_MISSING_MARKERS = (
+    "no module named",
+    "command not found",
+    "not recognized as an internal or external command",
+    "could not determine executable to run",
+    "npx: not found",
+    # A bare "enoent" is intentionally excluded — it also appears in
+    # legitimate "ENOENT: no such file or directory" compile/type
+    # errors, which are REAL failures.
+)
+
+
+def output_indicates_missing_tool(output: str) -> bool:
+    lowered = (output or "").lower()
+    return any(marker in lowered for marker in _TOOL_MISSING_MARKERS)
+
+
 @dataclass
 class ProjectProfile:
     kind: str

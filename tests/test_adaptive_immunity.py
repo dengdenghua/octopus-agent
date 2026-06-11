@@ -72,6 +72,48 @@ class TestRiskScoring:
             a.learn("x", latency_ms=1.0, tokens=1.0)
         assert a.sample_count("x") == 10
 
+    def test_single_axis_anomaly_reaches_threshold(self):
+        # A tool that hangs (latency spike) or exfiltrates (token spike)
+        # is anomalous on ONE axis. Averaging two axes used to halve the
+        # signal below threshold; max-of-axes must catch it.
+        a = AdaptiveImmunity(quarantine_threshold=0.7)
+        for i in range(50):
+            a.learn("x", latency_ms=100.0 + (i % 5), tokens=200.0 + (i % 5))
+        # Latency normal, tokens 100x (classic exfil signature).
+        score = a.compute_risk("x", predicted_latency_ms=102, predicted_tokens=20000)
+        assert a.is_anomalous(score), score.composite
+        # And the mirror: latency spike, tokens normal.
+        score2 = a.compute_risk("x", predicted_latency_ms=50000, predicted_tokens=201)
+        assert a.is_anomalous(score2), score2.composite
+
+    def test_absent_prediction_is_cold_start_not_anomaly(self):
+        # The runtime doesn't populate predicted_cost (arrives 0/0).
+        # That must NOT read as a 6σ anomaly against a real baseline —
+        # otherwise wiring learn() would quarantine all normal traffic.
+        a = AdaptiveImmunity(quarantine_threshold=0.7)
+        for _ in range(50):
+            a.learn("x", latency_ms=100.0, tokens=200.0)
+        score = a.compute_risk("x", predicted_latency_ms=0.0, predicted_tokens=0.0)
+        assert not a.is_anomalous(score)
+        assert "no_prediction" in score.reason
+
+    def test_threshold_floored_above_cold_start(self):
+        # A threshold at/below cold_start would quarantine every
+        # cold-start call with no recovery path.
+        a = AdaptiveImmunity(quarantine_threshold=0.3, cold_start_score=0.5)
+        assert a.quarantine_threshold > 0.5
+        cold = a.compute_risk("never-seen", predicted_latency_ms=10, predicted_tokens=10)
+        assert not a.is_anomalous(cold)
+
+    def test_learn_builds_baseline_via_trust_engine(self):
+        # TrustEngine.learn must reach the adaptive baseline (the
+        # executor calls this post-execution).
+        adaptive = AdaptiveImmunity()
+        engine = TrustEngine(trusted_sources=["skill://public/*"], adaptive=adaptive)
+        for _ in range(7):
+            engine.learn(_call(sucker="run_sql"), latency_ms=120.0, tokens=240.0)
+        assert adaptive.sample_count("run_sql") == 7
+
 
 class TestTrustEngineIntegration:
     def _engine(self, **kw):

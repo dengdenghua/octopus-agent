@@ -136,7 +136,11 @@ class PlaywrightBackend:
             "scroll": bs._browser_scroll,
             "wait": bs._browser_wait,
             "state": bs._browser_state,
-            "extract": bs._browser_extract,
+            # extract() means "read the page's text". _browser_extract is
+            # a CSS-selector scraper that REQUIRES a selector and errors
+            # without one; _browser_get returns title + inner text, which
+            # is what the BrowserBackend.extract contract wants.
+            "extract": bs._browser_get,
         }
         handler = handlers.get(action)
         if handler is None:

@@ -313,7 +313,16 @@ export function useRealtimeThread(
         if (cancelled) return;
         setState((prev) => {
           if (prev.turns.length > 0) {
-            const next: Conversation = { ...prev, resumeState: "resumed" };
+            // Live events landed before this resume response. We keep
+            // the live turns, but the server's hasMore still tells us
+            // whether older turns exist on disk — must carry it, or
+            // loadOlderTurns() stays permanently disabled and the
+            // "load earlier" banner never appears.
+            const next: Conversation = {
+              ...prev,
+              resumeState: "resumed",
+              hasMoreTurns: result.hasMore === true,
+            };
             stateRef.current = next;
             return next;
           }

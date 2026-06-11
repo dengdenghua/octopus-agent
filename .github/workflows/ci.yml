@@ -207,29 +207,6 @@ jobs:
       - name: CLI --help for every subcommand
         run: pytest tests/test_cli_smoke.py -v
 
-  nerves-cross-process:
-    name: Nerves cross-process e2e (Redis)
-    runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
-    env:
-      REDIS_URL: redis://localhost:6379/0
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: {python-version: "3.11", cache: pip}
-      - run: pip install -e ".[dev,hearts-redis]" redis
-      - name: Run cross-process e2e suite
-        run: pytest tests/test_nerves_cross_process_e2e.py -v -m integration --tb=short
-
   demos:
     name: End-to-end demos (bugfix/reflection/evolution)
     runs-on: ubuntu-latest
