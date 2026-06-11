@@ -31,8 +31,16 @@ class ImmunityConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    # SECURITY: keep this in EXACT sync with the TrustEngine in-process
+    # default (runtime/safety/auth/trust_engine.py). ``mcp://*`` is
+    # deliberately absent — a malicious MCP server must not be trusted
+    # out of the box; operators whitelist specific ``mcp://<server>/*``
+    # entries in config (see config.example.yaml). Previously this
+    # default DID include ``mcp://*`` while TrustEngine's did not, so
+    # the yaml-driven path silently trusted every MCP server — the
+    # opposite of the documented posture.
     trusted_sources: list[str] = Field(
-        default_factory=lambda: ["skill://public/*", "mcp://*"]
+        default_factory=lambda: ["skill://public/*"]
     )
     self_whitelist: list[str] = Field(
         default_factory=lambda: [

@@ -34,6 +34,15 @@ class TestSchemaDefaults:
         assert cfg.intel_sources == []
         assert cfg.mcp_servers == []
 
+    def test_immunity_default_excludes_wildcard_mcp(self):
+        # SECURITY: the yaml-driven default must match the TrustEngine
+        # in-process default — neither trusts mcp://* out of the box.
+        from runtime.safety.auth.trust_engine import TrustEngine
+
+        cfg = AgentConfig()
+        assert "mcp://*" not in cfg.immunity.trusted_sources
+        assert cfg.immunity.trusted_sources == TrustEngine().trusted_sources
+
     def test_planner_invalid_type_rejected(self):
         from pydantic import ValidationError
 
