@@ -1,0 +1,43 @@
+# Implementation Status · 架构声明与代码现实对照
+
+> 本表回答一个问题：**architecture.md / constitution.md 里的每个机制，今天在代码里处于什么状态？**
+> 状态分四档：**已接线**（默认路径在用）· **可选后端**（代码完整，按配置启用）· **休眠代码**（模块存在，无调用方）· **未实装**（仅文档）。
+> 每一行都给出代码证据；更新本表时请先核查代码，不要照搬旧文档或审查报告的结论。
+> 最后核查：2026-06-11。
+
+## 安全治理
+
+| 机制 | 状态 | 证据 |
+|---|---|---|
+| Constitution 出口检查（Rule 层：PII/secret 扫描、rewrite/block） | **已接线** | `runtime/safety/validation/gate.py` 的 `check_outbound`；所有渠道出口强制经过（`runtime/adapters/channels/base.py`，且 `channels/manager.py` 以 lint 强制 adapter 必须调用） |
+| Constitution LLM-Judge 层 | **休眠代码** | `runtime/safety/validation/llm_judge.py` 存在并导出 `build_judge_from_router`，但全仓库无调用方 |
+| Constitution Human-Gate 层 | **已接线**（经审批体系） | `runtime/safety/approval/approval_gate.py` 风险评级 + 审批门；realtime 双向审批通道 |
+| Immunity 先天层（信任源白名单、三态判决） | **已接线** | `runtime/safety/auth/trust_engine.py` |
+| Immunity 自适应层（行为评分、抗体记忆） | **未实装** | 仅文档描述；trust_engine 无对应代码 |
+| 预算熔断（三态 CircuitBreaker） | **已接线** | `runtime/safety/budget_breaker/breaker.py` |
+| 敏感路径守卫（含 macOS /private 符号链接） | **已接线** | `runtime/safety/auth/path_guard.py`、`file_safety.py` |
+
+## 分布式与编排
+
+| 机制 | 状态 | 证据 |
+|---|---|---|
+| Hearts「3 心 HA 调度」叙事 | **可选后端**（用途比叙事小） | `runtime/core/hearts/` 有 coordinator/etcd/redis 实现；实际消费方是 `runtime/platform/process/distributed_lock.py`（Redis 分布式锁，按依赖可用性启用）与 tour 演示。无"三心互备调度循环" |
+| Nerves 消息总线（NATS / Redis Streams） | **休眠代码** | `runtime/core/nerves/nats_bus.py`、`redis_bus.py` 存在，全仓库无消费方；默认走进程内 `bus.py` |
+| Chromatophores（信号广播 + Boids 仲裁） | **已接线** | `runtime/safety/chromatophores/`（signal_bus、boids）被 `runtime/execution/swarm/runtime.py`、`runtime/cli_run.py` 使用 |
+| SpinalCord 反射快路径 | **已接线** | `runtime/core/nerves/reflex/` + 前端 `/workspace/reflex` 管理页 |
+| 网状 Arm 直接互通（腕间 gossip 不经中枢） | **未实装**（按叙事口径） | Chromatophores 提供 pub/sub 原语，但 Arm↔Arm 直接协作路径未构建 |
+
+## 自进化
+
+| 机制 | 状态 | 证据 |
+|---|---|---|
+| 反思闭环（turn scoring → deep reflection → deep evolve） | **已接线** | `runtime/memory/learning/`（turn_scoring、deep_evolution、review_queue、promotion_applier） |
+| Camouflage 提示词 A/B 与变体晋升 | **已接线** | `runtime/safety/experiments/scheduler.py`；状态持久化于 `data/camouflage_*.{yaml,json}` |
+| Fitness 五层 + 漂移一票否决 | **已接线** | `runtime/safety/evolution/fitness.py`、`drift_monitor.py` |
+| 写后自动诊断（代码模式快检注入观察） | **已接线** | `runtime/core/cerebrum/react_execution.py` 的 `_run_auto_diagnostics`（注意：检查器缺失时跳过，不报假阳性） |
+
+## 维护本表
+
+1. 改变某行状态的 PR，应同步更新本表（和必要时的 architecture.md 措辞）。
+2. 「休眠代码」要么找到消费方接线，要么在下个清理周期删除——不要让它无限期停留。
+3. 新增器官/机制时先过 `docs/architecture/organ-tiering.md` 的三问，再在此登记初始状态。

@@ -75,6 +75,7 @@ nav:
       - 自定义模型: custom-models.md
   - 架构:
       - 总览: architecture.md
+      - 实装状态对照: implementation-status.md
       - 核心路径: architecture/core-path.md
       - 高分图: architecture/high-res-map.md
       - 高分图(mermaid): architecture/high-res-map.mermaid.md

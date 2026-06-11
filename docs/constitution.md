@@ -9,6 +9,12 @@
 > CAI 是训练内化的, 我们是**应用 gate + 规则 + LLM judge 的三层防御**。
 > 两者互补 · 不冲突。Claude 本身有宪法化权重 · 我们在框架层再加一层显式约束。
 
+> ⚠️ **实装状态（2026-06）**：三层防御中 **Rule 层已接线**
+> （`runtime/safety/validation/gate.py` 的 `check_outbound`，所有渠道出口
+> 强制经过）；**Human-Gate 经审批体系已接线**；**LLM-Judge 层代码存在但
+> 尚无调用方**。本文条款描述的是目标契约，逐机制现状见
+> [implementation-status.md](implementation-status.md)。
+
 ---
 
 ## 0. 为什么必须有
