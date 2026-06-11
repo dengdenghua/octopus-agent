@@ -65,6 +65,66 @@ def get_tracer(name: str = "runtime") -> Any:
     return _NoopTracer()  # type: ignore[name-defined]
 
 
+_TRACING_CONFIGURED = False
+
+
+def maybe_setup_tracing(*, service_name: str = "octopus-agent") -> bool:
+    """Install a global OTel TracerProvider so the ~65 instrumentation
+    points actually export — but only when explicitly configured.
+
+    Without this, ``trace.get_tracer()`` returns a tracer bound to the
+    default NoOp provider: spans are created and immediately discarded,
+    so every ``trace_stage`` / ``traced`` call is invisible. The app
+    never configured a provider, leaving the whole tracing surface a
+    silent no-op even with the ``[tracing]`` extra installed.
+
+    Opt-in and side-effect-free by default:
+      * returns False when the OTel SDK isn't installed;
+      * returns False unless an exporter is requested via
+        ``OTEL_EXPORTER_OTLP_ENDPOINT`` (OTLP) or
+        ``OCTOPUS_OTEL_CONSOLE=1`` (stdout, for local debugging);
+      * never raises — a tracing misconfig must not stop serve.
+
+    Idempotent. Returns True iff a provider was installed.
+    """
+    global _TRACING_CONFIGURED
+    if _TRACING_CONFIGURED or not OTEL_AVAILABLE:
+        return False
+    import os
+
+    otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
+    want_console = os.environ.get("OCTOPUS_OTEL_CONSOLE", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if not otlp_endpoint and not want_console:
+        return False
+    try:
+        from opentelemetry import trace as _trace  # type: ignore[import-untyped]
+        from opentelemetry.sdk.resources import Resource  # type: ignore[import-untyped]
+        from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-untyped]
+        from opentelemetry.sdk.trace.export import (  # type: ignore[import-untyped]
+            BatchSpanProcessor,
+            ConsoleSpanExporter,
+        )
+
+        provider = TracerProvider(
+            resource=Resource.create({"service.name": service_name})
+        )
+        if otlp_endpoint:
+            from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-untyped]
+                OTLPSpanExporter,
+            )
+
+            provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+        if want_console:
+            provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
+        _trace.set_tracer_provider(provider)
+        _TRACING_CONFIGURED = True
+        return True
+    except Exception:  # noqa: BLE001 — tracing setup must never break startup
+        return False
+
+
 @contextmanager
 def _span_scope(name: str) -> Iterator[Any]:
     """Create a span without attaching it to the global current context.

@@ -236,6 +236,18 @@ def run_serve(
     stack = build_from_config(cfg)
     runner = BackgroundRunner(name=f"scheduler-{cfg.name}")
 
+    # Optional OTel span export. No-op unless OTEL_EXPORTER_OTLP_ENDPOINT
+    # or OCTOPUS_OTEL_CONSOLE is set AND the [tracing] extra is installed
+    # — otherwise the ~65 trace_stage points stay silent (default NoOp
+    # provider discards every span). Never raises.
+    try:
+        from runtime.adapters.instrumentation import maybe_setup_tracing
+
+        if maybe_setup_tracing(service_name=cfg.name):
+            print(_yellow(color, "OpenTelemetry tracing: enabled"))
+    except Exception:  # noqa: BLE001 — tracing wiring must not block startup
+        logging.getLogger(__name__).debug("tracing setup failed", exc_info=True)
+
     # Constitution LLM-judge tier (opt-in via safety.enable_llm_judge /
     # OCTOPUS_ENABLE_LLM_JUDGE). gate.check_outbound consults the judge
     # on every outbound message; without this registration the tier is
