@@ -109,7 +109,10 @@ def build_v2_bugfix_graph(proj: Path) -> TaskGraph:
         TaskNode(node_id="n1", skill_ref=SkillId("read_file"),
                  args_template={"path": str(proj / "test_arith.py")}),
         TaskNode(node_id="n2", skill_ref=SkillId("exec_shell"),
-                 args_template={"command": [sys.executable, "test_arith.py"],
+                 # -B: n4's same-length fix edit lands in the same second
+                 # as this run; a written .pyc would stale-hit (mtime+size,
+                 # 1s granularity) and n5 would re-run buggy bytecode.
+                 args_template={"command": [sys.executable, "-B", "test_arith.py"],
                                 "cwd": str(proj), "timeout_s": 15.0}),
         TaskNode(node_id="n3", skill_ref=SkillId("read_file"),
                  args_template={"path": str(proj / "arith.py")}),
@@ -118,7 +121,8 @@ def build_v2_bugfix_graph(proj: Path) -> TaskGraph:
                                 "find": "return a * b",
                                 "replace": "return a - b"}),
         TaskNode(node_id="n5", skill_ref=SkillId("exec_shell"),
-                 args_template={"command": [sys.executable, "test_arith.py"],
+                 # -B: see n2 — avoid the same-second stale-.pyc trap.
+                 args_template={"command": [sys.executable, "-B", "test_arith.py"],
                                 "cwd": str(proj), "timeout_s": 15.0}),
         TaskNode(node_id="n6", skill_ref=SkillId("git_add"),
                  args_template={"repo_dir": str(proj),

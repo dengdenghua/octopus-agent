@@ -99,7 +99,13 @@ def build_bugfix_graph(proj: Path) -> TaskGraph:
             node_id="n2",
             skill_ref=SkillId("exec_shell"),
             args_template={
-                "command": [sys.executable, "test_add.py"],
+                # -B is load-bearing: the n4 fix edit is same-length and
+                # lands in the same wall-clock second as this run, so a
+                # written .pyc would stale-hit (CPython invalidates on
+                # mtime+size at 1-second granularity) and n5 would re-run
+                # the buggy bytecode — making the demo "fail" after a
+                # correct fix. Don't write bytecode here.
+                "command": [sys.executable, "-B", "test_add.py"],
                 "cwd": str(proj),
                 "timeout_s": 15.0,
             },
@@ -122,7 +128,8 @@ def build_bugfix_graph(proj: Path) -> TaskGraph:
             node_id="n5",
             skill_ref=SkillId("exec_shell"),
             args_template={
-                "command": [sys.executable, "test_add.py"],
+                # -B: see n2 — avoid the same-second stale-.pyc trap.
+                "command": [sys.executable, "-B", "test_add.py"],
                 "cwd": str(proj),
                 "timeout_s": 15.0,
             },

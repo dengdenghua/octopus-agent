@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -36,7 +37,7 @@ class TestSetupBuggyProject:
         """Implementation note."""
         proj = setup_buggy_project(tmp_path)
         r = subprocess.run(
-            ["python", "test_add.py"],
+            [sys.executable, "test_add.py"],
             cwd=str(proj),
             capture_output=True, text=True,
         )
