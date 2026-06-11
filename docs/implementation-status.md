@@ -44,7 +44,7 @@
 | Playwright 轨（后台无状态爬取/提取） | **已接线** | `runtime/execution/suckers/browser_skills.py` 的 `browser_*` 技能 |
 | Electron webview 轨（桌面应用内可见操作） | **已接线**（仅 Electron 环境） | `runtime/execution/suckers/browser_act_skills.py` 的 `live_browser_*` 技能，经本地 bridge |
 | 扩展 relay 轨（操控用户真实浏览器标签页） | **休眠代码** | `extensions/` 有扩展，但未接入 skill 路由 |
-| 统一 BrowserBackend 抽象 + 路由优先级 | **部分实装**（接缝+mock，真 adapter 待真机） | `runtime/execution/suckers/browser_backend.py`（Protocol + `resolve_backend` 优先级 extension>electron>playwright）+ `browser_backends_mock.py`；三轨的真实 adapter 需对应运行时端到端验证后接入，现有三轨调用点未改 |
+| 统一 BrowserBackend 抽象 + 路由优先级 | **已实装**（接缝+三轨 adapter，待真机联调） | `runtime/execution/suckers/browser_backend.py`（Protocol + `resolve_backend` 优先级 extension>electron>playwright）+ `browser_backends.py`（ElectronBackend/PlaywrightBackend/ExtensionBackend，包各轨现有函数，可注入 transport 单测）+ mock。adapter 映射已测；切换三轨现有 skill 调用点改走统一接口、以及真机端到端验证仍待有运行时的环境完成 |
 
 ## 维护本表
 

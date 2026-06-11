@@ -70,7 +70,15 @@ class BrowserResult:
 
     @classmethod
     def from_track(cls, track: Track, response: dict[str, Any]) -> BrowserResult:
-        ok = bool(response.get("ok", False))
+        # Tracks disagree on the success marker: Electron/extension
+        # return an explicit ``{"ok": bool}``; Playwright handlers
+        # return a payload dict with an ``"error"`` key only on
+        # failure. Honour an explicit ``ok`` when present, else treat
+        # "no error key" as success.
+        if "ok" in response:  # noqa: SIM108 — clearer split than a ternary
+            ok = bool(response["ok"])
+        else:
+            ok = "error" not in response
         return cls(
             ok=ok,
             track=track,
