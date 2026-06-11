@@ -41,6 +41,7 @@ import logging
 import os
 import re
 from collections.abc import Callable, Iterator
+from concurrent.futures import CancelledError
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID
@@ -681,27 +682,46 @@ class GatewayApprovalProvider(ApprovalProvider):
                 "tool": req.tool_name,
                 "argsPreview": req.args_preview,
                 "detail": req.detail,
+                # Lets the client run its own countdown and expire the
+                # dialog in lockstep instead of leaving a zombie prompt
+                # after the server has already given up.
+                "timeoutMs": int(timeout * 1000),
             },
             timeout=timeout,
         )
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        # Every failure denies, but the *reason* is part of the contract:
+        # "timeout" / "connection_lost" are machine-readable so the UI
+        # and journal can distinguish "user said no" from "nobody was
+        # there to answer".
         try:
             decision = future.result(timeout=timeout + 5.0)
-        except (_ApprovalError, TimeoutError, ConnectionError, OSError, RuntimeError) as exc:
-            _logger.warning(
-                "approval bridge: %s denied (%s)",
-                req.tool_name,
-                exc.__class__.__name__,
-            )
-            result = ApprovalDecision(approved=False, reason=str(exc))
-            self._record_approval(req, result, decision_label="error")
-            return result
+        except _ApprovalError as exc:
+            code = getattr(exc.error, "code", None)
+            timed_out = code == JsonRpcErrorCode.APPROVAL_TIMEOUT
+            label = "timeout" if timed_out else "error"
+            return self._deny(req, reason=label if timed_out else f"error: {exc}", label=label)
+        except CancelledError:
+            # ApprovalManager.cancel_all() on connection close cancels the
+            # pending future. CancelledError is a BaseException — without
+            # this clause it would crash the react worker thread.
+            return self._deny(req, reason="connection_lost", label="connection_lost")
+        except TimeoutError:
+            return self._deny(req, reason="timeout", label="timeout")
+        except (ConnectionError, OSError, RuntimeError) as exc:
+            return self._deny(req, reason=f"error: {exc}", label="error")
         action = (decision or {}).get("action", "decline")
         result = ApprovalDecision(
             approved=(action == "accept"),
             reason=action,
         )
         self._record_approval(req, result)
+        return result
+
+    def _deny(self, req: ApprovalRequest, *, reason: str, label: str) -> ApprovalDecision:
+        _logger.warning("approval bridge: %s denied (%s)", req.tool_name, label)
+        result = ApprovalDecision(approved=False, reason=reason)
+        self._record_approval(req, result, decision_label=label)
         return result
 
     def _record_approval(

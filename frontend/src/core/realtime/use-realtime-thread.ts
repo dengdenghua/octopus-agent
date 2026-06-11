@@ -106,6 +106,12 @@ export function useRealtimeThread(
   const approvalResolvers = useRef<
     Map<string | number, (decision: { action: string }) => void>
   >(new Map());
+  // Client-side expiry timers, keyed like the resolvers. The server
+  // denies on its own timeout (params.timeoutMs); these keep the
+  // dialog from outliving that decision as a zombie prompt.
+  const approvalTimers = useRef<
+    Map<string | number, ReturnType<typeof setTimeout>>
+  >(new Map());
   const clientRef = useRef<RealtimeClient | null>(null);
   // Latest reduced snapshot for callbacks that don't want React's stale
   // closure semantics. Updated synchronously alongside ``setState``.
@@ -153,8 +159,31 @@ export function useRealtimeThread(
             return next;
           });
           approvalResolvers.current.delete(req.id);
+          const timer = approvalTimers.current.get(req.id);
+          if (timer !== undefined) {
+            clearTimeout(timer);
+            approvalTimers.current.delete(req.id);
+          }
           resolve(decision);
         });
+        // Expire in lockstep with the server: once its timeout lapses
+        // the request id is dead — the server already denied — so a
+        // reply would go nowhere. Auto-decline locally to drop the
+        // dialog and settle the promise (an unsettled promise here
+        // leaks the client's reply tracker entry forever).
+        const timeoutMs =
+          typeof req.params?.timeoutMs === "number" && req.params.timeoutMs > 0
+            ? req.params.timeoutMs
+            : 600_000;
+        approvalTimers.current.set(
+          req.id,
+          setTimeout(() => {
+            approvalResolvers.current.get(req.id)?.({
+              action: "decline",
+              reason: "timeout",
+            } as { action: string });
+          }, timeoutMs),
+        );
       });
 
     const onNotification = (note: {
@@ -185,6 +214,22 @@ export function useRealtimeThread(
       // inside ``RealtimeClient`` will call onOpen again when the
       // new socket is up.
       setConnected(false);
+      // The server cancels every pending approval future when the
+      // connection drops (ApprovalManager.cancel_all), so the request
+      // ids are dead. Drop the dialogs and timers now — replying after
+      // reconnect would target a request the server no longer knows.
+      for (const timer of approvalTimers.current.values()) {
+        clearTimeout(timer);
+      }
+      approvalTimers.current.clear();
+      approvalResolvers.current.clear();
+      if (stateRef.current.pendingApprovals.length > 0) {
+        setState((prev) => {
+          const next: Conversation = { ...prev, pendingApprovals: [] };
+          stateRef.current = next;
+          return next;
+        });
+      }
       const turns = stateRef.current.turns;
       const active = turns[turns.length - 1];
       if (!active || active.status !== "inProgress") return;
@@ -283,6 +328,10 @@ export function useRealtimeThread(
       client.close();
       clientRef.current = null;
       approvalResolvers.current.clear();
+      for (const timer of approvalTimers.current.values()) {
+        clearTimeout(timer);
+      }
+      approvalTimers.current.clear();
       setConnected(false);
     };
   }, [args.threadId, args.clientFactory, applyEvent]);

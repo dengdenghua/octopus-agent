@@ -695,12 +695,100 @@ def test_gateway_approval_provider_converts_gateway_timeout_to_rejection(tmp_pat
             )
 
             assert decision.approved is False
-            assert "timed out waiting" in (decision.reason or "")
+            # Machine-readable reason: the UI and journal must be able
+            # to tell "nobody answered" apart from "user said no".
+            assert decision.reason == "timeout"
             approvals = trace.approvals(thread_id="thread-1")
-            assert approvals[0]["decision"] == "error"
-            assert "timed out waiting" in approvals[0]["reason"]
+            assert approvals[0]["decision"] == "timeout"
+            assert approvals[0]["reason"] == "timeout"
         finally:
             trace.close()
+
+    asyncio.run(run())
+
+
+def test_gateway_approval_provider_converts_connection_loss_to_rejection(tmp_path: Path) -> None:
+    import asyncio
+
+    class CancelledEmitter:
+        async def request_approval(
+            self,
+            method: object,
+            params: dict[str, object],
+            *,
+            timeout: float,
+        ) -> dict[str, str]:
+            # ApprovalManager.cancel_all() on connection close cancels
+            # the pending future; awaiting it raises CancelledError.
+            raise asyncio.CancelledError()
+
+    async def run() -> None:
+        trace = AgentTraceStore(tmp_path / "trace.sqlite")
+        try:
+            provider = GatewayApprovalProvider(
+                CancelledEmitter(),
+                asyncio.get_running_loop(),
+                thread_id="thread-1",
+                turn_id="turn-1",
+                trace_store=trace,
+            )
+            decision = await asyncio.to_thread(
+                provider.request,
+                ApprovalRequest(
+                    thread_id="thread-1",
+                    tool_name="exec_shell",
+                    tool_call_id="call-1",
+                    args_preview="ls",
+                    detail="exec_shell wants to execute",
+                ),
+            )
+
+            assert decision.approved is False
+            assert decision.reason == "connection_lost"
+            approvals = trace.approvals(thread_id="thread-1")
+            assert approvals[0]["decision"] == "connection_lost"
+        finally:
+            trace.close()
+
+    asyncio.run(run())
+
+
+def test_gateway_approval_provider_sends_timeout_to_client(tmp_path: Path) -> None:
+    import asyncio
+
+    captured: dict[str, object] = {}
+
+    class CapturingEmitter:
+        async def request_approval(
+            self,
+            method: object,
+            params: dict[str, object],
+            *,
+            timeout: float,
+        ) -> dict[str, str]:
+            captured.update(params)
+            return {"action": "accept"}
+
+    async def run() -> None:
+        provider = GatewayApprovalProvider(
+            CapturingEmitter(),
+            asyncio.get_running_loop(),
+            thread_id="thread-1",
+            turn_id="turn-1",
+        )
+        await asyncio.to_thread(
+            provider.request,
+            ApprovalRequest(
+                thread_id="thread-1",
+                tool_name="exec_shell",
+                tool_call_id="call-1",
+                args_preview="ls",
+                detail="",
+            ),
+        )
+        # The client mirrors the server timeout to expire its dialog in
+        # lockstep instead of leaving a zombie prompt.
+        assert captured["timeoutMs"] == 120_000
 
     asyncio.run(run())
 
