@@ -65,6 +65,10 @@ export interface UseRealtimeThreadValue {
   }) => Promise<void>;
   resolveApproval: (requestId: string | number, accept: boolean) => void;
   resume: () => Promise<void>;
+  /** Page backwards: prepend the next batch of turns older than the
+   * current `state.turns[0]`. No-op when `state.hasMoreTurns` is
+   * false or a load is already in flight. */
+  loadOlderTurns: () => Promise<void>;
   /** Cancel the turn that's currently in progress, if any. No-op when
    * no turn is live. The returned promise resolves once the server has
    * acknowledged the interrupt RPC — not when the turn actually ends;
@@ -91,6 +95,11 @@ export interface UseRealtimeThreadValue {
     diff?: string;
   }) => Promise<void>;
 }
+
+// Newest turns fetched per thread/resume page. Large threads resume
+// with the most recent window; older history pages in on demand via
+// loadOlderTurns().
+const RESUME_TURN_LIMIT = 50;
 
 export function useRealtimeThread(
   args: UseRealtimeThreadArgs,
@@ -292,10 +301,13 @@ export function useRealtimeThread(
     type ResumeResponse = {
       thread: { id: string; path?: string };
       turns: Conversation["turns"];
+      hasMore?: boolean;
+      totalTurns?: number;
     };
     void client
       .request<ResumeResponse>("thread/resume", {
         threadId: args.threadId,
+        limit: RESUME_TURN_LIMIT,
       })
       .then((result) => {
         if (cancelled) return;
@@ -309,6 +321,7 @@ export function useRealtimeThread(
             ...prev,
             turns: result.turns ?? [],
             resumeState: "resumed",
+            hasMoreTurns: result.hasMore === true,
           };
           stateRef.current = next;
           return next;
@@ -377,19 +390,64 @@ export function useRealtimeThread(
     type ResumeResponse = {
       thread: { id: string; path?: string };
       turns: Conversation["turns"];
+      hasMore?: boolean;
+      totalTurns?: number;
     };
     const result = await client.request<ResumeResponse>("thread/resume", {
       threadId: args.threadId,
+      limit: RESUME_TURN_LIMIT,
     });
     setState((prev) => {
       const next: Conversation = {
         ...prev,
         turns: result.turns ?? [],
         resumeState: "resumed",
+        hasMoreTurns: result.hasMore === true,
       };
       stateRef.current = next;
       return next;
     });
+  }, [args.threadId]);
+
+  // Guards concurrent backwards-pagination; a ref (not state) because
+  // double-invocation protection must be synchronous.
+  const loadingOlderRef = useRef(false);
+
+  const loadOlderTurns = useCallback(async () => {
+    const client = clientRef.current;
+    if (!client) return;
+    if (loadingOlderRef.current) return;
+    const current = stateRef.current;
+    if (!current.hasMoreTurns) return;
+    const oldest = current.turns[0];
+    if (!oldest) return;
+    loadingOlderRef.current = true;
+    try {
+      type ResumeResponse = {
+        turns: Conversation["turns"];
+        hasMore?: boolean;
+      };
+      const result = await client.request<ResumeResponse>("thread/resume", {
+        threadId: args.threadId,
+        limit: RESUME_TURN_LIMIT,
+        beforeTurnId: oldest.id,
+      });
+      setState((prev) => {
+        // Drop any overlap defensively (the cursor is exclusive, but a
+        // concurrent full resume may have already prepended them).
+        const known = new Set(prev.turns.map((t) => t.id));
+        const older = (result.turns ?? []).filter((t) => !known.has(t.id));
+        const next: Conversation = {
+          ...prev,
+          turns: [...older, ...prev.turns],
+          hasMoreTurns: result.hasMore === true,
+        };
+        stateRef.current = next;
+        return next;
+      });
+    } finally {
+      loadingOlderRef.current = false;
+    }
   }, [args.threadId]);
 
   const interrupt = useCallback<
@@ -456,6 +514,7 @@ export function useRealtimeThread(
       startTurn,
       resolveApproval,
       resume,
+      loadOlderTurns,
       interrupt,
       compact,
       decideHunk,
@@ -466,6 +525,7 @@ export function useRealtimeThread(
       startTurn,
       resolveApproval,
       resume,
+      loadOlderTurns,
       interrupt,
       compact,
       decideHunk,

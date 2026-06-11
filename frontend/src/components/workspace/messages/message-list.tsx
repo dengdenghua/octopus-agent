@@ -189,6 +189,7 @@ export function MessageList({
   threadId,
   thread,
   paddingBottom = MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
+  header,
   footer,
   compact = false,
   lastTurnToolEvents,
@@ -201,6 +202,9 @@ export function MessageList({
   thread: BaseStream<AgentThreadState>;
   paddingBottom?: number;
   compact?: boolean;
+  /** Rendered above the first message — e.g. a "load older turns"
+   * banner when the thread resumed with a paginated window. */
+  header?: ReactNode;
   footer?: ReactNode;
   lastTurnToolEvents?: LiveToolEvent[];
   liveToolEvents?: LiveToolEvent[];
@@ -855,6 +859,7 @@ export function MessageList({
           compact ? "max-w-none px-2" : "max-w-(--container-width-md) px-4",
         )}
       >
+        {header}
         {groupedMessages.map((group, index) => {
           const groupKey = `${group.type}:${group.id ?? `idx-${index}`}`;
           const isLatestGroup = index === groupedMessages.length - 1;

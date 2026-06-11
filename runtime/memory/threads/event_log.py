@@ -307,6 +307,39 @@ class EventLog:
             _apply_event(evt, turns, by_id)
         return turns
 
+    @staticmethod
+    def paginate_turns(
+        turns: list[Turn],
+        *,
+        limit: int | None = None,
+        before_turn_id: str | None = None,
+    ) -> tuple[list[Turn], bool]:
+        """Newest-window slice of an already-replayed turn list.
+
+        ``before_turn_id`` (exclusive cursor) confines the window to
+        turns strictly older than that id; ``limit`` keeps the newest
+        N of the window. Returns ``(window, has_more)`` where
+        ``has_more`` means turns older than the window exist —
+        clients page backwards with ``before_turn_id = window[0].id``.
+
+        No ``limit`` → the full window (back-compat: thread/resume
+        without params behaves exactly as before). An unknown cursor
+        falls back to the full list rather than guessing.
+
+        Replay still walks the whole JSONL; what pagination saves is
+        the model_dump + wire payload + client-side reduce, which is
+        where large threads actually hurt.
+        """
+        window = turns
+        if before_turn_id:
+            idx = next((i for i, t in enumerate(turns) if t.id == before_turn_id), None)
+            if idx is not None:
+                window = turns[:idx]
+        if limit is None or limit <= 0 or limit >= len(window):
+            # Whole window returned — nothing older remains beyond it.
+            return window, False
+        return window[-limit:], True
+
     def summary(self) -> ThreadSummary | None:
         """Lightweight metadata snapshot for thread/list responses.
 

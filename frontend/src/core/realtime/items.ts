@@ -313,6 +313,12 @@ export interface Conversation {
   pendingApprovals: PendingApproval[];
   tokenUsage: Record<string, unknown> | null;
   resumeState: "needsResume" | "resuming" | "resumed";
+  /**
+   * True when thread/resume was paginated and turns older than
+   * `turns[0]` exist on disk. Page backwards with the hook's
+   * `loadOlderTurns()`.
+   */
+  hasMoreTurns: boolean;
 }
 
 export interface PendingApproval {
@@ -329,5 +335,6 @@ export function emptyConversation(threadId: string): Conversation {
     pendingApprovals: [],
     tokenUsage: null,
     resumeState: "needsResume",
+    hasMoreTurns: false,
   };
 }

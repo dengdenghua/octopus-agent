@@ -46,6 +46,7 @@ import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   MessageList,
 } from "@/components/workspace/messages";
+import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older-turns-banner";
 import { ThreadProviders } from "@/components/workspace/messages/context";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoPanel } from "@/components/workspace/todo-panel";
@@ -1214,6 +1215,13 @@ function ChatsPageContent({
                 className="size-full"
                 threadId={threadId}
                 thread={thread}
+                header={
+                  realtimeApprovals.hasMoreTurns ? (
+                    <LoadOlderTurnsBanner
+                      onLoad={realtimeApprovals.loadOlderTurns}
+                    />
+                  ) : null
+                }
                 paddingBottom={
                   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
                   (hasCurrentTodos ? 96 : 0)

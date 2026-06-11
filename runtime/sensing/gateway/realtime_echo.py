@@ -248,9 +248,21 @@ class EchoRuntime:
 
             raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
         turns = log.replay()
+        raw_limit = params.get("limit")
+        window, has_more = EventLog.paginate_turns(
+            turns,
+            limit=raw_limit if isinstance(raw_limit, int) else None,
+            before_turn_id=(
+                params.get("beforeTurnId")
+                if isinstance(params.get("beforeTurnId"), str)
+                else None
+            ),
+        )
         return {
             "thread": {"id": thread_id, "path": str(log.path)},
-            "turns": [t.model_dump(by_alias=True, mode="json") for t in turns],
+            "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
+            "totalTurns": len(turns),
+            "hasMore": has_more,
         }
 
     async def _handle_list(self, params: dict[str, Any], emitter: EventEmitter) -> dict[str, Any]:

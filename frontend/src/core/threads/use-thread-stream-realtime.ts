@@ -79,6 +79,8 @@ export type UseThreadStreamRealtimeResult = readonly [
   {
     pendingApprovals: PendingApproval[];
     resolveApproval: (requestId: string | number, accept: boolean) => void;
+    hasMoreTurns: boolean;
+    loadOlderTurns: () => Promise<void>;
   },
 ];
 
@@ -629,8 +631,15 @@ export function useThreadStreamRealtime(
   } = opts;
 
   const realtime = useRealtimeThread({ threadId });
-  const { state, startTurn, interrupt, resume, compact, resolveApproval } =
-    realtime;
+  const {
+    state,
+    startTurn,
+    interrupt,
+    resume,
+    compact,
+    resolveApproval,
+    loadOlderTurns,
+  } = realtime;
   const [isUploading, setIsUploading] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const permissionRuntime = useMemo(
@@ -666,8 +675,12 @@ export function useThreadStreamRealtime(
     () => ({
       pendingApprovals: state.pendingApprovals,
       resolveApproval,
+      // Backwards pagination — thread/resume returns the newest window
+      // for large threads; older history pages in on demand.
+      hasMoreTurns: state.hasMoreTurns,
+      loadOlderTurns,
     }),
-    [state.pendingApprovals, resolveApproval],
+    [state.pendingApprovals, resolveApproval, state.hasMoreTurns, loadOlderTurns],
   );
 
   const isLoading = useMemo(() => conversationIsLoading(state), [state]);

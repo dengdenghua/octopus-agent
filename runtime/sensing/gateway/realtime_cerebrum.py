@@ -1819,10 +1819,24 @@ class CerebrumRuntime:
             summary = log.summary()
             if summary is not None and summary.archived:
                 raise _RpcError(JsonRpcErrorCode.THREAD_NOT_FOUND, f"unknown thread {thread_id}")
+            # Stale-turn closing must see the FULL replay; pagination
+            # only slices the response.
             turns = self._resume_turns(log)
+            raw_limit = params.get("limit")
+            window, has_more = EventLog.paginate_turns(
+                turns,
+                limit=raw_limit if isinstance(raw_limit, int) else None,
+                before_turn_id=(
+                    params.get("beforeTurnId")
+                    if isinstance(params.get("beforeTurnId"), str)
+                    else None
+                ),
+            )
             return {
                 "thread": {"id": thread_id, "path": str(log.path)},
-                "turns": [t.model_dump(by_alias=True, mode="json") for t in turns],
+                "turns": [t.model_dump(by_alias=True, mode="json") for t in window],
+                "totalTurns": len(turns),
+                "hasMore": has_more,
             }
         if method == "thread/compact":
             thread_id = self._require_thread_id(params.get("threadId"))
