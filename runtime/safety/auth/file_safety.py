@@ -82,8 +82,21 @@ def check_file_write(path: str | Path) -> FileWriteVerdict:
     if basename in _DENIED_WRITE_BASENAMES:
         return FileWriteVerdict(False, p_in, f"denied_basename: {basename}")
 
+    # Denylist prefixes name canonical Unix locations (/etc/...), but on
+    # macOS /etc, /var and /tmp are symlinks into /private, so the
+    # resolved path loses the /etc prefix. Match the realpath (with and
+    # without a leading /private) plus the pre-resolution input — extra
+    # candidates can only add denials, never relax them.
+    candidates = [resolved_norm]
+    if resolved_norm.startswith("/private/"):
+        candidates.append(resolved_norm[len("/private"):])
+    input_norm = os.path.normpath(p_in).replace("\\", "/").lower()
+    if input_norm.startswith("/"):
+        candidates.append(input_norm)
+
     for prefix in _DENIED_WRITE_ABS_PREFIXES:
-        if resolved_norm.startswith(prefix.lower()):
+        pl = prefix.lower()
+        if any(cand.startswith(pl) for cand in candidates):
             return FileWriteVerdict(False, p_in, f"denied_abs_prefix: {prefix}")
 
     try:

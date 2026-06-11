@@ -80,7 +80,7 @@ def check_path(
             )
 
     if not allow_sensitive:
-        reason = _check_sensitive(resolved)
+        reason = _check_sensitive(resolved, original=p_in)
         if reason:
             return PathVerdict(
                 False, p_in, resolved=resolved_str, reason=reason,
@@ -143,13 +143,34 @@ def _has_dos_device(path_str: str) -> bool:
     return False
 
 
-def _check_sensitive(resolved: Path) -> str:
+def _abs_match_candidates(resolved_norm: str, original: str) -> list[str]:
+    """Normalized path variants to match against absolute-prefix denylists.
+
+    Denylist prefixes are written against canonical Unix locations
+    (``/etc/...``), but on macOS ``/etc``, ``/var`` and ``/tmp`` are
+    symlinks into ``/private``, so the resolved path no longer carries
+    the ``/etc`` prefix. Match both sides: the realpath (with and
+    without a leading ``/private``) and the pre-resolution input.
+    Extra candidates can only add denials, never relax them.
+    """
+    candidates = [resolved_norm]
+    if resolved_norm.startswith("/private/"):
+        candidates.append(resolved_norm[len("/private"):])
+    if original:
+        in_norm = os.path.normpath(original).replace("\\", "/").lower()
+        if in_norm.startswith("/"):
+            candidates.append(in_norm)
+    return candidates
+
+
+def _check_sensitive(resolved: Path, original: str = "") -> str:
     rs = str(resolved)
     rs_norm = rs.replace("\\", "/").lower()
 
-    for pref in _SENSITIVE_ABS_PREFIXES_UNIX:
-        if rs_norm.startswith(pref.lower()):
-            return f"sensitive_abs_path: {pref}"
+    for cand in _abs_match_candidates(rs_norm, original):
+        for pref in _SENSITIVE_ABS_PREFIXES_UNIX:
+            if cand.startswith(pref.lower()):
+                return f"sensitive_abs_path: {pref}"
 
     try:
         home = Path(os.path.expanduser("~")).resolve()
