@@ -355,6 +355,41 @@ def test_task_run_read_model_aggregates_events_tools_tokens_and_approvals(
     assert len(run["events"]) == 5
 
 
+def test_connection_lost_approval_counts_as_rejection(store: AgentTraceStore) -> None:
+    # The approval lifecycle change added 'connection_lost' as a
+    # distinct decision label; the task-run rollup must count it among
+    # rejections alongside rejected/timeout/error, not silently drop it.
+    store.record_task_run_started(
+        task_id="turn-cl",
+        thread_id="thread-1",
+        ts="2026-06-07T00:00:00+00:00",
+    )
+    for decision in ("rejected", "timeout", "connection_lost", "error", "approved"):
+        store.record_approval(
+            thread_id="thread-1",
+            turn_id="turn-cl",
+            task_id="turn-cl",
+            agent_id="agent-a",
+            tool_name="exec_shell",
+            tool_call_id=f"call-{decision}",
+            decision=decision,
+        )
+    store.record_task_run_finished(
+        task_id="turn-cl",
+        thread_id="thread-1",
+        turn_id="turn-cl",
+        agent_id="agent-a",
+        status="failed",
+        ts="2026-06-07T00:00:04+00:00",
+    )
+
+    run = store.task_run("turn-cl")
+    assert run is not None
+    assert run["approval_count"] == 5
+    # rejected + timeout + connection_lost + error = 4 (approved excluded)
+    assert run["approval_rejections"] == 4
+
+
 def test_task_runs_lists_latest_runs_and_filters_status(store: AgentTraceStore) -> None:
     store.record_task_run_started(
         task_id="task-old",

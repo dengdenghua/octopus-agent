@@ -16,7 +16,9 @@ from pathlib import Path
 from threading import Lock
 from typing import Any, Literal
 
-ApprovalDecision = Literal["requested", "approved", "rejected", "timeout", "error"]
+ApprovalDecision = Literal[
+    "requested", "approved", "rejected", "timeout", "connection_lost", "error"
+]
 TaskRunStatus = Literal[
     "running",
     "completed",
@@ -1120,7 +1122,8 @@ def _task_run_from_rows(
         "approval_rejections": sum(
             1
             for row in approvals
-            if str(row.get("decision") or "").lower() in {"rejected", "timeout", "error"}
+            if str(row.get("decision") or "").lower()
+            in {"rejected", "timeout", "connection_lost", "error"}
         ),
         "checkpoint_count": len(checkpoints),
         "token_usage_count": len(token_rows),
@@ -1240,7 +1243,8 @@ def _task_run_findings(
 
     rejected = [
         row for row in approvals
-        if str(row.get("decision") or "").lower() in {"rejected", "timeout", "error"}
+        if str(row.get("decision") or "").lower()
+        in {"rejected", "timeout", "connection_lost", "error"}
     ]
     for row in rejected[:5]:
         findings.append({
