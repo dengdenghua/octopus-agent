@@ -450,11 +450,11 @@ def register_all(registry: SkillRegistry) -> None:
                 name, type(exc).__name__, exc,
             )
     try:
-        from runtime.platform.process.paths import project_root
+        from runtime.platform.process.paths import resources_root
 
         _register_market(
             registry,
-            all_skills_dir=project_root() / "skills" / "public",
+            all_skills_dir=resources_root() / "skills" / "public",
             respect_enabled_flag=False,
             verify_tests=False,
         )

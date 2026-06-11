@@ -68,7 +68,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/install/lib/python3.12/site-packages:${PYTHONPATH}" \
     OCTOPUS_DATA_DIR=/data \
     OCTOPUS_CONFIG=/etc/octopus/config.yaml \
-    OCTOPUS_WEBUI_DIST=/app/webui
+    OCTOPUS_WEBUI_DIST=/app/webui \
+    OCTOPUS_RESOURCES_DIR=/app/resources
 
 RUN groupadd -r octopus && \
     useradd -r -g octopus -d /data -s /bin/false octopus && \

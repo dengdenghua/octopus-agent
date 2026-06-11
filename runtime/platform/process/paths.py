@@ -127,4 +127,23 @@ def app_paths(root: str | Path | None = None) -> AppPaths:
     return AppPaths(project_root())
 
 
-__all__ = ["AppPaths", "app_paths", "project_root"]
+def resources_root() -> Path:
+    """Root for READ-ONLY bundled assets: skills/, prompts/, protocols/,
+    agents/ presets.
+
+    In a source checkout this is the project root. In the Docker image
+    the code is pip-installed and the working dir is the data volume
+    (``/data``), so ``project_root()`` resolves to ``/data`` — which has
+    no bundled assets. The image copies them to ``/app/resources`` and
+    sets ``OCTOPUS_RESOURCES_DIR`` so loaders find them; without this the
+    container silently loses the file-backed skill catalog (87+ skills).
+    Honour the env var, else fall back to ``project_root()`` so dev and
+    editable installs are unchanged.
+    """
+    env = os.environ.get("OCTOPUS_RESOURCES_DIR")
+    if env:
+        return Path(env).expanduser().resolve()
+    return project_root()
+
+
+__all__ = ["AppPaths", "app_paths", "project_root", "resources_root"]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runtime.platform.process.paths import app_paths, project_root
+from runtime.platform.process.paths import app_paths, project_root, resources_root
 
 
 def _make_project(root: Path) -> Path:
@@ -71,3 +71,26 @@ def test_project_root_falls_back_to_cwd_without_sentinels(monkeypatch, tmp_path)
 
     assert project_root() == scratch.resolve()
     assert app_paths().data_dir == scratch.resolve() / "data"
+
+
+def test_resources_root_honours_env(monkeypatch, tmp_path):
+    # The Docker image pip-installs the code and runs from /data, so
+    # project_root() can't find bundled skills/prompts/protocols. The
+    # image sets OCTOPUS_RESOURCES_DIR=/app/resources; resources_root()
+    # must honour it so the 87+ file-backed skills actually load.
+    res = tmp_path / "resources"
+    res.mkdir()
+    monkeypatch.setenv("OCTOPUS_RESOURCES_DIR", str(res))
+    assert resources_root() == res.resolve()
+
+
+def test_resources_root_falls_back_to_project_root(monkeypatch, tmp_path):
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    monkeypatch.chdir(scratch)
+    monkeypatch.delenv("OCTOPUS_RESOURCES_DIR", raising=False)
+    monkeypatch.delenv("OCTOPUS_DATA_DIR", raising=False)
+    monkeypatch.delenv("OCTOPUS_HOME", raising=False)
+    # No env, no sentinels → same as project_root (dev/editable installs
+    # are unchanged).
+    assert resources_root() == project_root()

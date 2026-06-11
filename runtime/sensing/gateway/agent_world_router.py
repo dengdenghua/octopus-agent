@@ -27,7 +27,7 @@ except ImportError:  # pragma: no cover
 
 from runtime.execution.agents.loader import default_agents_root
 from runtime.execution.misc.agent_avatar import write_pixel_agent_avatar
-from runtime.platform.process.paths import project_root
+from runtime.platform.process.paths import resources_root
 
 _INSTALL_STATE = Path(os.path.expanduser("~/.octopus/agents-installed.json"))
 _OCTOPUS_AUTHOR = "octopus"
@@ -406,7 +406,7 @@ def _install_template_agent(
     template = _template_by_id(agent_id)
     if not template:
         return None
-    skills_root = skills_root or project_root() / "skills" / "public"
+    skills_root = skills_root or resources_root() / "skills" / "public"
     private_skills = _template_private_skills(template)
     available_skills = _template_skill_catalog(template)
     skill_bundle = _copy_template_private_skills(template, skills_root)
@@ -659,7 +659,7 @@ def create_agent_world_router(
         if not template:
             raise HTTPException(400, f"agent is already local: {agent_id}")
         agents_root = default_agents_root()
-        skills_root = project_root() / "skills" / "public"
+        skills_root = resources_root() / "skills" / "public"
         agent_root = _install_template_agent(agent_id, agents_root, skills_root=skills_root)
         if agent_root is None:
             raise HTTPException(404, f"agent template not found: {agent_id}")
@@ -757,7 +757,7 @@ def create_agent_world_router(
                 path,
                 agent_name,
                 agents_root=default_agents_root(),
-                skills_root=project_root() / "skills" / "public",
+                skills_root=resources_root() / "skills" / "public",
             )
         except FileNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
