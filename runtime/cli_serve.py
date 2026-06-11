@@ -236,6 +236,20 @@ def run_serve(
     stack = build_from_config(cfg)
     runner = BackgroundRunner(name=f"scheduler-{cfg.name}")
 
+    # Constitution LLM-judge tier (opt-in via safety.enable_llm_judge /
+    # OCTOPUS_ENABLE_LLM_JUDGE). gate.check_outbound consults the judge
+    # on every outbound message; without this registration the tier is
+    # a null allow-all. Fail-open: registration problems must not stop
+    # serve — the regex rule layer remains the hard floor.
+    try:
+        from runtime.safety.validation.bootstrap import maybe_register_llm_judge
+
+        judge_router = getattr(getattr(stack, "planner", None), "router", None)
+        if maybe_register_llm_judge(judge_router):
+            print(_yellow(color, "constitution LLM judge: enabled"))
+    except Exception:  # noqa: BLE001 — never block startup on judge wiring
+        logging.getLogger(__name__).debug("llm judge bootstrap failed", exc_info=True)
+
     intel_count = 0
     for src in cfg.intel_sources:
         intel_count += register_intel_task(runner, src, stack)

@@ -265,6 +265,19 @@ safety:
   # OCTOPUS_ENABLE_TRUST_SIGNAL=1 / 0.
   enable_trust_signal: false
 
+  # ─── Constitution LLM judge (semantic outbound gate) ──────
+  # When true, serve registers an LLM judge at startup and the
+  # constitution gate consults it on every outbound message that
+  # passes the regex rule layer (verdicts cached 60s per message+
+  # destination). Whether a judge "block" hard-enforces or stays
+  # audit-only follows the constitution profile (strict enforces;
+  # normal/lax audit-only). Judge failures fail open — the regex
+  # rule layer is always the hard floor. Adds ~one Haiku call per
+  # unique outbound message. Env override: OCTOPUS_ENABLE_LLM_JUDGE.
+  enable_llm_judge: false
+  # Optional judge model override (defaults to a low-latency model):
+  # llm_judge_model: claude-haiku-4-5-20251001
+
   # ─── Per-guard overrides (fine-grained kill-switch) ───────
   # Map of guard label -> True/False. Overrides take precedence
   # over disabled_guards (so True here re-enables a guard listed

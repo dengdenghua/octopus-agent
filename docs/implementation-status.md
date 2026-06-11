@@ -10,7 +10,7 @@
 | 机制 | 状态 | 证据 |
 |---|---|---|
 | Constitution 出口检查（Rule 层：PII/secret 扫描、rewrite/block） | **已接线** | `runtime/safety/validation/gate.py` 的 `check_outbound`；所有渠道出口强制经过（`runtime/adapters/channels/base.py`，且 `channels/manager.py` 以 lint 强制 adapter 必须调用） |
-| Constitution LLM-Judge 层 | **休眠代码** | `runtime/safety/validation/llm_judge.py` 存在并导出 `build_judge_from_router`，但全仓库无调用方 |
+| Constitution LLM-Judge 层 | **可选后端**（配置开启） | `runtime/safety/validation/bootstrap.py` 在 serve 启动时按 `safety.enable_llm_judge` / `OCTOPUS_ENABLE_LLM_JUDGE` 注册 judge；gate Pass 3 消费。默认关（每条出口多一次模型调用）；strict 档硬执行、normal/lax 仅审计 |
 | Constitution Human-Gate 层 | **已接线**（经审批体系） | `runtime/safety/approval/approval_gate.py` 风险评级 + 审批门；realtime 双向审批通道 |
 | Immunity 先天层（信任源白名单、三态判决） | **已接线** | `runtime/safety/auth/trust_engine.py` |
 | Immunity 自适应层（行为评分、抗体记忆） | **未实装** | 仅文档描述；trust_engine 无对应代码 |
