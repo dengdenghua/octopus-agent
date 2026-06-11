@@ -41,6 +41,20 @@ class CheckResult:
     duration_ms: int
 
 
+def _module_installed(name: str) -> bool:
+    try:
+        import importlib.util
+
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _tsc_installed(root: Path) -> bool:
+    bin_dir = root / "node_modules" / ".bin"
+    return (bin_dir / "tsc").exists() or (bin_dir / "tsc.cmd").exists()
+
+
 def detect_project(workspace: str) -> ProjectProfile:
     root = Path(workspace)
     if not root.is_dir():
@@ -53,11 +67,17 @@ def detect_project(workspace: str) -> ProjectProfile:
         scripts = pkg.get("scripts", {}) if isinstance(pkg, dict) else {}
         has_ts = (root / "tsconfig.json").is_file()
         kind = "node-ts" if has_ts else "node"
-        if has_ts:
+        # Only offer typecheck when tsc is actually installed: a bare
+        # ``npx tsc`` on a machine without the package may hit the
+        # network to fetch it, and a missing binary would surface as a
+        # bogus "typecheck failed" — these checks feed the agent's
+        # auto-diagnostics, so a false failure sends it chasing
+        # phantom errors.
+        if has_ts and _tsc_installed(root):
             checks.append({
                 "name": "typecheck",
-                "argv": ["npx", "tsc", "--noEmit"],
-                "display_cmd": "npx tsc --noEmit",
+                "argv": ["npx", "--no-install", "tsc", "--noEmit"],
+                "display_cmd": "npx --no-install tsc --noEmit",
             })
         if "lint" in scripts:
             checks.append({
@@ -89,7 +109,10 @@ def detect_project(workspace: str) -> ProjectProfile:
 
     if (root / "pyproject.toml").is_file() or (root / "setup.py").is_file():
         kind = "python"
-        if (root / "pyproject.toml").is_file():
+        # Same tool-presence gate as tsc above: without it, projects
+        # that don't ship mypy (most of them) get "No module named
+        # mypy" reported as a typecheck FAILURE after every file write.
+        if (root / "pyproject.toml").is_file() and _module_installed("mypy"):
             checks.append({
                 "name": "typecheck",
                 "argv": [sys.executable, "-m", "mypy", ".", "--ignore-missing-imports"],

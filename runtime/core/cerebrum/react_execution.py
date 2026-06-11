@@ -212,6 +212,11 @@ def _run_auto_diagnostics(stack: Any, workspace_path: str | None = None) -> str 
         parts: list[str] = []
         for r in errors:
             output = (r.stderr or r.stdout or "").strip()
+            # A missing checker is an environment gap, not a code
+            # failure — reporting it as one sends the model chasing
+            # phantom errors (or pip-installing tools mid-task).
+            if _output_indicates_missing_tool(output):
+                continue
             if not output:
                 parts.append(f"[{r.name}] 失败 (exit {r.exit_code})")
                 continue
@@ -221,6 +226,21 @@ def _run_auto_diagnostics(stack: Any, workspace_path: str | None = None) -> str 
         return "\n\n".join(parts) if parts else None
     except (OSError, TypeError, ValueError):
         return None
+
+
+_TOOL_MISSING_MARKERS = (
+    "no module named",
+    "command not found",
+    "not recognized as an internal or external command",
+    "could not determine executable to run",
+    "npx: not found",
+    "enoent",
+)
+
+
+def _output_indicates_missing_tool(output: str) -> bool:
+    lowered = output.lower()
+    return any(marker in lowered for marker in _TOOL_MISSING_MARKERS)
 
 
 def _update_working_set(
