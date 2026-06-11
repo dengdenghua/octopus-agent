@@ -8,9 +8,9 @@ import pytest
 
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.write_skills import (
+    _BACKGROUND_PROCESSES,
     EXEC_SKILL_NAME,
     WRITE_SKILL_NAMES,
-    _BACKGROUND_PROCESSES,
     _append_text_file,
     _background_exec,
     _edit_file,

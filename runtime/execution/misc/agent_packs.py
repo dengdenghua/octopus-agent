@@ -22,7 +22,6 @@ except ImportError:  # pragma: no cover
 
 from runtime.execution.misc.agent_avatar import write_pixel_agent_avatar
 
-
 _FRONTMATTER_RE = re.compile(r"\A\s*---\s*\n(.*?)\n---\s*(?:\n|$)", re.DOTALL)
 
 

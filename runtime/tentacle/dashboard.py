@@ -25,20 +25,22 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from runtime.tentacle.mobile.vlm import VlmConfig
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi import Request as FastAPIRequest
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
-from runtime.tentacle.base import TentacleStatus, ToolCall
+from runtime.tentacle.base import ToolCall
 from runtime.tentacle.coordinator import TentacleCoordinator
-from runtime.tentacle.mobile.device import MobileDevice
 
 logger = logging.getLogger(__name__)
 
 
-def _auto_detect_vlm_config() -> "VlmConfig | None":
+def _auto_detect_vlm_config() -> VlmConfig | None:
     """从环境变量自动检测 VLM 配置.
 
     检测优先级：
@@ -49,6 +51,7 @@ def _auto_detect_vlm_config() -> "VlmConfig | None":
     5. GLM_API_KEY（智谱 GLM-4V）
     """
     import os
+
     from runtime.tentacle.mobile.vlm import VlmConfig
 
     # 1. 通用 VLM 环境变量
@@ -284,7 +287,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
 
         # 3. 调用 VLM 分析
         try:
-            from runtime.tentacle.mobile.vlm import VlmClient, VlmConfig
+            from runtime.tentacle.mobile.vlm import VlmClient
 
             # 从协调器获取 VLM 客户端（如果已配置）
             vlm_client: VlmClient | None = getattr(coordinator, "_vlm_client", None)

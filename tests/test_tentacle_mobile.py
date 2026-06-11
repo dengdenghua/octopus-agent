@@ -12,37 +12,33 @@
 
 from __future__ import annotations
 
-import asyncio
-import time
-
 import pytest
 
 from runtime.execution.arms.presets import (
-    make_mobile_operator_arm,
-    make_mobile_browser_operator_arm,
     make_desktop_operator_arm,
+    make_mobile_browser_operator_arm,
+    make_mobile_operator_arm,
 )
 from runtime.tentacle import (
-    MobileDevice,
+    ANDROID_CAPABILITIES,
     DesktopDevice,
+    Heartbeat,
+    MobileDevice,
     TentaclePool,
     TentacleStatus,
     TentacleType,
-    Heartbeat,
     ToolCall,
     ToolResult,
-    ANDROID_CAPABILITIES,
 )
 from runtime.tentacle.mobile.apks.tool_bridge import (
     Envelope,
     ErrorCode,
-    hello,
     heartbeat,
+    hello,
     tool_execute,
 )
 from runtime.tentacle.mobile.apks.version import OCTOPUS_MOBILE_VERSION, is_compatible
 from runtime.tentacle.mobile.mcp_server import TentacleMcpServer
-
 
 # ── 1. 包导入测试 ─────────────────────────────────────────
 
@@ -51,11 +47,8 @@ def test_tentacle_package_imports():
     """Tentacle 包可正常导入."""
     from runtime.tentacle import (
         Tentacle,
-        TentacleType,
         TentacleStatus,
-        MobileDevice,
-        DesktopDevice,
-        TentaclePool,
+        TentacleType,
     )
     assert Tentacle is not None
     assert TentacleType.MOBILE.value == "mobile"

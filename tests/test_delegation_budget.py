@@ -7,8 +7,6 @@ that the module can be imported and used independently.
 """
 from __future__ import annotations
 
-import pytest
-
 from runtime.execution.suckers.delegation_budget import (
     _PER_TURN_ABSOLUTE_LIMIT,
     check_absolute_cap,

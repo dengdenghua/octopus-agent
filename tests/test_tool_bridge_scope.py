@@ -2,23 +2,23 @@ import json
 from types import SimpleNamespace
 
 import runtime.sensing.gateway.tool_bridge as tool_bridge
-from runtime.execution.tool_engine.executor import ToolExecutor
 from runtime.execution.suckers.agent_meta_skills import _todo_write
 from runtime.execution.suckers.builtins import _list_cwd
 from runtime.execution.suckers.registry import Skill, SkillRegistry
+from runtime.execution.tool_engine.executor import ToolExecutor
 from runtime.platform.models import ParsedIntent
 from runtime.platform.process.session import Session, session_scope
 from runtime.safety.auth import TrustEngine
-from runtime.sensing.model_router.models import (
-    ModelResponse,
-    ModelStreamEvent,
-    ToolCall,
-)
 from runtime.sensing.gateway.tool_bridge import (
     _execute_tool_call,
     _reflection_checkpoint_message,
     build_anthropic_tool_specs,
     stream_agentic_fallback,
+)
+from runtime.sensing.model_router.models import (
+    ModelResponse,
+    ModelStreamEvent,
+    ToolCall,
 )
 
 

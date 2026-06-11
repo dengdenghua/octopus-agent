@@ -584,59 +584,58 @@ def test_stale_background_watchers_reaped_on_next_turn(tmp_path: Path) -> None:
         ]
     )
 
-    with TestClient(app) as client:
-        with client.websocket_connect("/api/realtime") as ws:
-            _drive(
-                ws,
-                {
-                    "threadId": "th-reap",
-                    "input": [{"type": "text", "text": "first"}],
-                    "approvalPolicy": "never",
-                },
-            )
-            bucket = runtime._thread_background_tasks.get("th-reap")
-            assert bucket and any(not t.done() for t in bucket), (
-                "expected at least one running watcher after first turn"
-            )
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        _drive(
+            ws,
+            {
+                "threadId": "th-reap",
+                "input": [{"type": "text", "text": "first"}],
+                "approvalPolicy": "never",
+            },
+        )
+        bucket = runtime._thread_background_tasks.get("th-reap")
+        assert bucket and any(not t.done() for t in bucket), (
+            "expected at least one running watcher after first turn"
+        )
 
-            # Second turn — reaper at start_turn entry must cancel the
-            # leftover watcher before the new turn proceeds.
-            _set_script(
-                [
-                    {"type": "text_delta", "delta": "second"},
-                    {"type": "react_completed"},
-                ]
-            )
-            _drive(
-                ws,
-                {
-                    "threadId": "th-reap",
-                    "input": [{"type": "text", "text": "second"}],
-                    "approvalPolicy": "never",
-                },
-            )
+        # Second turn — reaper at start_turn entry must cancel the
+        # leftover watcher before the new turn proceeds.
+        _set_script(
+            [
+                {"type": "text_delta", "delta": "second"},
+                {"type": "react_completed"},
+            ]
+        )
+        _drive(
+            ws,
+            {
+                "threadId": "th-reap",
+                "input": [{"type": "text", "text": "second"}],
+                "approvalPolicy": "never",
+            },
+        )
 
-            # Reap is awaited inside ``start_turn`` so the bucket
-            # should be empty (or all done) by the time the second
-            # turn returns. Allow a tiny grace window for done-callbacks.
-            deadline = time.time() + 1.0
-            while time.time() < deadline:
-                bucket = runtime._thread_background_tasks.get("th-reap") or []
-                if all(t.done() for t in bucket):
-                    break
-                time.sleep(0.05)
+        # Reap is awaited inside ``start_turn`` so the bucket
+        # should be empty (or all done) by the time the second
+        # turn returns. Allow a tiny grace window for done-callbacks.
+        deadline = time.time() + 1.0
+        while time.time() < deadline:
             bucket = runtime._thread_background_tasks.get("th-reap") or []
-            assert all(t.done() for t in bucket), (
-                "reaper failed to cancel stale watchers from prior turn"
-            )
+            if all(t.done() for t in bucket):
+                break
+            time.sleep(0.05)
+        bucket = runtime._thread_background_tasks.get("th-reap") or []
+        assert all(t.done() for t in bucket), (
+            "reaper failed to cancel stale watchers from prior turn"
+        )
 
 
 def test_simple_question_uses_reflection_fast_path(tmp_path: Path) -> None:
     from fastapi import FastAPI
 
-    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
 
     class FakeRouter:
         def __init__(self) -> None:
@@ -981,9 +980,9 @@ def test_input_metadata_capability_mode_reaches_react_intent() -> None:
 def test_tool_question_keeps_react_path_when_router_exists(tmp_path: Path) -> None:
     from fastapi import FastAPI
 
-    from runtime.sensing.model_router.models import ModelStreamEvent
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.model_router.models import ModelStreamEvent
 
     class FakeRouter:
         def __init__(self) -> None:
@@ -2475,9 +2474,9 @@ def test_meta_skill_hint_emitted_when_prompt_matches_pack(tmp_path: Path) -> Non
     hand-rolled fixture that could drift from real behavior."""
     from fastapi import FastAPI
 
-    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
 
     class FakeRouter:
         def call_stream(self, _request: Any) -> Iterator[ModelStreamEvent]:
@@ -2538,9 +2537,9 @@ def test_meta_skill_hint_silent_when_no_match(tmp_path: Path) -> None:
     ``2+2等于几`` should pass through with zero meta-skill events."""
     from fastapi import FastAPI
 
-    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
     from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+    from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent
 
     class FakeRouter:
         def call_stream(self, _request: Any) -> Iterator[ModelStreamEvent]:

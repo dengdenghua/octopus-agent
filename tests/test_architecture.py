@@ -13,6 +13,13 @@ sys.path.insert(0, str(BASE))
 
 import pytest
 
+from runtime.platform.plugins.plugin_loader import (
+    OctopusPlugin,
+    PluginContext,
+    PluginLoader,
+    PluginManifest,
+    PluginState,
+)
 from runtime.platform.process.eventbus import (
     ALL_DOMAIN_EVENTS,
     EVOLUTION_EVENTS,
@@ -35,13 +42,6 @@ from runtime.platform.process.eventbus import (
     SkillUsed,
     StateChanged,
     ToolCallBlocked,
-)
-from runtime.platform.plugins.plugin_loader import (
-    OctopusPlugin,
-    PluginContext,
-    PluginLoader,
-    PluginManifest,
-    PluginState,
 )
 from runtime.platform.process.state import (
     FileBackend,

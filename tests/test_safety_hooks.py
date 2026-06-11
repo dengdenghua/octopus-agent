@@ -222,8 +222,8 @@ class TestOtherDispatchers:
 
 
 def _make_executor():
-    from runtime.execution.tool_engine import ToolExecutor
     from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.tool_engine import ToolExecutor
     from runtime.memory.journal import InMemoryJournal
     from runtime.safety.auth import TrustEngine
 

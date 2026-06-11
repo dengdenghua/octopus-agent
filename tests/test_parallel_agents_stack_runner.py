@@ -13,7 +13,6 @@ from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.agents import Agent, AgentRegistry
 from runtime.execution.arms.base import ArmPool
 from runtime.execution.arms.presets import make_web_read_arm
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.parallel_agents import (
     DispatchTaskInput,
     ParallelAgentOrchestrator,
@@ -21,9 +20,9 @@ from runtime.execution.parallel_agents import (
 )
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.builtins import register_all
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
-from runtime.platform.models import BudgetSpec, SkillId
-from runtime.platform.models import Trajectory, TrajectoryOutcome
+from runtime.platform.models import BudgetSpec, SkillId, Trajectory, TrajectoryOutcome
 from runtime.platform.process.session import current_session
 from runtime.safety.auth import TrustEngine
 

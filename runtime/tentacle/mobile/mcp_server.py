@@ -35,10 +35,12 @@ import json
 import logging
 import re
 import sys
-import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .vlm import VlmConfig
 
 from ..base import ToolCall, ToolResult
 from ..coordinator import TentacleCoordinator
@@ -560,10 +562,9 @@ class TentacleMcpServer:
                 "content": [{"type": "text", "text": content_text}],
                 "isError": False,
             }
-        else:
-            return self._error_result(
-                f"Tool {skill_name} failed: {result.error_message or 'Unknown error'}"
-            )
+        return self._error_result(
+            f"Tool {skill_name} failed: {result.error_message or 'Unknown error'}"
+        )
 
     async def _call_management_tool(
         self, name: str, args: dict[str, Any], tentacle_id: str | None
@@ -773,8 +774,7 @@ class TentacleMcpServer:
                         }
                     ]
                 }
-            else:
-                return {"error": {"code": -32002, "message": f"Screenshot failed: {result.error_message}"}}
+            return {"error": {"code": -32002, "message": f"Screenshot failed: {result.error_message}"}}
 
         # 设备状态
         status = {
@@ -935,9 +935,10 @@ class TentacleMcpServer:
         }
 
     @staticmethod
-    def _auto_detect_vlm_config() -> "VlmConfig | None":
+    def _auto_detect_vlm_config() -> VlmConfig | None:
         """从环境变量自动检测 VLM 配置."""
         import os
+
         from runtime.tentacle.mobile.vlm import VlmConfig
 
         vlm_key = os.environ.get("VLM_API_KEY", "").strip()

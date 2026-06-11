@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -377,9 +377,9 @@ class TestResumeTask:
 
         assert rc == 0
         stack = captured["stack"]
-        assert getattr(stack, "planner").name == "planner"
-        assert getattr(stack, "executor").name == "executor"
-        assert getattr(stack, "journal").path == path
+        assert stack.planner.name == "planner"
+        assert stack.executor.name == "executor"
+        assert stack.journal.path == path
         assert captured["runner_kwargs"] == {
             "max_iterations": 7,
             "resume_task_id": "task-123",

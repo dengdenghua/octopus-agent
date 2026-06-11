@@ -9,14 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+
 import pytest
 import pytest_asyncio
 
-from runtime.tentacle.base import ToolCall, ToolResult
+from runtime.tentacle.base import ToolCall
 from runtime.tentacle.coordinator import TentacleCoordinator
 from runtime.tentacle.mobile.device import MobileDevice
-from runtime.tentacle.transport import DeviceHello
-
 
 # ── fixtures ──────────────────────────────────────────────
 

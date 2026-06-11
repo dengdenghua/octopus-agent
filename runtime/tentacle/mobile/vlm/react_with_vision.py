@@ -35,8 +35,9 @@ import json
 import logging
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from ...llm.chat_types import (
     ChatMessage,

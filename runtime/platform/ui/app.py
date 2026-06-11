@@ -778,8 +778,8 @@ def create_app(
     # to runtime/sensing/siphon/meta_router.py mid-2026 · same split
     # pattern as config_router. Keeps app.py under 2000 lines and
     # makes the meta surface independently testable.
-    from runtime.sensing.gateway.meta_router import create_meta_router
     from runtime.execution.arms.tool_registry import get_tool_registry
+    from runtime.sensing.gateway.meta_router import create_meta_router
 
     app.include_router(create_meta_router(
         registry=state.registry,

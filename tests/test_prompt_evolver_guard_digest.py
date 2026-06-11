@@ -9,16 +9,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from runtime.safety.evolution.guard_telemetry import (
+    GuardTelemetry,
+    default_guard_digest_provider,
+)
 from runtime.safety.experiments.prompt_evolver import PromptEvolver
 from runtime.safety.experiments.prompt_mutator import (
     _build_user_prompt,
     _render_guard_digest_for_prompt,
 )
 from runtime.safety.experiments.prompt_optimizer import PromptVariant
-from runtime.safety.evolution.guard_telemetry import (
-    GuardTelemetry,
-    default_guard_digest_provider,
-)
 
 
 def _variant(name: str = "v1", suffix: str = "") -> PromptVariant:

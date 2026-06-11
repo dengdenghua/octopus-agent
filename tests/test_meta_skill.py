@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from runtime.core.graph_runtime import GraphRuntime
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.memory.skills_lib.meta_skill import (
     MetaEdge,

@@ -29,17 +29,25 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .mobile.vlm import VlmConfig
 
 from websockets.server import WebSocketServerProtocol
 
-from .base import Heartbeat, TentacleStatus, ToolCall, ToolResult
+from .base import Heartbeat, ToolCall, ToolResult
 from .mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from .mobile.device import MobileDevice
+from .mobile.pc_screen_capture import (
+    PcScreenCapture,
+    PcScreenConfig,
+    RemoteInputHandler,
+)
+from .mobile.screen_relay import ScreenRelay
 from .pool import TentaclePool
 from .transport import DeviceHello, TaskExecuteRequest, TentacleWebSocketServer
-from .mobile.screen_relay import ScreenRelay
-from .mobile.pc_screen_capture import PcScreenCapture, PcScreenConfig, RemoteInputHandler, PC_HOST_ID
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +127,10 @@ class TentacleCoordinator:
         # 启动 Dashboard HTTP 服务
         if self._dashboard_port is not None:
             try:
-                from runtime.tentacle.dashboard import create_tentacle_router
-
-                from fastapi import FastAPI
                 import uvicorn
+                from fastapi import FastAPI
+
+                from runtime.tentacle.dashboard import create_tentacle_router
 
                 app = FastAPI(title="Octopus Tentacle Dashboard")
                 app.include_router(create_tentacle_router(self))
@@ -330,7 +338,7 @@ class TentacleCoordinator:
         *,
         rules: list | None = None,
         fallback_skill: str | None = None,
-    ) -> "TentacleCoordinator":
+    ) -> TentacleCoordinator:
         """使用 Cerebrum 静态规划器作为决策引擎的工厂方法.
 
         Args:
@@ -355,7 +363,7 @@ class TentacleCoordinator:
             )
             await coordinator.start()
         """
-        from runtime.core.cerebrum.planner import Rule, StaticPlanner
+        from runtime.core.cerebrum.planner import StaticPlanner
 
         planner = StaticPlanner(
             rules=rules,
@@ -375,12 +383,12 @@ class TentacleCoordinator:
     @classmethod
     def with_vlm(
         cls,
-        vlm_config: "VlmConfig",
+        vlm_config: VlmConfig,
         host: str = "0.0.0.0",
         port: int = 8765,
         *,
         dashboard_port: int | None = 8766,
-    ) -> "TentacleCoordinator":
+    ) -> TentacleCoordinator:
         """使用 VLM 作为决策引擎的工厂方法.
 
         流程：
@@ -407,7 +415,6 @@ class TentacleCoordinator:
             await coordinator.start()
         """
         from .mobile.vlm import VlmClient
-        from .mobile.vlm.client import VlmConfig
 
         vlm_client = VlmClient(vlm_config)
 
@@ -461,7 +468,7 @@ class TentacleCoordinator:
                         screenshot_base64=screenshot_b64,
                         task=task,
                     )
-            except Exception as e:
+            except Exception:
                 logger.exception("VLM 分析失败")
                 return []
 

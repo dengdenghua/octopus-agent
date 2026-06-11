@@ -746,9 +746,7 @@ def _image_blocks_from_attachments(attachments: Any) -> list[dict[str, Any]]:
         else:
             raw_url = item.get("url") or item.get("artifact_url")
             if isinstance(raw_url, str) and raw_url.strip():
-                if raw_url.startswith("data:image/"):
-                    url = raw_url
-                elif _looks_like_image_attachment(item):
+                if raw_url.startswith("data:image/") or _looks_like_image_attachment(item):
                     url = raw_url
         if not url:
             continue

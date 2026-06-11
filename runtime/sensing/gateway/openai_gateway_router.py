@@ -700,8 +700,8 @@ def synthesize_reply(
         )
         text = (resp.text or "").strip()
         if text:
-            from runtime.platform.runtime_policy.identity_filter import filter_text
             from runtime.platform.process.session import current_session
+            from runtime.platform.runtime_policy.identity_filter import filter_text
             filtered = filter_text(
                 text,
                 session=current_session(),

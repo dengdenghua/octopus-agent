@@ -24,12 +24,12 @@ import asyncio
 import json
 import logging
 import struct
-import time
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from websockets.server import WebSocketServerProtocol, serve
 
-from ..base import Heartbeat, TentacleStatus, ToolCall, ToolResult, now_ms
+from ..base import Heartbeat, ToolCall, ToolResult, now_ms
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ class TentacleWebSocketServer:
             # 等待结果（带超时）
             result = await asyncio.wait_for(future, timeout=timeout_ms / 1000.0)
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return ToolResult.fail(
                 call.call_id, -32012, f"Timeout after {timeout_ms}ms", timeout_ms
             )

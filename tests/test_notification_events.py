@@ -82,8 +82,8 @@ class TestBudgetWarnCrossing:
 
 
 def _executor_plus_budget(usd_limit: float = 0.01):
-    from runtime.execution.tool_engine import ToolExecutor
     from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.tool_engine import ToolExecutor
     from runtime.memory.journal import InMemoryJournal
     from runtime.platform.models import Budget, BudgetLimits, TaskId
     from runtime.safety.auth import TrustEngine
@@ -271,8 +271,8 @@ class TestImmuneReject:
     def test_dispatched_when_immune_blocks(self):
         from uuid import uuid4
 
-        from runtime.execution.tool_engine import ToolExecutor
         from runtime.execution.suckers import Skill, SkillRegistry
+        from runtime.execution.tool_engine import ToolExecutor
         from runtime.memory.journal import InMemoryJournal
         from runtime.platform.models import (
             ArmId,
@@ -281,12 +281,12 @@ class TestImmuneReject:
             SkillId,
             TaskId,
         )
+        from runtime.safety.auth import TrustEngine
         from runtime.safety.hooks import (
             HookDecision,
             NotificationEvent,
             register_hook,
         )
-        from runtime.safety.auth import TrustEngine
 
         captured: list[dict] = []
 

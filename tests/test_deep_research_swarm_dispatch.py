@@ -13,8 +13,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
 from runtime.execution.suckers.market_skills import _try_real_research_swarm
 
 
@@ -82,7 +80,6 @@ def test_returns_structured_result_on_success() -> None:
     final report and per-role outputs — NOT the legacy
     instructions-only payload."""
     import runtime.safety.organization.forge as forge
-    from runtime.execution.suckers import market_skills as ms
 
     # Stub topology
     class _StubTopology:

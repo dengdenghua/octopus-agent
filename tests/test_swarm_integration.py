@@ -8,9 +8,9 @@ import pytest
 
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.arms import Arm, ArmPool
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.swarm import SwarmResult, SwarmRuntime
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,
@@ -23,6 +23,7 @@ from runtime.platform.models import (
     new_id,
     now_utc,
 )
+from runtime.safety.auth import TrustEngine
 from runtime.safety.chromatophores import (
     TOPIC_ARM_BUSY,
     TOPIC_ARM_IDLE,
@@ -30,7 +31,6 @@ from runtime.safety.chromatophores import (
     ResourceClaim,
     SignalBus,
 )
-from runtime.safety.auth import TrustEngine
 
 # ═══════════════════════════════════════════════════════════
 # Shared fixtures

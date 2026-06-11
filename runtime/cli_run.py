@@ -18,9 +18,9 @@ from runtime.cli_core import (
 from runtime.core.cerebrum import PlannerError
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.arms import Arm, ArmPool
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.swarm import SwarmResult, SwarmRuntime
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal, Journal, JSONLJournal
 from runtime.platform.i18n import _
 from runtime.platform.models import (
@@ -34,8 +34,8 @@ from runtime.platform.models import (
     TaskGraph,
     TaskNode,
 )
-from runtime.safety.chromatophores import BoidsArbitrator, SignalBus
 from runtime.safety.auth import TrustEngine
+from runtime.safety.chromatophores import BoidsArbitrator, SignalBus
 
 
 def run_goal(

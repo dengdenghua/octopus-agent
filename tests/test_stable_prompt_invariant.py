@@ -12,13 +12,10 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-
 from runtime.core.cerebrum.stable_prompt import (
     StablePromptBuilder,
     render_volatile_as_user_message,
 )
-
 
 # ── builder unit tests ────────────────────────────────────────
 
@@ -166,7 +163,10 @@ def _system_text_from_run(thinking: bool = False, recall: str | None = None) -> 
     """
     # Lightweight reuse of the helpers from test_react_loop.
     from tests.test_react_loop import (  # type: ignore[import-not-found]
-        _CapturingRouter, _FakeStack, _intent, run_react_loop,
+        _CapturingRouter,
+        _FakeStack,
+        _intent,
+        run_react_loop,
     )
 
     router = _CapturingRouter(["Final Answer: done"])

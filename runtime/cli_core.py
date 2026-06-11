@@ -13,11 +13,11 @@ from runtime.core.nerves.reflex import (
     RegexMatcher,
 )
 from runtime.execution.arms import Arm, ArmPool
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.builtins import register_builtins
-from runtime.memory.journal import InMemoryJournal, Journal
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.hemolymph import ContextComposer
+from runtime.memory.journal import InMemoryJournal, Journal
 from runtime.platform.models import (
     ArmId,
     BudgetSpec,

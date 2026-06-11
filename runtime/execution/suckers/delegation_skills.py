@@ -6,8 +6,14 @@ from typing import Any
 
 from .delegation_budget import (
     _PER_TURN_ABSOLUTE_LIMIT,
+)
+from .delegation_budget import (
     check_absolute_cap as _check_absolute_cap,
+)
+from .delegation_budget import (
     compute_fingerprint as _compute_fingerprint,
+)
+from .delegation_budget import (
     record_delegation as _record_delegation,
 )
 from .registry import Skill, SkillRegistry

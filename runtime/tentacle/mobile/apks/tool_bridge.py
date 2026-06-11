@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -51,15 +51,15 @@ class Envelope:
     error: dict[str, Any] | None = None
 
     @staticmethod
-    def request(method: str, params: dict[str, Any] | None = None, id: str | None = None) -> "Envelope":
+    def request(method: str, params: dict[str, Any] | None = None, id: str | None = None) -> Envelope:
         return Envelope(method=method, params=params, id=id or str(uuid.uuid4()))
 
     @staticmethod
-    def reply_ok(call_id: str, result: Any) -> "Envelope":
+    def reply_ok(call_id: str, result: Any) -> Envelope:
         return Envelope(id=call_id, result=result)
 
     @staticmethod
-    def reply_err(call_id: str, code: int, message: str, data: Any = None) -> "Envelope":
+    def reply_err(call_id: str, code: int, message: str, data: Any = None) -> Envelope:
         err: dict[str, Any] = {"code": code, "message": message}
         if data is not None:
             err["data"] = data
@@ -79,7 +79,7 @@ class Envelope:
         return out
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "Envelope":
+    def from_dict(cls, d: dict[str, Any]) -> Envelope:
         return cls(
             method=d.get("method"),
             id=d.get("id"),

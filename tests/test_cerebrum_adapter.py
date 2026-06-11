@@ -10,17 +10,13 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import pytest
 import pytest_asyncio
 
 from runtime.core.cerebrum.planner import Rule, StaticPlanner
-from runtime.tentacle.base import ToolCall, ToolResult
-from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from runtime.tentacle.coordinator import TentacleCoordinator
+from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from runtime.tentacle.mobile.device import MobileDevice
-
 
 # ── fixtures ──────────────────────────────────────────────
 

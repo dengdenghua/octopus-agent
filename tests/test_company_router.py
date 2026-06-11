@@ -867,7 +867,7 @@ def test_company_task_syncs_from_team_task_events(tmp_path: Path) -> None:
         f"/api/company/projects/{project_id}/tasks",
         json={"title": "Track runner state"},
     ).json()
-    sync = getattr(router, "sync_team_task_event")
+    sync = router.sync_team_task_event
 
     running = sync({
         "type": "task:progress",
@@ -979,7 +979,7 @@ def test_company_insights_parse_fenced_project_update_json(tmp_path: Path) -> No
         f"/api/company/projects/{project_id}/tasks",
         json={"title": "Return structured update"},
     ).json()
-    sync = getattr(router, "sync_team_task_event")
+    sync = router.sync_team_task_event
 
     sync({
         "type": "task:progress",

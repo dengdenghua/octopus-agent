@@ -28,7 +28,6 @@ from typing import Any, Optional
 
 from runtime.core.nerves.bus import NervesEvent, publish
 
-
 # ── Device State ────────────────────────────────────────
 
 
@@ -215,7 +214,7 @@ class DevicePool:
                 reason=reason,
             ))
 
-    def get(self, device_id: str) -> Optional[ConnectedDevice]:
+    def get(self, device_id: str) -> ConnectedDevice | None:
         return self._devices.get(device_id)
 
     def list_online(self) -> list[ConnectedDevice]:
@@ -248,9 +247,9 @@ class DevicePool:
 
     def pick_device(
         self,
-        preferred_id: Optional[str] = None,
-        kind: Optional[DeviceKind] = None,
-    ) -> Optional[ConnectedDevice]:
+        preferred_id: str | None = None,
+        kind: DeviceKind | None = None,
+    ) -> ConnectedDevice | None:
         """Select a device for the next tool call.
 
         Strategy:
@@ -282,11 +281,11 @@ class DevicePool:
 
     async def call_tool(
         self,
-        device_id: Optional[str],
+        device_id: str | None,
         method: str,
         params: dict[str, Any],
         timeout_s: float = 30.0,
-        kind: Optional[DeviceKind] = None,
+        kind: DeviceKind | None = None,
     ) -> Any:
         dev = self.pick_device(preferred_id=device_id, kind=kind)
         if dev is None:
@@ -309,7 +308,7 @@ class DevicePool:
             }
             await dev.ws.send_json(request)
             return await asyncio.wait_for(fut, timeout=timeout_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise TimeoutError(f"Tool call {method} timed out after {timeout_s}s")
         finally:
             dev.pending_calls.pop(call_id, None)
@@ -333,7 +332,7 @@ class DevicePool:
 
 # ── Global singleton ────────────────────────────────────
 
-_pool: Optional[DevicePool] = None
+_pool: DevicePool | None = None
 
 
 def get_device_pool() -> DevicePool:

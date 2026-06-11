@@ -11,7 +11,7 @@ from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
 
-from .local import LocalBackend, BackendAudit, Sandbox
+from .local import BackendAudit, LocalBackend, Sandbox
 
 _OUTPUT_CAP_BYTES = 200_000
 _DEFAULT_IMAGE = "python:3.11-slim"

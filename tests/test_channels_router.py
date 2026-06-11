@@ -42,9 +42,9 @@ def _rt():
 def _build_stack(tmp_path: Path):
     from runtime.core.cerebrum import StaticPlanner
     from runtime.core.cerebrum.planner import Rule
-    from runtime.execution.tool_engine import ToolExecutor
     from runtime.execution.suckers import SkillRegistry
     from runtime.execution.suckers.builtins import register_all
+    from runtime.execution.tool_engine import ToolExecutor
     from runtime.memory.journal import JSONLJournal
     from runtime.platform.models import BudgetSpec, SkillId
     from runtime.safety.auth import TrustEngine

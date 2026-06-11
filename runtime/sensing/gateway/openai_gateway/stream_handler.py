@@ -132,8 +132,8 @@ def _direct_llm_fallback_impl(
     )
     try:
         resp = router.call(req)
-        from runtime.platform.runtime_policy.identity_filter import filter_text
         from runtime.platform.process.session import current_session
+        from runtime.platform.runtime_policy.identity_filter import filter_text
         filtered = filter_text(
             resp.text,
             session=current_session(),
@@ -251,8 +251,8 @@ def _stream_direct_llm_fallback(
         thinking_budget=thinking_budget_for_effort(normalized_effort, max_tokens),
     )
 
-    from runtime.platform.runtime_policy.identity_filter import filter_text
     from runtime.platform.process.session import current_session
+    from runtime.platform.runtime_policy.identity_filter import filter_text
 
     text_buf: list[str] = []
     thinking_buf: list[str] = []

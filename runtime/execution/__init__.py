@@ -18,7 +18,13 @@ from __future__ import annotations
 # Backward-compat shims for code that does `from runtime.execution import X`
 # where X is a submodule name now living under misc/.
 from .misc import (  # noqa: F401
-    agent_avatar, agent_packs, capability_catalog, capability_permissions,
-    file_write_leases, image_generation, multiagent_contracts,
-    parallel_runner, skill_policy,
+    agent_avatar,
+    agent_packs,
+    capability_catalog,
+    capability_permissions,
+    file_write_leases,
+    image_generation,
+    multiagent_contracts,
+    parallel_runner,
+    skill_policy,
 )

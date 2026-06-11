@@ -18,11 +18,11 @@ Octopus Mobile 的核心抽象。详见：
 
 from __future__ import annotations
 
-from .base import Tentacle, TentacleType, TentacleStatus, Heartbeat, ToolCall, ToolResult
-from .pool import TentaclePool, select_for_affinity
-from .mobile.device import MobileDevice, ANDROID_CAPABILITIES
-from .desktop import DesktopDevice, DESKTOP_CAPABILITIES
+from .base import Heartbeat, Tentacle, TentacleStatus, TentacleType, ToolCall, ToolResult
+from .desktop import DESKTOP_CAPABILITIES, DesktopDevice
+from .mobile.device import ANDROID_CAPABILITIES, MobileDevice
 from .mobile.mcp_server import TentacleMcpServer, serve_stdio
+from .pool import TentaclePool, select_for_affinity
 
 # 仿生学别名（按 ADR-001 双轨命名契约 —— 类名用工程名，生物名仅在文档与别名）
 Tentacle = Tentacle  # 同名（生物名 ≡ 工程名，因为概念高度一致）

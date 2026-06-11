@@ -21,8 +21,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
-from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 from runtime.platform.process.paths import project_root
+from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 
 
 def create_browser_router() -> APIRouter:

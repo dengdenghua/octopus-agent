@@ -29,10 +29,12 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from runtime.platform.plugins.plugin_base import ModuleContext, ModulePlugin, ProvidedCapability
+from runtime.platform.plugins.plugin_base import ModuleContext, ModulePlugin
 
 try:
-    from fastapi import Request as _FastAPIRequest  # noqa: F401 – needed for route annotation resolution
+    from fastapi import (
+        Request as _FastAPIRequest,  # noqa: F401 – needed for route annotation resolution
+    )
 except ImportError:
     _FastAPIRequest = None  # type: ignore[assignment,misc]
 

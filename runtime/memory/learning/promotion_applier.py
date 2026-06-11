@@ -351,7 +351,7 @@ def _audit_record(
 
 def _promotion_id(*, item_id: str, target: str) -> str:
     digest = hashlib.blake2b(
-        f"{item_id}|{target}".encode("utf-8"),
+        f"{item_id}|{target}".encode(),
         digest_size=10,
     ).hexdigest()
     return f"pa_{digest}"

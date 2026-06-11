@@ -8,8 +8,8 @@ import pytest
 
 from runtime.core.cerebrum.planner import Rule, StaticPlanner
 from runtime.core.graph_runtime import GraphRuntime, TemplateResolutionError, resolve_templates
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,
@@ -19,8 +19,8 @@ from runtime.platform.models import (
     ParsedIntent,
     SkillId,
 )
-from runtime.safety.evolution.canary import CanaryConfig, CanaryManager
 from runtime.safety.auth import TrustEngine
+from runtime.safety.evolution.canary import CanaryConfig, CanaryManager
 from runtime.safety.recovery.gepa_bridge import (
     mark_winner_proposal_applied,
     record_winner_proposal_and_canary,

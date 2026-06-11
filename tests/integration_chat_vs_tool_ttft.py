@@ -25,17 +25,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from runtime.core.cerebrum.react_loop import stream_react_loop  # noqa: E402
-from runtime.execution.tool_engine import ToolExecutor  # noqa: E402
 from runtime.execution.suckers import Skill, SkillRegistry  # noqa: E402
+from runtime.execution.tool_engine import ToolExecutor  # noqa: E402
 from runtime.platform.models import ParsedIntent  # noqa: E402
 from runtime.safety.auth import TrustEngine  # noqa: E402
-from runtime.sensing.model_router.openai_router import OpenAIModelRouter  # noqa: E402
 from runtime.sensing.gateway.openai_gateway.stream_handler import (  # noqa: E402
     _stream_direct_llm_fallback,
 )
 from runtime.sensing.gateway.realtime_turn_routing import (  # noqa: E402
     looks_like_tool_intent,
 )
+from runtime.sensing.model_router.openai_router import OpenAIModelRouter  # noqa: E402
 
 
 def _build_router() -> OpenAIModelRouter:

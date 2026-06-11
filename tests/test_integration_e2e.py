@@ -6,8 +6,8 @@ import pytest
 
 from runtime.core.cerebrum import StaticPlanner
 from runtime.core.cerebrum.planner import Rule
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,

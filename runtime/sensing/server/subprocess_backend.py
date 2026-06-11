@@ -11,7 +11,7 @@ from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
 
-from .local import LocalBackend, BackendAudit, Sandbox
+from .local import BackendAudit, LocalBackend, Sandbox
 
 _SUBPROCESS_ENTRY = """
 import json, os, sys, traceback

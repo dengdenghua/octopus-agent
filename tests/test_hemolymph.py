@@ -8,8 +8,8 @@ import pytest
 
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.suckers.builtins import register_builtins
-from runtime.memory.journal import InMemoryJournal
 from runtime.memory.hemolymph import ContextComposer, estimate_tokens
+from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,
     ParsedIntent,

@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from runtime.sensing.server.ssh import (
-    SshSandbox,
     SshBackend,
+    SshSandbox,
     SshUnavailableError,
     _sh_quote,
 )

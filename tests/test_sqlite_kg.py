@@ -261,8 +261,8 @@ class TestLLMPlannerCompat:
 
         from runtime.core.cerebrum import LLMPlanner
         from runtime.execution.suckers import Skill, SkillRegistry
-        from runtime.memory.journal import InMemoryJournal
         from runtime.memory.hemolymph import ContextComposer
+        from runtime.memory.journal import InMemoryJournal
         from runtime.platform.models import ParsedIntent
         from runtime.sensing.model_router import MockModelRouter
 

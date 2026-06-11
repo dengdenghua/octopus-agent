@@ -5,9 +5,9 @@ import pytest
 
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.arms import Arm, ArmPool
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.swarm import SwarmRuntime
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,
@@ -19,8 +19,8 @@ from runtime.platform.models import (
     TaskNode,
     new_id,
 )
-from runtime.safety.chromatophores import BoidsArbitrator, SignalBus
 from runtime.safety.auth import TrustEngine
+from runtime.safety.chromatophores import BoidsArbitrator, SignalBus
 from runtime.safety.recovery.skill_forge import ForgeConfig, SkillForge
 
 # ═══════════════════════════════════════════════════════════

@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-
 # ── 消息 ───────────────────────────────────────────────────────
 
 
@@ -44,23 +43,23 @@ class ChatMessage:
         return d
 
     @classmethod
-    def system(cls, content: str) -> "ChatMessage":
+    def system(cls, content: str) -> ChatMessage:
         return cls(role="system", content=content)
 
     @classmethod
-    def user(cls, content: str) -> "ChatMessage":
+    def user(cls, content: str) -> ChatMessage:
         return cls(role="user", content=content)
 
     @classmethod
-    def assistant(cls, content: str, tool_calls: list["ToolCall"] | None = None) -> "ChatMessage":
+    def assistant(cls, content: str, tool_calls: list[ToolCall] | None = None) -> ChatMessage:
         msg = cls(role="assistant", content=content)
         msg._tool_calls = tool_calls or []
         return msg
 
     # 内部字段：assistant 消息携带的 tool_calls（OpenAI 风格）
-    _tool_calls: list["ToolCall"] = field(default_factory=list, repr=False)
+    _tool_calls: list[ToolCall] = field(default_factory=list, repr=False)
 
-    def tool_calls(self) -> list["ToolCall"]:
+    def tool_calls(self) -> list[ToolCall]:
         return list(self._tool_calls)
 
 

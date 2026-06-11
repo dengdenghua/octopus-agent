@@ -130,8 +130,8 @@ class TestJournalAuditChain:
 
 class TestBeakBudgetTracker:
     def _build_executor(self, tracker=None):
-        from runtime.execution.tool_engine.executor import ToolExecutor
         from runtime.execution.suckers import Skill, SkillRegistry
+        from runtime.execution.tool_engine.executor import ToolExecutor
         from runtime.memory.journal import InMemoryJournal
         from runtime.safety.auth import TrustEngine
 

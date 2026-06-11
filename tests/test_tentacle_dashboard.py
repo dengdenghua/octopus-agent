@@ -6,17 +6,15 @@
 from __future__ import annotations
 
 import pytest
-
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.core.cerebrum.planner import Rule, StaticPlanner
 from runtime.tentacle.base import ToolCall
-from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from runtime.tentacle.coordinator import TentacleCoordinator
 from runtime.tentacle.dashboard import create_tentacle_router
+from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from runtime.tentacle.mobile.device import MobileDevice
-
-from fastapi import FastAPI
 
 
 @pytest.fixture

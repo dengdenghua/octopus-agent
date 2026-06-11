@@ -20,7 +20,7 @@ import asyncio
 import io
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import TYPE_CHECKING, Any
 
@@ -136,7 +136,7 @@ class PcScreenCapture:
 
     async def _capture_loop(self) -> None:
         """主捕获循环."""
-        from .screen_relay import FrameType, FrameFlags, encode_frame_header
+        from .screen_relay import FrameFlags, FrameType, encode_frame_header
 
         interval = 1.0 / self._config.fps
         quality = self._config.jpeg_quality

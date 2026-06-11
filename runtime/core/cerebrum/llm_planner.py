@@ -13,8 +13,8 @@ _logger = logging.getLogger(__name__)
 
 from runtime.adapters.instrumentation import trace_stage
 from runtime.execution.suckers import SkillRegistry
-from runtime.memory.journal import Journal
 from runtime.memory.hemolymph import ContextComposer
+from runtime.memory.journal import Journal
 from runtime.platform.models import (
     BudgetSpec,
     ParsedIntent,

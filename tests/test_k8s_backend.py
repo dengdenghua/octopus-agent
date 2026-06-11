@@ -8,8 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from runtime.sensing.server.k8s import (
-    K8sSandbox,
     K8sBackend,
+    K8sSandbox,
     K8sUnavailableError,
 )
 

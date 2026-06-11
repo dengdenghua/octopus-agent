@@ -286,7 +286,11 @@ class TestEvolutionStatusEndpoint:
             return _Resp(text=script[i % len(script)])
 
         def _fake_stream(req):  # noqa: ANN001
-            from runtime.sensing.model_router.models import CostEntry, ModelResponse, ModelStreamEvent
+            from runtime.sensing.model_router.models import (
+                CostEntry,
+                ModelResponse,
+                ModelStreamEvent,
+            )
             resp = _fake_call(req)
             if resp.text:
                 yield ModelStreamEvent(type="text_delta", delta=resp.text)

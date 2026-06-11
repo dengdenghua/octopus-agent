@@ -1378,16 +1378,16 @@ When making changes, first read the surrounding code.
             with contextlib.suppress(Exception):
                 journal.write_task_resumed(
                     task_id=task_id,
-                    extra_tokens=extra_tokens,
-                    extra_usd=extra_usd,
-                    extra_iterations=extra_iterations,
+                    extra_tokens=body.extra_tokens,
+                    extra_usd=body.extra_usd,
+                    extra_iterations=body.extra_iterations,
                 )
         return {
             "ok": True,
             "task_id": task_id,
             "thread_id": thread_id,
-            "extra_tokens": extra_tokens,
-            "extra_iterations": extra_iterations,
+            "extra_tokens": body.extra_tokens,
+            "extra_iterations": body.extra_iterations,
             "message": (
                 f"登记 pending resume 到 thread {thread_id or '?'} · "
                 "下条消息 run_stream 会自动接续"

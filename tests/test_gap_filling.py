@@ -6,14 +6,14 @@ from unittest.mock import patch
 
 import pytest
 
-from runtime.memory.runtime_state.context_compressor import (
-    CompressorConfig,
-    ContextCompressor,
-)
 from runtime.memory.diagnostics.error_classifier import (
     ErrorCategory,
     RecoveryAction,
     classify_error,
+)
+from runtime.memory.runtime_state.context_compressor import (
+    CompressorConfig,
+    ContextCompressor,
 )
 from runtime.platform.budget.iteration_budget import (
     IterationBudget,

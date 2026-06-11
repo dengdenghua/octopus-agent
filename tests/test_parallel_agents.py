@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.execution.misc.file_write_leases import acquire_file_write_lease
 from runtime.execution.parallel_agents import (
     DispatchTaskInput,
     ParallelAgentOrchestrator,
 )
-from runtime.execution.misc.file_write_leases import acquire_file_write_lease
 from runtime.sensing.gateway.parallel_agents_router import (
     create_parallel_agents_router,
 )

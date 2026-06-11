@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Optional
 
 
 @dataclass
@@ -52,7 +52,7 @@ class DeviceLockManager:
         sem = self._get_semaphore(device_id)
         try:
             await asyncio.wait_for(sem.acquire(), timeout=timeout_s)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             current = self._locks.get(device_id)
             holder_info = f" (held by {current.holder} for {time.time()-current.acquired_at:.1f}s)" if current else ""
             raise TimeoutError(
@@ -70,7 +70,7 @@ class DeviceLockManager:
     def is_locked(self, device_id: str) -> bool:
         return device_id in self._locks
 
-    def current_holder(self, device_id: str) -> Optional[str]:
+    def current_holder(self, device_id: str) -> str | None:
         entry = self._locks.get(device_id)
         return entry.holder if entry else None
 
@@ -80,7 +80,7 @@ class DeviceLockManager:
 
 # ── Global singleton ────────────────────────────────────
 
-_manager: Optional[DeviceLockManager] = None
+_manager: DeviceLockManager | None = None
 
 
 def get_device_lock_manager() -> DeviceLockManager:

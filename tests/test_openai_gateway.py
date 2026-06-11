@@ -12,12 +12,12 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from runtime.platform.config import AgentConfig, PlannerConfig, build_from_config  # noqa: E402
 from runtime.platform.models import ParsedIntent  # noqa: E402
-from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent  # noqa: E402
 from runtime.sensing.gateway import create_openai_router  # noqa: E402
 from runtime.sensing.gateway.openai_gateway import _stream_direct_llm_fallback  # noqa: E402
 from runtime.sensing.gateway.openai_gateway.request_parser import (  # noqa: E402
     _model_runtime_options,
 )
+from runtime.sensing.model_router.models import ModelResponse, ModelStreamEvent  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.

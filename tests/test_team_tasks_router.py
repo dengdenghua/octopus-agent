@@ -20,9 +20,9 @@ from runtime.sensing.gateway.team_rooms_router import (  # noqa: E402
 )
 from runtime.sensing.gateway.team_tasks_router import (  # noqa: E402
     TeamTaskWire,
-    create_team_tasks_router,
     _fallback_topology,
     _task_input_text,
+    create_team_tasks_router,
 )
 
 

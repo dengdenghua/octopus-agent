@@ -11,8 +11,8 @@ from runtime.core.cerebrum.planner import PlannerError, Rule
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.arms.base import ArmPool, Worker
 from runtime.execution.suckers import Skill, SkillRegistry
-from runtime.memory.journal import InMemoryJournal
 from runtime.memory.hemolymph import ContextComposer
+from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,
     BudgetSpec,

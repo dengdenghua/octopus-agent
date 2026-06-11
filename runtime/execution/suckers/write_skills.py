@@ -24,7 +24,6 @@ from __future__ import annotations
 # ║ free function above it. Splitting risks scattering the skill ↔ helper ║
 # ║ pairs across files for no real call-site win.                          ║
 # ╚════════════════════════════════════════════════════════════════════════╝
-
 import contextlib
 import json
 import os

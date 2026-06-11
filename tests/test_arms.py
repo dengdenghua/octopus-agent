@@ -16,8 +16,8 @@ from runtime.execution.arms import (
     make_file_arm,
     make_search_arm,
 )
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmAssignment,

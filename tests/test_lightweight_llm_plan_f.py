@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from runtime.tentacle.llm import (
     ChatMessage,
     FakeTransport,
@@ -25,9 +23,7 @@ from runtime.tentacle.llm import (
     TokenUsage,
     ToolCall,
     ToolCallResult,
-    ToolMessage,
 )
-
 
 # ── 工具类 ──────────────────────────────────────────────────
 

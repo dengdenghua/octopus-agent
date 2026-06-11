@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from runtime.adapters.instrumentation import trace_stage
 
-from .local import LocalBackend, BackendAudit, Sandbox
+from .local import BackendAudit, LocalBackend, Sandbox
 
 NetworkMode = Literal["none", "bridge", "host"]
 

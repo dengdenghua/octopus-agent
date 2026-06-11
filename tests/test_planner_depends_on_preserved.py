@@ -28,8 +28,8 @@ import json
 def _make_planner(reg, response_text):
     """Shared helper · LLMPlanner needs a ContextComposer parameter."""
     from runtime.core.cerebrum.llm_planner import LLMPlanner
-    from runtime.memory.journal import InMemoryJournal
     from runtime.memory.hemolymph import ContextComposer
+    from runtime.memory.journal import InMemoryJournal
     from runtime.sensing.model_router import MockModelRouter
 
     composer = ContextComposer(journal=InMemoryJournal(), registry=reg)

@@ -57,7 +57,6 @@ from __future__ import annotations
 # ║   §11 optimize_for_recipe (GEPA entrypoint)          ~L955             ║
 # ║   §12 persist_winner + propose_for_losing_recipes    ~L1129            ║
 # ╚════════════════════════════════════════════════════════════════════════╝
-
 import json
 import logging
 import os

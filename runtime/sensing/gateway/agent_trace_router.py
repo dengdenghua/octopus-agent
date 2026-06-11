@@ -9,11 +9,11 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from runtime.memory.diagnostics.trace_store import AgentTraceStore
 from runtime.memory.learning.experience_ledger import ExperienceLedger
-from runtime.memory.runtime_state.process_timeline import build_task_run_process_timeline
 from runtime.memory.learning.promotion_applier import PromotionApplier
 from runtime.memory.learning.review_queue import ReviewQueue
-from runtime.memory.diagnostics.trace_store import AgentTraceStore
+from runtime.memory.runtime_state.process_timeline import build_task_run_process_timeline
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
 
 _STORE_LOCK = threading.Lock()

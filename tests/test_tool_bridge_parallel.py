@@ -19,16 +19,16 @@ from __future__ import annotations
 import time
 from types import SimpleNamespace
 
-from runtime.execution.tool_engine.executor import ToolExecutor
 from runtime.execution.suckers.registry import Skill, SkillRegistry
+from runtime.execution.tool_engine.executor import ToolExecutor
 from runtime.platform.models import ParsedIntent
 from runtime.safety.auth import TrustEngine
+from runtime.sensing.gateway.tool_bridge import stream_agentic_fallback
 from runtime.sensing.model_router.models import (
     ModelResponse,
     ModelStreamEvent,
     ToolCall,
 )
-from runtime.sensing.gateway.tool_bridge import stream_agentic_fallback
 
 
 def _agent():

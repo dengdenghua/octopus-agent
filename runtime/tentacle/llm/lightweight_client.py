@@ -19,8 +19,9 @@ import os
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Protocol
+from typing import Any, Protocol
 
 from .chat_types import (
     ChatMessage,
@@ -84,7 +85,7 @@ class LlmConfig:
     # ── 预设工厂 ────────────────────────────────────────────
 
     @classmethod
-    def deepSeek(cls, api_key: str | None = None, model: str = "deepseek-chat") -> "LlmConfig":
+    def deepSeek(cls, api_key: str | None = None, model: str = "deepseek-chat") -> LlmConfig:
         return cls(
             base_url="https://api.deepseek.com/v1",
             api_key=api_key or os.environ.get("DEEPSEEK_API_KEY", ""),
@@ -92,7 +93,7 @@ class LlmConfig:
         )
 
     @classmethod
-    def qwen(cls, api_key: str | None = None, model: str = "qwen-plus") -> "LlmConfig":
+    def qwen(cls, api_key: str | None = None, model: str = "qwen-plus") -> LlmConfig:
         return cls(
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             api_key=api_key or os.environ.get("QWEN_API_KEY", ""),
@@ -100,7 +101,7 @@ class LlmConfig:
         )
 
     @classmethod
-    def openAi(cls, api_key: str | None = None, model: str = "gpt-4o-mini") -> "LlmConfig":
+    def openAi(cls, api_key: str | None = None, model: str = "gpt-4o-mini") -> LlmConfig:
         return cls(
             base_url="https://api.openai.com/v1",
             api_key=api_key or os.environ.get("OPENAI_API_KEY", ""),
@@ -108,12 +109,12 @@ class LlmConfig:
         )
 
     @classmethod
-    def ollama(cls, base_url: str = "http://localhost:11434/v1", model: str = "qwen2.5:7b") -> "LlmConfig":
+    def ollama(cls, base_url: str = "http://localhost:11434/v1", model: str = "qwen2.5:7b") -> LlmConfig:
         # Ollama OpenAI 兼容模式不需要 key
         return cls(base_url=base_url, api_key="ollama", model=model)
 
     @classmethod
-    def glm(cls, api_key: str | None = None, model: str = "glm-4-flash") -> "LlmConfig":
+    def glm(cls, api_key: str | None = None, model: str = "glm-4-flash") -> LlmConfig:
         return cls(
             base_url="https://open.bigmodel.cn/api/paas/v4",
             api_key=api_key or os.environ.get("GLM_API_KEY", ""),

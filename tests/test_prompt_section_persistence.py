@@ -8,8 +8,8 @@ from uuid import uuid4
 from runtime.core.cerebrum import LLMPlanner
 from runtime.core.cerebrum.prompt_persistence import dump_section, load_section
 from runtime.execution.suckers import Skill, SkillRegistry
-from runtime.memory.journal import InMemoryJournal
 from runtime.memory.hemolymph import ContextComposer
+from runtime.memory.journal import InMemoryJournal
 from runtime.platform.config import (
     AgentConfig,
     LearnConfig,

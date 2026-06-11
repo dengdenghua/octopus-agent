@@ -296,9 +296,9 @@ class TestExecutorEnforcement:
     def _setup(self, tmp_path: Path):
         """Build a registered write skill + executor. Returns
         (executor, budget_factory)."""
-        from runtime.execution.tool_engine import ToolExecutor
         from runtime.execution.suckers import SkillRegistry
         from runtime.execution.suckers.write_skills import register_write_skills
+        from runtime.execution.tool_engine import ToolExecutor
         from runtime.memory.journal import InMemoryJournal
         from runtime.safety.auth import TrustEngine
 

@@ -17,13 +17,15 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
-from runtime.sensing.model_router.devices import ConnectedDevice, AndroidDevice, DeviceKind, DeviceState, get_device_pool
 from runtime.safety.approval.device_lock import get_device_lock_manager
-
+from runtime.sensing.model_router.devices import (
+    AndroidDevice,
+    get_device_pool,
+)
 
 _VALID_ANDROID_ACTIONS = {
     "tap", "long_press", "swipe", "input_text", "system_key",

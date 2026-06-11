@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 from runtime.execution.agents.loader import default_agents_root
+from runtime.execution.misc.agent_avatar import pixel_agent_avatar_svg
 from runtime.platform.io import atomic_write_text
 
 _AGENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")

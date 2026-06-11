@@ -13,14 +13,12 @@ Octopus Mobile 端（Kotlin）通过 WebSocket 连接本服务器，接收 tool/
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import Any
 
 from ..base import (
     Heartbeat,
-    Tentacle,
     TentacleStatus,
     TentacleType,
     ToolCall,

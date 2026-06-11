@@ -75,14 +75,14 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from uuid import uuid4
 
+from runtime.core.cerebrum.capability_router import (
+    activate_capabilities,
+    order_skill_names,
+)
 from runtime.core.cerebrum.todo_protocol import (
     context_mode,
     render_todo_protocol_guidance,
     should_require_todo_protocol,
-)
-from runtime.core.cerebrum.capability_router import (
-    activate_capabilities,
-    order_skill_names,
 )
 from runtime.platform.models import ParsedIntent
 from runtime.sensing.model_router.models import (

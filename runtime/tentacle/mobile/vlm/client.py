@@ -79,7 +79,7 @@ class VlmConfig:
     # ── 预设工厂 ────────────────────────────────────────────
 
     @classmethod
-    def deepseek_vl(cls, api_key: str | None = None, model: str = "deepseek-vl") -> "VlmConfig":
+    def deepseek_vl(cls, api_key: str | None = None, model: str = "deepseek-vl") -> VlmConfig:
         """DeepSeek-VL 配置."""
         return cls(
             base_url="https://api.deepseek.com/v1",
@@ -88,7 +88,7 @@ class VlmConfig:
         )
 
     @classmethod
-    def qwen_vl(cls, api_key: str | None = None, model: str = "qwen-vl-max") -> "VlmConfig":
+    def qwen_vl(cls, api_key: str | None = None, model: str = "qwen-vl-max") -> VlmConfig:
         """阿里 Qwen-VL 配置."""
         return cls(
             base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -97,7 +97,7 @@ class VlmConfig:
         )
 
     @classmethod
-    def glm_vl(cls, api_key: str | None = None, model: str = "glm-4v") -> "VlmConfig":
+    def glm_vl(cls, api_key: str | None = None, model: str = "glm-4v") -> VlmConfig:
         """智谱 GLM-4V 配置."""
         return cls(
             base_url="https://open.bigmodel.cn/api/paas/v4",
@@ -106,7 +106,7 @@ class VlmConfig:
         )
 
     @classmethod
-    def openai_vl(cls, api_key: str | None = None, model: str = "gpt-4o") -> "VlmConfig":
+    def openai_vl(cls, api_key: str | None = None, model: str = "gpt-4o") -> VlmConfig:
         """OpenAI GPT-4o 配置."""
         return cls(
             base_url="https://api.openai.com/v1",

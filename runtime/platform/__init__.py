@@ -27,9 +27,10 @@
 """
 from __future__ import annotations
 
+from runtime.platform.plugins.plugin_loader import PluginLoader, get_plugin_loader
+
 # Top-level convenience re-exports (unchanged from before)
 from runtime.platform.process.eventbus import DomainEvent, EventBus, get_eventbus
-from runtime.platform.plugins.plugin_loader import PluginLoader, get_plugin_loader
 from runtime.platform.process.state import StateStore, get_statestore
 
 __all__ = [
@@ -44,23 +45,54 @@ __all__ = [
 
 # Backward-compat shims for code that does `from runtime.platform import X`
 # where X is a submodule name.
-from .process import (  # noqa: F401
-    session, session_executor, state, scope, streaming, paths, utils,
-    service_provider, event_bridge, eventbus, distributed_lock, turn_model,
-)
-from .observability import (  # noqa: F401
-    metrics, health, logging_config, structured_logging, redactor, doctor,
-)
-from .plugins import (  # noqa: F401
-    plugin_base, plugin_compat, plugin_hub, plugin_loader, plugins, skill_market,
-)
 from .lifecycle import (  # noqa: F401
-    backup, data_migration, factory_reset, setup_wizard, demo,
+    backup,
+    data_migration,
+    demo,
+    factory_reset,
+    setup_wizard,
 )
 from .llm_infra import (  # noqa: F401
-    llm_cache, llm_caller, budget_tracker,
+    budget_tracker,
+    llm_cache,
+    llm_caller,
+)
+from .observability import (  # noqa: F401
+    doctor,
+    health,
+    logging_config,
+    metrics,
+    redactor,
+    structured_logging,
+)
+from .plugins import (  # noqa: F401
+    plugin_base,
+    plugin_compat,
+    plugin_hub,
+    plugin_loader,
+    plugins,
+    skill_market,
+)
+from .process import (  # noqa: F401
+    distributed_lock,
+    event_bridge,
+    eventbus,
+    paths,
+    scope,
+    service_provider,
+    session,
+    session_executor,
+    state,
+    streaming,
+    turn_model,
+    utils,
 )
 from .runtime_policy import (  # noqa: F401
-    browser_sessions, capabilities, feature_flags, idempotency,
-    identity_filter, retry, workspaces,
+    browser_sessions,
+    capabilities,
+    feature_flags,
+    idempotency,
+    identity_filter,
+    retry,
+    workspaces,
 )

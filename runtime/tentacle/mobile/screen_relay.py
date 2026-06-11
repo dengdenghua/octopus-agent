@@ -22,7 +22,7 @@ import asyncio
 import logging
 import struct
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import Any
 
@@ -482,6 +482,7 @@ class ScreenRelay:
     def _generate_mock_jpeg(tentacle_id: str, frame_idx: int) -> bytes:
         """使用 PIL 生成 mock JPEG 测试图案."""
         import io
+
         from PIL import Image, ImageDraw
 
         img = Image.new("RGB", (320, 240), color=(30, 30, 40))

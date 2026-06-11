@@ -9,8 +9,8 @@ from runtime.platform.models import (
     Trajectory,
     TrajectoryOutcome,
 )
-from runtime.sensing.model_router.models import MockModelRouter
 from runtime.sensing.gateway.openai_gateway_router import synthesize_reply
+from runtime.sensing.model_router.models import MockModelRouter
 
 
 def _web_search_trajectory() -> Trajectory:

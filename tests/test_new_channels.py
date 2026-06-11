@@ -17,23 +17,20 @@ from runtime.adapters.channels import (
     BlueBubblesError,
     Channel,
     ChannelManager,
-    ChannelRoutingError,
     EmailChannel,
     EmailError,
     GoogleChatChannel,
-    GoogleChatError,
     HomeAssistantChannel,
     HomeAssistantError,
-    InboundMessage,
     LineChannel,
     LineError,
     LineSignatureError,
-    MattermostChannel,
-    MattermostError,
-    MattermostSignatureError,
     MatrixChannel,
     MatrixError,
     MatrixSignatureError,
+    MattermostChannel,
+    MattermostError,
+    MattermostSignatureError,
     NtfyChannel,
     NtfyError,
     OpenWebUIChannel,
@@ -41,7 +38,6 @@ from runtime.adapters.channels import (
     OutboundMessage,
     QQBotChannel,
     QQBotError,
-    QQBotSignatureError,
     SignalChannel,
     SignalError,
     SignalSignatureError,
@@ -51,14 +47,9 @@ from runtime.adapters.channels import (
     SmsError,
     SmsSignatureError,
     TeamsChannel,
-    TeamsError,
-    TeamsSignatureError,
-    WeComChannel,
-    WeComError,
-    WeComSignatureError,
     WebhooksChannel,
-    WebhooksError,
     WebhooksSignatureError,
+    WeComChannel,
     WhatsAppChannel,
     WhatsAppError,
     WhatsAppSignatureError,
@@ -857,13 +848,13 @@ class TestWeComChannel:
         with patch.object(ch, "_verify_signature"), \
              patch.object(ch, "_decrypt_message", return_value=decrypted_xml):
             body = (
-                "<xml>"
-                "<MsgSignature>sig</MsgSignature>"
-                "<TimeStamp>1700000000</TimeStamp>"
-                "<Nonce>nonce</Nonce>"
-                "<Encrypt>encrypted</Encrypt>"
-                "</xml>"
-            ).encode()
+                b"<xml>"
+                b"<MsgSignature>sig</MsgSignature>"
+                b"<TimeStamp>1700000000</TimeStamp>"
+                b"<Nonce>nonce</Nonce>"
+                b"<Encrypt>encrypted</Encrypt>"
+                b"</xml>"
+            )
             msg = ch.handle_webhook(body=body, headers={})
             assert msg is not None
             assert msg.channel_id == "wecom"
@@ -876,7 +867,7 @@ class TestWeComChannel:
             corp_id="c1", agent_id="a1", secret="s1",
             token="t1", encoding_aes_key="key123",
         )
-        body = "<xml><MsgSignature>s</MsgSignature><TimeStamp>t</TimeStamp><Nonce>n</Nonce></xml>".encode()
+        body = b"<xml><MsgSignature>s</MsgSignature><TimeStamp>t</TimeStamp><Nonce>n</Nonce></xml>"
         msg = ch.handle_webhook(body=body, headers={})
         assert msg is None
 

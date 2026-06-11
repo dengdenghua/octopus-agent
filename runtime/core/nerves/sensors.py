@@ -8,8 +8,8 @@ from runtime.sensing.normalize import (  # noqa: F401
     FileWatcherSensor,
     GitCommitDetected,
     ProcessStateChanged,
-    SensorManager,
     SensorEvent,
+    SensorManager,
 )
 from runtime.sensing.normalize.preview_bridge import (  # noqa: F401
     PreviewRefreshBridge,

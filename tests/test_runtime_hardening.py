@@ -6,13 +6,13 @@ from uuid import uuid4
 from runtime.core.cerebrum.checkpoint_integrity import validate_checkpoint_state
 from runtime.core.cerebrum.completion_receipt import build_completion_receipt
 from runtime.core.cerebrum.run_state import converge_run_state
-from runtime.execution.misc.multiagent_contracts import validate_work_plan
 from runtime.execution.misc.file_write_leases import (
     FileWriteLeaseConflict,
     acquire_file_write_lease,
     authorize_file_write_handoff,
     release_file_write_lease,
 )
+from runtime.execution.misc.multiagent_contracts import validate_work_plan
 from runtime.execution.parallel_agents import DispatchTaskInput, ParallelAgentOrchestrator
 from runtime.execution.swarm import SwarmRuntime
 from runtime.memory.journal import InMemoryJournal
@@ -20,7 +20,6 @@ from runtime.memory.runtime_state.blackboard import Blackboard
 from runtime.memory.runtime_state.file_transactions import summarize_file_ops
 from runtime.platform.models import Budget, BudgetLimits, BudgetSpec, TaskGraph, TaskId, TaskNode
 from runtime.safety.approval.approval_gate import assess_approval_risk
-
 from tests.test_swarm_runtime import FakeArm, FakeArmPool
 
 

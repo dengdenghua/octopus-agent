@@ -5,8 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from runtime.memory.journal import JSONLJournal
 from runtime.memory.diagnostics.trace_store import AgentTraceStore
+from runtime.memory.journal import JSONLJournal
 from runtime.safety.approval.approval_gate import ApprovalRequest
 from runtime.sensing.gateway.realtime_cerebrum import GatewayApprovalProvider
 

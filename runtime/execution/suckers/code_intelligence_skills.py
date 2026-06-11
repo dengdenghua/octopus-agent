@@ -19,7 +19,6 @@ from __future__ import annotations
 # ║   §7 code_dependency_graph (import graph)            ~L890             ║
 # ║   §8 register_code_intelligence_skills               ~L963             ║
 # ╚════════════════════════════════════════════════════════════════════════╝
-
 import ast
 import re
 from pathlib import Path

@@ -119,7 +119,7 @@ class ToolResult:
         data: Any = None,
         duration_ms: int = 0,
         **extra: Any,
-    ) -> "ToolResult":
+    ) -> ToolResult:
         return cls(
             call_id=call_id,
             success=True,
@@ -136,7 +136,7 @@ class ToolResult:
         message: str,
         duration_ms: int = 0,
         **extra: Any,
-    ) -> "ToolResult":
+    ) -> ToolResult:
         return cls(
             call_id=call_id,
             success=False,

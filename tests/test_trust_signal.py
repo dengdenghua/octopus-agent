@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from runtime.safety.evolution.guard_telemetry import GuardTelemetry
 from runtime.safety.validation.trust_signal import (
     HIGH_TRUST_FLOOR,
     LOW_TRUST_CEILING,
@@ -21,7 +22,6 @@ from runtime.safety.validation.trust_signal import (
     fetch_current_trust_score,
     render_trust_summary,
 )
-from runtime.safety.evolution.guard_telemetry import GuardTelemetry
 
 # ══════════════════════════════════════════════════════════════════
 # Compute trust score

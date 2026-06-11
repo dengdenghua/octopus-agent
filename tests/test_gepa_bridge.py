@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from runtime.safety.evolution.canary import CanaryConfig, CanaryManager
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
+from runtime.safety.recovery.evolution_dataset import (
+    EvolutionDataset,
+    EvolutionExample,
+)
 from runtime.safety.recovery.gepa_bridge import (
     _merge_failure_samples,
-    record_winner_canary_outcome,
-    mark_winner_proposal_applied,
     collect_failures_from_ledger,
+    mark_winner_proposal_applied,
+    record_winner_canary_outcome,
     record_winner_proposal_and_canary,
 )
 from runtime.safety.recovery.gepa_optimizer import GepaResult, PromptCandidate
 from runtime.safety.recovery.native_replay import replay_candidates
 from runtime.safety.recovery.native_replay_sandbox import run_sandbox_replay
 from runtime.safety.recovery.native_turn_replay import replay_turn_candidates
-from runtime.safety.recovery.evolution_dataset import (
-    EvolutionDataset,
-    EvolutionExample,
-)
 
 
 def test_collect_failures_from_ledger_reads_turn_failures(tmp_path) -> None:

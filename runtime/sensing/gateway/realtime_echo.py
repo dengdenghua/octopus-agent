@@ -232,7 +232,9 @@ class EchoRuntime:
             return await self._handle_archive(params, emitter)
         # Mirror the gateway behavior so callers see a clean
         # method-not-found rather than NotImplementedError noise.
-        from runtime.sensing.gateway.realtime_gateway import _RpcError  # local import to dodge cycle
+        from runtime.sensing.gateway.realtime_gateway import (
+            _RpcError,  # local import to dodge cycle
+        )
 
         raise _RpcError(JsonRpcErrorCode.METHOD_NOT_FOUND, method)
 

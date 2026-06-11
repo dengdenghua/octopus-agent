@@ -27,9 +27,9 @@ def _seed_journal(path: Path) -> None:
     from runtime.core.cerebrum import StaticPlanner
     from runtime.core.cerebrum.planner import Rule
     from runtime.core.graph_runtime import GraphRuntime
-    from runtime.execution.tool_engine import ToolExecutor
     from runtime.execution.suckers import SkillRegistry
     from runtime.execution.suckers.builtins import register_all
+    from runtime.execution.tool_engine import ToolExecutor
     from runtime.memory.journal import JSONLJournal
     from runtime.platform.models import (
         ArmId,

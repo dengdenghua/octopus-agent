@@ -48,7 +48,6 @@ from __future__ import annotations
 # ║   §12 diary_write (human-readable narrative log)     ~L666             ║
 # ║   §13 register_memory_skills (entrypoint)            ~L692             ║
 # ╚════════════════════════════════════════════════════════════════════════╝
-
 from datetime import datetime
 from pathlib import Path
 from typing import Any

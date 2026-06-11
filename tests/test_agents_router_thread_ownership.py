@@ -20,8 +20,8 @@ import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi import FastAPI, Request  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 from fastapi.routing import APIRouter  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 from runtime.core.cerebrum.pause_control import PauseController  # noqa: E402
 from runtime.memory.threads.store import ThreadStateStore  # noqa: E402

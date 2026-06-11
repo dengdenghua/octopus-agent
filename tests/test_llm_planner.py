@@ -9,8 +9,8 @@ import pytest
 from runtime.core.cerebrum import LLMPlanner, PlannerError
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.builtins import register_builtins
-from runtime.memory.journal import InMemoryJournal
 from runtime.memory.hemolymph import ContextComposer
+from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import BudgetSpec, ParsedIntent
 from runtime.sensing.model_router import MockModelRouter
 

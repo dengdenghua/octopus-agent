@@ -32,22 +32,22 @@ from runtime.core.nerves import reflex  # noqa: F401
 from runtime.execution import (
     agents,
     arms,
-    tool_engine,
     parallel_agents,
     suckers,
     swarm,
+    tool_engine,
 )
-from runtime.memory import journal, hemolymph, knowledge_graph, threads
+from runtime.memory import hemolymph, journal, knowledge_graph, threads
 from runtime.platform import config, i18n, models, ui  # noqa: F401
 from runtime.safety import (
-    experiments,
-    chromatophores,
     auth,
     budget_breaker,
+    chromatophores,
+    experiments,
     invariants,
     recovery,
 )
-from runtime.sensing import model_router, server, gateway, normalize
+from runtime.sensing import gateway, model_router, normalize, server
 
 __all__ = [
     "__version__",

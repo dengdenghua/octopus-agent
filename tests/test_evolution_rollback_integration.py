@@ -5,8 +5,8 @@ from unittest.mock import patch
 
 from runtime.safety.evolution.canary import CanaryConfig, CanaryManager, CanaryPhase
 from runtime.safety.evolution.drift_monitor import DriftConfig, DriftMonitor
-from runtime.safety.evolution.rollback_coordinator import RollbackCoordinator
 from runtime.safety.evolution.proposal_ledger import ProposalLedger, ProposalStatus
+from runtime.safety.evolution.rollback_coordinator import RollbackCoordinator
 
 
 class TestCanaryDeployAndRollbackE2E:

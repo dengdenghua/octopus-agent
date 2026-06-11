@@ -38,8 +38,8 @@ from .client import (
 from .react_with_vision import (
     ScreenInfoGetter,
     ScreenshotGetter,
-    VlmTriggerPolicy,
     VisionReAct,
+    VlmTriggerPolicy,
 )
 
 __all__ = [

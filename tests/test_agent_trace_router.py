@@ -246,7 +246,7 @@ def test_trace_task_run_review_can_commit_to_experience_ledger(
     # Use today's date as the week anchor so commit timestamps
     # (== "now") fall inside the half-open [week_start, week_start+7)
     # window regardless of which day of the week the test runs.
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
     today_iso = datetime.now(UTC).date().isoformat()
     summary = client.get(
         "/api/agent-trace/experience-ledger/weekly-summary",

@@ -253,8 +253,8 @@ def test_react_loop_compresses_observation_when_flag_on(
         """Stand-in executor that returns an HTML-heavy observation."""
 
         def __init__(self) -> None:
-            from runtime.execution.tool_engine import ToolExecutor
             from runtime.execution.suckers import Skill, SkillRegistry
+            from runtime.execution.tool_engine import ToolExecutor
             from runtime.safety.auth import TrustEngine
 
             reg = SkillRegistry()

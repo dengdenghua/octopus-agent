@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from runtime.safety.evolution.proposal_ledger import ProposalLedger
 from runtime.safety.recovery.evolution_constraints import (
     EvolutionConstraintConfig,
     EvolutionConstraintValidator,
 )
 from runtime.safety.recovery.evolution_dataset import EvolutionDatasetBuilder
-from runtime.safety.evolution.proposal_ledger import ProposalLedger
 
 
 def test_evolution_dataset_builder_normalizes_failures_and_synthetic_variants() -> None:

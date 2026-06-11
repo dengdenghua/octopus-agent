@@ -7,10 +7,10 @@ from uuid import uuid4
 
 import pytest
 
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.suckers.builtins import _read_file
 from runtime.execution.suckers.write_skills import _write_text_file
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,

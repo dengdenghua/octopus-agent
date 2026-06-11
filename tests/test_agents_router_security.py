@@ -15,8 +15,8 @@ import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi import FastAPI, Request  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 from fastapi.routing import APIRouter  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 from runtime.safety.auth.identity import Identity, IdentityStore  # noqa: E402
 

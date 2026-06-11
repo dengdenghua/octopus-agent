@@ -37,10 +37,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import time
 from collections import deque
-from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Protocol
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 from .chat_types import (
     ChatMessage,

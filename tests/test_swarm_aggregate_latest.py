@@ -107,8 +107,8 @@ class TestConsolidatorNewest:
 class TestComposerNewest:
     def test_render_recent_trajectories_uses_latest(self):
         from runtime.execution.suckers import SkillRegistry
-        from runtime.memory.journal import InMemoryJournal
         from runtime.memory.hemolymph import ContextComposer
+        from runtime.memory.journal import InMemoryJournal
 
         journal = InMemoryJournal()
         tid, old_traj, new_traj = _write_two_aggregates(journal)

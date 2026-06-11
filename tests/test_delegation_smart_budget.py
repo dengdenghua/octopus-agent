@@ -19,8 +19,14 @@ from runtime.execution.suckers.delegation_budget import (
     _PER_TURN_ABSOLUTE_LIMIT,
     _TURN_DELEGATIONS,
     _TURN_FAILED_FINGERPRINTS,
+)
+from runtime.execution.suckers.delegation_budget import (
     check_absolute_cap as _check_absolute_cap,
+)
+from runtime.execution.suckers.delegation_budget import (
     compute_fingerprint as _compute_fingerprint,
+)
+from runtime.execution.suckers.delegation_budget import (
     record_delegation as _record_delegation,
 )
 

@@ -86,11 +86,11 @@ class TestExecutorPlanMode:
         """Plan-mode agent calling write_text_file → step fails ·
         error message points at ``exit_plan_mode``."""
         monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path))
-        from runtime.execution.tool_engine import ToolExecutor
         from runtime.execution.suckers import SkillRegistry
         from runtime.execution.suckers.write_skills import (
             register_write_skills,
         )
+        from runtime.execution.tool_engine import ToolExecutor
         from runtime.memory.journal import InMemoryJournal
         from runtime.platform.models import (
             ArmId,

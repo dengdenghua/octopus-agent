@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from runtime.core.cerebrum.react_types import REACT_SYSTEM_PROMPT_BASE
 
-
 # Anthropic prompt-cache hit requires a stable prefix; keeping the
 # base small means a) cache stays warm regardless of mode, b) short
 # chat turns don't pay for code-mode-specific prose. Current observed
