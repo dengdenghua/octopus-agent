@@ -109,10 +109,17 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
     journal = JSONLJournal(config.journal_file) if config.journal_file else InMemoryJournal()
 
     # 4. Immunity
+    from runtime.safety.auth.attack_memory import AttackMemory
+
     immunity = TrustEngine(
         trusted_sources=list(config.immunity.trusted_sources),
         self_whitelist=list(config.immunity.self_whitelist),
         unknown_policy=config.immunity.unknown_policy,
+        attack_memory=AttackMemory(
+            config.immunity.attack_memory_path,
+            threshold=config.immunity.attack_threshold,
+            window_s=float(config.immunity.attack_window_seconds),
+        ),
     )
 
     # 5. ToolExecutor

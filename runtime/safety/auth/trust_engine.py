@@ -5,6 +5,7 @@ import fnmatch
 from typing import Literal
 
 from runtime.platform.models import AntigenSignature, ImmuneReport, ImmuneVerdict, ToolCall
+from runtime.safety.auth.attack_memory import AttackMemory
 
 UnknownPolicy = Literal["quarantine", "reject", "allow"]
 
@@ -16,6 +17,7 @@ class TrustEngine:
         trusted_sources: list[str] | None = None,
         self_whitelist: list[str] | None = None,
         unknown_policy: UnknownPolicy = "quarantine",
+        attack_memory: AttackMemory | None = None,
     ) -> None:
         # Default trust roster — keep these in sync with the
         # ``ImmunityConfig`` defaults in
@@ -40,6 +42,10 @@ class TrustEngine:
             ]
         )
         self.unknown_policy = unknown_policy
+        # Memory tier (protocols/immunity.md): known attackers are
+        # rejected before the trusted_sources allow — a compromised
+        # entity inside a trusted glob must not keep its free pass.
+        self.attack_memory = attack_memory if attack_memory is not None else AttackMemory()
 
 
     def check(self, call: ToolCall, signature: AntigenSignature) -> ImmuneReport:
@@ -49,6 +55,18 @@ class TrustEngine:
                 signature=signature,
                 strategy_used="tolerance",
                 reason="self-whitelisted caller",
+            )
+
+        pattern = self.attack_memory.match(signature.entity_id)
+        if pattern is not None:
+            return ImmuneReport(
+                verdict="reject",
+                signature=signature,
+                strategy_used="memory",
+                reason=(
+                    f"known attack pattern (hits={pattern.hit_count}): "
+                    f"{pattern.reason}"
+                ),
             )
 
         if self._is_trusted(signature.entity_id):
@@ -63,6 +81,12 @@ class TrustEngine:
         if self.unknown_policy == "reject":
             verdict = "reject"
             reason = "unknown source, policy=reject"
+            # Crystallization input: repeated hard rejections of the
+            # same source become an antibody, so the source stays
+            # rejected even if the policy is later relaxed.
+            self.attack_memory.record_violation(
+                signature.entity_id, reason="repeated innate rejections",
+            )
         elif self.unknown_policy == "allow":
             verdict = "allow"
             reason = "unknown source, policy=allow (risky)"

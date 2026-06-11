@@ -88,6 +88,13 @@ immunity:
     - "arms/*"
     - "intel_collector/*"
   unknown_policy: quarantine
+  # ── Memory tier · 抗体记忆 ──
+  # 同一来源在窗口内累计 attack_threshold 次硬拒绝后晶化为攻击模式，
+  # 此后即使命中 trusted_sources 也直接 reject（防被攻陷的信任源）。
+  # attack_memory_path 设置后抗体跨重启持久化；不设则仅进程内生效。
+  # attack_memory_path: data/immunity_antibodies.json
+  attack_threshold: 3
+  attack_window_seconds: 3600
 
 # ─────────────── Intel Sources 情报源 ─────────────────
 # 主动搜索外部情报并写入 Journal · serve 模式下按频率定时抓取

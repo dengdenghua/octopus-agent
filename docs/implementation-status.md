@@ -13,7 +13,8 @@
 | Constitution LLM-Judge 层 | **可选后端**（配置开启） | `runtime/safety/validation/bootstrap.py` 在 serve 启动时按 `safety.enable_llm_judge` / `OCTOPUS_ENABLE_LLM_JUDGE` 注册 judge；gate Pass 3 消费。默认关（每条出口多一次模型调用）；strict 档硬执行、normal/lax 仅审计 |
 | Constitution Human-Gate 层 | **已接线**（经审批体系） | `runtime/safety/approval/approval_gate.py` 风险评级 + 审批门；realtime 双向审批通道 |
 | Immunity 先天层（信任源白名单、三态判决） | **已接线** | `runtime/safety/auth/trust_engine.py` |
-| Immunity 自适应层（行为评分、抗体记忆） | **未实装** | 仅文档描述；trust_engine 无对应代码 |
+| Immunity 记忆层（抗体记忆：重复违规晶化、命中即拒、可持久化） | **已接线** | `runtime/safety/auth/attack_memory.py`；TrustEngine 在 tolerance 之后最先查（可拦截信任 glob 内的已知攻击者）；`immunity.attack_memory_path` 配置持久化 |
+| Immunity 自适应层（行为异常 z-score 评分） | **未实装** | 仅文档描述（protocols/immunity.md §Adaptive） |
 | 预算熔断（三态 CircuitBreaker） | **已接线** | `runtime/safety/budget_breaker/breaker.py` |
 | 敏感路径守卫（含 macOS /private 符号链接） | **已接线** | `runtime/safety/auth/path_guard.py`、`file_safety.py` |
 

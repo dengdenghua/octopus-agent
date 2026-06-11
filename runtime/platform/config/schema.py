@@ -42,6 +42,11 @@ class ImmunityConfig(BaseModel):
         ]
     )
     unknown_policy: Literal["quarantine", "reject", "allow"] = "quarantine"
+    # Memory tier (antibody memory). ``attack_memory_path`` enables
+    # persistence across restarts; None keeps antibodies in-process.
+    attack_memory_path: str | None = None
+    attack_threshold: int = 3
+    attack_window_seconds: int = 3600
 
 
 class IntelSourceConfig(BaseModel):
