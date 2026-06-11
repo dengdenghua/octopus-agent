@@ -355,47 +355,9 @@ def _h_find(
 
 def _h_state(max_items: int = 30, **_: Any) -> dict[str, Any]:
     max_items = max(1, min(int(max_items), 100))
-    code = f"""(() => {{
-        const limit = {max_items};
-        const textOf = (el) => (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ');
-        const selectorFor = (el) => {{
-            if (el.id) return `#${{CSS.escape(el.id)}}`;
-            const aria = el.getAttribute('aria-label');
-            if (aria) return `${{el.tagName.toLowerCase()}}[aria-label="${{aria.replaceAll('"', '\\"')}}"]`;
-            const name = el.getAttribute('name');
-            if (name) return `${{el.tagName.toLowerCase()}}[name="${{name.replaceAll('"', '\\"')}}"]`;
-            return el.tagName.toLowerCase();
-        }};
-        const visible = (el) => {{
-            const r = el.getBoundingClientRect();
-            const s = window.getComputedStyle(el);
-            return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
-        }};
-        const pick = (selector) => Array.from(document.querySelectorAll(selector))
-            .filter(visible)
-            .slice(0, limit)
-            .map((el) => ({{
-                tag: el.tagName.toLowerCase(),
-                text: textOf(el).slice(0, 120),
-                selector: selectorFor(el),
-                href: el.href || null,
-                type: el.getAttribute('type') || null,
-                placeholder: el.getAttribute('placeholder') || null
-            }}));
-        const bodyText = document.body?.innerText || document.body?.textContent || '';
-        return {{
-            url: location.href,
-            title: document.title,
-            text_length: bodyText.length,
-            viewport: {{ width: window.innerWidth, height: window.innerHeight }},
-            scroll: {{ x: window.scrollX, y: window.scrollY }},
-            links: pick('a[href]'),
-            buttons: pick('button,[role="button"],input[type="button"],input[type="submit"]'),
-            inputs: pick('input,textarea,select'),
-            headings: pick('h1,h2,h3')
-        }};
-    }})()"""
-    result = _h_execute_js(code)
+    from runtime.execution.suckers.browser_dom_js import dom_state_iife_js
+
+    result = _h_execute_js(dom_state_iife_js(max_items))
     if result.get("ok") and isinstance(result.get("result"), dict):
         return {"ok": True, **result["result"]}
     return result

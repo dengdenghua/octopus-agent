@@ -355,44 +355,11 @@ def _browser_state(
         except Exception:
             text = ""
         try:
-            snapshot = p.evaluate(
-                """(limit) => {
-                    const textOf = (el) => (el.innerText || el.textContent || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ');
-                    const selectorFor = (el) => {
-                        if (el.id) return `#${CSS.escape(el.id)}`;
-                        const aria = el.getAttribute('aria-label');
-                        if (aria) return `${el.tagName.toLowerCase()}[aria-label="${aria.replaceAll('"', '\\"')}"]`;
-                        const name = el.getAttribute('name');
-                        if (name) return `${el.tagName.toLowerCase()}[name="${name.replaceAll('"', '\\"')}"]`;
-                        return el.tagName.toLowerCase();
-                    };
-                    const visible = (el) => {
-                        const r = el.getBoundingClientRect();
-                        const s = window.getComputedStyle(el);
-                        return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
-                    };
-                    const pick = (selector) => Array.from(document.querySelectorAll(selector))
-                        .filter(visible)
-                        .slice(0, limit)
-                        .map((el) => ({
-                            tag: el.tagName.toLowerCase(),
-                            text: textOf(el).slice(0, 120),
-                            selector: selectorFor(el),
-                            href: el.href || null,
-                            type: el.getAttribute('type') || null,
-                            placeholder: el.getAttribute('placeholder') || null
-                        }));
-                    return {
-                        viewport: { width: window.innerWidth, height: window.innerHeight },
-                        scroll: { x: window.scrollX, y: window.scrollY },
-                        links: pick('a[href]'),
-                        buttons: pick('button,[role="button"],input[type="button"],input[type="submit"]'),
-                        inputs: pick('input,textarea,select'),
-                        headings: pick('h1,h2,h3')
-                    };
-                }""",
-                max_items,
+            from runtime.execution.suckers.browser_dom_js import (
+                dom_snapshot_function_js,
             )
+
+            snapshot = p.evaluate(dom_snapshot_function_js(), max_items)
         except Exception as e:  # noqa: BLE001
             return {"error": f"state_error: {type(e).__name__}: {e}"}
         return {
