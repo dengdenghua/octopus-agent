@@ -17,6 +17,7 @@ because each event carries the full identity (threadId, turnId, itemId).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal, TypeAlias
@@ -244,7 +245,26 @@ class FileChange(BaseModel):
     # flat ``revert-diff`` REST endpoint and for tooling that prefers
     # the textual form. New UIs should drive off ``hunks``.
     diff: str | None = None
+    # True when ``diff`` was cut at the executor's output limit. A
+    # truncated diff under-counts +/- lines and cannot be reverse-
+    # applied (it may end mid-hunk) — clients must label it and keep
+    # it out of revert paths. ``hunks`` stream separately and are
+    # unaffected.
+    diff_truncated: bool = Field(default=False, alias="diffTruncated")
     hunks: list[FileHunk] = Field(default_factory=list)
+
+
+# The executor appends this marker when a unified diff exceeds its
+# output limit (``_compute_unified_diff`` in
+# ``runtime/execution/tool_engine/executor.py``). The format is a wire
+# contract: ``diff_is_truncated`` is how downstream FileChange builders
+# recover the flag from the in-band text, so change both together.
+_DIFF_TRUNCATION_RE = re.compile(r"\.\.\. \(truncated \d+ bytes\)\s*$")
+
+
+def diff_is_truncated(diff: str | None) -> bool:
+    """True when ``diff`` ends with the executor's truncation marker."""
+    return bool(diff) and _DIFF_TRUNCATION_RE.search(diff or "") is not None
 
 
 class FileChangeItem(_ItemBase):

@@ -1,4 +1,6 @@
 import type { AIMessage, Message, ToolCall } from "@/core/api/types";
+import type { FileHunk } from "@/core/realtime";
+import { singleHunkDiff } from "@/components/realtime/item-views/file-change-view";
 import { artifactDisplayPath } from "@/core/artifacts/utils";
 import { getBackendBaseURL } from "@/core/config";
 import { swallow } from "@/core/utils/log";
@@ -38,10 +40,12 @@ type OutputArtifact = {
 type OutputChange = {
   created: boolean;
   diff?: string;
+  diffTruncated: boolean;
   path: string;
   op?: string | null;
   added: number;
   removed: number;
+  hunks: FileHunk[];
 };
 
 type OutputSummary = {
@@ -116,6 +120,29 @@ function artifactFromToolCall(toolCall: ToolCall): OutputArtifact | null {
   };
 }
 
+function hunksFromChange(change: Record<string, unknown>): FileHunk[] {
+  if (!Array.isArray(change.hunks)) return [];
+  const out: FileHunk[] = [];
+  for (const raw of change.hunks) {
+    const hunk = asRecord(raw);
+    if (!hunk) continue;
+    if (typeof hunk.id !== "string" || typeof hunk.body !== "string") continue;
+    out.push({
+      id: hunk.id,
+      oldStart: typeof hunk.oldStart === "number" ? hunk.oldStart : 0,
+      oldLines: typeof hunk.oldLines === "number" ? hunk.oldLines : 0,
+      newStart: typeof hunk.newStart === "number" ? hunk.newStart : 0,
+      newLines: typeof hunk.newLines === "number" ? hunk.newLines : 0,
+      body: hunk.body,
+      decision:
+        hunk.decision === "accepted" || hunk.decision === "rejected"
+          ? hunk.decision
+          : "pending",
+    });
+  }
+  return out;
+}
+
 function changesFromToolCall(toolCall: ToolCall): OutputChange[] {
   if (
     toolCall.name !== "file_change" ||
@@ -134,10 +161,12 @@ function changesFromToolCall(toolCall: ToolCall): OutputChange[] {
     out.push({
       created: isCreatedFileChange(op, change.diff, counts),
       diff: typeof change.diff === "string" ? change.diff : undefined,
+      diffTruncated: change.diffTruncated === true,
       path,
       op,
       added: counts.added,
       removed: counts.removed,
+      hunks: hunksFromChange(change),
     });
   }
   return out;
@@ -156,11 +185,17 @@ function summarizeOutputs(messages: Message[]): OutputSummary {
       }
       for (const change of changesFromToolCall(toolCall)) {
         const existing = changes.get(change.path);
+        const seen = new Set(change.hunks.map((h) => h.id));
+        const carried = (existing?.hunks ?? []).filter((h) => !seen.has(h.id));
         changes.set(change.path, {
           ...change,
           added: (existing?.added ?? 0) + change.added,
           created: Boolean(existing?.created || change.created),
           removed: (existing?.removed ?? 0) + change.removed,
+          diffTruncated: Boolean(
+            existing?.diffTruncated || change.diffTruncated,
+          ),
+          hunks: [...carried, ...change.hunks],
         });
       }
     }
@@ -225,8 +260,10 @@ export function MessageOutputSummary({
   const visibleChanges = changesOpen
     ? summary.changes
     : summary.changes.slice(0, 3);
-  const revertableChanges = summary.changes.filter((change) =>
-    change.diff?.trim(),
+  // A truncated diff may end mid-hunk; reverse-applying it would
+  // conflict or corrupt the file, so it never enters the revert batch.
+  const revertableChanges = summary.changes.filter(
+    (change) => change.diff?.trim() && !change.diffTruncated,
   );
   const showAuditActions = Boolean(auditNotice);
 
@@ -380,33 +417,11 @@ export function MessageOutputSummary({
             <CollapsibleContent>
               <ul className="divide-y divide-border/50 border-t border-border/60">
                 {visibleChanges.map((change) => (
-                  <li
+                  <ChangeRow
                     key={change.path}
-                    className="flex items-center gap-3 px-3 py-2 text-sm"
-                  >
-                    <span
-                      className={cn(
-                        "shrink-0 rounded px-1.5 py-0.5 text-[10px]",
-                        change.created
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {change.created ? "新建" : "编辑"}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
-                      {change.path}
-                    </span>
-                    <span className="shrink-0 font-mono text-xs">
-                      <span className="text-emerald-600 dark:text-emerald-400">
-                        +{change.added}
-                      </span>
-                      <span className="mx-1 text-muted-foreground"> </span>
-                      <span className="text-red-600 dark:text-red-400">
-                        -{change.removed}
-                      </span>
-                    </span>
-                  </li>
+                    change={change}
+                    threadId={threadId}
+                  />
                 ))}
                 {!changesOpen && summary.changes.length > 3 && (
                   <li className="px-3 py-2 text-xs text-muted-foreground">
@@ -426,6 +441,205 @@ export function MessageOutputSummary({
       )}
     </div>
   );
+}
+
+/**
+ * One file row in the changes summary. When the server streamed
+ * per-hunk metadata (FileChangeItem.changes[].hunks) the row becomes
+ * expandable and each hunk can be accepted or rejected individually.
+ * Reject reverse-applies just that hunk through the same
+ * ``/api/fs/revert-diff`` endpoint the "撤销" (revert-all) button uses;
+ * accept is informational — the file already contains the change.
+ */
+function ChangeRow({
+  change,
+  threadId,
+}: {
+  change: OutputChange;
+  threadId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [decisions, setDecisions] = useState<
+    Record<string, "accepted" | "rejected">
+  >({});
+  const [rejecting, setRejecting] = useState<string | null>(null);
+  const hasHunks = change.hunks.length > 0;
+
+  const rejectHunk = async (hunk: FileHunk) => {
+    if (rejecting) return;
+    setRejecting(hunk.id);
+    try {
+      const base = getBackendBaseURL();
+      const response = await fetch(`${base}/api/fs/revert-diff`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: change.path,
+          diff: singleHunkDiff(change.path, hunk, change.diff ?? null),
+          thread_id: threadId,
+          delete_empty: false,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await responseErrorMessage(response));
+      }
+      setDecisions((prev) => ({ ...prev, [hunk.id]: "rejected" }));
+      notifyWorkspaceChanged();
+      toast.success("已撤销该改动块");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "撤销失败");
+    } finally {
+      setRejecting(null);
+    }
+  };
+
+  return (
+    <li className="text-sm">
+      <div
+        className={cn(
+          "flex items-center gap-3 px-3 py-2",
+          hasHunks && "cursor-pointer hover:bg-muted/30",
+        )}
+        onClick={hasHunks ? () => setOpen((prev) => !prev) : undefined}
+      >
+        {hasHunks && (
+          <ChevronDownIcon
+            className={cn(
+              "size-3.5 shrink-0 text-muted-foreground/60 transition-transform",
+              !open && "-rotate-90",
+            )}
+          />
+        )}
+        <span
+          className={cn(
+            "shrink-0 rounded px-1.5 py-0.5 text-[10px]",
+            change.created
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-muted text-muted-foreground",
+          )}
+        >
+          {change.created ? "新建" : "编辑"}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+          {change.path}
+        </span>
+        {change.diffTruncated && (
+          <span
+            title="diff 超过服务端输出上限被截断，行数统计不完整，且不可整体撤销"
+            className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
+          >
+            diff 已截断
+          </span>
+        )}
+        <span className="shrink-0 font-mono text-xs">
+          <span className="text-emerald-600 dark:text-emerald-400">
+            +{change.added}
+          </span>
+          <span className="mx-1 text-muted-foreground"> </span>
+          <span className="text-red-600 dark:text-red-400">
+            -{change.removed}
+          </span>
+        </span>
+      </div>
+      {hasHunks && open && (
+        <div className="flex flex-col gap-1.5 px-3 pb-2 pl-9">
+          {change.hunks.map((hunk) => (
+            <HunkDecisionRow
+              key={hunk.id}
+              hunk={hunk}
+              decision={decisions[hunk.id] ?? hunk.decision}
+              rejecting={rejecting === hunk.id}
+              onAccept={() =>
+                setDecisions((prev) => ({ ...prev, [hunk.id]: "accepted" }))
+              }
+              onReject={() => void rejectHunk(hunk)}
+            />
+          ))}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function HunkDecisionRow({
+  hunk,
+  decision,
+  rejecting,
+  onAccept,
+  onReject,
+}: {
+  hunk: FileHunk;
+  decision: "pending" | "accepted" | "rejected";
+  rejecting: boolean;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
+  const header = `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`;
+  return (
+    <div
+      className="overflow-hidden rounded border border-border/40 bg-card/60 text-xs"
+      data-hunk-decision={decision}
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-border/40 bg-muted/30 px-2 py-1">
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {header}
+        </span>
+        <div className="flex items-center gap-1.5">
+          {decision === "pending" ? (
+            <>
+              <button
+                type="button"
+                onClick={onAccept}
+                className="inline-flex h-6 items-center rounded-md border border-border/70 px-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
+              >
+                接受
+              </button>
+              <button
+                type="button"
+                onClick={onReject}
+                disabled={rejecting}
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-border/70 px-2 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-55 dark:text-red-400"
+              >
+                {rejecting && (
+                  <Loader2Icon className="size-3 animate-spin text-muted-foreground/70" />
+                )}
+                拒绝
+              </button>
+            </>
+          ) : (
+            <span
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                decision === "accepted"
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+                  : "bg-red-500/15 text-red-700 dark:text-red-400",
+              )}
+            >
+              {decision === "accepted" ? "已接受" : "已撤销"}
+            </span>
+          )}
+        </div>
+      </div>
+      <pre className="max-h-48 overflow-auto font-mono text-[11px] leading-snug">
+        {hunk.body.split(/\r?\n/).map((line, idx) =>
+          line ? (
+            <div key={idx} className={cn("px-2", hunkLineTone(line))}>
+              {line}
+            </div>
+          ) : null,
+        )}
+      </pre>
+    </div>
+  );
+}
+
+function hunkLineTone(line: string): string {
+  if (line.startsWith("@@")) return "text-muted-foreground";
+  if (line.startsWith("+"))
+    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+  if (line.startsWith("-"))
+    return "bg-red-500/10 text-red-700 dark:text-red-400";
+  return "text-foreground/80";
 }
 
 function notifyWorkspaceChanged() {

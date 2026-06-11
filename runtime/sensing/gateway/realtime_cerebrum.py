@@ -69,6 +69,7 @@ from runtime.protocol import (
     WorkspaceFocus,
 )
 from runtime.protocol.diff_parser import parse_unified_diff
+from runtime.protocol.items import diff_is_truncated
 from runtime.safety.approval.approval_gate import (
     ApprovalDecision,
     ApprovalProvider,
@@ -4245,6 +4246,10 @@ def _file_change_item_from_tool_evt(evt: dict[str, Any]) -> FileChangeItem | Non
     if isinstance(raw_diff, str) and raw_diff.strip():
         changes = parse_unified_diff(raw_diff)
         if changes:
+            if diff_is_truncated(raw_diff):
+                # The marker sits at the tail of the combined diff, so
+                # only the last file's diff is known-incomplete.
+                changes[-1].diff_truncated = True
             return FileChangeItem(changes=changes)
 
     raw_list = evt.get("file_changes")
@@ -4277,7 +4282,15 @@ def _file_change_item_from_tool_evt(evt: dict[str, Any]) -> FileChangeItem | Non
                 sub = parse_unified_diff(diff_str)
                 if sub:
                     hunks = sub[0].hunks
-            parsed.append(FileChange(path=path, op=op, diff=diff_str, hunks=hunks))
+            parsed.append(
+                FileChange(
+                    path=path,
+                    op=op,
+                    diff=diff_str,
+                    diff_truncated=diff_is_truncated(diff_str),
+                    hunks=hunks,
+                )
+            )
         if parsed:
             return FileChangeItem(changes=parsed)
     return None

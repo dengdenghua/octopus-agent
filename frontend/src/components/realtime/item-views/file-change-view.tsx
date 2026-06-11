@@ -96,7 +96,11 @@ function FileChangeGroup({
         )}
         <OpIcon className={cn("size-3.5 shrink-0", opColor)} />
         <span className={cn("text-[10px] font-semibold uppercase tracking-wider", opColor)}>
-          {t.realtimeItems.fileChange.operations[change.op]}
+          {
+            t.realtimeItems.fileChange.operations[
+              change.op === "update" ? "modify" : change.op
+            ]
+          }
         </span>
         <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
           {change.path}

@@ -1187,6 +1187,9 @@ def _compute_unified_diff(
     if len(diff) > _FILE_DIFF_OUTPUT_LIMIT:
         head = diff[:_FILE_DIFF_OUTPUT_LIMIT]
         omitted = len(diff) - len(head)
+        # Marker format is a wire contract: runtime/protocol/items.py
+        # ``diff_is_truncated`` matches it to set FileChange.diff_truncated
+        # downstream. Change both together.
         return head + f"\n... (truncated {omitted} bytes)\n"
     return diff
 

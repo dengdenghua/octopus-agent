@@ -139,6 +139,13 @@ export interface FileChange {
   path: string;
   op: "create" | "update" | "delete";
   diff?: string | null;
+  /**
+   * True when `diff` was cut at the server's output limit. A truncated
+   * diff under-counts +/- lines and cannot be reverse-applied — label
+   * it in the UI and keep it out of revert paths. `hunks` stream
+   * separately and are unaffected.
+   */
+  diffTruncated?: boolean;
   hunks?: FileHunk[];
 }
 

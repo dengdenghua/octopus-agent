@@ -417,6 +417,41 @@ export function reduce(
 
 // ── Helpers ──────────────────────────────────────────────────
 
+// Shared no-op result: same state reference, nothing flagged as changed.
+// Returning the *same* reference matters — callers (and React setters)
+// use identity to skip re-renders, so dropped deltas must not allocate.
+function unchanged(state: Conversation): ReducerOutput {
+  return { next: state, changedTurnIds: [], changedItemIds: [] };
+}
+
+// Copy ``arr`` with index ``idx`` replaced. Single allocation, no
+// per-element predicate — the indexed counterpart of ``.map()`` for
+// the hot single-item update paths below.
+function replaceAt<T>(arr: readonly T[], idx: number, value: T): T[] {
+  const next = arr.slice();
+  next[idx] = value;
+  return next;
+}
+
+// Rebuild Conversation with one item of one turn swapped out. Every
+// streaming delta lands here, so the work is two indexed copies —
+// no full-array scans beyond the initial findIndex at the call site.
+function replaceTurnItem(
+  state: Conversation,
+  turn: Turn,
+  turnIdx: number,
+  itemIdx: number,
+  item: Item,
+  turnPatch?: Partial<Turn>,
+): Conversation {
+  const nextTurn: Turn = {
+    ...turn,
+    ...turnPatch,
+    items: replaceAt(turn.items, itemIdx, item),
+  };
+  return { ...state, turns: replaceAt(state.turns, turnIdx, nextTurn) };
+}
+
 function mergeCompletedTurn(existing: Turn, incoming: Turn): Turn {
   const incomingItems = Array.isArray(incoming.items) ? incoming.items : [];
   const incomingById = new Map(incomingItems.map((item) => [item.id, item]));
@@ -446,9 +481,10 @@ function upsertItem(
   item: Item,
   phase: "started" | "completed",
 ): ReducerOutput {
-  const turn = state.turns.find((t) => t.id === turnId);
+  const turnIdx = state.turns.findIndex((t) => t.id === turnId);
+  const turn = state.turns[turnIdx];
   if (!turn) {
-    return { next: state, changedTurnIds: [], changedItemIds: [] };
+    return unchanged(state);
   }
   const idx = turn.items.findIndex((it) => it.id === item.id);
   let nextItems: Item[];
@@ -459,15 +495,14 @@ function upsertItem(
     // a no-op (out-of-order delivery from a buffered queue).
     const existing = turn.items[idx];
     if (phase === "completed" || existing?.status === "inProgress") {
-      nextItems = turn.items.map((it) => (it.id === item.id ? item : it));
+      nextItems = replaceAt(turn.items, idx, item);
     } else {
-      return { next: state, changedTurnIds: [], changedItemIds: [] };
+      return unchanged(state);
     }
   }
   const nextTurn: Turn = { ...turn, items: nextItems };
-  const turns = state.turns.map((t) => (t.id === turnId ? nextTurn : t));
   return {
-    next: { ...state, turns },
+    next: { ...state, turns: replaceAt(state.turns, turnIdx, nextTurn) },
     changedTurnIds: [turnId],
     changedItemIds: [item.id],
   };
@@ -482,37 +517,40 @@ function mergeDelta(
   kind: DeltaKind,
   delta: string,
 ): ReducerOutput {
-  const turn = state.turns.find((t) => t.id === turnId);
+  const turnIdx = state.turns.findIndex((t) => t.id === turnId);
+  const turn = state.turns[turnIdx];
   if (!turn) {
-    return { next: state, changedTurnIds: [], changedItemIds: [] };
+    return unchanged(state);
   }
-  const items = turn.items.map((it) => {
-    if (it.id !== itemId) return it;
-    // Drop deltas that arrive after the item is already completed.
-    // Without this, the RAF-batched delta queue can flush AFTER an
-    // ``item/completed`` snapshot lands in the reducer (item/* is
-    // dispatched immediately, deltas are deferred to next frame),
-    // and we end up appending those deltas to the already-final
-    // ``text`` — doubling content. Status check is the simplest gate.
-    if (it.status !== "inProgress") return it;
-    if (kind === "agentMessage" && it.type === "agentMessage") {
-      return { ...it, text: it.text + delta };
-    }
-    if (kind === "reasoning" && it.type === "reasoning") {
-      return { ...it, content: it.content + delta };
-    }
-    if (kind === "plan" && it.type === "plan") {
-      return { ...it, text: it.text + delta };
-    }
-    if (kind === "commandOutput" && it.type === "commandExecution") {
-      return { ...it, aggregatedOutput: it.aggregatedOutput + delta };
-    }
-    return it;
-  });
-  const nextTurn: Turn = { ...turn, items };
-  const turns = state.turns.map((t) => (t.id === turnId ? nextTurn : t));
+  const itemIdx = turn.items.findIndex((x) => x.id === itemId);
+  const it = turn.items[itemIdx];
+  if (!it) {
+    return unchanged(state);
+  }
+  // Drop deltas that arrive after the item is already completed.
+  // Without this, the RAF-batched delta queue can flush AFTER an
+  // ``item/completed`` snapshot lands in the reducer (item/* is
+  // dispatched immediately, deltas are deferred to next frame),
+  // and we end up appending those deltas to the already-final
+  // ``text`` — doubling content. Status check is the simplest gate.
+  if (it.status !== "inProgress") {
+    return unchanged(state);
+  }
+  let updated: Item | null = null;
+  if (kind === "agentMessage" && it.type === "agentMessage") {
+    updated = { ...it, text: it.text + delta };
+  } else if (kind === "reasoning" && it.type === "reasoning") {
+    updated = { ...it, content: it.content + delta };
+  } else if (kind === "plan" && it.type === "plan") {
+    updated = { ...it, text: it.text + delta };
+  } else if (kind === "commandOutput" && it.type === "commandExecution") {
+    updated = { ...it, aggregatedOutput: it.aggregatedOutput + delta };
+  }
+  if (updated === null) {
+    return unchanged(state);
+  }
   return {
-    next: { ...state, turns },
+    next: replaceTurnItem(state, turn, turnIdx, itemIdx, updated),
     changedTurnIds: [turnId],
     changedItemIds: [itemId],
   };
@@ -586,27 +624,24 @@ function applyMcpToolProgress(
   workspaceFocus: WorkspaceFocus | null | undefined,
   hasWorkspaceFocus: boolean,
 ): ReducerOutput {
-  const turn = state.turns.find((t) => t.id === turnId);
+  const turnIdx = state.turns.findIndex((t) => t.id === turnId);
+  const turn = state.turns[turnIdx];
   if (!turn) {
-    return { next: state, changedTurnIds: [], changedItemIds: [] };
+    return unchanged(state);
   }
-  let touched = false;
-  const items = turn.items.map((item) => {
-    if (item.id !== itemId || item.type !== "mcpToolCall") return item;
-    touched = true;
-    return { ...item, progress } as Item;
-  });
-  if (!touched) {
-    return { next: state, changedTurnIds: [], changedItemIds: [] };
+  const itemIdx = turn.items.findIndex(
+    (item) => item.id === itemId && item.type === "mcpToolCall",
+  );
+  const existing = turn.items[itemIdx];
+  if (!existing) {
+    return unchanged(state);
   }
-  const nextTurn: Turn = {
-    ...turn,
-    items,
-    ...(hasWorkspaceFocus ? { workspaceFocus: workspaceFocus ?? null } : {}),
-  };
-  const turns = state.turns.map((t) => (t.id === turnId ? nextTurn : t));
+  const updated = { ...existing, progress } as Item;
+  const turnPatch = hasWorkspaceFocus
+    ? { workspaceFocus: workspaceFocus ?? null }
+    : undefined;
   return {
-    next: { ...state, turns },
+    next: replaceTurnItem(state, turn, turnIdx, itemIdx, updated, turnPatch),
     changedTurnIds: [turnId],
     changedItemIds: [itemId],
   };
@@ -622,47 +657,40 @@ function applyFileChangeHunkDelta(
   workspaceFocus: WorkspaceFocus | null | undefined,
   hasWorkspaceFocus: boolean,
 ): ReducerOutput {
-  const turn = state.turns.find((t) => t.id === turnId);
+  const turnIdx = state.turns.findIndex((t) => t.id === turnId);
+  const turn = state.turns[turnIdx];
   if (!turn) {
-    return { next: state, changedTurnIds: [], changedItemIds: [] };
+    return unchanged(state);
   }
-  let touched = false;
-  const items = turn.items.map((item) => {
-    if (item.id !== itemId || item.type !== "fileChange") return item;
-    touched = true;
-    const changeIndex = item.changes.findIndex(
-      (change) => change.path === path,
-    );
-    const changes =
-      changeIndex === -1
-        ? [...item.changes, { path, op, hunks: [hunk] }]
-        : item.changes.map((change, index) => {
-            if (index !== changeIndex) return change;
-            const hunks = change.hunks ?? [];
-            const hunkIndex = hunks.findIndex(
-              (existing) => existing.id === hunk.id,
-            );
-            const nextHunks =
-              hunkIndex === -1
-                ? [...hunks, hunk]
-                : hunks.map((existing, hIndex) =>
-                    hIndex === hunkIndex ? hunk : existing,
-                  );
-            return { ...change, op: change.op ?? op, hunks: nextHunks };
-          });
-    return { ...item, changes } as Item;
-  });
-  if (!touched) {
-    return { next: state, changedTurnIds: [], changedItemIds: [] };
+  const itemIdx = turn.items.findIndex(
+    (entry) => entry.id === itemId && entry.type === "fileChange",
+  );
+  const item = turn.items[itemIdx];
+  if (!item || item.type !== "fileChange") {
+    return unchanged(state);
   }
-  const nextTurn: Turn = {
-    ...turn,
-    items,
-    ...(hasWorkspaceFocus ? { workspaceFocus: workspaceFocus ?? null } : {}),
-  };
-  const turns = state.turns.map((t) => (t.id === turnId ? nextTurn : t));
+  const changeIndex = item.changes.findIndex((change) => change.path === path);
+  const change = item.changes[changeIndex];
+  let changes;
+  if (!change) {
+    changes = [...item.changes, { path, op, hunks: [hunk] }];
+  } else {
+    const hunks = change.hunks ?? [];
+    const hunkIndex = hunks.findIndex((existing) => existing.id === hunk.id);
+    const nextHunks =
+      hunkIndex === -1 ? [...hunks, hunk] : replaceAt(hunks, hunkIndex, hunk);
+    changes = replaceAt(item.changes, changeIndex, {
+      ...change,
+      op: change.op ?? op,
+      hunks: nextHunks,
+    });
+  }
+  const updated = { ...item, changes } as Item;
+  const turnPatch = hasWorkspaceFocus
+    ? { workspaceFocus: workspaceFocus ?? null }
+    : undefined;
   return {
-    next: { ...state, turns },
+    next: replaceTurnItem(state, turn, turnIdx, itemIdx, updated, turnPatch),
     changedTurnIds: [turnId],
     changedItemIds: [itemId],
   };
@@ -675,30 +703,30 @@ function applyHunkDecision(
   hunkId: string,
   decision: "accepted" | "rejected",
 ): ReducerOutput {
-  const turn = state.turns.find((t) => t.id === turnId);
-  if (!turn) return { next: state, changedTurnIds: [], changedItemIds: [] };
+  const turnIdx = state.turns.findIndex((t) => t.id === turnId);
+  const turn = state.turns[turnIdx];
+  if (!turn) return unchanged(state);
+  const itemIdx = turn.items.findIndex(
+    (it) => it.id === itemId && it.type === "fileChange",
+  );
+  const item = turn.items[itemIdx];
+  if (!item || item.type !== "fileChange") return unchanged(state);
   let hit = false;
-  const items = turn.items.map((it) => {
-    if (it.id !== itemId) return it;
-    if (it.type !== "fileChange") return it;
-    const changes = it.changes.map((ch) => {
-      if (!ch.hunks) return ch;
-      return {
-        ...ch,
-        hunks: ch.hunks.map((h) => {
-          if (h.id !== hunkId) return h;
-          hit = true;
-          return { ...h, decision };
-        }),
-      };
-    });
-    return { ...it, changes };
+  const changes = item.changes.map((ch) => {
+    if (!ch.hunks) return ch;
+    const hunkIndex = ch.hunks.findIndex((h) => h.id === hunkId);
+    const target = ch.hunks[hunkIndex];
+    if (!target) return ch;
+    hit = true;
+    return {
+      ...ch,
+      hunks: replaceAt(ch.hunks, hunkIndex, { ...target, decision }),
+    };
   });
-  if (!hit) return { next: state, changedTurnIds: [], changedItemIds: [] };
-  const nextTurn: Turn = { ...turn, items };
-  const turns = state.turns.map((t) => (t.id === turnId ? nextTurn : t));
+  if (!hit) return unchanged(state);
+  const updated = { ...item, changes } as Item;
   return {
-    next: { ...state, turns },
+    next: replaceTurnItem(state, turn, turnIdx, itemIdx, updated),
     changedTurnIds: [turnId],
     changedItemIds: [itemId],
   };
