@@ -411,3 +411,66 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(options.maxSubagents).toBeUndefined();
   });
 });
+
+describe("<ChatInputBox /> send-failure draft restore", () => {
+  function dispatchSendFailed(detail: {
+    threadId?: string | null;
+    text?: string | null;
+  }) {
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("octopus:send-failed", { detail }),
+      );
+    });
+  }
+
+  it("restores the draft when a send fails after optimistic clear", async () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        onSubmit={vi.fn()}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(textarea(), { target: { value: "hello agent" } });
+    fireEvent.click(screen.getByTitle("Send"));
+    await waitFor(() => expect(textarea().value).toBe(""));
+
+    dispatchSendFailed({ threadId: "thread-1", text: "hello agent" });
+
+    await waitFor(() => expect(textarea().value).toBe("hello agent"));
+  });
+
+  it("ignores failures from other threads", () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        onSubmit={vi.fn()}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    dispatchSendFailed({ threadId: "thread-other", text: "not mine" });
+
+    expect(textarea().value).toBe("");
+  });
+
+  it("does not clobber text the user already retyped", () => {
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        onSubmit={vi.fn()}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(textarea(), { target: { value: "new attempt" } });
+    dispatchSendFailed({ threadId: "thread-1", text: "old failed text" });
+
+    expect(textarea().value).toBe("new attempt");
+  });
+});

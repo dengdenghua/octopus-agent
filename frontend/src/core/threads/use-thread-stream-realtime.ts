@@ -786,10 +786,10 @@ export function useThreadStreamRealtime(
     (_threadId, message) => {
       const text = (message?.text ?? "").trim();
       if (!text) return;
+      const effectiveThreadId =
+        _threadId && _threadId !== "new" ? _threadId : threadId;
       void (async () => {
         setSendError(null);
-        const effectiveThreadId =
-          _threadId && _threadId !== "new" ? _threadId : threadId;
         const files = message.files ?? [];
         setIsUploading(files.length > 0);
         try {
@@ -848,6 +848,17 @@ export function useThreadStreamRealtime(
         setSendError(
           err instanceof Error ? err.message : "Failed to send message",
         );
+        // The input box clears its draft optimistically on submit, so a
+        // failed send (socket drop before turn/start lands) would eat
+        // the user's text. Hand it back — the box restores the draft
+        // when it is still empty.
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("octopus:send-failed", {
+              detail: { threadId: effectiveThreadId, text },
+            }),
+          );
+        }
       });
     },
     [

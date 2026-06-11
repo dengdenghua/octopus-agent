@@ -330,6 +330,31 @@ export function ChatInputBox({
     };
   }, [allowAgentModes, onModeChange, threadId]);
 
+  // A failed send hands the text back (the draft was cleared
+  // optimistically on submit). Restore only when the box is still
+  // empty — if the user already started retyping, theirs wins.
+  useEffect(() => {
+    const handler = (
+      event: CustomEvent<{ threadId?: string | null; text?: string | null }>,
+    ) => {
+      const detail = event.detail;
+      if (detail?.threadId && threadId && detail.threadId !== threadId) {
+        return;
+      }
+      const lostText = detail?.text ?? "";
+      if (!lostText) return;
+      setDraft((current) => (current.trim() ? current : lostText));
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    };
+    window.addEventListener("octopus:send-failed", handler as EventListener);
+    return () => {
+      window.removeEventListener(
+        "octopus:send-failed",
+        handler as EventListener,
+      );
+    };
+  }, [threadId]);
+
   const handleSubmit = useCallback(async () => {
     const text = draft.trim();
     if (!text || isBusy || status === "streaming") return;
