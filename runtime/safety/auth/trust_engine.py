@@ -5,6 +5,7 @@ import fnmatch
 from typing import Literal
 
 from runtime.platform.models import AntigenSignature, ImmuneReport, ImmuneVerdict, ToolCall
+from runtime.safety.auth.adaptive_immunity import AdaptiveImmunity
 from runtime.safety.auth.attack_memory import AttackMemory
 
 UnknownPolicy = Literal["quarantine", "reject", "allow"]
@@ -18,6 +19,7 @@ class TrustEngine:
         self_whitelist: list[str] | None = None,
         unknown_policy: UnknownPolicy = "quarantine",
         attack_memory: AttackMemory | None = None,
+        adaptive: AdaptiveImmunity | None = None,
     ) -> None:
         # Default trust roster — keep these in sync with the
         # ``ImmunityConfig`` defaults in
@@ -46,6 +48,10 @@ class TrustEngine:
         # rejected before the trusted_sources allow — a compromised
         # entity inside a trusted glob must not keep its free pass.
         self.attack_memory = attack_memory if attack_memory is not None else AttackMemory()
+        # Adaptive tier (protocols/immunity.md §Adaptive). Disabled by
+        # default (None) — opt in via config so deployments without a
+        # cost-baseline history don't quarantine on noise.
+        self.adaptive = adaptive
 
 
     def check(self, call: ToolCall, signature: AntigenSignature) -> ImmuneReport:
@@ -68,6 +74,29 @@ class TrustEngine:
                     f"{pattern.reason}"
                 ),
             )
+
+        # Adaptive tier — behavioural anomaly. Risk only TIGHTENS: a
+        # high score quarantines even an otherwise-trusted source (a
+        # trusted skill suddenly costing 10x its baseline is worth a
+        # second look), but a low score never relaxes Innate/Memory.
+        # Self callers already returned above (I2: no autoimmunity).
+        if self.adaptive is not None:
+            predicted = call.predicted_cost
+            score = self.adaptive.compute_risk(
+                str(call.sucker_id),
+                predicted_latency_ms=predicted.latency_ms if predicted else 0.0,
+                predicted_tokens=(
+                    (predicted.tokens_in + predicted.tokens_out) if predicted else 0.0
+                ),
+            )
+            if self.adaptive.is_anomalous(score):
+                return ImmuneReport(
+                    verdict="quarantine",
+                    signature=signature,
+                    strategy_used="adaptive",
+                    risk=score,
+                    reason=f"behavioural anomaly: {score.reason}",
+                )
 
         if self._is_trusted(signature.entity_id):
             return ImmuneReport(
@@ -100,6 +129,13 @@ class TrustEngine:
             strategy_used="innate",
             reason=reason,
         )
+
+    def learn(self, call: ToolCall, *, latency_ms: float, tokens: float) -> None:
+        """Fold an executed call's observed cost into the adaptive
+        baseline (protocols/immunity.md Execute-time learning loop).
+        No-op when the adaptive tier is disabled."""
+        if self.adaptive is not None:
+            self.adaptive.learn(str(call.sucker_id), latency_ms=latency_ms, tokens=tokens)
 
 
     def _is_self(self, call: ToolCall) -> bool:

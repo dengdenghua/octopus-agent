@@ -111,6 +111,15 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
     # 4. Immunity
     from runtime.safety.auth.attack_memory import AttackMemory
 
+    adaptive = None
+    if config.immunity.enable_adaptive:
+        from runtime.safety.auth.adaptive_immunity import AdaptiveImmunity
+
+        adaptive = AdaptiveImmunity(
+            window_size=config.immunity.adaptive_window_size,
+            quarantine_threshold=config.immunity.adaptive_quarantine_threshold,
+        )
+
     immunity = TrustEngine(
         trusted_sources=list(config.immunity.trusted_sources),
         self_whitelist=list(config.immunity.self_whitelist),
@@ -120,6 +129,7 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
             threshold=config.immunity.attack_threshold,
             window_s=float(config.immunity.attack_window_seconds),
         ),
+        adaptive=adaptive,
     )
 
     # 5. ToolExecutor

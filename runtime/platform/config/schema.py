@@ -47,6 +47,11 @@ class ImmunityConfig(BaseModel):
     attack_memory_path: str | None = None
     attack_threshold: int = 3
     attack_window_seconds: int = 3600
+    # Adaptive tier (behavioural anomaly z-score). Off by default —
+    # needs a per-sucker cost-baseline history to be meaningful.
+    enable_adaptive: bool = False
+    adaptive_window_size: int = 200
+    adaptive_quarantine_threshold: float = 0.7
 
 
 class IntelSourceConfig(BaseModel):

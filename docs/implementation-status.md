@@ -14,7 +14,7 @@
 | Constitution Human-Gate 层 | **已接线**（经审批体系） | `runtime/safety/approval/approval_gate.py` 风险评级 + 审批门；realtime 双向审批通道 |
 | Immunity 先天层（信任源白名单、三态判决） | **已接线** | `runtime/safety/auth/trust_engine.py` |
 | Immunity 记忆层（抗体记忆：重复违规晶化、命中即拒、可持久化） | **已接线** | `runtime/safety/auth/attack_memory.py`；TrustEngine 在 tolerance 之后最先查（可拦截信任 glob 内的已知攻击者）；`immunity.attack_memory_path` 配置持久化 |
-| Immunity 自适应层（行为异常 z-score 评分） | **未实装** | 仅文档描述（protocols/immunity.md §Adaptive） |
+| Immunity 自适应层（行为异常 z-score 评分） | **可选后端**（配置开启） | `runtime/safety/auth/adaptive_immunity.py`：每 sucker 滑动窗口基线 + z-score 复合分，超阈值 quarantine（只收紧，自己人 I2 旁路、冷启动 I4 保守 0.5）；TrustEngine.learn 执行后更新基线；`immunity.enable_adaptive` 开启 |
 | 预算熔断（三态 CircuitBreaker） | **已接线** | `runtime/safety/budget_breaker/breaker.py` |
 | 敏感路径守卫（含 macOS /private 符号链接） | **已接线** | `runtime/safety/auth/path_guard.py`、`file_safety.py` |
 

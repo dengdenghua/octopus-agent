@@ -95,6 +95,14 @@ immunity:
   # attack_memory_path: data/immunity_antibodies.json
   attack_threshold: 3
   attack_window_seconds: 3600
+  # ── Adaptive tier · 行为异常评分 ──
+  # 每个 sucker 维护延迟/token 成本的滑动窗口基线，偏离基线过远
+  # （z-score 复合分 ≥ 阈值）的调用被 quarantine —— 即使来源可信。
+  # 默认关：需要积累每个工具的成本基线才有意义；冷启动保守返回 0.5
+  # 不会误隔离。
+  enable_adaptive: false
+  adaptive_window_size: 200
+  adaptive_quarantine_threshold: 0.7
 
 # ─────────────── Intel Sources 情报源 ─────────────────
 # 主动搜索外部情报并写入 Journal · serve 模式下按频率定时抓取
