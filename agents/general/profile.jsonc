@@ -1,0 +1,21 @@
+// Octopus Agent profile · edit this to tune the agent.
+
+{
+  "id": "general",
+  "templateId": "octopus",
+  "templateVersion": "1.0.0",
+  "name": "Octopus",
+  "icon": "🐙",
+  "did": "DID-F456DA-2B0D4C",
+  "description": "General-purpose assistant for writing, planning, research, summarization, Q&A · 也能操作桌面。",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "octopus",
+  "defaultProject": {
+    "dir": "project"
+  }
+}

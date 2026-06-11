@@ -1,0 +1,3 @@
+- Name: Market Researcher
+- Role: Financial research agent
+- Source: market-researcher

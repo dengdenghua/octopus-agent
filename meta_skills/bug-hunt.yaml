@@ -1,0 +1,64 @@
+# Bug Hunt 能力包 / Meta-Skill
+# 5-step workflow: 3 parallel probes → vuln audit → repo audit.
+# For application security review and penetration-test summary.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - deep_probe          (深度代码探测)
+#   - code_safety_audit   (代码安全审计)
+#   - http_load_tester    (接口压力 / fuzz)
+#   - code_vuln_audit     (漏洞扫描)
+#   - repo_audit          (仓库级审计)
+
+name: bug-hunt
+kind: skill_cluster
+version: 0.1.0
+description: 安全漏洞猎手 — 3 源并行探测 → 漏洞扫描 → 仓库审计
+when_to_use: 安全审计 / pentest / 漏洞 / 渗透 / 攻防 / security
+affinity: [security, code, audit]
+
+budget:
+  tokens: 100000
+  usd: 2.0
+  latency_ms: 5400000
+
+steps:
+  - node_id: probe
+    skill: deep_probe
+    args:
+      target: "{user_input.target}"
+      depth: 3
+    timeout_ms: 600000
+
+  - node_id: safety
+    skill: code_safety_audit
+    args:
+      target: "{user_input.target}"
+      ruleset: owasp-top-10
+    timeout_ms: 600000
+
+  - node_id: fuzz
+    skill: http_load_tester
+    args:
+      target: "{user_input.target}"
+      profile: security-fuzz
+    timeout_ms: 600000
+
+  - node_id: vuln
+    skill: code_vuln_audit
+    args:
+      target: "{user_input.target}"
+      probe: "{probe.output}"
+      safety: "{safety.output}"
+      fuzz: "{fuzz.output}"
+      severity_threshold: medium
+    depends_on: [probe, safety, fuzz]
+    timeout_ms: 600000
+
+  - node_id: report
+    skill: repo_audit
+    args:
+      target: "{user_input.target}"
+      vuln: "{vuln.output}"
+      template: pentest-summary
+    depends_on: [vuln]
+    timeout_ms: 300000

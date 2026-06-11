@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" shape-rendering="crispEdges">
+  <title>Admin pixel half-body avatar</title>
+  <rect width="96" height="96" fill="#fff"/>
+  <path fill="#111" d="M30 12h36v4h8v6h4v10H18V22h4v-6h8z"/>
+  <path fill="#fff" d="M30 20h36v4H30z"/>
+  <path fill="#111" d="M24 32h48v8h4v18h-4v10h-6v6H30v-6h-6V58h-4V40h4z"/>
+  <path fill="#fff" d="M28 38h40v8h4v10h-4v10h-6v6H34v-6h-6V56h-4V46h4z"/>
+  <path fill="#111" d="M20 44h6v14h-6zm50 0h6v14h-6zM34 48h10v4H34zm18 0h10v4H52zm-8 8h8v4h-8zm-8 10h24v4H36zm4 4h16v4H40z"/>
+  <path fill="#111" d="M32 74h32v4h8v4h8v12H16V82h8v-4h8z"/>
+  <path fill="#fff" d="M36 78h24v4h4v8h-8v-6H40v6h-8v-8h4z"/>
+  <path fill="#111" d="M46 80h4v10h-4z"/>
+</svg>

@@ -1,0 +1,141 @@
+site_name: Octopus-Agent
+site_description: "Agent OS for planning, scheduling, memory, safety, and self-improving agents"
+site_url: https://octopus-agent.github.io/
+repo_url: https://github.com/octopus-agent/octopus-agent
+repo_name: octopus-agent/octopus-agent
+copyright: "Apache-2.0 · octopus-agent contributors"
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  icon:
+    logo: octicons/code-of-conduct-24
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji
+
+nav:
+  - Product Hardening:
+      - Main Path Audit: main-path-audit.md
+      - Self-Evolution Minimum Loop: self-evolution-min-loop.md
+      - Engineering Hygiene Plan: engineering-hygiene-plan.md
+  - 首页: index.md
+  - 入门:
+      - 概念入口: CONCEPTS.md
+      - 10 分钟路径: GOLDEN_PATH.md
+      - 快速开始: getting-started.md
+      - 部署: deployment.md
+      - 扩展: extending.md
+      - 自定义模型: custom-models.md
+  - 架构:
+      - 总览: architecture.md
+      - 核心路径: architecture/core-path.md
+      - 高分图: architecture/high-res-map.md
+      - 高分图(mermaid): architecture/high-res-map.mermaid.md
+      - 模块地图: architecture/module-map.md
+      - 器官分级: architecture/organ-tiering.md
+      - 聊天模式: architecture/chat-modes.md
+      - ReAct 自演化: architecture/react-self-evolution.md
+      - 索引: architecture/README.md
+  - 仿生模型:
+      - 总览: biomimetic/README.md
+      - 原则: principles.md
+      - 命名: naming.md
+      - 六模块: six-modules.md
+      - 等级: tiers.md
+      - 基因组: genome.md
+      - 基因锁: gene-locks.md
+      - 适应度: fitness.md
+  - 不变量与标准:
+      - 清单: invariants.md
+      - 速查卡: invariants-cheatsheet.md
+      - 标准: standards.md
+      - 宪法: constitution.md
+  - 能力与基准:
+      - Agent 能力: agent-capabilities.md
+      - 基准: benchmarks.md
+      - 评审地图: review-map-capability-parity.md
+  - ADR:
+      - 索引: adr/README.md
+      - 001 仿生命名: adr/001-bionic-naming.md
+      - 002 模式门控 scope: adr/002-mode-gated-scope.md
+      - 003 Session 对象: adr/003-session-object.md
+      - 004 OpenAPI→TS 代码生成: adr/004-openapi-ts-codegen.md
+      - 005 Agent 能力: adr/005-agent-capabilities.md
+      - 006 生命周期 hooks: adr/006-lifecycle-hooks.md
+      - 007 MCP 信任库: adr/007-mcp-trust-store.md
+      - 008 宪法 profiles: adr/008-constitution-profiles.md
+  - 自动文档:
+      - 总览: auto/README.md
+      - 概览: auto/00-overview.md
+      - 技术栈: auto/10-tech-stack.md
+  - 工程笔记:
+      - Redis Streams vs NATS JetStream: redis-streams-vs-nats-jetstream.md
+  - 贡献:
+      - Roadmap: roadmap.md
+      - Forklist: forklist.md
+
+plugins:
+  - search
+  # Implementation note.
+  # - mkdocstrings:
+  #     handlers:
+  #       python:
+  #         paths: [runtime]
+  #         options:
+  #           show_source: false
+  #           show_bases: true
+  #           docstring_style: google
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/octopus-agent/octopus-agent
+  version:
+    provider: mike

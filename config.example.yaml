@@ -1,0 +1,277 @@
+# octopus-agent · example configuration
+# 复制为 config.yaml 后按需修改 · 所有值均可通过 ${ENV_VAR} 引用环境变量
+
+# ─────────────── 预设模板 ─────────────────
+# 一行配置 · 覆盖下方所有默认值
+# 可选: personal | team | enterprise | research
+# 设为 null 则手动配置下方各项
+preset: personal
+
+name: my-octopus
+version_compat: "0.2"
+
+# ─────────────── Planner 规划器 ─────────────────
+# 决定如何将用户目标拆解为任务图 (TaskGraph)
+#
+# type: static  → 零 LLM 成本，基于规则匹配（demo / CI / 离线模式）
+#        llm    → 真 LLM 驱动规划（需要 ANTHROPIC_API_KEY）
+# model: 当 type=llm 时选择模型
+#   - "claude-haiku-4-5-20251001"  便宜快模型
+#   - "claude-sonnet-4-6"          平衡
+#   - "claude-opus-4-7"            最强（成本高）
+#   - "mock/planner"               离线 demo，返回 mock_response
+# mock_response: 仅 mock/planner 时生效，JSON 格式的任务图
+# max_nodes: 规划图最大节点数（1-50）
+planner:
+  type: llm
+  model: claude-haiku-4-5-20251001
+  mock_response: null
+  max_nodes: 10
+
+# ─────────────── Evolve 自进化模型 ─────────────────
+# 控制进化评估（deep_reflect / deep_evolve）使用的模型
+# 核心原则：用户用什么模型，进化就用什么模型，不硬编码 Key
+#
+# strategy:
+#   inherit               → 继承 planner 的模型和 base_url（默认，零配置）
+#   cheaper_same_provider → 自动选同提供商的便宜模型（如 mimo-v2.5-pro → mimo-v2-flash）
+#   explicit              → 显式指定 model / base_url / api_key_env
+#
+# model:       strategy=explicit 时指定模型名（如 mimo-v2-flash）
+# base_url:    strategy=explicit 时指定 API 地址（如 https://api.xiaomimimo.com/v1）
+# api_key_env: 读取 API Key 的环境变量名（如 MIMO_API_KEY），不硬编码 Key
+evolve:
+  strategy: inherit
+  model: null
+  base_url: null
+  api_key_env: null
+
+# ─────────────── Evolve 显式配置示例 ─────────────────
+# 如果你想用 MiMo Flash 做进化评估（降低 80% 成本），取消注释：
+# evolve:
+#   strategy: explicit
+#   model: mimo-v2-flash
+#   base_url: https://api.xiaomimimo.com/v1
+#   api_key_env: MIMO_API_KEY        # 设置环境变量: set MIMO_API_KEY=tp-xxx
+
+# ─────────────── Budget 预算 ─────────────────
+# 硬顶约束 · 触发即任务失败（不会自动放宽）
+#
+# max_tokens:    单任务最大 token 消耗
+# max_usd:       单任务最大美元花费
+# max_latency_ms: 单任务最大耗时（毫秒），600_000 = 10 分钟
+budget:
+  max_tokens: 50000
+  max_usd: 0.50
+  max_latency_ms: 600000
+
+# ─────────────── Immunity 免疫系统 ─────────────────
+# 三层信任模型：self_whitelist（无条件放行）→ trusted_sources（签名信任）
+# → unknown_policy（未命中以上两者时的处理策略）
+#
+# trusted_sources: fnmatch 模式匹配信任的技能/MCP 来源
+#   - skill://public/*  社区验证过的公开技能
+#   - skill://all_skills/plugin-creator  本地内置插件脚手架技能
+#   - mcp://anthropic/* Anthropic 官方 MCP 服务器
+# self_whitelist: fnmatch 模式匹配的"自己人"（不会被免疫攻击）
+#   - cerebrum / ganglia / arms/*  核心器官
+# unknown_policy: quarantine（隔离观察）| reject（拒绝）| allow（放行）
+immunity:
+  trusted_sources:
+    - "skill://public/*"
+    - "skill://all_skills/plugin-creator"
+    - "mcp://anthropic/*"
+    - "mcp://fs/*"
+  self_whitelist:
+    - "cerebrum"
+    - "ganglia"
+    - "arms/*"
+    - "intel_collector/*"
+  unknown_policy: quarantine
+
+# ─────────────── Intel Sources 情报源 ─────────────────
+# 主动搜索外部情报并写入 Journal · serve 模式下按频率定时抓取
+#
+# 每项:
+#   source_id:         唯一标识
+#   query:             搜索关键词
+#   max_results:       单次最多结果数
+#   fetch_top_n:       实际抓取前 N 条（0 = 全部）
+#   frequency_seconds: 刷新间隔
+#   tags:              标签（用于分类和过滤）
+intel_sources:
+  - source_id: claude_updates
+    query: "anthropic claude new release"
+    max_results: 5
+    fetch_top_n: 1
+    frequency_seconds: 3600
+    tags: ["llm", "weekly"]
+  - source_id: ai_news
+    query: "AI agent framework news 2025"
+    max_results: 3
+    frequency_seconds: 21600
+
+# ─────────────── MCP Servers ─────────────────────
+# Model Context Protocol 外部服务器 · 为 Agent 提供额外工具
+#
+# 每个条目:
+#   name:        唯一名称
+#   command:     启动命令
+#   args:        命令参数
+#   env:         环境变量（可引用 ${ENV}）
+#   name_prefix: 工具名前缀，用于避免命名冲突
+#
+# 示例（取消注释即启用文件系统 MCP 服务器）:
+#   - name: fs
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+#     env: {}
+#     name_prefix: "mcp_fs_"
+mcp_servers: []
+
+# ─────────────── Learn 学习/反思配置 ───────────────
+# 从 Journal 历史事件中学习 · 6 路反思生产器各自独立触发
+#
+# learn_from_journal:              从 Journal JSONL 提取规避规则
+#   min_hits:                         至少 N 次相同模式的失败才生成规则
+#   max_rules:                        规则总数上限（防膨胀）
+# learn_memories_from_journal:      从 Journal 聚类压缩长时记忆
+# learn_kg_from_journal:            从 Journal 构建知识图谱三元组
+#   kg_max_triples:                   单次最多提取的三元组数
+# rewrite_from_journal:             从 Journal 优化工作流规则集
+#   rewrite_min_confidence:           规则重写的最低置信度 (0.0-1.0)
+#   rewrite_min_severity:            最低严重度: low | mid | high
+# assess_recipe_from_journal:       从 Journal 评估策略组合（配方）效果
+#
+# 持久化路径（null = 仅内存，路径 = 写 JSONL 文件）:
+#   rules_persist_path / memories_persist_path / static_rules_persist_path
+learn:
+  learn_from_journal: null
+  min_hits: 3
+  max_rules: 30
+  learn_memories_from_journal: null
+  learn_kg_from_journal: null
+  kg_max_triples: 15
+  rewrite_from_journal: null
+  rewrite_min_confidence: 0.7
+  rewrite_min_severity: mid
+  assess_recipe_from_journal: null
+
+# ─────────────── Journal & 全局开关 ──────────────
+# journal_file:     null = 仅内存 · "path/to/events.jsonl" = JSONL 持久化
+# enable_web_skills: 自动注册 fetch_url / web_search 技能（需 httpx 可用）
+# default_arm_id:   默认腕足 ID（用于单腕任务分配）
+journal_file: null
+enable_web_skills: true
+default_arm_id: code_arm
+
+# ─────────────── Molili 认证集成 ─────────────────
+# 第三方认证平台集成 · 支持短信验证码登录
+#
+# enabled:    是否启用 Molili 集成
+# base_url:   Molili 对话 API 地址
+# info_url:   Molili 用户信息 API 地址
+# jwt_secret: 签发 JWT 的密钥 ⚠️ 生产必须设为 32+ 字符强随机值
+# jwt_expire_seconds: JWT 过期时间（秒），2592000 = 30 天
+# jwt_issuer: JWT 签发者标识
+#
+# auth.mock_mode:   本地 Mock 模式（跳过真实短信发送）
+# auth.mock_code:   本地 Mock 时的固定验证码
+# auth.sms_send_url / auth.sms_verify_url: 短信服务接口地址
+# auth.send_phone_field / verify_phone_field: 请求体中的手机号字段名
+# auth.code_field:      请求体中的验证码字段名
+# auth.sms_type:        SendSmsCmd.smsType 参数（Swagger 标注必填，实际可省略）
+# auth.user_id_path:   响应中 user_id 的 JSONPath
+# auth.token_path:     响应中 token 的 JSONPath
+# auth.mobile_path:    响应中手机号的 JSONPath
+# auth.credits_path:   响应中积分/配额信息的 JSONPath
+molili:
+  enabled: true
+  base_url: https://molili.8kbl.com/molili-agi/chatApi/v1
+  info_url: https://molili.8kbl.com/molili-agi/userApi/v1/userInfo
+
+  jwt_secret: null
+  jwt_expire_seconds: 2592000
+  jwt_issuer: octopus-agent
+
+  auth:
+    mock_mode: false
+    mock_code: null
+
+    sms_send_url: https://molili.8kbl.com/molili-agi/loginApi/v1/sendSms
+    sms_verify_url: https://molili.8kbl.com/molili-agi/loginApi/v1/loginByMobile
+
+    send_phone_field: mobile
+    verify_phone_field: mobile
+    code_field: verifyCode
+    sms_type: null
+    user_id_path: data.userId
+    token_path: data.token
+    mobile_path: data.userInfo.mobile
+    credits_path: data.userInfo
+
+# ─────────────── Local Auth 本地认证 ─────────────
+# 本地用户名登录 · 不依赖第三方服务
+#
+# enabled:              是否启用
+# allow_any_username:   允许任意用户名（false 时需配合 allowed_usernames 白名单）
+# allowed_usernames:    用户名白名单（仅 allow_any_username=false 时生效）
+# jwt_secret:           JWT 签名密钥 ⚠️ 32+ 字符强随机值
+# jwt_expire_seconds:   JWT 过期时间（秒），604800 = 7 天
+# jwt_issuer:           JWT 签发者标识
+# actor_prefix:         用户名前缀（用于命名空间隔离，如 "local:alice"）
+# default_roles:        新用户默认角色
+local_auth:
+  enabled: false
+  allow_any_username: true
+  allowed_usernames: []
+  jwt_secret: null
+  jwt_expire_seconds: 604800
+  jwt_issuer: octopus-agent
+  actor_prefix: "local:"
+  default_roles: [user, local]
+
+# ─────────────── Safety: guard kill-switch 安全守卫开关 ─────────────
+# Persistently disable individual ReAct guards by label. Useful when
+# a guard is firing too many false positives in this project — see
+# the weekly_guard_reports/ output and per-label precision data.
+#
+# Two kill-switch layers exist; both are MERGED (union):
+#   * This file (project-level baseline; survives restarts)
+#   * OCTOPUS_DISABLED_GUARDS env var (emergency runtime override;
+#     adds to whatever this file already disables)
+#
+# Each entry is a guard's exact label (visible in Final Answer
+# rejections as "[<label>] ..." and in the weekly digest report).
+# Removing or fixing the underlying detector is preferred over
+# disabling — but disabling is the right escape hatch when noise
+# is hurting the agent's productivity.
+safety:
+  # Examples — uncomment to disable persistently in this project:
+  # disabled_guards:
+  #   - magic-number guard
+  #   - long-function guard
+  disabled_guards: []
+
+  # ─── Trust-signal escalation (P0 → P1 bridge) ─────────────
+  # When true, the constitution gate consults the guard-telemetry
+  # trust score on each outbound message. If the agent has been
+  # repeatedly tripping real security guards (suspect bucket,
+  # score ≤ 0.20), a clean allow is upgraded to human_gate so a
+  # human reviews. Trust signal NEVER relaxes a block — only
+  # tightens an allow. Default off; turn on once the judge batch
+  # has accumulated a few weeks of verdict data so the trust
+  # score is meaningful. Override at runtime with the env var
+  # OCTOPUS_ENABLE_TRUST_SIGNAL=1 / 0.
+  enable_trust_signal: false
+
+  # ─── Per-guard overrides (fine-grained kill-switch) ───────
+  # Map of guard label -> True/False. Overrides take precedence
+  # over disabled_guards (so True here re-enables a guard listed
+  # there). Use this to whitelist a single guard back on after a
+  # blanket disable, or to surgically turn off a guard that's
+  # firing too many false positives this week.
+  guard_overrides: {}
+    # Examples:
+    # magic-number guard: false   # turn off
+    # weak-test guard: true       # explicit on (overrides any blanket off)

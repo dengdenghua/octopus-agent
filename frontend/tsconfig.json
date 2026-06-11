@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitAny": true,
+    "checkJs": false,
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "motion/react": ["./src/lib/motion-shim.tsx"],
+      "mermaid-real": ["./node_modules/mermaid/dist/mermaid.d.ts"],
+      "mermaid": ["./src/lib/mermaid-shim.ts"]
+    }
+  },
+  "include": [
+    "src/main.tsx",
+    "src/router.tsx",
+    "src/app/page.tsx",
+    "src/app/login/page.tsx",
+    "src/app/register/page.tsx",
+    "src/app/about/page.tsx",
+    "src/app/workspace/layout.tsx",
+    "src/app/workspace/chats/[thread_id]/page.tsx",
+    "src/app/workspace/team/page.tsx",
+    "src/app/workspace/team/new/page.tsx",
+    "src/app/workspace/team/[thread_id]/page.tsx",
+    "src/app/workspace/browser/page.tsx",
+    "src/app/browser/page.tsx",
+    "src/app/workspace/mcp/page.tsx",
+    "src/app/workspace/agents/page.tsx",
+    "src/app/workspace/skills/page.tsx",
+    "src/app/workspace/meta-skills/page.tsx",
+    "src/app/workspace/channels/page.tsx",
+    "src/types/electron.d.ts",
+    "vite-env.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", "src/app/api", "src/app/mock"]
+}

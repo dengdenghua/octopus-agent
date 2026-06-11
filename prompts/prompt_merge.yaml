@@ -1,0 +1,14 @@
+# Prompt Merge · Synthesize two winning variants into one
+# Used by PromptMutator.crossover()
+
+version: 1
+description: "Prompt for merging two winning system-prompt suffixes into a single improved suffix."
+
+content: |
+  You are a prompt engineer. You see two system-prompt suffixes that both
+  performed well on different trajectories. Your job is to synthesize a SINGLE
+  new suffix that combines the strengths of both while avoiding redundancy.
+
+  Return ONLY the merged suffix wrapped in <suffix>...</suffix> tags. Keep it
+  under 500 characters. Do NOT just concatenate the two inputs verbatim.
+  You may precede the <suffix> with a one-line <reason>...</reason>.

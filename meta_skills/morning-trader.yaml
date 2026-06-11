@@ -1,0 +1,93 @@
+# Morning Trader 能力包 / Meta-Skill
+# 9-step workflow that pulls 6 parallel data sources at pre-market and
+# composes a trader brief, then delivers to docx + slack.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - macro_rates_monitor (宏观利率)
+#   - catalyst_calendar   (事件日历)
+#   - earnings_preview    (今日财报)
+#   - sector_overview     (板块行情)
+#   - funding_digest      (一级市场融资)
+#   - deal_tracker        (交易跟踪)
+#   - morning_note        (操盘手早报模板)
+#   - docx_export         (归档)
+#   - slack_post          (推送)
+
+name: morning-trader
+kind: skill_cluster
+version: 0.1.0
+description: 操盘手早报 — 6 源并行拉数据 → 早会点评 → docx + slack
+when_to_use: 交易日早报 / pre-market / 操盘手早会 / 每日盘前 / 早盘
+affinity: [finance, trading, briefing]
+
+budget:
+  tokens: 30000
+  usd: 0.5
+  latency_ms: 600000
+
+steps:
+  - node_id: macro
+    skill: macro_rates_monitor
+    args:
+      region: "{user_input.region}"
+    timeout_ms: 60000
+
+  - node_id: catalysts
+    skill: catalyst_calendar
+    args:
+      date: today
+    timeout_ms: 60000
+
+  - node_id: earnings
+    skill: earnings_preview
+    args:
+      date: today
+    timeout_ms: 120000
+
+  - node_id: sectors
+    skill: sector_overview
+    args:
+      date: today
+    timeout_ms: 120000
+
+  - node_id: funding
+    skill: funding_digest
+    args:
+      window: 1d
+    timeout_ms: 120000
+
+  - node_id: deals
+    skill: deal_tracker
+    args:
+      window: 1d
+    timeout_ms: 120000
+
+  - node_id: compose
+    skill: morning_note
+    args:
+      template: trader-brief
+      inputs:
+        macro: "{macro.output}"
+        catalysts: "{catalysts.output}"
+        earnings: "{earnings.output}"
+        sectors: "{sectors.output}"
+        funding: "{funding.output}"
+        deals: "{deals.output}"
+    depends_on: [macro, catalysts, earnings, sectors, funding, deals]
+    timeout_ms: 120000
+
+  - node_id: archive
+    skill: docx_export
+    args:
+      content: "{compose.output}"
+      filename: "trader-brief-{date}.docx"
+    depends_on: [compose]
+    timeout_ms: 30000
+
+  - node_id: notify
+    skill: slack_post
+    args:
+      channel: "{user_input.channel}"
+      content: "{compose.output}"
+    depends_on: [compose]
+    timeout_ms: 30000

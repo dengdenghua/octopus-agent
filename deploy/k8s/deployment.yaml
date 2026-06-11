@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: octopus-agent
+  namespace: octopus-agent
+  labels:
+    app.kubernetes.io/name: octopus-agent
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: octopus-agent
+  template:
+    metadata:
+      labels:
+        app: octopus-agent
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: octopus-agent
+          image: ghcr.io/octopus-agent/octopus-agent:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          args:
+            - serve
+            - --config
+            - /etc/octopus/config.yaml
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: octopus-agent
+          envFrom:
+            - secretRef:
+                name: octopus-agent-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+            runAsUser: 999
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+          volumeMounts:
+            - name: config
+              mountPath: /etc/octopus
+              readOnly: true
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: octopus-agent-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: octopus-agent-data
+        - name: tmp
+          emptyDir: {}

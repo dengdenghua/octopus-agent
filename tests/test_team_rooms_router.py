@@ -1,0 +1,218 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+fastapi = pytest.importorskip("fastapi")
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router  # noqa: E402
+
+
+def _client(
+    tmp_path: Path,
+    *,
+    identity_store=None,
+    require_auth: bool = False,
+) -> TestClient:
+    app = FastAPI()
+    app.include_router(
+        create_team_rooms_router(
+            state_path=tmp_path / "team_rooms.json",
+            identity_store=identity_store,
+            require_auth=require_auth,
+        ),
+    )
+    return TestClient(app)
+
+
+def _team_body(name: str = "Family") -> dict:
+    return {
+        "name": name,
+        "members": [
+            {
+                "name": "general",
+                "display_name": "Octopus",
+                "description": "General assistant",
+                "model": None,
+                "tool_groups": None,
+            },
+            {
+                "name": "coder",
+                "display_name": "Coder",
+                "description": "Code assistant",
+                "model": None,
+                "tool_groups": None,
+            },
+        ],
+        "leaderId": "general",
+    }
+
+
+def test_create_list_and_reload_team_rooms(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+
+    created = client.post("/api/teams", json=_team_body()).json()
+    assert created["id"].startswith("team-family")
+    assert created["leaderId"] == "general"
+    assert created["members"][1]["name"] == "coder"
+
+    listed = client.get("/api/teams").json()
+    assert listed["count"] == 1
+    assert listed["teams"][0]["name"] == "Family"
+
+    reloaded = _client(tmp_path).get("/api/teams").json()
+    assert reloaded["count"] == 1
+    assert reloaded["teams"][0]["id"] == created["id"]
+
+
+def test_invite_join_adds_human_participant(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    team = client.post("/api/teams", json=_team_body()).json()
+
+    invite = client.post(
+        f"/api/teams/{team['id']}/invite",
+        json={"role": "viewer"},
+    ).json()
+    token = invite["invite_token"]
+    assert invite["invite_role"] == "viewer"
+    assert invite["invite_hash_path"].endswith(token)
+
+    info = client.get(f"/api/team-invites/{token}").json()
+    assert info["team"]["id"] == team["id"]
+
+    joined = client.post(
+        f"/api/team-invites/{token}/join",
+        json={"display_name": "Remote Alice", "participant_id": "alice"},
+    ).json()
+    assert joined["participant"]["display_name"] == "Remote Alice"
+    assert joined["participant"]["role"] == "viewer"
+    participants = joined["team"]["participants"]
+    assert any(p["id"] == "alice" for p in participants)
+
+
+def test_team_room_websocket_presence_and_events(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    team = client.post("/api/teams", json=_team_body()).json()
+    url = f"/api/teams/{team['id']}/ws"
+
+    with client.websocket_connect(f"{url}?participant_id=alice&display_name=Alice&thread_id=thread-a") as alice:
+        ready = alice.receive_json()
+        assert ready["type"] == "ready"
+        assert ready["participant"]["id"] == "alice"
+        assert alice.receive_json()["type"] == "presence"
+
+        with client.websocket_connect(f"{url}?participant_id=bob&display_name=Bob&thread_id=thread-a") as bob:
+            bob_ready = bob.receive_json()
+            assert bob_ready["participant"]["id"] == "bob"
+            alice_presence = alice.receive_json()
+            bob_presence = bob.receive_json()
+            assert alice_presence["type"] == "presence"
+            assert bob_presence["type"] == "presence"
+            assert {p["id"] for p in alice_presence["participants"]} == {"alice", "bob"}
+
+            bob.send_json({"type": "cursor", "position": {"x": 12, "y": 34}})
+            cursor = alice.receive_json()
+            assert cursor["type"] == "cursor"
+            assert cursor["thread_id"] == "thread-a"
+            assert cursor["participant_id"] == "bob"
+            assert cursor["position"] == {"x": 12, "y": 34}
+
+            bob.send_json({"type": "message", "text": "Can you review this?"})
+            message = alice.receive_json()
+            assert message["type"] == "message"
+            assert message["thread_id"] == "thread-a"
+            assert message["participant_id"] == "bob"
+            assert message["text"] == "Can you review this?"
+
+            bob.send_json({"type": "thread:update", "reason": "finished"})
+            update = alice.receive_json()
+            assert update["type"] == "thread:update"
+            assert update["thread_id"] == "thread-a"
+            assert update["participant_id"] == "bob"
+            assert update["reason"] == "finished"
+
+
+def test_team_room_websocket_respects_auth_and_actor_binding(tmp_path: Path) -> None:
+    from runtime.safety.auth import Identity, IdentityStore
+
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+    client = _client(tmp_path, identity_store=store, require_auth=True)
+
+    team = client.post(
+        "/api/teams",
+        headers={"Authorization": "Bearer sk-alice"},
+        json=_team_body(),
+    ).json()
+    owner_id = team["participants"][0]["id"]
+    url = f"/api/teams/{team['id']}/ws?participant_id={owner_id}&display_name=Alice"
+
+    with client.websocket_connect(url) as ws:
+        assert ws.receive_json() == {
+            "type": "error",
+            "message": "missing Authorization: Bearer <token>",
+        }
+
+    with client.websocket_connect(
+        url,
+        headers={"Authorization": "Bearer sk-bob"},
+    ) as ws:
+        assert ws.receive_json() == {
+            "type": "error",
+            "message": "participant actor mismatch",
+        }
+
+    with client.websocket_connect(
+        url,
+        headers={"Authorization": "Bearer sk-alice"},
+    ) as ws:
+        ready = ws.receive_json()
+        assert ready["type"] == "ready"
+        assert ready["participant"]["id"] == owner_id
+
+
+def test_update_and_remove_team_participants(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    team = client.post("/api/teams", json=_team_body()).json()
+    owner_id = team["participants"][0]["id"]
+
+    invite = client.post(
+        f"/api/teams/{team['id']}/invite",
+        json={"role": "member"},
+    ).json()
+    joined = client.post(
+        f"/api/team-invites/{invite['invite_token']}/join",
+        json={"display_name": "Alice", "participant_id": "alice"},
+    ).json()
+    assert joined["participant"]["role"] == "member"
+
+    updated = client.patch(
+        f"/api/teams/{team['id']}/participants/alice",
+        json={"role": "viewer", "display_name": "Alice Viewer"},
+    ).json()
+    assert updated["participant"]["role"] == "viewer"
+    assert updated["participant"]["display_name"] == "Alice Viewer"
+
+    removed = client.delete(f"/api/teams/{team['id']}/participants/alice").json()
+    assert removed["ok"] is True
+    alice = next(p for p in removed["team"]["participants"] if p["id"] == "alice")
+    assert alice["status"] == "removed"
+
+    guard = client.patch(
+        f"/api/teams/{team['id']}/participants/{owner_id}",
+        json={"role": "viewer"},
+    )
+    assert guard.status_code == 400
+
+
+def test_delete_team(tmp_path: Path) -> None:
+    client = _client(tmp_path)
+    team = client.post("/api/teams", json=_team_body("Delete me")).json()
+
+    deleted = client.delete(f"/api/teams/{team['id']}").json()
+    assert deleted == {"ok": True, "deleted": True, "team_id": team["id"]}
+    assert client.get("/api/teams").json()["count"] == 0

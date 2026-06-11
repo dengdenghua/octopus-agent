@@ -1,0 +1,2 @@
+- Name: Pitch Agent
+- Role: financial specialist

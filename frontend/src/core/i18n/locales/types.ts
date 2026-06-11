@@ -1,0 +1,5477 @@
+import type { LucideIcon } from "lucide-react";
+
+export interface Translations {
+  // Locale meta
+  locale: {
+    localName: string;
+  };
+
+  // Common
+  common: {
+    home: string;
+    settings: string;
+    delete: string;
+    edit: string;
+    rename: string;
+    share: string;
+    openInNewWindow: string;
+    close: string;
+    more: string;
+    search: string;
+    download: string;
+    thinking: string;
+    artifacts: string;
+    public: string;
+    custom: string;
+    notAvailableInDemoMode: string;
+    loading: string;
+    copy: string;
+    copied: string;
+    version: string;
+    lastUpdated: string;
+    code: string;
+    preview: string;
+    cancel: string;
+    save: string;
+    install: string;
+    create: string;
+    import: string;
+    export: string;
+    exportAsMarkdown: string;
+    exportAsJSON: string;
+    exportSuccess: string;
+    model: string;
+    other: string;
+    unlink: string;
+    guest: string;
+    confirm: string;
+    timeAgo: (value: number, unit: string) => string;
+    stubResponseTitle: string;
+    stubResponseDescription: (method: string, path: string) => string;
+  };
+
+  home: {
+    docs: string;
+    blog: string;
+  };
+
+  // Landing page
+  landing: {
+    tagline: string;
+    subtitle: string;
+    getStarted: string;
+    clickToEnter: string;
+    capabilitiesPanel: string;
+    features: {
+      deepResearch: string;
+      multiAgent: string;
+      skillsTools: string;
+      sandbox: string;
+      memory: string;
+      multiChannel: string;
+    };
+  };
+
+  // Welcome
+  welcome: {
+    greeting: string;
+    description: string;
+    createYourOwnSkill: string;
+    createYourOwnSkillDescription: string;
+  };
+
+  // Clipboard
+  clipboard: {
+    copyToClipboard: string;
+    copiedToClipboard: string;
+    failedToCopyToClipboard: string;
+    linkCopied: string;
+  };
+
+  // Input Box
+  inputBox: {
+    placeholder: string;
+    createSkillPrompt: string;
+    addAttachments: string;
+    stop: string;
+    send: string;
+    mode: string;
+    flashMode: string;
+    flashModeDescription: string;
+    chatModeDescription: string;
+    reactMode: string;
+    reactModeDescription: string;
+    ephemeralMode: string;
+    ephemeralModeDescription: string;
+    reasoningMode: string;
+    reasoningModeDescription: string;
+    reasoningEffort: string;
+    reasoningEffortMinimal: string;
+    reasoningEffortMinimalDescription: string;
+    reasoningEffortLow: string;
+    reasoningEffortLowDescription: string;
+    reasoningEffortMedium: string;
+    reasoningEffortMediumDescription: string;
+    reasoningEffortHigh: string;
+    reasoningEffortHighDescription: string;
+    searchModels: string;
+    surpriseMe: string;
+    surpriseMePrompt: string;
+    followupLoading: string;
+    followupConfirmTitle: string;
+    followupConfirmDescription: string;
+    followupConfirmAppend: string;
+    followupConfirmReplace: string;
+    suggestions: {
+      suggestion: string;
+      prompt: string;
+      icon: LucideIcon;
+    }[];
+    suggestionsCreate: (
+      | {
+          suggestion: string;
+          prompt: string;
+          icon: LucideIcon;
+        }
+      | {
+          type: "separator";
+        }
+    )[];
+  };
+
+  // Message display
+  message: {
+    thinking: string;
+    thinkingProcess: string;
+    replyThinking: string;
+    replyThinkingDescription: string;
+    executionProcess: string;
+    executionProcessDescription: string;
+    visibleReasoning: string;
+    executionSteps: string;
+    toolCalls: string;
+    todoAndContext: string;
+    expandable: string;
+    agentCluster: string;
+    processDetails: string;
+    statusViewing: string;
+    statusCompleted: string;
+    statusError: string;
+    statusWaiting: string;
+  };
+
+  // Execution Checklist
+  executionChecklist: {
+    title: string;
+    clarifyGoal: string;
+    clarifyGoalDetail: string;
+    searchRound: (round: number, query: string) => string;
+    adjustKeywords: (round: number) => string;
+    adjustKeywordsDetail: string;
+    webSearch: (count: number) => string;
+    readContext: string;
+    writeFile: string;
+    runCommand: string;
+    callTool: (count: number) => string;
+    toolCallDetail: string;
+    analyzeAndAlign: string;
+    analyzeAndAlignDetail: string;
+    generateResponse: string;
+    generateResponseDetail: string;
+    // Search classification
+    marketSize: string;
+    competition: string;
+    technology: string;
+    consumerDemand: string;
+    evidenceRound: (round: number) => string;
+    queryPrefix: string;
+    continueFromPrevious: string;
+  };
+
+  // Chat Input Box
+  chatInputBox: {
+    quickCapabilities: string;
+    addResearchMaterial: string;
+    webSearch: string;
+    createPpt: string;
+    createHtml: string;
+    renderTable: string;
+    createImage: string;
+    scheduledTask: string;
+    workflow: string;
+    projectFiles: string;
+    deepResearchConfig: string;
+    roles: string;
+    materials: string;
+    collapse: string;
+    materialNote: string;
+    url: string;
+    file: string;
+    text: string;
+    textTitle: string;
+    pasteTextMaterial: string;
+    focus: string;
+    deliverable: string;
+    searchAngles: string;
+    customRole: string;
+    addRole: string;
+    removeRole: string;
+    toggleMaterial: string;
+    removeMaterial: string;
+    startThreadBeforeUpload: string;
+    uploadFailed: string;
+    maxSubagents: string;
+    maxSearches: string;
+    permissionModeLabel: string;
+    permissionModeDefault: string;
+    permissionModeDefaultDesc: string;
+    permissionModeAcceptEdits: string;
+    permissionModeAcceptEditsDesc: string;
+    permissionModeBypass: string;
+    permissionModeBypassDesc: string;
+    permissionModePlan: string;
+    permissionModePlanDesc: string;
+    seedWebSearch: string;
+    seedCreatePpt: string;
+    seedCreateHtml: string;
+    seedRenderTable: string;
+    seedCreateImage: string;
+    seedScheduledTask: string;
+    seedWorkflow: string;
+    seedProjectFiles: string;
+  };
+
+  // Team Mode
+  teamMode: {
+    mode: string;
+    modeTeam: string;
+    modeTeamDesc: string;
+    createTeam: string;
+    chat: string;
+    chatDescription: string;
+    cowork: string;
+    coworkDescription: string;
+    comingSoon: string;
+  };
+
+  // Create Project Dialog
+  createProjectDialog: {
+    title: string;
+    placeholder: string;
+    quickCategory: string;
+    categoryInvest: string;
+    categoryHomework: string;
+    categoryWriting: string;
+    categoryTravel: string;
+    hint: string;
+    cancel: string;
+    create: string;
+  };
+
+  // Dispatch Card (swarm)
+  dispatchCard: {
+    agentSwarmTitle: string;
+    parallelTasks: (n: number) => string;
+    done: string;
+    researchFocus: string;
+    equipment: string;
+    personalityLabel: string;
+    battleRecord: (tasks: number) => string;
+    ratingSuffix: (stars: string) => string;
+  };
+
+  // Deliverables Card (swarm)
+  deliverablesCard: {
+    detailedReports: string;
+    expertsSaved: (n: number) => string;
+    colReport: string;
+    colPath: string;
+    colActions: string;
+    copyPath: string;
+    download: string;
+    allFiles: string;
+    previewOrDownload: string;
+  };
+
+  // Landing footer
+  landingFooter: {
+    tagline: string;
+    productTitle: string;
+    workspaceLink: string;
+    aboutLink: string;
+    workflowLink: string;
+    resourcesTitle: string;
+    skillMarketLink: string;
+    communityTitle: string;
+    wechat: string;
+  };
+
+  // Message grouping (activity label bag passed to pure module)
+  messageGrouping: {
+    fileFallback: string;
+    writeFile: (file: string) => string;
+    writeFileWithLines: (file: string, added: number) => string;
+    editFile: (file: string) => string;
+    editFileAddRemove: (file: string, added: number, removed: number) => string;
+    editFileAdded: (file: string, added: number) => string;
+    editFileRemoved: (file: string, removed: number) => string;
+    executeCommand: string;
+    executeCommandWith: (cmd: string) => string;
+    planStep: string;
+    think: string;
+  };
+
+  // Trace generator (swarm simulation label bag)
+  traceGenerator: {
+    searchTitle: (query: string) => string;
+    resultCount: (n: number) => string;
+    toolCallTitle: string;
+    toolCallDetail: string;
+    milestoneSave: (bucket: number, total: number) => string;
+    thinkThoughts: string[];
+  };
+
+  // Create Team Dialog (CreateTeamDialog component)
+  createTeamDialog: {
+    title: string;
+    description: string;
+    allAgents: (n: number) => string;
+    selected: (n: number, max: number) => string;
+    emptyHintL1: string;
+    emptyHintL2: string;
+    currentTl: string;
+    setAsTl: string;
+    teamNameLabel: string;
+    teamNamePlaceholder: string;
+    create: string;
+    cancel: string;
+  };
+
+  // Code Mode
+  codeMode: {
+    ask: string;
+    plan: string;
+    agent: string;
+    solo: string;
+    sandbox: string;
+    fullAccess: string;
+    workspaceDir: string;
+    selectWorkspace: string;
+    chooseWorkspaceFolder: string;
+    personalSpace: string;
+    selectFolder: string;
+    selectWorkspaceFolderFirst: string;
+    recentWorkspaces: string;
+    noRecentWorkspaces: string;
+    browseCurrentFolder: string;
+    chooseCurrentFolder: string;
+    selectThisFolder: string;
+    folderPickerPathUnavailable: string;
+    openFolderCta: string;
+    cloneRepoCta: string;
+    connectSshCta: string;
+    cloneRepoUnavailable: string;
+    connectSshUnavailable: string;
+    parentFolder: string;
+    loadingFolders: string;
+    noSubfolders: string;
+    explorer: string;
+    wiki: string;
+    builder: string;
+    coder: string;
+    builderDesc: string;
+    coderDesc: string;
+    autoDetected: string;
+    searchConversations: string;
+    showFileTree: string;
+    hideFileTree: string;
+    inputPlaceholder: string;
+    running: string;
+    defaultModel: string;
+    files: string;
+    cloudServices: string;
+    quickActionNewFile: string;
+    quickActionAttachFile: string;
+    quickActionOpenMcp: string;
+    fast: string;
+    deep: string;
+    swarms: string;
+    // Capability selector (collab / auto / swarms)
+    capabilityCollab: string;
+    capabilityAuto: string;
+    capabilityCollabTitle: string;
+    capabilityAutoTitle: string;
+    capabilitySwarmsTitle: string;
+    advanced: string;
+    architectLevelTooltip: string;
+    architectLevelL0: string;
+    architectLevelL1: string;
+    architectLevelL2: string;
+    architectLevelL3: string;
+    // Right-pane toggle + extended rail
+    codeTab: string;
+    previewTab: string;
+    showExtendedPanels: string;
+    hideExtendedPanels: string;
+    moreActions: string;
+    subtaskSwarmTitle: string;
+    // Fast-mode status badges
+    fastOver60s: string;
+    fastRunning: string;
+    fastCompleted: string;
+    fastProgress: (sec: number) => string;
+    fastDone: (sec: number) => string;
+    hardTimeoutOn: string;
+    hardTimeoutOff: string;
+    loadingInline: string;
+    // Auto verify
+    autoVerifyPassed: string;
+    autoVerifyFailed: string;
+    autoVerifyFailedQueued: string;
+    autoVerifyRunning: string;
+    changesAwaitingVerify: string;
+    verify: string;
+    attemptCompleted: (
+      attempt: number,
+      count: number,
+      singular: boolean,
+    ) => string;
+    autoFixLimitReached: (attempt: number, max: number) => string;
+    failedChecks: (count: number, singular: boolean) => string;
+    changedFilesPending: (count: number, singular: boolean) => string;
+    runningProjectChecks: string;
+    // Panel labels
+    term: string;
+    terminal: string;
+    hideTerminal: string;
+    showTerminal: string;
+    hidePreviewSidecar: string;
+    showPreviewSidecar: string;
+    debug: string;
+    closeSidecar: string;
+    // Misc
+    goToLinePrompt: string;
+    goToLineDefault: string;
+    workbenchLayoutPanels: string;
+    verificationFailedNoDetails: string;
+    // Terminal input
+    terminalPlaceholder: string;
+    stop: string;
+    send: string;
+    // File tree
+    refresh: string;
+    // Live preview
+    previewDiagnostic: string;
+    previewDiagnostics: string;
+    previewConsole: string;
+    previewConsoleEmpty: string;
+    previewConsoleClear: string;
+    previewConsoleAddToChat: string;
+    previewDevTools: string;
+    previewDevToolsUnavailable: string;
+    // Tool panel (realtime)
+    toolPanelPreview: string;
+    toolPanelTerminal: string;
+    // Threads sidebar (realtime)
+    threadsHistory: string;
+    newThread: string;
+    searchThreads: string;
+    noThreadsYet: string;
+    // Verify panel
+    runChecks: string;
+    autoVerifyAttempt: (attempt: number) => string;
+    queuedAutoFix: (count: number, max: number) => string;
+    latestTurnPassed: string;
+    noAutoFixQueued: string;
+    moreFiles: (count: number) => string;
+    clickRunChecksToVerify: string;
+    runningVerification: string;
+    projectLabel: string;
+    sendErrorToAI: string;
+    fix: string;
+    copyOutput: string;
+    // Changes panel
+    hunks: (count: number) => string;
+    revertToLastCommit: string;
+    fileReverted: string;
+    failedToRevertFile: string;
+    hunkAccepted: string;
+    hunkReverted: string;
+    failedToRevertHunk: string;
+    steps: {
+      understandRequirement: string;
+      analyzeIntent: string;
+      architectureDesign: string;
+      planStructure: string;
+      generateCode: string;
+      writeCode: string;
+      codeReview: string;
+      checkQuality: string;
+      parallelDev: string;
+      multiAgentCollab: string;
+      frontendDev: string;
+      backendDev: string;
+      dbDesign: string;
+    };
+  };
+
+  // Agent Workflow
+  agentWorkflow: {
+    title: string;
+    running: string;
+    progress: string;
+    empty: string;
+    showDetails: string;
+    hideDetails: string;
+    input: string;
+    result: string;
+  };
+
+  // Realtime item views
+  realtimeItems: {
+    error: {
+      label: string;
+      willRetry: string;
+      yes: string;
+      no: string;
+    };
+    command: {
+      cwd: string;
+      waitingOutput: string;
+      running: string;
+      exitCode: (code: number) => string;
+    };
+    fileChange: {
+      title: (count: number) => string;
+      hunkCount: (count: number) => string;
+      noDiff: string;
+      accept: string;
+      reject: string;
+      operations: {
+        create: string;
+        delete: string;
+        modify: string;
+      };
+      decisions: {
+        accepted: string;
+        rejected: string;
+        pending: string;
+      };
+    };
+    verification: {
+      title: string;
+      passed: string;
+      failed: string;
+      running: string;
+      exitCode: (code: number) => string;
+      relatedFiles: (count: number) => string;
+      relatedChanges: (count: number) => string;
+    };
+    plan: {
+      label: string;
+    };
+    reasoning: {
+      label: string;
+      empty: string;
+    };
+    todo: {
+      label: string;
+    };
+  };
+
+  // Quick Templates
+  quickTemplates: {
+    title: string;
+    hint: string;
+    items: {
+      companyWebsite: { name: string; description: string; prompt: string };
+      personalPortfolio: { name: string; description: string; prompt: string };
+      ecommercePage: { name: string; description: string; prompt: string };
+      dashboard: { name: string; description: string; prompt: string };
+      crmSystem: { name: string; description: string; prompt: string };
+      todoApp: { name: string; description: string; prompt: string };
+      chatInterface: { name: string; description: string; prompt: string };
+      searchPage: { name: string; description: string; prompt: string };
+      apiDocs: { name: string; description: string; prompt: string };
+      puzzleGame: { name: string; description: string; prompt: string };
+    };
+  };
+
+  // Agent Workbench Panel (swarm)
+  agentWorkbench: {
+    idle: string;
+    finished: string;
+    running: string;
+    newTaskTitle: string;
+    closeTitle: string;
+    emptyNoAgents: string;
+    startNewTaskButton: string;
+    composerHint: string;
+    taskListView: string;
+    computerView: string;
+    reportView: string;
+    traceFeedEmpty: string;
+    liveEventStream: string;
+    eventsCount: (count: number) => string;
+    computerViewEmpty: string;
+    browsingTrail: (emoji: string) => string;
+    reportPending: string;
+    agentRunning: string;
+    durationSeconds: (s: string) => string;
+    agentComputer: string;
+    agentNames: string[];
+    dimensionTask: (index: number) => string;
+    waitingToStart: string;
+    waitingForPhase: string;
+    phaseCompleted: string;
+    webSearchActions: (count: number) => string;
+    fileActions: (count: number) => string;
+    terminalActions: (count: number) => string;
+    executionActions: (count: number) => string;
+    listSeparator: string;
+    statusProcessing: string;
+    statusCompleted: string;
+    statusError: string;
+    executingTask: string;
+    waitingToContinue: string;
+    currentProgress: string;
+    minimizeProgress: string;
+    restoreProgress: string;
+    closeWorkspace: string;
+    activityTrace: string;
+    computerViewLabel: string;
+    computerViewHint: string;
+    copyDetails: string;
+    waitingForToolResult: string;
+    kindTerminal: string;
+    kindBrowser: string;
+    kindSearch: string;
+    kindRead: string;
+    kindFile: string;
+    kindTodos: string;
+    kindAgent: string;
+    request: string;
+    response: string;
+    phase: string;
+    steps: string;
+    messages: string;
+    workingSet: string;
+    resumePlan: string;
+    copyMarkdown: string;
+    copyJson: string;
+    candidateRecoveryPoints: string;
+    noResumeProposalsAvailable: string;
+    iteration: (iteration: number) => string;
+    stepCount: (count: number) => string;
+    fileCount: (count: number) => string;
+    reviewRecoveryPoint: string;
+    review: string;
+    resumeDraft: string;
+    useAsDraft: string;
+    resumeFromLatestCheckpoint: string;
+    resumeFromPhase: (phase: string) => string;
+    restorePhase: (phase: string) => string;
+    restoreLatestPhase: string;
+    continueFromIteration: (iteration: number) => string;
+    rehydrateWorkingSetFiles: (count: number) => string;
+    useLastProgressSummary: (progress: string) => string;
+    reviewLatestProgressSummary: string;
+    checkpointLabel: (type: string, id: number) => string;
+    taskLabel: (taskId: string) => string;
+    continueFromIterationLabel: (iteration: number) => string;
+    phaseLabel: (phase: string) => string;
+    workingSetFilesLabel: (count: number) => string;
+    rawCheckpointExcluded: string;
+    resumeDraftIntro: string;
+    resumeTitleLabel: (title: string) => string;
+    progressLabel: (progress: string) => string;
+    safetyRequirements: string;
+    useOnlySanitizedRecovery: string;
+    doNotAssumeRawSnapshots: string;
+    reconfirmBeforeDestructive: string;
+    unknown: string;
+  };
+
+  // Diagnostics page
+  diagnosticsPage: {
+    title: string;
+    description: string;
+    tabs: {
+      featureFlags: string;
+      suggestions: string;
+      remote: string;
+      invariants: string;
+    };
+    noActiveProject: string;
+  };
+
+  // Feature Flags panel
+  featureFlagsPanel: {
+    title: string;
+    reload: string;
+    reloading: string;
+    reloadAria: string;
+    loading: string;
+    loadFailed: (error: string) => string;
+    empty: string;
+    experimental: string;
+  };
+
+  // Ambient Suggestions panel
+  ambientSuggestionsPanel: {
+    title: string;
+    generate: string;
+    generating: string;
+    generateAria: string;
+    loading: string;
+    loadFailed: (error: string) => string;
+    featureDisabled: string;
+    empty: string;
+    emptyGenerateHint: string;
+    accept: string;
+    dismiss: string;
+    acceptAria: (title: string) => string;
+    dismissAria: (title: string) => string;
+    recent: (count: number) => string;
+    dismissed: (count: number) => string;
+    experimental: string;
+  };
+
+  // Remote Backends panel
+  remoteBackendsPanel: {
+    title: string;
+    disabled: string;
+    disabledAria: string;
+    loadFailed: (error: string) => string;
+    addBackendAria: string;
+    addFailed: string;
+    namePlaceholder: string;
+    nameAria: string;
+    urlPlaceholder: string;
+    urlAria: string;
+    add: string;
+    adding: string;
+    loading: string;
+    empty: string;
+    untested: string;
+    reachable: string;
+    error: string;
+    ping: string;
+    pinging: string;
+    remove: string;
+    removing: string;
+    pingAria: (name: string) => string;
+    removeAria: (name: string) => string;
+  };
+
+  // Invariants panel
+  invariantsPanel: {
+    title: string;
+    ruleCount: (count: number) => string;
+    ruleCountAria: string;
+    enforcerCount: (count: number) => string;
+    enforcerCountAria: string;
+    rebuild: string;
+    rebuilding: string;
+    rebuildAria: string;
+    loadFailed: (error: string) => string;
+    filterPlaceholder: string;
+    filterAria: string;
+    loading: string;
+    emptyFiltered: (filter: string) => string;
+    empty: string;
+    enforcerCountLabel: (count: number) => string;
+  };
+
+  // Plugins page
+  plugins: {
+    pageLoading: string;
+    pageTitle: string;
+    pageSubtitle: string;
+    tabSkillMarket: string;
+    refreshButton: string;
+    feature1Title: string;
+    feature1Desc: string;
+    feature2Title: string;
+    feature2Desc: string;
+    statTotal: string;
+    statEnabled: string;
+    statErrors: string;
+    statCapabilities: string;
+    cardAuthor: string;
+    cardStatus: string;
+    cardCapabilities: string;
+    statusEnabled: string;
+    statusDisabled: string;
+    emptyTitle: string;
+    emptyHint: string;
+  };
+
+  // Live Preview
+  livePreview: {
+    title: string;
+    desktop: string;
+    tablet: string;
+    mobile: string;
+    refresh: string;
+    openExternal: string;
+    showCode: string;
+    hideCode: string;
+    loading: string;
+    empty: string;
+    emptyHint: string;
+    showPanel: string;
+    hidePanel: string;
+  };
+
+  // Code Status
+  codeStatus: {
+    processing: string;
+    deploying: string;
+    deployed: string;
+    deployError: string;
+  };
+
+  // Selection Editor
+  selectionEditor: {
+    placeholder: string;
+  };
+
+  // Sidebar
+  sidebar: {
+    recentChats: string;
+    newChat: string;
+    chats: string;
+    demoChats: string;
+    sectionToday: string;
+    sectionYesterday: string;
+    sectionLast7Days: string;
+    sectionLast30Days: string;
+    sectionOlder: string;
+    agents: string;
+    skills: string;
+    createTeam: string;
+    switchAgent: string;
+    selectAgent: string;
+    confirmDeleteProject: (project: string) => string;
+    confirmDeleteThread: (title: string) => string;
+    tools: string;
+    navigate: string;
+    backgroundTasks: string;
+    apiPublish: string;
+    memory: string;
+    taskBoard: string;
+    workflows: string;
+    evolution: string;
+    observability: string;
+    diagnostics: string;
+    plugins: string;
+    projects: string;
+    channels: string;
+    pairing: string;
+    browser: string;
+    moveToProject: string;
+    newProject: string;
+    // Additional fields
+    appAuth: string;
+    agentSwarm: string;
+    // Nav items (left primary + collapsible groups)
+    navChat: string;
+    navCode: string;
+    navAdmin: string;
+    navSwarm: string;
+    navCompany: string;
+    navTeam: string;
+    navKnowledgeGraph: string;
+    navReflex: string;
+    navIntelligence: string;
+    navMcp: string;
+    navStore: string;
+    navEvolution: string;
+    navPlugins: string;
+    navHR: string;
+    navDesktopOrganizer: string;
+    navMobile: string;
+    navArchitecture: string;
+    groupTools: string;
+    groupAdvancedTools: string;
+    groupAdvanced: string;
+    groupConnectors: string;
+    groupOperations: string;
+    groupSystem: string;
+    // Agent / team footer
+    noAgents: string;
+    loginMolili: string;
+    loginMoliliReason: string;
+    remainingCredits: string;
+    logout: string;
+    noTeams: string;
+    selectTeam: string;
+    deleteTeam: string;
+    newTeam: string;
+    teamMembers: (n: number) => string;
+    lockedAgentTooltip: (name: string) => string;
+    adminAgentName: string;
+    switchAgentLabel: string;
+    // Header/footer tooltips
+    newChatTooltip: string;
+    searchTooltip: string;
+    settingsTooltip: string;
+    // Project + chat list actions
+    deleteProjectTooltip: string;
+    deleteThreadTooltip: string;
+    actionSort: string;
+    actionNewProject: string;
+    actionNewTask: string;
+    actionNewChat: string;
+    actionEnableProjectGrouping: string;
+    actionDisableProjectGrouping: string;
+    sectionProjects: string;
+    sectionChats: string;
+    sectionSessions: string;
+    noChatsYet: string;
+    collapseSidebar: string;
+    expandSidebar: string;
+    projectNamePlaceholder: string;
+  };
+
+  // Browser settings page
+  browserSettings: {
+    title: string;
+    description: string;
+    tabBrowsers: string;
+    tabExtension: string;
+    tabCompare: string;
+    systemEnv: string;
+    browserList: string;
+    refresh: string;
+    noBrowsers: string;
+    viaExtension: string;
+    viaCdp: string;
+    viaPlaywright: string;
+    extensionInstalled: string;
+    extensionNotInstalled: string;
+    configureExtension: string;
+    configureCdp: string;
+    maxOpenTabs: string;
+    maxOpenTabsDesc: string;
+    maxSavedTabs: string;
+    maxSavedTabsDesc: string;
+    saveConfig: string;
+    configSaved: string;
+    installExtensionTitle: string;
+    installExtensionDesc: string;
+    step1Title: string;
+    step1Desc: string;
+    step1Action: string;
+    step1Hint: string;
+    step2Title: string;
+    step2Desc: string;
+    step2OpenFolder: string;
+    step2CopyPath: string;
+    step3Title: string;
+    step3Desc: string;
+    relayConnected: string;
+    relayDisconnected: string;
+    relayVersion: string;
+    compareTitle: string;
+    compareDesc: string;
+    compareFeature: string;
+    compareExtension: string;
+    compareCdp: string;
+    compareSetup: string;
+    compareSetupExt: string;
+    compareSetupCdp: string;
+    compareReconnect: string;
+    compareReconnectExt: string;
+    compareReconnectCdp: string;
+    compareChromeVersion: string;
+    compareChromeVersionExt: string;
+    compareChromeVersionCdp: string;
+    compareStability: string;
+    compareStabilityExt: string;
+    compareStabilityCdp: string;
+    compareInstall: string;
+    compareInstallExt: string;
+    compareInstallCdp: string;
+    comparePrompt: string;
+    comparePromptExt: string;
+    comparePromptCdp: string;
+    useExtension: string;
+    useCdp: string;
+    recommended: string;
+    beta: string;
+    high: string;
+    medium: string;
+    auto: string;
+    manual: string;
+    allVersions: string;
+    // Page Agent integration
+    pageAgentDesc: string;
+    pageAgentDocs: string;
+    pageAgentFeature1: string;
+    pageAgentFeature1Desc: string;
+    pageAgentFeature2: string;
+    pageAgentFeature2Desc: string;
+    pageAgentFeature3: string;
+    pageAgentFeature3Desc: string;
+    pageAgentFeature4: string;
+    pageAgentFeature4Desc: string;
+    pageAgentCmpArch: string;
+    pageAgentCmpArchPA: string;
+    pageAgentCmpArchRelay: string;
+    pageAgentCmpControl: string;
+    pageAgentCmpControlPA: string;
+    pageAgentCmpControlRelay: string;
+    pageAgentCmpProtocol: string;
+    pageAgentCmpLogin: string;
+    pageAgentCmpLoginPA: string;
+    pageAgentCmpLoginRelay: string;
+    pageAgentCmpVisual: string;
+    pageAgentCmpVisualPA: string;
+    pageAgentCmpVisualRelay: string;
+    pageAgentEnabled: string;
+    pageAgentDisabled: string;
+    pageAgentEnabledDesc: string;
+    pageAgentDisabledDesc: string;
+    pageAgentEnable: string;
+    pageAgentDisable: string;
+    pageAgentEnableSuccess: string;
+    // Browser page hardcoded Chinese
+    systemArchitecture: string;
+    step3DragHint: string;
+    extProInstallOnce: string;
+    extProNoManualAuth: string;
+    extProAllVersions: string;
+    extConNeedExtension: string;
+    cdpProNoExtension: string;
+    cdpProChrome144: string;
+    cdpConReAuth: string;
+    cdpConChrome144Only: string;
+  };
+
+  // MCP Connection Center
+  mcpCenter: {
+    integrations: string;
+    connectionCenter: string;
+    connectionCenterDesc: string;
+    toolExtension: string;
+    toolExtensionDesc: string;
+    configGovernance: string;
+    configGovernanceDesc: string;
+  };
+
+  // Intelligence Center
+  intelligenceCenter: {
+    researchOps: string;
+    title: string;
+    description: string;
+    discoverChanges: string;
+    // IntelligencePage extras
+    pageSubtitle: string;
+    pageBadge: string;
+  };
+
+  // Channels
+  channels: {
+    title: string;
+    description: string;
+    serviceRunning: string;
+    serviceStopped: string;
+    enabled: string;
+    disabled: string;
+    running: string;
+    stopped: string;
+    restart: string;
+    restarting: string;
+    restartSuccess: string;
+    restartFailed: string;
+    notConfigured: string;
+    // New fields
+    linked: string;
+    notLinked: string;
+    pairedUsers: string;
+    pairedGroups: string;
+    pendingRequests: string;
+    noGroupPairing: string;
+    configureAgent: string;
+    configureAgentHint: string;
+    agentConfigured: string;
+    selectAgent: string;
+    selectAgentTitle: (channel: string) => string;
+    connectBot: string;
+    bindWechat: string;
+    howToConnect: string;
+    connect: string;
+    connecting: string;
+    connectSuccess: string;
+    connectFailed: string;
+    cancel: string;
+    clientId: string;
+    clientSecret: string;
+    appId: string;
+    appSecret: string;
+    botToken: string;
+    applicationId: string;
+    authorizeBot: string;
+    wechatScanTitle: string;
+    wechatScanHint: string;
+    wechatWaiting: string;
+    wechatConnectHint: string;
+    channelCount: (n: number) => string;
+    dingtalkName: string;
+    wechatName: string;
+    feishuName: string;
+    wecomName: string;
+    howToConnectLabel: string;
+    connectDingtalk: string;
+    connectFeishu: string;
+    connectWechat: string;
+    connectTelegram: string;
+    dingtalkStep1: string;
+    dingtalkStep2: string;
+    dingtalkStep3: string;
+    dingtalkStep4: string;
+    dingtalkStep5: string;
+    dingtalkClientIdPlaceholder: string;
+    dingtalkClientSecretPlaceholder: string;
+    feishuStep1: string;
+    feishuStep2: string;
+    feishuStep3: string;
+    feishuStep4: string;
+    feishuAppIdPlaceholder: string;
+    feishuAppSecretPlaceholder: string;
+    telegramStep1: string;
+    telegramStep2: string;
+    telegramStep3: string;
+    telegramStep4: string;
+    telegramBotTokenPlaceholder: string;
+    wechatQrFailed: string;
+    wechatConnectSuccess: string;
+    wechatBot: string;
+    channelBot: string;
+    // ChannelsPage extras
+    pageDescription: string;
+    localDataNote: string;
+    connectedCount: (n: number) => string;
+    loading: string;
+    noRegistered: string;
+    connectedBadge: string;
+    toastAgentBound: string;
+    toastBindFailed: string;
+    toastAgentUnbound: string;
+    toastUnbindFailed: string;
+    assignDialogTitle: (name: string) => string;
+    assignDialogDesc: string;
+    noAgentsAvailable: string;
+    unassignCurrent: string;
+    howToSetup: string;
+    clickToChangeAgent: string;
+    handlingMessages: string;
+    rebindOrUnbind: string;
+    helpDocsComingSoon: string;
+  };
+
+  // Pairing Authorization
+  pairing: {
+    title: string;
+    description: string;
+    filterChannel: string;
+    filterStatus: string;
+    clearFilters: string;
+    currentFilters: string;
+    pendingSection: string;
+    pendingNote: string;
+    noPendingRequests: string;
+    noPendingDesc: string;
+    approve: string;
+    reject: string;
+    approveSuccess: string;
+    rejectSuccess: string;
+    statusPending: string;
+    statusApproved: string;
+    statusRejected: string;
+    allChannels: string;
+    allStatuses: string;
+    user: string;
+    group: string;
+    requestedAt: string;
+    expiresAt: string;
+    operationFailed: string;
+    notImplementedTitle: string;
+    notImplementedDesc: string;
+  };
+  agentApi: {
+    title: string;
+    description: string;
+    comingSoonTitle: string;
+    comingSoonDesc: string;
+    plannedEndpoint: string;
+    sampleCalls: string;
+    requestFormat: string;
+  };
+
+  // Paused tasks banner
+  pausedTasksBanner: {
+    paused: string;
+    pendingPause: string;
+    executing: string;
+    continueBtn: string;
+    clearBtn: string;
+    pauseBtn: string;
+    clearTitle: string;
+    reasonUserRequest: string;
+    reasonBudgetNearLimit: string;
+    reasonIterationNearLimit: string;
+    reasonExternal: string;
+    resumedTitlePrefix: string;
+    resumedDescWithThread: string;
+    resumedTitleClearMark: string;
+    resumedDescNoThread: string;
+    clearedPrefix: string;
+    pauseRequestedPrefix: string;
+    pauseRequestedDesc: string;
+    agentLabel: string;
+    threadLabel: string;
+    tokensLabel: string;
+    costLabel: string;
+    budgetDialogTitle: string;
+    budgetDialogDesc: string;
+    budgetResumedDesc: string;
+    extraTokensKLabel: string;
+    extraUsdLabel: string;
+    extraIterationsLabel: string;
+    notNowBtn: string;
+    continueWithBudgetBtn: string;
+  };
+  armsDialog: {
+    titlePrefix: string;
+    description: string;
+    wrenchTitle: string;
+  };
+  agentConfig: {
+    dialogTitle: string;
+    title: string;
+    subtitle: string;
+    configBadge: string;
+    uidLabel: string;
+    back: string;
+    synced: string;
+    unsaved: string;
+    active: string;
+    ready: string;
+    loadoutReady: string;
+    saved: string;
+    saveFailed: (msg: string) => string;
+    officialFaction: string;
+    authorFaction: (author: string) => string;
+    categoryRoles: Record<string, string>;
+    categoryTypes: Record<string, string>;
+    factionLabel: string;
+    armCountLabel: string;
+    armCount: (count: number) => string;
+    skillCountLabel: string;
+    skillCount: (count: number) => string;
+    permissionLabel: string;
+    guarded: string;
+    permissionCount: (enabled: number, total: number) => string;
+    visualTitle: string;
+    visualSubtitle: string;
+    visualStatus: string;
+    visualWatermark: string;
+    visualLoadoutLabel: string;
+    visualSystemOnline: string;
+    visualGenerateAction: string;
+    visualGenerating: string;
+    visualGenerateSuccess: string;
+    visualGenerateFailed: (msg: string) => string;
+    visualMissing: string;
+    viewFront: string;
+    viewSide: string;
+    viewBack: string;
+    basicTitle: string;
+    basicSubtitle: string;
+    descriptionLabel: string;
+    modelLabel: string;
+    modelHint: string;
+    modelPlaceholder: string;
+    defaultModel: string;
+    armTitle: string;
+    armSubtitle: string;
+    noArms: string;
+    advancedArmConfig: string;
+    moreArms: (count: number) => string;
+    emptyArmSlot: string;
+    skillTitle: string;
+    skillSubtitle: string;
+    privateSkillsLabel: string;
+    privateSkillsPlaceholder: string;
+    keySkillsLabel: string;
+    browseSkillWhitelist: string;
+    availableSkillPoolLabel: string;
+    availableSkillPoolCount: (selected: number, total: number) => string;
+    availableSkillPoolHint: string;
+    skillSlotHint: string;
+    allSkillsWildcard: string;
+    emptySkillSlot: string;
+    moreSkills: (count: number) => string;
+    extraAffinityLabel: string;
+    extraAffinityPlaceholder: string;
+    commaHint: string;
+    promptTitle: string;
+    promptSubtitle: string;
+    soulPlaceholder: string;
+    loadoutCheckTitle: string;
+    loadoutCheckSubtitle: string;
+    loadoutOk: string;
+    checkNoArms: string;
+    checkNoPrivateSkills: string;
+    checkBlockedSkills: (count: number) => string;
+    checkNoExecutableSkills: string;
+    checkUnsavedChanges: string;
+    configureProfileAction: string;
+    configureArmAction: string;
+    configureSkillsAction: string;
+    configurePermissionsAction: string;
+    routingConfig: string;
+    saveTitle: string;
+    saveSubtitle: string;
+    saveButton: string;
+    savedButton: string;
+    resetButton: string;
+    noChange: string;
+    modified: string;
+    signedDelta: (count: number) => string;
+  };
+  chatPage: {
+    stopNote: string;
+  };
+
+  // Agents
+  agents: {
+    title: string;
+    description: string;
+    newAgent: string;
+    emptyTitle: string;
+    emptyDescription: string;
+    chat: string;
+    delete: string;
+    deleteConfirm: string;
+    deleteSuccess: string;
+    newChat: string;
+    createPageTitle: string;
+    createPageSubtitle: string;
+    nameStepTitle: string;
+    nameStepHint: string;
+    nameStepPlaceholder: string;
+    nameStepContinue: string;
+    nameStepInvalidError: string;
+    nameStepAlreadyExistsError: string;
+    nameStepNetworkError: string;
+    nameStepCheckError: string;
+    nameStepBootstrapMessage: string;
+    save: string;
+    saving: string;
+    saveRequested: string;
+    saveHint: string;
+    saveCommandMessage: string;
+    agentCreatedPendingRefresh: string;
+    more: string;
+    agentCreated: string;
+    startChatting: string;
+    backToGallery: string;
+  };
+
+  // Breadcrumb
+  breadcrumb: {
+    workspace: string;
+    chats: string;
+  };
+
+  // Workspace
+  workspace: {
+    officialWebsite: string;
+    githubTooltip: string;
+    settingsAndMore: string;
+    visitGithub: string;
+    reportIssue: string;
+    contactUs: string;
+    about: string;
+    modes: {
+      chat: string;
+      team: string;
+      code: string;
+    };
+    // Landing page
+    landing: {
+      tagline: string;
+      badge: string;
+      headline: string;
+      description: string;
+      newTask: string;
+      codeTask: string;
+      systemLoop: {
+        goal: string;
+        plan: string;
+        execute: string;
+        observe: string;
+        remember: string;
+        improve: string;
+      };
+      primaryRoutes: {
+        agentTask: {
+          title: string;
+          description: string;
+        };
+        codeWork: {
+          title: string;
+          description: string;
+        };
+        inspectRuntime: {
+          title: string;
+          description: string;
+        };
+      };
+      conceptMap: {
+        title: string;
+        planner: string;
+        plannerAlias: string;
+        plannerValue: string;
+        reflex: string;
+        reflexAlias: string;
+        reflexValue: string;
+        safety: string;
+        safetyAlias: string;
+        safetyValue: string;
+        workflow: string;
+        workflowAlias: string;
+        workflowValue: string;
+      };
+      operatingSurfaces: {
+        title: string;
+        openTraces: string;
+        skills: {
+          title: string;
+          text: string;
+        };
+        memory: {
+          title: string;
+          text: string;
+        };
+        reflex: {
+          title: string;
+          text: string;
+        };
+        automation: {
+          title: string;
+          text: string;
+        };
+      };
+    };
+  };
+
+  // Conversation
+  conversation: {
+    noMessages: string;
+    startConversation: string;
+    noArtifactSelected: string;
+    selectArtifactToView: string;
+    artifactsTitle: string;
+    retry: string;
+    editResend: string;
+    regenerateResponse: string;
+    goodResponse: string;
+    badResponse: string;
+    feedbackThanks: string;
+    feedbackRecorded: string;
+    feedbackFailed: string;
+    interruptedMessage: string;
+    strategyReflex: string;
+    strategyReact: string;
+    strategyDirectLlm: string;
+    strategyVote: string;
+    strategyCache: string;
+    clarificationChoose: string;
+    clarificationAutoSubmit: (seconds: number) => string;
+  };
+
+  // Chats
+  chats: {
+    searchChats: string;
+    workspace: string;
+    description: string;
+    newChat: string;
+    noChats: string;
+    noChatsDescription: string;
+    startNow: string;
+    noMatch: string;
+    noMatchDescription: string;
+  };
+
+  // Page titles (document title)
+  pages: {
+    appName: string;
+    chats: string;
+    newChat: string;
+    untitled: string;
+  };
+
+  // Tool calls
+  toolCalls: {
+    moreSteps: (count: number) => string;
+    lessSteps: string;
+    executeCommand: string;
+    presentFiles: string;
+    needYourHelp: string;
+    useTool: (toolName: string) => string;
+    searchForRelatedInfo: string;
+    searchForRelatedImages: string;
+    searchFor: (query: string) => string;
+    searchForRelatedImagesFor: (query: string) => string;
+    searchOnWebFor: (query: string) => string;
+    viewWebPage: string;
+    listFolder: string;
+    readFile: string;
+    writeFile: string;
+    clickToViewContent: string;
+    writeTodos: string;
+    skillInstallTooltip: string;
+    toastSkillInstallFailed: string;
+    toastExportConversationFailed: string;
+  };
+
+  // Uploads
+  uploads: {
+    uploading: string;
+    uploadingFiles: string;
+  };
+
+  // Streaming status
+  streaming: {
+    thinking: string;
+    thoughtProcess: string;
+    connectionLost: string;
+    networkLost: string;
+    turnFailed: string;
+    verificationRequired: string;
+    streamEndpointUnavailable: string;
+    iteration: (count: number) => string;
+    toolCalls: (count: number) => string;
+    generating: string;
+  };
+
+  subagents: {
+    subagent: string;
+    executing: (count: number) => string;
+    pending: string;
+    reasoning: string;
+    iterating: string;
+    generating: string;
+    analyzing: string;
+    summarizing: string;
+    in_progress: string;
+    completed: string;
+    failed: string;
+    cancelled: string;
+    timed_out: string;
+  };
+
+  todoList: {
+    title: string;
+  };
+
+  executionPanel: {
+    readFile: string;
+    searchFiles: string;
+    searchContent: string;
+    listDir: string;
+    gitDiff: string;
+    gitStatus: string;
+    diagnostics: string;
+    writeFile: string;
+    editFile: string;
+    createFile: string;
+    gitCommit: string;
+    editNotebook: string;
+    terminal: string;
+    execute: string;
+    subAgent: string;
+    assignMember: string;
+    run: string;
+    search: string;
+    browse: string;
+    fetch: string;
+  };
+
+  // Token Usage
+  tokenUsage: {
+    title: string;
+    input: string;
+    output: string;
+    total: string;
+    speed: string;
+    context: string;
+  };
+
+  // Model Router
+  modelRouter: {
+    title: string;
+    auto: string;
+    manual: string;
+    taskType: string;
+    selectedModel: string;
+    originalModel: string;
+    score: string;
+    modelScores: string;
+    recentRouting: string;
+    loadingHistory: string;
+    coding: string;
+    reasoning: string;
+    creative: string;
+    simple: string;
+    math: string;
+  };
+
+  // Shortcuts
+  shortcuts: {
+    searchActions: string;
+    noResults: string;
+    actions: string;
+    keyboardShortcuts: string;
+    keyboardShortcutsDescription: string;
+    openCommandPalette: string;
+    commandPaletteDescription: string;
+    toggleSidebar: string;
+    focusChatInput: string;
+    toggleRightPanel: string;
+    pages: string;
+  };
+
+  // Slash Commands
+  slashCommands: {
+    clear: string;
+    compact: string;
+    mode: string;
+    model: string;
+    settings: string;
+    commit: string;
+    review: string;
+    test: string;
+    fix: string;
+    search: string;
+    memory: string;
+    cost: string;
+    context: string;
+    init: string;
+    wiki: string;
+    monitor: string;
+    personality: string;
+    personalityApplied: string;
+    arena: string;
+    quest: string;
+    record: string;
+    replay: string;
+    skills: string;
+    deploy: string;
+  };
+
+  // Tool Approval
+  toolApproval: {
+    requiresApproval: string;
+    approve: string;
+    reject: string;
+    approved: string;
+    rejected: string;
+  };
+
+  // Diff Editor
+  diffEditor: {
+    title: string;
+    changedFiles: string;
+    noChanges: string;
+    acceptAll: string;
+    rejectAll: string;
+    accept: string;
+    reject: string;
+    accepted: string;
+    rejected: string;
+    pending: string;
+    additions: string;
+    deletions: string;
+    sideBySide: string;
+    unified: string;
+    expandLines: string;
+    collapseLines: string;
+    searchFiles: string;
+    sortByName: string;
+    sortByStatus: string;
+    sortByChanges: string;
+    fileAdded: string;
+    fileModified: string;
+    fileDeleted: string;
+    hunkAccept: string;
+    hunkReject: string;
+    allAccepted: string;
+    allRejected: string;
+    filesChanged: string;
+  };
+
+  // Settings
+  settings: {
+    title: string;
+    description: string;
+    sections: {
+      account: string;
+      subscription: string;
+      appearance: string;
+      memory: string;
+      tools: string;
+      skills: string;
+      notification: string;
+      browser: string;
+      observability: string;
+      privacy: string;
+      about: string;
+      automation: string;
+      evolution: string;
+    };
+    automation: {
+      title: string;
+      description: string;
+      restartRequiredTitle: string;
+      restartRequiredBody: string;
+      browserTitle: string;
+      browserDesc: string;
+      desktopTitle: string;
+      desktopDesc: string;
+      groupLabel: string;
+      reset: string;
+      save: string;
+      saveDescription: string;
+      loading: string;
+      loadFailed: string;
+      restartConfirmTitle: string;
+      restartConfirmBody: string;
+      restartLater: string;
+      restartNow: string;
+      restarting: string;
+      restartFailed: string;
+      rules: {
+        sectionTitle: string;
+        sectionDescription: string;
+        emptyState: string;
+        loading: string;
+        loadFailed: string;
+        addTitle: string;
+        effectLabel: string;
+        effectAllow: string;
+        effectDeny: string;
+        toolLabel: string;
+        toolPlaceholder: string;
+        argsLabel: string;
+        argsPlaceholder: string;
+        reasonLabel: string;
+        reasonPlaceholder: string;
+        addButton: string;
+        adding: string;
+        addError: string;
+        deleteButton: string;
+        deleteError: string;
+        moveUpButton: string;
+        moveDownButton: string;
+        moveError: string;
+        firstMatchHint: string;
+      };
+    };
+    evolution: {
+      title: string;
+      description: string;
+      refresh: string;
+      loading: string;
+      loadFailed: string;
+      schedulerStatus: string;
+      runningLabel: string;
+      runningYes: string;
+      runningNo: string;
+      intervalLabel: string;
+      tickedLabel: string;
+      tickedUnit: string;
+      learnedRulesTitle: string;
+      scanned: string;
+      trajectoryUnit: string;
+      failed: string;
+      clusters: string;
+      produced: string;
+      ruleUnit: string;
+      lastTick: string;
+      noFailureData: string;
+      ruleTrigger: string;
+      ruleMitigation: string;
+      recipeScoreTitle: string;
+      noData: string;
+      colRecipe: string;
+      colUses: string;
+      colSuccessRate: string;
+      colAvgSteps: string;
+      colVerdict: string;
+      colScore: string;
+      gepaTitle: string;
+      gepaScannedPrefix: string;
+      gepaManifestUnit: string;
+      gepaSkippedPrefix: string;
+      gepaDryRunBadge: string;
+      gepaAutoApplyBadge: string;
+      gepaDryRunHint: string;
+      notGenerated: string;
+      camouflageTitle: string;
+      camouflageDescription: string;
+      camouflageDisabledHint: string;
+      camouflageEnabledBadge: string;
+      camouflageDisabledBadge: string;
+      camouflageVariantsLabel: string;
+      camouflageStepsLabel: string;
+      camouflageRetiredLabel: string;
+      camouflageBoostedLabel: string;
+      camouflageLastStepLabel: string;
+      camouflageNoVariants: string;
+      camouflageOriginSeed: string;
+      camouflageOriginMutation: string;
+      camouflageOriginCrossover: string;
+    };
+    memory: {
+      title: string;
+      description: string;
+      empty: string;
+      rawJson: string;
+      exportButton: string;
+      exportSuccess: string;
+      importButton: string;
+      importConfirmTitle: string;
+      importConfirmDescription: string;
+      importFileLabel: string;
+      importInvalidFile: string;
+      importSuccess: string;
+      manualFactSource: string;
+      addFact: string;
+      addFactTitle: string;
+      editFactTitle: string;
+      addFactSuccess: string;
+      editFactSuccess: string;
+      clearAll: string;
+      clearAllConfirmTitle: string;
+      clearAllConfirmDescription: string;
+      clearAllSuccess: string;
+      factDeleteConfirmTitle: string;
+      factDeleteConfirmDescription: string;
+      factDeleteSuccess: string;
+      factContentLabel: string;
+      factCategoryLabel: string;
+      factConfidenceLabel: string;
+      factContentPlaceholder: string;
+      factCategoryPlaceholder: string;
+      factConfidenceHint: string;
+      factSave: string;
+      factValidationContent: string;
+      factValidationConfidence: string;
+      noFacts: string;
+      summaryReadOnly: string;
+      memoryFullyEmpty: string;
+      factPreviewLabel: string;
+      searchPlaceholder: string;
+      filterAll: string;
+      filterFacts: string;
+      filterSummaries: string;
+      noMatches: string;
+      projectScope: string;
+      agentScope: string;
+      globalScope: string;
+      saved: string;
+      enableMemory: string;
+      enableMemoryDesc: string;
+      autoCapture: string;
+      autoCaptureDesc: string;
+      injectOnReply: string;
+      injectOnReplyDesc: string;
+      scopeLabel: string;
+      markdown: {
+        overview: string;
+        userContext: string;
+        work: string;
+        personal: string;
+        topOfMind: string;
+        historyBackground: string;
+        recentMonths: string;
+        earlierContext: string;
+        longTermBackground: string;
+        updatedAt: string;
+        facts: string;
+        empty: string;
+        table: {
+          category: string;
+          confidence: string;
+          confidenceLevel: {
+            veryHigh: string;
+            high: string;
+            normal: string;
+            unknown: string;
+          };
+          content: string;
+          source: string;
+          createdAt: string;
+          view: string;
+        };
+      };
+    };
+    appearance: {
+      themeTitle: string;
+      themeDescription: string;
+      system: string;
+      light: string;
+      dark: string;
+      apple: string;
+      systemDescription: string;
+      lightDescription: string;
+      darkDescription: string;
+      appleDescription: string;
+      languageTitle: string;
+      languageDescription: string;
+      chatFontSizeTitle: string;
+      chatFontSizeDescription: string;
+      chatFontSizeSmall: string;
+      chatFontSizeMedium: string;
+      chatFontSizeLarge: string;
+      cornerRadiusTitle: string;
+      cornerRadiusDescription: string;
+      cornerCrisp: string;
+      cornerSoft: string;
+      cornerDefault: string;
+      cornerRound: string;
+      cornerPill: string;
+      uiDensityTitle: string;
+      uiDensityDescription: string;
+      densityComfortable: string;
+      densityCompact: string;
+    };
+    tools: {
+      title: string;
+      description: string;
+    };
+    skills: {
+      title: string;
+      description: string;
+      createSkill: string;
+      emptyTitle: string;
+      emptyDescription: string;
+      emptyButton: string;
+      enabledDescription: string;
+      noMatch: (query: string) => string;
+      tabMarket: string;
+      tabInstalled: string;
+      tabPerformance: string;
+      capabilities: string;
+      skillsCenter: string;
+      skillsCenterDesc: string;
+      skillMarket: string;
+      skillMarketDesc: string;
+      runPerformance: string;
+      runPerformanceDesc: string;
+      discoverFromMarket: string;
+    };
+    notification: {
+      title: string;
+      description: string;
+      requestPermission: string;
+      deniedHint: string;
+      testButton: string;
+      testTitle: string;
+      testBody: string;
+      notSupported: string;
+      disableNotification: string;
+    };
+    acknowledge: {
+      emptyTitle: string;
+      emptyDescription: string;
+    };
+    account: {
+      title: string;
+      description: string;
+      profile: {
+        title: string;
+        description: string;
+        displayName: string;
+        displayNamePlaceholder: string;
+        bio: string;
+        bioPlaceholder: string;
+        avatar: string;
+        changeAvatar: string;
+        removeAvatar: string;
+        saveChanges: string;
+        saving: string;
+        saved: string;
+      };
+      linkedAccounts: {
+        title: string;
+        description: string;
+        connect: string;
+        disconnect: string;
+        connected: string;
+        notConnected: string;
+      };
+      privacy: {
+        title: string;
+        description: string;
+        shareUsageData: string;
+        shareUsageDataDescription: string;
+        allowAnalytics: string;
+        allowAnalyticsDescription: string;
+      };
+      dangerZone: {
+        title: string;
+        description: string;
+        deleteAccount: string;
+        deleteAccountDescription: string;
+        deleteAccountConfirm: string;
+      };
+    };
+    subscription: {
+      title: string;
+      description: string;
+      currentPlan: string;
+      freeTierDesc: string;
+      paidTierDesc: string;
+      upgrade: string;
+      downgrade: string;
+      billingHistory: string;
+      paymentMethod: string;
+      cancelSubscription: string;
+      planTitle: string;
+      planDescription: string;
+      free: string;
+      autoRenewal: string;
+      expiresOn: (date: string) => string;
+      perMonth: string;
+      bonus: string;
+      cancel: string;
+      usageTitle: string;
+      usageDescription: (start: string, end: string) => string;
+      apiRequests: string;
+      requestsRemaining: (n: string, percent: string) => string;
+      tokens: string;
+      currentPeriodCost: string;
+      recentUsage: string;
+      recentUsageDescription: string;
+      colTime: string;
+      colType: string;
+      colModel: string;
+      colSource: string;
+      colCost: string;
+      billingHistoryTitle: string;
+      billingHistoryDescription: string;
+      colDescription: string;
+      colDate: string;
+      colStatus: string;
+      colAmount: string;
+      availablePlans: string;
+      availablePlansDescription: string;
+      currentBadge: string;
+      requestsPerMonth: (n: string) => string;
+      agentsCount: (n: number) => string;
+      workflowsCount: (n: number) => string;
+      prioritySupport: string;
+      currentPlanBtn: string;
+      selectFree: string;
+      subscribe: string;
+    };
+  };
+
+  // Model Settings
+  modelSettings: {
+    title: string;
+    customModels: string;
+    addCustomModel: string;
+    emptyCustomModels: string;
+    externalModelRisk: string;
+    provider: string;
+    modelId: string;
+    modelIdPlaceholder: string;
+    displayName: string;
+    displayNamePlaceholder: string;
+    providerLabel: string;
+    providerAutoHint: string;
+    apiKey: string;
+    apiKeyPlaceholder: string;
+    getApiKey: string;
+    customModel: string;
+    fillModelId: string;
+    apiProtocol: string;
+    baseUrlLabel: string;
+    baseUrlPlaceholder: string;
+    extraHeadersTitle: string;
+    extraHeadersPlaceholder: string;
+    extraHeadersHint: string;
+    requiredFields: string;
+    fillRequiredBeforeTest: string;
+    testEndpointHint: string;
+    taglineCostBalance: string;
+    taglineBestEffect: string;
+    taglineBestValue: string;
+    taglineGoodValue: string;
+    updateFailed: string;
+    networkError: string;
+    editModelTitle: (name: string) => string;
+    keepApiKeyHint: string;
+    saveSuccess: string;
+    testSuccess: string;
+    testFailed: string;
+    diagnoseHealthy: string;
+    diagnoseIssues: (issues: string) => string;
+    deleteConfirm: (name: string) => string;
+    gatewayReturned: (status: number) => string;
+    cannotReachGateway: string;
+    current: string;
+    setDefault: string;
+    edit: string;
+    gatewayUrl: string;
+    connected: string;
+    disconnected: string;
+    reconnect: string;
+    maxTokensLabel: string;
+    thinkingLabel: string;
+    visionLabel: string;
+    resetConnection: string;
+    diagnose: string;
+    port: string;
+    portDescription: string;
+    connectionHelp: string;
+    connectionHelpReconnect: string;
+    connectionHelpReset: string;
+    connectionHelpDiagnose: string;
+    // Additional fields for model settings page
+    loadFailed: string;
+    setDefaultSuccess: string;
+    setDefaultFailed: string;
+    deleteSuccess: string;
+    deleteFailed: string;
+    systemDefault: string;
+    setAsDefault: string;
+    backendUrlHint: string;
+    setDefaultHint: string;
+    noOfficialModels: string;
+    moliliHosted: string;
+    notBound: string;
+    gatewayDisabled: string;
+    moliliNotLinked: string;
+    moliliNotEnabled: string;
+    officialModels: string;
+    officialModelsHint: string;
+    // Open-ended model id list · one custom-model row now holds an
+    // arbitrary number of upstream model ids. Index 0 is the picker
+    // default; index -1 is the strongest slot for Auto mode's
+    // performance verdict.
+    modelList: {
+      label: string;
+      hint: string;
+      addButton: string;
+      removeTooltip: string;
+      empty: string;
+    };
+    // Local-model scan + one-click import. The collapsible in the
+    // settings page probes Ollama / LM Studio / vLLM / llama.cpp
+    // defaults and lets the operator import a discovered row with
+    // one click (no need to hand-fill base_url).
+    localModels: {
+      title: string;
+      subtitle: string;
+      scanButton: string;
+      scanButtonScanning: string;
+      empty: string;
+      emptyHint: string;
+      modelsCount: (n: number) => string;
+      importButton: string;
+      importingButton: string;
+      imported: string;
+      importFailed: string;
+      serviceStatus: {
+        ok: string;
+        empty: string;
+        error: string;
+      };
+      providerHint: string;
+      collapseToggle: string;
+    };
+  };
+
+  // Task Board
+  taskBoard: {
+    title: string;
+    description: string;
+    refresh: string;
+    noTasks: string;
+    noTasksDesc: string;
+    kanban: string;
+    timeline: string;
+    list: string;
+    schedules: string;
+    queued: string;
+    running: string;
+    completed: string;
+    failed: string;
+    all: string;
+    background: string;
+    quest: string;
+    scheduled: string;
+    type: string;
+    name: string;
+    status: string;
+    duration: string;
+    created: string;
+    noTasksDescription: string;
+    // Task card extras
+    paused: string;
+    cancelled: string;
+    progress: string;
+    phase: string;
+    task: string;
+    intelligence: string;
+    // Stats bar
+    totalTasks: string;
+    successRate: string;
+    avgDuration: string;
+    types: string;
+    across: (count: number) => string;
+    operations: string;
+    unifiedView: string;
+    noTimelineTasks: string;
+    inProgress: string;
+    zoomOut: string;
+    zoomIn: string;
+    justNow: string;
+    minutesAgo: string;
+    hoursAgo: string;
+    daysAgo: string;
+  };
+
+  // Arena
+  arena: {
+    title: string;
+    blindAB: string;
+    battle: string;
+    leaderboard: string;
+    battleTitle: string;
+    battleDesc: string;
+    promptPlaceholder: string;
+    modelA: string;
+    modelB: string;
+    aIsBetter: string;
+    bIsBetter: string;
+    tie: string;
+    bothBad: string;
+    eloLeaderboard: string;
+    model: string;
+    elo: string;
+    winRate: string;
+    battles: string;
+    battleInProgress: string;
+    sendingPrompt: string;
+    prompt: string;
+    whichBetter: string;
+    choseA: string;
+    choseB: string;
+    votedTie: string;
+    votedBothBad: string;
+    voted: string;
+    identitiesRevealed: string;
+    newBattle: string;
+    noBattles: string;
+    wins: string;
+    losses: string;
+    ties: string;
+  };
+
+  // Quest
+  questMode: {
+    analyze: string;
+    plan: string;
+    execute: string;
+    verify: string;
+    report: string;
+    reject: string;
+    approveExecute: string;
+    startQuest: string;
+    questDesc: string;
+    requirementPlaceholder: string;
+    executionPlan: string;
+    verificationPassed: string;
+    verificationIssues: string;
+    tests: string;
+    lintErrors: string;
+    typeErrors: string;
+    requirementChecks: string;
+    issues: string;
+    questCompleted: string;
+    questFailed: string;
+    stepsCompleted: string;
+    filesChanged: string;
+    changedFiles: string;
+    remainingTodos: string;
+    startDescription: string;
+    title: string;
+    active: string;
+    analyzing: string;
+    generatingPlan: string;
+    verifyingResults: string;
+    generatingReport: string;
+    newQuest: string;
+    cancelled: string;
+    startNewQuest: string;
+    quest: string;
+  };
+
+  // Knowledge Graph
+  knowledgeGraph: {
+    title: string;
+    graph: string;
+    communities: string;
+    query: string;
+    searchPlaceholder: string;
+    noEntities: string;
+    noEntitiesDesc: string;
+    queryPlaceholder: string;
+    deleteEntity: string;
+    searchEntities: string;
+    entitiesExtracted: string;
+    detect: string;
+    noCommunities: string;
+    clickDetect: string;
+    askQuestion: string;
+    askToSearch: string;
+    hybridDescription: string;
+    // KnowledgeGraphPanel extras
+    emptyStateTitle: string;
+    emptyStateHint: string;
+    totalEntities: string;
+    totalRelationships: string;
+    entityTypesCount: string;
+    relationshipsHeader: string;
+    loadFailed: string;
+    pageSubtitle: string;
+  };
+
+  // Background Tasks
+  backgroundTasks: {
+    title: string;
+    queued: string;
+    running: string;
+    paused: string;
+    completed: string;
+    failed: string;
+    cancelled: string;
+    interrupted: string;
+    pause: string;
+    resume: string;
+    cancel: string;
+    newTask: string;
+    taskPlaceholder: string;
+    waitingOutput: string;
+    noOutput: string;
+    taskName: string;
+    taskNamePlaceholder: string;
+    promptLabel: string;
+    promptPlaceholder: string;
+    runInBackground: string;
+    noTasks: string;
+    noTasksDescription: string;
+  };
+
+  unifiedStore: {
+    title: string;
+    subtitle: string;
+    systemStatus: string;
+    tabs: {
+      agents: string;
+      apps: string;
+      plugins: string;
+      skills: string;
+    };
+    browserPlugins: {
+      title: string;
+      electronBadge: string;
+      webPreviewBadge: string;
+      descElectron: string;
+      descWeb: string;
+      installLocal: string;
+      refreshAria: string;
+      listFailed: string;
+      installFailed: string;
+      statusFailed: string;
+      removeConfirm: string;
+      removeFailed: string;
+      enabled: string;
+      disabled: string;
+      removeAria: (name: string) => string;
+      emptyElectron: string;
+      emptyElectronHint: string;
+      emptyWeb: string;
+      placeholderTitle: string;
+      placeholderDesc: string;
+      placeholderBrowserTitle: string;
+      placeholderBrowserDesc: string;
+      placeholderSkillTitle: string;
+      placeholderSkillDesc: string;
+      placeholderMcpTitle: string;
+      placeholderMcpDesc: string;
+    };
+    skills: {
+      title: string;
+      localTab: string;
+      marketTab: string;
+      localTitle: string;
+      localDesc: string;
+      searchAria: string;
+      searchPlaceholder: string;
+      loading: string;
+      loadFailed: (msg: string) => string;
+      all: string;
+      other: string;
+      visibleCount: (label: string, count: number) => string;
+      enabledCount: (count: number) => string;
+      noDescription: string;
+      noMatch: (query: string) => string;
+      toggleSkillAria: (enabled: boolean, name: string) => string;
+      localSource: string;
+      runtimeSource: string;
+      categoryLabels: Record<string, string>;
+    };
+    closeAria: string;
+  };
+
+  // Agent Market
+  agentWorld: {
+    myAgents: string;
+    store: string;
+    featured: string;
+    popular: string;
+    discover: string;
+    searchPlaceholder: string;
+    categories: {
+      all: string;
+      assistant: string;
+      coder: string;
+      researcher: string;
+      creative: string;
+      automation: string;
+      specialist: string;
+      financial: string;
+    };
+    searchAgents: string;
+    noAgentsFound: string;
+    noFeatured: string;
+    noPopular: string;
+    title: string;
+    description: string;
+    pageOf: (page: number, total: number) => string;
+    by: string;
+    agentInstalled: string;
+    agentUninstalled: string;
+    installThisAgent: string;
+    assembleCapabilityPack: string;
+    keySkillCount: (count: number) => string;
+    emptyState: string;
+    // AgentWorldUnified extras
+    createAgentCardTitle: string;
+    createAgentCardDesc: string;
+    addAgent: string;
+    newAgent: string;
+    importAgentPack: string;
+    importAgentPackDesc: string;
+    importAgentPackPlaceholder: string;
+    previewAgentPack: string;
+    importSelectedAgent: string;
+    noImportableAgents: string;
+    importedAgent: (name: string, path: string) => string;
+    discoverTagline: string;
+    // AgentWorldCard extras
+    toastInstalled: (name: string) => string;
+    toastCapabilityPackInstalled: (name: string, count: number) => string;
+    toastUninstalled: (name: string) => string;
+    authorPrefix: string;
+  };
+
+  // Community
+  community: {
+    searchDiscussions: string;
+    activeAgents: string;
+    totalLikes: string;
+    totalDiscussions: string;
+    noPosts: string;
+  };
+
+  // Feed
+  feed: {
+    noActivity: string;
+    newAgentPublished: string;
+    agentTrending: string;
+    reached: string;
+    downloads: string;
+  };
+
+  // Browser
+  browser: {
+    back: string;
+    forward: string;
+    reload: string;
+    urlPlaceholder: string;
+    closeSession: string;
+    actionLog: string;
+    noActions: string;
+    launchBrowser: string;
+    launchingBrowser: string;
+    browserAutomation: string;
+    browserAutomationDesc: string;
+    navigateHint: string;
+    openExternal: string;
+    clickToRefresh: string;
+    actions: (count: number) => string;
+    stopAutoRefresh: string;
+    startAutoRefresh: string;
+    toggleDevice: string;
+    deviceDesktop: string;
+    deviceTablet: string;
+    deviceMobile: string;
+    viewportHint: (label: string, w: number, h: number) => string;
+    startBrowsingHint: string;
+    embeddedBlocked: string;
+    copilot: {
+      stopAgent: string;
+      stopAgentTooltip: string;
+      autoBrowseOnTooltip: string;
+      autoBrowseOffTooltip: string;
+      summarizePage: string;
+      extractKeyPoints: string;
+      translateToChinese: string;
+      recorderTitle: string;
+      recorderDesc: string;
+      researchGoalPlaceholder: string;
+      start: string;
+      recordCurrentPage: string;
+      clearLog: string;
+      copied: string;
+      copyBrief: string;
+      exportMd: string;
+      emptyHint: string;
+      thinking: string;
+      inputPlaceholder: string;
+      noAgents: string;
+      confirmInputContent: string;
+      confirmSubmitForm: string;
+      confirmSensitiveClick: string;
+      confirmSensitiveAction: string;
+    };
+    extensionMarketplace: {
+      title: string;
+      subtitle: string;
+      installLocal: string;
+      refreshAriaLabel: string;
+      closeAriaLabel: string;
+      searchPlaceholder: string;
+      installedExtensions: string;
+      electronSupported: string;
+      webPreviewOnly: string;
+      webPreview: string;
+      enabled: string;
+      disabled: string;
+      removeAriaLabel: (name: string) => string;
+      noExtensionsElectron: string;
+      noExtensionsWeb: string;
+      comingSoonBadge: string;
+      installedBadge: string;
+      installableBadge: string;
+      install: string;
+      rating: string;
+      installs: string;
+      status: string;
+      capabilityTags: string;
+      errorListFailed: string;
+      errorInstallFailed: string;
+      errorStatusFailed: string;
+      errorRemoveFailed: string;
+      confirmRemove: string;
+      categoryFeatured: string;
+      categoryEfficiency: string;
+      categoryResearch: string;
+      categorySecurity: string;
+      categoryDevelopment: string;
+      categoryComingSoon: string;
+      taglinePageAgent: string;
+      taglineResearchClipper: string;
+      taglineShieldLite: string;
+      taglineCookieVault: string;
+      taglineTranslatorLens: string;
+      taglineDomInspector: string;
+      taglineVisualRecorder: string;
+      tagsPageAgent: string[];
+      tagsResearchClipper: string[];
+      tagsShieldLite: string[];
+      tagsCookieVault: string[];
+      tagsTranslatorLens: string[];
+      tagsDomInspector: string[];
+      tagsVisualRecorder: string[];
+    };
+    webviewTab: {
+      extPluginButton: string;
+      openDirectory: string;
+      extPluginTitle: string;
+      extPluginDesc: string;
+      dragToBookmarks: string;
+      dragToBookmarksDesc: string;
+      dragToBookmarksTitle: string;
+      step1Temporary: string;
+      step2LongTerm: string;
+      step3LoadExtension: string;
+      pluginDirectory: string;
+      pluginDirectoryOpened: (path: string) => string;
+      pluginPathCopied: string;
+      bookmarkletCopied: string;
+      copyBookmarklet: string;
+      copyPath: string;
+      openPluginDirectory: string;
+      connectingPlugin: string;
+      connectingPluginDesc: string;
+      searchPlaceholder: string;
+      resetLayout: string;
+      finishEditing: string;
+      editDesktop: string;
+      dragHint: string;
+      aiBrowserDesktop: string;
+      calendarLabel: string;
+      aiToolFolder: string;
+      researchWidgets: string;
+      addTitle: string;
+      settingsTitle: string;
+      weekdays: string[];
+      monthFormat: (year: number, month: number) => string;
+      navHome: string;
+      navTheme: string;
+      navWidgets: string;
+      navWallpaper: string;
+      navGames: string;
+      appNameCocoloopCommunity: string;
+      appNameCocoloopMarket: string;
+      appDescCocoloopCommunity: string;
+      appDescCocoloopMarket: string;
+      appDescGemini: string;
+      appDescNotebookLM: string;
+      appDescDoubao: string;
+      appDescPerplexity: string;
+      appDescChatGPT: string;
+      appDescClaude: string;
+      appDescKimi: string;
+      widgetTitleResearch: string;
+      widgetSubtitleResearch: string;
+      widgetTitleTodayTasks: string;
+      widgetSubtitleTodayTasks: string;
+      panelTitleTheme: string;
+      panelTitleWidgets: string;
+      panelTitleWallpaper: string;
+      panelTitleGames: string;
+      panelTitleAddApp: string;
+      panelTitleDesktopSettings: string;
+      panelSubtitle: string;
+      panelClose: string;
+      themeNames: string[];
+      themeDescs: string[];
+      widgetPanelNames: string[];
+      widgetPanelDescs: string[];
+      widgetEnabled: string;
+      wallpaperTitle: (index: number) => string;
+      gameNames: string[];
+      settingNames: string[];
+      settingDescs: string[];
+      crashTitle: string;
+      crashDesc: string;
+      crashReload: string;
+      ctxEditIcon: string;
+      ctxDelete: string;
+      ctxSizeSmall: string;
+      ctxSizeMedium: string;
+      ctxSizeLarge: string;
+      ctxEditWidget: string;
+      ctxEditFolder: string;
+      ctxEditHome: string;
+      ctxAddWidget: string;
+      ctxAddIcon: string;
+      ctxSettings: string;
+      editWidgetDialogTitle: string;
+      editWidgetTitleLabel: string;
+      editWidgetTitlePlaceholder: string;
+      editWidgetTypeLabel: string;
+      editWidgetTypeWeather: string;
+      editWidgetTypeCalendar: string;
+      editWidgetTypeNotes: string;
+      editWidgetTypeSystem: string;
+      editWidgetTypeAiTools: string;
+      editWidgetTypeBookmarks: string;
+      editWidgetSave: string;
+      promptSiteName: string;
+      promptSiteUrl: string;
+      promptFolderName: string;
+      searchPlaceholderFormat: (engine: string) => string;
+      searchEngineFallback: string;
+      newWidget: string;
+      newFolder: string;
+      addIconBtn: string;
+      addWidgetBtn: string;
+      appNameDoubao: string;
+    };
+    tabBar: {
+      close: string;
+      newTab: string;
+    };
+    urlBar: {
+      back: string;
+      forward: string;
+      refresh: string;
+      backToHome: string;
+      searchOrUrl: string;
+      siteInfo: string;
+      siteInfoDesc: string;
+      clearData: string;
+      openExternally: string;
+      confirmClearSiteData: string;
+      clearingSiteData: string;
+      clearFailed: string;
+      siteCleared: (origin: string) => string;
+      currentSite: string;
+      addBookmark: string;
+      removeBookmark: string;
+      bookmarkLabel: string;
+      historyLabel: string;
+      searchOrOpen: (query: string) => string;
+      downloads: string;
+      downloading: string;
+      recentDownload: string;
+      downloadCount: (count: number) => string;
+      noDownloads: string;
+      noDownloadRecords: string;
+      unnamedDownload: string;
+      downloadCompleted: string;
+      downloadIncomplete: string;
+      unknownSize: string;
+      openFile: string;
+      openFolder: string;
+      historyAndBookmarks: string;
+      bookmarksTab: (count: number) => string;
+      historyTab: (count: number) => string;
+      clearHistoryTitle: string;
+      clearHistory: string;
+      noBookmarks: string;
+      noHistory: string;
+      removeBookmarkTitle: string;
+      deviceDesktop: string;
+      deviceTablet: string;
+      deviceMobile: string;
+      switchToDevice: (device: string) => string;
+      browserExtensions: string;
+      openBrowserExtensions: string;
+      extensionsLabel: string;
+      aiAssistant: string;
+    };
+  };
+
+  // Execution Plan
+  executionPlan: {
+    title: string;
+    awaitingReview: string;
+    executing: string;
+    completed: string;
+    rejected: string;
+    lowRisk: string;
+    mediumRisk: string;
+    highRisk: string;
+    approve: string;
+    reject: string;
+    edit: string;
+    fast: string;
+    medium: string;
+    slow: string;
+    addStep: string;
+    confirmReject: string;
+    cancel: string;
+    saveAndReview: string;
+    editPlan: string;
+    toastApproved: string;
+    toastApproveFailed: string;
+    toastMustHaveStep: string;
+    toastUpdated: string;
+    toastModifyFailed: string;
+    toastRejected: string;
+    toastRejectFailed: string;
+  };
+
+  // Mode Selector
+  modes: {
+    builder: string;
+    coder: string;
+    architect: string;
+    teamCoder: string;
+    admin: string;
+    builderTooltip: string;
+    coderTooltip: string;
+    architectTooltip: string;
+    teamCoderTooltip: string;
+    adminTooltip: string;
+    builderDesc: string;
+    coderDesc: string;
+    architectDesc: string;
+    teamCoderDesc: string;
+    adminDesc: string;
+    autoDetected: string;
+    projectTemplates: string;
+    projectSignals: string;
+  };
+
+  // Code page tabs
+  codeTabs: {
+    monitor: string;
+    traces: string;
+    arena: string;
+    teach: string;
+    browser: string;
+    diff: string;
+  };
+
+  // Skills Market
+  skillsMarket: {
+    title: string;
+    categories: {
+      all: string;
+      coding: string;
+      writing: string;
+      research: string;
+      automation: string;
+      data: string;
+      devops: string;
+      security: string;
+      other: string;
+    };
+    searchPlaceholder: string;
+    enabled: string;
+    disabled: string;
+    enable: string;
+    disable: string;
+    noDescription: string;
+    builtIn: string;
+    skillsCount: (total: number, enabled: number) => string;
+    filterAll: (count: number) => string;
+    filterInstalled: (count: number) => string;
+    filterEnabled: (count: number) => string;
+    loadingSkills: string;
+    noSkillsFound: string;
+    noSkillsFoundHint: string;
+    description: string;
+    requiredTools: string;
+    parameters: string;
+    usageExamples: string;
+    systemPrompt: string;
+    exportJson: string;
+    downloads: (count: number) => string;
+    input: string;
+    expected: string;
+    createCustomSkill: string;
+    createCustomSkillDesc: string;
+    importSkill: string;
+    importSkillDesc: string;
+    name: string;
+    category: string;
+    tags: string;
+    tagsPlaceholder: string;
+    systemPromptPlaceholder: string;
+    nameAndPromptRequired: string;
+    failedToCreate: string;
+    importSource: string;
+    importFailed: string;
+    publishAgentAsApi: string;
+    createSkill: string;
+  };
+
+  // API Publish
+  apiPublish: {
+    title: string;
+    tabs: {
+      code: string;
+      keys: string;
+      logs: string;
+      stats: string;
+      test: string;
+    };
+    publishAgentAsApi: string;
+    apiName: string;
+    agent: string;
+    endpointPath: string;
+    endpointPathHint: string;
+    rpmLimit: string;
+    dailyLimit: string;
+    publish: string;
+    endpoint: string;
+    noPublishedApis: string;
+    noPublishedApisHint: string;
+    generateKey: string;
+    keyName: string;
+    copyKeyWarning: string;
+    noApiKeys: string;
+    recentCalls: (count: number) => string;
+    noCallsYet: string;
+    loadingStats: string;
+    totalCalls: string;
+    today: string;
+    avgLatency: string;
+    totalTokens: string;
+    success: string;
+    errors: string;
+    dailyCalls: string;
+    apiKey: string;
+    inputLabel: string;
+    inputPlaceholder: string;
+    sendRequest: string;
+    response: string;
+    revoke: string;
+    disable: string;
+    enable: string;
+    refreshTooltip: string;
+    cancel: string;
+    created: string;
+    lastUsed: string;
+  };
+
+  // Deploy (extend existing)
+  deploy: {
+    title: string;
+    detecting: string;
+    building: string;
+    deploying: string;
+    ready: string;
+    error: string;
+    cancelled: string;
+    recommended: string;
+    generatedConfigs: string;
+    openDeployment: string;
+    copyUrl: string;
+    setup: string;
+    history: string;
+    analyzingProject: string;
+    deployTarget: string;
+    deployTo: (provider: string) => string;
+    detectProject: string;
+    clickDetectHint: string;
+    pending: string;
+    unknown: string;
+    details: string;
+    deployAgain: string;
+    noActiveDeployment: string;
+    noActiveDeploymentHint: string;
+    noDeployments: string;
+    noDeploymentsHint: string;
+    requires: string;
+    confidence: string;
+    build: string;
+    output: string;
+    port: string;
+    staticPreview: string;
+    openInBrowser: string;
+  };
+
+  // Codebase Index
+  codebaseIndex: {
+    title: string;
+    tabs: {
+      search: string;
+      status: string;
+      stats: string;
+    };
+    searchPlaceholder: string;
+    indexIncremental: string;
+    rebuildFull: string;
+    clearIndex: string;
+    notIndexed: string;
+    notIndexedHint: string;
+    startIndexing: string;
+    noMatchingCode: string;
+    indexingInProgress: string;
+    preparing: string;
+    files: string;
+    chunks: string;
+    embedded: string;
+    skipped: string;
+    elapsed: string;
+    progress: string;
+    errors: (count: number) => string;
+    indexingComplete: string;
+    completedIn: string;
+    indexReady: string;
+    noIndex: string;
+    indexReadyHint: string;
+    noIndexHint: string;
+    dbSize: string;
+    configuration: string;
+    backend: string;
+    model: string;
+    chunkSize: string;
+    autoIndex: string;
+    on: string;
+    off: string;
+    languages: string;
+    chunkTypes: string;
+    lastIndexed: string;
+    showCode: string;
+    hideCode: string;
+    toastFullReindexStarted: string;
+    toastIncrementalStarted: string;
+    toastStartIndexingFailed: string;
+    toastIndexCleared: string;
+    toastClearIndexFailed: string;
+  };
+
+  // Teach & Repeat
+  teachRepeat: {
+    title: string;
+    recording: string;
+    stop: string;
+    startRecording: string;
+    startRecordingDesc: string;
+    workflowName: string;
+    workflowNamePlaceholder: string;
+    descriptionOptional: string;
+    newRecording: string;
+    backToLibrary: string;
+    searchWorkflows: string;
+    noWorkflows: string;
+    noWorkflowsHint: string;
+    noMatchingWorkflows: string;
+    replay: string;
+    adaptiveReplay: string;
+    replayResults: string;
+    replayingWorkflow: string;
+    steps: string;
+    params: string;
+    used: string;
+    noDescription: string;
+    duplicate: string;
+  };
+
+  // Parallel Agents
+  parallelAgents: {
+    title: string;
+    active: string;
+    max: string;
+    noParallelTasks: string;
+    noParallelTasksHint: string;
+    completed: string;
+    failed: string;
+    cancelled: string;
+    batches: string;
+    filterAgents: string;
+    noMatchingAgents: string;
+    waitingForAgents: string;
+    aggregatedResults: string;
+    rawResults: string;
+    aggregated: string;
+    conflictsDetected: (count: number) => string;
+    noOutput: string;
+    agentsRunning: (count: number) => string;
+    noActiveTasks: string;
+    cancelAll: string;
+    depends: string;
+    statusLabels: {
+      pending: string;
+      running: string;
+      completed: string;
+      failed: string;
+      cancelled: string;
+      timedOut: string;
+      partial: string;
+    };
+  };
+
+  // Monitor
+  monitor: {
+    title: string;
+    tokens: string;
+    estCost: string;
+    turns: string;
+    toolCalls: string;
+    cacheReads: string;
+    tokensCached: string;
+    unique: string;
+    toolUsage: string;
+    noToolCalls: string;
+    telemetry: string;
+    otelEnabled: string;
+    otelDisabled: string;
+    metrics: string;
+    privacy: string;
+    promptsRedacted: string;
+    promptsLogged: string;
+    tokenDistribution: string;
+    inputLabel: string;
+    outputLabel: string;
+    cacheLabel: string;
+  };
+
+  // Traces
+  traces: {
+    title: string;
+    trace: string;
+    spans: string;
+    total: string;
+    noTraces: string;
+    attributes: string;
+    events: (count: number) => string;
+    refresh: string;
+  };
+
+  // Collab
+  collab: {
+    invite: string;
+    inviteCollaborators: string;
+    collaborateTitle: string;
+    collaborateDesc: string;
+    generatingLink: string;
+    clickToGenerate: string;
+    generateInviteLink: string;
+    copied: string;
+    copy: string;
+    copyLink: string;
+    currentlyOnline: (count: number) => string;
+    online: string;
+    typing: string;
+    // InviteDialog extras
+    inviteDialogTitle: string;
+    inviteDialogDesc: string;
+    linkCopied: string;
+    copyFailed: string;
+    // PresenceAvatars
+    onlineCount: (count: number) => string;
+  };
+
+  // Workflow Editor
+  workflowEditor: {
+    title: string;
+    untitled: string;
+    newWorkflow: string;
+    savedWorkflows: string;
+    placeholder: string;
+    descPlaceholder: string;
+    layoutApplied: string;
+    saved: string;
+    saveFailed: string;
+    loadFailed: string;
+    deleted: string;
+    deleteFailed: string;
+    valid: string;
+    fixErrors: string;
+    executed: string;
+    executeFailed: string;
+    codeCopied: string;
+    start: string;
+    end: string;
+    nodePaletteTitle: string;
+    save: string;
+    run: string;
+    savedToJsonFile: string;
+    runBackendNotReady: string;
+    dismiss: string;
+    more: string;
+    noSavedWorkflows: string;
+    selectNodeToConfigure: string;
+    searchNodes: string;
+    runningWorkflow: string;
+    executionCompleted: string;
+    executionFailed: string;
+    runResults: string;
+    viewResultJson: string;
+    importN8n: string;
+    saving: string;
+    running: string;
+    runCompleted: string;
+    runFailed: string;
+    statusPrefix: string;
+    importSuccess: (name: string, nodeCount: number) => string;
+    nodes: {
+      llm: string;
+      tool: string;
+      condition: string;
+      code: string;
+      subagent: string;
+      loop: string;
+      parallel: string;
+      humanInput: string;
+      memory: string;
+      http: string;
+    };
+    config: {
+      label: string;
+      model: string;
+      systemPrompt: string;
+      temperature: string;
+      maxTokens: string;
+      toolName: string;
+      parameters: string;
+      conditionExpr: string;
+      language: string;
+      code: string;
+      agentName: string;
+      agentConfig: string;
+      loopBody: string;
+      maxIterations: string;
+      breakCondition: string;
+      branchNodes: string;
+      aggregation: string;
+      aggregationMergeAll: string;
+      aggregationFirstResult: string;
+      aggregationMajorityVote: string;
+      promptMessage: string;
+      url: string;
+      method: string;
+      headers: string;
+      body: string;
+      operation: string;
+      memoryKey: string;
+      valueExpression: string;
+      timeout: string;
+      responseFormat: string;
+    };
+    palette: {
+      flow: string;
+      ai: string;
+      actions: string;
+      data: string;
+    };
+    toolbar: {
+      save: string;
+      undo: string;
+      redo: string;
+      copy: string;
+      paste: string;
+      delete: string;
+      autoLayout: string;
+      validate: string;
+      exportCode: string;
+      run: string;
+      running: string;
+    };
+    nodeDescriptions: {
+      start: string;
+      end: string;
+      condition: string;
+      loop: string;
+      parallel: string;
+      llm: string;
+      subagent: string;
+      tool: string;
+      code: string;
+      http: string;
+      memory: string;
+      humanInput: string;
+    };
+    nodeLabels: {
+      noModelSet: string;
+      noToolSelected: string;
+      noAgentSelected: string;
+      noCodeWritten: string;
+      noUrlConfigured: string;
+      pausesForInput: string;
+      workflowEntryPoint: string;
+    };
+  };
+
+  // Agent detail/profile
+  agentDetail: {
+    overview: string;
+    profile: string;
+    memory: string;
+    reviews: string;
+    social: string;
+    chat: string;
+    install: string;
+    installed: string;
+    uninstall: string;
+    writeReview: string;
+    submitReview: string;
+    submit: string;
+    noReviews: string;
+    conversations: string;
+    messages: string;
+    satisfaction: string;
+    responseTime: string;
+    addMemory: string;
+    deleteMemory: string;
+    relationships: string;
+    strength: string;
+    downloads: string;
+    ratings: string;
+    description: string;
+    tags: string;
+    capabilities: string;
+    tasksCompleted: string;
+    profileNotAvailable: string;
+    noMemories: string;
+    noRelationships: string;
+    agentProfileAndMemory: string;
+    statistics: string;
+    memoryContent: string;
+    noMemoriesYet: string;
+    noRelationshipsYet: string;
+    shareExperience: string;
+    reviewSubmitted: string;
+    memoryAdded: string;
+    memoryDeleted: string;
+    confidence: string;
+    accessed: string;
+    official: string;
+    featured: string;
+    memoryTypes: {
+      fact: string;
+      preference: string;
+      learned_skill: string;
+      relationship: string;
+    };
+    journal: string;
+    noJournal: string;
+    journalIntro: string;
+    journalMoods: {
+      insight: string;
+      mistake: string;
+      pride: string;
+      tired: string;
+      question: string;
+    };
+  };
+
+  // MCP Settings page
+  mcpSettings: {
+    title: string;
+    description: string;
+    trustedTag: string;
+    untrustedTag: string;
+    trustButton: string;
+    revokeButton: string;
+    unapprovedHint: string;
+    noServers: string;
+    toastLoadConfigFailed: string;
+    toastTrustSuccess: (name: string) => string;
+    toastTrustFailed: string;
+    toastRevokeSuccess: (name: string) => string;
+    toastRevokeFailed: string;
+    toastToggleSuccess: (name: string, enabled: boolean) => string;
+    toastUpdateFailed: string;
+  };
+
+  // Intelligence
+  intelligence: {
+    title: string;
+    runNow: string;
+    latestReport: string;
+    history: string;
+    config: string;
+    noReports: string;
+    running: string;
+    sources: string;
+    itemsAnalyzed: string;
+    skillsCreated: string;
+    reports: string;
+    enabled: string;
+    disabled: string;
+    schedule: string;
+    lastRun: string;
+    subscriptions: string;
+    addSubscription: string;
+    customTopic: string;
+    keywords: string;
+    selectSources: string;
+    stubWarning: string;
+    enabledTopics: string;
+    runAll: string;
+    topicReport: string;
+    viewHistory: string;
+    noSubscriptions: string;
+    reportOverview: string;
+    reportOverviewDescription: string;
+    repoSpotlights: string;
+    repoSpotlightsRankedBy: string;
+    fullReport: string;
+    fullReportDescription: string;
+    spotlightsButton: string;
+    backToTop: string;
+    reportLanguage: string;
+    reportLanguageZh: string;
+    reportLanguageEn: string;
+    reportLanguageBoth: string;
+    // IntelligencePanel extras
+    subscriptionsHeader: string;
+    topicPlaceholder: string;
+    addButton: string;
+    noSubscriptionsHint: (keywordExample: string) => string;
+    exampleKeyword: string;
+    keywordsPrefix: string;
+    lastRunPrefix: (date: string) => string;
+    neverRun: string;
+    reportsHeader: string;
+    noReportsHint: string;
+    itemsCount: (n: number) => string;
+    loadFailed: string;
+    subscriptionAdded: string;
+    addFailed: string;
+    updateFailed: string;
+    // Additional keys for IntelligencePanel
+    subscriptionDeleted: string;
+    deleteFailed: string;
+    runSubscriptionFailed: string;
+    runAllSubscriptionsFailed: string;
+    reportGenerated: (count: number) => string;
+    reportsGenerated: (count: number) => string;
+    aiCustomSubscription: string;
+    aiCustomSubscriptionDescription: string;
+    collapse: string;
+    expand: string;
+    generateDraft: string;
+    createSubscription: string;
+    draftPlaceholder: string;
+    deleteSubscription: string;
+    source: string;
+    web: string;
+  };
+
+  intelligencePanel: {
+    examplePrompts: string[];
+    goalPlaceholder: string;
+  };
+
+  // Live Run Feedback
+  liveRunFeedback: {
+    title: string;
+    phaseUnderstand: string;
+    phaseExecute: string;
+    phaseVerify: string;
+    generatingActionDraft: string;
+    generatingReasoning: string;
+    iteration: (n: number) => string;
+    contentPreview: string;
+    updatingTodos: string;
+    writingFile: string;
+    writeComplete: string;
+    readingFile: string;
+    readingContext: string;
+    runningCommand: string;
+    calling: string;
+  };
+
+  // Public Thinking Status
+  publicThinkingStatus: {
+    title: string;
+    organizingReply: string;
+    executingTool: string;
+    gotResults: string;
+    analyzing: string;
+    understandingTask: string;
+    planningFirstStep: string;
+    waitingForModel: string;
+    stillWaiting: string;
+  };
+
+  // Evolution Dashboard
+  evolutionDashboard: {
+    title: string;
+    skills: string;
+    memories: string;
+    knowledgeGraph: string;
+    improvementScore: string;
+    proactive: string;
+    autoExtracted: string;
+    totalEntries: string;
+    entities: string;
+    relationships: string;
+    communities: string;
+    learningEvents: string;
+    reports: string;
+    skillsAutoCreated: string;
+    // Skill performance table
+    skillPerformance: string;
+    all: string;
+    autoExtractedFilter: string;
+    manual: string;
+    declining: string;
+    skillName: string;
+    usageCount: string;
+    successRate: string;
+    avgDuration: string;
+    trend: string;
+    noSkillData: string;
+    // Learning curve
+    learningCurve: string;
+    successRatePct: string;
+    avgDurationSec: string;
+    skillsUsed: string;
+    // Memory growth
+    memoryGrowth: string;
+    facts: string;
+    preferences: string;
+    learnedSkills: string;
+    // Timeline
+    extractionTimeline: string;
+    autoLabel: string;
+    manualLabel: string;
+    // Recommendations
+    recommendations: string;
+    noRecommendations: string;
+    // Sync from Intel
+    syncFromIntel: string;
+    syncing: string;
+    syncComplete: string;
+    syncFailed: string;
+    lastSync: string;
+    // Errors
+    connectionFailed: string;
+    loading: string;
+    refresh: string;
+    selfImprovement: string;
+    measureChanges: string;
+    noLearningData: string;
+    noMemoryData: string;
+    noSkillExtractionEvents: string;
+    continuousLearningDesc: string;
+    viewInTaskBoard: string;
+    active: string;
+    disabled: string;
+    of100: string;
+  };
+
+  // Wiki Panel
+  wiki: {
+    title: string;
+    repoWiki: string;
+    docs: string;
+    static: string;
+    generate: string;
+    generateWiki: string;
+    generatingWiki: string;
+    generateConfirmTitle: string;
+    generateConfirmBody: string;
+    generateStarted: string;
+    generateComplete: string;
+    generateFailed: string;
+    update: string;
+    updateConfirmTitle: string;
+    updateConfirmBody: string;
+    updateUpToDate: string;
+    updatedFiles: (count: number) => string;
+    updateFailed: string;
+    loadingWiki: string;
+    noWikiYet: string;
+    noWikiDesc: string;
+    backendUnavailable: string;
+    refresh: string;
+    expand: string;
+    collapse: string;
+    editing: string;
+    save: string;
+    editDocument: string;
+    documentSaved: string;
+    documentSaveFailed: string;
+    selectDocument: string;
+    failedToLoad: string;
+    files: string;
+    modules: string;
+    overview: string;
+    outdated: string;
+    filesChanged: (count: number) => string;
+    steps: string;
+    elapsed: string;
+    warnings: (count: number) => string;
+    autosyncOnLabel: string;
+    autosyncOffLabel: string;
+    autosyncOnHint: string;
+    autosyncOffHint: string;
+    autosyncOn: string;
+    autosyncOff: string;
+    autosyncSaveFailed: string;
+    autosyncSavedNotWatching: string;
+  };
+
+  // Onboarding
+  onboarding: {
+    title: string;
+    welcomeToOctopus: string;
+    yourAIPlatform: string;
+    welcomeDesc: string;
+    chatModes: string;
+    chatModesDesc: string;
+    modeChat: string;
+    modeChatDesc: string;
+    modeCode: string;
+    modeCodeDesc: string;
+    modeTeam: string;
+    modeTeamDesc: string;
+    keyFeatures: string;
+    keyFeaturesDesc: string;
+    featureAgentWorld: string;
+    featureAgentWorldDesc: string;
+    featureWorkflows: string;
+    featureWorkflowsDesc: string;
+    featureSkillsMarket: string;
+    featureSkillsMarketDesc: string;
+    featureTaskBoard: string;
+    featureTaskBoardDesc: string;
+    quickTips: string;
+    quickTipsDesc: string;
+    tipSearch: string;
+    tipToggleSidebar: string;
+    tipSlashCommands: string;
+    tipMentionAgents: string;
+    skip: string;
+    previous: string;
+    next: string;
+    getStarted: string;
+    goToStep: (step: number) => string;
+  };
+
+  // A2A Agents
+  a2a: {
+    title: string;
+    refresh: string;
+    registerAgent: string;
+    remoteAgentUrl: string;
+    connect: string;
+    remove: string;
+    testConnection: string;
+    connectionSuccessful: string;
+    connectionFailed: string;
+    noAgents: string;
+    noAgentsDesc: string;
+    endpoint: string;
+    description: string;
+    capabilities: string;
+    skills: string;
+    streaming: string;
+    multiTurn: string;
+    push: string;
+    sendTask: string;
+    sendTaskPlaceholder: string;
+    send: string;
+    artifacts: string;
+    status: string;
+    nonTextContent: string;
+    binaryContent: string;
+  };
+
+  // Live Tool Timeline
+  liveTools: {
+    terminal: string;
+    writeFile: string;
+    editFile: string;
+    readFile: string;
+    searchFiles: string;
+    searchContent: string;
+    webSearch: string;
+    gitStatus: string;
+    gitCommit: string;
+    gitDiff: string;
+    streamRecovery: string;
+    running: string;
+  };
+
+  // Live Tool Timeline detail labels
+  liveToolTimeline: {
+    searchingWeb: string;
+    searchingQuery: (query: string) => string;
+    searchedPages: (count?: number) => string;
+    searchResultCovering: (query: string) => string;
+    searchResultInContext: string;
+    browsingPage: string;
+    browsedOnePage: string;
+    sourceFrom: (source: string) => string;
+    pageOpenedAndExtracted: string;
+    parallelDispatching: (count?: number) => string;
+    parallelTasksReturned: (count?: number) => string;
+    rolesWithNextStep: (roles: string) => string;
+    subtaskAggregation: string;
+    callSubAgent: (role: string) => string;
+    callSubAgentShort: string;
+    focusedDelegation: string;
+    writeBlackboard: (key: string) => string;
+    writeBlackboardShort: string;
+    saveBlackboardFinding: string;
+    readBlackboardDirectory: string;
+    readBlackboard: (key: string) => string;
+    readBlackboardShort: string;
+    pullParallelResults: string;
+    thoughtDetailLabel: (iteration?: number) => string;
+    modelPublicReasoningFragment: string;
+    modelPublicReasoningStream: string;
+    modelOutputtingReasoning: string;
+    invokeSkillProcess: string;
+    understandTask: string;
+    readingUserRequirements: string;
+    connectRuntime: string;
+    establishingCallbackChannel: string;
+    renderingModelOutput: string;
+    incrementalTextReceived: string;
+    thinking: string;
+    modelOrganizingNextStep: string;
+    modelOrganizingNextStepWithWait: (seconds: number) => string;
+    modelOutputIncomplete: string;
+    providerRejected: string;
+    modelOutputReceived: string;
+    modelStartedReturning: string;
+    readFileToUnderstand: string;
+    viewDirectoryStructure: string;
+    writeFileContent: string;
+    scopePath: (path: string) => string;
+    matchPattern: (pattern: string) => string;
+    keyPagesExtracted: string;
+    searchCovering: (queries: string) => string;
+    searchResultCalibrate: string;
+    searchingWebRounds: (rounds: number) => string;
+    browsingPageCount: (count: number) => string;
+    browsedPagesCount: (count: number) => string;
+    searchRoundIndex: (round: number) => string;
+    pageItemIndex: (page: number) => string;
+    collapseSearchDetails: string;
+    expandSearchDetails: string;
+    collapseToolDetails: string;
+    expandToolDetails: string;
+    collectingEvidence: string;
+    searchRoundFailed: string;
+    marketSizeLeads: string;
+    competitionLeads: string;
+    technologyLeads: string;
+    demandLeads: string;
+    roundResultsRead: string;
+  };
+
+  // Annotations
+  annotations: {
+    resolve: string;
+    unresolve: string;
+    delete: string;
+    resolved: string;
+    reply: string;
+    replyPlaceholder: string;
+    addComment: string;
+    addCommentPlaceholder: string;
+    comment: string;
+    cancel: string;
+    noAnnotations: string;
+    noAnnotationsHint: string;
+    annotation: (count: number) => string;
+    showResolved: (count: number) => string;
+    hideResolved: (count: number) => string;
+    anonymous: string;
+  };
+
+  // Mention Autocomplete
+  mentions: {
+    mentions: string;
+    searching: string;
+    noResults: string;
+    navigate: string;
+    select: string;
+    close: string;
+  };
+
+  // Follow-up Suggestions
+  followups: {
+    explainCode: string;
+    howToFix: string;
+    writeTests: string;
+    summarize: string;
+    tellMore: string;
+  };
+
+  // Code Editor
+  codeEditor: {
+    modified: string;
+    reset: string;
+    save: string;
+    saving: string;
+    saved: string;
+    fileSaved: string;
+    fileSaveFailed: string;
+    diagnose: string;
+    diagnosticsClean: string;
+    diagnosticsIssues: string;
+    diagnosticsFailed: string;
+    goToDefinitionTitle: (symbol: string) => string;
+    findReferencesTitle: (symbol: string) => string;
+    definitionButton: string;
+    referencesButton: string;
+    definitionFound: (symbol: string, file: string, line: number) => string;
+    definitionNotFound: (symbol: string) => string;
+    definitionLookupFailed: string;
+    referencesFound: (count: number, symbol: string) => string;
+    referencesNotFound: (symbol: string) => string;
+    referencesLookupFailed: string;
+  };
+
+  // Cron Settings
+  cronSettings: {
+    title: string;
+    description: string;
+    noTasks: string;
+    last: string;
+    jobName: string;
+    commandToRun: string;
+    cronExpression: string;
+    create: string;
+    cancel: string;
+    addTask: string;
+    // Additional fields
+    loadFailed: string;
+    createSuccess: string;
+    createFailed: string;
+    deleteSuccess: string;
+    deleteFailed: string;
+  };
+
+  // Team Input
+  teamInput: {
+    placeholder: string;
+  };
+
+  fileTree: {
+    emptyDirectory: string;
+  };
+
+  // TAOR Indicator
+  taor: {
+    think: string;
+    thinking: string;
+    act: string;
+    acting: string;
+    observe: string;
+    observing: string;
+    repeat: string;
+    iteration: string;
+  };
+
+  // Bundle Info
+  bundleInfo: {
+    title: string;
+    environment: string;
+    vite: string;
+    react: string;
+    sourceModules: string;
+  };
+
+  // Model Picker
+  modelPicker: {
+    selectModel: string;
+    tabOfficial: string;
+    tabCustom: string;
+    addModel: string;
+    noCustomModels: string;
+    officialDisabled: string;
+    loginRequired: string;
+    enabling: string;
+    clickToEnable: string;
+    recommended: string;
+    bindMoliliFirst: string;
+    bindMoliliDesc: string;
+    modelEnabled: (name: string) => string;
+    enableFailed: string;
+    enableFailedWithMessage: (msg: string) => string;
+    autoModelLabel: string;
+    autoModelDescription: string;
+    /** Compact badge for the picker row (e.g. "智能" / "Smart"). */
+    autoModelBadge: string;
+  };
+
+  // Account Settings
+  accountSettings: {
+    creditsBalance: string;
+    moliliAccount: string;
+    available: string;
+    refreshing: string;
+    refresh: string;
+    byType: string;
+    granted: string;
+    expiredOrFrozen: string;
+    expired: string;
+    creditsDescription: string;
+    creditsRefreshed: string;
+    refreshFailed: string;
+    primaryAccount: string;
+    linkGoogle: string;
+    linkGithub: string;
+    unlinkConfirm: string;
+    systemManaged: string;
+    clickToChangeAvatar: string;
+    deleteAccountConfirm: string;
+    deleteAccountWarning: string;
+    typeToConfirm: string;
+    confirmDelete: string;
+    factoryResetTitle: string;
+    factoryResetDescription: string;
+    factoryResetDialogDescription: string;
+    factoryResetTypeToConfirm: string;
+    factoryResetTypeMismatch: string;
+    factoryResetSuccess: string;
+    factoryResetFailed: string;
+    factoryResetPending: string;
+    factoryResetConfirm: string;
+    // Avatar / account session hints
+    avatarTooLarge: string;
+    moliliSessionExpired: (reason: string) => string;
+    moliliSessionExpiredDefaultReason: string;
+    moliliSessionCacheHint: string;
+    cachedSuffix: string;
+    expiredTooltip: string;
+  };
+
+  // Subscription Settings
+  subscriptionSettings: {
+    upgradeTitle: string;
+    upgradeDesc: string;
+    currentPlan: string;
+    upgradeNow: string;
+    contactUs: string;
+    invoiceHint: string;
+    totalCredits: (total: string) => string;
+    plans: {
+      plus: {
+        name: string;
+        credits: string;
+        badge: string | null;
+        features: string[];
+      };
+      pro: {
+        name: string;
+        credits: string;
+        badge: string | null;
+        features: string[];
+      };
+      max: {
+        name: string;
+        credits: string;
+        badge: string | null;
+        features: string[];
+      };
+    };
+  };
+
+  // Swarm Panel
+  swarmPanel: {
+    title: string;
+    collapse: string;
+    noActiveTasks: string;
+    emptyHint: string;
+    viewing: string;
+    backToLatest: string;
+    taskWaiting: string;
+    taskRunning: string;
+    taskNoSteps: string;
+    noSteps: string;
+    parallelTasks: string;
+    status: {
+      completed: string;
+      failed: string;
+      pending: string;
+    };
+    statusLabels: string[];
+    taskStatuses: {
+      pending: string;
+      running: string;
+      completed: string;
+      failed: string;
+    };
+    // SwarmPanel (workspace task-monitor) extras
+    panelStatusPending: string;
+    panelStatusRunning: string;
+    panelStatusCompleted: string;
+    panelStatusFailed: string;
+    statTotal: string;
+    statRunning: string;
+    statCompleted: string;
+    statFailed: string;
+    taskListHeader: string;
+    noSwarmTasksTitle: string;
+    noSwarmTasksHint: string;
+    loadFailed: string;
+    taskComplete: string;
+    replayTeamWork: string;
+    noActivity: string;
+  };
+
+  // Subtask
+  subtask: {
+    cancelled: string;
+    timedOut: string;
+  };
+
+  // Dispatch Composer
+  dispatchComposer: {
+    title: string;
+    connectedBatch: (id: string) => string;
+    placeholder: string;
+    concurrency: string;
+    autoSplit: string;
+    model: string;
+    splitting: string;
+    dispatching: string;
+    processing: string;
+    dispatchButton: string;
+    dispatchFailed: string;
+  };
+
+  // Credits
+  credits: {
+    remaining: (n: number) => string;
+    remainingWithHint: (n: number) => string;
+    credits: string;
+    refreshed: string;
+    refreshFailed: string;
+  };
+
+  // Daily credits claim
+  dailyClaim: {
+    title: string;
+    description: (fixed: number) => string;
+    drawButton: string;
+    drawHint: (max: number) => string;
+    directClaim: (fixed: number) => string;
+    claimedToday: string;
+    claiming: string;
+    drawing: string;
+    claimSuccess: (n: number) => string;
+    claimFailed: string;
+    dismissToday: string;
+    manualEntry: string;
+  };
+
+  // Implementation note.
+  payOrder: {
+    title: string;
+    subtitle: string;
+    backToPricing: string;
+    purchaseInfo: string;
+    planName: string;
+    amount: string;
+    confirmPayment: string;
+    polling: string;
+    paidSuccess: string;
+    pollingTimeout: string;
+    notLinked: string;
+    notLinkedDesc: string;
+    qrExpired: string;
+    loadingGoods: string;
+    goodsFailed: string;
+    recommended: string;
+    perMonth: string;
+    perYear: string;
+    oneTime: string;
+    subscribeNow: string;
+    priceTag: (yuan: string, unit: string) => string;
+  };
+
+  // Auth
+  // Login page (pages/Login.tsx)
+  loginPage: {
+    appSubtitle: string;
+    checkingProviders: string;
+    noProvidersTitle: string;
+    noProvidersHint: string;
+    tabPhone: string;
+    tabLocal: string;
+    termsPrefix: string;
+    termsLink: string;
+    jwtNote: string;
+    mockModeBanner: string;
+    mockCodeLabel: (code: string) => string;
+    mockServerLog: string;
+    phoneLabel: string;
+    sending: string;
+    resendInSec: (n: number) => string;
+    getCode: string;
+    sentToPrefix: string;
+    resend: string;
+    codeLabel: string;
+    backButton: string;
+    verifying: string;
+    loginButton: string;
+    spinnerWait: string;
+    localBanner: string;
+    usernameLabel: string;
+    displayNameLabel: string;
+    loggingIn: string;
+    errorServiceDisabled: string;
+    errorUpstream: string;
+    errorCodeInvalid: string;
+    errorNotInWhitelist: string;
+  };
+
+  // Register page (app/register/page.tsx)
+  registerPage: {
+    loadingText: string;
+    badgeText: string;
+    heroTitleLine1: string;
+    heroTitleLine2: string;
+    heroDescription: string;
+    cardTitle: string;
+    cardDescription: string;
+    usernameLabel: string;
+    usernamePlaceholder: string;
+    emailLabel: string;
+    passwordLabel: string;
+    passwordPlaceholder: string;
+    confirmPasswordLabel: string;
+    confirmPasswordPlaceholder: string;
+    submitting: string;
+    submitButton: string;
+    alreadyHaveAccount: string;
+    loginLink: string;
+    toastFillRequired: string;
+    toastPasswordMismatch: string;
+    toastUsernameTooShort: string;
+    toastPasswordTooShort: string;
+    toastSuccess: string;
+    toastFailed: string;
+  };
+
+  // App Authorization page
+  appAuth: {
+    pageTitle: string;
+    pageSubtitle: string;
+    searchPlaceholder: string;
+    connectedCount: (n: number) => string;
+    tabAll: string;
+    connectedSectionHeader: (n: number) => string;
+    availableSectionHeader: (n: number) => string;
+    loadingText: string;
+    noAvailableApps: string;
+    statusConnected: string;
+    statusExpired: string;
+    statusRevoked: string;
+    statusError: string;
+    statusPending: string;
+    typePrefix: string;
+    connectedAtPrefix: string;
+    lastUsedAtPrefix: string;
+    testConnectionTooltip: string;
+    refreshTooltip: string;
+    disconnectTooltip: string;
+    connectButton: string;
+    connectDialogTitle: (name: string) => string;
+    apiKeyLabelFallback: string;
+    tokenLabelFallback: string;
+    cookieLabel: string;
+    howToGetApiKey: string;
+    cookieHint: (domain: string) => string;
+    oauthRedirectHint: (name: string) => string;
+    dialogCancel: string;
+    browserDialogDescription: string;
+    browserStatusSuccess: string;
+    browserStatusFailed: string;
+    browserStatusCancelled: string;
+    browserStatusWaiting: string;
+    browserStep1: string;
+    browserStep2: string;
+    browserStep3: string;
+    browserCookiesLabel: string;
+    browserBearerLabel: string;
+    browserCaptured: string;
+    browserNotCaptured: string;
+    browserCloseButton: string;
+    browserCancelButton: string;
+    confirmDisconnect: string;
+    // Toasts fired from core/integrations/hooks.ts
+    toastAuthCreated: string;
+    toastAuthDeleted: string;
+    toastAuthRefreshed: string;
+    toastBrowserAuthSuccess: string;
+    toastBrowserAuthFailed: string;
+    toastBrowserAuthCancelled: string;
+  };
+
+  // Skills page (app/workspace/skills/page.tsx)
+  skillsPage: {
+    pageTitle: string;
+    pageSubtitle: string;
+    disclaimer: string;
+    createButton: string;
+    tabInstalled: string;
+    loadingSkills: string;
+    noInstalledTitle: string;
+    noInstalledHint: string;
+    categories: {
+      sourcing: string;
+      research: string;
+      browse: string;
+      file: string;
+      comm: string;
+      content: string;
+      memory: string;
+      system: string;
+      other: string;
+    };
+    searchPlaceholder: string;
+    matchCount: (matched: number, total: number) => string;
+    totalCount: (n: number) => string;
+    noMatch: (query: string) => string;
+    tooltipSource: (source: string) => string;
+    tooltipCost: (cost: string) => string;
+    tooltipTags: (tags: string) => string;
+    tooltipTested: string;
+    tooltipUntested: string;
+    testedDotTitle: string;
+    noDescription: string;
+  };
+
+  // FileActivityIndicator + PreviewRefreshIndicator (observability chrome)
+  activityIndicators: {
+    recentFileActivity: (n: number) => string;
+    fileActivityTitle: (n: number) => string;
+    realtimeLabel: string;
+    filesCount: (n: number) => string;
+    previewLastRefresh: (reason: string) => string;
+    previewWaitingForRefresh: string;
+    previewPrefix: (count: number) => string;
+  };
+
+  changesPanel: {
+    title: string;
+    empty: string;
+    emptyHint: string;
+  };
+
+  codeWelcome: {
+    title: string;
+    fixBug: string;
+    fixBugPrompt: string;
+    addFeature: string;
+    addFeaturePrompt: string;
+    refactor: string;
+    refactorPrompt: string;
+    writeTests: string;
+    writeTestsPrompt: string;
+    explainCode: string;
+    explainCodePrompt: string;
+    optimize: string;
+    optimizePrompt: string;
+    hint: string;
+  };
+
+  workingSet: {
+    title: string;
+    empty: string;
+    editing: string;
+    reading: string;
+    understand: string;
+    execute: string;
+    verify: string;
+  };
+
+  contextWindow: {
+    title: string;
+    system: string;
+    tools: string;
+    memory: string;
+    history: string;
+  };
+
+  contextCompressor: {
+    compressing: string;
+    full: string;
+    clickToCompress: string;
+    compressContext: string;
+    contextUsage: string;
+    tokens: string;
+    threshold: string;
+    contextFull: string;
+    autoCompressed: string;
+  };
+
+  // Reflex page (app/workspace/reflex/page.tsx)
+  reflexPage: {
+    subtitle: string;
+    lastRefreshPrefix: (time: string) => string;
+    pageTitle: string;
+    editRulesButton: string;
+    reloadButton: string;
+    reloadResetButton: string;
+    reloadingStatus: string;
+    reloadLoaded: (rules: number, statsReset: boolean) => string;
+    reloadError: (error: string) => string;
+    fetchFailed: string;
+    reloadFailed: string;
+    statTry: string;
+    statHit: string;
+    statHitRate: string;
+    statRules: string;
+    statStale: string;
+    statLastHourHits: string;
+    sparklineTitle: string;
+    sparklineEmpty: string;
+    rulesTableTitle: string;
+    responseTiersTitle: string;
+    colRule: string;
+    colKind: string;
+    colPatternType: string;
+    colPrio: string;
+    colTries: string;
+    colHits: string;
+    colRate: string;
+    colLast: string;
+    noRulesLoaded: string;
+    tierEnabled: string;
+    tierDisabled: string;
+    tierSize: string;
+    tierHits: string;
+    tierMisses: string;
+    tierRate: string;
+    tierEndpoint: string;
+    tierSimilarity: string;
+    badgeAB: (count: number) => string;
+    badgeGated: string;
+    badgeStale: string;
+    badgeUnexercised: string;
+    perActor: string;
+    minutesAgo: (m: number) => string;
+    hoursAgo: (h: number) => string;
+    daysAgo: (d: number) => string;
+  };
+
+  // Reflex YAML editor page (app/workspace/reflex/edit/page.tsx)
+  reflexEditor: {
+    backButton: string;
+    pageTitle: string;
+    mtimePrefix: (time: string) => string;
+    reloadFromDisk: string;
+    runTestsButton: string;
+    saveAndReload: string;
+    saveNoReload: string;
+    keyboardHintSuffix: string;
+    testResultsCard: string;
+    errorPrefix: (msg: string) => string;
+    testSummary: (passed: number, total: number, failed: number) => string;
+    testFailureRow: (ruleId: string, input: string, reason: string) => string;
+    loadingEditor: string;
+    statusIdle: string;
+    statusLoading: string;
+    statusSaving: string;
+    statusLoaded: string;
+    statusSaved: (rules: number) => string;
+    statusReloaded: (active: number) => string;
+    statusReloadFailed: (err: string) => string;
+    statusLoadFailed: (err: string) => string;
+    statusSaveFailed: (err: string) => string;
+    statusRunningTests: string;
+    statusTestError: (err: string) => string;
+    statusFetchError: string;
+    statusSaveError: string;
+    statusTestErrorFallback: string;
+    statusUnknown: string;
+    modeCard: string;
+    modeYaml: string;
+    cardEmpty: string;
+    cardAddNew: string;
+    cardField_id: string;
+    cardField_trigger: string;
+    cardField_reply: string;
+    cardField_priority: string;
+    triggerMode_exact: string;
+    triggerMode_contains: string;
+    triggerMode_regex: string;
+    priority_low: string;
+    priority_medium: string;
+    priority_high: string;
+    cardAdvancedBadge: string;
+    cardDelete: string;
+    cardConfirmDelete: string;
+    cardSavedHint: string;
+    cardField_action: string;
+    cardField_replyOnFailure: string;
+    cardField_replyOnFailurePlaceholder: string;
+    cardField_hubPreset: string;
+    cardField_headers: string;
+    cardField_body: string;
+    cardField_addHeader: string;
+    actionMode_none: string;
+    actionMode_webhook: string;
+    actionMode_mqtt: string;
+    cardField_replySource: string;
+    replySource_text: string;
+    replySource_workflow: string;
+    replySource_slowHint: string;
+    cardField_workflowPick: string;
+    cardField_workflowFallback: string;
+  };
+
+  // RecipeForge panel (app/workspace/reflex/gepa-panel.tsx) · prompt evolution
+  recipeForge: {
+    panelTitle: string;
+    reflectionPathBadge: string;
+    addendumAppliedTitle: string;
+    addendumLive: string;
+    addendumNone: string;
+    addendumClearButton: string;
+    addendumBytes: (size: number) => string;
+    knobIterations: string;
+    knobEvalTasks: string;
+    autoProposeButton: string;
+    autoProposeRunning: string;
+    autoProposeTitle: string;
+    runForgeButton: string;
+    runForgeRunning: string;
+    paretoFrontTitle: (count: number) => string;
+    iterCount: (count: number) => string;
+    elapsedSeconds: (seconds: number) => string;
+    thisRunHistory: (count: number) => string;
+    addendumsByScope: (count: number) => string;
+    addendumCsvTooltip: string;
+    addendumRefresh: string;
+    addendumGlobalHint: string;
+    canaryTitle: string;
+    canaryRefresh: string;
+    canaryEmpty: string;
+    canaryCounts: (active: number, rolledBack: number, total: number) => string;
+    canaryPhase: (phase: string) => string;
+    canaryRate: (rate: number) => string;
+    canarySamples: (sample: number, success: number, failure: number) => string;
+    canaryCandidate: (candidateId: string) => string;
+    canaryRecipe: (recipeId: string) => string;
+    canaryProposal: (proposalId: string) => string;
+    canaryRollbackReason: (reason: string) => string;
+    proposalDetailsButton: string;
+    proposalDetailsTitle: string;
+    proposalDetailsLoading: string;
+    proposalDetailsStatus: (status: string) => string;
+    proposalDetailsCanaries: (count: number) => string;
+    proposalDetailsRollbacks: (count: number) => string;
+    proposalDetailsMetadata: string;
+    pastRunsTitle: (count: number) => string;
+    pastRunsCsvTooltip: string;
+    pastRunsRefresh: string;
+    applyButton: string;
+    applyRecipeButton: (recipeId: string) => string;
+    applyGlobalButton: string;
+    cancelButton: string;
+    bestBadge: string;
+    promptPreview: string;
+    deleteButton: string;
+    confirmDeleteButton: string;
+    globalScope: string;
+    perRecipeScope: string;
+    recipePrefix: string;
+    triggerManual: string;
+    triggerAutoPropose: string;
+    bestAvg: (score: number) => string;
+    converged: string;
+    notConverged: string;
+    noIterationsYet: string;
+    convergenceChartLabel: string;
+    bestSoFarLabel: string;
+    perIterLabel: string;
+    historySkipped: (iter: string, reason: string) => string;
+    historyEarlyStop: (iter: string) => string;
+    historySeed: (frontSize: string) => string;
+    historyIter: (iter: string) => string;
+    historyImproved: string;
+    previewSummary: string;
+    nativeEvidenceTitle: string;
+    nativeEvidenceReplay: (score: number) => string;
+    nativeEvidenceSandboxReplay: (score: number, passed?: boolean) => string;
+    nativeEvidenceTurnReplay: (score: number, passed?: boolean) => string;
+    nativeEvidenceLLMReplay: (score: number, passed?: boolean) => string;
+    nativeEvidenceCases: (count: number) => string;
+    nativeEvidenceMetric: (
+      label: string,
+      score: number | null | undefined,
+    ) => string;
+    nativeEvidenceWeakCase: (caseId: string, reason: string) => string;
+    nativeEvidenceMissing: (signals: string) => string;
+    nativeEvidenceNoWeakCases: string;
+    statusFetchFailed: string;
+    statusRunFailed: string;
+    statusRunInProgress: (nIter: number, nSeconds: number) => string;
+    statusApplyFailed: (error: string) => string;
+    statusDeleteFailed: (error: string) => string;
+    statusDeleteFailedGeneric: string;
+    statusRunError: (error: string) => string;
+    statusNoRun: (reason: string) => string;
+    statusRunSuccess: (iter: string, elapsed: string, front: number) => string;
+    statusAutoProposeInProgress: (nSeconds: number) => string;
+    statusAutoProposeError: (error: string) => string;
+    statusNoPropose: string;
+    statusProposeSkipped: (reason: string) => string;
+    statusProposeSuccess: (count: number) => string;
+    statusApplying: (candidateId: string, where: string) => string;
+    statusApplied: (scope: string, size: number, path: string) => string;
+    statusDeleteAddendum: string;
+    statusDeleted: (path: string) => string;
+    statusNothingToDelete: string;
+    clearAddendumPath: (path: string) => string;
+  };
+
+  // Workflows wrapper page (app/workspace/workflows/page.tsx)
+  workflowsWrapperPage: {
+    loadingEditor: string;
+  };
+
+  // AppAuth wrapper page (app/workspace/app-auth/page.tsx)
+  appAuthWrapperPage: {
+    securityKicker: string;
+    pageTitle: string;
+    pageSubtitle: string;
+    feature1Title: string;
+    feature1Desc: string;
+    feature2Title: string;
+    feature2Desc: string;
+  };
+
+  // Observability page (app/observability/page.tsx)
+  observabilityPage: {
+    pageTitle: string;
+    pageSubtitle: string;
+    loadError: string;
+    unknownStatus: string;
+    statHealth: string;
+    statRunningTasks: string;
+    statJournalEvents: string;
+    statCapabilities: string;
+    cardActiveTasks: string;
+    cardJournalTail: string;
+    cardReflectionSnapshot: string;
+    defaultStrategy: string;
+    journalRow: (task: string, arm: string) => string;
+    subtitle: string;
+    swarmCardTitle: string;
+    noConcurrentTasks: string;
+    noConcurrentTasksHint: string;
+    nestedSseNote: string;
+    journalEventStream: string;
+    // Tab names
+    tabRuns: string;
+    tabSwarm: string;
+    tabBlackboard: string;
+    tabJournal: string;
+    tabRegeneration: string;
+    tabHemolymph: string;
+    tabCost: string;
+    // Connection status
+    connected: string;
+    idle: string;
+    // Swarm panel
+    stepsCount: (n: number) => string;
+    // Blackboard panel
+    activeTurns: string;
+    noActiveBlackboard: string;
+    noActiveBlackboardHint: string;
+    snapshot: string;
+    selectTurnHint: string;
+    selectTurnHintDesc: string;
+    emptyBlackboard: string;
+    keyCount: string;
+    keysLabel: string;
+    taskPrefix: string;
+    // Journal panel
+    pause: string;
+    resume: string;
+    clear: string;
+    noEvents: string;
+    noEventsHint: string;
+    eventActionFile: string;
+    eventArtifact: string;
+    eventArtifactScreenshot: string;
+    eventSuccess: string;
+    eventFailure: string;
+    eventDurationSuffix: (ms: number) => string;
+    // Run review panel
+    runReviewTitle: string;
+    runReviewHint: string;
+    runReviewRuns: string;
+    runReviewRunning: string;
+    runReviewErrors: string;
+    runReviewTokens: string;
+    runReviewCost: string;
+    runReviewEmpty: string;
+    runReviewEmptyHint: string;
+    runReviewStatusRunning: string;
+    runReviewStatusDone: string;
+    runReviewStatusError: string;
+    runReviewEvents: (n: number) => string;
+    runReviewCostLine: (tokens: number, usd: number) => string;
+    runReviewToolSummary: string;
+    runReviewFiles: string;
+    runReviewLearningSignals: string;
+    runReviewTaskPrefix: string;
+    runReviewMetricForged: (count: number) => string;
+    runReviewMetricRules: (count: number) => string;
+    runReviewMetricMems: (count: number) => string;
+    runReviewMetricTriples: (count: number) => string;
+    runReviewMetricTraj: (count: number) => string;
+    runReviewMetricRecipes: (count: number) => string;
+    // Regeneration panel
+    loading: string;
+    errorPrefix: string;
+    trajectoryTotal: string;
+    failureCount: string;
+    regenProducers: {
+      skillForge: string;
+      skillForgeHint: string;
+      ruleExtractor: string;
+      ruleExtractorHint: (n: number) => string;
+      memoryConsolidator: string;
+      memoryConsolidatorHint: (n: number) => string;
+      kgUpdater: string;
+      kgUpdaterHint: string;
+      workflowRewriter: string;
+      workflowRewriterHint: string;
+      recipeEvaluator: string;
+      recipeEvaluatorHint: string;
+    };
+    // Hemolymph panel
+    latestCompose: string;
+    noComposeRecords: string;
+    noComposeRecordsHint: string;
+    total: string;
+    historyPrefix: string;
+    hemolymphTable: {
+      ts: string;
+      usedBudget: string;
+      util: string;
+      recipe: string;
+    };
+    hemolymphBuckets: {
+      system: string;
+      suckers: string;
+      memory: string;
+      history: string;
+    };
+    // Cost panel
+    cumulativeTokens: string;
+    cumulativeUsd: string;
+    commitCount: string;
+    taskCount: string;
+    taskGroupingPrefix: string;
+    noBudgetCommits: string;
+    noBudgetCommitsHint: string;
+    costTable: {
+      task: string;
+      tokens: string;
+      usd: string;
+      commits: string;
+      last: string;
+    };
+    // Status dot
+    statusReady: string;
+    statusWarming: string;
+    statusIdle: string;
+    utilizationLabel: string;
+    snapshotTokensUnit: string;
+  };
+
+  // Evolution Control Panel (8-section operator console)
+  evolutionControl: {
+    panelTitle: string;
+    refreshAriaLabel: string;
+    loadingText: string;
+    sections: {
+      budget: string;
+      skillProposals: string;
+      models: string;
+      mcp: string;
+      curriculum: string;
+      frameworks: string;
+      drift: string;
+      dispatch: string;
+    };
+    budget: {
+      cardTitle: string;
+      empty: string;
+      consecutiveFailures: (n: number, max: number) => string;
+      perHour: string;
+      last24h: (ok: number, fail: number) => string;
+      rejected: (budget: number, breaker: number) => string;
+      dailyUsage: (used: number, limit: number) => string;
+      cost: (tokens: number, usd: number) => string;
+      lastReset: (value: string) => string;
+      source: (source: string, events: number) => string;
+      resetButton: string;
+    };
+    skillProposals: {
+      cardTitle: string;
+      empty: string;
+      approve: string;
+      reject: string;
+    };
+    models: {
+      cardTitle: string;
+      empty: string;
+      runningBenchmarks: string;
+      runBenchmarks: string;
+      benchmarkNotes: string;
+    };
+    mcp: {
+      cardTitle: string;
+      vetAll: string;
+      empty: string;
+      installDisabled: string;
+    };
+    curriculum: {
+      cardTitle: string;
+      runCycle: string;
+      empty: string;
+      start: string;
+      dismiss: string;
+    };
+    frameworks: {
+      cardTitle: string;
+      empty: string;
+      baseModelPrefix: string;
+      tiesPrefix: string;
+      bWinRatePrefix: string;
+    };
+    drift: {
+      cardTitle: string;
+      scanButton: string;
+      sweepButton: string;
+      eventsHeader: string;
+      repairsHeader: string;
+      emptyEvents: string;
+      emptyRepairs: string;
+      acknowledgeButton: string;
+      eventPrefix: (id: number) => string;
+      diffSummary: string;
+    };
+    dispatch: {
+      cardTitle: string;
+      empty: string;
+      testPrefix: (id: string) => string;
+    };
+  };
+
+  // Evolution Panel (cerebrum rules/memories viewer)
+  evolutionPanel: {
+    title: string;
+    description: string;
+    summaryEmpty: string;
+    summaryReady: (learned: number, total: number) => string;
+    summaryHealthy: string;
+    summaryFailures: (failures: number) => string;
+    statusNormal: string;
+    statusNeedsReview: string;
+    statAvoidRule: string;
+    statAvoidRuleHint: string;
+    statAvoidRuleTooltip: string;
+    statAvoidRuleDesc: string;
+    statPatternMem: string;
+    statPatternMemHint: string;
+    statPatternMemTooltip: string;
+    statPatternMemDesc: string;
+    statAllTrajs: string;
+    statAllTrajsHint: string;
+    statAllTrajsTooltip: (total: number) => string;
+    statAllTrajsDesc: string;
+    statAllTrajsPoints: (total: number, learned: number) => string[];
+    statReactLabel: string;
+    statReactHint: (reviewCount: number) => string;
+    statReactTooltip: (attempts: number, reviewCount: number) => string;
+    statReactValue: (attempts: number, reviewCount: number) => string;
+    statReactDesc: string;
+    statReactPoints: (attempts: number, failures: number) => string[];
+    learnedMitigationsTitle: string;
+    learnedMitigationsDesc: string;
+    consolidatedMemoriesTitle: string;
+    consolidatedMemoriesDesc: string;
+    noMitigationsHint: string;
+    noMemoriesHint: string;
+    linesSuffix: (n: number) => string;
+    forgetLineTitle: string;
+    forgetLineButton: string;
+    nextRunImpact: string;
+    failureReadBeforeWrite: string;
+    failureTypeError: string;
+    failureGeneric: (failure: string) => string;
+    toolFailureLesson: (tool: string, failure: string, count: number) => string;
+    reflectingButton: string;
+    reflectButton: string;
+    reflectHint: string;
+    advancedTitle: string;
+    reactVariantsTitle: string;
+    tableName: string;
+    tableSetting: string;
+    tableAttempts: string;
+    tableSuccessRate: string;
+    variantSetting: (maxIterations: number, temperature: string) => string;
+    toastReflectSkipped: (error: string) => string;
+    toastReflectSuccess: (rules: number, mems: number) => string;
+    toastReflectFailed: (msg: string) => string;
+    toastForgetRuleSuccess: string;
+    toastForgetMemorySuccess: string;
+    toastDeleteFailed: (msg: string) => string;
+  };
+
+  // Privacy settings page
+  privacySettings: {
+    identityLockTitle: string;
+    identityLockDesc: string;
+    lockedTag: string;
+    unlockedTag: string;
+    sourceLabel: string;
+    restoreDefault: string;
+    profileTitle: string;
+    profileDescPrefix: string;
+    profileDescDocLink: string;
+    profileDescSuffix: string;
+    profileStrictBlurb: string;
+    profileNormalBlurb: string;
+    profileLaxBlurb: string;
+    activeTag: string;
+    profileLoadFailed: string;
+    alternativeUnlockTitle: string;
+    altEnvLabel: string;
+    altEnvDesc: string;
+    altTurnLabel: string;
+    altTurnDesc: string;
+    altApiLabel: string;
+    altApiDesc: string;
+    toastProfileSwitched: (name: string) => string;
+    toastProfileFailed: (msg: string) => string;
+    toastRestoreDefault: string;
+    toastLockOn: string;
+    toastLockOff: string;
+    toastToggleFailed: (msg: string) => string;
+  };
+
+  auth: {
+    login: string;
+    logout: string;
+    logoutSuccess: string;
+    logoutFailed: string;
+    notLoggedIn: string;
+    currentAccount: string;
+    loginAccount: string;
+    phoneNumber: string;
+    verificationCode: string;
+    sendCode: string;
+    sending: string;
+    loggingIn: string;
+    enterDirectly: string;
+    entering: string;
+    guestMode: {
+      title: string;
+      features: string[];
+    };
+    errors: {
+      invalidPhone: string;
+      sendFailed: string;
+      fillRequired: string;
+      loginFailed: string;
+      enterFailed: string;
+      moliliNotEnabled: string;
+    };
+    success: {
+      codeSent: string;
+      loginSuccess: string;
+      guestEntered: string;
+    };
+    guestUser: string;
+    placeholders: {
+      phone: string;
+      code: string;
+    };
+    terms: {
+      autoRegister: string;
+      agreeTo: string;
+      userAgreement: string;
+      privacyPolicy: string;
+    };
+    page: {
+      title: string;
+      subtitle: string;
+      description: string;
+      cardDescription: string;
+    };
+    molili: {
+      title: string;
+      reason: string;
+      autoRegister: string;
+    };
+  };
+
+  // Settings Dialog
+  settingsDialog: {
+    dragToResize: string;
+  };
+
+  // Skill Categories
+  skillCategories: {
+    ecommerce: string;
+    marketing: string;
+    research: string;
+    finance: string;
+    documents: string;
+    devtools: string;
+    communication: string;
+    skillManagement: string;
+    systemTools: string;
+    automationTools: string;
+    other: string;
+  };
+
+  // Personality template selector (sidebar of agent-detail dialog etc.)
+  personality: {
+    templatesTitle: string;
+    applySuccess: (name: string) => string;
+    applyFailed: string;
+    // Dicts keyed by backend template name / category slug. Missing keys
+    // fall back to the backend-supplied English strings at render time.
+    templateNames: Record<string, string>;
+    templateDescriptions: Record<string, string>;
+    categories: Record<string, string>;
+  };
+
+  // Error Boundary
+  errorBoundary: {
+    title: string;
+    description: string;
+    chunkTitle: string;
+    chunkDescription: string;
+    unexpectedDescription: string;
+    retry: string;
+    refreshPage: string;
+  };
+
+  // Hero (landing)
+  hero: {
+    releaseBadge: string;
+    withOctopus: string;
+    heroDescription: string;
+  };
+
+  // Channel Pairings
+  channelPairings: {
+    loadFailed: string;
+    loading: string;
+    users: string;
+    groups: string;
+    pending: string;
+    noUsers: string;
+    noGroups: string;
+    noPending: string;
+    copiedId: string;
+    copyId: string;
+    pairingDetails: string;
+    autoRegisterDesc: string;
+    metadataDesc: string;
+  };
+
+  // Channel Credential
+  channelCredential: {
+    cannotBeEmpty: string;
+    connected: string;
+    saveFailed: string;
+    disconnected: string;
+    deleteFailed: string;
+    editCredential: string;
+    setCredential: string;
+    credentialLocalHint: string;
+    howToConnect: string;
+    comingSoon: string;
+    unsupportedPlatform: string;
+    currentConfigured: string;
+    disconnect: string;
+    saving: string;
+    saveAndConnect: string;
+    qrCodeFailed: string;
+    scanConfirmed: string;
+    pollFailed: string;
+    wechatScanInstruction: string;
+    requesting: string;
+    getQrCode: string;
+    qrPending: string;
+    qrScanned: string;
+    qrConfirmed: string;
+    qrExpired: string;
+    qrRejected: string;
+    qrError: string;
+    refreshQr: string;
+    show: string;
+    hide: string;
+    slackBotTokenHint: string;
+    slackSigningSecretHint: string;
+    dingtalkWebhookUrlHint: string;
+    dingtalkSecretLabel: string;
+    dingtalkSecretHint: string;
+    feishuAppIdHint: string;
+    feishuVerificationTokenPlaceholder: string;
+    feishuVerificationTokenHint: string;
+    telegramBotTokenHint: string;
+    telegramWebhookSecretLabel: string;
+    telegramWebhookSecretPlaceholder: string;
+    telegramWebhookSecretHint: string;
+    discordBotTokenPlaceholder: string;
+    discordBotTokenHint: string;
+    discordPublicKeyPlaceholder: string;
+    discordPublicKeyHint: string;
+    botSuffix: string;
+    confirmDisconnect: (name: string) => string;
+    unsupportedPlatformDesc1: string;
+    unsupportedPlatformDesc2: string;
+  };
+
+  // Execution Timeline
+  executionTimeline: {
+    title: string;
+    loading: string;
+    empty: string;
+    searchPlaceholder: string;
+    refresh: string;
+    noTask: string;
+    events: string;
+  };
+
+  // Plan Panel extras
+  planPanel: {
+    completed: string;
+    inProgress: string;
+    pending: string;
+  };
+
+  // Todo Panel
+  todoPanel: {
+    title: string;
+    collapse: string;
+    expand: string;
+    closeTaskPlan: string;
+    collapseTaskPlan: string;
+    expandTaskPlan: string;
+  };
+
+  // Scope Settings
+  scopeSettings: {
+    codeModeDisabled: string;
+    authorizeWorkspaces: string;
+    noAuthorized: string;
+    writeScopeTitle: string;
+    writeScopeTooltip: string;
+    writeScopeDescription: string;
+  };
+
+  // Team Selector
+  teamSelector: {
+    selectTeam: string;
+    noTeams: string;
+    memberCount: (count: number) => string;
+    confirmDisband: (name: string) => string;
+    disbandTeam: string;
+    createTeam: string;
+  };
+
+  // Team Members Dialog
+  teamMembers: {
+    title: string;
+    description: string;
+    ownerDesc: string;
+    memberDesc: string;
+    viewerDesc: string;
+    permissionsUpdated: string;
+    updatePermissionsFailed: string;
+    memberRemoved: string;
+    removeMemberFailed: string;
+    removeMember: string;
+  };
+
+  // Team Join page
+  teamJoin: {
+    missingToken: string;
+    invalidInvite: string;
+    joinSuccess: (name: string) => string;
+    joinFailed: string;
+    guestName: string;
+    title: string;
+    description: string;
+    loadingInvite: string;
+    membersAndParticipants: (members: number, participants: number) => string;
+    displayNamePlaceholder: string;
+    joining: string;
+    joinButton: string;
+  };
+
+  // Evolution Indicator
+  evolutionIndicator: {
+    clickToView: string;
+    rulesAndMemories: (rules: number, memories: number) => string;
+    deltaRules: (count: number) => string;
+    deltaMemories: (count: number) => string;
+  };
+
+  // DAG Debugger (TaskGraph visualization)
+  dagDebugger: {
+    title: string;
+    taskDetails: string;
+    timeline: string;
+    activeTasks: string;
+    stats: string;
+    dryRun: string;
+    noTaskFound: string;
+    nodeStatus: {
+      pending: string;
+      running: string;
+      completed: string;
+      failed: string;
+      cancelled: string;
+    };
+    columns: {
+      nodeId: string;
+      kind: string;
+      status: string;
+      startedAt: string;
+      completedAt: string;
+      duration: string;
+      error: string;
+    };
+    topology: {
+      totalNodes: string;
+      totalEdges: string;
+      maxParallelism: string;
+      criticalPath: string;
+      layers: string;
+    };
+    budget: {
+      tokens: string;
+      usd: string;
+      latency: string;
+    };
+    activeTasksEmpty: string;
+    statsSummary: {
+      totalTasks: string;
+      completedTasks: string;
+      failedTasks: string;
+      successRate: string;
+      totalSteps: string;
+      totalTokens: string;
+      totalUsd: string;
+      avgDuration: string;
+    };
+    dryRunResult: {
+      valid: string;
+      invalid: string;
+      estimatedMinSteps: string;
+    };
+  };
+
+  // Skill Market Web API
+  skillMarketApi: {
+    title: string;
+    searchPlaceholder: string;
+    categories: string;
+    installed: string;
+    install: string;
+    uninstall: string;
+    publish: string;
+    noResults: string;
+    installSuccess: (name: string) => string;
+    uninstallSuccess: (name: string) => string;
+    installFailed: string;
+    uninstallFailed: string;
+    skillNotFound: string;
+    notInstalled: string;
+    alreadyInstalled: string;
+    publishReady: string;
+    publishHint: string;
+    version: string;
+    author: string;
+    tags: string;
+    description: string;
+  };
+
+  // Knowledge Graph Persistence
+  kgPersistence: {
+    title: string;
+    backend: string;
+    backends: {
+      memory: string;
+      sqlite: string;
+      kuzu: string;
+    };
+    status: {
+      connected: string;
+      disconnected: string;
+      loading: string;
+    };
+    actions: {
+      switchBackend: string;
+      exportTriples: string;
+      importTriples: string;
+      runQuery: string;
+      shortestPath: string;
+      patternMatch: string;
+    };
+    kuzu: {
+      notInstalled: string;
+      installHint: string;
+      query: string;
+      cypherPlaceholder: string;
+    };
+    sqlite: {
+      dbPath: string;
+      exportSuccess: string;
+      importSuccess: (count: number) => string;
+    };
+    export: {
+      title: string;
+      format: string;
+      json: string;
+      csv: string;
+    };
+    import: {
+      title: string;
+      fileLabel: string;
+      success: string;
+      failed: string;
+    };
+  };
+
+  // Coordinator Health (HA)
+  coordinatorHealth: {
+    title: string;
+    healthy: string;
+    unhealthy: string;
+    checking: string;
+    coordinatorType: string;
+    holderId: string;
+    activeLeases: string;
+    connectivity: {
+      ok: string;
+      failed: string;
+    };
+    leaseDetails: {
+      scope: string;
+      ttlRemaining: string;
+      renewCount: string;
+      renewFailures: string;
+      status: string;
+    };
+    leaseStatus: {
+      ok: string;
+      warning: string;
+      expired: string;
+      degraded: string;
+    };
+    guardian: {
+      title: string;
+      start: string;
+      stop: string;
+      running: string;
+      stopped: string;
+      renewInterval: string;
+      renewRatio: string;
+      maxFailures: string;
+    };
+    errors: {
+      noLeases: string;
+      leaseExpired: string;
+      leaseExpiringSoon: string;
+      connectivityFailed: string;
+    };
+  };
+
+  armsEditor: {
+    saved: (agentId: string) => string;
+    saveFailed: (msg: string) => string;
+    loading: string;
+    loadFailed: (msg: string) => string;
+    description: string;
+    armsTab: string;
+    skillsTab: string;
+    permissionsTab: string;
+    routingTab: string;
+    availableArmsLabel: string;
+    selectedArmsCount: (selected: number, total: number) => string;
+    filterAll: string;
+    filterEnabled: string;
+    filterDisabled: string;
+    filterSelected: string;
+    filterUnselected: string;
+    noArmsFound: string;
+    extraAffinityLabel: string;
+    extraAffinityHint: string;
+    extraAffinityPlaceholder: string;
+    privateSkillsLabel: string;
+    privateSkillsHint: string;
+    selectedSkillsCount: (count: number) => string;
+    skillSearchPlaceholder: string;
+    skillMarketplaceLabel: string;
+    skillCategoryAll: string;
+    skillCategoryCustom: string;
+    enableAllSkills: string;
+    disableAllSkills: string;
+    enableVisibleSkills: string;
+    disableVisibleSkills: string;
+    visibleSkillsCount: (visible: number, total: number) => string;
+    skillSource: (source: string) => string;
+    customSkillSource: string;
+    noSkillsFound: string;
+    permissionsLabel: string;
+    permissionsHint: string;
+    permissionEnabled: string;
+    permissionDisabled: string;
+    permissionAvailable: string;
+    permissionUnavailable: string;
+    permissionUpdateFailed: (msg: string) => string;
+    budgetLabel: string;
+    budgetOverride: string;
+    budgetDefault: string;
+    budgetEditHint: (agentId: string) => string;
+    reset: string;
+    saveAndReload: string;
+  };
+  architecture: {
+    title: string;
+    subtitle: string;
+    groups: {
+      entry: string;
+      diagrams: string;
+      topics: string;
+      coreOrgans: string;
+    };
+    docs: {
+      readme: string;
+      "core-path": string;
+      "high-res-map": string;
+      "high-res-mermaid": string;
+      "chat-modes": string;
+      "react-self-evo": string;
+      "organ-tiering": string;
+      "module-map": string;
+      "organ-cerebrum": string;
+      "organ-ganglia": string;
+      "organ-beak": string;
+      "organ-hearts": string;
+      "organ-chromatophores": string;
+    };
+  };
+  knowledgePanel: {
+    graphView: string;
+    listView: string;
+    searchPlaceholder: string;
+    layouts: {
+      ring: string;
+      star: string;
+      layers: string;
+      clusters: string;
+    };
+    nodeAndEdgeStats: (n: number, e: number) => string;
+  };
+
+  // Number Formatting
+  numberFormat: {
+    yi: string;
+    wan: string;
+  };
+
+  // Deep Research Roles
+  deepResearchRoles: {
+    marketLandscape: {
+      name: string;
+      focus: string;
+      deliverable: string;
+      searchAngles: string[];
+    };
+    userNeeds: {
+      name: string;
+      focus: string;
+      deliverable: string;
+      searchAngles: string[];
+    };
+    productPricing: {
+      name: string;
+      focus: string;
+      deliverable: string;
+      searchAngles: string[];
+    };
+    channelSales: {
+      name: string;
+      focus: string;
+      deliverable: string;
+      searchAngles: string[];
+    };
+    skeptic: {
+      name: string;
+      focus: string;
+      deliverable: string;
+      searchAngles: string[];
+    };
+  };
+
+  chatStreamingFooter: {
+    researching: string;
+    swarmCollaborating: string;
+    collaborating: string;
+    coding: string;
+    processing: string;
+    thinking: string;
+    running: string;
+    done: string;
+    error: string;
+    completed: string;
+    agentCollaboration: string;
+    readyToReadEditVerify: string;
+    readyToBreakdownAndGather: string;
+    readyToExecuteTask: string;
+    readyToHandleCodeTask: string;
+    readyForAgentCollaboration: string;
+    readyForDeepTask: string;
+    readyToExecute: string;
+    awaitingConfirmation: string;
+    executionError: string;
+    updatingPlan: string;
+    planUpdated: string;
+    collectingData: string;
+    dataCollected: string;
+    readingContext: string;
+    contextRead: string;
+    modifyingArtifacts: string;
+    artifactsModified: string;
+    runningVerification: string;
+    verificationDone: string;
+    coordinatingAgents: string;
+    agentsCoordinated: string;
+    processingTask: string;
+    organizingResults: string;
+  };
+
+  metaSkills: {
+    title: string;
+    subtitle: string;
+    loading: string;
+    loadFailed: (msg: string) => string;
+    empty: string;
+    count: (n: number) => string;
+    steps: (n: number) => string;
+    affinity: string;
+    budget: string;
+    budgetTokens: (n: number) => string;
+    budgetUsd: (n: number) => string;
+    budgetLatency: (n: number) => string;
+    viewDiagram: string;
+    hideDiagram: string;
+    diagramButton: string;
+    collapseDiagram: string;
+    diagramLoading: string;
+    diagramFailed: (msg: string) => string;
+    directionLabel: string;
+    directionLR: string;
+    directionTD: string;
+    directionRL: string;
+    directionBT: string;
+    matchLabel: string;
+    matchPlaceholder: string;
+    matchButton: string;
+    matchNoResult: (q: string) => string;
+    matchResult: (q: string, name: string) => string;
+    refresh: string;
+    noAffinity: string;
+    whenToUse: string;
+  };
+}

@@ -1,0 +1,2 @@
+- Name: Meeting Prep Agent
+- Role: financial specialist

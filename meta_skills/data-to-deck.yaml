@@ -1,0 +1,63 @@
+# Data to Deck 能力包 / Meta-Skill
+# 5-step linear pipeline: raw data → viz → chart → pitch → deck → pptx.
+# Designed for weekly/monthly recurring data updates.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - data_viz_gen       (数据可视化草图)
+#   - chart_image        (高清图表渲染)
+#   - pitch_deck         (演示大纲)
+#   - deck_refresh       (既有 deck 增量更新)
+#   - pptx               (PPTX 渲染)
+
+name: data-to-deck
+kind: skill_cluster
+version: 0.1.0
+description: 数据到演示 — 一键把本期数据转成可对外汇报的 PPT
+when_to_use: 数据汇报 / 周报 PPT / 月度 deck / 数据演示
+affinity: [data, presentation, productivity]
+
+budget:
+  tokens: 40000
+  usd: 0.8
+  latency_ms: 1800000
+
+steps:
+  - node_id: viz
+    skill: data_viz_gen
+    args:
+      dataset: "{user_input.dataset}"
+      focus: "{user_input.focus}"
+    timeout_ms: 180000
+
+  - node_id: chart
+    skill: chart_image
+    args:
+      spec: "{viz.output}"
+      resolution: 2x
+    depends_on: [viz]
+    timeout_ms: 180000
+
+  - node_id: outline
+    skill: pitch_deck
+    args:
+      template: data-update
+      charts: "{chart.output}"
+      period: "{user_input.period}"
+    depends_on: [chart]
+    timeout_ms: 180000
+
+  - node_id: refresh
+    skill: deck_refresh
+    args:
+      base_deck: "{user_input.base_deck}"
+      new_outline: "{outline.output}"
+    depends_on: [outline]
+    timeout_ms: 300000
+
+  - node_id: render
+    skill: pptx
+    args:
+      deck: "{refresh.output}"
+      filename: "data-deck-{user_input.period}.pptx"
+    depends_on: [refresh]
+    timeout_ms: 180000

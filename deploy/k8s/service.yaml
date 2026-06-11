@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: octopus-agent
+  namespace: octopus-agent
+  labels:
+    app.kubernetes.io/name: octopus-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: octopus-agent
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000

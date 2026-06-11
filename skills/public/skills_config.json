@@ -1,0 +1,248 @@
+{
+  "27_image-prompt-guide": {
+    "installedVersion": "0.0.37"
+  },
+  "27_remotion": {
+    "installedVersion": "0.0.37"
+  },
+  "27_pptx": {
+    "installedVersion": "0.0.37"
+  },
+  "27_xlsx": {
+    "enabled": true,
+    "installedVersion": "0.0.37"
+  },
+  "27_pdf": {
+    "installedVersion": "0.0.37"
+  },
+  "27_mcp-tools": {
+    "installedVersion": "0.0.37"
+  },
+  "27_mcporter": {
+    "installedVersion": "0.0.37"
+  },
+  "27_docx": {
+    "installedVersion": "0.0.37"
+  },
+  "27_graphql-operations": {
+    "installedVersion": "0.0.37"
+  },
+  "27_gmail-assistant": {
+    "installedVersion": "0.0.37"
+  },
+  "27_lark-tools": {
+    "installedVersion": "0.0.37"
+  },
+  "27_skill-finder": {
+    "installedVersion": "0.0.37"
+  },
+  "27_skill-creator": {
+    "installedVersion": "0.0.37"
+  },
+  "27_plugin-creator": {
+    "enabled": true,
+    "installedVersion": "0.0.37"
+  },
+  "27_find-skills": {
+    "installedVersion": "0.0.37"
+  },
+  "27_skill-writer": {
+    "installedVersion": "0.0.37"
+  },
+  "27_skill-vetter": {
+    "installedVersion": "0.0.37"
+  },
+  "27_create-website": {
+    "installedVersion": "0.0.37"
+  },
+  "27_brainstorming": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_dispatching-parallel-agents": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_executing-plans": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_finishing-a-development-branch": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_receiving-code-review": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_requesting-code-review": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_subagent-driven-development": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_systematic-debugging": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_test-driven-development": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_using-git-worktrees": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_using-superpowers": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_verification-before-completion": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_writing-plans": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_writing-skills": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:superpowers"
+  },
+  "27_frontend-app-builder": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:build-web-apps"
+  },
+  "27_frontend-testing-debugging": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:build-web-apps"
+  },
+  "27_react-best-practices": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:build-web-apps"
+  },
+  "27_shadcn-best-practices": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:build-web-apps"
+  },
+  "27_stripe-best-practices": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:build-web-apps"
+  },
+  "27_supabase-best-practices": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:build-web-apps"
+  },
+  "27_game-playtest": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_game-studio": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_game-ui-frontend": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_phaser-2d-game": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_react-three-fiber-game": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_sprite-pipeline": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_three-webgl-game": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_web-3d-asset-pipeline": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_web-game-foundations": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:game-studio"
+  },
+  "27_agents-sdk": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:openai-developers"
+  },
+  "27_build-chatgpt-app": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:openai-developers"
+  },
+  "27_chatgpt-app-submission": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:openai-developers"
+  },
+  "27_openai-api-troubleshooting": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:openai-developers"
+  },
+  "27_openai-platform-api-key": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:openai-developers"
+  },
+  "27_gh-address-comments": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:github"
+  },
+  "27_gh-fix-ci": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:github"
+  },
+  "27_github": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:github"
+  },
+  "27_yeet": {
+    "enabled": true,
+    "installedVersion": "0.0.37",
+    "sourcePlugin": "codex:github"
+  }
+}

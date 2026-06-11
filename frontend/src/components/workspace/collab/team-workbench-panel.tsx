@@ -1,0 +1,239 @@
+import {
+  ClipboardListIcon,
+  FolderIcon,
+  MonitorIcon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { FileTree } from "@/components/workspace/file-tree";
+import { WorkDirSelector } from "@/components/workspace/workdir-selector";
+import type { Team } from "@/core/teams";
+import { cn } from "@/lib/utils";
+
+import { TeamTasksPanel } from "./team-tasks-panel";
+
+export type TeamWorkbenchTabId = "tasks" | "workspace" | "members";
+
+interface TeamWorkbenchPanelProps {
+  activeTab: TeamWorkbenchTabId;
+  onSelectTab: (tab: TeamWorkbenchTabId) => void;
+  onClose?: () => void;
+  roomId: string | null | undefined;
+  team: Team | null;
+  workDir: string;
+  onWorkDirChange: (path: string) => void;
+  currentParticipantId?: string;
+  canManageTasks?: boolean;
+  className?: string;
+}
+
+const TABS: Array<{
+  id: TeamWorkbenchTabId;
+  label: string;
+  Icon: typeof ClipboardListIcon;
+}> = [
+  { id: "tasks", label: "待办 plan", Icon: ClipboardListIcon },
+  { id: "workspace", label: "工作区", Icon: FolderIcon },
+  { id: "members", label: "成员", Icon: UsersIcon },
+];
+
+export function TeamWorkbenchPanel({
+  activeTab,
+  onSelectTab,
+  onClose,
+  roomId,
+  team,
+  workDir,
+  onWorkDirChange,
+  currentParticipantId,
+  canManageTasks = true,
+  className,
+}: TeamWorkbenchPanelProps) {
+  return (
+    <div
+      className={cn(
+        "flex size-full min-h-0 flex-col bg-[color:color-mix(in_oklch,var(--muted)_46%,var(--background))]",
+        className,
+      )}
+    >
+      <header className="relative shrink-0 border-b border-border/60 bg-background/95 px-3 pt-2">
+        <div className="flex items-end gap-2">
+          <div className="mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-2 text-xs font-medium text-muted-foreground shadow-sm">
+            <MonitorIcon className="size-4" />
+            <span className="hidden min-[520px]:inline">Team 工作台</span>
+          </div>
+          <div
+            role="tablist"
+            aria-label="Team 工作台"
+            className="flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {TABS.map(({ id, label, Icon }) => {
+              const active = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => onSelectTab(id)}
+                  className={cn(
+                    "inline-flex h-9 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg border border-transparent px-3 text-sm font-medium transition-all",
+                    active
+                      ? "-mb-px h-10 rounded-b-none border-border/70 border-b-background bg-background text-foreground shadow-sm"
+                      : "mb-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  <Icon
+                    className={cn(
+                      "size-4 shrink-0",
+                      active ? "text-primary" : "text-muted-foreground/80",
+                    )}
+                  />
+                  <span className="truncate">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="mb-1 size-8 shrink-0 rounded-lg border border-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/60 hover:text-foreground"
+              onClick={onClose}
+              title="关闭工作台"
+            >
+              <XIcon className="size-4" />
+            </Button>
+          )}
+        </div>
+        {activeTab === "workspace" && (
+          <WorkspacePathBar
+            workDir={workDir}
+            onWorkDirChange={onWorkDirChange}
+          />
+        )}
+      </header>
+
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70">
+        {activeTab === "tasks" ? (
+          <TeamTasksPanel
+            roomId={roomId}
+            team={team}
+            canManageTasks={canManageTasks}
+          />
+        ) : activeTab === "workspace" ? (
+          <WorkspacePage workDir={workDir} />
+        ) : (
+          <MembersPage
+            team={team}
+            currentParticipantId={currentParticipantId}
+          />
+        )}
+      </main>
+    </div>
+  );
+}
+
+function WorkspacePathBar({
+  workDir,
+  onWorkDirChange,
+}: {
+  workDir: string;
+  onWorkDirChange: (path: string) => void;
+}) {
+  return (
+    <div className="mt-2 flex items-center gap-2 border-t border-border/45 py-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border/60 bg-muted/25 px-2.5 py-1.5">
+        <FolderIcon className="size-4 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-medium text-muted-foreground">
+            当前工作区
+          </div>
+          <div className="truncate font-mono text-[11px] text-foreground">
+            {workDir || "未选择目录"}
+          </div>
+        </div>
+      </div>
+      <WorkDirSelector
+        workDir={workDir}
+        onWorkDirChange={onWorkDirChange}
+        className="shrink-0"
+      />
+    </div>
+  );
+}
+
+function WorkspacePage({ workDir }: { workDir: string }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 p-1">
+        <FileTree workDir={workDir} className="h-full" />
+      </div>
+    </div>
+  );
+}
+
+function MembersPage({
+  team,
+  currentParticipantId,
+}: {
+  team: Team | null;
+  currentParticipantId?: string;
+}) {
+  const participants = (team?.participants ?? []).filter(
+    (participant) => participant.status !== "removed",
+  );
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="mb-3">
+        <div className="text-sm font-medium text-foreground">成员</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          {team?.name ?? "未选择 Team"} · {participants.length} 位在线/协作成员
+        </div>
+      </div>
+      <div className="space-y-2">
+        {participants.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 py-8 text-center text-sm text-muted-foreground">
+            暂无成员
+          </div>
+        ) : (
+          participants.map((participant) => (
+            <div
+              key={participant.id}
+              className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-3 py-2"
+            >
+              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground">
+                {participant.display_name.charAt(0)}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-medium text-foreground">
+                    {participant.display_name}
+                  </span>
+                  {participant.id === currentParticipantId && (
+                    <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                      You
+                    </span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {participant.role}
+                </span>
+              </span>
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  participant.status === "active"
+                    ? "bg-emerald-500"
+                    : "bg-muted-foreground/35",
+                )}
+              />
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,126 @@
+# Sensing · Gateway (HTTP API)
+
+> 全部 FastAPI router · openai_gateway / meta / mcp / config / channels / thread_compat / …
+
+**Source**: `runtime/sensing/gateway/`
+
+## Exports
+
+- `StreamingJournal`
+- `create_evolution_ops_router`
+- `create_openai_router`
+- `create_parallel_agents_router`
+- `create_thread_state_router`
+
+## Modules
+
+| Module | Summary |
+| --- | --- |
+| `account_usage_router.py` | — |
+| `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
+| `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
+| `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/ib-check-deck/scripts/extract_numbers.py` | Extract numerical values from presentation content for consistency checking. |
+| `agent_trace_router.py` | Read-only API for the durable agent trace store. |
+| `agent_world_router.py` | Agent Market router · local agent marketplace. |
+| `agents_local_partner.py` | LocalPartner subsystem — detection + secure registration. |
+| `agents_models.py` | Pydantic wire models for ``agents_router``. |
+| `agents_router.py` | — |
+| `ambient_suggestions_router.py` | Ambient Suggestions router · ``/api/ambient-suggestions/*``. |
+| `android_router.py` | — |
+| `anthropic_compat/event_adapter.py` | Map internal ReAct loop events to Anthropic Managed Agents event shapes. |
+| `anthropic_compat/models.py` | Pydantic models for the Anthropic Managed Agents compat layer. |
+| `anthropic_compat/router.py` | Anthropic Managed Agents REST + SSE router. |
+| `anthropic_compat/session_manager.py` | Session lifecycle manager for the Anthropic compat layer. |
+| `apps_router.py` | — |
+| `channels_router.py` | — |
+| `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
+| `computer_router.py` | Computer automation API. |
+| `config_router.py` | Config router · identity-lock + providers + custom-models. |
+| `cron_router.py` | Cron settings compatibility router. |
+| `dag_debugger_router.py` | — |
+| `debug_router.py` | Debug diagnostics router · ``/api/debug/session-info``. |
+| `deep_research_router.py` | Deep research API router. |
+| `deployments_router.py` | — |
+| `evolution_ops/budget.py` | Budget subsystem for evolution operators. |
+| `evolution_ops/curriculum.py` | Curriculum subsystem for evolution operators. |
+| `evolution_ops/framework_benchmarks.py` | Framework benchmarks subsystem for evolution operators. |
+| `evolution_ops/mcp_ops.py` | MCP subsystem for evolution operators. |
+| `evolution_ops/protocol_drift.py` | Protocol drift subsystem for evolution operators. |
+| `evolution_ops/recipe_forge.py` | RecipeForge subsystem for evolution operators. |
+| `evolution_ops/skill_forge.py` | SkillForge subsystem for evolution operators. |
+| `evolution_ops/utils.py` | Shared utility functions for evolution operator subsystems. |
+| `evolution_ops_router.py` | Evolution operator console control-plane routes. |
+| `evolution_router.py` | — |
+| `fs_router.py` | Filesystem router · ``/api/fs/{tree,read,write}``. |
+| `index_router.py` | Code index router · ``/api/index/*``. |
+| `intelligence_router.py` | — |
+| `invariants_router.py` | Invariants router · catalog of the 34-rule constitution and which functions enforce each rule. |
+| `journal_router.py` | Journal query router · ``/api/journal/*``. |
+| `lsp_router.py` | Thin HTTP wrapper around the registered LSP skills. |
+| `mcp_router.py` | MCP router · declare / enable / disable MCP servers at runtime. |
+| `memory_router.py` | Local memory compatibility API. |
+| `meta_router.py` | Meta router · feedback / skills / auth-provider listing. |
+| `meta_skill_router.py` | FastAPI router for the 能力包 / Meta-Skill catalog. |
+| `metrics_router.py` | Metrics router — Prometheus text export of the in-process registry. |
+| `observability_router.py` | Observability router · journal / reflect / kg / progress / stream / run. |
+| `openai_formatting.py` | Pure-function formatters for the OpenAI-compat gateway. |
+| `openai_gateway/context_manager.py` | — |
+| `openai_gateway/models.py` | — |
+| `openai_gateway/request_parser.py` | — |
+| `openai_gateway/response_formatter.py` | — |
+| `openai_gateway/stream_handler.py` | — |
+| `openai_gateway/tool_converter.py` | — |
+| `openai_gateway_router.py` | — |
+| `organizations_router.py` | REST endpoints for team-topology management. |
+| `parallel_agents_router.py` | — |
+| `plugin_hub_router.py` | PluginHub management REST API. |
+| `plugins_router.py` | — |
+| `prompts_router.py` | Prompts router · ``/api/prompts/*``. |
+| `realtime_cerebrum.py` | Cerebrum-backed realtime runtime. |
+| `realtime_echo.py` | Echo runtime — reference :class:`RealtimeRuntime` implementation. |
+| `realtime_gateway.py` | Realtime gateway — JSON-RPC 2.0 over WebSocket. |
+| `realtime_turn_routing.py` | Turn-routing helpers for the realtime runtime. |
+| `remote_backends_router.py` | Remote backends router · ``/api/remote-backends/*``. |
+| `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over SSH-tunneled HTTP. |
+| `skill_market_router.py` | — |
+| `slash_command_expansion.py` | Slash-command expansion for realtime chat input. |
+| `streaming_journal.py` | — |
+| `stub_router.py` | — |
+| `subagents_router.py` | Subagent FastAPI router. |
+| `system_router.py` | System-level local maintenance endpoints. |
+| `team_rooms_router.py` | Persistent team rooms API. |
+| `team_tasks_router.py` | Persistent team tasks API. |
+| `terminal_router.py` | terminal_router · WebSocket-based persistent shell sessions. |
+| `thread_state_router.py` | Thread state HTTP router used by the realtime UI. |
+| `tool_bridge.py` | tool_bridge · the agentic-loop helper that turns Octopus skills into Claude-native ``tool_use`` calls and loops result → next turn. |
+| `turn_session.py` | Turn session metadata assembly for realtime execution. |
+| `uploads_router.py` | Thread uploads / artifacts router. |
+| `verify_router.py` | Verification router · ``/api/verify/*``. |
+| `wiki_generic.py` | Project-agnostic wiki generator · scans an arbitrary user-selected folder and writes a navigable static documentation tree under ``<root>/.octopus-wiki/``. |
+| `wiki_router.py` | — |
+| `workspaces_router.py` | Workspace manifest API. |
+
+## Who imports this
+
+**14** file(s) reference this package:
+
+- **`runtime/adapters/`** · 4 file(s)
+  - `runtime/adapters/channels/manager.py`
+  - `runtime/adapters/integrations/local_auth/router.py`
+  - `runtime/adapters/integrations/molili/router_account.py`
+  - `runtime/adapters/integrations/molili/router_proxy.py`
+- **`runtime/cli_serve.py/`** · 1 file(s)
+  - `runtime/cli_serve.py`
+- **`runtime/core/`** · 2 file(s)
+  - `runtime/core/cerebrum/react_loop.py`
+  - `runtime/core/nerves/reflex/workflow_delegate.py`
+- **`runtime/execution/`** · 4 file(s)
+  - `runtime/execution/suckers/browser_act_skills.py`
+  - `runtime/execution/suckers/capability_skills.py`
+  - `runtime/execution/suckers/cron_skills.py`
+  - `runtime/execution/suckers/ephemeral_runner.py`
+- **`runtime/platform/`** · 3 file(s)
+  - `runtime/platform/ui/app.py`
+  - `runtime/platform/ui/state.py`
+  - `runtime/platform/ui/thread_routes.py`
+

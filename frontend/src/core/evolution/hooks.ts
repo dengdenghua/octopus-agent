@@ -1,0 +1,102 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import {
+  getEvolutionOverview,
+  getLearningCurve,
+  getSkillPerformance,
+  getMemoryGrowth,
+  getRecommendations,
+  getFitness,
+  getDrift,
+  getLedger,
+  getCanary,
+  rollbackCanary,
+} from "./api";
+import { queryKeys } from "@/core/api/query-keys";
+
+export function useEvolutionOverview() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: queryKeys.evolution.overview,
+    queryFn: getEvolutionOverview,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useLearningCurve(weeks?: number) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...queryKeys.evolution.learningCurve, weeks],
+    queryFn: () => getLearningCurve(weeks),
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useSkillPerformance() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: queryKeys.evolution.skills,
+    queryFn: getSkillPerformance,
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useMemoryGrowth(days?: number) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...queryKeys.evolution.memory, days],
+    queryFn: () => getMemoryGrowth(days),
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useRecommendations() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: queryKeys.evolution.recommendations,
+    queryFn: getRecommendations,
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useFitness(agentId: string | undefined, window?: number) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...queryKeys.evolution.overview, "fitness", agentId, window],
+    queryFn: () => getFitness(agentId!, window),
+    enabled: !!agentId,
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useDrift(agentId: string | undefined) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...queryKeys.evolution.overview, "drift", agentId],
+    queryFn: () => getDrift(agentId!),
+    enabled: !!agentId,
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useLedger(opts?: { limit?: number; offset?: number }) {
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...queryKeys.evolution.overview, "ledger", opts],
+    queryFn: () => getLedger(opts),
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useCanary() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: [...queryKeys.evolution.overview, "canary"],
+    queryFn: getCanary,
+  });
+  return { data: data ?? null, isLoading, error };
+}
+
+export function useRollbackCanary() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (skillName: string) => rollbackCanary(skillName),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.evolution.overview, "canary"] });
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.evolution.overview, "ledger"] });
+    },
+  });
+}

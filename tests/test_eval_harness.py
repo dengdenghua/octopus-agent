@@ -1,0 +1,141 @@
+"""Tests for benchmarks/eval_harness.py."""
+
+from __future__ import annotations
+
+from benchmarks.eval_harness import (
+    EvalCase,
+    Trajectory,
+    Verdict,
+    run_case,
+    run_suite,
+)
+
+
+def _mock_runner_echo(prompt: str):
+    """Yield a single text_delta echoing the prompt."""
+    yield {"kind": "text_delta", "delta": prompt}
+
+
+def _mock_runner_with_tool(prompt: str):
+    yield {"kind": "tool_start", "tool_name": "list_files"}
+    yield {"kind": "tool_end", "tool_name": "list_files", "status": "success"}
+    yield {"kind": "text_delta", "delta": "done"}
+
+
+def _mock_runner_flaky(prompt: str):
+    """Succeed half the time (uses a counter on a func attribute)."""
+    n = getattr(_mock_runner_flaky, "_n", 0)
+    _mock_runner_flaky._n = n + 1
+    if n % 2 == 0:
+        yield {"kind": "text_delta", "delta": "ok"}
+    else:
+        yield {"kind": "text_delta", "delta": "fail"}
+
+
+def test_run_case_passes_when_grader_returns_true() -> None:
+    case = EvalCase(
+        id="echo",
+        prompt="hello",
+        grader=lambda t: "hello" in t.last_text(),
+    )
+    result = run_case(case, runner=_mock_runner_echo, k=3)
+    assert result.passes == 3
+    assert result.pass_at_k == 1.0
+    assert result.pass_pow_k == 1.0
+    assert result.avg_score == 1.0
+
+
+def test_run_case_partial_credit() -> None:
+    case = EvalCase(
+        id="partial",
+        prompt="x",
+        grader=lambda t: Verdict(passed=False, score=0.5, reason="halfway"),
+    )
+    result = run_case(case, runner=_mock_runner_echo, k=2)
+    assert result.passes == 0
+    assert result.avg_score == 0.5
+
+
+def test_trajectory_tool_names() -> None:
+    case = EvalCase(
+        id="tool",
+        prompt="x",
+        grader=lambda t: "list_files" in t.tool_names(),
+    )
+    result = run_case(case, runner=_mock_runner_with_tool, k=1)
+    assert result.passes == 1
+
+
+def test_pass_at_k_vs_pow_k_diverge_on_flaky() -> None:
+    _mock_runner_flaky._n = 0  # reset counter
+    case = EvalCase(
+        id="flaky",
+        prompt="x",
+        grader=lambda t: t.last_text() == "ok",
+    )
+    result = run_case(case, runner=_mock_runner_flaky, k=4)
+    # 2 of 4 pass under the modulo — pass@k should hit 1.0, pass^k 0.0
+    assert result.passes == 2
+    assert result.pass_at_k == 1.0
+    assert result.pass_pow_k == 0.0
+
+
+def test_suite_aggregates() -> None:
+    cases = [
+        EvalCase(id="a", prompt="hello", grader=lambda t: "hello" in t.last_text()),
+        EvalCase(id="b", prompt="world", grader=lambda t: "world" in t.last_text()),
+        EvalCase(id="c", prompt="x", grader=lambda t: False),
+    ]
+    report = run_suite(cases, runner=_mock_runner_echo, k=2)
+    assert len(report.cases) == 3
+    # 2 of 3 cases all-pass → 2/3
+    assert abs(report.aggregate_pass_pow_k - 2 / 3) < 1e-9
+    summary = report.summary()
+    assert "pass@k" in summary
+    assert "pass^k" in summary
+
+
+def test_setup_failure_recorded() -> None:
+    def bad_setup() -> None:
+        raise RuntimeError("env broken")
+
+    case = EvalCase(
+        id="bad",
+        prompt="x",
+        setup=bad_setup,
+        grader=lambda t: True,
+    )
+    result = run_case(case, runner=_mock_runner_echo, k=1)
+    assert result.passes == 0
+    assert "setup failed" in (result.trajectories[0].error or "")
+
+
+def test_runner_exception_captured() -> None:
+    def bad_runner(prompt: str):
+        yield {"kind": "text_delta", "delta": "starting"}
+        raise RuntimeError("blew up")
+
+    case = EvalCase(id="boom", prompt="x", grader=lambda t: not t.error)
+    result = run_case(case, runner=bad_runner, k=1)
+    assert result.passes == 0
+    assert "blew up" in (result.trajectories[0].error or "")
+
+
+def test_report_serialises_to_json(tmp_path) -> None:
+    case = EvalCase(id="x", prompt="hello", grader=lambda t: True)
+    report = run_suite([case], runner=_mock_runner_echo, k=2)
+    out = tmp_path / "report.json"
+    report.write_json(out)
+    assert out.exists()
+    text = out.read_text(encoding="utf-8")
+    assert '"pass_at_k"' in text
+    assert '"aggregate_pass_at_k"' in text
+
+
+def test_trajectory_runtime_ms_positive() -> None:
+    t = Trajectory(trial_id="t", case_id="c")
+    import time as _time
+
+    _time.sleep(0.01)
+    t.ended_at = _time.time()
+    assert t.runtime_ms() >= 10.0

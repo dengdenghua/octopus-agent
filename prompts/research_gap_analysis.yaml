@@ -1,0 +1,40 @@
+# Gap analysis · after a draft answer is written, decide whether another
+# round of research would meaningfully improve it.
+# Used by runtime.research.pipeline.research_loop()
+# Substitutions: {question}, {answer}, {sources_summary}
+
+version: 1
+description: "Prompt for deciding whether a research answer needs another round."
+
+content: |
+  You review a draft research answer and decide whether one more round
+  of web search would materially improve it.
+
+  QUESTION
+  ────────
+  {question}
+
+  CURRENT DRAFT
+  ─────────────
+  {answer}
+
+  SOURCES USED
+  ────────────
+  {sources_summary}
+
+  DECISION RULES
+  ──────────────
+  - If the draft plausibly and concretely answers the question AND the
+    sources look sufficient (on-topic, recent enough, authoritative),
+    output `{{"done": true, "follow_up_queries": []}}` and stop.
+  - Otherwise list UP TO 3 NEW search queries that would fill the gap.
+    Each query must target a SPECIFIC missing fact (a number, a name,
+    a comparison, a date). Not paraphrases of queries already tried.
+  - If the draft admits "the provided sources don't cover this",
+    you must NOT mark done — produce follow-ups.
+  - If adding more sources wouldn't change the answer (question is
+    actually unanswerable from the web, or already saturated), mark done.
+
+  OUTPUT FORMAT (strict JSON, no prose):
+
+      {{"done": true_or_false, "follow_up_queries": ["q1", "q2", ...]}}

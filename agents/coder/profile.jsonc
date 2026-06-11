@@ -1,0 +1,25 @@
+// Octopus Agent profile · Coder
+// Implementation note.
+
+{
+  "id": "coder",
+  "templateId": "coder",
+  "templateVersion": "1.0.0",
+  "name": "Coder",
+  "icon": "💻",
+  "did": "DID-DB9653-765527",
+  "description": "Coding-focused agent — writes, debugs, refactors, and reviews code.",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "octopus",
+  "defaultProject": {
+    "dir": "project"
+  },
+  "capabilities": {
+    "code_mode_unlock": true
+  }
+}

@@ -1,0 +1,257 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class PlannerConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["static", "llm"] = "static"
+    model: str = "mock/planner"           # Implementation note.
+    mock_response: str | None = None       # Implementation note.
+    anthropic_api_key: str | None = None  # Implementation note.
+    base_url: str | None = None
+    max_nodes: int = Field(default=10, gt=0, le=50)
+
+
+class BudgetConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    max_tokens: int = Field(default=50_000, gt=0)
+    max_usd: float = Field(default=0.50, gt=0.0)
+    max_latency_ms: int = Field(default=600_000, gt=0)
+
+
+class ImmunityConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    trusted_sources: list[str] = Field(
+        default_factory=lambda: ["skill://public/*", "mcp://*"]
+    )
+    self_whitelist: list[str] = Field(
+        default_factory=lambda: [
+            "cerebrum", "ganglia", "arms/*",
+            "react_loop", "react_arm",
+            "intel_collector/*",
+        ]
+    )
+    unknown_policy: Literal["quarantine", "reject", "allow"] = "quarantine"
+
+
+class IntelSourceConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    source_id: str = Field(..., min_length=1)
+    query: str = Field(..., min_length=1)
+    max_results: int = 5
+    fetch_top_n: int = 0
+    frequency_seconds: int = 3600
+    tags: list[str] = Field(default_factory=list)
+
+
+class MCPServerConfigEntry(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = Field(..., min_length=1)
+    command: str = Field(..., min_length=1)
+    args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
+    name_prefix: str | None = None       # Implementation note.
+
+
+class LearnConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    learn_from_journal: str | None = None     # Implementation note.
+    min_hits: int = 3
+    max_rules: int = 30
+    learn_memories_from_journal: str | None = None  # Implementation note.
+    learn_kg_from_journal: str | None = None         # Implementation note.
+    kg_max_triples: int = 15
+    rewrite_from_journal: str | None = None          # Implementation note.
+    rewrite_min_confidence: float = 0.7
+    rewrite_min_severity: Literal["low", "mid", "high"] = "mid"
+    assess_recipe_from_journal: str | None = None    # Implementation note.
+
+    rules_persist_path: str | None = None        # Implementation note.
+    memories_persist_path: str | None = None     # Implementation note.
+    static_rules_persist_path: str | None = None  # Implementation note.
+
+    @field_validator(
+        "learn_from_journal",
+        "learn_memories_from_journal",
+        "learn_kg_from_journal",
+        "rewrite_from_journal",
+        "assess_recipe_from_journal",
+        "rules_persist_path",
+        "memories_persist_path",
+        "static_rules_persist_path",
+    )
+    @classmethod
+    def _validate_local_path(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        path = value.strip()
+        if not path:
+            raise ValueError("path must not be empty")
+        if any(ord(ch) < 32 for ch in path):
+            raise ValueError("path must not contain control characters")
+        if "://" in path:
+            raise ValueError("path must be a local filesystem path, not a URI")
+        try:
+            Path(path)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("invalid filesystem path") from exc
+        return path
+
+
+class CredentialPoolConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    keys: list[str] = Field(default_factory=list)
+    strategy: Literal["round_robin", "least_used", "random"] = "round_robin"
+    cooldown_seconds: float = Field(default=60.0, gt=0.0)
+    max_retries: int = Field(default=3, gt=0)
+
+
+class HotCacheConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = True
+    path: str = "~/.octopus/hot_cache"
+    max_words: int = Field(default=500, gt=0)
+    ttl_hours: float = Field(default=24.0, gt=0.0)
+
+
+_CHEAPER_MAP: dict[str, str] = {
+    "mimo-v2.5-pro": "mimo-v2-flash",
+    "claude-sonnet-4-6": "claude-haiku-4-5-20251001",
+    "claude-opus-4-7": "claude-sonnet-4-6",
+    "gpt-4o": "gpt-4o-mini",
+    "gpt-4-turbo": "gpt-4o-mini",
+}
+
+
+def _pick_cheaper(model: str) -> str:
+    return _CHEAPER_MAP.get(model, model)
+
+
+class EvolveConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    strategy: Literal["inherit", "cheaper_same_provider", "explicit"] = "inherit"
+    model: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
+
+    def resolve(self, planner: PlannerConfig) -> tuple[str, str | None]:
+        if self.strategy == "inherit":
+            return planner.model, planner.base_url
+        if self.strategy == "cheaper_same_provider":
+            return _pick_cheaper(planner.model), planner.base_url
+        return self.model or planner.model, self.base_url or planner.base_url
+
+
+class MoliliAuthConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    mock_mode: bool = False
+    mock_code: str | None = None
+    sms_send_url: str | None = None
+    sms_verify_url: str | None = None
+    send_phone_field: str = "mobile"
+    verify_phone_field: str = "mobile"
+    code_field: str = "verifyCode"
+    sms_type: str | None = None
+    user_id_path: str = "data.userId"
+    token_path: str = "data.token"
+    mobile_path: str = "data.userInfo.mobile"
+    credits_path: str = "data.userInfo"
+
+
+class MoliliConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    base_url: str = "https://molili.8kbl.com/molili-agi/chatApi/v1"
+    info_url: str | None = None
+    request_timeout_seconds: float = Field(default=10.0, ge=1.0, le=600.0)
+    jwt_secret: str | None = Field(default=None, min_length=32)
+    jwt_expire_seconds: int = Field(default=2_592_000, gt=0)
+    jwt_issuer: str = "octopus-agent"
+    auth: MoliliAuthConfig = Field(default_factory=MoliliAuthConfig)
+
+
+class LocalAuthConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    allow_any_username: bool = False
+    allowed_usernames: list[str] = Field(default_factory=list)
+    jwt_secret: str | None = Field(default=None, min_length=32)
+    jwt_expire_seconds: int = Field(default=604_800, gt=0)
+    jwt_issuer: str = "octopus-agent"
+    actor_prefix: str = "local:"
+    default_roles: list[str] = Field(default_factory=lambda: ["user", "local"])
+
+
+
+class CanaryConfig(BaseModel):
+    stages: list[str] = Field(default_factory=lambda: ["shadow", "5pct", "25pct", "50pct", "full"])
+    sample_sizes: dict[str, int] = Field(default_factory=lambda: {
+        "shadow": 0, "5pct": 5, "25pct": 25, "50pct": 50, "full": 100,
+    })
+    auto_promote: bool = True
+    rollback_on_failure: bool = True
+    max_duration_hours: float = 72.0
+
+
+class DriftConfig(BaseModel):
+    check_soul: bool = True
+    check_genome: bool = True
+    check_score: bool = True
+    score_window: int = 10
+    score_threshold: float = 0.15
+    critical_auto_rollback: bool = True
+
+class AgentConfig(BaseModel):
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str = "octopus-agent"
+    version_compat: str = "0.2"
+    preset: str | None = None
+
+    planner: PlannerConfig = Field(default_factory=PlannerConfig)
+    budget: BudgetConfig = Field(default_factory=BudgetConfig)
+    immunity: ImmunityConfig = Field(default_factory=ImmunityConfig)
+    learn: LearnConfig = Field(default_factory=LearnConfig)
+    credential_pool: CredentialPoolConfig = Field(default_factory=CredentialPoolConfig)
+    hot_cache: HotCacheConfig = Field(default_factory=HotCacheConfig)
+    evolve: EvolveConfig = Field(default_factory=EvolveConfig)
+    canary: CanaryConfig = Field(default_factory=CanaryConfig)
+    drift: DriftConfig = Field(default_factory=DriftConfig)
+    molili: MoliliConfig = Field(default_factory=MoliliConfig)
+    local_auth: LocalAuthConfig = Field(default_factory=LocalAuthConfig)
+
+    intel_sources: list[IntelSourceConfig] = Field(default_factory=list)
+    mcp_servers: list[MCPServerConfigEntry] = Field(default_factory=list)
+
+    journal_file: str | None = None        # Implementation note.
+    enable_web_skills: bool = True         # Implementation note.
+    default_arm_id: str = "code_arm"

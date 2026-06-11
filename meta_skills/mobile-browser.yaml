@@ -1,0 +1,51 @@
+# Mobile Browser 能力包 / Meta-Skill
+# 移动浏览器自动化：导航 → DOM 交互 → 截图 → 扩展
+# 通过 mobile_browser_operator_arm 驱动 GeckoView
+#
+# Reuses mobile browser skills:
+#   - android.browser_navigate   (导航)
+#   - android.browser_get_dom    (获取 DOM)
+#   - android.browser_click      (点击)
+#   - android.browser_type       (输入)
+#   - android.browser_screenshot (截图)
+#   - android.browser_evaluate   (执行 JS)
+
+name: mobile-browser
+kind: skill_cluster
+version: 0.1.0
+description: 移动浏览器自动化 — 导航 → DOM 交互 → 截图 → 反爬
+when_to_use: 浏览器 / 网页 / 反爬 / 抓取 / browser / navigate / scraping / 网站自动化 / cloudflare / 验证码
+affinity: [mobile, android, browser, anti_bot, scraping]
+
+budget:
+  tokens: 80000
+  usd: 1.0
+  latency_ms: 300000
+
+steps:
+  - node_id: navigate
+    skill: android.browser_navigate
+    args:
+      url: "{user_input.url}"
+    timeout_ms: 30000
+
+  - node_id: interact
+    skill: android.browser_click
+    args:
+      selector: "{user_input.selector}"
+    depends_on: [navigate]
+    timeout_ms: 15000
+
+  - node_id: capture
+    skill: android.browser_screenshot
+    args:
+      full_page: true
+    depends_on: [interact]
+    timeout_ms: 10000
+
+  - node_id: extract
+    skill: android.browser_get_dom
+    args:
+      selector: "{user_input.extract_selector}"
+    depends_on: [interact]
+    timeout_ms: 10000

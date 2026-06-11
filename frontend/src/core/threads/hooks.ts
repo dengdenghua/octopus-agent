@@ -1,0 +1,597 @@
+import { swallow } from "@/core/utils/log";
+import type { Message } from "@/core/api/types";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
+import { getAPIClient } from "../api";
+import type { LocalSettings } from "../settings";
+
+import type { LiveToolEvent } from "@/components/workspace/live-tool-timeline";
+
+import type { AgentThread, AgentThreadState } from "./types";
+import { useThreadStreamRealtime } from "./use-thread-stream-realtime";
+
+export type ToolEndEvent = {
+  name: string;
+  data: unknown;
+};
+
+export type ThreadStreamOptions = {
+  threadId?: string | null | undefined;
+  context: Omit<LocalSettings["context"], "mode"> & {
+    mode: LocalSettings["context"]["mode"] | "code" | "team";
+  };
+  isMock?: boolean;
+  onStart?: (threadId: string) => void;
+  onFinish?: (state: AgentThreadState) => void;
+  onToolEnd?: (event: ToolEndEvent) => void;
+};
+
+type SendMessageOptions = {
+  additionalKwargs?: Record<string, unknown>;
+};
+
+export function upsertLiveToolEvent(
+  events: LiveToolEvent[],
+  nextEvent: LiveToolEvent,
+): LiveToolEvent[] {
+  const existingIndex = events.findIndex((event) => event.id === nextEvent.id);
+  if (existingIndex === -1) {
+    return [...events, nextEvent];
+  }
+
+  const updated = [...events];
+  const existing = updated[existingIndex]!;
+  const merged: LiveToolEvent = { ...existing };
+  for (const [key, value] of Object.entries(nextEvent) as Array<
+    [keyof LiveToolEvent, LiveToolEvent[keyof LiveToolEvent]]
+  >) {
+    if (value !== undefined) {
+      (merged as unknown as Record<string, unknown>)[key] = value;
+    }
+  }
+  updated[existingIndex] = {
+    ...merged,
+  };
+  return updated;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
+    return Number(value);
+  }
+  return undefined;
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  if (isRecord(value)) return value;
+  if (Array.isArray(value)) return { items: value };
+  if (typeof value === "string" && value.trim()) return { input: value };
+  return undefined;
+}
+
+function terminalToolStatus(value: unknown): LiveToolEvent["status"] {
+  if (value === true) return "error";
+  const normalized = typeof value === "string" ? value.toLowerCase() : "";
+  if (
+    normalized === "error" ||
+    normalized === "failed" ||
+    normalized === "failure" ||
+    normalized === "rejected" ||
+    normalized === "cancelled" ||
+    normalized === "canceled" ||
+    normalized === "timeout" ||
+    normalized === "timed_out"
+  ) {
+    return "error";
+  }
+  return "done";
+}
+
+export function normalizeCustomToolEvent(
+  event: Record<string, unknown>,
+): LiveToolEvent | null {
+  const type = stringValue(event.type);
+  if (
+    type !== "tool_start" &&
+    type !== "tool_end" &&
+    type !== "sub_tool_start" &&
+    type !== "sub_tool_end"
+  ) {
+    return null;
+  }
+
+  const name = stringValue(event.tool_name) ?? stringValue(event.name);
+  const rawId =
+    stringValue(event.tool_call_id) ??
+    stringValue(event.toolUseId) ??
+    stringValue(event.id);
+  if (!name || !rawId) return null;
+
+  const isStart = type === "tool_start" || type === "sub_tool_start";
+  const startedAt = Date.now();
+  const finishedAt = isStart ? undefined : Date.now();
+  const input = recordValue(
+    event.input_preview ?? event.input ?? event.args ?? event.arguments,
+  );
+  const output =
+    event.output_preview ??
+    event.output ??
+    event.result ??
+    event.observation;
+
+  return {
+    id: rawId,
+    name,
+    status: isStart ? "running" : terminalToolStatus(event.status ?? event.is_error),
+    startedAt,
+    finishedAt,
+    durationMs: isStart
+      ? undefined
+      : numberValue(event.duration_ms ?? event.durationMs),
+    iteration: numberValue(event.iteration) ?? 0,
+    agentId: stringValue(event.agent_id) ?? stringValue(event.agentId),
+    agentName:
+      stringValue(event.agent_name) ??
+      stringValue(event.agentName) ??
+      stringValue(event.sub_agent_role) ??
+      stringValue(event.subAgentRole),
+    input,
+    output,
+    parentToolUseId:
+      stringValue(event.parent_tool_use_id) ??
+      stringValue(event.parentToolUseId),
+    subAgentRole:
+      stringValue(event.sub_agent_role) ?? stringValue(event.subAgentRole),
+    thought: stringValue(event.thought),
+    observation: stringValue(event.observation),
+  };
+}
+
+function recoveryToolEventId(runId?: string): string {
+  return `stream-recovery:${runId || "current"}`;
+}
+
+function upsertStreamRecoveryEvent(
+  events: LiveToolEvent[],
+  next: {
+    runId?: string;
+    status: LiveToolEvent["status"];
+    input?: Record<string, unknown>;
+    output?: unknown;
+  },
+): LiveToolEvent[] {
+  const id = recoveryToolEventId(next.runId);
+  const existing = events.find((event) => event.id === id);
+  const startedAt = existing?.startedAt ?? Date.now();
+  const finishedAt =
+    next.status === "running" || next.status === "waiting_approval"
+      ? undefined
+      : Date.now();
+  return upsertLiveToolEvent(events, {
+    id,
+    name: "stream_recovery",
+    status: next.status,
+    startedAt,
+    finishedAt,
+    durationMs:
+      finishedAt !== undefined ? Math.max(0, finishedAt - startedAt) : undefined,
+    iteration: existing?.iteration ?? 0,
+    input: next.input ?? existing?.input,
+    output: next.output,
+  });
+}
+
+function upsertModelReasoningEvent(
+  events: LiveToolEvent[],
+  next: {
+    delta?: string;
+    status?: LiveToolEvent["status"];
+    iteration?: number;
+  },
+): LiveToolEvent[] {
+  const id = "model-reasoning:current";
+  const existing = events.find((event) => event.id === id);
+  const startedAt = existing?.startedAt ?? Date.now();
+  const previousOutput = isRecord(existing?.output) ? existing.output : {};
+  const previousContent =
+    typeof previousOutput.content === "string" ? previousOutput.content : "";
+  const content = `${previousContent}${next.delta ?? ""}`;
+  const status = next.status ?? "running";
+  const finishedAt =
+    status === "running" || status === "waiting_approval" ? undefined : Date.now();
+
+  return upsertLiveToolEvent(events, {
+    id,
+    name: "model_reasoning",
+    status,
+    startedAt,
+    finishedAt,
+    durationMs:
+      finishedAt !== undefined ? Math.max(0, finishedAt - startedAt) : undefined,
+    iteration: next.iteration ?? existing?.iteration ?? 0,
+    output: { content },
+  });
+}
+
+function upsertAgentThoughtEvent(
+  events: LiveToolEvent[],
+  next: {
+    thought?: string;
+    observation?: string;
+    iteration?: number;
+  },
+): LiveToolEvent[] {
+  const iteration = next.iteration ?? 0;
+  const id = `agent-thought:${iteration}`;
+  const existing = events.find((event) => event.id === id);
+  const startedAt = existing?.startedAt ?? Date.now();
+  const finishedAt = Date.now();
+  return upsertLiveToolEvent(events, {
+    id,
+    name: "agent_thought",
+    status: "done",
+    startedAt,
+    finishedAt,
+    durationMs: Math.max(0, finishedAt - startedAt),
+    iteration,
+    thought: next.thought ?? existing?.thought,
+    observation: next.observation ?? existing?.observation,
+  });
+}
+
+export function finalizeLiveToolEvents(
+  events: LiveToolEvent[],
+  nextStatus: Extract<LiveToolEvent["status"], "done" | "error">,
+  output: unknown,
+): LiveToolEvent[] {
+  const finishedAt = Date.now();
+  return events.map((event) => {
+    if (event.status !== "running" && event.status !== "waiting_approval") {
+      return event;
+    }
+    return {
+      ...event,
+      status: nextStatus,
+      finishedAt,
+      durationMs: Math.max(0, finishedAt - event.startedAt),
+      output: event.output ?? output,
+    };
+  });
+}
+
+function completeActiveTodoItems(input: LiveToolEvent["input"]): LiveToolEvent["input"] {
+  if (!input) return input;
+  const nextInput = { ...input };
+  const normalizeItems = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) {
+          return item;
+        }
+        const record = item as Record<string, unknown>;
+        if (record.status !== "in_progress") return item;
+        return { ...record, status: "completed" };
+      });
+    }
+    if (typeof value === "string" && value.trim()) {
+      try {
+        return JSON.stringify(normalizeItems(JSON.parse(value)));
+      } catch (e) {
+        swallow(e);
+        return value;
+      }
+    }
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const record = value as Record<string, unknown>;
+      if ("todos" in record) {
+        return { ...record, todos: normalizeItems(record.todos) };
+      }
+      if ("items" in record) {
+        return { ...record, items: normalizeItems(record.items) };
+      }
+    }
+    return value;
+  };
+
+  if ("todos" in nextInput) {
+    nextInput.todos = normalizeItems(nextInput.todos);
+  }
+  if ("items" in nextInput) {
+    nextInput.items = normalizeItems(nextInput.items);
+  }
+  return nextInput;
+}
+
+function completeLatestTodoWriteOnSuccess(
+  events: LiveToolEvent[],
+  nextStatus: Extract<LiveToolEvent["status"], "done" | "error">,
+): LiveToolEvent[] {
+  if (nextStatus !== "done") return events;
+  let latestIndex = -1;
+  let latestStartedAt = -Infinity;
+  events.forEach((event, index) => {
+    if (event.name !== "todo_write" || !event.input) return;
+    if (event.startedAt >= latestStartedAt) {
+      latestStartedAt = event.startedAt;
+      latestIndex = index;
+    }
+  });
+  if (latestIndex < 0) return events;
+  return events.map((event, index) =>
+    index === latestIndex
+      ? { ...event, input: completeActiveTodoItems(event.input) }
+      : event,
+  );
+}
+
+function buildRunLifecycleEvents(
+  runStartedAt: number,
+  status: Extract<LiveToolEvent["status"], "done" | "error">,
+  output: unknown,
+): LiveToolEvent[] {
+  const finishedAt = Date.now();
+  const connectionStartedAt = Math.min(runStartedAt + 300, finishedAt);
+  const gatewayStartedAt = Math.min(runStartedAt + 900, finishedAt);
+  return [
+    {
+      id: "live-log:request",
+      name: "turn_request",
+      status: "done",
+      startedAt: runStartedAt,
+      finishedAt: connectionStartedAt,
+      durationMs: Math.max(0, connectionStartedAt - runStartedAt),
+      iteration: 0,
+    },
+    {
+      id: "live-log:stream",
+      name: "stream_connection",
+      status: "done",
+      startedAt: connectionStartedAt,
+      finishedAt: gatewayStartedAt,
+      durationMs: Math.max(0, gatewayStartedAt - connectionStartedAt),
+      iteration: 0,
+      input: { transport: "WebSocket" },
+    },
+    {
+      id: "live-log:model-gateway",
+      name: "model_gateway",
+      status,
+      startedAt: gatewayStartedAt,
+      finishedAt,
+      durationMs: Math.max(0, finishedAt - gatewayStartedAt),
+      iteration: 0,
+      output,
+    },
+  ];
+}
+
+export function finalizeTurnHistory(
+  events: LiveToolEvent[],
+  runStartedAt: number,
+  nextStatus: Extract<LiveToolEvent["status"], "done" | "error">,
+  output: unknown,
+): LiveToolEvent[] {
+  const lifecycleEvents = buildRunLifecycleEvents(runStartedAt, nextStatus, output);
+  const finalizedEvents = completeLatestTodoWriteOnSuccess(
+    finalizeLiveToolEvents(events, nextStatus, output),
+    nextStatus,
+  );
+  const lifecycleIds = new Set(lifecycleEvents.map((event) => event.id));
+  const lifecycleNames = new Set(lifecycleEvents.map((event) => event.name));
+  return [
+    ...lifecycleEvents,
+    ...finalizedEvents.filter(
+      (event) => !lifecycleIds.has(event.id) && !lifecycleNames.has(event.name),
+    ),
+  ];
+}
+
+export function useThreadStream({
+  threadId,
+  context,
+  isMock,
+  onStart,
+  onFinish,
+  onToolEnd,
+}: ThreadStreamOptions) {
+  // Every caller now goes through the realtime WebSocket. This hook name
+  // stays stable because workspace pages share the tuple contract.
+  void isMock;
+
+  return useThreadStreamRealtime({
+    threadId: typeof threadId === "string" ? threadId : "",
+    model:
+      typeof (context as { model_name?: unknown })?.model_name === "string"
+        ? ((context as { model_name?: string }).model_name as string)
+        : undefined,
+    onStart,
+    onFinish,
+    onToolEnd,
+    context,
+  });
+}
+
+
+export function useThreads(
+  params: Record<string, unknown> = {
+    limit: 50,
+    sortBy: "updated_at",
+    sortOrder: "desc",
+    select: ["thread_id", "updated_at", "values"],
+  },
+  mode?: "chat" | "code" | "team",
+  agent?: string | null,
+) {
+  // Compose metadata filter from the optional mode + agent arguments.
+  // The backend's ThreadStateStore.search() ANDs together every metadata
+  // key-value pair we send, so `{mode:"chat", agent:"coder"}` yields
+  // exactly the threads that this Coder agent handled in chat mode.
+  //
+  // Skipping the `agent` clause entirely (null/undefined) shows all
+  // threads; used by search dialogs and admin views that want the
+  // full cross-agent history.
+  if (mode || agent) {
+    const metadata = {
+      ...((params.metadata as Record<string, unknown>) || {}),
+    } as Record<string, unknown>;
+    if (mode) metadata.mode = mode;
+    if (agent) metadata.agent = agent;
+    params = { ...params, metadata };
+  }
+  const apiClient = getAPIClient();
+  return useQuery<AgentThread[]>({
+    queryKey: ["threads", "search", params],
+    queryFn: async () => {
+      const maxResults = params.limit as number | undefined;
+      const initialOffset = (params.offset ?? 0) as number;
+      const DEFAULT_PAGE_SIZE = 50;
+
+      // Preserve prior semantics: if a non-positive limit is explicitly provided,
+      // delegate to a single search call with the original parameters.
+      if (maxResults !== undefined && maxResults <= 0) {
+        const response = await apiClient.threads.search(params);
+        return response as AgentThread[];
+      }
+
+      const pageSize =
+        typeof maxResults === "number" && maxResults > 0
+          ? Math.min(DEFAULT_PAGE_SIZE, maxResults)
+          : DEFAULT_PAGE_SIZE;
+
+      const threads: AgentThread[] = [];
+      let offset = initialOffset;
+      const MAX_PAGES = 100;
+      let page = 0;
+
+      while (page < MAX_PAGES) {
+        page++;
+        if (typeof maxResults === "number" && threads.length >= maxResults) {
+          break;
+        }
+
+        const currentLimit =
+          typeof maxResults === "number"
+            ? Math.min(pageSize, maxResults - threads.length)
+            : pageSize;
+
+        if (typeof maxResults === "number" && currentLimit <= 0) {
+          break;
+        }
+
+        const response = (await apiClient.threads.search({
+          ...params,
+          limit: currentLimit,
+          offset,
+        })) as AgentThread[];
+
+        threads.push(...response);
+
+        if (response.length < currentLimit) {
+          break;
+        }
+
+        offset += response.length;
+      }
+
+      return threads;
+    },
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useDeleteThread() {
+  const queryClient = useQueryClient();
+  const apiClient = getAPIClient();
+  return useMutation({
+    onMutate: async ({ threadId }: { threadId: string }) => {
+      await queryClient.cancelQueries({ queryKey: ["threads", "search"] });
+      const previousThreads = queryClient.getQueriesData<AgentThread[]>({
+        queryKey: ["threads", "search"],
+      });
+      queryClient.setQueriesData(
+        {
+          queryKey: ["threads", "search"],
+          exact: false,
+        },
+        (oldData: Array<AgentThread> | undefined) => {
+          if (oldData == null) {
+            return oldData;
+          }
+          return oldData.filter((t) => t.thread_id !== threadId);
+        },
+      );
+      return { previousThreads };
+    },
+    mutationFn: async ({ threadId }: { threadId: string }) => {
+      // Single DELETE: there used to be a second fetch right after this
+      // that hit the SAME endpoint and 404'd because the first call had
+      // already removed the thread. The 404 threw, the mutation failed,
+      // ``onSuccess`` never ran, React Query's cache stayed stale, and
+      // the UI looked like it couldn't delete the thread. The second
+      // call was a leftover from when there was a separate "local
+      // thread data" cleanup endpoint. That endpoint no longer exists,
+      // so the call is pure double-delete bug.
+      await apiClient.threads.delete(threadId);
+    },
+    onError(_error, _variables, context) {
+      for (const [queryKey, data] of context?.previousThreads ?? []) {
+        queryClient.setQueryData(queryKey, data);
+      }
+      toast.error("删除对话失败，已恢复列表");
+    },
+    onSettled() {
+      void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
+    },
+  });
+}
+
+export function useRenameThread() {
+  const queryClient = useQueryClient();
+  const apiClient = getAPIClient();
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      title,
+    }: {
+      threadId: string;
+      title: string;
+    }) => {
+      await apiClient.threads.updateState(threadId, {
+        values: { title },
+      });
+    },
+    onSuccess(_, { threadId, title }) {
+      queryClient.setQueriesData(
+        {
+          queryKey: ["threads", "search"],
+          exact: false,
+        },
+        (oldData: Array<AgentThread> | undefined) => {
+          if (!oldData) return oldData;
+          return oldData.map((t) => {
+            if (t.thread_id === threadId) {
+              return {
+                ...t,
+                values: {
+                  ...t.values,
+                  title,
+                },
+              };
+            }
+            return t;
+          });
+        },
+      );
+    },
+  });
+}

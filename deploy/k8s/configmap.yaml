@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: octopus-agent-config
+  namespace: octopus-agent
+data:
+  config.yaml: |
+    # Implementation note.
+    # Implementation note.
+    name: octopus-agent
+    version_compat: "0.2"
+
+    planner:
+      type: llm
+      model: mock/prod
+      mock_response: |
+        {"reasoning": "mock response · replace me in prod", "nodes": []}
+
+    budget:
+      max_tokens: 50000
+      max_usd: 0.50
+
+    journal:
+      type: jsonl
+      path: /data/events.jsonl
+
+    # Implementation note.
+    hearts:
+      coordinator:
+        type: redis
+        url: redis://redis:6379/0

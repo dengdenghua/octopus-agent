@@ -1,0 +1,29 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="27" y1="25" x2="225" y2="225" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#DCEBFF"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="64" y1="53" x2="190" y2="201" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset=".46" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <filter id="soft" x="36" y="36" width="184" height="184" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#2563EB" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <rect x="18" y="18" width="220" height="220" rx="52" fill="url(#bg)"/>
+  <path d="M53 184L202 55" stroke="#BFDBFE" stroke-width="10" stroke-linecap="round" opacity=".8"/>
+  <path d="M58 72L178 198" stroke="#CCFBF1" stroke-width="9" stroke-linecap="round" opacity=".85"/>
+  <g filter="url(#soft)">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M128 55C87.13 55 56 86.85 56 128C56 169.15 87.13 201 128 201C168.87 201 200 169.15 200 128C200 86.85 168.87 55 128 55ZM128 85C151.31 85 169 103.13 169 128C169 152.87 151.31 171 128 171C104.69 171 87 152.87 87 128C87 103.13 104.69 85 128 85Z" fill="url(#ring)"/>
+    <path d="M91 191C75 205 60 196 51 213" stroke="#2563EB" stroke-width="12" stroke-linecap="round"/>
+    <path d="M165 191C181 205 196 196 205 213" stroke="#06B6D4" stroke-width="12" stroke-linecap="round"/>
+  </g>
+  <circle cx="128" cy="128" r="19" fill="#F8FAFC"/>
+  <circle cx="128" cy="128" r="7" fill="#0F172A"/>
+  <circle cx="72" cy="86" r="5" fill="#2563EB"/>
+  <circle cx="184" cy="86" r="5" fill="#06B6D4"/>
+  <circle cx="128" cy="205" r="5" fill="#0F172A"/>
+</svg>

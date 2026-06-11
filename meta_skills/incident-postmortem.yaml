@@ -1,0 +1,72 @@
+# Incident Postmortem 能力包 / Meta-Skill
+# 6-step workflow for SRE blameless postmortem:
+#   - 3 parallel log / timeline / traffic sources
+#   - Synthesise review with blameless template
+#   - Archive to docx + notify slack
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - log_diagnostic          (实时日志诊断)
+#   - incident_retrospective  (时间线还原)
+#   - http_load_profiler      (流量画像)
+#   - incident_review_guide   (复盘模板)
+#   - docx_export             (归档)
+#   - slack_post              (推送)
+
+name: incident-postmortem
+kind: skill_cluster
+version: 0.1.0
+description: SRE blameless 复盘 — 日志/时间线/流量 3 源 → 复盘报告 → docx + slack
+when_to_use: 故障 / 复盘 / postmortem / RCA / 事故 / 异常 / outage
+affinity: [sre, devops, writing]
+
+budget:
+  tokens: 60000
+  usd: 1.0
+  latency_ms: 3600000
+
+steps:
+  - node_id: logs
+    skill: log_diagnostic
+    args:
+      window: "{user_input.window}"
+      severity: error
+    timeout_ms: 300000
+
+  - node_id: timeline
+    skill: incident_retrospective
+    args:
+      window: "{user_input.window}"
+    timeout_ms: 300000
+
+  - node_id: traffic
+    skill: http_load_profiler
+    args:
+      window: "{user_input.window}"
+    timeout_ms: 300000
+
+  - node_id: review
+    skill: incident_review_guide
+    args:
+      template: blameless
+      inputs:
+        logs: "{logs.output}"
+        timeline: "{timeline.output}"
+        traffic: "{traffic.output}"
+    depends_on: [logs, timeline, traffic]
+    timeout_ms: 600000
+
+  - node_id: archive
+    skill: docx_export
+    args:
+      content: "{review.output}"
+      filename: "postmortem-{user_input.incident_id}.docx"
+    depends_on: [review]
+    timeout_ms: 60000
+
+  - node_id: notify
+    skill: slack_post
+    args:
+      channel: "{user_input.channel}"
+      content: "{review.output}"
+    depends_on: [review]
+    timeout_ms: 30000

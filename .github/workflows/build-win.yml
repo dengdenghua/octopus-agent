@@ -1,0 +1,109 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: win-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-win:
+    name: Build Windows EXE
+    runs-on: windows-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+      OCTOPUS_SOURCEMAP: "0"
+      CI: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Upgrade Python build tooling
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install Python dependencies
+        run: python -m pip install -e ".[dev,web,serve]" pyinstaller
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        working-directory: extras/desktop
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: pnpm typecheck
+
+      - name: Generate desktop icons
+        working-directory: extras/desktop
+        run: pnpm icons:generate
+
+      - name: Prepare desktop agents
+        working-directory: extras/desktop
+        run: pnpm desktop:agents
+
+      - name: Build backend (PyInstaller)
+        working-directory: extras/desktop
+        run: pnpm backend:build:win
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Build Electron EXE
+        working-directory: extras/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec electron-builder --win --publish never
+
+      - name: List release artifacts
+        working-directory: extras/desktop/release
+        run: |
+          Get-ChildItem -Recurse | Select-Object FullName, Length
+          Get-ChildItem -File | ForEach-Object { "{0:N1} MB`t{1}" -f ($_.Length / 1MB), $_.Name }
+
+      - name: Upload EXE installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Octopus-Setup-Windows
+          path: |
+            extras/desktop/release/*.exe
+            extras/desktop/release/*.blockmap
+            extras/desktop/release/*.yml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload portable (unpacked)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Octopus-Portable-Windows
+          path: extras/desktop/release/win-unpacked/**
+          if-no-files-found: error
+          retention-days: 14

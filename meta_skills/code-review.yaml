@@ -1,0 +1,69 @@
+# Code review Meta-Skill.
+# Multi-axis code review: correctness, security, style, tests.
+#
+# Reuses existing arms/skills:
+#   - git_repo_audit (deep probe)
+#   - code_vuln_audit (security audit)
+#   - seo_audit-style pattern (quality pass)
+
+name: code-review
+kind: skill_cluster
+version: 0.1.0
+description: Multi-perspective code review for a branch or PR
+when_to_use: User wants to review a PR / diff / branch / 代码审查 / 评审
+affinity: [engineering, code, security]
+
+budget:
+  tokens: 80000
+  usd: 2.0
+  latency_ms: 1800000
+
+steps:
+  - node_id: scope
+    skill: git_diff
+    args:
+      target: "{user_input.target}"
+      base: "{user_input.base_branch}"
+    timeout_ms: 60000
+
+  - node_id: audit
+    skill: git_repo_audit
+    args:
+      diff: "{scope.output}"
+      focus: [complexity, test_coverage, maintainability]
+    depends_on: [scope]
+    timeout_ms: 300000
+
+  - node_id: security
+    skill: code_vuln_audit
+    args:
+      diff: "{scope.output}"
+      severity_threshold: medium
+    depends_on: [scope]
+    timeout_ms: 300000
+
+  - node_id: performance
+    skill: complexity_analyzer
+    args:
+      files: "{scope.output.touched_files}"
+    depends_on: [scope]
+    timeout_ms: 180000
+
+  - node_id: merge
+    skill: skill_library
+    args:
+      templates: [code-review-report]
+      inputs:
+        audit: "{audit.output}"
+        security: "{security.output}"
+        performance: "{performance.output}"
+    depends_on: [audit, security, performance]
+    timeout_ms: 180000
+
+  - node_id: post
+    skill: slack_post
+    args:
+      channel: "{user_input.channel}"
+      content: "{merge.output}"
+    depends_on: [merge]
+    timeout_ms: 30000

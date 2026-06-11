@@ -1,0 +1,63 @@
+# Octopus desktop default configuration.
+#
+# This file is copied into the Electron userData directory on first launch.
+# It intentionally contains no API keys. Users can edit the copied config or
+# configure providers from the app UI.
+
+name: octopus-desktop
+version_compat: "0.2"
+
+planner:
+  type: llm
+  model: molili
+  max_nodes: 10
+
+budget:
+  max_tokens: 50000
+  max_usd: 0.50
+  max_latency_ms: 600000
+
+immunity:
+  trusted_sources:
+    - "skill://public/*"
+    - "mcp://anthropic/*"
+    - "mcp://fs/*"
+  self_whitelist:
+    - "cerebrum"
+    - "ganglia"
+    - "arms/*"
+    - "intel_collector/*"
+  unknown_policy: quarantine
+
+journal_file: null
+enable_web_skills: true
+default_arm_id: code_arm
+
+molili:
+  enabled: true
+  base_url: https://molili.8kbl.com/molili-agi/chatApi/v1
+  info_url: https://molili.8kbl.com/molili-agi/userApi/v1/userInfo
+  request_timeout_seconds: 30
+  jwt_secret: octopus-desktop-molili-jwt-secret-change-me
+  jwt_expire_seconds: 2592000
+  jwt_issuer: octopus-agent
+  auth:
+    mock_mode: false
+    sms_send_url: https://molili.8kbl.com/molili-agi/loginApi/v1/sendSms
+    sms_verify_url: https://molili.8kbl.com/molili-agi/loginApi/v1/loginByMobile
+    send_phone_field: mobile
+    verify_phone_field: mobile
+    code_field: verifyCode
+    user_id_path: data.userId
+    token_path: data.token
+    mobile_path: data.userInfo.mobile
+    credits_path: data.userInfo
+
+local_auth:
+  enabled: true
+  allow_any_username: true
+  jwt_secret: octopus-desktop-local-jwt-secret-change-me
+  jwt_expire_seconds: 604800
+  jwt_issuer: octopus-agent
+  actor_prefix: "local:"
+  default_roles: [user, local]

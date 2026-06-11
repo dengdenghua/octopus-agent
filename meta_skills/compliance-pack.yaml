@@ -1,0 +1,63 @@
+# Compliance Pack 能力包 / Meta-Skill
+# 5-step workflow: 2 parallel KYC sources → contract gen → risk analyse
+# → review doc. For onboarding & periodic compliance review.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - kyc_doc_parse        (证件 OCR + 字段提取)
+#   - kyc_rules            (KYC 规则匹配)
+#   - legal_contract_gen   (合同生成)
+#   - legal_risk_analyzer  (法律风险扫描)
+#   - client_review        (合规 / 法务审阅)
+
+name: compliance-pack
+kind: skill_cluster
+version: 0.1.0
+description: 合规审查 — KYC 双源 → 合同生成 → 法律风险 → 审阅
+when_to_use: KYC / 合规 / 合同审 / 法律审查 / 尽调
+affinity: [legal, compliance, risk]
+
+budget:
+  tokens: 50000
+  usd: 1.0
+  latency_ms: 1800000
+
+steps:
+  - node_id: kyc_docs
+    skill: kyc_doc_parse
+    args:
+      docs: "{user_input.docs}"
+    timeout_ms: 300000
+
+  - node_id: kyc_rules
+    skill: kyc_rules
+    args:
+      counterparty: "{user_input.counterparty}"
+      jurisdiction: "{user_input.jurisdiction}"
+    timeout_ms: 180000
+
+  - node_id: contract
+    skill: legal_contract_gen
+    args:
+      counterparty: "{user_input.counterparty}"
+      template: "{user_input.contract_template}"
+      kyc: "{kyc_docs.output}"
+      rules: "{kyc_rules.output}"
+    depends_on: [kyc_docs, kyc_rules]
+    timeout_ms: 300000
+
+  - node_id: risk
+    skill: legal_risk_analyzer
+    args:
+      contract: "{contract.output}"
+      rules: "{kyc_rules.output}"
+    depends_on: [contract]
+    timeout_ms: 300000
+
+  - node_id: review
+    skill: client_review
+    args:
+      contract: "{contract.output}"
+      risk: "{risk.output}"
+      checks: [compliance, legal, completeness]
+    depends_on: [risk]
+    timeout_ms: 180000

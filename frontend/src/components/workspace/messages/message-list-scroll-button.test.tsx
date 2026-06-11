@@ -1,0 +1,333 @@
+import { fireEvent, screen, within } from "@testing-library/react";
+import type * as React from "react";
+import { describe, expect, test, vi } from "vitest";
+
+import type { Message } from "@/core/api/types";
+import type { BaseStream } from "@/core/api/use-stream-types";
+import type { AgentThreadState } from "@/core/threads";
+import { SubtasksProvider } from "@/core/tasks/context";
+import { renderWithProviders } from "@/test/harness";
+
+import { ThreadProviders } from "./context";
+import type { LiveToolEvent } from "../live-tool-timeline";
+import {
+  MessageList,
+  nearestTurnKeyByViewportCenter,
+  turnMarkerKindFromMessages,
+  visibleTurnMarkerWindow,
+} from "./message-list";
+
+vi.mock("@/components/ai-elements/conversation", () => ({
+  Conversation: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => <div className={className}>{children}</div>,
+  ConversationContent: ({
+    children,
+    className,
+  }: {
+    children: React.ReactNode;
+    className?: string;
+  }) => <div className={className}>{children}</div>,
+  ConversationScrollButton: ({
+    children,
+    style,
+    ...props
+  }: React.ComponentProps<"button">) => (
+    <button data-testid="scroll-to-latest" style={style} {...props}>
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock("../artifacts", () => ({
+  useArtifacts: () => ({
+    setOpen: vi.fn(),
+    autoOpen: false,
+    autoSelect: false,
+    selectedArtifact: null,
+    select: vi.fn(),
+  }),
+}));
+
+vi.mock("@/core/settings", () => ({
+  useLocalSettings: () => [
+    {
+      display: {
+        chat_font_size: "medium",
+      },
+    },
+    vi.fn(),
+  ],
+}));
+
+function mockThread(
+  overrides: Partial<BaseStream<AgentThreadState>> = {},
+): BaseStream<AgentThreadState> {
+  const messages = overrides.messages ?? [];
+  return {
+    messages,
+    streamingMessage: null,
+    subgraphStreams: {},
+    values: {
+      title: "",
+      messages,
+      artifacts: [],
+    },
+    isLoading: false,
+    isThreadLoading: false,
+    error: undefined,
+    stop: vi.fn(),
+    refresh: vi.fn(),
+    submit: vi.fn(),
+    threadId: "thread-1",
+    ...overrides,
+  };
+}
+
+const scrollIntoViewMock = vi.fn();
+
+Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+  configurable: true,
+  value: scrollIntoViewMock,
+});
+
+describe("MessageList scroll-to-latest affordance", () => {
+  beforeEach(() => {
+    scrollIntoViewMock.mockClear();
+  });
+
+  test("floats above the reserved input area", () => {
+    const thread = mockThread();
+
+    renderWithProviders(
+      <SubtasksProvider>
+        <ThreadProviders thread={thread}>
+          <MessageList
+            threadId="thread-1"
+            thread={thread}
+            paddingBottom={180}
+          />
+        </ThreadProviders>
+      </SubtasksProvider>,
+      { initialRoute: "/workspace/chats/thread-1" },
+    );
+
+    const button = screen.getByTestId("scroll-to-latest");
+    expect(button).toHaveTextContent("最新");
+    expect(button).toHaveAccessibleName("回到最新消息");
+    expect(button).toHaveStyle({ bottom: "192px" });
+  });
+
+  test("renders a left turn locator rail for quick jumps between user turns", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "first request" },
+      { id: "assistant-1", type: "ai", content: "first answer" },
+      { id: "user-2", type: "human", content: "second request" },
+      { id: "assistant-2", type: "ai", content: "second answer" },
+    ];
+    const thread = mockThread({ messages });
+
+    renderWithProviders(
+      <SubtasksProvider>
+        <ThreadProviders thread={thread}>
+          <MessageList threadId="thread-1" thread={thread} paddingBottom={0} />
+        </ThreadProviders>
+      </SubtasksProvider>,
+      { initialRoute: "/workspace/chats/thread-1" },
+    );
+
+    const rail = screen.getByRole("navigation", {
+      name: "\u5bf9\u8bdd\u5b9a\u4f4d",
+    });
+    expect(rail).toHaveClass("block");
+    expect(rail).not.toHaveClass("hidden");
+    expect(
+      within(rail).getByRole("button", { name: /\u7b2c 1 \u8f6e/ }),
+    ).toHaveAccessibleName(/first request/);
+    expect(
+      within(rail).getByRole("button", {
+        name: "\u8df3\u5230\u7b2c\u4e00\u8f6e\u5bf9\u8bdd",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(rail).getByRole("button", {
+        name: "\u8df3\u5230\u6700\u540e\u4e00\u8f6e\u5bf9\u8bdd",
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(rail).getByRole("button", { name: /\u7b2c 2 \u8f6e/ }),
+    );
+
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
+
+  test("renders phased turns as quiet bars and short turns as dots", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "large research task" },
+      {
+        id: "assistant-1",
+        type: "ai",
+        content: "Working through the plan.",
+        additional_kwargs: {
+          reasoning_content: "Phase 1: plan\nPhase 2: execute",
+        },
+      },
+      { id: "user-2", type: "human", content: "quick follow-up" },
+      { id: "assistant-2", type: "ai", content: "short answer" },
+    ];
+    const thread = mockThread({ messages });
+
+    renderWithProviders(
+      <SubtasksProvider>
+        <ThreadProviders thread={thread}>
+          <MessageList threadId="thread-1" thread={thread} paddingBottom={0} />
+        </ThreadProviders>
+      </SubtasksProvider>,
+      { initialRoute: "/workspace/chats/thread-1" },
+    );
+
+    const rail = screen.getByRole("navigation", {
+      name: "\u5bf9\u8bdd\u5b9a\u4f4d",
+    });
+    const phasedTurn = within(rail).getByRole("button", {
+      name: /\u7b2c 1 \u8f6e/,
+    });
+    const shortTurn = within(rail).getByRole("button", {
+      name: /\u7b2c 2 \u8f6e/,
+    });
+
+    expect(phasedTurn).toHaveAttribute("data-turn-marker-kind", "phase");
+    expect(shortTurn).toHaveAttribute("data-turn-marker-kind", "dot");
+    expect(phasedTurn.querySelector("span[aria-hidden='true']")).toHaveClass(
+      "h-8",
+    );
+    expect(shortTurn.querySelector("span[aria-hidden='true']")).toHaveClass(
+      "size-2.5",
+    );
+    expect(shortTurn.querySelector("[data-turn-marker-avatar='true']")).toBeTruthy();
+  });
+
+  test("shows a workbench status light only on the running latest turn avatar", () => {
+    const messages: Message[] = [
+      { id: "user-1", type: "human", content: "large research task" },
+      {
+        id: "assistant-1",
+        type: "ai",
+        content: "Phase 1: plan\nPhase 2: execute",
+      },
+      { id: "user-2", type: "human", content: "continue" },
+      { id: "assistant-2", type: "ai", content: "working" },
+    ];
+    const runningEvent: LiveToolEvent = {
+      id: "tool-1",
+      name: "model_reasoning",
+      status: "running",
+      startedAt: 1,
+      iteration: 1,
+    };
+    const thread = mockThread({ isLoading: true, messages });
+
+    renderWithProviders(
+      <SubtasksProvider>
+        <ThreadProviders thread={thread}>
+          <MessageList
+            liveToolEvents={[runningEvent]}
+            paddingBottom={0}
+            thread={thread}
+            threadId="thread-1"
+          />
+        </ThreadProviders>
+      </SubtasksProvider>,
+      { initialRoute: "/workspace/chats/thread-1" },
+    );
+
+    const rail = screen.getByRole("navigation", {
+      name: "\u5bf9\u8bdd\u5b9a\u4f4d",
+    });
+    const firstTurn = within(rail).getByRole("button", {
+      name: /\u7b2c 1 \u8f6e/,
+    });
+    const latestTurn = within(rail).getByRole("button", {
+      name: /\u7b2c 2 \u8f6e/,
+    });
+
+    expect(firstTurn.querySelector("[data-turn-marker-status]")).toBeNull();
+    expect(
+      latestTurn.querySelector("[data-turn-marker-status='running']"),
+    ).toBeTruthy();
+  });
+
+  test("treats plan-like tool turns as phased locator bars", () => {
+    expect(
+      turnMarkerKindFromMessages([
+        { id: "user-1", type: "human", content: "build the whole feature" },
+        {
+          id: "assistant-1",
+          type: "ai",
+          content: "",
+          tool_calls: [
+            {
+              id: "todo-1",
+              name: "todo_write",
+              args: {
+                items: [
+                  { content: "Plan UI", status: "completed" },
+                  { content: "Implement", status: "in_progress" },
+                ],
+              },
+            },
+          ],
+        },
+      ]),
+    ).toBe("phase");
+  });
+
+  test("limits the locator rail to a sliding window near the active turn", () => {
+    const markers = Array.from({ length: 24 }, (_, index) => ({
+      key: `human:${index + 1}`,
+      kind: "dot" as const,
+      label: `turn ${index + 1}`,
+      number: index + 1,
+    }));
+
+    const latestWindow = visibleTurnMarkerWindow(markers, null);
+    expect(latestWindow).toHaveLength(17);
+    expect(latestWindow[0]?.number).toBe(8);
+    expect(latestWindow.at(-1)?.number).toBe(24);
+
+    const middleWindow = visibleTurnMarkerWindow(markers, "human:10");
+    expect(middleWindow).toHaveLength(17);
+    expect(middleWindow.map((marker) => marker.number)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+    ]);
+  });
+
+  test("chooses the turn containing the message viewport center", () => {
+    const markers = [
+      { key: "human:1", kind: "dot" as const, label: "one", number: 1 },
+      { key: "human:2", kind: "phase" as const, label: "two", number: 2 },
+      { key: "human:3", kind: "dot" as const, label: "three", number: 3 },
+    ];
+
+    expect(
+      nearestTurnKeyByViewportCenter(
+        markers,
+        {
+          "human:1": { top: -260, bottom: -20 },
+          "human:2": { top: 40, bottom: 640 },
+          "human:3": { top: 680, bottom: 900 },
+        },
+        0,
+        720,
+      ),
+    ).toBe("human:2");
+  });
+});

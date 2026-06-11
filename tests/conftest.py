@@ -1,0 +1,159 @@
+"""Implementation note."""
+
+from __future__ import annotations
+
+from uuid import uuid4
+
+import pytest
+
+from runtime.platform.models import (
+    Budget,
+    BudgetLimits,
+    BudgetSpec,
+    CostEntry,
+    ExecutionResult,
+    ParsedIntent,
+    Step,
+    TaskGraph,
+    TaskId,
+    TaskNode,
+    ToolCall,
+    Trajectory,
+    TrajectoryOutcome,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_module_state():
+    """Reset process-wide mutable state between tests.
+
+    Prevents cross-test leakage through module-level knobs. As more
+    such knobs land (prompt cache toggle, rate limiter, etc.), add
+    them here so every test starts from a clean slate.
+
+    Currently resets:
+      - ``runtime.platform.runtime_policy.identity_filter._RUNTIME_OVERRIDE`` — set by
+        ``PUT /api/config/identity-lock``; if a test flips it to False
+        and forgets to clean up, later "lock is on by default" tests
+        would spuriously see it off.
+      - All eight singletons (EventBus, StateStore, PluginLoader,
+        UsagePricing, EvolutionAutoTrigger, AmbientScheduler,
+        CamouflageScheduler, RegenerationScheduler). Without this,
+        tests that triggered a scheduler thread or populated the
+        eventbus could leak state into the next test — e.g. the
+        invariants_router cache picking up stale third-party module
+        state, or anthropic SDK lazy-imports surviving across tests.
+    """
+    from runtime.platform import identity_filter as _idf
+    _idf.set_runtime_lock(None)
+    yield
+    _idf.set_runtime_lock(None)
+    _reset_singletons()
+
+
+def _reset_singletons() -> None:
+    """Drop every process-wide singleton between tests.
+
+    Each ``reset()`` is wrapped in a try/except: a singleton that
+    can't be reset (because its module failed to import on this
+    platform) shouldn't take down the rest of the suite. The reset
+    methods themselves are documented as test-only.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    # (module_path, attr) tuples — imported lazily so a missing
+    # optional dep on the import chain doesn't break the fixture.
+    _SINGLETONS = (
+        ("runtime.platform.process.eventbus", "EventBus"),
+        ("runtime.platform.process.state", "StateStore"),
+        ("runtime.platform.plugins.plugin_loader", "PluginLoader"),
+        ("runtime.platform.budget.usage_pricing", "UsagePricing"),
+        ("runtime.safety.evolution.auto_trigger", "EvolutionAutoTrigger"),
+        ("runtime.memory.skills_lib.ambient_suggestions_scheduler", "AmbientScheduler"),
+        ("runtime.safety.experiments.scheduler", "CamouflageScheduler"),
+        ("runtime.safety.recovery.scheduler", "RegenerationScheduler"),
+    )
+    for mod_path, cls_name in _SINGLETONS:
+        try:
+            import importlib
+            mod = importlib.import_module(mod_path)
+            cls = getattr(mod, cls_name, None)
+            if cls is None:
+                continue
+            reset = getattr(cls, "reset", None)
+            if reset is not None:
+                reset()
+        except Exception as exc:  # noqa: BLE001 — singleton reset must not fail tests
+            _log.debug("singleton reset skipped for %s.%s: %s", mod_path, cls_name, exc)
+
+    # ServiceProvider stitches eventbus/statestore/plugin_loader together
+    # at first ``get_provider()`` call. If we've blanked those out, the
+    # provider is also stale.
+    try:
+        from runtime.platform import service_provider as _sp
+        _sp._PROVIDER = None  # noqa: SLF001 — test reset only
+    except Exception as exc:  # noqa: BLE001
+        _log.debug("service_provider reset skipped: %s", exc)
+
+
+@pytest.fixture
+def small_limits() -> BudgetLimits:
+    return BudgetLimits(tokens=1_000, usd=0.10)
+
+
+@pytest.fixture
+def small_budget(small_limits: BudgetLimits) -> Budget:
+    return Budget(task_id=TaskId(uuid4()), limits=small_limits)
+
+
+@pytest.fixture
+def sample_cost() -> CostEntry:
+    return CostEntry(tokens_in=100, tokens_out=50, usd=0.001, latency_ms=200.0)
+
+
+@pytest.fixture
+def sample_intent() -> ParsedIntent:
+    return ParsedIntent(
+        raw="test intent",
+        intent_type="task",
+        normalized_goal="run a unit test",
+    )
+
+
+@pytest.fixture
+def sample_graph() -> TaskGraph:
+    return TaskGraph(
+        nodes=[
+            TaskNode(node_id="n1", skill_ref="read_file"),
+            TaskNode(node_id="n2", skill_ref="run_test"),
+        ],
+        budget=BudgetSpec(tokens=10_000, usd=0.10),
+        task_type="code_fix",
+    )
+
+
+@pytest.fixture
+def sample_step(sample_cost: CostEntry) -> Step:
+    call = ToolCall(
+        caller="arm:code_arm",
+        sucker_id="read_file",
+        args={"path": "a.py"},
+    )
+    result = ExecutionResult(
+        call_id=call.call_id,
+        status="success",
+        output="ok",
+        cost=sample_cost,
+    )
+    return Step(step_id=0, node_id="n1", action=call, result=result)
+
+
+@pytest.fixture
+def sample_trajectory(sample_step: Step, sample_graph: TaskGraph) -> Trajectory:
+    return Trajectory(
+        task_id=sample_graph.task_id,
+        arm_id="code_arm",
+        steps=[sample_step],
+        outcome=TrajectoryOutcome(success=True),
+    )

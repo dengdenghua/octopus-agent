@@ -1,0 +1,284 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint + Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package
+        run: pip install -e ".[dev,web,serve,discord]"
+
+      - name: Invariant lint (LINT-01..10)
+        run: python -m tools.lint.invariant_check runtime/ tests/
+
+      - name: Skill package dedup
+        run: python tools/lint/skill_dedup_check.py --strict
+
+      - name: Skill cross-dir dedup (all_skills vs skills/public ratchet)
+        run: python tools/lint/skill_cross_dir_check.py --strict
+
+      - name: Protocol method drift (ServerMethod ↔ reducer.ts)
+        run: python tools/lint/protocol_method_drift.py --strict
+
+      - name: "Exception audit (no NEW unjustified silent except: pass)"
+        run: python tools/lint/exception_audit.py --strict
+
+      - name: God-file check (no NEW files ≥1000 lines)
+        run: python tools/lint/god_file_check.py --strict
+
+      - name: Root hygiene (matches ROOT_LAYOUT.md allow-list)
+        run: python tools/lint/root_hygiene.py --strict
+
+      - name: Repo URL consistency (matches pyproject.toml source of truth)
+        run: python tools/lint/repo_url_check.py --strict
+
+      - name: Test-count freshness (no stale "3800+" in roadmap)
+        run: python tools/lint/count_tests.py --check
+
+      - name: Doc-claim drift (organ/protocol counts match filesystem)
+        run: python tools/lint/doc_claims_check.py --strict
+
+      - name: Auth-actor ratchet (no NEW bare _auth calls)
+        run: python tools/lint/auth_actor_check.py --strict
+
+      - name: Root hygiene (prevent foreign Electron scaffolds)
+        run: python tools/lint/root_hygiene_check.py --strict
+
+      - name: Hardcoded user paths (block per-user absolute paths in source)
+        run: python tools/lint/hardcoded_path_check.py --strict
+
+      - name: Ruff check
+        run: ruff check runtime/ tests/ tools/
+
+      - name: Ruff format check
+        run: ruff format --check runtime/ tests/ tools/
+
+      - name: pytest (with coverage)
+        run: pytest --cov=runtime --cov=tools --cov-report=term --cov-fail-under=60
+
+      - name: Delegation regression gate (timeout/fallback/retry/smart-budget)
+        run: pytest tests/test_delegation_enhancements.py tests/test_delegation_smart_budget.py -v --tb=short
+
+      - name: Security regression gate (team_tasks authorization)
+        run: pytest tests/test_team_tasks_router_security.py -v --tb=short
+
+      - name: Security regression gate (team_rooms authorization)
+        run: pytest tests/test_team_rooms_router_security.py -v --tb=short
+
+      - name: Security regression gate (parallel_agents ownership)
+        run: pytest tests/test_parallel_agents_router_security.py -v --tb=short
+
+      - name: Security regression gate (channels admin)
+        run: pytest tests/test_channels_router_security.py -v --tb=short
+
+      - name: Security regression gate (agents admin)
+        run: pytest tests/test_agents_router_security.py -v --tb=short
+
+      - name: Security regression gate (thread ownership)
+        run: pytest tests/test_agents_router_thread_ownership.py -v --tb=short
+
+      - name: Security regression gate (LocalPartner admin + alias)
+        run: pytest tests/test_agents_router_local_partner_security.py -v --tb=short
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage
+
+  pytest-cross-platform:
+    # Catches path-separator, encoding, and permission bugs that only
+    # surface off-Linux. Runs the test suite (no lint, no coverage)
+    # on Windows + macOS as a sanity floor. Tagged ``not slow`` to
+    # keep the matrix runtime sane — full battery still gates on
+    # the linux ``lint-and-test`` job above.
+    name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install package
+        run: pip install -e ".[dev,web,serve]"
+      - name: pytest (fast subset)
+        run: pytest -m "not slow and not integration" --tb=short -q
+
+  security-scan:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install bandit pip-audit
+      - name: Bandit SAST
+        run: bandit -r runtime/ -ll -ii
+      - name: pip-audit
+        run: pip install -e ".[dev,web,serve]" && pip-audit
+
+  frontend:
+    name: Frontend lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: ESLint
+        working-directory: frontend
+        run: pnpm exec eslint . --ext .ts,.tsx || true
+      - name: Typecheck
+        working-directory: frontend
+        run: pnpm typecheck
+      - name: Build
+        working-directory: frontend
+        run: pnpm build
+
+  docker-build:
+    name: Docker build test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t octopus-agent-ci .
+
+  tracing-smoke:
+    name: Tracing smoke test (with OTel installed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: pip install -e ".[dev,tracing]"
+      - run: pytest tests/test_tracing.py -v
+
+  cli-smoke:
+    name: CLI argparse wiring smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: pip install -e ".[dev,serve,web,discord]"
+      - name: CLI --help for every subcommand
+        run: pytest tests/test_cli_smoke.py -v
+
+  nerves-cross-process:
+    name: Nerves cross-process e2e (Redis)
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: pip install -e ".[dev,hearts-redis]" redis
+      - name: Run cross-process e2e suite
+        run: pytest tests/test_nerves_cross_process_e2e.py -v -m integration --tb=short
+
+  demos:
+    name: End-to-end demos (bugfix/reflection/evolution)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: pip install -e ".[dev,web,serve]"
+      - name: Git identity for commit demos
+        run: |
+          git config --global user.email "ci@octopus-agent.test"
+          git config --global user.name "octopus-ci"
+      - name: Run demo tests
+        run: pytest tests/test_bugfix_demo.py tests/test_reflection_demo.py tests/test_evolution_demo.py -v
+
+  openapi-contract:
+    name: OpenAPI schema + TS types contract gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pip install -e ".[dev,serve]"
+
+      - name: Regenerate OpenAPI snapshot
+        run: OCTOPUS_OPENAPI_WRITE=1 pytest tests/test_openapi_snapshot.py -q
+
+      - name: Assert snapshot is committed
+        run: |
+          if ! git diff --exit-code docs/openapi-snapshot.json; then
+            echo "::error::docs/openapi-snapshot.json is stale · run 'make openapi-snapshot' locally and commit the diff"
+            exit 1
+          fi
+
+      - name: Regenerate TS types
+        working-directory: frontend
+        run: pnpm exec openapi-typescript ../docs/openapi-snapshot.json -o src/core/api/openapi-types.ts
+
+      - name: Assert TS types are committed
+        run: |
+          if ! git diff --exit-code frontend/src/core/api/openapi-types.ts; then
+            echo "::error::frontend/src/core/api/openapi-types.ts is stale · run 'make frontend-types' locally and commit the diff"
+            exit 1
+          fi

@@ -1,0 +1,141 @@
+import { Star as StarFilledIcon, Github as GitHubLogoIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+
+import { Button } from "@/components/ui/button";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { swallow } from "@/core/utils/log";
+import { GITHUB_URL } from "@/core/config";
+import type { Locale } from "@/core/i18n/locale";
+import { useI18n } from "@/core/i18n/hooks";
+import { env } from "@/env";
+import { cn } from "@/lib/utils";
+
+export type HeaderProps = {
+  className?: string;
+  homeURL?: string;
+  /** Kept for API compat · no longer consumed · locale resolves via
+   *  the surrounding ``I18nProvider``. */
+  locale?: Locale;
+};
+
+// NOTE · 2026-04-24 · was ``async function Header({...})`` using the
+// Next.js RSC ``await getI18n()`` pattern. React (SPA) doesn't allow
+// async client components · every /about page load emitted:
+//   "<Header> is an async Client Component. Only Server Components
+//    can be async at the moment."
+// Switched to the ``useI18n()`` hook which the surrounding
+// ``I18nProvider`` (src/main.tsx) already guarantees. ``locale`` prop
+// is retained for caller compat · ignored internally.
+export function Header({ className, homeURL }: HeaderProps) {
+  const isExternalHome = !homeURL;
+  const { t } = useI18n();
+  return (
+    <header
+      className={cn(
+        "container-md fixed top-0 right-0 left-0 z-20 mx-auto flex h-16 items-center justify-between backdrop-blur-xs",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-6">
+        <a
+          href={homeURL ?? GITHUB_URL}
+          target={isExternalHome ? "_blank" : "_self"}
+          rel={isExternalHome ? "noopener noreferrer" : undefined}
+          className="group/logo flex items-center gap-2 transition-opacity hover:opacity-80"
+        >
+          <div className="flex size-7 items-center justify-center rounded-lg border border-white/12 bg-white/[0.04] text-white/80 shadow-sm">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 512 512"
+              fill="none"
+            >
+              <path
+                d="M256 32C167.6 32 96 103.6 96 192c0 52.8 25.6 99.6 65.2 128.8C128 348 96 404 96 448c0 17.7 14.3 32 32 32s32-14.3 32-32c0-28 16-68 40-96 8 4 16.4 7.2 25.2 9.6-4 26.4-9.2 56-9.2 86.4 0 17.7 14.3 32 32 32s32-14.3 32-32c0-26.4 4-52 8-76 12-2.4 23.6-6 34.8-11.2C348 384 368 420 368 448c0 17.7 14.3 32 32 32s32-14.3 32-32c0-48-36-108-72-147.2C399.6 271.6 416 233.6 416 192c0-88.4-71.6-160-160-160zm0 64c53 0 96 43 96 96s-43 96-96 96-96-43-96-96 43-96 96-96z"
+                fill="currentColor"
+              />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-white/90">Octopus</h1>
+        </a>
+      </div>
+      <nav className="mr-8 ml-auto flex items-center gap-8 text-sm font-medium">
+        {/* Pre-fix ``/:lang/docs`` (resolving to "/en/docs") pointed
+            at the mkdocs site we haven't deployed · router catch-all
+            404'd every click from the landing header. Swap to the
+            in-app ``/about`` until proper docs hosting lands. */}
+        <Link
+          to="/about"
+          className="relative text-white/60 transition-colors after:absolute after:-bottom-0.5 after:left-0 after:h-0.5 after:w-0 after:bg-white/40 after:transition-all after:duration-300 hover:text-white/90 hover:after:w-full"
+        >
+          {t.home.docs}
+        </Link>
+      </nav>
+      <div className="relative">
+        <Button
+          variant="outline"
+          size="sm"
+          asChild
+          className="group relative z-10"
+        >
+          <a
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <GitHubLogoIcon className="size-4" />
+            Star on GitHub
+            {env.STATIC_WEBSITE_ONLY &&
+              env.GITHUB_OAUTH_TOKEN && <StarCounter />}
+          </a>
+        </Button>
+      </div>
+      <hr className="from-border/0 via-border/70 to-border/0 absolute top-16 right-0 left-0 z-10 m-0 h-px w-full border-none bg-linear-to-r" />
+    </header>
+  );
+}
+
+// NOTE · same async-in-SPA trap as Header above · rewritten to
+// useEffect + useState so React can render it as a regular client
+// component.
+function StarCounter() {
+  const [stars, setStars] = useState(10000);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(
+          "https://api.github.com/repos/octopus/octopus",
+          {
+            headers: env.GITHUB_OAUTH_TOKEN
+              ? {
+                  Authorization: `Bearer ${env.GITHUB_OAUTH_TOKEN}`,
+                  "Content-Type": "application/json",
+                }
+              : {},
+          },
+        );
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        if (!cancelled && typeof data?.stargazers_count === "number") {
+          setStars(data.stargazers_count);
+        }
+      } catch (e) { swallow(e); }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return (
+    <>
+      <StarFilledIcon
+        className="size-4 transition-colors duration-300 group-hover:text-yellow-500"
+        fill="currentColor"
+      />
+      {stars > 0 && (
+        <NumberTicker className="font-mono tabular-nums" value={stars} />
+      )}
+    </>
+  );
+}

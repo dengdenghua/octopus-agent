@@ -1,0 +1,72 @@
+# Tests and local runtime artifacts
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.codex-logs/
+.marvis_static/
+logs/
+data/
+ura-artifacts/
+_outer_preflatten_*/
+.octopus/*.json
+.octopus/*.jsonl
+.octopus/*.bak
+.octopus/*.lock
+.octopus/local/
+.octopus/research/
+.octopus/archive/
+test-results/
+
+# Python build/cache output
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+build/
+dist/
+
+# Editor metadata
+.vscode/
+.idea/
+.claude/
+
+# Git metadata
+.git/
+.gitignore
+
+# Runtime data
+data/
+*.jsonl
+*.sqlite
+*.sqlite3
+*.db
+
+# Environment files
+.env
+.env.*
+!.env.example
+config.local.yaml
+
+# Documentation excluded from production image
+docs/
+*.md
+!README.md
+
+# Local deployment sources excluded from runtime image
+deploy/
+docker-compose*.yml
+Dockerfile
+.dockerignore
+mkdocs.yml
+Makefile
+
+# Frontend build/dependency output
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.vite/
+frontend/.next/
+frontend/coverage/
+frontend/playwright-report/

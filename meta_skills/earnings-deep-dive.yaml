@@ -1,0 +1,81 @@
+# Earnings Deep Dive 能力包 / Meta-Skill
+# 6-step workflow that turns an earnings report into a one-page trader brief:
+#   - Validates ticker + period + comparable set
+#   - Pulls preview (consensus expectations) in parallel with the actual report
+#   - Cross-references peer set
+#   - Synthesises an equity research note
+#   - Composes the morning-note style brief
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - earnings_preview  (预告 + 一致预期)
+#   - earnings_analysis (财报实报 + 同比环比)
+#   - comps_analysis    (同业对比)
+#   - equity_research   (深度研究)
+#   - morning_note      (早会点评模板)
+
+name: earnings-deep-dive
+kind: skill_cluster
+version: 0.1.0
+description: 财报深度点评 — preview + report + peers + research → trader brief
+when_to_use: 财报 / 业绩 / earnings call / 业绩快报 / 业绩点评 / 财报季
+affinity: [finance, research, writing]
+
+budget:
+  tokens: 60000
+  usd: 1.5
+  latency_ms: 1800000
+
+steps:
+  - node_id: prefs
+    skill: ask_user_question
+    args:
+      prompt: "{user_input.ticker}"
+      questions: "[fiscal_period, comparable_set, depth]"
+    timeout_ms: 120000
+
+  - node_id: preview
+    skill: earnings_preview
+    args:
+      ticker: "{user_input.ticker}"
+      period: "{prefs.output.period}"
+    depends_on: [prefs]
+    timeout_ms: 180000
+
+  - node_id: report
+    skill: earnings_analysis
+    args:
+      ticker: "{user_input.ticker}"
+      period: "{prefs.output.period}"
+    depends_on: [prefs]
+    timeout_ms: 300000
+
+  - node_id: peers
+    skill: comps_analysis
+    args:
+      ticker: "{user_input.ticker}"
+      comparable_set: "{prefs.output.comparable_set}"
+      anchor: "{report.output.key_metrics}"
+    depends_on: [report]
+    timeout_ms: 300000
+
+  - node_id: research
+    skill: equity_research
+    args:
+      ticker: "{user_input.ticker}"
+      earnings: "{report.output}"
+      peers: "{peers.output}"
+      depth: "{prefs.output.depth}"
+    depends_on: [report, peers]
+    timeout_ms: 300000
+
+  - node_id: brief
+    skill: morning_note
+    args:
+      template: earnings-brief
+      inputs:
+        preview: "{preview.output}"
+        report: "{report.output}"
+        peers: "{peers.output}"
+        research: "{research.output}"
+    depends_on: [research]
+    timeout_ms: 120000

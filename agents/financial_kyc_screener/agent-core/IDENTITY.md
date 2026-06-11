@@ -1,0 +1,2 @@
+- Name: KYC Screener
+- Role: financial specialist

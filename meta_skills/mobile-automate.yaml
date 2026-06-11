@@ -1,0 +1,53 @@
+# Mobile Operator 能力包 / Meta-Skill
+# 手机自动化工作流：感知 → 操作 → 验证
+# 通过 mobile_operator_arm 驱动 Android 设备
+#
+# Reuses mobile skills (runtime/tentacle/skills/):
+#   - android.screenshot      (截屏感知)
+#   - android.find_element    (元素定位)
+#   - android.tap             (点击)
+#   - android.input_text      (输入)
+#   - android.wait            (等待)
+#   - android.assert_screen   (验证)
+
+name: mobile-automate
+kind: skill_cluster
+version: 0.1.0
+description: 手机自动化 — 截屏感知 → 元素定位 → 操作执行 → 结果验证
+when_to_use: 手机 / 安卓 / android / 移动 / 触手 / 打开app / 点击按钮 / 自动操作 / mobile / tap / swipe / 截屏
+affinity: [mobile, android, gui, automation, app]
+
+budget:
+  tokens: 50000
+  usd: 0.5
+  latency_ms: 120000
+
+steps:
+  - node_id: sense
+    skill: android.screenshot
+    args:
+      analyze: true
+    timeout_ms: 15000
+
+  - node_id: locate
+    skill: android.find_element
+    args:
+      query: "{user_input.target}"
+      screenshot: "{sense.output}"
+    depends_on: [sense]
+    timeout_ms: 10000
+
+  - node_id: act
+    skill: android.tap
+    args:
+      x: "{locate.x}"
+      y: "{locate.y}"
+    depends_on: [locate]
+    timeout_ms: 5000
+
+  - node_id: verify
+    skill: android.assert_screen
+    args:
+      expected: "{user_input.expected}"
+    depends_on: [act]
+    timeout_ms: 10000

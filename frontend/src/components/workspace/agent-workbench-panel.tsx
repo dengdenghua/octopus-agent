@@ -1,0 +1,1888 @@
+﻿import {
+  BotIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CircleIcon,
+  CopyIcon,
+  FolderIcon,
+  GlobeIcon,
+  LayoutGridIcon,
+  MonitorIcon,
+  PauseIcon,
+  PlayIcon,
+  SkipForwardIcon,
+  TerminalIcon,
+  UsersIcon,
+  XIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { useI18n } from "@/core/i18n/hooks";
+import { TerminalPanel } from "@/components/workspace/terminal-panel";
+import type { LiveToolEvent } from "./live-tool-timeline";
+import {
+  pickCurrentWorkBlock,
+  progressForWorkBlocks,
+  statusText,
+} from "./work-blocks";
+import { cn } from "@/lib/utils";
+import { DotProgress } from "@/components/workspace/swarm/dot-progress";
+import { BrowserPreviewPanel } from "./browser-preview-panel";
+import { LivePreviewPanel } from "./live-preview-panel";
+import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  type AgentTile,
+  type AgentWorkbenchTabId,
+  blockIcon,
+  statusIcon,
+  kindLabel,
+  eventTime,
+  copyText,
+  compactDetail,
+  agentProgressPercent,
+  stringFromKeys,
+  textFromUnknown,
+  commandForBlock,
+  repairMojibakeText,
+  __testing,
+  FILES_TAB_LABEL,
+  DIFF_TAB_LABEL,
+  TERMINAL_TAB_LABEL,
+  BROWSER_TAB_LABEL,
+} from "./agent-workbench-utils";
+import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
+import {
+  StatusGlyph,
+  WorkBlockDetailSection,
+  AgentSummaryPage,
+  AgentCreationCard,
+  AgentFilesPage,
+  AgentDiffPage,
+  WorkbenchEmptyPage,
+  isAgentCreationBlock,
+  agentTileForBlock,
+  findAgentTileByFocusId,
+} from "./agent-workbench-pages";
+import {
+  currentScreenFrame,
+  screenBlocksForAgent,
+  type ScreenFrameSnapshot,
+  useAgentWorkbenchSnapshot,
+} from "./agent-workbench-snapshot";
+import type { AgentPhase } from "./agent-phases";
+import type { WorkBlock } from "./work-blocks";
+
+// Re-export items that were exported from the original file
+export { hasAgentWorkbenchContent, __testing } from "./agent-workbench-utils";
+export type { AgentWorkbenchTabId } from "./agent-workbench-utils";
+export { workspaceFocusTabFromEvents } from "./agent-workbench-utils";
+
+type ScreenPhaseGroup = {
+  id: string;
+  title: string;
+  detail?: string;
+  status: AgentPhase["status"];
+  blocks: WorkBlock[];
+};
+
+function MainProcessPhaseTimeline({
+  phases,
+  screenBlocks,
+  screenFrame,
+  currentPhaseId,
+  selectedBlockId,
+  onSelectBlock,
+}: {
+  phases: AgentPhase[];
+  screenBlocks: WorkBlock[];
+  screenFrame: ScreenFrameSnapshot;
+  currentPhaseId: string | null;
+  selectedBlockId: string | null;
+  onSelectBlock: (blockId: string, phaseId: string | null) => void;
+}) {
+  const groups = useMemo(
+    () => buildScreenPhaseGroups(phases, screenBlocks, currentPhaseId),
+    [currentPhaseId, phases, screenBlocks],
+  );
+  const currentBlockId = screenFrame.block?.id ?? null;
+  const currentGroupId = useMemo(() => {
+    if (currentBlockId) {
+      const group = groups.find((candidate) =>
+        candidate.blocks.some((block) => block.id === currentBlockId),
+      );
+      if (group) return group.id;
+    }
+    return currentPhaseId ?? groups[0]?.id ?? null;
+  }, [currentBlockId, currentPhaseId, groups]);
+  const [openPhaseIds, setOpenPhaseIds] = useState<Set<string>>(
+    () => new Set(currentGroupId ? [currentGroupId] : []),
+  );
+
+  useEffect(() => {
+    if (!currentGroupId) return;
+    setOpenPhaseIds((prev) => {
+      if (prev.has(currentGroupId)) return prev;
+      const next = new Set(prev);
+      next.add(currentGroupId);
+      return next;
+    });
+  }, [currentGroupId]);
+
+  if (screenBlocks.length === 0) {
+    return (
+      <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">
+        暂无操作记录
+      </div>
+    );
+  }
+
+  if (!screenFrame.block) {
+    return (
+      <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">
+        暂无当前操作
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {groups.map((group) => {
+        const open = openPhaseIds.has(group.id);
+        const groupIsCurrent = group.id === currentGroupId;
+        return (
+          <section
+            key={group.id}
+            className={cn(
+              "overflow-hidden rounded-lg border bg-background/85 shadow-sm",
+              groupIsCurrent ? "border-primary/25" : "border-border/40",
+            )}
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setOpenPhaseIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(group.id)) next.delete(group.id);
+                  else next.add(group.id);
+                  return next;
+                })
+              }
+              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-muted/35"
+            >
+              <ChevronDownIcon
+                className={cn(
+                  "size-3.5 shrink-0 text-muted-foreground transition-transform",
+                  open ? "rotate-0" : "-rotate-90",
+                )}
+              />
+              <StatusGlyph status={group.status} />
+              <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+                {group.title}
+              </span>
+              {group.detail && (
+                <span className="hidden max-w-[35%] truncate text-[10px] text-muted-foreground sm:inline">
+                  {group.detail}
+                </span>
+              )}
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {group.blocks.length > 0
+                  ? `${group.blocks.length} 帧`
+                  : phaseStatusLabel(group.status)}
+              </span>
+            </button>
+            {open && (
+              <div className="border-t border-border/30">
+                {group.blocks.length === 0 ? (
+                  <div className="px-3 py-2 text-[11px] text-muted-foreground">
+                    {phaseStatusLabel(group.status)}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/30">
+                    {group.blocks.map((block) => {
+                      const frameIndex = Math.max(
+                        0,
+                        screenBlocks.findIndex((item) => item.id === block.id),
+                      );
+                      const expanded =
+                        block.id === (selectedBlockId ?? currentBlockId);
+                      return (
+                        <ScreenFrameRow
+                          key={block.id}
+                          block={block}
+                          expanded={expanded}
+                          frameIndex={frameIndex}
+                          isCurrent={block.id === currentBlockId}
+                          onSelect={() => onSelectBlock(block.id, group.id)}
+                          total={screenFrame.total}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScreenFrameRow({
+  block,
+  expanded,
+  frameIndex,
+  isCurrent,
+  onSelect,
+  total,
+}: {
+  block: WorkBlock;
+  expanded: boolean;
+  frameIndex: number;
+  isCurrent: boolean;
+  onSelect: () => void;
+  total: number;
+}) {
+  const Icon = blockIcon(block.kind);
+  const cmd = block.kind === "terminal" ? commandForBlock(block) : null;
+  const cwd =
+    block.kind === "terminal"
+      ? stringFromKeys(block.event.input, ["cwd", "work_dir"])
+      : null;
+  const output =
+    block.kind === "terminal"
+      ? block.outputText || textFromUnknown(block.event.output) || ""
+      : null;
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-muted/35",
+          expanded && "bg-muted/25",
+        )}
+      >
+        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+          {isCurrent ? "当前帧" : "帧"} {frameIndex + 1}/{total}
+        </span>
+        <StatusGlyph status={block.status} />
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
+          {block.title}
+        </span>
+        {block.subtitle && (
+          <span className="max-w-[40%] shrink-0 truncate text-[10px] text-muted-foreground">
+            {block.subtitle}
+          </span>
+        )}
+        <ChevronDownIcon
+          className={cn(
+            "size-3.5 shrink-0 text-muted-foreground transition-transform",
+            expanded ? "rotate-0" : "-rotate-90",
+          )}
+        />
+      </button>
+      {expanded && (cmd || cwd || output) && (
+        <div className="border-t border-border/30">
+          {cmd && (
+            <div className="flex items-start gap-1.5 px-2.5 py-1.5">
+              <span className="mt-0.5 shrink-0 font-mono text-[10px] text-emerald-600">
+                $
+              </span>
+              <pre className="min-w-0 flex-1 whitespace-pre-wrap break-all font-mono text-[11px] leading-4 text-foreground">
+                {cmd}
+              </pre>
+            </div>
+          )}
+          {cwd && (
+            <div className="px-2.5 pb-1 font-mono text-[10px] text-muted-foreground">
+              {cwd}
+            </div>
+          )}
+          {output && (
+            <pre className="max-h-32 overflow-auto border-t border-border/30 px-2.5 py-1.5 font-mono text-[10px] leading-4 text-foreground/70">
+              {output}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildScreenPhaseGroups(
+  phases: AgentPhase[],
+  screenBlocks: WorkBlock[],
+  currentPhaseId: string | null,
+): ScreenPhaseGroup[] {
+  if (phases.length === 0) {
+    return [
+      {
+        id: "screen:all",
+        title: "过程帧",
+        status: statusFromBlocks(screenBlocks),
+        blocks: screenBlocks,
+      },
+    ];
+  }
+
+  const screenOrder = new Map(
+    screenBlocks.map((block, index) => [block.id, index]),
+  );
+  const blockById = new Map(screenBlocks.map((block) => [block.id, block]));
+  const assigned = new Set<string>();
+  const groups = phases.map((phase) => {
+    const phaseBlocks = phase.blockIds
+      .map((blockId) => blockById.get(blockId))
+      .filter((block): block is WorkBlock => Boolean(block))
+      .sort(
+        (left, right) =>
+          (screenOrder.get(left.id) ?? 0) - (screenOrder.get(right.id) ?? 0),
+      );
+    for (const block of phaseBlocks) assigned.add(block.id);
+    return {
+      id: phase.id,
+      title: phase.title,
+      detail: phase.detail,
+      status: phase.status,
+      blocks: phaseBlocks,
+    };
+  });
+
+  const orphanBlocks = screenBlocks.filter((block) => !assigned.has(block.id));
+  if (orphanBlocks.length > 0) {
+    const target =
+      groups.find((group) => group.id === currentPhaseId) ??
+      groups.find((group) => group.status === "running") ??
+      groups.find((group) => group.status !== "pending") ??
+      groups[0];
+    if (target) {
+      const merged = new Map(target.blocks.map((block) => [block.id, block]));
+      for (const block of orphanBlocks) {
+        if (!merged.has(block.id)) merged.set(block.id, block);
+      }
+      target.blocks = Array.from(merged.values());
+      target.blocks.sort(
+        (left, right) =>
+          (screenOrder.get(left.id) ?? 0) - (screenOrder.get(right.id) ?? 0),
+      );
+    }
+  }
+
+  return groups;
+}
+
+function statusFromBlocks(blocks: WorkBlock[]): AgentPhase["status"] {
+  if (blocks.some((block) => block.status === "error")) return "error";
+  if (
+    blocks.some(
+      (block) =>
+        block.status === "running" || block.status === "waiting_approval",
+    )
+  ) {
+    return "running";
+  }
+  return blocks.length > 0 ? "done" : "pending";
+}
+
+function phaseStatusLabel(status: AgentPhase["status"]) {
+  if (status === "running") return "进行中";
+  if (status === "error") return "异常";
+  if (status === "done") return "已完成";
+  return "待开始";
+}
+
+export function AgentWorkbenchPanel({
+  activeTab,
+  events,
+  focusedAgentId,
+  hasAnswer,
+  onSelectTab,
+  runSettled,
+  runFailed,
+  paused,
+  className,
+  onClose,
+  threadId,
+  workDir,
+  browserPreviewBlocks,
+}: {
+  activeTab?: AgentWorkbenchTabId;
+  events: LiveToolEvent[];
+  focusedAgentId?: string | null;
+  hasAnswer?: boolean;
+  onSelectTab?: (tab: AgentWorkbenchTabId) => void;
+  runSettled?: boolean;
+  runFailed?: boolean;
+  threadId?: string | null;
+  workDir?: string;
+  paused?: boolean;
+  className?: string;
+  onClose?: () => void;
+  browserPreviewBlocks?: ExtractedCodeBlocks | null;
+}) {
+  const { t } = useI18n();
+  const {
+    deriveAgentTiles,
+    phaseBlockSummary,
+    agentStatusLabel,
+    agentStatusClass,
+    workbenchStatus,
+  } = useAgentWorkbenchI18n();
+
+  const workbenchSnapshot = useAgentWorkbenchSnapshot(events, {
+    deriveAgentTiles,
+    hasAnswer,
+    runSettled,
+    runFailed,
+    paused,
+    workDir,
+  });
+  const {
+    agentTiles,
+    blocks,
+    currentPhase,
+    focusedTab,
+    inferredWorkDir,
+    phases,
+    recentFileEvents,
+    visibleDiffEntries,
+  } = workbenchSnapshot;
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string | null>(
+    currentPhase?.id ?? null,
+  );
+  const [manualPhaseSelection, setManualPhaseSelection] = useState(false);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [manualBlockSelection, setManualBlockSelection] = useState(false);
+  const [activityView, setActivityView] = useState<"summary" | "screen">(
+    "summary",
+  );
+  const [replayPlaying, setReplayPlaying] = useState(false);
+  const [replayCompleted, setReplayCompleted] = useState(false);
+  const [closedTabs, setClosedTabs] = useState<Set<AgentWorkbenchTabId>>(
+    () => new Set(),
+  );
+
+  const selectedPhase =
+    phases.find((phase) => phase.id === selectedPhaseId) ?? currentPhase;
+  const phaseBlocks = useMemo(
+    () =>
+      selectedPhase
+        ? blocks.filter((block) => selectedPhase.blockIds.includes(block.id))
+        : blocks,
+    [blocks, selectedPhase],
+  );
+  const defaultBlock = useMemo(
+    () => pickCurrentWorkBlock(phaseBlocks) ?? phaseBlocks[0] ?? null,
+    [phaseBlocks],
+  );
+  const selectedBlock =
+    phaseBlocks.find((block) => block.id === selectedBlockId) ?? defaultBlock;
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const selectedAgent = selectedAgentId
+    ? (agentTiles.find((agent) => agent.id === selectedAgentId) ?? null)
+    : null;
+  const creationFocusAgent = isAgentCreationBlock(selectedBlock)
+    ? agentTileForBlock(selectedBlock, agentTiles)
+    : undefined;
+  const screenBlocks = useMemo(
+    () => screenBlocksForAgent(blocks, selectedAgent?.id ?? null),
+    [blocks, selectedAgent?.id],
+  );
+  const screenFrame = useMemo(
+    () =>
+      currentScreenFrame(
+        screenBlocks,
+        manualBlockSelection ? selectedBlockId : null,
+      ),
+    [manualBlockSelection, screenBlocks, selectedBlockId],
+  );
+  const screenProgress = useMemo(() => {
+    if (!screenFrame.block || screenBlocks.length === 0) {
+      return { current: 0, total: 0 };
+    }
+    return progressForWorkBlocks(screenBlocks, screenFrame.block);
+  }, [screenBlocks, screenFrame.block]);
+  const replayIndex = useMemo(() => {
+    if (!screenFrame.block) return -1;
+    return screenBlocks.findIndex(
+      (block) => block.id === screenFrame.block?.id,
+    );
+  }, [screenBlocks, screenFrame.block]);
+  const replayPrompt = useMemo(
+    () => composeReplayPrompt(selectedAgent, screenBlocks),
+    [screenBlocks, selectedAgent],
+  );
+
+  useEffect(() => {
+    if (!currentPhase) {
+      setSelectedPhaseId(null);
+      setManualPhaseSelection(false);
+      return;
+    }
+    setSelectedPhaseId((current) => {
+      const currentStillExists = Boolean(
+        current && phases.some((phase) => phase.id === current),
+      );
+      if (!manualPhaseSelection || !currentStillExists) {
+        return currentPhase.id;
+      }
+      return current;
+    });
+  }, [currentPhase, phases, manualPhaseSelection]);
+
+  useEffect(() => {
+    if (!defaultBlock) {
+      setSelectedBlockId(null);
+      setManualBlockSelection(false);
+      return;
+    }
+    setSelectedBlockId((current) => {
+      const currentStillExists = Boolean(
+        current && phaseBlocks.some((block) => block.id === current),
+      );
+      if (!manualBlockSelection || !currentStillExists) {
+        return defaultBlock.id;
+      }
+      return current;
+    });
+  }, [defaultBlock, phaseBlocks, manualBlockSelection]);
+
+  useEffect(() => {
+    setSelectedAgentId((current) =>
+      current && agentTiles.some((agent) => agent.id === current)
+        ? current
+        : null,
+    );
+  }, [agentTiles]);
+
+  useEffect(() => {
+    setReplayPlaying(false);
+    setReplayCompleted(false);
+  }, [selectedAgent?.id]);
+
+  useEffect(() => {
+    if (!replayPlaying) return;
+    if (screenBlocks.length === 0) {
+      setReplayPlaying(false);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setManualBlockSelection(true);
+      setSelectedBlockId((current) => {
+        const index = current
+          ? screenBlocks.findIndex((block) => block.id === current)
+          : -1;
+        const nextIndex = index < 0 ? 0 : index + 1;
+        if (nextIndex >= screenBlocks.length) {
+          setReplayPlaying(false);
+          setReplayCompleted(true);
+          return current ?? screenBlocks[screenBlocks.length - 1]?.id ?? null;
+        }
+        return screenBlocks[nextIndex]?.id ?? current;
+      });
+    }, 1100);
+    return () => window.clearInterval(timer);
+  }, [replayPlaying, screenBlocks]);
+
+  const startReplay = useCallback(() => {
+    if (screenBlocks.length === 0) return;
+    setActivityView("screen");
+    onSelectTab?.("agent");
+    setReplayCompleted(false);
+    setManualBlockSelection(true);
+    setSelectedBlockId(screenBlocks[0]?.id ?? null);
+    setReplayPlaying(true);
+  }, [onSelectTab, screenBlocks]);
+
+  const pauseReplay = useCallback(() => {
+    setReplayPlaying(false);
+  }, []);
+
+  const jumpToCurrent = useCallback(() => {
+    setActivityView("screen");
+    onSelectTab?.("agent");
+    setReplayPlaying(false);
+    setReplayCompleted(false);
+    setManualBlockSelection(false);
+    setSelectedBlockId(null);
+  }, [onSelectTab]);
+
+  const copyReplayPrompt = useCallback(() => {
+    copyText(replayPrompt);
+  }, [replayPrompt]);
+
+  const openMainProcess = useCallback(() => {
+    setSelectedAgentId(null);
+    setActivityView("screen");
+    setManualBlockSelection(false);
+    onSelectTab?.("agent");
+  }, [onSelectTab]);
+
+  const openSubagentProcess = useCallback(
+    (agentId: string) => {
+      setSelectedAgentId(agentId);
+      setActivityView("screen");
+      setManualBlockSelection(false);
+      onSelectTab?.("agent");
+    },
+    [onSelectTab],
+  );
+
+  const subagentDock = (
+    <SubagentDock
+      agents={agentTiles}
+      selectedAgentId={selectedAgent?.id ?? null}
+      onSelectMain={openMainProcess}
+      onSelectAgent={openSubagentProcess}
+    />
+  );
+
+  useEffect(() => {
+    if (!focusedAgentId || agentTiles.length === 0) return;
+    const target = findAgentTileByFocusId(focusedAgentId, agentTiles);
+    if (!target) return;
+    setSelectedAgentId(target.id);
+    setActivityView("screen");
+  }, [focusedAgentId, agentTiles]);
+
+  const emptyShell = blocks.length === 0 && agentTiles.length === 0;
+  const runStatus = workbenchStatus(blocks, phases);
+  const runState: "running" | "error" | "pending" | "completed" = phases.some(
+    (p) => p.status === "running",
+  )
+    ? "running"
+    : blocks.some((b) => b.status === "error")
+      ? "error"
+      : phases.some((p) => p.status === "pending")
+        ? "pending"
+        : "completed";
+  const SelectedIcon = selectedBlock
+    ? blockIcon(selectedBlock.kind)
+    : MonitorIcon;
+  const SelectedStatusIcon = selectedBlock
+    ? statusIcon(selectedBlock.status)
+    : CircleIcon;
+  const requestedActiveTab: AgentWorkbenchTabId =
+    activeTab ?? (focusedAgentId ? "agent" : focusedTab) ?? "agent";
+  const effectiveActiveTab: AgentWorkbenchTabId =
+    requestedActiveTab === "subagents" ? "agent" : requestedActiveTab;
+  const workbenchTabs: Array<{
+    id: AgentWorkbenchTabId;
+    label: string;
+    Icon: typeof MonitorIcon;
+  }> = [
+    // Sort by expected usage frequency and priority.
+    {
+      id: "files",
+      label: FILES_TAB_LABEL,
+      Icon: FolderIcon,
+    },
+    {
+      id: "diff",
+      label: DIFF_TAB_LABEL,
+      Icon: ChevronRightIcon,
+    },
+    {
+      id: "terminal",
+      label: TERMINAL_TAB_LABEL,
+      Icon: TerminalIcon,
+    },
+    {
+      id: "browser",
+      label: BROWSER_TAB_LABEL,
+      Icon: GlobeIcon,
+    },
+  ];
+
+  // Auto-open a tab if it becomes the effective active tab
+  useEffect(() => {
+    if (closedTabs.has(effectiveActiveTab)) {
+      setClosedTabs((prev) => {
+        const next = new Set(prev);
+        next.delete(effectiveActiveTab);
+        return next;
+      });
+    }
+  }, [effectiveActiveTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCloseTab = useCallback(
+    (tabId: AgentWorkbenchTabId) => {
+      setClosedTabs((prev) => {
+        const next = new Set(prev);
+        next.add(tabId);
+        return next;
+      });
+      if (effectiveActiveTab === tabId) {
+        onSelectTab?.("agent");
+      }
+    },
+    [effectiveActiveTab, onSelectTab],
+  );
+
+  const handleOpenTab = useCallback(
+    (tabId: AgentWorkbenchTabId) => {
+      setClosedTabs((prev) => {
+        const next = new Set(prev);
+        next.delete(tabId);
+        return next;
+      });
+      onSelectTab?.(tabId);
+    },
+    [onSelectTab],
+  );
+
+  const visibleTabs = workbenchTabs.filter((tab) => !closedTabs.has(tab.id));
+  const showSubagentDock = effectiveActiveTab === "agent";
+
+  // Workbench view: summary / computer view.
+  if (emptyShell) {
+    const emptyEmbeddedPage =
+      effectiveActiveTab === "files" ? (
+        <AgentFilesPage
+          workDir={inferredWorkDir}
+          threadId={threadId}
+          recentFileEvents={recentFileEvents}
+        />
+      ) : effectiveActiveTab === "diff" ? (
+        <AgentDiffPage entries={visibleDiffEntries} />
+      ) : effectiveActiveTab === "terminal" ? (
+        <TerminalPanel
+          sessionId={`agent-workbench-${threadId ?? "local"}`}
+          cwd={inferredWorkDir}
+          className="min-h-0 flex-1"
+        />
+      ) : effectiveActiveTab === "browser" ? (
+        browserPreviewBlocks ? (
+          <LivePreviewPanel
+            htmlContent={browserPreviewBlocks.html}
+            cssContent={browserPreviewBlocks.css}
+            jsContent={browserPreviewBlocks.js}
+            className="min-h-0 flex-1"
+          />
+        ) : (
+          <BrowserPreviewPanel
+            threadId={threadId ?? "default"}
+            workspacePath={inferredWorkDir}
+            className="min-h-0 flex-1"
+          />
+        )
+      ) : (
+        <WorkbenchEmptyPage
+          title="机器人"
+          description="当前没有正在运行的机器人过程。"
+        />
+      );
+
+    return (
+      <div
+        className={cn(
+          "flex size-full min-h-0 flex-col bg-[color:color-mix(in_oklch,var(--muted)_46%,var(--background))]",
+          className,
+        )}
+      >
+        <header className="relative shrink-0 border-b border-border/60 px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => onSelectTab?.("agent")}
+              className="relative flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background font-mono shadow-sm transition-colors hover:bg-muted"
+              aria-label="机器人"
+              title="机器人"
+            >
+              <BotIcon className="size-4 text-muted-foreground" />
+            </button>
+            <div
+              role="tablist"
+              aria-label="看板"
+              className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {visibleTabs.map((tab) => {
+                const active = effectiveActiveTab === tab.id;
+                const Icon = tab.Icon;
+                return (
+                  <div
+                    key={tab.id}
+                    className={cn(
+                      "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-md text-sm font-medium shadow-none transition-colors",
+                      active
+                        ? "bg-background text-foreground shadow-sm ring-1 ring-border/70"
+                        : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
+                    )}
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => handleOpenTab(tab.id)}
+                      className="flex min-w-0 items-center gap-1.5 pl-2.5"
+                    >
+                      <Icon className="size-4 shrink-0" />
+                      <span className="truncate">{tab.label}</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Close ${tab.label}`}
+                      onClick={() => handleCloseTab(tab.id)}
+                      className={cn(
+                        "mr-1 flex size-4 shrink-0 items-center justify-center rounded transition-colors",
+                        active
+                          ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+                          : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground",
+                      )}
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {onClose ? (
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label={t.agentWorkbench.closeTitle}
+              >
+                <XIcon className="size-4" />
+              </button>
+            ) : null}
+          </div>
+        </header>
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70">
+          {emptyEmbeddedPage}
+        </main>
+        {showSubagentDock ? subagentDock : null}
+      </div>
+    );
+  }
+
+  const agentKanbanPage = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* View switch tabs */}
+      <div className="flex items-center gap-0.5 border-b border-border/45 px-2 py-1">
+        {[
+          { id: "summary" as const, label: "概要" },
+          { id: "screen" as const, label: "电脑视图" },
+        ].map((view) => (
+          <button
+            key={view.id}
+            type="button"
+            onClick={() => setActivityView(view.id)}
+            className={cn(
+              "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+              activityView === view.id
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+            )}
+          >
+            {view.label}
+          </button>
+        ))}
+        <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+          {selectedAgent?.label ?? "Agent 01"}
+        </span>
+      </div>
+
+      {/* View content */}
+      {activityView === "summary" ? (
+        creationFocusAgent ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70 p-3">
+            <div className="mx-auto w-full max-w-xl">
+              <AgentCreationCard
+                agent={creationFocusAgent}
+                agentStatusClass={agentStatusClass}
+                agentStatusLabel={agentStatusLabel}
+              />
+            </div>
+          </div>
+        ) : (
+          <AgentSummaryPage
+            phases={phases}
+            diffEntries={visibleDiffEntries}
+            agentTiles={agentTiles}
+            blocks={blocks}
+            onSelectTab={onSelectTab}
+          />
+        )
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col bg-background/70">
+          {/* Header: agent identity + status */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-border/40 bg-background/90 px-3 py-2">
+            <MonitorIcon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <span
+                className={cn(
+                  "inline-block size-2 rounded-full ring-2 ring-background",
+                  !selectedAgent || selectedAgent.status === "running"
+                    ? "bg-emerald-500"
+                    : selectedAgent.status === "error"
+                      ? "bg-red-500"
+                      : selectedAgent.status === "done"
+                        ? "bg-muted-foreground/50"
+                        : "bg-amber-400",
+                )}
+              />
+              当前进度{" "}
+              {screenProgress.total > 0
+                ? `${screenProgress.current}/${screenProgress.total}`
+                : phases.length > 0
+                  ? `${Math.max(1, phases.findIndex((p) => p.id === currentPhase?.id) + 1)}/${phases.length}`
+                  : "0/0"}
+            </span>
+            <span className="h-4 w-px bg-border/70" />
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              {selectedAgent
+                ? `${selectedAgent.label} · ${repairMojibakeText(
+                    selectedAgent.codename ?? selectedAgent.name,
+                  )}${
+                    selectedAgent.role
+                      ? ` · ${repairMojibakeText(selectedAgent.role)}`
+                      : ""
+                  }`
+                : (currentPhase?.title ?? "电脑视图")}
+            </span>
+            <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+              <span>
+                {selectedAgent
+                  ? selectedAgent.status === "running"
+                    ? "运行中"
+                    : selectedAgent.status === "error"
+                      ? "异常"
+                      : selectedAgent.status === "done"
+                        ? "已结束"
+                        : "等待中"
+                  : phases.some((p) => p.status === "running")
+                    ? "运行中"
+                    : "已结束"}
+              </span>
+            </span>
+          </div>
+
+          {/* Tool call timeline */}
+          {selectedAgent ? (
+            <SubagentProcessView
+              agent={selectedAgent}
+              blocks={screenBlocks}
+              currentBlockId={screenFrame.block?.id ?? null}
+              onSelectBlock={(blockId) => {
+                setSelectedBlockId(blockId);
+                setManualBlockSelection(true);
+              }}
+            />
+          ) : (
+            <>
+              <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+                <div className="mx-auto w-full max-w-2xl space-y-3 p-3">
+                  <MainProcessPhaseTimeline
+                    currentPhaseId={currentPhase?.id ?? null}
+                    onSelectBlock={(blockId, phaseId) => {
+                      if (phaseId) {
+                        setSelectedPhaseId(phaseId);
+                        setManualPhaseSelection(true);
+                      }
+                      setSelectedBlockId(blockId);
+                      setManualBlockSelection(true);
+                    }}
+                    phases={phases}
+                    screenBlocks={screenBlocks}
+                    screenFrame={screenFrame}
+                    selectedBlockId={selectedBlockId}
+                  />
+                </div>
+              </div>
+
+              {/* Bottom agent switcher */}
+            </>
+          )}
+          <div className="hidden shrink-0 border-t border-border/40 bg-background/90">
+            <div className="mx-auto flex w-full max-w-2xl items-center gap-1.5 overflow-x-auto px-3 py-1.5">
+              {/* Main controller */}
+              <button
+                type="button"
+                onClick={() => setSelectedAgentId(null)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-colors",
+                  !selectedAgent
+                    ? "bg-foreground/10 text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <MonitorIcon className="size-3" />
+                主控
+              </button>
+              {/* Subagents */}
+              {agentTiles.map((tile) => {
+                const active = selectedAgent?.id === tile.id;
+                return (
+                  <button
+                    key={tile.id}
+                    type="button"
+                    onClick={() => setSelectedAgentId(tile.id)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-colors",
+                      active
+                        ? "bg-foreground/10 text-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {tile.avatar ? (
+                      <span className="text-xs">{tile.avatar}</span>
+                    ) : (
+                      <BotIcon className="size-3" />
+                    )}
+                    <span
+                      className={cn(
+                        "inline-block size-1.5 rounded-full",
+                        tile.status === "running"
+                          ? "bg-emerald-500"
+                          : tile.status === "error"
+                            ? "bg-red-500"
+                            : tile.status === "done"
+                              ? "bg-muted-foreground/50"
+                              : "bg-amber-400",
+                      )}
+                    />
+                    {tile.codename ?? tile.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const effectiveEmbeddedPage =
+    effectiveActiveTab === "agent" ? (
+      agentKanbanPage
+    ) : effectiveActiveTab === "files" ? (
+      <AgentFilesPage
+        workDir={inferredWorkDir}
+        threadId={threadId}
+        recentFileEvents={recentFileEvents}
+      />
+    ) : effectiveActiveTab === "diff" ? (
+      <AgentDiffPage entries={visibleDiffEntries} />
+    ) : effectiveActiveTab === "terminal" ? (
+      <TerminalPanel
+        sessionId={`agent-workbench-${threadId ?? "local"}`}
+        cwd={inferredWorkDir}
+        className="min-h-0 flex-1"
+      />
+    ) : effectiveActiveTab === "browser" ? (
+      browserPreviewBlocks ? (
+        <LivePreviewPanel
+          htmlContent={browserPreviewBlocks.html}
+          cssContent={browserPreviewBlocks.css}
+          jsContent={browserPreviewBlocks.js}
+          className="min-h-0 flex-1"
+        />
+      ) : (
+        <BrowserPreviewPanel
+          threadId={threadId ?? "default"}
+          workspacePath={inferredWorkDir}
+        />
+      )
+    ) : undefined;
+
+  return (
+    <div
+      className={cn(
+        "flex size-full min-h-0 flex-col bg-[color:color-mix(in_oklch,var(--muted)_46%,var(--background))]",
+        className,
+      )}
+    >
+      <header className="relative shrink-0 border-b border-border/60 px-3 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => onSelectTab?.("agent")}
+            className={cn(
+              "relative flex size-9 shrink-0 items-center justify-center rounded-md border font-mono shadow-sm transition-colors",
+              effectiveActiveTab === "agent" && "ring-1",
+              runState === "running"
+                ? "border-emerald-500/40 bg-emerald-500/10 animate-[breathing_2s_ease-in-out_infinite]"
+                : runState === "error"
+                  ? "border-destructive/50 bg-destructive/10"
+                  : runState === "pending"
+                    ? "border-amber-500/40 bg-amber-500/10"
+                    : "border-emerald-500/30 bg-emerald-500/5",
+              effectiveActiveTab === "agent" && "ring-primary/30",
+            )}
+            title={runStatus.label}
+            aria-label={`${t.agentWorkbench.agentComputer} · ${runStatus.label}`}
+          >
+            <BotIcon
+              className={cn(
+                "size-4 transition-colors",
+                runState === "running"
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : runState === "error"
+                    ? "text-destructive"
+                    : runState === "pending"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-emerald-600 dark:text-emerald-400",
+              )}
+            />
+            {(runState === "running" || runState === "pending") && (
+              <span
+                className={cn(
+                  "absolute -top-0.5 -right-0.5 size-2 rounded-full",
+                  runState === "running"
+                    ? "bg-emerald-500 animate-ping"
+                    : "bg-amber-500 animate-pulse",
+                )}
+              />
+            )}
+          </button>
+          <div
+            role="tablist"
+            aria-label={t.agentWorkbench.agentComputer}
+            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {visibleTabs.map(({ id, label, Icon }) => {
+              const active = id === effectiveActiveTab;
+              return (
+                <div
+                  key={id}
+                  className={cn(
+                    "group inline-flex h-8 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-md text-sm font-medium shadow-none transition-colors",
+                    active
+                      ? "bg-background text-foreground ring-1 ring-border/60"
+                      : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
+                  )}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => onSelectTab?.(id)}
+                    className="flex min-w-0 items-center gap-1.5 pl-2.5"
+                  >
+                    <Icon className="size-4 shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCloseTab(id);
+                    }}
+                    className={cn(
+                      "mr-1 flex size-4 shrink-0 items-center justify-center rounded transition-colors",
+                      active
+                        ? "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+                        : "text-muted-foreground/0 group-hover:text-muted-foreground/70 hover:!bg-muted hover:!text-foreground",
+                    )}
+                    aria-label={`Close ${label}`}
+                  >
+                    <XIcon className="size-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground"
+                title="标签页列表"
+                aria-label="标签页列表"
+              >
+                <LayoutGridIcon className="size-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              {workbenchTabs.map(({ id, label, Icon }) => {
+                const visible = !closedTabs.has(id);
+                return (
+                  <DropdownMenuItem
+                    key={id}
+                    className="gap-2"
+                    onClick={() =>
+                      visible ? handleCloseTab(id) : handleOpenTab(id)
+                    }
+                  >
+                    <Icon className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate">{label}</span>
+                    {visible && <CheckIcon className="size-3.5 text-primary" />}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      {effectiveEmbeddedPage ? (
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70">
+          {effectiveEmbeddedPage}
+        </main>
+      ) : (
+        <main className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70">
+            <div className="flex items-center border-b border-border/45 px-4 py-1 text-[11px]">
+              <span className="mx-auto font-mono text-foreground">
+                {selectedAgent
+                  ? `${t.agentWorkbench.kindAgent} ${selectedAgent.label}`
+                  : `${t.agentWorkbench.kindAgent} 01`}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setActivityView((value) =>
+                    value === "summary" ? "screen" : "summary",
+                  )
+                }
+                className="ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+              >
+                <UsersIcon className="size-3.5" />
+                {activityView === "summary"
+                  ? t.agentWorkbench.computerViewLabel
+                  : t.agentWorkbench.activityTrace}
+              </button>
+            </div>
+
+            <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-3 py-3">
+              {activityView === "screen" ? (
+                <div className="flex min-h-48 flex-1 items-center justify-center rounded-lg border border-border/55 bg-background/80 px-4 text-sm text-muted-foreground shadow-sm">
+                  {t.agentWorkbench.computerViewHint}
+                </div>
+              ) : selectedPhase ? (
+                <section className="rounded-lg border border-border/55 bg-background/85 px-3 py-3 shadow-sm">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                    <StatusGlyph status={selectedPhase.status} />
+                    <span>{selectedPhase.title}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      {phaseBlockSummary(selectedPhase, blocks)}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-1.5">
+                    {phaseBlocks.length === 0 ? (
+                      <div className="py-4 text-center text-sm text-muted-foreground">
+                        {selectedPhase.status === "done"
+                          ? t.agentWorkbench.phaseCompleted
+                          : selectedPhase.status === "error"
+                            ? t.agentWorkbench.statusError
+                            : t.agentWorkbench.waitingForPhase}
+                      </div>
+                    ) : (
+                      phaseBlocks.map((block) => {
+                        const Icon = blockIcon(block.kind);
+                        const active = selectedBlock?.id === block.id;
+                        return (
+                          <button
+                            key={block.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedBlockId(block.id);
+                              setManualBlockSelection(true);
+                            }}
+                            className={cn(
+                              "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors",
+                              active
+                                ? "bg-muted/70 text-foreground"
+                                : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                            )}
+                          >
+                            <StatusGlyph status={block.status} />
+                            <Icon className="size-4 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate">
+                              {block.title}
+                            </span>
+                            <span className="max-w-[45%] truncate text-xs text-muted-foreground">
+                              {block.subtitle}
+                            </span>
+                            <ChevronDownIcon className="size-3.5 -rotate-90 opacity-50" />
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </section>
+              ) : (
+                <WorkbenchEmptyPage
+                  title="机器人"
+                  description="当前没有正在运行的机器人过程。"
+                />
+              )}
+
+              {selectedBlock && (
+                <section className="mt-3 overflow-hidden rounded-lg border border-border/55 bg-background/85 shadow-sm">
+                  <div className="flex items-center justify-between border-b border-border/45 px-3 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <SelectedIcon className="size-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate text-xs font-semibold text-foreground">
+                        {selectedBlock.title}
+                      </span>
+                      <span className="shrink-0 text-xs font-normal text-muted-foreground">
+                        {kindLabel(selectedBlock.kind, t.agentWorkbench)} ·{" "}
+                        {eventTime(selectedBlock)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={() =>
+                        copyText(
+                          selectedBlock.outputText ||
+                            selectedBlock.inputText ||
+                            selectedBlock.subtitle,
+                        )
+                      }
+                      title={t.agentWorkbench.copyDetails}
+                    >
+                      <CopyIcon className="size-3.5" />
+                    </button>
+                  </div>
+                  <div className="grid divide-y divide-border/45">
+                    <WorkBlockDetailSection
+                      key={`${selectedBlock.id}:request`}
+                      title={t.agentWorkbench.request}
+                      content={
+                        selectedBlock.inputText || selectedBlock.subtitle
+                      }
+                    />
+                    <WorkBlockDetailSection
+                      key={`${selectedBlock.id}:response`}
+                      title={t.agentWorkbench.response}
+                      content={selectedBlock.outputText}
+                      empty={
+                        <div className="flex min-h-16 items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground">
+                          {selectedBlock.status === "running" ? (
+                            <>
+                              <CircleIcon className="size-3 animate-pulse" />
+                              {t.agentWorkbench.waitingForToolResult}
+                            </>
+                          ) : (
+                            <>
+                              <SelectedStatusIcon className="size-3.5" />
+                              {statusText(selectedBlock.status)}
+                            </>
+                          )}
+                        </div>
+                      }
+                    />
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
+
+          {agentTiles.length > 0 && (
+            <div className="shrink-0 border-t border-border/55 bg-background/90 px-4 py-2">
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {agentTiles.map((agent) => {
+                  const active = selectedAgent?.id === agent.id;
+                  const percent = agentProgressPercent(agent.status);
+                  return (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      onClick={() => setSelectedAgentId(agent.id)}
+                      title={`${repairMojibakeText(agent.name)}: ${repairMojibakeText(agent.task)}`}
+                      className={cn(
+                        "flex min-w-32 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
+                        active
+                          ? "border-foreground/70 bg-background"
+                          : "border-transparent bg-muted/45 hover:bg-muted/70",
+                      )}
+                    >
+                      {agent.avatar ? (
+                        <span
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-background text-base"
+                          aria-hidden="true"
+                          title={agent.role ?? "subagent"}
+                        >
+                          {agent.avatar}
+                        </span>
+                      ) : (
+                        <BotIcon className="size-7 shrink-0 rounded-full bg-background p-1 text-foreground" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2 font-mono text-xs text-foreground">
+                          <span>{repairMojibakeText(agent.name)}</span>
+                          <span>{repairMojibakeText(agent.label)}</span>
+                        </div>
+                        <div className="mt-1 line-clamp-1 text-[11px] text-muted-foreground">
+                          {compactDetail(agent.task, 56)}
+                        </div>
+                        <div
+                          className={cn(
+                            "mt-1 truncate text-[11px]",
+                            agentStatusClass(agent.status),
+                          )}
+                        >
+                          {dockAgentStatusLabel(agent.status)}
+                        </div>
+                        <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all",
+                              agent.status === "error"
+                                ? "bg-destructive"
+                                : "bg-emerald-500",
+                            )}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedAgent && (
+                <div className="mt-0.5 truncate px-1 text-[11px] text-muted-foreground">
+                  {repairMojibakeText(selectedAgent.name)} ·{" "}
+                  {compactDetail(selectedAgent.task)}
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      )}
+      {showSubagentDock && screenBlocks.length > 0 ? (
+        <ReplayController
+          playing={replayPlaying}
+          completed={replayCompleted}
+          current={replayIndex >= 0 ? replayIndex + 1 : 0}
+          total={screenBlocks.length}
+          agentLabel={selectedAgent ? selectedAgent.label : "主控"}
+          onPlay={startReplay}
+          onPause={pauseReplay}
+          onJumpCurrent={jumpToCurrent}
+          onCopyPrompt={copyReplayPrompt}
+        />
+      ) : null}
+      {showSubagentDock ? subagentDock : null}
+    </div>
+  );
+}
+
+function ReplayController({
+  playing,
+  completed,
+  current,
+  total,
+  agentLabel,
+  onPlay,
+  onPause,
+  onJumpCurrent,
+  onCopyPrompt,
+}: {
+  playing: boolean;
+  completed: boolean;
+  current: number;
+  total: number;
+  agentLabel: string;
+  onPlay: () => void;
+  onPause: () => void;
+  onJumpCurrent: () => void;
+  onCopyPrompt: () => void;
+}) {
+  const label = playing
+    ? "Octopus Agent 正在回放"
+    : completed
+      ? "Octopus Agent 回放完成"
+      : "Octopus Agent 可回放";
+  const progress = total > 0 ? Math.max(0, Math.min(1, current / total)) : 0;
+
+  return (
+    <div className="shrink-0 border-t border-border/45 bg-background/95 px-3 py-2">
+      <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-border/55 bg-background px-3 py-2 shadow-sm">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-foreground">
+          <BotIcon className="size-4" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium text-foreground">
+              {label}
+            </span>
+            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+              {agentLabel}
+            </span>
+            {total > 0 && (
+              <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
+                {Math.max(0, current)}/{total}
+              </span>
+            )}
+          </div>
+          <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-300",
+                completed ? "bg-emerald-500" : "bg-primary",
+              )}
+              style={{ width: `${progress * 100}%` }}
+            />
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={playing ? onPause : onPlay}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors",
+              playing
+                ? "bg-muted text-foreground hover:bg-muted/75"
+                : "bg-foreground text-background hover:opacity-90",
+            )}
+            title={playing ? "暂停回放" : "看回放"}
+          >
+            {playing ? (
+              <PauseIcon className="size-3.5" aria-hidden="true" />
+            ) : (
+              <PlayIcon className="size-3.5" aria-hidden="true" />
+            )}
+            {playing ? "暂停" : "看回放"}
+          </button>
+          <button
+            type="button"
+            onClick={onJumpCurrent}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/75"
+            title="跳到当前步骤"
+          >
+            <SkipForwardIcon className="size-3.5" aria-hidden="true" />
+            跳当前
+          </button>
+          <button
+            type="button"
+            onClick={onCopyPrompt}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/75"
+            title="复制同款任务提示"
+          >
+            <CopyIcon className="size-3.5" aria-hidden="true" />
+            做同款
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubagentDock({
+  agents,
+  selectedAgentId,
+  onSelectMain,
+  onSelectAgent,
+}: {
+  agents: AgentTile[];
+  selectedAgentId: string | null;
+  onSelectMain: () => void;
+  onSelectAgent: (agentId: string) => void;
+}) {
+  return (
+    <div className="shrink-0 border-t border-border/45 bg-background/95 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="flex shrink-0 items-center gap-1 rounded-md bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
+          <BotIcon className="size-3.5" aria-hidden="true" />
+          工位
+        </span>
+        <div className="flex min-w-0 flex-1 items-stretch gap-2 overflow-x-auto pb-0.5">
+          <button
+            type="button"
+            onClick={onSelectMain}
+            aria-label="查看主 Agent 工位"
+            title="主 Agent: 当前对话主进程"
+            className={cn(
+              "relative flex min-w-28 shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
+              selectedAgentId === null
+                ? "border-primary/50 bg-primary/10 text-primary shadow-sm"
+                : "border-border/55 bg-muted/35 text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-background">
+              <BotIcon className="size-4" aria-hidden="true" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-medium">主控</span>
+              <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                当前对话
+              </span>
+            </span>
+            <span className="ml-auto size-2 rounded-full bg-emerald-500" />
+          </button>
+          {agents.map((agent) => {
+            const active = selectedAgentId === agent.id;
+            const label = agent.codename ?? agent.name ?? agent.label;
+            const progress = agentProgressPercent(agent.status) / 100;
+            const hue = agent.status === "error" ? 8 : 118;
+            return (
+              <button
+                key={agent.id}
+                type="button"
+                onClick={() => onSelectAgent(agent.id)}
+                aria-label={`查看 ${label} 独立进程`}
+                title={`${label}: ${agent.task}`}
+                className={cn(
+                  "relative flex min-w-32 shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
+                  active
+                    ? "border-primary/50 bg-primary/10 text-primary shadow-sm"
+                    : "border-border/55 bg-muted/35 text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full border border-border/50 bg-background text-lg leading-none">
+                  {agent.avatar ? (
+                    <span aria-hidden="true">{agent.avatar}</span>
+                  ) : (
+                    <BotIcon className="size-5" aria-hidden="true" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium">
+                      {repairMojibakeText(label)}
+                    </span>
+                    <span className="font-mono text-xs text-foreground">
+                      {agent.label}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+                    {dockAgentStatusLabel(agent.status)}
+                  </span>
+                  <DotProgress
+                    progress={progress}
+                    hue={hue}
+                    cols={10}
+                    rows={2}
+                    className={cn(
+                      "mt-1",
+                      agent.status === "running" && "animate-pulse",
+                    )}
+                  />
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function dockAgentStatusLabel(status: AgentTile["status"]): string {
+  if (status === "running") return "运行中";
+  if (status === "error") return "异常";
+  if (status === "done") return "已完成";
+  return "等待中";
+}
+
+function composeReplayPrompt(
+  agent: AgentTile | null,
+  blocks: WorkBlock[],
+): string {
+  const target = agent
+    ? `${repairMojibakeText(agent.codename ?? agent.name)} (${repairMojibakeText(agent.role ?? agent.label)})`
+    : "主控 Agent";
+  const brief = repairMojibakeText(
+    agent?.prompt ?? agent?.task ?? agent?.lastThought ?? "",
+  );
+  const steps = blocks
+    .slice(0, 12)
+    .map((block, index) => {
+      const detail = compactDetail(
+        repairMojibakeText(
+          block.subtitle || block.inputText || block.outputText || block.title,
+        ),
+        120,
+      );
+      return `${index + 1}. ${block.title}${detail ? ` - ${detail}` : ""}`;
+    })
+    .join("\n");
+  return [
+    `请按类似方式复刻这个多 Agent 工作流：${target}`,
+    brief ? `\n任务说明：\n${brief}` : "",
+    steps ? `\n关键过程：\n${steps}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function SubagentProcessView({
+  agent,
+  blocks,
+  currentBlockId,
+  onSelectBlock,
+}: {
+  agent: AgentTile;
+  blocks: WorkBlock[];
+  currentBlockId: string | null;
+  onSelectBlock: (blockId: string) => void;
+}) {
+  const label = repairMojibakeText(agent.codename ?? agent.name ?? agent.label);
+  const progress = agentProgressPercent(agent.status) / 100;
+  const hue = agent.status === "error" ? 8 : 118;
+  const brief = repairMojibakeText(
+    agent.prompt ?? agent.task ?? agent.lastThought ?? "",
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 p-3">
+        <section className="overflow-hidden rounded-xl border border-border/55 bg-background/90 shadow-sm">
+          <div className="flex items-center justify-center border-b border-border/40 px-3 py-2 text-sm font-medium text-muted-foreground">
+            Agent 集群 - 独立进程
+          </div>
+          <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div className="rounded-md bg-foreground px-2.5 py-1.5 font-mono text-sm font-semibold text-background">
+                {agent.label}
+              </div>
+              <div className="mt-7 flex size-20 items-center justify-center rounded-lg border border-border bg-background text-4xl">
+                {agent.avatar ? (
+                  <span aria-hidden="true">{agent.avatar}</span>
+                ) : (
+                  <BotIcon className="size-10 text-foreground" />
+                )}
+              </div>
+              <div className="mt-4 truncate text-sm font-semibold text-foreground">
+                {label}
+              </div>
+              <div className="mt-1 truncate text-xs text-muted-foreground">
+                {repairMojibakeText(agent.role ?? "Subagent")}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-lg font-semibold text-foreground">
+                    {label}
+                  </div>
+                  <div className="mt-1 truncate text-sm text-muted-foreground">
+                    {repairMojibakeText(
+                      agent.role ?? agent.taskLabel ?? "子智能体",
+                    )}
+                  </div>
+                </div>
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium",
+                    agent.status === "running" &&
+                      "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    agent.status === "error" &&
+                      "bg-destructive/10 text-destructive",
+                    agent.status === "done" && "bg-muted text-muted-foreground",
+                    agent.status === "pending" &&
+                      "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-2 rounded-full",
+                      agent.status === "running" && "bg-emerald-500",
+                      agent.status === "error" && "bg-destructive",
+                      agent.status === "done" && "bg-muted-foreground/45",
+                      agent.status === "pending" && "bg-amber-400",
+                    )}
+                  />
+                  {dockAgentStatusLabel(agent.status)}
+                </span>
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <DotProgress
+                  progress={progress}
+                  hue={hue}
+                  cols={18}
+                  rows={3}
+                  className={cn(agent.status === "running" && "animate-pulse")}
+                />
+                <span className="text-xs text-muted-foreground">
+                  {agent.eventCount} 条过程记录
+                </span>
+                {agent.iterationCount !== undefined && (
+                  <span className="text-xs text-muted-foreground">
+                    {agent.iterationCount} 轮
+                  </span>
+                )}
+              </div>
+              <div className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/35 px-3 py-2 text-sm leading-6 text-foreground">
+                {brief || "暂无任务说明。"}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {blocks.length === 0 ? (
+          <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-border/55 bg-muted/20 px-4 text-sm text-muted-foreground">
+            等待子智能体开始输出
+          </div>
+        ) : (
+          <section className="rounded-xl border border-border/50 bg-background/80 p-2 shadow-sm">
+            <div className="flex items-center gap-2 px-2 pb-2 text-sm font-medium text-muted-foreground">
+              <MonitorIcon className="size-4" aria-hidden="true" />
+              过程回放
+              <span className="ml-auto text-xs font-normal">
+                {blocks.length} 步
+              </span>
+            </div>
+            <div className="space-y-2">
+              {blocks.map((block, index) => {
+                const Icon = blockIcon(block.kind);
+                const active = currentBlockId === block.id;
+                const detail =
+                  block.outputText ||
+                  block.inputText ||
+                  block.subtitle ||
+                  block.title;
+                return (
+                  <button
+                    key={block.id}
+                    type="button"
+                    onClick={() => onSelectBlock(block.id)}
+                    className={cn(
+                      "flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
+                      active
+                        ? "border-primary/45 bg-primary/5"
+                        : "border-border/40 bg-background/75 hover:bg-muted/35",
+                    )}
+                  >
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <StatusGlyph
+                          status={block.status}
+                          className="size-3.5"
+                        />
+                        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="truncate text-xs font-semibold text-foreground">
+                          {block.title}
+                        </span>
+                        {block.subtitle && (
+                          <span className="max-w-[38%] shrink-0 truncate text-[11px] text-muted-foreground">
+                            {block.subtitle}
+                          </span>
+                        )}
+                      </div>
+                      {detail && (
+                        <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                          {compactDetail(detail, 150)}
+                        </div>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                      {statusText(block.status)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,101 @@
+# Paper write Meta-Skill.
+# 9-step workflow that turns a topic into a research-grade paper.
+#  - Validates user prefs (length, audience, citation style)
+#  - Searches + fetches 3-5 papers from arXiv / OpenAlex
+#  - Builds a section outline aligned with the request
+#  - Writes each section with citation tracking
+#  - Cross-checks every claim against the bibliography
+#  - Compiles to LaTeX, then PDF
+
+name: paper-write
+kind: skill_cluster
+version: 0.1.0
+description: End-to-end academic paper writing from a topic prompt
+when_to_use: User asks to write a research / academic / paper / arxiv / latex / 论文
+affinity: [research, writing, latex]
+
+budget:
+  tokens: 200000
+  usd: 5.0
+  latency_ms: 3600000
+
+steps:
+  - node_id: prefs
+    skill: ask_user_question
+    args:
+      prompt: "{user_input.topic}"
+      questions: "[length, audience, citation_style, deadline]"
+    timeout_ms: 120000
+
+  - node_id: research
+    skill: deep_research
+    args:
+      topic: "{user_input.topic}"
+      depth: 3
+      sources: [arxiv, openalex, semantic_scholar]
+    depends_on: [prefs]
+    timeout_ms: 600000
+
+  - node_id: outline
+    skill: paper_outline
+    args:
+      topic: "{user_input.topic}"
+      research: "{research.output}"
+      prefs: "{prefs.output}"
+    depends_on: [research]
+    timeout_ms: 120000
+
+  - node_id: intro
+    skill: paper_section_author
+    args:
+      section: introduction
+      outline: "{outline.output}"
+    depends_on: [outline]
+    timeout_ms: 300000
+
+  - node_id: methods
+    skill: paper_section_author
+    args:
+      section: methods
+      outline: "{outline.output}"
+    depends_on: [outline]
+    timeout_ms: 300000
+
+  - node_id: results
+    skill: paper_section_author
+    args:
+      section: results
+      outline: "{outline.output}"
+    depends_on: [methods]
+    timeout_ms: 300000
+
+  - node_id: discussion
+    skill: paper_section_author
+    args:
+      section: discussion
+      outline: "{outline.output}"
+    depends_on: [results]
+    timeout_ms: 300000
+
+  - node_id: verify_citations
+    skill: source_to_claim_check
+    args:
+      paper: "{discussion.output}"
+      sources: "{research.output.sources}"
+    depends_on: [discussion]
+    timeout_ms: 180000
+
+  - node_id: latex
+    skill: latex_compile
+    args:
+      paper: "{verify_citations.output}"
+      template: acl
+    depends_on: [verify_citations]
+    timeout_ms: 300000
+
+  - node_id: pdf
+    skill: pdf_render
+    args:
+      source: "{latex.output}"
+    depends_on: [latex]
+    timeout_ms: 60000

@@ -1,0 +1,184 @@
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
+import { cn } from "@/lib/utils";
+
+interface ChatPageLayoutProps {
+  header: ReactNode;
+  modeSwitcher?: ReactNode;
+  messageList: ReactNode;
+  inputArea: ReactNode;
+  sidebar?: ReactNode;
+  secondaryPanel?: ReactNode;
+  bottomBar?: ReactNode;
+  isNewThread?: boolean;
+  messageListClassName?: string;
+  headerClassName?: string;
+  showSidebar?: boolean;
+  sidebarWidth?: string;
+}
+
+export function ChatPageLayout({
+  header,
+  modeSwitcher,
+  messageList,
+  inputArea,
+  sidebar,
+  secondaryPanel,
+  bottomBar,
+  isNewThread = false,
+  messageListClassName,
+  headerClassName,
+  showSidebar = false,
+  sidebarWidth = "min(300px, 36vw)",
+}: ChatPageLayoutProps) {
+  // Backwards compat: old callers pass Tailwind classes like "lg:w-72" or
+  // "lg:w-[44rem]". Extract the pixel/rem value so we can drive inline
+  // width (which animates) instead of fighting breakpoint classes.
+  const defaultWidth = resolveSidebarWidth(sidebarWidth);
+  const [customWidth, setCustomWidth] = useState<number | null>(null);
+  const resolvedWidth = customWidth ? `${customWidth}px` : defaultWidth;
+
+  // Resize drag handling
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const aside = (e.target as HTMLElement).parentElement;
+    if (!aside) return;
+    const rect = aside.getBoundingClientRect();
+    resizeRef.current = { startX: e.clientX, startWidth: rect.width };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizeRef.current) return;
+      const delta = resizeRef.current.startX - e.clientX;
+      const newWidth = Math.max(
+        280,
+        Math.min(800, resizeRef.current.startWidth + delta),
+      );
+      setCustomWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (resizeRef.current) {
+        resizeRef.current = null;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+  return (
+    <div className="relative flex size-full min-h-0 flex-col overflow-hidden">
+      <div className="relative flex min-h-0 flex-1">
+        <header
+          className={cn(
+            // Implementation note.
+            // Implementation note.
+            "absolute top-0 right-0 left-0 z-30 flex h-11 shrink-0 items-center justify-between overflow-hidden pl-12 pr-3",
+            isNewThread
+              ? "border-b border-border/20"
+              : "border-b border-border/30",
+            "bg-background/80 backdrop-blur-lg",
+            headerClassName,
+          )}
+        >
+          {header}
+        </header>
+        <div
+          className="relative flex min-h-0 max-w-full grow overflow-hidden transition-[margin-right] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{
+            marginRight: sidebar && showSidebar ? resolvedWidth : "0px",
+          }}
+        >
+          <main className="relative flex min-h-0 max-w-full grow flex-col overflow-hidden overscroll-none">
+            {modeSwitcher && (
+              <div className="pointer-events-auto absolute top-2 left-1/2 z-50 -translate-x-1/2">
+                {modeSwitcher}
+              </div>
+            )}
+            <div className="flex size-full min-w-0 flex-col items-center overflow-hidden">
+              <div
+                className={cn(
+                  "w-full min-w-0 overflow-hidden",
+                  !isNewThread && "pt-11",
+                  messageListClassName,
+                )}
+              >
+                {messageList}
+              </div>
+            </div>
+            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center px-3 pb-3">
+              {inputArea}
+            </div>
+          </main>
+          {secondaryPanel}
+        </div>
+        {sidebar && (
+          <aside
+            aria-hidden={!showSidebar}
+            style={{ width: resolvedWidth }}
+            className={cn(
+              // Overlay drawer from the right, same language as the
+              // artifact drawer in ChatBox — slides in regardless of
+              // viewport width, with frosted glass + left shadow edge.
+              "absolute top-0 right-0 bottom-0 z-20 flex flex-col overflow-hidden pt-11",
+              "border-l border-border/60 bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)]",
+              "backdrop-blur-[10px] shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
+              "transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              showSidebar
+                ? "translate-x-0 opacity-100"
+                : "translate-x-full opacity-0 pointer-events-none",
+            )}
+          >
+            {/* Resize handle on left edge */}
+            <div
+              onMouseDown={handleMouseDown}
+              className="absolute top-0 left-0 bottom-0 z-30 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
+              aria-label="拖拽调整宽度"
+            />
+            {sidebar}
+          </aside>
+        )}
+      </div>
+      {bottomBar}
+    </div>
+  );
+}
+
+/** Map legacy sidebarWidth Tailwind prop values to concrete CSS widths.
+ *  Existing callers pass strings like "lg:w-72" / "lg:w-[44rem]"; we
+ *  translate those to the underlying rem/px so the overlay drawer can
+ *  animate via inline width.  Falls through if the prop is already a
+ *  valid CSS length (e.g. "min(380px, 42vw)"). */
+function resolveSidebarWidth(raw: string): string {
+  if (/[()]|vw|%/.test(raw)) return raw;
+
+  const m = raw.match(/w-(?:\[(.+?)\]|(\d+))/);
+  let px: string;
+  if (m) {
+    if (m[1]) px = m[1];
+    else if (m[2]) px = `${Number(m[2]) * 0.25}rem`;
+    else px = raw;
+  } else {
+    px = raw;
+  }
+  // Cap at 40vw so the drawer stays narrow — it's an overlay, so the
+  // main column must still be the primary reading surface underneath.
+  return `min(${px}, 40vw)`;
+}

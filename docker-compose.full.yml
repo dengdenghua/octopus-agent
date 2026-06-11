@@ -1,0 +1,175 @@
+# octopus-agent · 全栈部署（生产 / 压测 / 多 worker）
+# 包含: agent + Redis + Jaeger + Prometheus + Grafana
+#
+# Redis 为跨进程事件总线（Nerves）和分布式记忆（Hemolymph）提供共享后端。
+# Jaeger / Prometheus / Grafana 提供完整的可观测性栈。
+#
+# 初次使用:
+#   1. cp config.example.yaml config.yaml  # 复制并编辑配置
+#   2. 在 .env 中设置 REDIS_PASSWORD 和 GRAFANA_PASSWORD
+#   3. mkdir -p data/ data/redis data/grafana
+#
+# 启动:
+#   docker compose -f docker-compose.full.yml up -d
+#   docker compose -f docker-compose.full.yml logs -f octopus-agent
+#
+# 访问:
+#   http://localhost:8000        · Agent UI
+#   http://localhost:16686       · Jaeger UI (分布式追踪)
+#   http://localhost:3000        · Grafana (指标面板)
+#   http://localhost:9090        · Prometheus (指标采集)
+
+services:
+  # ─── Agent 主服务 ───────────────────────────────
+  octopus-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: octopus-agent:latest
+    container_name: octopus-agent
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      OCTOPUS_HEARTS_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}@redis:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_SERVICE_NAME: octopus-agent
+      OCTOPUS_LOG_LEVEL: ${OCTOPUS_LOG_LEVEL:-INFO}
+    volumes:
+      - ./data:/data
+      - ./config.yaml:/etc/octopus/config.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    command:
+      - serve
+      - --config
+      - /etc/octopus/config.yaml
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --learn-interval
+      - "${LEARN_INTERVAL_S:-0}"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "4.0"
+        reservations:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ─── Redis · 事件总线 + 分布式记忆后端 ──────────
+  redis:
+    image: redis:7-alpine
+    container_name: octopus-redis
+    restart: unless-stopped
+    command: [
+      "redis-server",
+      "--appendonly", "yes",
+      "--save", "60", "1",
+      "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"
+    ]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -a \"$REDIS_PASSWORD\" ping"]
+      environment:
+        REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ─── Jaeger · 分布式追踪 ────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    container_name: octopus-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ─── Prometheus · 指标采集 ──────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: octopus-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - octopus-agent
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ─── Grafana · 指标可视化 ───────────────────────
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: octopus-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD must be set}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./deploy/grafana-datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+      - jaeger
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"

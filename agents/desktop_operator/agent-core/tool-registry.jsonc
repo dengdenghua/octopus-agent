@@ -1,0 +1,9 @@
+// arms reference factories in runtime/execution/arms/presets.py.
+// extra_affinity keywords boost agent matching by topic.
+
+{
+  "arms": ["desktop_operator"],
+  "extra_affinity": [
+    "desktop", "gui", "vision", "automation", "screenshot", "native_app"
+  ]
+}

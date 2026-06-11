@@ -1,0 +1,37 @@
+// Implementation note.
+// Implementation note.
+
+{
+  "id": "admin",
+  "templateId": "admin",
+  "templateVersion": "1.0.0",
+  "name": "管理员",
+  "icon": "🛡️",
+  "did": "DID-ADMIN-000001",
+  "description": "系统管理员 — 拥有系统的最高权限，可以管理所有智能体、配置和全局设置。",
+  "avatar": "avatar.png",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local",
+  "creator": "octopus",
+  "defaultProject": {
+    "dir": "project"
+  },
+  // Implementation note.
+  "capabilities": {
+    "code_mode_unlock": true,
+    "architect_level": "L3",
+    "team_mode": false,
+    "admin_mode": true,
+    "allow_shell": true,
+    "allow_git": true,
+    "allow_web_search": true,
+    "allow_file_write": true,
+    "allow_sensitive": true,
+    "unrestricted_workspace": true,
+    "manage_agents": true,
+    "manage_system": true
+  }
+}

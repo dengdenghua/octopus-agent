@@ -1,0 +1,233 @@
+{
+  "_about": "Example approval policy for octopus-agent. Copy this file to data/permissions.json (which is gitignored) and edit there. Rules are evaluated in order — first match wins. Unknown fields like _about / _comment_* are ignored by load_policy.",
+  "_docs": "https://github.com/octopus-agent/octopus-agent  ·  see docs/permissions.md for the full guide.",
+  "version": 1,
+  "rules": [
+    {
+      "_comment_section": "── Read-only filesystem & metadata · always allowed ──",
+      "effect": "allow",
+      "tool": "read_file",
+      "reason": "trusted: pure read"
+    },
+    {
+      "effect": "allow",
+      "tool": "list_cwd",
+      "reason": "trusted: pure read"
+    },
+    {
+      "effect": "allow",
+      "tool": "file_stats",
+      "reason": "trusted: pure read"
+    },
+    {
+      "effect": "allow",
+      "tool": "count_words",
+      "reason": "trusted: pure compute"
+    },
+    {
+      "effect": "allow",
+      "tool": "hash_text",
+      "reason": "trusted: pure compute"
+    },
+
+    {
+      "_comment_section": "── Browser reads (headless Playwright) · enable fetch + scrape paths ──",
+      "_comment_note": "Comment these out if you don't want agents to drive Chromium. The url_guard layer still blocks SSRF / private-network targets even when allowed here.",
+      "effect": "allow",
+      "tool": "browser_get",
+      "reason": "trusted: headless page render → text"
+    },
+    {
+      "effect": "allow",
+      "tool": "browser_extract",
+      "reason": "trusted: CSS-selector scrape"
+    },
+    {
+      "effect": "allow",
+      "tool": "browser_navigate",
+      "reason": "trusted: navigate-only, no content read"
+    },
+    {
+      "effect": "allow",
+      "tool": "browser_find",
+      "reason": "trusted: in-page text find"
+    },
+    {
+      "effect": "allow",
+      "tool": "browser_state",
+      "reason": "trusted: page accessibility snapshot"
+    },
+
+    {
+      "_comment_section": "── Browser writes / interaction · default DENY · uncomment per skill if you want them ──",
+      "_comment_note": "browser_click, browser_type, browser_screenshot, live_browser_* skills stay gated. The live_browser_* family in particular operates your real, logged-in browser tab via the Electron desktop bridge — leaving it gated is the whole point of Patch 2.",
+      "effect": "deny",
+      "tool": "live_browser_*",
+      "reason": "user-confirm: live bridge drives your real browser"
+    },
+
+    {
+      "_comment_section": "── Web egress · fetch_url is allowed; webhooks/email/slack stay gated ──",
+      "effect": "allow",
+      "tool": "fetch_url",
+      "reason": "trusted: read-only HTTP GET (url_guard enforces SSRF rules)"
+    },
+    {
+      "effect": "allow",
+      "tool": "web_search",
+      "reason": "trusted: search-engine query"
+    },
+    {
+      "effect": "allow",
+      "tool": "crawl_site",
+      "reason": "trusted: bounded crawler with url_guard, robots checks, and JSONL output"
+    },
+    {
+      "effect": "deny",
+      "tool": "send_*",
+      "reason": "user-confirm: outbound message"
+    },
+    {
+      "effect": "deny",
+      "tool": "email_*",
+      "reason": "user-confirm: sends mail"
+    },
+    {
+      "effect": "deny",
+      "tool": "slack_*",
+      "reason": "user-confirm: posts to slack"
+    },
+
+    {
+      "_comment_section": "── Shell · narrow allow for safe read-only invocations, hard deny on destructive ──",
+      "_comment_note": "args_contains is a substring check, not a regex. The deny rule fires before the allow because order matters.",
+      "effect": "deny",
+      "tool": "exec_shell",
+      "args_contains": "rm -rf",
+      "reason": "destructive: rm -rf"
+    },
+    {
+      "effect": "deny",
+      "tool": "exec_shell",
+      "args_contains": "sudo",
+      "reason": "destructive: sudo escalation"
+    },
+    {
+      "effect": "deny",
+      "tool": "exec_shell",
+      "args_contains": "shutdown",
+      "reason": "destructive: shutdown"
+    },
+    {
+      "effect": "allow",
+      "tool": "exec_shell",
+      "args_contains": "git status",
+      "reason": "trusted: read-only git status"
+    },
+    {
+      "effect": "allow",
+      "tool": "exec_shell",
+      "args_contains": "git log",
+      "reason": "trusted: read-only git log"
+    },
+    {
+      "effect": "allow",
+      "tool": "exec_shell",
+      "args_contains": "git diff",
+      "reason": "trusted: read-only git diff"
+    },
+
+    {
+      "_comment_section": "── Filesystem writes · default DENY (every write hits the UI) ──",
+      "_comment_note": "If you want a workspace-scoped allow, add an args_contains rule that pins the path prefix. The agent's _SCOPED_ARTIFACT_WRITE_TOOLS shortcut in react_loop already auto-approves writes inside the artifact sandbox; this rule is for everything else.",
+      "effect": "deny",
+      "tool": "write_*",
+      "reason": "user-confirm: writes to disk"
+    },
+    {
+      "effect": "deny",
+      "tool": "edit_*",
+      "reason": "user-confirm: edits files"
+    },
+    {
+      "effect": "deny",
+      "tool": "delete_*",
+      "reason": "user-confirm: deletes files"
+    },
+
+    {
+      "_comment_section": "── Git side-effects · default DENY for anything that mutates remote/branch state ──",
+      "effect": "allow",
+      "tool": "git_status",
+      "reason": "trusted: read-only"
+    },
+    {
+      "effect": "allow",
+      "tool": "git_diff",
+      "reason": "trusted: read-only"
+    },
+    {
+      "effect": "allow",
+      "tool": "git_log",
+      "reason": "trusted: read-only"
+    },
+    {
+      "effect": "deny",
+      "tool": "git_push",
+      "reason": "user-confirm: publishes to remote"
+    },
+    {
+      "effect": "deny",
+      "tool": "git_reset",
+      "reason": "user-confirm: rewrites history"
+    },
+    {
+      "effect": "deny",
+      "tool": "git_merge",
+      "reason": "user-confirm: rewrites history"
+    },
+    {
+      "effect": "deny",
+      "tool": "git_create_pr",
+      "reason": "user-confirm: opens external PR"
+    },
+
+    {
+      "_comment_section": "── Desktop · keyboard/mouse/screen always need confirmation ──",
+      "_comment_note": "Even if Capabilities → desktop_automation is ON, keep these gated per-call. Screen capture is a data-egress vector (whatever's on screen leaves the host the moment the screenshot lands in a tool observation).",
+      "effect": "deny",
+      "tool": "mouse_*",
+      "reason": "user-confirm: drives the real mouse"
+    },
+    {
+      "effect": "deny",
+      "tool": "keyboard_*",
+      "reason": "user-confirm: drives the real keyboard"
+    },
+    {
+      "effect": "deny",
+      "tool": "screen_*",
+      "reason": "user-confirm: captures screen"
+    },
+    {
+      "effect": "allow",
+      "tool": "computer_observe",
+      "reason": "trusted: status + sandboxed screenshot path (not the bytes)"
+    },
+    {
+      "effect": "allow",
+      "tool": "computer_preview_action",
+      "reason": "trusted: queues a token, does not execute"
+    },
+    {
+      "effect": "deny",
+      "tool": "computer_plan_next",
+      "reason": "user-confirm: ships screenshot to vision model (egress)"
+    },
+    {
+      "effect": "deny",
+      "tool": "computer_execute_token",
+      "reason": "user-confirm: actually moves mouse / keyboard"
+    }
+  ]
+}

@@ -1,0 +1,79 @@
+import { describe, expect, test } from "vitest";
+
+import type { LiveToolEvent } from "./live-tool-timeline";
+import { getProcessTraceEvents } from "./process-trace-events";
+
+function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
+  return {
+    id: "event-1",
+    name: "read_file",
+    status: "done",
+    startedAt: 1000,
+    iteration: 0,
+    ...partial,
+  };
+}
+
+describe("process trace events", () => {
+  test("filters transport and model plumbing from user-visible process", () => {
+    const visible = getProcessTraceEvents([
+      event({ id: "request", name: "turn_request", startedAt: 100 }),
+      event({ id: "stream", name: "stream_connection", startedAt: 200 }),
+      event({ id: "gateway", name: "model_gateway", startedAt: 300 }),
+      event({ id: "reasoning", name: "model_reasoning", startedAt: 400 }),
+      event({ id: "response", name: "response_stream", startedAt: 500 }),
+      event({ id: "read", name: "read_file", startedAt: 600 }),
+    ]);
+
+    expect(visible.map((item) => item.id)).toEqual(["read"]);
+  });
+
+  test("keeps meaningful work events and preserves chronological order", () => {
+    const visible = getProcessTraceEvents([
+      event({ id: "write", name: "write_file", startedAt: 400 }),
+      event({ id: "search", name: "web_search", startedAt: 100 }),
+      event({ id: "todo", name: "todo_write", startedAt: 200 }),
+      event({ id: "swarm", name: "call_agent_parallel", startedAt: 300 }),
+    ]);
+
+    expect(visible.map((item) => item.id)).toEqual([
+      "search",
+      "todo",
+      "swarm",
+      "write",
+    ]);
+  });
+
+  test("omits child tool events because their parent carries the process step", () => {
+    const visible = getProcessTraceEvents([
+      event({ id: "shell", name: "shell_command", startedAt: 100 }),
+      event({
+        id: "child",
+        name: "grep",
+        parentToolUseId: "shell",
+        startedAt: 200,
+      }),
+    ]);
+
+    expect(visible.map((item) => item.id)).toEqual(["shell"]);
+  });
+
+  test("hides completed auto verification events but keeps active or failed ones", () => {
+    const visible = getProcessTraceEvents([
+      event({ id: "verification-done", name: "verification", status: "done" }),
+      event({
+        id: "verification-running",
+        name: "verification",
+        status: "running",
+      }),
+      event({ id: "verification-error", name: "verification", status: "error" }),
+      event({ id: "read", name: "read_file", status: "done" }),
+    ]);
+
+    expect(visible.map((item) => item.id)).toEqual([
+      "verification-running",
+      "verification-error",
+      "read",
+    ]);
+  });
+});

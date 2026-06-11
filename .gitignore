@@ -1,0 +1,183 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.Python
+
+# Tooling
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.tox/
+coverage.xml
+
+# IDE / Editor
+.vscode/
+.idea/
+.claude/
+.codex/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+.git.broken*
+.marvis_static/
+
+# Local runtime artifacts
+data/
+logs/
+.runtime-logs/
+test-results/
+/workspace/
+*.jsonl
+*.sqlite
+*.sqlite3
+*.db
+*.log
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local-only config
+config.yaml
+config.local.yaml
+!config.example.yaml
+
+# Docker
+.docker-build-cache/
+
+# JavaScript dependencies
+/node_modules/
+
+# temp
+*.tmp
+.tmp_*
+.tmp-tailwind-postcss/
+/tmp/
+scratch/
+
+# Local Octopus state / reversible cleanup archives.
+# Do not ignore .octopus/plugins wholesale: bundled release plugins may live there.
+.octopus/*.json
+.octopus/*.jsonl
+.octopus/*.bak
+.octopus/*.lock
+# tool-registry hot-reload artifacts under agents/
+agents/**/*.jsonc.bak
+agents/**/*.jsonc.lock
+.octopus/local/
+.octopus/research/
+# (.octopus-browser-relay/ used to live at root; moved to
+# extensions/octopus-browser-relay/ — committed product surface)
+.octopus/archive/
+agents/*/workspace/
+benchmarks/results/
+skills_backup_*/
+
+# Historical analysis / replay dumps
+_outer_preflatten_*/
+ura-artifacts/
+EIGHT_SLEEP_*.md
+EIGHT_SLEEP_*.html
+PRD_SOMNIA_*.md
+*marvis*.py
+*todesk*.py
+debug.log
+__test_write__.tmp
+
+# Test artifacts & tooling cache
+output/playwright/
+frontend/output/
+.codex-artifacts/
+.playwright-cli/
+evidence/
+
+# Android — 正式 Android 端在同级 ../octopus-mobile/，主仓库不跟踪
+/mobile/
+
+# Frontend local artifacts
+frontend/release/
+frontend/release-*/
+frontend/coverage/
+frontend/playwright-report/
+frontend/dist-regression/
+frontend/build/
+frontend/*.tsbuildinfo
+frontend/tmp-*.mjs
+frontend/lint-output*.txt
+frontend/src/styles/tailwind-prebuilt.css
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.next/
+
+# Local verification and packaged desktop binaries
+/artifacts/
+/github-artifacts/
+
+# Root-level scratch notes and generated probe files
+/response.txt
+/joke.txt
+/intro.txt
+/tmp_test_code_edit.py
+/tmp_out.txt
+/tmp_*.txt
+/agent_probe.py
+/quark_*.py
+/todesk_*.py
+/*_probe.py
+/*_scratch.py
+/*_local.py
+/check_*.py
+/integrate_*.py
+/remove_*.py
+/restore_*.py
+/cleanup_*.py
+/network_*.py
+/add_*.py
+/expand_*.py
+/ckg_*.py
+/_outer_preflatten_*/
+/ura-artifacts/
+
+# Local agent runtime artifacts (Phase B cleanup)
+.codex-runlogs/
+.octopus/
+# Third-party plugin source (use as reference, not as committed deps)
+_external/
+# Local reverse-engineering captures
+evidence/kimi-desktop/
+
+# Local backend/frontend run logs (only screenshots in .codex-logs/ are committed)
+.codex-logs/*.log
+.codex-logs/*.err.log
+.codex-logs/*.out.log
+# Local Codex/Codex Artifacts caches
+.codex-artifacts/
+.codex/
+.playwright-cli/
+
+# Tool-generated local artifacts (root hygiene)
+.codex-logs/
+.qoder/
+output/
+ura-artifacts/
+evidence/

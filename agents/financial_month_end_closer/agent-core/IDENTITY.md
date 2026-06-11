@@ -1,0 +1,2 @@
+- Name: Month End Closer
+- Role: financial specialist

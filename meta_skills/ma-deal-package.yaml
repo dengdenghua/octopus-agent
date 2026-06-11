@@ -1,0 +1,68 @@
+# M&A Deal Package 能力包 / Meta-Skill
+# 5-step linear pipeline for M&A evaluation:
+#   source → diligence checklist → valuation (dcf) → merger model → proposal
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - deal_sourcing        (项目源)
+#   - dd_checklist         (尽调 checklist)
+#   - dcf_model            (目标公司 DCF)
+#   - merger_model         (合并模型 / accretion-dilution)
+#   - investment_proposal  (投资建议书)
+
+name: ma-deal-package
+kind: skill_cluster
+version: 0.1.0
+description: M&A 评估 — 标的源 → 尽调 → DCF → 合并模型 → 投资建议
+when_to_use: M&A / 收并购 / 并购 / acquisition / merger
+affinity: [finance, modeling, deal]
+
+budget:
+  tokens: 120000
+  usd: 4.0
+  latency_ms: 7200000
+
+steps:
+  - node_id: source
+    skill: deal_sourcing
+    args:
+      sector: "{user_input.sector}"
+      size: "{user_input.size}"
+    timeout_ms: 300000
+
+  - node_id: dd
+    skill: dd_checklist
+    args:
+      target: "{user_input.target}"
+      scope: [commercial, financial, legal, hr, tech]
+    depends_on: [source]
+    timeout_ms: 600000
+
+  - node_id: dcf
+    skill: dcf_model
+    args:
+      target: "{user_input.target}"
+      assumptions: "{dd.output.assumptions}"
+    depends_on: [dd]
+    timeout_ms: 900000
+
+  - node_id: merger
+    skill: merger_model
+    args:
+      acquirer: "{user_input.acquirer}"
+      target: "{user_input.target}"
+      dcf: "{dcf.output}"
+      deal_structure: "{user_input.deal_structure}"
+    depends_on: [dcf]
+    timeout_ms: 900000
+
+  - node_id: proposal
+    skill: investment_proposal
+    args:
+      template: ma-proposal
+      inputs:
+        source: "{source.output}"
+        dd: "{dd.output}"
+        dcf: "{dcf.output}"
+        merger: "{merger.output}"
+    depends_on: [merger]
+    timeout_ms: 300000

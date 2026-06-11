@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Octopus</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --startup-background: #08080c;
+        --startup-logo-base: #8a7fff;
+        --startup-logo-shimmer-soft: rgb(255 255 255 / 0.03);
+        --startup-logo-shimmer-peak: rgb(255 255 255 / 0.55);
+        --startup-logo-shimmer-tail: rgb(255 255 255 / 0.08);
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --startup-background: #ffffff;
+          --startup-logo-base: #6654ff;
+          --startup-logo-shimmer-peak: rgb(102 84 255 / 0.35);
+        }
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: var(--startup-background);
+      }
+
+      body {
+        outline: none;
+      }
+
+      #root {
+        width: 100%;
+        height: 100%;
+      }
+
+      .startup-loader {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        align-items: center;
+        justify-content: center;
+        background: var(--startup-background);
+      }
+
+      .startup-loader__logo {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        opacity: 0;
+        animation: octo-logo-fade-in 220ms ease-out 60ms forwards;
+      }
+
+      .startup-loader__base,
+      .startup-loader__overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .startup-loader__base {
+        color: var(--startup-logo-base);
+      }
+
+      .startup-loader__overlay {
+        background-image: linear-gradient(
+          112deg,
+          transparent 22%,
+          var(--startup-logo-shimmer-soft) 38%,
+          var(--startup-logo-shimmer-peak) 49%,
+          var(--startup-logo-shimmer-tail) 56%,
+          transparent 74%
+        );
+        background-position: 140% 0;
+        background-repeat: no-repeat;
+        background-size: 220% 100%;
+        animation: octo-logo-shimmer 2200ms cubic-bezier(0.4, 0, 0.2, 1)
+          infinite;
+        -webkit-mask-image: url("/favicon.svg");
+        mask-image: url("/favicon.svg");
+        -webkit-mask-position: center;
+        mask-position: center;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+      }
+
+      .startup-loader__label {
+        position: absolute;
+        bottom: 32%;
+        left: 50%;
+        transform: translateX(-50%);
+        font-family:
+          "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--startup-logo-base);
+        opacity: 0;
+        animation: octo-label-fade-in 400ms ease-out 320ms forwards;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .startup-loader__logo,
+        .startup-loader__label {
+          animation: none;
+          opacity: 1;
+        }
+        .startup-loader__overlay {
+          animation: none;
+        }
+      }
+
+      @keyframes octo-logo-fade-in {
+        from { opacity: 0; transform: scale(0.96); }
+        to { opacity: 1; transform: scale(1); }
+      }
+
+      @keyframes octo-label-fade-in {
+        from { opacity: 0; transform: translate(-50%, 4px); }
+        to { opacity: 0.7; transform: translate(-50%, 0); }
+      }
+
+      @keyframes octo-logo-shimmer {
+        0% { background-position: 140% 0; }
+        100% { background-position: -120% 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root">
+      <div class="startup-loader" aria-hidden="true">
+        <div class="startup-loader__logo">
+          <img
+            class="startup-loader__base"
+            src="/favicon.svg"
+            alt=""
+            width="64"
+            height="64"
+          />
+          <div class="startup-loader__overlay"></div>
+        </div>
+        <div class="startup-loader__label">Octopus</div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

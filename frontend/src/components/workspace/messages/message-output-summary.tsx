@@ -1,0 +1,444 @@
+import type { AIMessage, Message, ToolCall } from "@/core/api/types";
+import { artifactDisplayPath } from "@/core/artifacts/utils";
+import { getBackendBaseURL } from "@/core/config";
+import { swallow } from "@/core/utils/log";
+import {
+  getFileExtensionDisplayName,
+  getFileIcon,
+  getFileName,
+} from "@/core/utils/files";
+import { cn } from "@/lib/utils";
+import {
+  ChevronDownIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  FileCheck2Icon,
+  FilePlus2Icon,
+  Loader2Icon,
+  RotateCcwIcon,
+  UserCheckIcon,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
+
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+
+import { useArtifacts } from "../artifacts";
+
+type OutputArtifact = {
+  path: string;
+  title?: string | null;
+  kind?: string | null;
+};
+
+type OutputChange = {
+  created: boolean;
+  diff?: string;
+  path: string;
+  op?: string | null;
+  added: number;
+  removed: number;
+};
+
+type OutputSummary = {
+  artifacts: OutputArtifact[];
+  changes: OutputChange[];
+};
+
+const REVIEW_ASSIGNEES = [
+  { value: "self", label: "我来审核" },
+  { value: "team", label: "交给团队" },
+  { value: "security", label: "安全审计" },
+];
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function diffCounts(diff: unknown): { added: number; removed: number } {
+  if (typeof diff !== "string" || diff.length === 0) {
+    return { added: 0, removed: 0 };
+  }
+  let added = 0;
+  let removed = 0;
+  for (const line of diff.split(/\r?\n/)) {
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
+    if (line.startsWith("+")) added += 1;
+    else if (line.startsWith("-")) removed += 1;
+  }
+  return { added, removed };
+}
+
+function isCreatedFileChange(
+  op: string | null,
+  diff: unknown,
+  counts: { added: number; removed: number },
+) {
+  const normalizedOp = op?.toLowerCase() ?? null;
+  if (
+    normalizedOp &&
+    [
+      "add",
+      "added",
+      "create",
+      "created",
+      "generate",
+      "generated",
+      "new",
+    ].includes(normalizedOp)
+  ) {
+    return true;
+  }
+  if (typeof diff === "string") {
+    return (
+      /^---\s+\/dev\/null/m.test(diff) ||
+      /^new file mode\b/m.test(diff) ||
+      /^@@\s+-0,0\s+\+\d+(?:,\d+)?\s+@@/m.test(diff)
+    );
+  }
+  return !normalizedOp && counts.added > 0 && counts.removed === 0;
+}
+
+function artifactFromToolCall(toolCall: ToolCall): OutputArtifact | null {
+  if (toolCall.name !== "artifact") return null;
+  const path = toolCall.args.path;
+  if (typeof path !== "string" || !path.trim()) return null;
+  return {
+    path,
+    title: typeof toolCall.args.title === "string" ? toolCall.args.title : null,
+    kind: typeof toolCall.args.kind === "string" ? toolCall.args.kind : null,
+  };
+}
+
+function changesFromToolCall(toolCall: ToolCall): OutputChange[] {
+  if (
+    toolCall.name !== "file_change" ||
+    !Array.isArray(toolCall.args.changes)
+  ) {
+    return [];
+  }
+  const out: OutputChange[] = [];
+  for (const raw of toolCall.args.changes) {
+    const change = asRecord(raw);
+    if (!change) continue;
+    const path = change?.path;
+    if (typeof path !== "string" || !path.trim()) continue;
+    const op = typeof change.op === "string" ? change.op : null;
+    const counts = diffCounts(change.diff);
+    out.push({
+      created: isCreatedFileChange(op, change.diff, counts),
+      diff: typeof change.diff === "string" ? change.diff : undefined,
+      path,
+      op,
+      added: counts.added,
+      removed: counts.removed,
+    });
+  }
+  return out;
+}
+
+function summarizeOutputs(messages: Message[]): OutputSummary {
+  const artifacts = new Map<string, OutputArtifact>();
+  const changes = new Map<string, OutputChange>();
+
+  for (const message of messages) {
+    if (message.type !== "ai") continue;
+    for (const toolCall of (message as AIMessage).tool_calls ?? []) {
+      const artifact = artifactFromToolCall(toolCall);
+      if (artifact) {
+        artifacts.set(artifact.path, artifact);
+      }
+      for (const change of changesFromToolCall(toolCall)) {
+        const existing = changes.get(change.path);
+        changes.set(change.path, {
+          ...change,
+          added: (existing?.added ?? 0) + change.added,
+          created: Boolean(existing?.created || change.created),
+          removed: (existing?.removed ?? 0) + change.removed,
+        });
+      }
+    }
+  }
+
+  return {
+    artifacts: [...artifacts.values()],
+    changes: [...changes.values()],
+  };
+}
+
+export function hasMessageOutputSummary(messages: Message[]): boolean {
+  const summary = summarizeOutputs(messages);
+  return summary.artifacts.length > 0 || summary.changes.length > 0;
+}
+
+export function MessageOutputSummary({
+  auditNotice,
+  messages,
+  threadId,
+  className,
+}: {
+  auditNotice?: string | null;
+  messages: Message[];
+  threadId?: string;
+  className?: string;
+}) {
+  const { select, setOpen } = useArtifacts();
+  const summary = useMemo(() => summarizeOutputs(messages), [messages]);
+  const [changesOpen, setChangesOpen] = useState(summary.changes.length <= 3);
+  const [reviewAssignee, setReviewAssignee] = useState(
+    REVIEW_ASSIGNEES[0]!.value,
+  );
+  const [reverting, setReverting] = useState(false);
+
+  if (summary.artifacts.length === 0 && summary.changes.length === 0) {
+    return null;
+  }
+
+  const openArtifact = (path: string) => {
+    select(path);
+    setOpen(true);
+  };
+
+  const totalAdded = summary.changes.reduce((sum, item) => sum + item.added, 0);
+  const totalRemoved = summary.changes.reduce(
+    (sum, item) => sum + item.removed,
+    0,
+  );
+  const createdChanges = summary.changes.filter((change) => change.created);
+  const editedChanges = summary.changes.filter((change) => !change.created);
+  const hasOnlyCreatedChanges =
+    createdChanges.length > 0 && editedChanges.length === 0;
+  const changeSummaryLabel = hasOnlyCreatedChanges
+    ? `已生成 ${createdChanges.length} 个产物`
+    : createdChanges.length > 0
+      ? `已生成 ${createdChanges.length} 个产物，已编辑 ${editedChanges.length} 个文件`
+      : `已编辑 ${editedChanges.length} 个文件`;
+  const ChangeSummaryIcon = hasOnlyCreatedChanges
+    ? FilePlus2Icon
+    : FileCheck2Icon;
+  const visibleChanges = changesOpen
+    ? summary.changes
+    : summary.changes.slice(0, 3);
+  const revertableChanges = summary.changes.filter((change) =>
+    change.diff?.trim(),
+  );
+  const showAuditActions = Boolean(auditNotice);
+
+  const handleRevertAll = async () => {
+    if (revertableChanges.length === 0 || reverting) return;
+    setReverting(true);
+    try {
+      const base = getBackendBaseURL();
+      for (const change of revertableChanges) {
+        const response = await fetch(`${base}/api/fs/revert-diff`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            path: change.path,
+            diff: change.diff,
+            thread_id: threadId,
+            delete_empty: change.created,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(await responseErrorMessage(response));
+        }
+      }
+      notifyWorkspaceChanged();
+      toast.success(`已撤销 ${revertableChanges.length} 个变更`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "撤销失败");
+    } finally {
+      setReverting(false);
+    }
+  };
+
+  const handleReviewAssigneeChange = (value: string) => {
+    setReviewAssignee(value);
+    const label =
+      REVIEW_ASSIGNEES.find((item) => item.value === value)?.label ?? value;
+    toast.info(`审核交给：${label}`);
+  };
+
+  return (
+    <div className={cn("mt-4 flex w-full flex-col gap-2", className)}>
+      {summary.artifacts.length > 0 && (
+        <section aria-label="产物汇总" className="space-y-2">
+          <div className="text-sm font-semibold text-foreground">产物汇总</div>
+          <div className="flex flex-col gap-2">
+            {summary.artifacts.map((artifact) => (
+              <button
+                key={artifact.path}
+                type="button"
+                onClick={() => openArtifact(artifact.path)}
+                className={cn(
+                  "group flex w-full items-center gap-3 rounded-lg border border-border/70 bg-muted/25 px-3 py-2.5 text-left",
+                  "transition-colors hover:border-border hover:bg-muted/45",
+                )}
+              >
+                <span className="shrink-0">
+                  {getFileIcon(artifactDisplayPath(artifact.path), "size-7")}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-foreground">
+                    {artifact.title ||
+                      getFileName(artifactDisplayPath(artifact.path))}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {artifact.kind ||
+                      getFileExtensionDisplayName(
+                        artifactDisplayPath(artifact.path),
+                      )}
+                  </span>
+                </span>
+                <ExternalLinkIcon className="size-4 shrink-0 text-muted-foreground opacity-70 transition-opacity group-hover:opacity-100" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {summary.changes.length > 0 && (
+        <Collapsible open={changesOpen} onOpenChange={setChangesOpen}>
+          <section
+            aria-label="文件变更汇总"
+            className="overflow-hidden rounded-lg border border-border/70 bg-muted/25"
+          >
+            <div className="flex flex-wrap items-start gap-2 px-3 py-2.5 sm:flex-nowrap sm:items-center">
+              <ChangeSummaryIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground/45" />
+              <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-foreground">
+                    {changeSummaryLabel}
+                  </span>
+                  <span className="mt-0.5 block font-mono text-[10px] leading-none">
+                    <span className="text-emerald-600 dark:text-emerald-400">
+                      +{totalAdded}
+                    </span>
+                    <span className="mx-1 text-muted-foreground"> </span>
+                    <span className="text-red-600 dark:text-red-400">
+                      -{totalRemoved}
+                    </span>
+                  </span>
+                </span>
+                <ChevronDownIcon
+                  className={cn(
+                    "size-4 shrink-0 text-muted-foreground/60 transition-transform",
+                    !changesOpen && "-rotate-90",
+                  )}
+                />
+              </CollapsibleTrigger>
+              {showAuditActions && (
+                <div
+                  aria-label="审计操作"
+                  className="ml-auto flex shrink-0 items-center gap-1.5"
+                >
+                  <button
+                    type="button"
+                    onClick={() => void handleRevertAll()}
+                    disabled={reverting || revertableChanges.length === 0}
+                    className={cn(
+                      "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border/70 bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors",
+                      "hover:bg-muted/60 disabled:cursor-not-allowed disabled:opacity-55",
+                    )}
+                  >
+                    {reverting ? (
+                      <Loader2Icon className="size-3 animate-spin text-muted-foreground/70" />
+                    ) : (
+                      <RotateCcwIcon className="size-3 text-muted-foreground/70" />
+                    )}
+                    撤销
+                  </button>
+                  <label className="relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border/70 bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/60">
+                    <UserCheckIcon className="size-3 text-muted-foreground/70" />
+                    审核
+                    <ChevronDownIcon className="size-3 text-muted-foreground/55" />
+                    <select
+                      aria-label="审核交给"
+                      value={reviewAssignee}
+                      onChange={(event) =>
+                        handleReviewAssigneeChange(event.target.value)
+                      }
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    >
+                      {REVIEW_ASSIGNEES.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+            </div>
+            <CollapsibleContent>
+              <ul className="divide-y divide-border/50 border-t border-border/60">
+                {visibleChanges.map((change) => (
+                  <li
+                    key={change.path}
+                    className="flex items-center gap-3 px-3 py-2 text-sm"
+                  >
+                    <span
+                      className={cn(
+                        "shrink-0 rounded px-1.5 py-0.5 text-[10px]",
+                        change.created
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {change.created ? "新建" : "编辑"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
+                      {change.path}
+                    </span>
+                    <span className="shrink-0 font-mono text-xs">
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        +{change.added}
+                      </span>
+                      <span className="mx-1 text-muted-foreground"> </span>
+                      <span className="text-red-600 dark:text-red-400">
+                        -{change.removed}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+                {!changesOpen && summary.changes.length > 3 && (
+                  <li className="px-3 py-2 text-xs text-muted-foreground">
+                    还有 {summary.changes.length - 3} 个文件，展开查看
+                  </li>
+                )}
+              </ul>
+            </CollapsibleContent>
+            {summary.artifacts.length > 0 && (
+              <div className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
+                <DownloadIcon className="mr-1 inline size-3.5 align-[-2px]" />
+                下载入口仍在右侧产物面板保留
+              </div>
+            )}
+          </section>
+        </Collapsible>
+      )}
+    </div>
+  );
+}
+
+function notifyWorkspaceChanged() {
+  window.dispatchEvent(new CustomEvent("octopus:workspace-changed"));
+}
+
+async function responseErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = await response.json();
+    if (typeof payload?.detail === "string") return payload.detail;
+    if (payload?.detail?.error) return String(payload.detail.error);
+  } catch (e) {
+    swallow(e);
+  }
+  return response.statusText || `Request failed (${response.status})`;
+}

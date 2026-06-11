@@ -1,0 +1,63 @@
+# Customer Outreach 能力包 / Meta-Skill
+# 5-step linear pipeline: target list → first-touch email → letter → review → send.
+# For sales / BD / CRM cold-warm outreach.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - buyer_list         (目标客户清单)
+#   - gmail_assistant    (邮件草稿)
+#   - process_letter     (正式信函)
+#   - client_review      (合规 / 文案审阅)
+#   - email_manager      (IMAP/SMTP 发送)
+
+name: customer-outreach
+kind: skill_cluster
+version: 0.1.0
+description: 客户触达 — 名单 → 邮件 → 信函 → 审阅 → 发送
+when_to_use: 销售 / BD / CRM / 触达 / outreach / 拓客
+affinity: [sales, crm, writing]
+
+budget:
+  tokens: 30000
+  usd: 0.5
+  latency_ms: 900000
+
+steps:
+  - node_id: list
+    skill: buyer_list
+    args:
+      icp: "{user_input.icp}"
+      count: "{user_input.count}"
+    timeout_ms: 120000
+
+  - node_id: draft
+    skill: gmail_assistant
+    args:
+      prospects: "{list.output}"
+      purpose: "{user_input.purpose}"
+      tone: "{user_input.tone}"
+    depends_on: [list]
+    timeout_ms: 180000
+
+  - node_id: letter
+    skill: process_letter
+    args:
+      drafts: "{draft.output}"
+      template: outreach-letter
+    depends_on: [draft]
+    timeout_ms: 180000
+
+  - node_id: review
+    skill: client_review
+    args:
+      letters: "{letter.output}"
+      checks: [compliance, tone, length]
+    depends_on: [letter]
+    timeout_ms: 120000
+
+  - node_id: send
+    skill: email_manager
+    args:
+      letters: "{review.output}"
+      schedule: "{user_input.schedule}"
+    depends_on: [review]
+    timeout_ms: 180000

@@ -1,0 +1,25 @@
+// arms reference factories in runtime/execution/arms/presets.py.
+// extra_affinity keywords boost agent matching by topic.
+// edited via PUT /api/agents/{id}/tool-registry
+
+{
+  "arms": [
+    "web_read",
+    "fs_writer",
+    "git",
+    "shell"
+  ],
+  "extra_affinity": [
+    "code",
+    "refactor",
+    "debug",
+    "test",
+    "bug",
+    "fix",
+    "plugin",
+    "skill"
+  ],
+  "private_skills": [
+    "plugin-creator"
+  ]
+}

@@ -1,0 +1,581 @@
+"""
+Integration tests for the ``meta`` endpoint group · feedback / skills /
+auth providers.
+
+Purpose
+-------
+
+Guard-rail coverage for endpoints about to be extracted out of the
+2081-line ``runtime/platform/ui/app.py`` into their own router
+(``runtime/sensing/siphon/meta_router.py``). Mirrors the pattern
+established in ``test_app_config_endpoints.py``: lock current
+behavior first, refactor second, verify the split is
+behavior-preserving.
+
+Coverage
+--------
+
+    POST /api/feedback                   · record 👍/👎 on reply
+    GET  /api/feedback                   · admin dashboard read-back
+    GET  /api/skills                     · registered skill list
+    GET  /api/auth/providers             · configured login methods
+
+Hermetic isolation
+------------------
+
+* ``chdir(tmp_path)`` isolates the ``Path("data/feedback.jsonl")``
+  that the feedback handler appends to (otherwise real feedback
+  would end up in repo-root ``data/``)
+* No ``molili_config`` / ``local_auth_config`` injected ·
+  ``auth_providers`` returns an empty list · pinning the "nothing
+  configured" behavior
+"""
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from runtime.execution.arms.tool_registry import ToolRegistry
+from runtime.execution.suckers.registry import Skill, SkillRegistry
+from runtime.platform.ui.app import create_app
+from runtime.sensing.gateway.meta_router import create_meta_router
+
+
+@pytest.fixture
+def isolated_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[Path]:
+    monkeypatch.chdir(tmp_path)
+    # The agent-market install registry lives at ~/.octopus/agents-installed.json
+    # by default, which leaks state between test runs and across local
+    # developer machines. Redirect it to tmp_path so each test sees a
+    # clean install set.
+    install_state = tmp_path / "agents-installed.json"
+    monkeypatch.setattr(
+        "runtime.sensing.gateway.agent_world_router._INSTALL_STATE",
+        install_state,
+    )
+    yield tmp_path
+
+
+@pytest.fixture
+def client(isolated_cwd: Path) -> TestClient:
+    return TestClient(create_app())
+
+
+# ═══════════════════════════════════════════════════════════
+# POST /api/feedback
+# ═══════════════════════════════════════════════════════════
+
+
+class TestFeedbackPost:
+    def test_liked_feedback_persists_to_jsonl(
+        self, client: TestClient, isolated_cwd: Path,
+    ) -> None:
+        r = client.post(
+            "/api/feedback",
+            json={
+                "sentiment": "liked",
+                "message_id": "m1",
+                "thread_id": "t1",
+                "agent_id": "coder",
+                "content_preview": "a helpful reply",
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["ok"] is True
+        # File exists at documented path
+        jsonl = isolated_cwd / "data" / "feedback.jsonl"
+        assert jsonl.exists()
+        lines = jsonl.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1
+        import json
+
+        rec = json.loads(lines[0])
+        assert rec["sentiment"] == "liked"
+        assert rec["message_id"] == "m1"
+        assert rec["thread_id"] == "t1"
+        assert rec["agent_id"] == "coder"
+        assert "ts" in rec  # epoch seconds · not asserting exact value
+
+    def test_disliked_with_reason(self, client: TestClient) -> None:
+        r = client.post(
+            "/api/feedback",
+            json={"sentiment": "disliked", "reason": "hallucinated api"},
+        )
+        assert r.status_code == 200
+        rec = r.json()["recorded"]
+        assert rec["sentiment"] == "disliked"
+        assert rec["reason"] == "hallucinated api"
+
+    def test_invalid_sentiment_rejected(self, client: TestClient) -> None:
+        r = client.post(
+            "/api/feedback", json={"sentiment": "meh"},
+        )
+        assert r.status_code == 400
+
+    def test_sentiment_required(self, client: TestClient) -> None:
+        r = client.post("/api/feedback", json={})
+        assert r.status_code == 400
+
+    def test_content_preview_truncated(
+        self, client: TestClient, isolated_cwd: Path,
+    ) -> None:
+        """Preview is capped at 400 chars — guards the feedback log
+        from growing unbounded on huge reply texts."""
+        big = "x" * 2000
+        client.post(
+            "/api/feedback",
+            json={"sentiment": "liked", "content_preview": big},
+        )
+        import json
+
+        jsonl = isolated_cwd / "data" / "feedback.jsonl"
+        rec = json.loads(jsonl.read_text(encoding="utf-8").splitlines()[0])
+        assert len(rec["content_preview"]) == 400
+
+
+# ═══════════════════════════════════════════════════════════
+# GET /api/feedback
+# ═══════════════════════════════════════════════════════════
+
+
+class TestFeedbackList:
+    def test_empty_when_no_file(self, client: TestClient) -> None:
+        r = client.get("/api/feedback")
+        assert r.status_code == 200
+        assert r.json() == {"entries": []}
+
+    def test_returns_entries_newest_first(
+        self, client: TestClient,
+    ) -> None:
+        for i in range(3):
+            client.post(
+                "/api/feedback",
+                json={"sentiment": "liked", "message_id": f"m{i}"},
+            )
+        data = client.get("/api/feedback").json()
+        # Reverse order — newest first (m2, m1, m0)
+        ids = [e["message_id"] for e in data["entries"]]
+        assert ids == ["m2", "m1", "m0"]
+
+    def test_limit_respected(self, client: TestClient) -> None:
+        for i in range(10):
+            client.post(
+                "/api/feedback",
+                json={"sentiment": "liked", "message_id": f"m{i}"},
+            )
+        data = client.get("/api/feedback?limit=3").json()
+        assert len(data["entries"]) == 3
+
+    def test_thread_id_filter(self, client: TestClient) -> None:
+        for i in range(5):
+            client.post(
+                "/api/feedback",
+                json={
+                    "sentiment": "liked",
+                    "message_id": f"m{i}",
+                    "thread_id": "t_a" if i < 2 else "t_b",
+                },
+            )
+        data = client.get("/api/feedback?thread_id=t_a").json()
+        assert {e["message_id"] for e in data["entries"]} == {"m0", "m1"}
+
+
+# ═══════════════════════════════════════════════════════════
+# GET /api/skills
+# ═══════════════════════════════════════════════════════════
+
+
+class TestSkills:
+    def test_returns_skill_list(self, client: TestClient) -> None:
+        r = client.get("/api/skills")
+        assert r.status_code == 200
+        data = r.json()
+        assert "skills" in data
+        assert isinstance(data["skills"], list)
+
+    def test_skill_entry_shape(self, client: TestClient) -> None:
+        """Each entry must carry the documented fields — the
+        frontend Skills page depends on these."""
+        data = client.get("/api/skills").json()
+        if not data["skills"]:
+            pytest.skip("no skills registered in minimal create_app()")
+        entry = data["skills"][0]
+        required = {
+            "name", "description", "affinity", "cost_profile",
+            "trusted_source", "has_tests",
+        }
+        assert required.issubset(entry.keys()), (
+            f"skill entry missing fields: {required - entry.keys()}"
+        )
+
+    def test_default_app_includes_file_backed_skill_library(
+        self, client: TestClient,
+    ) -> None:
+        data = client.get("/api/skills").json()
+        skills = {s["name"]: s for s in data["skills"]}
+
+        assert "pdf" in skills
+        pdf = skills["pdf"]
+        assert pdf["trusted_source"] == "skill://all_skills/pdf"
+
+    def test_plugin_dynamic_skills_are_hidden_from_global_catalog(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        registry = SkillRegistry()
+        registry.register(Skill(
+            name="plugin_skill",
+            description="Plugin skill",
+            trusted_source="skill://all_skills/plugin_skill",
+            handler=lambda **_kw: {"ok": True},
+        ), verify_tests=False)
+        registry.register(Skill(
+            name="local_skill",
+            description="Local skill",
+            trusted_source="skill://public/local_skill",
+            handler=lambda **_kw: {"ok": True},
+        ), verify_tests=False)
+        monkeypatch.setattr(
+            "runtime.sensing.gateway.meta_router._dynamic_plugin_skill_names",
+            lambda: {"plugin_skill"},
+        )
+        app = FastAPI()
+        app.include_router(create_meta_router(registry=registry))
+        client = TestClient(app)
+        data = client.get("/api/skills").json()
+        names = {skill["name"] for skill in data["skills"]}
+
+        assert "plugin_skill" not in names
+        assert "local_skill" in names
+
+    def test_skill_catalog_collapses_alias_child_and_duplicate_sources(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        registry = SkillRegistry()
+        for name, source in (
+            ("root_skill", "skill://all_skills/root-skill"),
+            ("alias_skill", "skill://all_skills/root-skill#alias"),
+            ("child_skill", "skill://all_skills/root-skill/child"),
+            ("duplicate_root", "skill://all_skills/root-skill"),
+            ("other_skill", "skill://all_skills/other-skill"),
+        ):
+            registry.register(Skill(
+                name=name,
+                description=name,
+                trusted_source=source,
+                handler=lambda **_kw: {"ok": True},
+            ), verify_tests=False)
+        monkeypatch.setattr(
+            "runtime.sensing.gateway.meta_router._dynamic_plugin_skill_names",
+            lambda: set(),
+        )
+        app = FastAPI()
+        app.include_router(create_meta_router(registry=registry))
+        client = TestClient(app)
+        data = client.get("/api/skills").json()
+        names = {skill["name"] for skill in data["skills"]}
+
+        assert "root_skill" in names
+        assert "other_skill" in names
+        assert "alias_skill" not in names
+        assert "child_skill" not in names
+        assert "duplicate_root" not in names
+
+    def test_skill_catalog_skips_broken_registry_entries(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class RegistryWithBrokenEntry:
+            def all_names(self) -> list[str]:
+                return ["good_skill", "broken_skill"]
+
+            def get(self, name: str) -> Skill:
+                if name == "broken_skill":
+                    raise RuntimeError("corrupt skill registration")
+                return Skill(
+                    name="good_skill",
+                    description="Good skill",
+                    trusted_source="skill://public/good_skill",
+                    handler=lambda **_kw: {"ok": True},
+                )
+
+            def is_enabled(self, _name: str) -> bool:
+                return True
+
+        monkeypatch.setattr(
+            "runtime.sensing.gateway.meta_router._dynamic_plugin_skill_names",
+            lambda: set(),
+        )
+        app = FastAPI()
+        app.include_router(create_meta_router(registry=RegistryWithBrokenEntry()))
+        client = TestClient(app)
+
+        r = client.get("/api/skills")
+        assert r.status_code == 200
+        names = {skill["name"] for skill in r.json()["skills"]}
+        assert "good_skill" in names
+        assert "broken_skill" not in names
+
+
+class TestCapabilityCatalog:
+    def test_capability_catalog_endpoint_merges_sources(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        registry = SkillRegistry()
+        registry.register(Skill(
+            name="exec_shell",
+            description="Execute shell commands.",
+            affinity=["shell"],
+            trusted_source="builtin://exec_shell",
+            handler=lambda **_kw: {"ok": True},
+        ), verify_tests=False)
+        skill_dir = tmp_path / "mobile-skills" / "tap"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            """---
+name: android.tap
+description: Tap a coordinate on the Android screen.
+parameters:
+  - name: x
+    type: integer
+    required: true
+---
+""",
+            encoding="utf-8",
+        )
+        tool_registry = ToolRegistry()
+        app = FastAPI()
+        app.include_router(create_meta_router(
+            registry=registry,
+            tool_registry=tool_registry,
+            mobile_skills_root=tmp_path / "mobile-skills",
+        ))
+        client = TestClient(app)
+
+        response = client.get(
+            "/api/capability-catalog",
+            params={"source": "mobile_mcp"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["schema"] == "octopus.capability_catalog.v1"
+        assert data["total"] == 1
+        entry = data["capabilities"][0]
+        assert entry["id"] == "mobile:android_tap"
+        assert entry["canonical_name"] == "android.tap"
+        assert entry["risk"]["level"] == "high"
+        assert data["summary"]["by_source"]["runtime_skill"] == 1
+        assert data["summary"]["by_source"]["mobile_mcp"] == 1
+
+
+class TestPlugins:
+    def test_copied_codex_plugins_are_registered_for_frontend(
+        self, client: TestClient,
+    ) -> None:
+        r = client.get("/api/plugins")
+        assert r.status_code == 200
+        plugins = r.json()
+        assert isinstance(plugins, list)
+
+        by_id = {plugin["id"]: plugin for plugin in plugins}
+        assert "browser" in by_id
+        assert by_id["browser"]["source"] == "codex"
+        assert by_id["browser"]["enabled"] is True
+        assert by_id["browser"]["state"] == "registered"
+        assert isinstance(by_id["browser"]["capabilities"], list)
+        assert by_id["browser"]["logo_url"].endswith("/assets/browser.png")
+        assert by_id["browser"]["icon_url"].endswith("/assets/composer-icon.png")
+
+    def test_plugin_detail_and_capabilities(
+        self, client: TestClient,
+    ) -> None:
+        detail = client.get("/api/plugins/browser")
+        assert detail.status_code == 200
+        assert detail.json()["id"] == "browser"
+
+        caps = client.get("/api/plugins/capabilities?type=codex")
+        assert caps.status_code == 200
+        assert any(cap["provider"] == "browser" for cap in caps.json())
+
+    def test_plugin_assets_are_served(
+        self, client: TestClient,
+    ) -> None:
+        detail = client.get("/api/plugins/browser").json()
+        logo_url = detail["logo_url"]
+        assert logo_url
+
+        asset = client.get(logo_url)
+        assert asset.status_code == 200
+        assert asset.headers["content-type"] == "image/png"
+        assert asset.content.startswith(b"\x89PNG")
+
+
+# ═══════════════════════════════════════════════════════════
+# GET /api/auth/providers
+# ═══════════════════════════════════════════════════════════
+
+
+class TestAgentMarket:
+    def test_agency_agents_are_available_in_square(
+        self, client: TestClient,
+    ) -> None:
+        r = client.get("/api/agent-market/store?search=Frontend%20Developer&limit=20")
+        assert r.status_code == 200
+
+        agents = r.json()["agents"]
+        by_id = {agent["id"]: agent for agent in agents}
+        frontend = by_id["agency_engineering_frontend_developer"]
+        assert frontend["display_name"] == "Frontend Developer"
+        assert frontend["author"] == "msitarzewski/agency-agents"
+        assert frontend["category"] == "coder"
+        assert frontend["is_installed"] is False
+        assert frontend["is_official"] is False
+        assert frontend["source_url"].endswith(
+            "/engineering/engineering-frontend-developer.md",
+        )
+
+    def test_agency_agent_detail_uses_catalog_metadata(
+        self, client: TestClient,
+    ) -> None:
+        r = client.get("/api/agent-market/store/agency_marketing_xiaohongshu_specialist")
+        assert r.status_code == 200
+
+        data = r.json()
+        assert data["display_name"] == "Xiaohongshu Specialist"
+        assert "agency-agents" in data["tags"]
+        assert data["category"] == "creative"
+
+    def test_financial_services_agents_are_available_in_square(
+        self, client: TestClient,
+    ) -> None:
+        r = client.get("/api/agent-market/store?search=Pitch%20Agent&limit=20")
+        assert r.status_code == 200
+
+        agents = r.json()["agents"]
+        by_id = {agent["id"]: agent for agent in agents}
+        pitch = by_id["financial_pitch_agent"]
+        assert pitch["display_name"] == "Pitch Agent"
+        assert pitch["author"] == "anthropics/financial-services"
+        assert pitch["category"] == "financial"
+        assert pitch["is_installed"] is False
+        assert pitch["is_official"] is False
+        assert "financial-services" in pitch["tags"]
+        assert "pitch-deck" in pitch["key_skills"]
+        assert "dcf-model" in pitch["key_skills"]
+        assert "pptx-author" in pitch["available_skills"]
+        assert len(pitch["available_skills"]) > len(pitch["key_skills"])
+        assert pitch["source_url"].endswith(
+            "/plugins/agent-plugins/pitch-agent/agents/pitch-agent.md",
+        )
+
+    def test_financial_services_agent_detail_uses_catalog_metadata(
+        self, client: TestClient,
+    ) -> None:
+        r = client.get("/api/agent-market/store/financial_kyc_screener")
+        assert r.status_code == 200
+
+        data = r.json()
+        assert data["display_name"] == "KYC Screener"
+        assert data["author"] == "anthropics/financial-services"
+        assert data["category"] == "financial"
+        assert "finance" in data["tags"]
+        assert data["key_skills"] == ["kyc-doc-parse", "kyc-rules", "xlsx-author"]
+        assert data["available_skills"] == data["key_skills"]
+
+    def test_financial_services_category_filter(
+        self, client: TestClient,
+    ) -> None:
+        r = client.get("/api/agent-market/store?category=financial&limit=50")
+        assert r.status_code == 200
+
+        data = r.json()
+        assert data["total"] == 10
+        assert {agent["author"] for agent in data["agents"]} == {
+            "anthropics/financial-services",
+        }
+
+    def test_financial_services_install_carries_key_skills(
+        self, tmp_path: Path,
+    ) -> None:
+        from runtime.sensing.gateway.agent_world_router import (
+            _install_template_agent,
+        )
+
+        agent_dir = _install_template_agent(
+            "financial_pitch_agent",
+            tmp_path / "agents",
+            skills_root=tmp_path / "skills",
+        )
+        assert agent_dir is not None
+
+        tool_registry = agent_dir / "agent-core" / "tool-registry.jsonc"
+        data = tool_registry.read_text(encoding="utf-8")
+        assert '"pitch-deck"' in data
+        assert '"dcf-model"' in data
+        assert (tmp_path / "skills" / "pitch-deck" / "SKILL.md").is_file()
+        assert (tmp_path / "skills" / "dcf-model" / "SKILL.md").is_file()
+        assert (tmp_path / "skills" / "pptx-author" / "SKILL.md").is_file()
+
+
+class TestAuthProviders:
+    def test_empty_when_no_provider_configured(
+        self, client: TestClient,
+    ) -> None:
+        """Neither molili_config nor local_auth_config injected →
+        empty list. The frontend Login page hides all tabs in this
+        case; adding a spurious default here would show a broken
+        login form."""
+        r = client.get("/api/auth/providers")
+        assert r.status_code == 200
+        assert r.json() == {"providers": []}
+
+    def test_molili_provider_when_configured(
+        self, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The molili auth router pokes many attributes on the config
+        (jwt_secret, jwt_issuer, api, ...). Rather than stub every
+        one, skip gracefully when a full Config isn't available in
+        the test env · this test exercises the ``enabled`` flag
+        conditional · not the downstream router."""
+        try:
+            from runtime.adapters.integrations.molili.config import (
+                MoliliConfig,
+            )
+        except ImportError:
+            pytest.skip("molili config not importable in test env")
+
+        # Use the real config with minimal settings · still hits the
+        # auth_providers endpoint's enabled-check path.
+        try:
+            cfg = MoliliConfig(enabled=True)
+        except Exception:  # noqa: BLE001
+            pytest.skip("molili config requires fields we don't have")
+
+        app = create_app(molili_config=cfg)
+        c = TestClient(app)
+        data = c.get("/api/auth/providers").json()
+        ids = {p["id"] for p in data["providers"]}
+        assert "molili" in ids
+
+    def test_local_provider_when_configured(
+        self, isolated_cwd: Path,
+    ) -> None:
+        class _FakeLocal:
+            enabled = True
+            users = {"alice": "x"}  # password_required=True
+            allow_any_username = True
+
+        app = create_app(local_auth_config=_FakeLocal())
+        c = TestClient(app)
+        data = c.get("/api/auth/providers").json()
+        ids = {p["id"] for p in data["providers"]}
+        assert "local" in ids
+        local = next(p for p in data["providers"] if p["id"] == "local")
+        # password_required reflects whether users dict is non-empty
+        assert local["password_required"] is True

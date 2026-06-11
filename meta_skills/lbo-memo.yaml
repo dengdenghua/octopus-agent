@@ -1,0 +1,79 @@
+# LBO Memo 能力包 / Meta-Skill
+# 6-step workflow for PE buyout IC memo:
+#   - 2 parallel valuation sources (dcf + comps)
+#   - LBO model build
+#   - IC memo composition
+#   - docx export
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - deal_screening  (项目初筛)
+#   - comps_analysis  (可比公司)
+#   - dcf_model       (现金流折现)
+#   - lbo_model       (杠杆收购模型)
+#   - ic_memo         (投委会备忘录模板)
+#   - docx_export     (归档)
+
+name: lbo-memo
+kind: skill_cluster
+version: 0.1.0
+description: PE 立项备忘录 — 估值 + LBO → IC memo → docx
+when_to_use: LBO / 杠杆收购 / buyout / PE 立项 / 投委会
+affinity: [finance, modeling, memo]
+
+budget:
+  tokens: 100000
+  usd: 3.0
+  latency_ms: 3600000
+
+steps:
+  - node_id: screen
+    skill: deal_screening
+    args:
+      target: "{user_input.target}"
+    timeout_ms: 180000
+
+  - node_id: comps
+    skill: comps_analysis
+    args:
+      target: "{user_input.target}"
+      anchor: "{screen.output.metrics}"
+    depends_on: [screen]
+    timeout_ms: 300000
+
+  - node_id: dcf
+    skill: dcf_model
+    args:
+      target: "{user_input.target}"
+      assumptions: "{screen.output.assumptions}"
+    depends_on: [screen]
+    timeout_ms: 600000
+
+  - node_id: lbo
+    skill: lbo_model
+    args:
+      target: "{user_input.target}"
+      dcf: "{dcf.output}"
+      comps: "{comps.output}"
+      leverage: "{user_input.leverage}"
+    depends_on: [dcf, comps]
+    timeout_ms: 600000
+
+  - node_id: memo
+    skill: ic_memo
+    args:
+      template: lbo-memo
+      inputs:
+        screen: "{screen.output}"
+        comps: "{comps.output}"
+        dcf: "{dcf.output}"
+        lbo: "{lbo.output}"
+    depends_on: [lbo]
+    timeout_ms: 300000
+
+  - node_id: archive
+    skill: docx_export
+    args:
+      content: "{memo.output}"
+      filename: "lbo-memo-{user_input.target}.docx"
+    depends_on: [memo]
+    timeout_ms: 60000

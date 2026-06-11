@@ -1,0 +1,239 @@
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any
+
+from fastapi import HTTPException
+
+_DEFAULT_MAX_TOKENS = 131072
+
+
+def _resolve_custom_model_router(
+    model_name: str,
+    router: Any,
+) -> tuple[Any, str]:
+    """Resolve a user-facing model alias through custom_models.json.
+
+    Looks up ``model_name`` in two ways:
+
+    1. As an entry id (``mimo2.5`` → the mimo entry). When the entry
+       has a ``models`` list, the first item is used as the upstream
+       model name.
+    2. As a variant inside any entry's ``models`` list
+       (``mimo-v2.5-flash`` → mimo entry, upstream=``mimo-v2.5-flash``).
+       This branch lets the picker show concrete variant rows the
+       user can pick directly while still routing through the entry's
+       ``base_url`` / ``api_key``.
+
+    Both branches build the appropriate provider router (Anthropic /
+    Gemini / OpenAI-compat) using the entry's credentials. Returns
+    ``(router, model_name)`` unchanged when no entry matches.
+    """
+    try:
+        from runtime.platform.process.paths import app_paths as _app_paths
+
+        _custom_path = _app_paths().custom_models_path
+        if not _custom_path.exists():
+            return router, model_name
+        _custom_data = json.loads(_custom_path.read_text(encoding="utf-8"))
+        if not isinstance(_custom_data, dict):
+            return router, model_name
+        _custom_entry = _custom_data.get(model_name)
+        # Variant lookup: walk every entry's models list and pick the
+        # entry whose models[] contains the given name. The variant
+        # itself becomes the upstream model name (no slot remap).
+        _variant_match = False
+        if not isinstance(_custom_entry, dict):
+            for _entry_id, _entry in _custom_data.items():
+                if not isinstance(_entry, dict):
+                    continue
+                _models = _entry.get("models")
+                if isinstance(_models, list) and any(
+                    isinstance(_m, str) and _m.strip() == model_name
+                    for _m in _models
+                ):
+                    _custom_entry = _entry
+                    _variant_match = True
+                    break
+        if not isinstance(_custom_entry, dict):
+            return router, model_name
+        _provider = str(_custom_entry.get("provider") or "openai").lower()
+        _base_url = str(_custom_entry.get("base_url") or "")
+        _api_key = str(_custom_entry.get("api_key") or "")
+        # When the caller passed a variant name, that exact name IS
+        # the upstream model. Otherwise pick the first model in the
+        # entry's models[] list (legacy "entry-as-alias" behavior).
+        if _variant_match:
+            _upstream_model = model_name
+        else:
+            _upstream_model = ""
+            _raw_models = _custom_entry.get("models")
+            if isinstance(_raw_models, list):
+                for _m in _raw_models:
+                    if isinstance(_m, str) and _m.strip():
+                        _upstream_model = _m.strip()
+                        break
+            if not _upstream_model:
+                _legacy = _custom_entry.get("model")
+                if isinstance(_legacy, str) and _legacy.strip():
+                    _upstream_model = _legacy.strip()
+            if not _upstream_model:
+                _upstream_model = model_name
+        _headers = (
+            _custom_entry.get("default_headers")
+            if isinstance(_custom_entry.get("default_headers"), dict)
+            else None
+        )
+        if _provider in ("anthropic", "claude"):
+            from runtime.sensing.model_router.anthropic_router import AnthropicModelRouter
+
+            new_router = AnthropicModelRouter(
+                api_key=_api_key,
+                default_model=_upstream_model,
+                base_url=(_base_url or None),
+            )
+        elif _provider in ("gemini", "google"):
+            from runtime.sensing.model_router.gemini_router import GeminiModelRouter
+
+            new_router = GeminiModelRouter(
+                api_key=_api_key,
+                default_model=_upstream_model,
+                base_url=(_base_url or "https://generativelanguage.googleapis.com/v1beta"),
+                extra_headers=_headers,
+            )
+        elif _provider in ("openai", "openai-compatible", "openai_compat"):
+            from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+            new_router = OpenAIModelRouter(
+                base_url=_base_url,
+                api_key=_api_key,
+                default_model=_upstream_model,
+                extra_headers=_headers,
+            )
+        else:
+            return router, model_name
+        resolved_model = _upstream_model
+        return new_router, resolved_model
+    except Exception as _e:  # noqa: BLE001
+        _logger = logging.getLogger(__name__)
+        _logger.debug("custom model resolution failed for %s: %s", model_name, _e)
+        return router, model_name
+
+
+def _custom_model_entry(model_name: str) -> dict[str, Any] | None:
+    try:
+        from runtime.platform.process.paths import app_paths as _app_paths
+
+        _custom_path = _app_paths().custom_models_path
+        if not _custom_path.exists():
+            return None
+        _custom_data = json.loads(_custom_path.read_text(encoding="utf-8"))
+        if not isinstance(_custom_data, dict):
+            return None
+        entry = _custom_data.get(model_name)
+        return entry if isinstance(entry, dict) else None
+    except Exception as _e:  # noqa: BLE001
+        logging.getLogger(__name__).debug(
+            "custom model metadata read failed for %s: %s", model_name, _e,
+        )
+        return None
+
+
+def _custom_model_entry_for(model_name: str, resolved_model: str) -> dict[str, Any] | None:
+    entry = _custom_model_entry(model_name) or _custom_model_entry(resolved_model)
+    if entry is not None:
+        return entry
+    try:
+        from runtime.platform.process.paths import app_paths as _app_paths
+
+        custom_path = _app_paths().custom_models_path
+        if not custom_path.exists():
+            return None
+        custom_data = json.loads(custom_path.read_text(encoding="utf-8"))
+        if not isinstance(custom_data, dict):
+            return None
+        for candidate in custom_data.values():
+            if (
+                isinstance(candidate, dict)
+                and str(candidate.get("model") or "") == resolved_model
+            ):
+                return candidate
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).debug(
+            "custom model reverse lookup failed for %s/%s: %s",
+            model_name,
+            resolved_model,
+            exc,
+        )
+    return None
+
+
+def _model_runtime_options(model_name: str, resolved_model: str) -> tuple[bool, int | None]:
+    entry = _custom_model_entry_for(model_name, resolved_model)
+    supports_thinking = (
+        bool(entry.get("supports_thinking"))
+        if entry is not None and "supports_thinking" in entry
+        else _model_supports_thinking(resolved_model)
+    )
+    provider = str(entry.get("provider") or "").lower() if entry else ""
+    if entry is not None and provider in ("openai", "openai-compatible", "openai_compat", ""):
+        return supports_thinking, None
+    return supports_thinking, _DEFAULT_MAX_TOKENS
+
+
+def _model_supports_thinking(model_name: str) -> bool:
+    m = (model_name or "").lower()
+    if m.startswith(("o1", "o3", "o4")):
+        return True
+    if "gpt-5" in m or "gpt-oss" in m:
+        return True
+    if "deepseek-v4" in m or "deepseek-reasoner" in m:
+        return True
+    if "sonnet-4" in m or "opus-4" in m:
+        return True
+    return bool("claude-4" in m or "claude-sonnet-4" in m or "claude-opus-4" in m)
+
+
+def _resolve_actor(
+    request: Any, identity_store: Any, require_auth: bool,
+    *,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+    jwt_leeway_seconds: int = 0,
+    trust_jwt_sub: bool = True,
+) -> str | None:
+    if request is None:
+        return None
+
+    if identity_store is not None:
+        auth = request.headers.get("Authorization") or ""
+        if auth.lower().startswith("bearer "):
+            token = auth[7:].strip()
+
+            if jwt_secret and token.count(".") == 2:
+                identity = identity_store.verify_jwt(
+                    token,
+                    secret=jwt_secret,
+                    leeway_seconds=jwt_leeway_seconds,
+                    required_issuer=jwt_issuer,
+                    required_audience=jwt_audience,
+                    trust_jwt_sub=trust_jwt_sub,
+                )
+                if identity is not None:
+                    return identity.actor_id
+                if require_auth:
+                    raise HTTPException(401, "invalid jwt")
+
+            # 2. API key
+            identity = identity_store.verify_api_key(token)
+            if identity is not None:
+                return identity.actor_id
+            if require_auth:
+                raise HTTPException(401, "invalid token")
+
+        if require_auth:
+            raise HTTPException(401, "missing Authorization: Bearer <token>")
+
+    return None

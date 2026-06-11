@@ -1,0 +1,250 @@
+{
+  "version": 2,
+  "generated_at": "2026-06-08T05:35:05+00:00",
+  "files_analyzed": 40,
+  "tree": [
+    {
+      "type": "doc",
+      "title": "项目概述",
+      "path": "00-overview.md"
+    },
+    {
+      "type": "doc",
+      "title": "技术栈",
+      "path": "10-tech-stack.md"
+    },
+    {
+      "type": "dir",
+      "title": "后端架构",
+      "children": [
+        {
+          "type": "doc",
+          "title": "概览",
+          "path": "20-backend/index.md"
+        },
+        {
+          "type": "dir",
+          "title": "Runtime 核心",
+          "children": [
+            {
+              "type": "doc",
+              "title": "Tool Engine · 执行器",
+              "path": "20-backend/21-runtime/tool-engine.md"
+            },
+            {
+              "type": "doc",
+              "title": "Cerebrum · 规划",
+              "path": "20-backend/21-runtime/cerebrum.md"
+            },
+            {
+              "type": "doc",
+              "title": "Suckers · 技能",
+              "path": "20-backend/21-runtime/suckers.md"
+            },
+            {
+              "type": "doc",
+              "title": "Arms · 工具组",
+              "path": "20-backend/21-runtime/arms.md"
+            },
+            {
+              "type": "doc",
+              "title": "All Skills 目录",
+              "path": "20-backend/21-runtime/all-skills.md"
+            }
+          ]
+        },
+        {
+          "type": "dir",
+          "title": "Safety",
+          "children": [
+            {
+              "type": "doc",
+              "title": "Validation",
+              "path": "20-backend/22-safety/validation.md"
+            },
+            {
+              "type": "doc",
+              "title": "Auth",
+              "path": "20-backend/22-safety/auth.md"
+            },
+            {
+              "type": "doc",
+              "title": "Hooks",
+              "path": "20-backend/22-safety/hooks.md"
+            },
+            {
+              "type": "doc",
+              "title": "Recovery",
+              "path": "20-backend/22-safety/recovery.md"
+            }
+          ]
+        },
+        {
+          "type": "dir",
+          "title": "Memory",
+          "children": [
+            {
+              "type": "doc",
+              "title": "Journal",
+              "path": "20-backend/23-memory/journal.md"
+            },
+            {
+              "type": "doc",
+              "title": "Hemolymph (Context)",
+              "path": "20-backend/23-memory/hemolymph.md"
+            }
+          ]
+        },
+        {
+          "type": "dir",
+          "title": "Sensing",
+          "children": [
+            {
+              "type": "doc",
+              "title": "Model Router",
+              "path": "20-backend/24-sensing/model-router.md"
+            },
+            {
+              "type": "doc",
+              "title": "Gateway · HTTP API",
+              "path": "20-backend/24-sensing/gateway.md"
+            }
+          ]
+        },
+        {
+          "type": "dir",
+          "title": "Adapters",
+          "children": [
+            {
+              "type": "doc",
+              "title": "MCP",
+              "path": "20-backend/25-adapters/mcp.md"
+            },
+            {
+              "type": "doc",
+              "title": "Channels",
+              "path": "20-backend/25-adapters/channels.md"
+            },
+            {
+              "type": "doc",
+              "title": "Integrations",
+              "path": "20-backend/25-adapters/integrations.md"
+            }
+          ]
+        },
+        {
+          "type": "dir",
+          "title": "Agents",
+          "children": [
+            {
+              "type": "doc",
+              "title": "🛡️ 管理员",
+              "path": "20-backend/26-agents/admin.md"
+            },
+            {
+              "type": "doc",
+              "title": "💻 Coder",
+              "path": "20-backend/26-agents/coder.md"
+            },
+            {
+              "type": "doc",
+              "title": "🖥️ Desktop Operator",
+              "path": "20-backend/26-agents/desktop_operator.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 Commerce Strategist",
+              "path": "20-backend/26-agents/ecommerce_mind.md"
+            },
+            {
+              "type": "doc",
+              "title": "📈 Earnings Reviewer",
+              "path": "20-backend/26-agents/financial_earnings_reviewer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🧾 GL Reconciler",
+              "path": "20-backend/26-agents/financial_gl_reconciler.md"
+            },
+            {
+              "type": "doc",
+              "title": "🛡️ KYC Screener",
+              "path": "20-backend/26-agents/financial_kyc_screener.md"
+            },
+            {
+              "type": "doc",
+              "title": "🔎 Market Researcher",
+              "path": "20-backend/26-agents/financial_market_researcher.md"
+            },
+            {
+              "type": "doc",
+              "title": "📋 Meeting Prep Agent",
+              "path": "20-backend/26-agents/financial_meeting_prep_agent.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 Model Builder",
+              "path": "20-backend/26-agents/financial_model_builder.md"
+            },
+            {
+              "type": "doc",
+              "title": "🗓️ Month End Closer",
+              "path": "20-backend/26-agents/financial_month_end_closer.md"
+            },
+            {
+              "type": "doc",
+              "title": "💼 Pitch Agent",
+              "path": "20-backend/26-agents/financial_pitch_agent.md"
+            },
+            {
+              "type": "doc",
+              "title": "✅ Statement Auditor",
+              "path": "20-backend/26-agents/financial_statement_auditor.md"
+            },
+            {
+              "type": "doc",
+              "title": "💵 Valuation Reviewer",
+              "path": "20-backend/26-agents/financial_valuation_reviewer.md"
+            },
+            {
+              "type": "doc",
+              "title": "🐙 Octopus",
+              "path": "20-backend/26-agents/general.md"
+            },
+            {
+              "type": "doc",
+              "title": "Agent Market Researcher",
+              "path": "20-backend/26-agents/market_researcher.md"
+            },
+            {
+              "type": "doc",
+              "title": "✨ Growth Marketer",
+              "path": "20-backend/26-agents/vibe_selling.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "dir",
+      "title": "图谱 · Graphs",
+      "children": [
+        {
+          "type": "doc",
+          "title": "Skill × Arm × Agent",
+          "path": "30-skills-graph/skill-map.md"
+        },
+        {
+          "type": "doc",
+          "title": "Hook Surface",
+          "path": "40-hooks/hook-surface.md"
+        },
+        {
+          "type": "doc",
+          "title": "ADR 锚点",
+          "path": "50-governance/adr-anchors.md"
+        }
+      ]
+    }
+  ]
+}

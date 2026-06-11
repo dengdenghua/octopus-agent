@@ -1,0 +1,83 @@
+import { format, formatDistanceToNow } from "date-fns";
+import { enUS as dateFnsEnUS } from "date-fns/locale/en-US";
+import { zhCN as dateFnsZhCN } from "date-fns/locale/zh-CN";
+
+import { detectLocale, type Locale } from "@/core/i18n";
+import { getLocaleFromCookie } from "@/core/i18n/cookies";
+
+function getDateFnsLocale(locale: Locale) {
+  switch (locale) {
+    case "zh-CN":
+      return dateFnsZhCN;
+    case "en-US":
+    default:
+      return dateFnsEnUS;
+  }
+}
+
+export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
+  const effectiveLocale =
+    locale ??
+    (getLocaleFromCookie() as Locale | null) ??
+    // Fallback when cookie is missing (or on first render)
+    detectLocale();
+  return formatDistanceToNow(date, {
+    addSuffix: true,
+    locale: getDateFnsLocale(effectiveLocale),
+  });
+}
+
+export function formatDate(date: Date | string | number, locale?: Locale): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const effectiveLocale =
+    locale ??
+    (getLocaleFromCookie() as Locale | null) ??
+    detectLocale();
+
+  if (effectiveLocale === "zh-CN") {
+    return format(d, "yyyy年MM月dd日");
+  }
+  return format(d, "MMM d, yyyy");
+}
+
+/* Implementation note. */
+export function formatRelativeTimestamp(
+  date: Date | string | number,
+  locale?: Locale,
+): string {
+  const d = typeof date === "string" ? new Date(date) : new Date(date);
+  const effectiveLocale =
+    locale ??
+    (getLocaleFromCookie() as Locale | null) ??
+    detectLocale();
+
+  const deltaSec = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  const isZh = effectiveLocale === "zh-CN";
+
+  if (deltaSec < 30) return isZh ? "刚刚" : "just now";
+  if (deltaSec < 3600) {
+    const m = Math.floor(deltaSec / 60);
+    return isZh ? `${m} 分钟前` : `${m}m ago`;
+  }
+  if (deltaSec < 86400) {
+    const h = Math.floor(deltaSec / 3600);
+    return isZh ? `${h} 小时前` : `${h}h ago`;
+  }
+  if (deltaSec < 7 * 86400) {
+    return format(d, "EEE", { locale: getDateFnsLocale(effectiveLocale) });
+  }
+  return formatDate(d, effectiveLocale);
+}
+
+export function formatCurrency(amount: string | number, currency = "USD", locale?: Locale): string {
+  const value = typeof amount === "string" ? parseFloat(amount) : amount;
+  const effectiveLocale =
+    locale ??
+    (getLocaleFromCookie() as Locale | null) ??
+    detectLocale();
+
+  return new Intl.NumberFormat(effectiveLocale === "zh-CN" ? "zh-CN" : "en-US", {
+    style: "currency",
+    currency,
+  }).format(Math.abs(value));
+}

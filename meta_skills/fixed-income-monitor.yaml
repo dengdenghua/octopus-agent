@@ -1,0 +1,69 @@
+# Fixed Income Monitor 能力包 / Meta-Skill
+# 6-step workflow: 4 parallel macro / rate / FX sources → portfolio view
+# → client-facing report.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - macro_rates_monitor   (宏观利率 + 央行)
+#   - bond_relative_value   (利率债相对价值)
+#   - bond_futures_basis    (国债期货基差)
+#   - fx_carry_trade        (外汇 Carry)
+#   - fixed_income_portfolio (组合久期 / DV01)
+#   - client_report         (客户报告)
+
+name: fixed-income-monitor
+kind: skill_cluster
+version: 0.1.0
+description: 固收日报 — 利率/利差/基差/汇率 4 源 → 组合视图 → 客户报告
+when_to_use: 固收 / 利率 / 国债 / 久期 / 汇率 / carry / bond
+affinity: [finance, fixed_income, briefing]
+
+budget:
+  tokens: 40000
+  usd: 0.8
+  latency_ms: 900000
+
+steps:
+  - node_id: macro
+    skill: macro_rates_monitor
+    args:
+      region: "{user_input.region}"
+    timeout_ms: 60000
+
+  - node_id: relval
+    skill: bond_relative_value
+    args:
+      curve: "{user_input.curve}"
+    timeout_ms: 120000
+
+  - node_id: basis
+    skill: bond_futures_basis
+    args:
+      ctd: "{user_input.ctd}"
+    timeout_ms: 120000
+
+  - node_id: fx
+    skill: fx_carry_trade
+    args:
+      pairs: "{user_input.pairs}"
+    timeout_ms: 120000
+
+  - node_id: portfolio
+    skill: fixed_income_portfolio
+    args:
+      book: "{user_input.book}"
+      macro: "{macro.output}"
+      relval: "{relval.output}"
+      basis: "{basis.output}"
+      fx: "{fx.output}"
+    depends_on: [macro, relval, basis, fx]
+    timeout_ms: 180000
+
+  - node_id: report
+    skill: client_report
+    args:
+      template: fi-daily
+      inputs:
+        portfolio: "{portfolio.output}"
+        macro: "{macro.output}"
+    depends_on: [portfolio]
+    timeout_ms: 120000

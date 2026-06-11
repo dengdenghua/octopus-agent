@@ -1,0 +1,302 @@
+# ═══════════════════════════════════════════════════════════
+# config.design.yaml — DESIGN REFERENCE, NOT A RUNTIME FILE
+# ═══════════════════════════════════════════════════════════
+#
+# This file documents the *intended* bio-named configuration layout
+# (spinal_cord / cerebrum / ganglia / arms / suckers / mantle / ...).
+# It is NOT loaded by any runtime today.
+#
+# As of 2026-05 the runtime schema ``runtime/platform/config/schema.py``
+# only understands ``planner / budget / immunity / learn /
+# credential_pool / hot_cache / molili / local_auth / intel_sources /
+# mcp_servers / journal_file / enable_web_skills / default_arm_id /
+# name / version_compat``. All 17 top-level bio blocks below are
+# dropped silently because pydantic does not enforce ``extra="forbid"``.
+#
+# To actually configure a running instance use ``config.example.yaml``
+# at the repo root — that's the schema-correct template that
+# ``make up`` / ``make dev`` and the Docker image consume.
+#
+# If you want these bio blocks to take effect, the follow-up work is:
+#   1. Extend ``AgentConfig`` in runtime/platform/config/schema.py
+#      with nested models for each subsystem.
+#   2. Wire each model into the matching subsystem builder
+#      (spinal_cord loader, cerebrum planner, etc.).
+#   3. Move this file back to the repo root.
+# ═══════════════════════════════════════════════════════════
+
+# Octopus-Agent 主配置
+# 每个模块对应章鱼的一个器官
+
+# ─────────────── Spinal Cord 脊髓（快路径反射）───
+spinal_cord:
+  enabled: true
+  tryfirst: true                          # 每次请求先走反射，未命中才走 Cerebrum
+  reflexes:
+    regex:
+      enabled: true
+      rules_file: ./spinal_cord/rules.yaml
+    cache:
+      enabled: true
+      ttl_seconds: 3600
+    rule_engine:
+      enabled: true
+    edge_slm:
+      enabled: false                      # 可选：本地小模型做意图分类
+      model_path: ./models/qwen-0.5b.gguf
+
+# ─────────────── Cerebrum 中枢脑（慢路径规划）────
+cerebrum:
+  planner_model: claude-opus-4-7         # 最强模型只给规划用
+  max_decomposition_depth: 5
+  prompt_cache: true                      # 前缀稳定 → 必开
+  skip_if_reflex_hit: true               # 反射命中时不唤醒中枢
+
+# ─────────────── Ganglia 神经节 ────────────────
+# ⚠️ 数字是诗意不是契约：count 随 arms.types 数自动对齐，不要硬编码 8
+ganglia:
+  count: auto                             # auto = len(arms.types)；也可显式 integer
+  autonomous_when_cerebrum_down: true     # 断联自治
+  local_checkpoint: true
+
+# ─────────────── Arms 腕足 ─────────────────────
+# ⚠️ 默认 8 类是参考章鱼，但真实应来自任务聚类：K 可以是 4/6/8/12
+# 每类可横向复制成多个实例应对并发
+arms:
+  replicas_per_type: 1                    # 高并发场景可 >1
+  # 以下是默认 8 类专长腕（可增减重排）
+  types:
+    - name: code_arm
+      model: claude-sonnet-4-6
+      sucker_affinity: [code, git, test, quality]
+      enable_exec: false                    # true → 加入 exec_shell
+      enable_git_network: false             # true → 加入 git push/pull/checkout/stash/create_pr
+    - name: data_arm
+      model: claude-sonnet-4-6
+      sucker_affinity: [sql, pandas, viz]
+    - name: search_arm
+      model: claude-haiku-4-5-20251001
+      sucker_affinity: [web_search, rag]
+    - name: browse_arm
+      model: claude-sonnet-4-6
+      sucker_affinity: [browser, dom]
+    - name: file_arm
+      model: claude-haiku-4-5-20251001
+      sucker_affinity: [fs, io]
+    - name: comm_arm
+      model: claude-haiku-4-5-20251001
+      sucker_affinity: [slack, email, im]
+    - name: deploy_arm
+      model: claude-sonnet-4-6
+      sucker_affinity: [docker, k8s, ci]
+    - name: observe_arm
+      model: claude-haiku-4-5-20251001
+      sucker_affinity: [metrics, log, trace]
+
+# ─────────────── Suckers 吸盘 ─────────────────
+suckers:
+  loader: progressive_disclosure          # 默认只注入 name+desc
+  public_dir: ./suckers/public
+  custom_dir: ./suckers/custom
+  mcp:
+    enabled: true
+    servers:
+      filesystem:
+        type: stdio
+        command: npx
+        args: ["@modelcontextprotocol/server-filesystem", "./"]
+
+# ─────────────── Mantle 外套膜（先天免疫）──────
+mantle:
+  default_provider: docker                # local/docker/ssh/k8s
+  per_arm_isolation: true
+
+# ─────────────── Immunity 免疫（适应性安全）────
+immunity:
+  innate:
+    signature_check: true                 # 每个 Sucker/MCP 必须有来源签名
+    trusted_sources:
+      - mcp://anthropic/*
+      - skill://public/*
+    unknown_policy: quarantine            # quarantine | reject | allow
+  adaptive:
+    risk_model: online                    # 在线学习行为风险分
+    quarantine_threshold: 0.7
+  memory:
+    attack_db: ./immunity/memory/attacks.db
+    remember_failures: true
+    deduplicate_window_hours: 24
+  tolerance:
+    self_whitelist:                       # 永不攻击"自己人"
+      - cerebrum
+      - ganglia
+      - arms/*
+
+# ─────────────── Hemolymph 血淋巴（上下文 + Blackboard）─
+hemolymph:
+  context_budget_tokens: 20000
+  quotas:
+    system: 0.15
+    suckers: 0.10
+    memory: 0.30
+    history: 0.45
+  overflow_strategy: compress_then_truncate
+  blackboard:
+    backend: redis                        # redis | memory
+    ttl_default_seconds: 1800
+    global_keys_persistent: true
+
+# ─────────────── Genome 基因组（DNA + 记忆）──
+genome:
+  # ── 长时记忆侧 ──
+  checkpoint_backend: sqlite              # sqlite | postgres
+  journal_retention_days: 30
+  memory_vector_store: lancedb
+  knowledge_fts: sqlite_fts5
+
+  # ── DNA 侧（可编辑遗传密码）──
+  dna:
+    enabled: true
+    mutation:
+      per_generation_count: 10
+      field_priors:
+        learning_rate: 0.30
+        scheduler_policy: 0.10
+        memory_policy: 0.10
+        arm_registry: 0.05              # 少变，风险大
+        tool_affinity_map: 0.15
+        risk_profile: 0.05
+        event_topology: 0.10
+        cortex_policy: 0.15
+    crossover:
+      parents: 2
+      per_generation_count: 5
+    shadow:
+      sample_size: 1000
+      min_fitness_gain: 0.03
+      significance_threshold: 0.05
+      max_cost_ratio: 1.2
+    canary:
+      initial_ratio:
+        hot: 0.05
+        warm: 0.01
+        cold: 0.005
+        nuclear: 0                      # 禁止自动
+      window_hours:
+        hot: 1
+        warm: 6
+        cold: 24
+    registry:
+      max_history: 500
+      retired_kept: 50
+      production_keep_n: 10             # 至少保留 N 代防雪崩
+    crdt:
+      enabled: true
+      vector_clock_pruning_days: 30
+      conflict_alert: true
+
+# ─────────────── Nerves 神经 ─────────────────
+nerves:
+  bus: nats                               # nats | redis_streams
+  bus_url: nats://localhost:4222
+  graph_executor: parallel_dag
+
+# ─────────────── Chromatophores 色素 (双身份) ──
+chromatophores:
+  # 身份 A：状态广播
+  topics:
+    - arm.busy
+    - arm.idle
+    - sucker.grabbed
+    - alert.budget
+    - alert.loop
+    - alert.immune
+  # 身份 B：并行效应器
+  effector:
+    max_parallel_actions: 8
+  # Boids 三原则（鱼群涌现协议）
+  boids:
+    separation:
+      resource_claim_ttl_ms: 5000         # 资源宣称 TTL
+    alignment:
+      sync_window_ms: 200                 # 同目标对齐窗口
+    cohesion:
+      idle_threshold_ticks: 10            # 超过 N 个 tick 空闲就聚拢
+
+# ─────────────── Ink 墨囊 (成本治理核心) ───────
+ink:
+  per_task:
+    max_tokens: 200000
+    max_cost_usd: 2.00
+  circuit_breaker:
+    consecutive_failures: 3
+    zero_gain_steps: 5
+  skill_cost_profile:
+    enabled: true
+    alert_delta: 2.0                      # 涨价 2x 告警
+
+# ─────────────── Hearts 心脏 (双循环隔离) ─────
+# ⚠️ 核心设计是"功能隔离"而非 HA；HA 通过多实例+quorum 另外做
+hearts:
+  systemic:                               # 体循环：内部业务主循环
+    tick_interval_ms: 500
+    throttled_tick_ms: 2000               # 预算紧张时
+    never_blocked_by_external_io: true    # 关键：外部挂起不阻塞
+  branchial_a:                            # 鳃循环 A：LLM / MCP 远程
+    tick_interval_ms: 200
+    timeout_ms: 30000
+    max_inflight: 50
+  branchial_b:                            # 鳃循环 B：第三方 API / webhook
+    tick_interval_ms: 200
+    timeout_ms: 10000
+    max_inflight: 100
+  offline_mode:                           # 外部全挂时的降级
+    enabled: true
+    fallback_to_reflex: true              # 优先走 spinal_cord
+
+# ─────────────── Eyes 眼睛 (模型) ─────────────
+eyes:
+  providers:
+    - name: anthropic
+      api_key: $ANTHROPIC_API_KEY
+    - name: openai
+      api_key: $OPENAI_API_KEY
+    - name: deepseek
+      api_key: $DEEPSEEK_API_KEY
+
+# ─────────────── Siphon 漏斗 (I/O) ────────────
+siphon:
+  sse: true
+  openai_compat_gateway: true             # 兼容 OpenAI SDK
+  port: 8000
+
+# ─────────────── Camouflage 拟态 ──────────────
+camouflage:
+  ab_testing: true
+  strategies:
+    - name: cheap
+      planner: claude-haiku-4-5-20251001
+    - name: balanced
+      planner: claude-sonnet-4-6
+    - name: deep
+      planner: claude-opus-4-7
+  convergence: thompson_sampling
+
+# ─────────────── Regeneration 再生 ────────────
+regeneration:
+  trajectory:
+    sample_rate: 1.0                      # 先全采
+  evaluator:
+    mode: batch                           # 夜间 Batch API
+    schedule: "0 2 * * *"                 # 每日 2:00
+  skill_forge:
+    min_hits: 5
+    min_success_rate: 0.7
+  reflection:
+    inject_into_planner_prompt: true
+
+# ─────────────── Skin 皮肤 (环境感知) ─────────
+skin:
+  watch_fs: true
+  watch_env: true
+  webhooks: []

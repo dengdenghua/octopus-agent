@@ -1,0 +1,13 @@
+# Implementation note.
+name: demo-octopus
+version_compat: "0.2"
+
+planner:
+  type: llm
+  model: mock/planner
+  mock_response: '{"reasoning":"demo","nodes":[{"skill":"list_cwd","args":{"path":"."}}]}'
+  max_nodes: 10
+
+budget:
+  max_tokens: 50000
+  max_usd: 0.50

@@ -1,0 +1,2 @@
+- Name: Market Researcher
+- Role: financial specialist

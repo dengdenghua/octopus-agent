@@ -1,0 +1,63 @@
+# Idea to Launch 能力包 / Meta-Skill
+# 5-step linear pipeline: rough idea → PRD → spec → OKR → landing page.
+# Covers 0→1 product launch from brainstorm to first-touch landing.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - idea_generation     (创意风暴)
+#   - idea_to_prd         (PRD 草稿)
+#   - product_spec_writer (详细 spec)
+#   - okr_planner         (OKR 拆解)
+#   - landing_page_scaffold (落地页脚手架)
+
+name: idea-to-launch
+kind: skill_cluster
+version: 0.1.0
+description: 创意到上线 — 0→1 全链路：想法 → PRD → spec → OKR → 落地页
+when_to_use: 创业 / 立项 / 0 到 1 / new product / idea / 上线
+affinity: [product, design, growth]
+
+budget:
+  tokens: 70000
+  usd: 2.0
+  latency_ms: 7200000
+
+steps:
+  - node_id: brainstorm
+    skill: idea_generation
+    args:
+      seed: "{user_input.seed}"
+      audience: "{user_input.audience}"
+      count: 5
+    timeout_ms: 300000
+
+  - node_id: prd
+    skill: idea_to_prd
+    args:
+      idea: "{user_input.seed}"
+      brainstorm: "{brainstorm.output}"
+    timeout_ms: 600000
+
+  - node_id: spec
+    skill: product_spec_writer
+    args:
+      prd: "{prd.output}"
+      audience: "{user_input.audience}"
+    depends_on: [prd]
+    timeout_ms: 600000
+
+  - node_id: okr
+    skill: okr_planner
+    args:
+      spec: "{spec.output}"
+      horizon: "{user_input.horizon}"
+    depends_on: [spec]
+    timeout_ms: 300000
+
+  - node_id: landing
+    skill: landing_page_scaffold
+    args:
+      spec: "{spec.output}"
+      okr: "{okr.output}"
+      copy_tone: "{user_input.tone}"
+    depends_on: [spec, okr]
+    timeout_ms: 600000

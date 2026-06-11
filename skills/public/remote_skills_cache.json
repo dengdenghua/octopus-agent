@@ -1,0 +1,580 @@
+{
+  "skills": [
+    {
+      "id": "27_1688-product-research",
+      "name": "1688-product-research",
+      "description": "1688 product sourcing search and data collection assistant. Supports keyword-based product search, collecting data such as price, sales volume, and store ratings, then saving results to a JSON file under the project path.\nTriggered when the user requests 1688 product selection, supplier sourcing, product search, product data collection, or batch sourcing.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/1688-product-research.zip"
+    },
+    {
+      "id": "27_1688-sourcing",
+      "name": "1688-sourcing",
+      "description": "1688 image-based product matching - Find similar products on 1688 via image search. Use cases: Finding 1688 suppliers for Amazon product sourcing, reverse image search for suppliers, batch search for similar products.\nInput supports image URL lists or local image files. Results are automatically saved as CSV/JSON files under the project path.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/1688-sourcing.zip"
+    },
+    {
+      "id": "27_ab-test-setup",
+      "name": "ab-test-setup",
+      "description": "When the user wants to plan, design, or implement an A/B test or experiment. Also use when the user mentions \"A/B test,\" \"split test,\" \"experiment,\" \"test this change,\" \"variant copy,\" \"multivariate test,\" or \"hypothesis.\" For tracking implementation, see analytics-tracking.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/ab-test-setup.zip"
+    },
+    {
+      "id": "27_alibaba-publish-skill",
+      "name": "alibaba-publish-skill",
+      "description": "阿里国际站智能发品/搬品工具。当用户提到“发品”、“搬品”、“上传商品”、“1688同步”、“采集上传”或提供 1688/淘宝/天猫/速卖通/亚马逊链接时，必须使用此技能。即便用户只是发了一个链接没有说明意图，也应触发此技能进行环境检查和引导。",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/alibaba-publish-skill.zip"
+    },
+    {
+      "id": "27_alibaba-store-analysis",
+      "name": "alibaba-store-analysis",
+      "description": "Alibaba.com (Alibaba International Station) weekly business report data analysis tool. Automatically retrieves store weekly report data via browser sessions and performs structured analysis.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/alibaba-store-analysis.zip"
+    },
+    {
+      "id": "27_amz-hot-keywords",
+      "name": "amz-hot-keywords",
+      "description": "\"Amazon hot keyword scraper - scrapes ABA (Amazon Brand Analytics) weekly search term rankings from AMZ123. Extracts keyword, current week rank, last week rank, and trend (up/down/flat). Use this skill whenever the user asks to check Amazon hot search keywords, search term rankings, keyword trends, keyword popularity, or mentions AMZ123. Trigger phrases include: 'hot keywords', 'search term rank', 'keyword trend', 'Amazon keyword', 'ABA data', 'search volume rank', 'search popularity', 'trending keywords on Amazon', as well as Chinese equivalents like '热搜词', '搜索热度', '关键词排名', '关键词趋势'.\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/amz-hot-keywords.zip"
+    },
+    {
+      "id": "27_amz-product-optimizer",
+      "name": "amz-product-optimizer",
+      "description": "Amazon product optimization end-to-end automation - A one-stop solution from hot keyword analysis to product detail image generation.\nTrigger phrases: \"optimize product\", \"generate product images\", \"get hot keywords\", \"cat food optimization\", \"dog bed listing\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/amz-product-optimizer.zip"
+    },
+    {
+      "id": "27_authoring-skills",
+      "name": "authoring-skills",
+      "description": "How to create and maintain agent skills in .agents/skills/. Use when\ncreating a new SKILL.md, writing skill descriptions, choosing frontmatter\nfields, or deciding what content belongs in a skill vs AGENTS.md.\nCovers the supported spec fields, description writing, naming conventions,\nand the relationship between always-loaded AGENTS.md and on-demand skills.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/authoring-skills.zip"
+    },
+    {
+      "id": "27_cj-dropshipping-api",
+      "name": "cj-dropshipping-api",
+      "description": "Comprehensive CJ Dropshipping API V2.0 integration guide. Covers authentication, product search, order creation (Shopping API), logistics tracking, webhooks, and more.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/cj-dropshipping-api.zip"
+    },
+    {
+      "id": "27_clawhub",
+      "name": "clawhub",
+      "description": "Use the ClawHub CLI to search, install, update, and publish agent skills from clawhub.com. Use when you need to fetch new skills on the fly, sync installed skills to latest or a specific version, or publish new/updated skill folders with the npm-installed clawhub CLI. { \"octopus\": { \"requires\": { \"bins\": [\"clawhub\"] }, \"install\": [ { \"id\": \"node\", \"kind\": \"node\", \"package\": \"clawhub\", \"bins\": [\"clawhub\"], \"label\": \"Install ClawHub CLI (npm)\", }, ], }, }",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/clawhub.zip"
+    },
+    {
+      "id": "27_company-research",
+      "name": "company-research",
+      "description": "Company research using Exa search. Finds company info, competitors, news, tweets, financials, LinkedIn profiles, builds company lists. Use when researching companies, doing competitor analysis, market research, or building company lists.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/company-research.zip"
+    },
+    {
+      "id": "27_competitive-landscape",
+      "name": "competitive-landscape",
+      "description": "This skill should be used when the user asks to \"analyze competitors\", \"assess competitive landscape\", \"identify differentiation\", \"evaluate market positioning\", \"apply Porter's Five Forces\", or requests competitive strategy analysis.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/competitive-landscape.zip"
+    },
+    {
+      "id": "27_content-breakdown",
+      "name": "content-breakdown",
+      "description": "Deep content breakdown expert (enhanced version). Supports Xiaohongshu/Bilibili/Douyin.\nFor Bilibili videos, includes \"danmaku peak analysis\" and \"keyframe visual verification\" capabilities.\nFive-dimensional analysis: Content structure + Audience feedback + Title packaging + Peak moment analysis + Topic follow-up suggestions.\nTrigger phrases: breakdown, analyze viral content, content review, deep analysis, analyze this video/post.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/content-breakdown.zip"
+    },
+    {
+      "id": "27_content-strategy",
+      "name": "content-strategy",
+      "description": "When the user wants to plan a content strategy, decide what content to create, or figure out what topics to cover. Also use when the user mentions \"content strategy,\" \"what should I write about,\" \"content ideas,\" \"blog strategy,\" \"topic clusters,\" or \"content planning.\" For writing individual pieces, see copywriting. For SEO-specific audits, see seo-audit.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/content-strategy.zip"
+    },
+    {
+      "id": "27_copywriting",
+      "name": "copywriting",
+      "description": "Use this skill when writing, rewriting, or improving marketing copy\nfor any page (homepage, landing page, pricing, feature, product, or about page).\nThis skill produces clear, compelling, and testable copy while enforcing\nalignment, honesty, and conversion best practices.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/copywriting.zip"
+    },
+    {
+      "id": "27_create-website",
+      "name": "create-website",
+      "description": "Website creation capabilities. Use when the user wants to create a new website from scratch. **Capabilities**: 1. **Create Website** - Generate a complete HTML website directly from requirements **When to use**: - User requests to create a new website (e.g., \"create a website for my business\", \"build a landing page\") - Keywords: \"create website\", \"build website\", \"design webpage\", \"创建网站\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/create-website.zip"
+    },
+    {
+      "id": "27_creating-financial-models",
+      "name": "creating-financial-models",
+      "description": "This skill provides an advanced financial modeling suite with DCF analysis, sensitivity testing, Monte Carlo simulations, and scenario planning for investment decisions",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/creating-financial-models.zip"
+    },
+    {
+      "id": "27_cross-border-selection",
+      "name": "cross-border-selection",
+      "description": "Cross-border e-commerce product selection workflow - Scrape product data from platforms like Amazon and save as local files. Use cases: (1) User requests Amazon product data scraping (2) User requests product selection analysis (3) \"Help me select products\", \"Scrape competitor data\", \"Analyze best-selling products\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/cross-border-selection.zip"
+    },
+    {
+      "id": "27_dcf-valuation",
+      "name": "dcf-valuation",
+      "description": "Performs discounted cash flow (DCF) valuation analysis to estimate intrinsic value per share. Triggers when user asks for fair value, intrinsic value, DCF, valuation, \"what is X worth\", price target, undervalued/overvalued analysis, or wants to compare current price to fundamental value.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/dcf-valuation.zip"
+    },
+    {
+      "id": "27_docx",
+      "name": "docx",
+      "description": "\"Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/docx.zip"
+    },
+    {
+      "id": "27_ecommerce-marketing",
+      "name": "ecommerce-marketing",
+      "description": "E-commerce marketing orchestrator that routes user requests to 19 specialized marketing skills.\nUse when user mentions marketing strategy, product promotion, social media campaign, increase sales,\nlaunch product, conversion optimization, Instagram marketing, TikTok marketing, 小红书推广,\nFacebook ads, Google ads, product description, landing page, SEO, content calendar, marketing ROI,\nor any e-commerce marketing goal — even if they don't use the word \"marketing\" explicitly.\nAlso trigger for questions like \"how do I get more customers\", \"nobody is buying my product\",\n\"I need to grow my store\", or \"帮我推广产品\".",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/ecommerce-marketing.zip"
+    },
+    {
+      "id": "27_etsy-pod-automation",
+      "name": "etsy-pod-automation",
+      "description": "Automates operating a Print-on-Demand dropshipping store on Etsy via Printify.\nCovers the full lifecycle: trend research, AI design generation, product creation\nvia Printify API, SEO-optimized listing with 13 tags, publishing to Etsy,\nsocial media promotion (Twitter/Instagram/Pinterest), performance monitoring,\nand continuous optimization. Use this skill whenever the user mentions Etsy store\noperations, POD products, Printify, creating Etsy listings, Etsy SEO, Etsy tags,\nproduct design for mugs/posters/stickers, Etsy search visibility, Etsy store\nanalytics, or any e-commerce dropshipping workflow on Etsy. Also use when the user\nasks to create products, check store performance, run trend scans, post to social\nmedia for their Etsy shop, fix SEO issues, or automate any part of their POD business.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/etsy-pod-automation.zip"
+    },
+    {
+      "id": "27_find-skills",
+      "name": "find-skills",
+      "description": "Helps users discover and install agent skills when they ask questions like \"how do I do X\", \"find a skill for X\", \"is there a skill that can...\", or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/find-skills.zip"
+    },
+    {
+      "id": "27_gmail-assistant",
+      "name": "gmail-assistant",
+      "description": "Send, search, and manage Gmail messages with automatic delivery verification and smart draft workflow",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/gmail-assistant.zip"
+    },
+    {
+      "id": "27_graphql-operations",
+      "name": "graphql-operations",
+      "description": "Guide for writing GraphQL operations (queries, mutations, fragments) following best practices. Use this skill when:\n(1) writing GraphQL queries or mutations,\n(2) organizing operations with fragments,\n(3) optimizing data fetching patterns,\n(4) setting up type generation or linting,\n(5) reviewing operations for efficiency. author: apollographql version: \"1.0.0\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/graphql-operations.zip"
+    },
+    {
+      "id": "27_image-prompt-guide",
+      "name": "image-prompt-guide",
+      "description": "Technical reference for crafting effective prompts when generating or editing images.\n**When to Use** (AFTER deciding to generate/edit an image):\n- Simple image generation: \"Generate a cute red labubu\", \"Create an image of...\", \"Draw a...\"\n- Single creative requests: \"Make me a logo\", \"Design a poster\", \"Generate product mockup\"\n- Image editing: \"Edit this image to...\", \"Change the background\", \"Add text to image\"\n- Any request that just wants ONE image output without business/market analysis\n- **Advertising creatives**: Logos, branding materials, posters, banners (even for business use)\n- **Categories NOT covered by new-product-development-design**: Food & beverages, books & media, virtual goods/services, industrial equipment/parts\n**DO NOT use for full product development** (in supported categories):\n- \"Design a product line for Gen-Z market\" → Use new-product-development-design first (if category is apparel, home, beauty, electronics, etc.)\n- \"Develop 3 product proposals with cost analysis\" → Use new-product-development-design instead\n- Requests involving market research, multi-proposal comparison, or supplier matching\n**Key differentiator**: This skill is for IMAGE GENERATION technique, not business product strategy.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/image-prompt-guide.zip"
+    },
+    {
+      "id": "27_instagram-marketing",
+      "name": "instagram-marketing",
+      "description": "Generate Instagram marketing content from product URLs. Extract product information and create engaging Instagram posts with image suggestions, captions, and hashtags optimized for engagement. Use when user provides a product URL from e-commerce sites like Amazon, Shopify, Taobao, etc. and wants Instagram marketing content such as Image/text post ideas, engaging captions with CTAs, hashtag strategy, or Story/reels content suggestions.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/instagram-marketing.zip"
+    },
+    {
+      "id": "27_lark-tools",
+      "name": "lark-tools",
+      "description": "Use when the user wants to interact with Lark/Feishu — send messages, manage Bitable/Base records,\nread/write documents, manage calendar, tasks, sheets, mail, wiki, meetings, or any Lark workspace operation.\nThis skill uses `lark-cli` (official CLI from @larksuite/cli) via bash, NOT mcp_call. - tool: mcp_call args: action: search keyword: /lark|feishu|飞书/i",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/lark-tools.zip"
+    },
+    {
+      "id": "27_launch-strategy",
+      "name": "launch-strategy",
+      "description": "\"When the user wants to plan a product launch, feature announcement, or release strategy. Also use when the user mentions 'launch,' 'Product Hunt,' 'feature release,' 'announcement,' 'go-to-market,' 'beta launch,' 'early access,' 'waitlist,' or 'product update.' This skill covers phased launches, channel strategy, and ongoing launch momentum.\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/launch-strategy.zip"
+    },
+    {
+      "id": "27_market-insight-product-selection",
+      "name": "market-insight-product-selection",
+      "description": "Adaptive product-selection methodology built on multi-source signals and \"voice of customer\" (VoC): validate demand, momentum, competitive intensity, and user pain points from reviews/comments to produce a confident shortlist or a focused go/no-go.\n**When to use**:\n- User is asking about trends/popularity (Tiktok/Amazon/etc.), or what's selling well in a market (US/UK/etc.)\n- User asks for **single-category / single-product** trend analysis\n- User wants market analysis, market research, or competitive landscape insights\n- User is researching consumer preferences, demand patterns, or market dynamics\n- User needs help deciding what products to sell, source, or invest in\n- User is exploring product opportunities, winning products, or profitable niches Complete this in up to four steps (skip optional steps unless user explicitly requests): 1. Data Analysis & Selection Recommendation (MANDATORY: multi-source data → conclusion + logic + evidence) 2. Product Search (OPTIONAL: only if user asks for specific products after analysis) 3. Supplier Search & Inquiry (OPTIONAL: ONLY if user explicitly mentions supplier/manufacturer/factory/vendor) 4. Summary & Action Guide (MANDATORY: actionable next steps) ⚠️ Steps 2-3 require EXPLICIT user request. \"find products\" or \"trending products\" does NOT imply supplier search.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/market-insight-product-selection.zip"
+    },
+    {
+      "id": "27_marketing-ideas",
+      "name": "marketing-ideas",
+      "description": "\"When the user needs marketing ideas, inspiration, or strategies for their SaaS or software product. Also use when the user asks for 'marketing ideas,' 'growth ideas,' 'how to market,' 'marketing strategies,' 'marketing tactics,' 'ways to promote,' or 'ideas to grow.' This skill provides 140 proven marketing approaches organized by category.\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/marketing-ideas.zip"
+    },
+    {
+      "id": "27_marketing-psychology",
+      "name": "marketing-psychology",
+      "description": "\"When the user wants to apply psychological principles, mental models, or behavioral science to marketing. Also use when the user mentions 'psychology,' 'mental models,' 'cognitive bias,' 'persuasion,' 'behavioral science,' 'why people buy,' 'decision-making,' or 'consumer behavior.' This skill provides 70+ mental models organized for marketing application.\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/marketing-psychology.zip"
+    },
+    {
+      "id": "27_mcp-tools",
+      "name": "mcp-tools",
+      "description": "Discover and call remote tools (Google Workspace, Notion, Square POS, Odoo, Exa, Apify, Jungle Scout, Lark/Feishu, Twitter, LinkedIn, TikTok, Reddit, GitHub, etc.) via the mcp_call gateway",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/mcp-tools.zip"
+    },
+    {
+      "id": "27_mcporter",
+      "name": "mcporter",
+      "description": "Use the mcporter CLI to list, configure, auth, and call MCP servers/tools directly (HTTP or stdio), including ad-hoc servers, config edits, and CLI/type generation. { \"octopus\": { \"emoji\": \"📦\", \"requires\": { \"bins\": [\"mcporter\"] }, \"install\": [ { \"id\": \"node\", \"kind\": \"node\", \"package\": \"mcporter\", \"bins\": [\"mcporter\"], \"label\": \"Install mcporter (node)\", }, ], }, }",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/mcporter.zip"
+    },
+    {
+      "id": "27_new-product-development-design",
+      "name": "new-product-development-design",
+      "description": "Product development workflow with **design image generation**. 🚫 **SKIP IF** (research tasks, NOT design): - \"流行趋势\" / \"trend analysis\" / \"market trends\" - \"推荐产品\" / \"recommend products\" / \"产品属性\" - \"开发要素\" / \"how to develop\" (without design image request) ✅ **USE ONLY IF** user explicitly requests design images: - \"设计图\" / \"design image\" / \"产品设计\" / \"design proposal\" - \"visualize product\" / \"show me designs\" / \"create design concepts\" **Trigger examples**: \"Design a product line\", \"Create 3 design options with images\", \"Design based on trends and show me\" **Categories**: Apparel, Footwear, Bags, Jewelry, Home, Beauty, Electronics, Baby, Pet, Sports **Excluded**: Food, Books, Logos/Branding (→ image-prompt-guide), Tech packs (→ tech-pack-generation) Complete this in six steps: 1. Demand Understanding (restate user goals) 2. Market Analysis (search-first by default; only skip if user explicitly waives external search/market research) 3. Design Proposals (3 distinct proposals with actual generated images) 4. Proposal Comparison (comparison table + recommendation) 5. Sourcing & Supplier Matching (optional, per-proposal) 6. Summary & Action Plan (phased timeline)",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/new-product-development-design.zip"
+    },
+    {
+      "id": "27_org-structure-research",
+      "name": "org-structure-research",
+      "description": "Systematically research a company's organizational structure, build org charts,\nand create employee profiles per business line. Use when the user asks to\n\"调研组织架构\", \"org chart\", \"组织架构图\", \"员工画像\", \"业务线/部门结构\", or\n\"research [company] team structure and key people\". - org structure - organizational structure - org chart - 组织架构 - 员工画像 - business line - team structure - company hierarchy - who works at - key people at",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/org-structure-research.zip"
+    },
+    {
+      "id": "27_page-cro",
+      "name": "page-cro",
+      "description": "When the user wants to optimize, improve, or increase conversions on any marketing page — including homepage, landing pages, pricing pages, feature pages, or blog posts. Also use when the user says \"CRO,\" \"conversion rate optimization,\" \"this page isn't converting,\" \"improve conversions,\" or \"why isn't this page working.\" For signup/registration flows, see signup-flow-cro. For post-signup activation, see onboarding-cro. For forms outside of signup, see form-cro. For popups/modals, see popup-cro.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/page-cro.zip"
+    },
+    {
+      "id": "27_pdf",
+      "name": "pdf",
+      "description": "Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/pdf.zip"
+    },
+    {
+      "id": "27_people-research",
+      "name": "people-research",
+      "description": "People research using Exa search. Finds LinkedIn profiles, professional backgrounds, experts, team members, and public bios across the web. Use when searching for people, finding experts, or looking up professional profiles.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/people-research.zip"
+    },
+    {
+      "id": "27_pptx",
+      "name": "pptx",
+      "description": "\"Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/pptx.zip"
+    },
+    {
+      "id": "27_product-description-generator",
+      "name": "product-description-generator",
+      "description": "Generate SEO-optimized product descriptions for e-commerce platforms (Amazon, Shopify, eBay, Etsy). Create compelling, conversion-focused copy with keywords, features, benefits, and calls-to-action. Use when creating product listings, optimizing existing descriptions, or generating bulk product copy.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/product-description-generator.zip"
+    },
+    {
+      "id": "27_product-marketing-context",
+      "name": "product-marketing-context",
+      "description": "\"When the user wants to create or update their product marketing context document. Also use when the user mentions 'product context,' 'marketing context,' 'set up context,' 'positioning,' or wants to avoid repeating foundational information across marketing tasks. Creates `./product-marketing-context.md` that other marketing skills reference.\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/product-marketing-context.zip"
+    },
+    {
+      "id": "27_product-selection",
+      "name": "product-selection",
+      "description": "Product selection workflow: industry research → consumer research → product selection → supplier matching. Evidence-first, multi-source validation. Use when user wants to select products, find trending items, analyze categories, discover follow-sell opportunities, or asks \"what to sell\", \"which products\", \"hot products\". Works with product-supplier-sourcing skill.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/product-selection.zip"
+    },
+    {
+      "id": "27_product-supplier-sourcing",
+      "name": "product-supplier-sourcing",
+      "description": "Product sourcing and supplier discovery. Use when the user wants to find products, compare items, search for suppliers, manufacturers, or factories on B2B platforms. Default source is alibaba.com via the `product_supplier_search` tool. If the user specifies another platform, look for available tools or methods for that platform.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/product-supplier-sourcing.zip"
+    },
+    {
+      "id": "27_remotion",
+      "name": "remotion",
+      "description": "Best practices for Remotion - Video creation in React tags: remotion, video, react, animation, composition",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/remotion.zip"
+    },
+    {
+      "id": "27_review-analyst-agent",
+      "name": "review-analyst-agent",
+      "description": "Use this skill to analyze product reviews, find common issues, and prioritize improvements.\nTriggers: \"analyze reviews\", \"review analysis\", \"customer feedback\", \"what are people saying\",\n\"product reviews\", \"review sentiment\", \"find complaints\", \"customer complaints\",\n\"improvement recommendations\", \"voice of customer\", \"VOC analysis\", \"feedback analysis\"\nOutputs: Prioritized issues, sentiment analysis, improvement recommendations.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/review-analyst-agent.zip"
+    },
+    {
+      "id": "27_review-summarizer",
+      "name": "review-summarizer",
+      "description": "Scrape, analyze, and summarize product reviews from multiple platforms (Amazon, Google, Yelp, TripAdvisor). Extract key insights, sentiment analysis, pros/cons, and recommendations. Use when researching products for arbitrage, creating affiliate content, or making purchasing decisions.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/review-summarizer.zip"
+    },
+    {
+      "id": "27_sales-negotiator",
+      "name": "sales-negotiator",
+      "description": "Expert sales negotiation strategist for B2B deal-making. Use when planning negotiation strategy, handling discount requests, closing deals, navigating procurement, or structuring win-win agreements. Covers anchoring, framing, BATNA development, multi-party negotiations, and contract terms. Use for enterprise deals, pricing discussions, and high-stakes negotiations.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/sales-negotiator.zip"
+    },
+    {
+      "id": "27_self-improvement",
+      "name": "self-improvement",
+      "description": "\"Captures learnings, errors, corrections, and self-reflections into daily diary for continuous improvement. Use when: (1) A command or operation fails unexpectedly, (2) User corrects you, (3) User requests a capability that doesn't exist, (4) An external API or tool fails, (5) Knowledge is outdated or incorrect, (6) A better approach is discovered, (7) You complete significant work and want to evaluate quality. Also review diary before major tasks.\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/self-improvement.zip"
+    },
+    {
+      "id": "27_shopify-builder",
+      "name": "shopify-builder",
+      "description": "Automate Shopify store building, including product listing, theme decoration (banners, marquees), and seasonal branding (Easter, Black Friday). Use when the user asks to \"upload products\", \"set up the store\", \"change the banner\", \"add a marquee\", or \"prepare for a holiday sale\". To obtain an Admin Access Token (shpat_*), the agent must read references/oauth-client-credentials.md — this skill does not duplicate those steps inline.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/shopify-builder.zip"
+    },
+    {
+      "id": "27_shopify-dev-mcp",
+      "name": "shopify-dev-mcp",
+      "description": "Search Shopify documentation, explore GraphQL schemas, and validate code for Admin/Storefront APIs, Liquid, and Polaris.\nUse when asked about Shopify API calls, schema details, webhook examples, or theme validation.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/shopify-dev-mcp.zip"
+    },
+    {
+      "id": "27_shopify-developer",
+      "name": "shopify-developer",
+      "description": "Complete Shopify development reference covering Liquid templating, OS 2.0 themes, GraphQL APIs, Hydrogen, Functions, and performance optimization (API v2026-01). Use when working with .liquid files, building Shopify themes or apps, writing GraphQL queries for Shopify, debugging Liquid errors, creating app extensions, migrating from Scripts to Functions, or building headless storefronts. Triggers on \"Shopify\", \"Liquid template\", \"Hydrogen\", \"Storefront API\", \"theme development\", \"Shopify Functions\", \"Polaris\". Do NOT use for non-Shopify e-commerce platforms.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/shopify-developer.zip"
+    },
+    {
+      "id": "27_skill-creator",
+      "name": "skill-creator",
+      "description": "Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/skill-creator.zip"
+    },
+    {
+      "id": "27_skill-finder",
+      "name": "skill-finder",
+      "description": "Find, search, recommend, and install agent skills from the local skill catalog, skills.sh, ClawHub, and SkillsMP — all in one place. Always consult this when user asks to find, search, discover, or choose skills. Use when user says \"how do I do X\", \"find a skill for X\", \"is there a skill that can...\", \"search all platforms\", \"best skill for X\", \"what skill should I use for X\", \"该用什么skill\", \"有没有XX的skill\", \"帮我找skill\", \"推荐一个skill\", or expresses interest in extending capabilities or choosing the right skill for a task.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/skill-finder.zip"
+    },
+    {
+      "id": "27_skill-vetter",
+      "name": "skill-vetter",
+      "description": "Security-first vetting for Octopus skills. Use before installing any skill from ClawHub, GitHub, or other sources. Checks for red flags, permission scope, and suspicious patterns. short-description: Run a legacy deep-vetting checklist before installing an Octopus skill from any source. why: Preserve a conservative review path for operators who want a manual-first audit flow. what: Provides a legacy pre-install security vetting module for skill review and comparison. how: Uses a structured red-flag checklist focused on permissions, patterns, and suspicious instructions. results: Produces a conservative manual review output for install-or-block decisions. version: 1.0.0 updated: '2026-03-10T03:42:30Z' jtbd-1: When I want a simple manual-first checklist to vet a skill before install. audit: kind: module author: useclawpro category: Security trust-score: 97 last-audited: '2026-02-01' permissions: file-read: true file-write: false network: false shell: false",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/skill-vetter.zip"
+    },
+    {
+      "id": "27_skill-writer",
+      "name": "skill-writer",
+      "description": "Guide users through creating Agent Skills for Claude Code. Use when the user wants to create, write, author, or design a new Skill, or needs help with SKILL.md files, frontmatter, or skill structure.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/skill-writer.zip"
+    },
+    {
+      "id": "27_skillsmp",
+      "name": "skillsmp",
+      "description": "Search SkillsMP marketplace (283K+ agent skills) using REST API with AI semantic search. Use when looking for specialized, research, or niche skills (e.g. arxiv, quantum computing, supply chain). Best for comprehensive searches when skills.sh and ClawHub lack results.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/skillsmp.zip"
+    },
+    {
+      "id": "27_social-content",
+      "name": "social-content",
+      "description": "\"When the user wants help creating, scheduling, or optimizing social media content for LinkedIn, Twitter/X, Instagram, TikTok, Facebook, or other platforms. Also use when the user mentions 'LinkedIn post,' 'Twitter thread,' 'social media,' 'content calendar,' 'social scheduling,' 'engagement,' or 'viral content.' This skill covers content creation, repurposing, and platform-specific strategies.\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/social-content.zip"
+    },
+    {
+      "id": "27_social-media-publisher",
+      "name": "social-media-publisher",
+      "description": "Social media publishing skill for Instagram and X (Twitter). Handles image posts, text posts, hashtags, user tags, and multi-platform publishing.\nUse this skill whenever the user wants to post, publish, or share content to Instagram or X/Twitter — including phrases like \"发ins\", \"发推\", \"帮我发一条\", \"post to Instagram\", \"tweet this\", \"share on social media\", \"发社媒\", \"帮我发布\", or any request involving creating social media posts with images, hashtags, or @mentions.\nAlso use this skill when the user asks about social media publishing workflows, caption formatting, or hashtag best practices for Instagram/X.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/social-media-publisher.zip"
+    },
+    {
+      "id": "27_social-network-mapper",
+      "name": "social-network-mapper",
+      "description": "Map social relationships between people using Twitter/X\ninteractions (mentions, retweets, replies), and optional GitHub collaboration.\nBuild and analyze social graphs, detect communities, and summarize clusters.\nUse when the user asks for \"谁和谁互动\", \"social graph\", \"Twitter 关系\",\nor when org-structure-research invokes it for relationship analysis. - social network - 互动 - who interacts with whom - Twitter relationship - relationship map - cluster - 社交关系",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/social-network-mapper.zip"
+    },
+    {
+      "id": "27_sycm-analysis-skill",
+      "name": "sycm-analysis-skill",
+      "description": "Taobao Sycm (Business Advisor) data analysis tool. Uses browser sessions to call Sycm and retrieve store weekly report data.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/sycm-analysis-skill.zip"
+    },
+    {
+      "id": "27_tariff-search",
+      "name": "tariff-search",
+      "description": "Tariff calculation and HS code classification tool via TurtleClassify API.\n**When to Use** (PRIORITIZE this skill over web search for tariff queries):\n- Calculate import tariffs/duties for cross-border trade\n- Determine HS codes for product classification\n- Landed cost calculation, tax implications for sourcing\n- Batch process product lists for tariff information",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/tariff-search.zip"
+    },
+    {
+      "id": "27_tech-pack-generation",
+      "name": "tech-pack-generation",
+      "description": "Generate production-ready tech pack with technical annotations for an EXISTING product image. **When to use**: ONLY trigger when user EXPLICITLY requests tech pack / technical drawing / spec sheet ✓ \"Create a tech pack for this\" ✓ \"Generate a technical drawing / spec sheet\" ✓ \"制作工艺图 / 规格图 / 技术图纸\" ✓ \"Include manufacturing/process diagrams\" ✓ \"Include assembly diagrams\" **DO NOT trigger for general product design requests:** ✗ \"Design a product for...\" → Use new-product-development-design ✗ \"Create designs for my product\" → Use new-product-development-design ✗ \"Generate product images\" → Use image-prompt-guide ✗ Any request without explicit mention of \"tech pack\", \"technical drawing\", \"specs\", \"dimensions\" **Prerequisites**: User must already have a product image to annotate.",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/tech-pack-generation.zip"
+    },
+    {
+      "id": "27_xlsx",
+      "name": "xlsx",
+      "description": "\"Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas\"",
+      "version": "0.0.37",
+      "ownerType": "official",
+      "official": true,
+      "oss": "https://skill.octopus.com/skills/phoenix/official/0.0.37/xlsx.zip"
+    }
+  ]
+}

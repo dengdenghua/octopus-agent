@@ -1,0 +1,65 @@
+# Data report Meta-Skill.
+# Daily operator brief assembled from real-time + research inputs.
+#
+# Reuses existing arms/skills:
+#   - weather, search, journal
+#   - docx (for the final report)
+
+name: daily-brief
+kind: skill_cluster
+version: 0.1.0
+description: Pull today's context (calendar, memory, weather, news) into a one-page brief
+when_to_use: User asks for a daily brief / morning report / 每日简报 / 早报
+affinity: [productivity, writing, briefing]
+
+budget:
+  tokens: 30000
+  usd: 0.5
+  latency_ms: 600000
+
+steps:
+  - node_id: weather
+    skill: weather_lookup
+    args:
+      city: "{user_input.city}"
+    timeout_ms: 30000
+
+  - node_id: calendar
+    skill: calendar_fetch
+    args:
+      date: today
+    timeout_ms: 30000
+
+  - node_id: memory
+    skill: journal_context
+    args:
+      window: 7d
+    timeout_ms: 30000
+
+  - node_id: news
+    skill: multi_search_engine
+    args:
+      query: "{user_input.topic}"
+      freshness: 1d
+      max_results: 5
+    timeout_ms: 120000
+
+  - node_id: compose
+    skill: report_writing
+    args:
+      template: daily-brief
+      inputs:
+        weather: "{weather.output}"
+        calendar: "{calendar.output}"
+        memory: "{memory.output}"
+        news: "{news.output}"
+    depends_on: [weather, calendar, memory, news]
+    timeout_ms: 120000
+
+  - node_id: deliver
+    skill: docx_export
+    args:
+      content: "{compose.output}"
+      filename: "brief-{date}.docx"
+    depends_on: [compose]
+    timeout_ms: 30000

@@ -1,0 +1,30 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="32" y1="24" x2="226" y2="232" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#07111F"/>
+      <stop offset="1" stop-color="#0B2A5B"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="68" y1="55" x2="192" y2="199" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DD3FC"/>
+      <stop offset=".48" stop-color="#3677FF"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+    <filter id="shadow" x="37" y="34" width="182" height="190" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#020617" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect x="18" y="18" width="220" height="220" rx="56" fill="url(#bg)"/>
+  <path d="M67 133C67 94.34 93.18 65 128.5 65C163.82 65 190 94.34 190 133C190 171.66 163.82 201 128.5 201C93.18 201 67 171.66 67 133Z" fill="#EAF6FF" opacity=".08"/>
+  <g filter="url(#shadow)">
+    <path d="M128 53C91.55 53 64 81.1 64 117.92C64 145.56 80.08 168.28 103.08 178.54C110.41 181.81 116 188.08 116 196.1V207H140V196.1C140 188.08 145.59 181.81 152.92 178.54C175.92 168.28 192 145.56 192 117.92C192 81.1 164.45 53 128 53ZM128 80C147.56 80 162 95.4 162 117.55C162 139.7 147.56 155 128 155C108.44 155 94 139.7 94 117.55C94 95.4 108.44 80 128 80Z" fill="url(#mark)"/>
+    <path d="M92 200C92 181.2 72 179.1 72 159.5" stroke="#7DD3FC" stroke-width="13" stroke-linecap="round"/>
+    <path d="M164 200C164 181.2 184 179.1 184 159.5" stroke="#22D3EE" stroke-width="13" stroke-linecap="round"/>
+    <path d="M116 207C112 224 93 219 88 235" stroke="#60A5FA" stroke-width="12" stroke-linecap="round"/>
+    <path d="M140 207C144 224 163 219 168 235" stroke="#38BDF8" stroke-width="12" stroke-linecap="round"/>
+  </g>
+  <circle cx="128" cy="117" r="22" fill="#07111F"/>
+  <circle cx="128" cy="117" r="8" fill="#EAF6FF"/>
+  <circle cx="77" cy="71" r="4" fill="#A7F3D0"/>
+  <circle cx="190" cy="84" r="4" fill="#BAE6FD"/>
+  <circle cx="205" cy="179" r="4" fill="#93C5FD"/>
+</svg>

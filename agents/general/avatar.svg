@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" shape-rendering="crispEdges">
+  <title>Octopus robot avatar</title>
+  <rect width="96" height="96" fill="#fff"/>
+  <path fill="#111827" d="M46 10h4v8h10v6H36v-6h10z"/>
+  <path fill="#2563eb" d="M44 8h8v6h-8z"/>
+  <path fill="#111827" d="M22 26h52v6h6v34h-6v6H22v-6h-6V32h6z"/>
+  <path fill="#e8f7ff" d="M28 32h40v4h6v24h-6v6H28v-6h-6V36h6z"/>
+  <path fill="#7dd3fc" d="M30 34h12v4H30zm26 0h10v4H56z"/>
+  <path fill="#0f172a" d="M34 42h10v10H34zm18 0h10v10H52z"/>
+  <path fill="#38bdf8" d="M37 44h4v4h-4zm18 0h4v4h-4z"/>
+  <path fill="#fb7185" d="M28 54h6v4h-6zm34 0h6v4h-6z"/>
+  <path fill="#111827" d="M40 58h16v4H40z"/>
+  <path fill="#111827" d="M14 38h6v18h-6zm62 0h6v18h-6z"/>
+  <path fill="#64748b" d="M18 42h4v10h-4zm56 0h4v10h-4z"/>
+  <path fill="#111827" d="M32 72h32v4h8v12H24V76h8z"/>
+  <path fill="#475569" d="M36 76h24v4h6v4H30v-4h6z"/>
+  <path fill="#38bdf8" d="M44 78h8v6h-8z"/>
+</svg>

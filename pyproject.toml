@@ -1,0 +1,202 @@
+[project]
+name = "octopus-agent"
+version = "0.2.0"
+description = "Biomimetic self-evolving agent OS."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.11"
+authors = [{name = "octopus-agent contributors"}]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "pydantic>=2.12.0",
+    "bcrypt>=4.0",
+]
+
+[project.optional-dependencies]
+minimal = [
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-timeout>=2.2",
+    "ruff>=0.5.0,<1.0",
+]
+tracing = [
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+]
+langfuse = [
+    "langfuse>=2.0",
+]
+serve = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.32",
+    "pyyaml>=6.0",
+    "python-multipart>=0.0.9",
+]
+# ── Web skills · httpx-gated ─────────────────────────────
+web = [
+    "httpx>=0.27",
+]
+# ── Web content extraction (Readability-style main content) ─
+extract = [
+    "trafilatura>=2.0",
+]
+# ── LLM provider adapters ────────────────────────────────
+anthropic = [
+    "anthropic>=0.40,<1.0",
+]
+# ── MCP client ───────────────────────────────────────────
+mcp = [
+    "mcp>=0.9,<2.0",
+]
+# ── Browser skills ───────────────────────────────────────
+browser = [
+    "playwright>=1.48",
+]
+# ── Desktop / computer use skills ────────────────────────
+desktop = [
+    "pyautogui>=0.9.54",
+    "pillow>=10.0",
+    "uiautomation>=2.0; platform_system == 'Windows'",
+]
+discord = [
+    "cryptography>=42.0",
+]
+channels = [
+    "httpx>=0.27",
+    "cryptography>=42.0",
+]
+mantle-ssh = [
+    "paramiko>=3.0",
+]
+mantle-k8s = [
+    "kubernetes>=29.0",
+]
+hearts-redis = [
+    "redis>=5.0",
+]
+hearts-etcd = [
+    "etcd3>=0.12",
+]
+skin = [
+    "watchdog>=4.0",
+]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "pymdown-extensions>=10.8",
+]
+all = [
+    # serve
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pyyaml>=6.0",
+    "python-multipart>=0.0.9",
+    # web / IM
+    "httpx>=0.27",
+    # LLM providers
+    "anthropic>=0.40",
+    # MCP client
+    "mcp>=0.9",
+    # browsers
+    "playwright>=1.48",
+    # desktop
+    "pyautogui>=0.9.54",
+    "pillow>=10.0",
+    "uiautomation>=2.0; platform_system == 'Windows'",
+    # observability
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+    # Implementation note.
+    "cryptography>=42.0",
+    # Implementation note.
+    "paramiko>=3.0",
+    "redis>=5.0",
+    "watchdog>=4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/octopus-agent/octopus-agent"
+Documentation = "https://github.com/octopus-agent/octopus-agent/blob/main/README.md"
+Repository = "https://github.com/octopus-agent/octopus-agent"
+Issues = "https://github.com/octopus-agent/octopus-agent/issues"
+Changelog = "https://github.com/octopus-agent/octopus-agent/blob/main/CHANGELOG.md"
+
+# ─── Single source of truth for the canonical repo URL ──────────
+# All other files (frontend/package.json, mkdocs.yml, install.sh,
+# permissions.example.json, the in-app About page, the in-app
+# GITHUB_URL constant, …) MUST match this value. CI enforces this via
+# tools/lint/repo_url_check.py. To move the project to a new home,
+# change this one line and re-run the linter.
+[tool.octopus]
+repo_url = "https://github.com/octopus-agent/octopus-agent"
+
+[project.scripts]
+octopus-lint = "tools.lint.invariant_check:main"
+octopus = "runtime.cli:main"
+octopus-agent = "runtime.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["runtime*", "tools*"]
+exclude = ["tests*", "*.fixtures*"]
+
+# ─── pytest ──────────────────────────────────────────
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+    "--timeout=60",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: end-to-end integration tests",
+]
+
+# ─── ruff ────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "tools/lint/fixtures",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "N", "SIM", "RET"]
+ignore = [
+    "E501",  # line too long (由 formatter 管)
+    "N818",  # exception naming (InvariantViolation 不加 Error 后缀)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+# ─── coverage ────────────────────────────────────────
+[tool.coverage.run]
+source = ["runtime", "tools"]
+omit = ["*/tests/*", "*/fixtures/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

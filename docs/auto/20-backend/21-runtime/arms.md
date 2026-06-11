@@ -1,0 +1,95 @@
+# Arms · 执行工具组
+
+> Arm preset 工厂 · 将原始 Skill 按职责打包成 arm（fs_writer / git / shell / browser_read / ...）。
+
+**Source**: `runtime/execution/arms/`
+
+## Exports
+
+- `BUILTIN_SKILLS`
+- `COMPUTER_USE_SKILL`
+- `FILE_EDIT_SKILL`
+- `PRESET_FACTORIES`
+- `SHELL_EXEC_SKILL`
+- `Arm`
+- `ArmPool`
+- `ByteStreamBuffer`
+- `ExtensionContext`
+- `ExtensionInfo`
+- `ExtensionRegistry`
+- `ExtensionState`
+- `GateError`
+- `LazyArmPool`
+- `LazyPool`
+- `LazyPromise`
+- `LazyValue`
+- `LineBuffer`
+- `ProcessTreeManager`
+- `PromiseGate`
+- `SafeRmConfig`
+- `SafeRmProtector`
+- `SessionLock`
+- `ShellEnvState`
+- `ShellExecEvent`
+- `ShellExecTelemetry`
+- `ShellStateManager`
+- `SkillBuilder`
+- `SkillCapability`
+- `SkillCategory`
+- `SkillDefinition`
+- `SkillInterface`
+- `ToolCallContext`
+- `ToolCallResult`
+- `ToolDefinition`
+- `ToolProvider`
+- `ToolRegistry`
+- `Worker`
+- `get_shell_telemetry`
+- `get_tool_registry`
+- `make_all_presets`
+- `make_code_arm`
+- `make_coder_arm_v2`
+- `make_desktop_operator_arm`
+- `make_ecommerce_mind_arm`
+- `make_file_arm`
+- `make_general_arm`
+- `make_search_arm`
+- `make_shell_arm`
+- `make_vibe_selling_arm`
+
+## Modules
+
+| Module | Summary |
+| --- | --- |
+| `base.py` | — |
+| `extension_registry.py` | Dynamic extension registry — hot-pluggable skill registration. |
+| `lazy_loader.py` | Lazy loading patterns — on-demand resource initialization. |
+| `output_buffer.py` | Dual-layer output buffer for shell command output. |
+| `presets.py` | — |
+| `process_tree.py` | Process tree management and graceful shutdown utilities. |
+| `promise_gate.py` | Promise gate — async concurrency control via chained promises. |
+| `safe_rm.py` | safe_rm — file protection mechanism for shell commands. |
+| `shell_state.py` | Shell environment state snapshot model. |
+| `shell_state_manager.py` | Shell state snapshot manager. |
+| `shell_telemetry.py` | Shell execution telemetry events. |
+| `skill_manifest.py` | Self-describing skill definition. |
+| `specialized.py` | — |
+| `tool_registry.py` | MCP-style tool registry — declarative tool registration pattern. |
+
+## Who imports this
+
+**7** file(s) reference this package:
+
+- **`runtime/cli_core.py/`** · 1 file(s)
+  - `runtime/cli_core.py`
+- **`runtime/cli_run.py/`** · 1 file(s)
+  - `runtime/cli_run.py`
+- **`runtime/execution/`** · 3 file(s)
+  - `runtime/execution/agents/base.py`
+  - `runtime/execution/agents/loader.py`
+  - `runtime/execution/swarm/runtime.py`
+- **`runtime/platform/`** · 1 file(s)
+  - `runtime/platform/ui/app.py`
+- **`runtime/sensing/`** · 1 file(s)
+  - `runtime/sensing/gateway/terminal_router.py`
+

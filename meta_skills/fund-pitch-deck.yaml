@@ -1,0 +1,64 @@
+# Fund Pitch Deck 能力包 / Meta-Skill
+# 5-step linear pipeline: market study → financial plan → CIM → pitch
+# deck → business plan PPT. Covers primary-market fundraising.
+#
+# Reuses existing arms/skills (all under runtime/execution/all_skills/):
+#   - competitive_analysis  (市场 / 竞品)
+#   - financial_plan        (财务预测)
+#   - cim_builder           (Confidential Information Memorandum)
+#   - pitch_deck            (路演 PPT 大纲)
+#   - business_plan_ppt     (商业计划 PPT 渲染)
+
+name: fund-pitch-deck
+kind: skill_cluster
+version: 0.1.0
+description: 一级市场融资 BP — 竞品 → 财务 → CIM → 路演 PPT → 商业计划
+when_to_use: 融资 / pitch / 路演 / 创业 BP / 一级市场 / CIM
+affinity: [finance, fundraising, presentation]
+
+budget:
+  tokens: 80000
+  usd: 2.5
+  latency_ms: 7200000
+
+steps:
+  - node_id: market
+    skill: competitive_analysis
+    args:
+      sector: "{user_input.sector}"
+      stage: "{user_input.stage}"
+    timeout_ms: 600000
+
+  - node_id: plan
+    skill: financial_plan
+    args:
+      horizon: "{user_input.horizon}"
+      assumptions: "{user_input.assumptions}"
+    depends_on: [market]
+    timeout_ms: 600000
+
+  - node_id: cim
+    skill: cim_builder
+    args:
+      market: "{market.output}"
+      plan: "{plan.output}"
+      round: "{user_input.round}"
+    depends_on: [plan]
+    timeout_ms: 900000
+
+  - node_id: pitch
+    skill: pitch_deck
+    args:
+      cim: "{cim.output}"
+      audience: "{user_input.audience}"
+      tone: "{user_input.tone}"
+    depends_on: [cim]
+    timeout_ms: 600000
+
+  - node_id: render
+    skill: business_plan_ppt
+    args:
+      pitch: "{pitch.output}"
+      filename: "fund-pitch-{user_input.round}.pptx"
+    depends_on: [pitch]
+    timeout_ms: 300000
