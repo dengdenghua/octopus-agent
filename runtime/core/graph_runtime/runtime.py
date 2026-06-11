@@ -486,10 +486,15 @@ class GraphRuntime:
                         failed_any = True
 
                 if failed_any:
-                    for _gi, node, step in layer_results:
+                    resolved_by_gi = {
+                        g: r for g, _n, r in layer_nodes
+                    }
+                    for gi, node, step in layer_results:
                         if not step.success:
                             self._retry_or_replan(
-                                gi, node, {}, step, graph,
+                                gi, node,
+                                resolved_by_gi.get(gi, {}),
+                                step, graph,
                                 steps, outputs_by_node,
                                 budget=budget, caller=caller,
                                 arm_id=arm_id, base_args=base_args,
@@ -644,7 +649,8 @@ class GraphRuntime:
                 f"{getattr(failed_step.result, 'error_type', 'unknown')}"
             )
             replan_intent = ParsedIntent(
-                raw_input=failed_info,
+                raw=failed_info,
+                intent_type="task",
                 normalized_goal=(
                     f"[REPLAN] 原计划第 {i+1}/{len(graph.nodes)} 步失败。"
                     f"已完成节点: {list(outputs_by_node.keys())}。"
@@ -678,7 +684,7 @@ class GraphRuntime:
                     ):
                         outputs_by_node[s.node_id] = s.result.output
         except (ConnectionError, TimeoutError, TypeError, ValueError) as exc:
-            _logger.debug("replan failed: %s", exc)
+            _logger.warning("replan failed: %s", exc)
 
     def _make_template_error_step(
         self,

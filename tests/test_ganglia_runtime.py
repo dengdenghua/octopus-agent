@@ -381,3 +381,115 @@ class TestRuleNodeArgs:
         # Implementation note.
         args1 = r.args_for(1, intent)
         assert args1 == {"intent_goal": "goal", "custom": "v"}
+
+
+# ═══════════════════════════════════════════════════════════
+# Parallel-layer failure → retry/replan path (regression).
+# Two bugs lived here undetected: a NameError (`gi` vs `_gi`)
+# in the parallel-failure loop, and a ParsedIntent built with a
+# non-existent `raw_input=` field + missing `intent_type`, which
+# always raised ValidationError (swallowed → replan never ran).
+# ═══════════════════════════════════════════════════════════
+
+
+def _boom_runtime():
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="root",
+            trusted_source="skill://public/root",
+            handler=lambda **kw: {"ok": True},
+        ),
+        verify_tests=False,
+    )
+
+    def _boom(**kw):
+        raise RuntimeError("intentional failure")
+
+    registry.register(
+        Skill(
+            name="boom",
+            trusted_source="skill://public/boom",
+            handler=_boom,
+        ),
+        verify_tests=False,
+    )
+    journal = InMemoryJournal()
+    executor = ToolExecutor(
+        registry=registry,
+        immunity=TrustEngine(trusted_sources=["skill://public/*"]),
+        journal=journal,
+    )
+    return GraphRuntime(executor=executor, journal=journal)
+
+
+def _parallel_failing_graph():
+    from runtime.platform.models import TaskGraph, TaskNode, WorkflowEdge
+
+    # Two root nodes in the same topo layer both fail; one edge present
+    # so the runtime takes the parallel path (use_parallel needs edges).
+    return TaskGraph(
+        nodes=[
+            TaskNode(node_id="n0", skill_ref=SkillId("boom")),
+            TaskNode(node_id="n1", skill_ref=SkillId("boom")),
+            TaskNode(node_id="n2", skill_ref=SkillId("root")),
+        ],
+        edges=[WorkflowEdge(from_node="n0", to_node="n2")],
+        budget=BudgetSpec(tokens=10_000, usd=0.10),
+    )
+
+
+def _budget(graph):
+    return Budget(
+        task_id=graph.task_id,
+        limits=BudgetLimits(tokens=10_000, usd=0.10),
+    )
+
+
+class TestParallelFailureRetry:
+    def test_parallel_failure_does_not_nameerror(self):
+        # Before the fix the parallel-failure loop referenced an unbound
+        # `gi`, crashing the whole graph run with NameError. planner=None
+        # so _retry_or_replan returns early — the crash was at the call
+        # site, before entry.
+        rt = _boom_runtime()
+        graph = _parallel_failing_graph()
+        traj = rt.run(
+            graph,
+            budget=_budget(graph),
+            caller="arms/code_arm",
+            arm_id=ArmId("code_arm"),
+            planner=None,
+        )
+        assert traj is not None
+        assert not traj.outcome.success
+
+    def test_replan_intent_constructs_without_validationerror(self):
+        # A fake planner whose .plan() is called proves the replan body
+        # (which builds a ParsedIntent) runs without ValidationError.
+        from runtime.platform.models import TaskGraph
+
+        planned = {"called": False}
+
+        class _FakePlanner:
+            def plan(self, intent):
+                planned["called"] = True
+                # A valid ParsedIntent reached us — assert its shape.
+                assert intent.intent_type == "task"
+                assert intent.raw
+                return TaskGraph(
+                    nodes=_parallel_failing_graph().nodes[:1],
+                    budget=BudgetSpec(tokens=1000, usd=0.01),
+                )
+
+        rt = _boom_runtime()
+        graph = _parallel_failing_graph()
+        rt.run(
+            graph,
+            budget=_budget(graph),
+            caller="arms/code_arm",
+            arm_id=ArmId("code_arm"),
+            planner=_FakePlanner(),
+            max_replans=1,
+        )
+        assert planned["called"], "replan was never attempted (ParsedIntent build failed?)"
