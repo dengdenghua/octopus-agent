@@ -3210,6 +3210,16 @@ class _ReactBridgeState:
     so subsequent steps start fresh.
     """
 
+    # Streaming text/reasoning chunks arrive per-token from the LLM.
+    # One WS frame + one journal write per token is pure overhead —
+    # the frontend coalesces per animation frame anyway. Buffer and
+    # flush on whichever comes first: ~64 chars or 50ms. The FIRST
+    # chunk of each item is never buffered (time-to-first-token), and
+    # any kind switch / item finalization drains the buffer, so
+    # ordering and final content are byte-identical to unbuffered.
+    _DELTA_FLUSH_INTERVAL_S = 0.05
+    _DELTA_FLUSH_MAX_CHARS = 64
+
     def __init__(
         self,
         on_background_task_start: Callable[[asyncio.Task[None]], None] | None = None,
@@ -3220,6 +3230,14 @@ class _ReactBridgeState:
         self.phases: list[AgentPhaseSnapshot] = []
         self.workbench_snapshot_version = 0
         self.background_tasks: list[asyncio.Task[None]] = []
+        self._delta_buf: list[str] = []
+        self._delta_kind: str | None = None
+        self._delta_ctx: tuple[Turn, EventLog, EventEmitter] | None = None
+        self._delta_flush_task: asyncio.Task[None] | None = None
+        # Serializes buffer drain between the consumer coroutine and
+        # the delayed-flush task so emitted chunks never interleave
+        # out of order on the socket.
+        self._delta_lock = asyncio.Lock()
         # Optional sink for cross-turn ownership of background watchers.
         # When set, each task created by ``track_background_tool`` is
         # also pushed through this callback so the runtime can sweep
@@ -3278,20 +3296,14 @@ class _ReactBridgeState:
     ) -> None:
         if not delta:
             return
-        if self.agent_message is None:
+        first = self.agent_message is None
+        if first:
             self.agent_message = AgentMessageItem(text="")
             turn.items.append(self.agent_message)
             await self._emit_started(turn, log, emitter, self.agent_message)
         self.agent_message.text += delta
-        log.item_delta(turn.thread_id, turn.id, self.agent_message.id, "agentMessage", delta)
-        await emitter.notify(
-            ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
-            {
-                "threadId": turn.thread_id,
-                "turnId": turn.id,
-                "itemId": self.agent_message.id,
-                "delta": delta,
-            },
+        await self._buffer_delta(
+            turn, log, emitter, "agentMessage", delta, flush_now=first,
         )
 
     async def append_reasoning(
@@ -3303,22 +3315,87 @@ class _ReactBridgeState:
     ) -> None:
         if not delta:
             return
-        if self.reasoning is None:
+        first = self.reasoning is None
+        if first:
             self.reasoning = ReasoningItem(content="")
             turn.items.append(self.reasoning)
             await self._emit_started(turn, log, emitter, self.reasoning)
         self.reasoning.content += delta
-        log.item_delta(turn.thread_id, turn.id, self.reasoning.id, "reasoning", delta)
-        await emitter.notify(
-            ServerMethod.ITEM_REASONING_TEXT_DELTA,
-            {
-                "threadId": turn.thread_id,
-                "turnId": turn.id,
-                "itemId": self.reasoning.id,
-                "delta": delta,
-                "contentIndex": 0,
-            },
+        await self._buffer_delta(
+            turn, log, emitter, "reasoning", delta, flush_now=first,
         )
+
+    # ── Delta coalescing ────────────────────────────────────────────
+
+    async def _buffer_delta(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        kind: str,
+        delta: str,
+        *,
+        flush_now: bool,
+    ) -> None:
+        if self._delta_buf and self._delta_kind != kind:
+            # Prose kind switched (reasoning ↔ message): drain the old
+            # kind first so chunks never reorder across items.
+            await self._flush_pending_delta()
+        self._delta_kind = kind
+        self._delta_ctx = (turn, log, emitter)
+        self._delta_buf.append(delta)
+        if flush_now or sum(len(s) for s in self._delta_buf) >= self._DELTA_FLUSH_MAX_CHARS:
+            await self._flush_pending_delta()
+            return
+        if self._delta_flush_task is None or self._delta_flush_task.done():
+            # Deadline flush: without it, an LLM stall mid-stream
+            # would leave the buffered tail invisible until the next
+            # chunk arrives (which may be seconds away).
+            self._delta_flush_task = asyncio.create_task(self._delayed_delta_flush())
+
+    async def _delayed_delta_flush(self) -> None:
+        await asyncio.sleep(self._DELTA_FLUSH_INTERVAL_S)
+        await self._flush_pending_delta()
+
+    async def _flush_pending_delta(self) -> None:
+        async with self._delta_lock:
+            task = self._delta_flush_task
+            if task is not None and task is not asyncio.current_task():
+                task.cancel()
+            self._delta_flush_task = None
+            if not self._delta_buf or self._delta_ctx is None:
+                return
+            combined = "".join(self._delta_buf)
+            self._delta_buf.clear()
+            kind = self._delta_kind
+            turn, log, emitter = self._delta_ctx
+            if kind == "agentMessage" and self.agent_message is not None:
+                item_id = self.agent_message.id
+                log.item_delta(turn.thread_id, turn.id, item_id, "agentMessage", combined)
+                await emitter.notify(
+                    ServerMethod.ITEM_AGENT_MESSAGE_DELTA,
+                    {
+                        "threadId": turn.thread_id,
+                        "turnId": turn.id,
+                        "itemId": item_id,
+                        "delta": combined,
+                    },
+                )
+            elif kind == "reasoning" and self.reasoning is not None:
+                item_id = self.reasoning.id
+                log.item_delta(turn.thread_id, turn.id, item_id, "reasoning", combined)
+                await emitter.notify(
+                    ServerMethod.ITEM_REASONING_TEXT_DELTA,
+                    {
+                        "threadId": turn.thread_id,
+                        "turnId": turn.id,
+                        "itemId": item_id,
+                        "delta": combined,
+                        "contentIndex": 0,
+                    },
+                )
+            # else: the item was already finalized — drop the tail; the
+            # item/completed snapshot carries the full text regardless.
 
     async def start_tool(
         self,
@@ -3594,6 +3671,9 @@ class _ReactBridgeState:
                 await self._emit_completed(turn, log, emitter, verification_item)
 
     async def flush(self, turn: Turn, log: EventLog, emitter: EventEmitter) -> None:
+        # Drain coalesced deltas BEFORE finalizing: completing an item
+        # nulls the slot the pending tail would attach to.
+        await self._flush_pending_delta()
         if self.agent_message is not None:
             self.agent_message.status = ItemStatus.COMPLETED
             await self._emit_completed(turn, log, emitter, self.agent_message)
