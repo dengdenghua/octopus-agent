@@ -37,6 +37,15 @@
 | Fitness 五层 + 漂移一票否决 | **已接线** | `runtime/safety/evolution/fitness.py`、`drift_monitor.py` |
 | 写后自动诊断（代码模式快检注入观察） | **已接线** | `runtime/core/cerebrum/react_execution.py` 的 `_run_auto_diagnostics`（注意：检查器缺失时跳过，不报假阳性） |
 
+## 浏览器自动化
+
+| 机制 | 状态 | 证据 |
+|---|---|---|
+| Playwright 轨（后台无状态爬取/提取） | **已接线** | `runtime/execution/suckers/browser_skills.py` 的 `browser_*` 技能 |
+| Electron webview 轨（桌面应用内可见操作） | **已接线**（仅 Electron 环境） | `runtime/execution/suckers/browser_act_skills.py` 的 `live_browser_*` 技能，经本地 bridge |
+| 扩展 relay 轨（操控用户真实浏览器标签页） | **休眠代码** | `extensions/` 有扩展，但未接入 skill 路由 |
+| 统一 BrowserBackend 抽象 + 路由优先级 | **部分实装**（接缝+mock，真 adapter 待真机） | `runtime/execution/suckers/browser_backend.py`（Protocol + `resolve_backend` 优先级 extension>electron>playwright）+ `browser_backends_mock.py`；三轨的真实 adapter 需对应运行时端到端验证后接入，现有三轨调用点未改 |
+
 ## 维护本表
 
 1. 改变某行状态的 PR，应同步更新本表（和必要时的 architecture.md 措辞）。
