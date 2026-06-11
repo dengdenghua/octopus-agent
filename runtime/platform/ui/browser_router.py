@@ -24,6 +24,43 @@ from fastapi.responses import FileResponse, Response
 from runtime.platform.process.paths import project_root
 from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 
+# Written into the profile dir while a persistent browser context is
+# live; removed on clean shutdown. A leftover sentinel on the next
+# launch means the previous session crashed (or the process was
+# killed) — surfaced as ``session["recovered_from_crash"]`` so callers
+# can re-validate login state instead of silently trusting it.
+_SESSION_SENTINEL_NAME = ".octopus_session_active"
+
+
+def secure_profile_dir(profile_dir: Path) -> None:
+    """Owner-only access for the browser profile.
+
+    The persistent context stores cookies and localStorage in
+    PLAINTEXT here; the default mkdir mode (umask, typically 755)
+    let every local user read login tokens.
+    """
+    with contextlib.suppress(OSError):
+        os.chmod(profile_dir, 0o700)
+
+
+def mark_session_active(profile_dir: Path) -> bool:
+    """Write the crash sentinel. Returns True when a stale sentinel
+    was already present (= previous session did not shut down
+    cleanly)."""
+    sentinel = profile_dir / _SESSION_SENTINEL_NAME
+    crashed = sentinel.exists()
+    with contextlib.suppress(OSError):
+        sentinel.write_text(f"{os.getpid()} {time.time():.0f}\n", encoding="utf-8")
+    return crashed
+
+
+def mark_session_closed(profile_dir: Path | str | None) -> None:
+    """Remove the crash sentinel on clean shutdown."""
+    if not profile_dir:
+        return
+    with contextlib.suppress(OSError):
+        (Path(profile_dir) / _SESSION_SENTINEL_NAME).unlink(missing_ok=True)
+
 
 def create_browser_router() -> APIRouter:
     """Create the ``/api/browser/*`` session and relay router."""
@@ -278,6 +315,7 @@ def create_browser_router() -> APIRouter:
         if not str(profile_dir).startswith(str(root)):
             raise HTTPException(400, "invalid browser profile id")
         profile_dir.mkdir(parents=True, exist_ok=True)
+        secure_profile_dir(profile_dir)
         session["profile_dir"] = str(profile_dir)
         return profile_dir
 
@@ -314,6 +352,7 @@ def create_browser_router() -> APIRouter:
         try:
             playwright = sync_playwright().start()
             profile_dir = _browser_profile_dir(session)
+            session["recovered_from_crash"] = mark_session_active(profile_dir)
             context = playwright.chromium.launch_persistent_context(
                 user_data_dir=str(profile_dir),
                 executable_path=executable_path,
@@ -355,6 +394,7 @@ def create_browser_router() -> APIRouter:
             with contextlib.suppress(Exception):
                 playwright.stop()
             session["playwright"] = None
+        mark_session_closed(session.get("profile_dir"))
         session["mode"] = "mock"
 
     def _record_browser_action(session: dict[str, Any], action: str, detail: str) -> None:

@@ -40,6 +40,7 @@ import {
   formatResults,
   parseActions,
   runActionWithRetry,
+  withActionTimeout,
   type AgentAction,
   type ActionResult,
 } from "./agentic-actions";
@@ -299,7 +300,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
               setAgentLoopActive(false);
               break;
             }
-            const r = await runBrowserHandleAction(webviewHandle, action);
+            const r = await withActionTimeout(
+              runBrowserHandleAction(webviewHandle, action),
+              action.type,
+            );
             results.push(r);
             if (needsUserConfirmation(r)) {
               addPendingConfirmation(action, r);
@@ -311,7 +315,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
               await new Promise((res) => setTimeout(res, 300));
             }
           }
-          const pageInfo = await webviewHandle.extractText().catch(() => null);
+          const pageInfo = await withActionTimeout(
+            webviewHandle.extractText(),
+            "extractText",
+          ).catch(() => null);
           const pageInfoLite = pageInfo
             ? {
                 url: pageInfo.url,
@@ -366,11 +373,14 @@ export function CopilotPanel({ webviewHandle }: Props) {
             setAgentLoopActive(false);
             break;
           }
-          const r = await runActionWithRetry(api, wcId, action, {
-            navigate: (url: string) => {
-              webviewHandle?.loadURL(url);
-            },
-          });
+          const r = await withActionTimeout(
+            runActionWithRetry(api, wcId, action, {
+              navigate: (url: string) => {
+                webviewHandle?.loadURL(url);
+              },
+            }),
+            action.type,
+          );
           results.push(r);
           // Implementation note.
           if (action.type === "wait" || action.type === "navigate") {
@@ -378,9 +388,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
           }
         }
         // Implementation note.
-        const pageInfo = await api.browser
-          .extractText(wcId)
-          .catch(() => null);
+        const pageInfo = await withActionTimeout(
+          api.browser.extractText(wcId),
+          "extractText",
+        ).catch(() => null);
         const pageInfoLite = pageInfo
           ? {
               url: pageInfo.url,
@@ -415,11 +426,17 @@ export function CopilotPanel({ webviewHandle }: Props) {
       setBusy(true);
       setErrorMsg(null);
       try {
-        const result = await runBrowserHandleAction(webviewHandle, pending.action, {
-          confirmDangerous: true,
-        });
+        const result = await withActionTimeout(
+          runBrowserHandleAction(webviewHandle, pending.action, {
+            confirmDangerous: true,
+          }),
+          pending.action.type,
+        );
         setPendingConfirmations((prev) => prev.filter((item) => item.id !== pending.id));
-        const pageInfo = await webviewHandle.extractText().catch(() => null);
+        const pageInfo = await withActionTimeout(
+          webviewHandle.extractText(),
+          "extractText",
+        ).catch(() => null);
         const pageInfoLite = pageInfo
           ? {
               url: pageInfo.url,

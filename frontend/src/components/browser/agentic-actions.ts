@@ -154,6 +154,37 @@ export async function runAction(
   }
 }
 
+// A wedged webview IPC channel leaves action promises pending forever,
+// which froze the copilot loop in `busy` with only a manual Stop as
+// the way out. Racing every action against a deadline turns the hang
+// into a normal failed result: the loop's catch/finally path reports
+// it and unfreezes.
+export const ACTION_TIMEOUT_MS = 30_000;
+
+export async function withActionTimeout<T>(
+  promise: Promise<T>,
+  label: string,
+  timeoutMs: number = ACTION_TIMEOUT_MS,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(`action timeout (${Math.round(timeoutMs / 1000)}s): ${label}`),
+            ),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /* Implementation note. */
 export async function runActionWithRetry(
   api: OctopusElectronAPI,
