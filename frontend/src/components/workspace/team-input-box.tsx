@@ -29,6 +29,7 @@ import {
 } from "./mention-autocomplete";
 import { ModelPicker, type PickerModel } from "./model-picker";
 import { useOptionalCollab } from "./collab";
+import { FloorBar } from "./collab/floor-bar";
 import { useSlashTypeahead } from "./use-slash-typeahead";
 import { WorkDirSelector } from "./workdir-selector";
 import { type TeamMode } from "./team-mode-picker";
@@ -198,6 +199,7 @@ export function TeamInputBox({
 
   return (
     <div className="rounded-xl border border-border/70 bg-card overflow-hidden focus-within:border-primary/40 focus-within:shadow-sm focus-within:shadow-primary/10 transition-[border-color,box-shadow] duration-200">
+      <FloorBar />
       <div className="relative">
         {slashPicker}
         {mentionOpen && (

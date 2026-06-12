@@ -5701,6 +5701,17 @@ export const enUS: Translations = {
     updatePolicyFailed: "Failed to update speaker policy",
   },
 
+  teamFloor: {
+    yourTurn: "Your turn",
+    speaking: "speaking",
+    floorOpen: "Floor is open",
+    pass: "Pass",
+    raiseHand: "Raise hand",
+    handRaised: "Hand raised",
+    raisedHands: "Raised hands",
+    grantFloor: "Give the floor",
+  },
+
   teamJoin: {
     missingToken: "The invite link is missing a token.",
     invalidInvite: "The invite link is invalid or has expired.",

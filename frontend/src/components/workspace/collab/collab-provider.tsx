@@ -9,10 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
 import { readOrCreateTeamParticipantId } from "@/core/teams";
+import type { SpeakerPolicy } from "@/core/teams";
 import { eventBus } from "@/core/events";
 import { teamTaskQueryKeys } from "@/core/team-tasks/hooks";
 import type { TeamTask } from "@/core/team-tasks/types";
@@ -72,16 +74,34 @@ export interface TeamTaskProgressEvent {
   runner_event?: Record<string, unknown> | null;
 }
 
+export interface FloorState {
+  speakerPolicy: SpeakerPolicy;
+  currentSpeakerId: string | null;
+  moderatorId: string | null;
+  floorRequests: string[];
+}
+
+const DEFAULT_FLOOR: FloorState = {
+  speakerPolicy: "free",
+  currentSpeakerId: null,
+  moderatorId: null,
+  floorRequests: [],
+};
+
 interface CollabContextType {
   users: User[];
   currentUser: User | null;
   isConnected: boolean;
   roomMessages: RoomMessage[];
   taskEvents: TeamTaskProgressEvent[];
+  floor: FloorState;
   join: (user: User) => void;
   leave: () => void;
   updateCursor: (position: { x: number; y: number }) => void;
-  sendRoomMessage: (text: string) => void;
+  sendRoomMessage: (text: string, onBehalfOf?: string) => void;
+  raiseHand: () => void;
+  yieldFloor: () => void;
+  grantFloor: (targetId: string | null) => void;
   notifyThreadUpdate: (reason?: string) => void;
   annotations: Annotation[];
   addAnnotation: (messageId: string, body: string) => Promise<void>;
@@ -131,6 +151,7 @@ export function CollabProvider({
   const [roomMessages, setRoomMessages] = useState<RoomMessage[]>([]);
   const [taskEvents, setTaskEvents] = useState<TeamTaskProgressEvent[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [floor, setFloor] = useState<FloorState>(DEFAULT_FLOOR);
 
   const localUser = useMemo<User>(() => ({
     id: resolvedParticipantId,
@@ -194,12 +215,26 @@ export function CollabProvider({
         if (disposed) return;
         const msg = parseMessage(event.data);
         if (!msg) return;
-        if (msg.type === "error" && String(msg.message ?? "").includes("participant removed")) {
-          shouldReconnectRef.current = false;
-          notifyRemoved("removed");
-          socket.close(4403);
+        if (msg.type === "error") {
+          const message = String(msg.message ?? "");
+          if (message.includes("participant removed")) {
+            shouldReconnectRef.current = false;
+            notifyRemoved("removed");
+            socket.close(4403);
+          } else if (
+            msg.code === "speech_denied" ||
+            msg.code === "delegation_denied" ||
+            msg.code === "not_moderator"
+          ) {
+            // The room rejected this send (muted / not your turn / not the
+            // moderator / not authorized to speak for someone). Surface it.
+            toast.error(message || "You can't speak right now");
+          }
+        } else if (msg.type === "floor") {
+          setFloor(floorFrom(msg));
         } else if (msg.type === "ready" && msg.participant) {
           setCurrentUser(participantToUser(msg.participant, avatar));
+          if (isRecord(msg.team)) setFloor(floorFrom(msg.team));
         } else if (msg.type === "presence" && Array.isArray(msg.participants)) {
           setUsers(msg.participants.map((p) => participantToUser(p)));
         } else if (msg.type === "message" && typeof msg.text === "string") {
@@ -240,6 +275,7 @@ export function CollabProvider({
           );
         } else if (msg.type === "team:update" && msg.team) {
           eventBus.emit("team:room-updated", { roomId: teamId ?? "" });
+          if (isRecord(msg.team)) setFloor(floorFrom(msg.team));
           if (teamHasRemovedParticipant(msg.team, resolvedParticipantId)) {
             shouldReconnectRef.current = false;
             notifyRemoved("removed");
@@ -340,15 +376,28 @@ export function CollabProvider({
     });
   }, [normalizedThreadId, sendJson]);
 
-  const sendRoomMessage = useCallback((text: string) => {
+  const sendRoomMessage = useCallback((text: string, onBehalfOf?: string) => {
     const clean = text.trim();
     if (!clean) return;
     sendJson({
       type: "message",
       text: clean,
+      ...(onBehalfOf ? { on_behalf_of: onBehalfOf } : {}),
       ...(normalizedThreadId ? { thread_id: normalizedThreadId } : {}),
     });
   }, [normalizedThreadId, sendJson]);
+
+  const raiseHand = useCallback(() => {
+    sendJson({ type: "floor:request" });
+  }, [sendJson]);
+
+  const yieldFloor = useCallback(() => {
+    sendJson({ type: "floor:yield" });
+  }, [sendJson]);
+
+  const grantFloor = useCallback((targetId: string | null) => {
+    sendJson({ type: "floor:grant", target: targetId ?? "" });
+  }, [sendJson]);
 
   const notifyThreadUpdate = useCallback((reason = "updated") => {
     if (!normalizedThreadId) return;
@@ -431,6 +480,10 @@ export function CollabProvider({
         isConnected,
         roomMessages,
         taskEvents,
+        floor,
+        raiseHand,
+        yieldFloor,
+        grantFloor,
         join,
         leave,
         updateCursor,
@@ -574,6 +627,30 @@ function removeTaskFromList(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+const FLOOR_POLICIES = new Set<SpeakerPolicy>([
+  "free",
+  "admin_only",
+  "round_robin",
+  "roll_call",
+  "moderated",
+]);
+
+// Extract floor state from either a dedicated ``floor`` event or a team
+// object (which carries the same fields). Tolerant of missing keys.
+function floorFrom(source: unknown): FloorState {
+  const item = isRecord(source) ? source : {};
+  const policy = String(item.speaker_policy ?? "free") as SpeakerPolicy;
+  return {
+    speakerPolicy: FLOOR_POLICIES.has(policy) ? policy : "free",
+    currentSpeakerId:
+      typeof item.current_speaker_id === "string" ? item.current_speaker_id : null,
+    moderatorId: typeof item.moderator_id === "string" ? item.moderator_id : null,
+    floorRequests: Array.isArray(item.floor_requests)
+      ? item.floor_requests.filter((x): x is string => typeof x === "string")
+      : [],
+  };
 }
 
 function stringOr(value: unknown): string {

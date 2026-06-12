@@ -5093,6 +5093,17 @@ export interface Translations {
     updatePolicyFailed: string;
   };
 
+  teamFloor: {
+    yourTurn: string;
+    speaking: string;
+    floorOpen: string;
+    pass: string;
+    raiseHand: string;
+    handRaised: string;
+    raisedHands: string;
+    grantFloor: string;
+  };
+
   // Team Join page
   teamJoin: {
     missingToken: string;

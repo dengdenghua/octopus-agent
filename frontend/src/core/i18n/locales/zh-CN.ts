@@ -5531,6 +5531,17 @@ export const zhCN: Translations = {
     updatePolicyFailed: "更新发言模式失败",
   },
 
+  teamFloor: {
+    yourTurn: "轮到你了",
+    speaking: "发言中",
+    floorOpen: "发言权空闲",
+    pass: "让出",
+    raiseHand: "举手",
+    handRaised: "已举手",
+    raisedHands: "举手队列",
+    grantFloor: "授予发言权",
+  },
+
   teamJoin: {
     missingToken: "邀请链接缺少 token。",
     invalidInvite: "邀请链接无效或已失效。",

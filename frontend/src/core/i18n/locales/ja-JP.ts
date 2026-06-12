@@ -5702,6 +5702,17 @@ export const jaJP: Translations = {
     updatePolicyFailed: "発言モードの更新に失敗しました",
   },
 
+  teamFloor: {
+    yourTurn: "あなたの番",
+    speaking: "発言中",
+    floorOpen: "発言権は空き",
+    pass: "パス",
+    raiseHand: "挙手",
+    handRaised: "挙手済み",
+    raisedHands: "挙手リスト",
+    grantFloor: "発言権を渡す",
+  },
+
   teamJoin: {
     missingToken: "The invite link is missing a token.",
     invalidInvite: "The invite link is invalid or has expired.",

@@ -5702,6 +5702,17 @@ export const koKR: Translations = {
     updatePolicyFailed: "발언 모드 업데이트 실패",
   },
 
+  teamFloor: {
+    yourTurn: "당신 차례",
+    speaking: "발언 중",
+    floorOpen: "발언권 비어 있음",
+    pass: "넘기기",
+    raiseHand: "손들기",
+    handRaised: "손 든 상태",
+    raisedHands: "손든 목록",
+    grantFloor: "발언권 주기",
+  },
+
   teamJoin: {
     missingToken: "The invite link is missing a token.",
     invalidInvite: "The invite link is invalid or has expired.",
