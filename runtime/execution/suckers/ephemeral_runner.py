@@ -296,7 +296,7 @@ def make_llm_ephemeral_runner(
 
         # ── Agentic loop path ────────────────────────────────
         # Build the tool spec list (filtered by role allowlist).
-        from runtime.sensing.gateway.tool_bridge import (
+        from runtime.execution.tool_spec_builder import (
             build_anthropic_tool_specs,
         )
         all_specs = build_anthropic_tool_specs(registry)
