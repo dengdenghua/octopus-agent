@@ -102,7 +102,7 @@ def draft_replies(
 
     # Lazy import · this module is also imported by the test path
     # which doesn't want to pull in the eyes layer.
-    from runtime.sensing.model_router.models import Message, ModelRequest
+    from runtime.platform.models.llm import Message, ModelRequest
 
     messages = [
         Message(role="system", content=_DRAFT_SYSTEM_PROMPT),

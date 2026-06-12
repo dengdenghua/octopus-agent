@@ -394,7 +394,7 @@ def _rehydrate_messages_from_steps(messages: list, steps: list[ReActStep]) -> li
     """
     if not steps:
         return messages
-    from runtime.sensing.model_router.models import Message
+    from runtime.platform.models.llm import Message
 
     existing = "\n".join(
         str(getattr(message, "content", "") or "") for message in messages
@@ -1169,7 +1169,7 @@ def stream_react_loop(
         _logger.warning("react_loop: stack.planner.router 不可用,无法进入 ReAct")
         return None
 
-    from runtime.sensing.model_router.models import (
+    from runtime.platform.models.llm import (
         Message,
         ModelRequest,
         normalize_reasoning_effort,
@@ -2432,7 +2432,7 @@ def stream_react_loop(
                 elif evt.type == "done":
                     resp = evt.final
             if resp is None:
-                from runtime.sensing.model_router.models import ModelResponse
+                from runtime.platform.models.llm import ModelResponse
                 resp = ModelResponse(
                     text="".join(text_parts),
                     thinking="".join(thinking_parts),
@@ -3188,7 +3188,7 @@ def stream_react_loop(
                         f"— quality is below threshold. Please reconsider your "
                         f"approach and try a different strategy."
                     )
-                    from runtime.sensing.model_router.models import Message
+                    from runtime.platform.models.llm import Message
 
                     messages.append(Message(
                         role="user",

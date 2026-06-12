@@ -194,7 +194,7 @@ def llm_mutate(
     """One mutation call · returns a new candidate or None on LLM
     failure. Defensive against malformed JSON · the GEPA loop
     treats None as "skip this iteration", doesn't crash."""
-    from runtime.sensing.model_router.models import Message, ModelRequest
+    from runtime.platform.models.llm import Message, ModelRequest
 
     failures_json = json.dumps(
         ctx.sample_failures[:5], ensure_ascii=False, indent=2,

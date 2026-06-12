@@ -894,7 +894,7 @@ def _make_eval_fn(
     sample_goals · keeps the eval set FIXED across iterations
     so candidate scores are comparable.
     """
-    from runtime.sensing.model_router.models import Message, ModelRequest
+    from runtime.platform.models.llm import Message, ModelRequest
 
     def _eval(prompt: str, n: int) -> list[float]:
         goals = sample_goals[:n]

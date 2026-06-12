@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from runtime.adapters.instrumentation import trace_stage
-from runtime.sensing.model_router.models import ModelRequest, ModelResponse, ModelRouter
+from runtime.platform.models.llm import ModelRequest, ModelResponse, ModelRouter
 
 from .breaker import CircuitBreaker
 

@@ -30,6 +30,12 @@ from dataclasses import dataclass
 from typing import Any
 
 from runtime.memory.threads.compaction import Summariser
+from runtime.platform.models.llm import (
+    Message,
+    ModelRequest,
+    ModelResponse,
+    ModelRouter,
+)
 from runtime.protocol.items import (
     AgentMessageItem,
     CommandExecutionItem,
@@ -41,12 +47,6 @@ from runtime.protocol.items import (
     TodoListItem,
     Turn,
     UserMessageItem,
-)
-from runtime.sensing.model_router.models import (
-    Message,
-    ModelRequest,
-    ModelResponse,
-    ModelRouter,
 )
 
 _logger = logging.getLogger(__name__)

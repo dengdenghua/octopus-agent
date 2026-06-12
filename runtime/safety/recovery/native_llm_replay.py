@@ -16,11 +16,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from runtime.platform.models.llm import Message, ModelRequest, ToolSpec
 from runtime.safety.recovery.native_turn_replay import (
     TurnReplayCase,
     build_turn_replay_cases,
 )
-from runtime.sensing.model_router.models import Message, ModelRequest, ToolSpec
 
 
 @dataclass(frozen=True, slots=True)

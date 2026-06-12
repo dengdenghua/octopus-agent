@@ -52,7 +52,7 @@ def _compress_context(
     if router is not None and len(mid_messages) > 4:
         summary = _summarize_messages(mid_messages, router, model)
         if summary:
-            from runtime.sensing.model_router.models import Message
+            from runtime.platform.models.llm import Message
             compressed = list(messages[:mid_start])
             compressed.append(Message(
                 role="system",
@@ -90,7 +90,7 @@ def _compress_context(
                 compressed.append(m)
             elif role == "user" and content.startswith("Observation:"):
                 short = content[:200] + "... [已压缩]" if len(content) > 200 else content
-                from runtime.sensing.model_router.models import Message
+                from runtime.platform.models.llm import Message
                 compressed.append(Message(role=role, content=short))
             else:
                 compressed.append(m)
@@ -107,7 +107,7 @@ def _compress_context(
         role = getattr(m, "role", "")
         if role == "user" and content.startswith("Observation:"):
             short = content[:200] + "... [已压缩]" if len(content) > 200 else content
-            from runtime.sensing.model_router.models import Message
+            from runtime.platform.models.llm import Message
             compressed.append(Message(role=role, content=short))
         else:
             compressed.append(m)
@@ -123,7 +123,7 @@ def _compress_context(
 
 def _summarize_messages(messages: list, router: Any, model: str) -> str:
     try:
-        from runtime.sensing.model_router.models import Message, ModelRequest
+        from runtime.platform.models.llm import Message, ModelRequest
         content_parts = []
         for m in messages:
             role = getattr(m, "role", "")
@@ -618,7 +618,7 @@ def _serialize_messages_for_checkpoint(messages: list) -> list[dict[str, Any]]:
 
 
 def _restore_messages_from_checkpoint(snapshot: list[dict[str, Any]]) -> list:
-    from runtime.sensing.model_router.models import Message, ToolCall
+    from runtime.platform.models.llm import Message, ToolCall
     result: list[Message] = []
     for m in snapshot:
         if not isinstance(m, dict) or not m.get("role"):
