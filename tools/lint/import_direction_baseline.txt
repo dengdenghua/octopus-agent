@@ -13,10 +13,6 @@ runtime/core/cerebrum/react_loop.py	sensing.gateway.openai_gateway
 runtime/core/cerebrum/react_loop.py	sensing.model_router.models
 runtime/core/cerebrum/react_loop.py	sensing.model_router.token_juicer
 runtime/core/nerves/reflex/reply_drafter.py	sensing.model_router.models
-runtime/core/nerves/reflex/workflow_delegate.py	sensing.gateway.workflow_editor_router
-runtime/core/nerves/sensors.py	sensing.normalize
-runtime/core/nerves/sensors.py	sensing.normalize.preview_bridge
-runtime/core/nerves/sensors.py	sensing.normalize.sensor
 runtime/execution/suckers/browser_act_skills.py	sensing.gateway
 runtime/execution/suckers/capability_skills.py	sensing.gateway.plugins_router
 runtime/execution/suckers/cron_skills.py	sensing.gateway.cron_router
