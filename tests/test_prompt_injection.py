@@ -118,3 +118,19 @@ class TestApprovalRiskTaint:
         assert "injection markers" in tainted.reason
         # idempotent
         assert tainted.with_injection_taint() is tainted
+
+
+class TestUntrustedMcpAndRiskGaps:
+    def test_mcp_output_is_untrusted_regardless_of_name(self):
+        # MCP name prefix is operator-configurable; affinity is the signal.
+        assert is_untrusted_tool("page_execute_task", ["mcp", "external"])
+        assert is_untrusted_tool("gh_get", ["external"])
+
+    def test_risk_classification_covers_aliases_and_mcp(self):
+        from runtime.safety.approval.approval_gate import assess_approval_risk as r
+        assert r("background_exec").level == "high"      # shell alias
+        assert r("run_command").level == "high"
+        assert r("mcp_gh_exec_shell").level == "high"     # mcp inner danger
+        assert r("mcp_x_write_file").level == "high"
+        assert r("mcp_x_get_issue").level == "medium"     # generic mcp ≥ medium
+        assert r("upload_artifact").level == "medium"     # egress synonym

@@ -198,7 +198,10 @@ def assess_approval_risk(
 
     if name.startswith(("read_", "list_", "glob_", "grep_", "file_stats")):
         bump("low", "local_read")
-    if name.startswith(("fetch_", "http_", "send_", "email_", "slack_")):
+    if name.startswith((
+        "fetch_", "http_", "send_", "email_", "slack_",
+        "upload_", "publish_", "post_", "webhook_", "deploy_",
+    )):
         bump("medium", "network_or_egress")
     if name.startswith(("write_", "append_", "edit_", "delete_")) or name in DANGEROUS_TOOLS:
         bump("high", "filesystem_write")
@@ -208,23 +211,41 @@ def assess_approval_risk(
         bump("high", "mobile_device_control")
     if name.startswith("git_"):
         bump("high", "vcs_mutation")
-    if name in {"exec_shell", "shell_command", "bash"} or name.startswith("exec_shell"):
+    # Command execution — incl. background / renamed aliases that the
+    # bare ``exec_shell`` check missed (a prompt-injected agent can route
+    # a shell through any of these).
+    if (
+        name in {
+            "exec_shell", "shell_command", "bash", "background_exec",
+            "run_command", "exec_command", "run_python", "python_exec",
+            "run_code", "subprocess_run",
+        }
+        or name.startswith(("exec_shell", "background_exec", "run_command"))
+    ):
         bump("high", "shell_execution")
         destructive_markers = (
-            "rm -rf",
-            "del /",
-            "remove-item",
-            "format ",
-            "drop database",
-            "truncate table",
-            "git reset --hard",
-            "git clean -fd",
-            "push --force",
-            "--force-with-lease",
-            "chmod 777",
+            "rm -rf", "del /", "remove-item", "format ", "drop database",
+            "truncate table", "git reset --hard", "git clean -fd",
+            "push --force", "--force-with-lease", "chmod 777",
         )
         if any(marker in preview for marker in destructive_markers):
             bump("critical", "destructive_command")
+    # MCP / remote tools: their output is attacker-influenceable and their
+    # tool NAME is freeform, so the prefix rules above don't see the
+    # capability. Treat any mcp_* tool as at least medium, and infer a
+    # dangerous capability from danger keywords in the name (e.g.
+    # ``mcp_<server>_exec_shell`` / ``..._write_file`` / ``..._upload``).
+    if name.startswith(("mcp_", "mcp__")):
+        bump("medium", "external_mcp")
+        _low = name.lower()
+        if any(k in _low for k in (
+            "exec", "shell", "bash", "subprocess", "run_command", "run_code",
+        )):
+            bump("high", "shell_execution")
+        elif any(k in _low for k in (
+            "write", "delete", "remove", "edit_", "upload", "publish", "deploy",
+        )):
+            bump("high", "filesystem_write")
     if "api_key" in preview or "secret" in preview or "token" in preview:
         bump("high", "secret_material")
     if level == "low" and is_dangerous_tool(name):

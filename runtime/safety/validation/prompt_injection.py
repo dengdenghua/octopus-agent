@@ -26,7 +26,13 @@ import re
 from dataclasses import dataclass
 
 # Affinity tags whose tool output is external / attacker-influenceable.
-UNTRUSTED_AFFINITIES: frozenset[str] = frozenset({"web", "browser"})
+# ``mcp`` / ``external`` cover MCP-bridge tools — their output comes from a
+# remote server and their registered NAME is operator-configurable (the
+# mcp_ prefix can be renamed), so affinity, not the name, is the reliable
+# signal that the payload is untrusted.
+UNTRUSTED_AFFINITIES: frozenset[str] = frozenset(
+    {"web", "browser", "mcp", "external"},
+)
 
 # Tool-name prefixes that are external regardless of declared affinity —
 # the MCP bridge registers remote-server tools under these names.

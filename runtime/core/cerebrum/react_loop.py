@@ -2761,15 +2761,19 @@ def stream_react_loop(
                     )
                     # Injection taint gate (hard): if untrusted content
                     # carrying injection markers entered this turn, a
-                    # high-risk tool can no longer auto-run — force it
-                    # through human approval, overriding auto_approve and
-                    # the scoped-write / accept-edits fast paths. This is
-                    # the escalation from the in-context warning to an
-                    # actual stop: a poisoned web page can't drive an
-                    # exec_shell / write / send behind the user's back.
+                    # risky tool can no longer auto-run — force it through
+                    # human approval, overriding auto_approve and the
+                    # scoped-write / accept-edits fast paths. This is the
+                    # escalation from the in-context warning to an actual
+                    # stop: a poisoned page can't drive an exec_shell /
+                    # write / send behind the user's back. Gate at medium+
+                    # so EXFILTRATION (egress tools = medium — the classic
+                    # injection payload) is caught, not just destructive
+                    # high-risk tools; only pure low-risk reads still
+                    # auto-run after taint.
                     if (
                         injection_taint_gates()
-                        and _approval_risk.level in {"high", "critical"}
+                        and _approval_risk.level in {"medium", "high", "critical"}
                     ):
                         _auto_approve = False
                         _scoped_artifact_write = False
