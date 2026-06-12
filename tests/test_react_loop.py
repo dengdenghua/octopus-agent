@@ -3219,3 +3219,61 @@ def test_injection_taint_gates_medium_egress_tool() -> None:
     approvals = [e for e in events if e["type"] == "tool_approval_request"]
     assert approvals and approvals[0]["tool_name"] == "send_email"
     assert "prompt_injection_taint" in approvals[0]["risk"]["categories"]
+
+
+def test_parallel_batch_injection_blocks_high_risk_tool() -> None:
+    """Red-team gap (now closed at the executor chokepoint): a model
+    emitting web_peek + exec_shell in ONE Action block went down the
+    parallel dispatch, which runs no approval/taint gate. The batch is now
+    forced serial (risky/untrusted → inline) and the executor blocks
+    exec_shell once web_peek's injection output taints the turn — even
+    though the parallel path itself never gates."""
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.tool_engine import ToolExecutor
+    from runtime.safety.auth import TrustEngine
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="web_peek", description="fetch", affinity=["web", "io"],
+            trusted_source="builtin://web_peek",
+            handler=lambda url="": {"content": _INJECTION_PAGE},
+        ),
+        verify_tests=False,
+    )
+    ran = {"exec": False}
+
+    def _shell(command="", **_kw):
+        ran["exec"] = True
+        return {"exit_code": 0, "stdout": "ok"}
+
+    reg.register(
+        Skill(
+            name="exec_shell", description="shell", affinity=["shell", "exec", "dangerous"],
+            trusted_source="builtin://exec_shell", handler=_shell,
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(_ScriptedRouter([
+        'Action:\n'
+        '    web_peek({"url": "http://x"})\n'
+        '    exec_shell({"command": "echo hi"})\n\n'
+        "Observation:",
+        "Final Answer: done",
+    ]))
+    stack.executor = ToolExecutor(
+        registry=reg,
+        immunity=TrustEngine(trusted_sources=["builtin://*"], unknown_policy="allow"),
+    )
+
+    events, result = _drain(stream_react_loop(
+        stack, _intent("peek and run in one block"), agent=None, max_iterations=4,
+    ))
+    assert result is not None
+    exec_ends = [
+        e for e in events
+        if e["type"] == "tool_end" and e["tool_name"] == "exec_shell"
+    ]
+    assert exec_ends, "exec_shell should have produced a tool_end"
+    assert exec_ends[0]["status"] != "success", "tainted exec_shell must be blocked"
+    assert not ran["exec"], "blocked exec_shell handler must NOT have run"

@@ -258,6 +258,34 @@ def assess_approval_risk(
     )
 
 
+def injection_taint_block(tool_name: str, args_preview: str = "") -> str | None:
+    """The single, path-independent enforcement point for prompt-injection
+    taint, called by the executor before every tool runs.
+
+    Returns a block reason when: the turn is injection-tainted (untrusted
+    content with injection markers entered it), this tool is risky
+    (medium+), and no approval-capable loop has reviewed this specific call
+    — i.e. it reached the executor via the parallel dispatch, the
+    agentic-fallback loop, or a subagent, none of which can ask a human.
+    Returns ``None`` to allow (clean turn, low-risk tool, or already
+    reviewed by the single-action approval gate). Fail-closed: when in
+    doubt after taint, a risky tool is blocked rather than auto-run."""
+    from runtime.safety.validation.prompt_injection import (
+        injection_gate_already_handled,
+        injection_taint_gates,
+    )
+    if not injection_taint_gates() or injection_gate_already_handled():
+        return None
+    risk = assess_approval_risk(tool_name, args_preview)
+    if risk.level in {"medium", "high", "critical"}:
+        return (
+            f"{tool_name} (risk={risk.level}: {risk.reason}) blocked — "
+            "untrusted content with prompt-injection markers entered this "
+            "turn and this execution path cannot request human approval"
+        )
+    return None
+
+
 def needs_approval(tool_name: str, auto_approve: bool = False) -> bool:
     """Backwards-compatible helper. Prefer ``is_dangerous_tool``."""
     if auto_approve:

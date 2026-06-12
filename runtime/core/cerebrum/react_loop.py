@@ -72,6 +72,7 @@ from runtime.safety.validation.prompt_injection import (
     mark_injection_taint,
     reset_injection_taint,
     scan_for_injection,
+    set_injection_gate_handled,
     wrap_untrusted_observation,
 )
 
@@ -964,9 +965,17 @@ def _dispatch_parallel_actions(
     parsed_pairs: list[tuple[str, dict[str, Any]] | None] = [
         _parse_action(a) for a in actions
     ]
+    from runtime.safety.approval.approval_gate import assess_approval_risk
+
     resolved_names: list[str | None] = []
     has_unregistered = False
     has_write_tool = False
+    # Risky/untrusted tools must run serially (inline, in this thread) so
+    # the injection-taint contextvar the executor reads/writes is visible —
+    # the parallel thread-pool path doesn't propagate it. Running them
+    # inline also lets an untrusted tool's taint apply to a later risky tool
+    # in the same batch via the executor's chokepoint block.
+    has_risky_or_untrusted = False
     for p in parsed_pairs:
         if p is None:
             resolved_names.append(None)
@@ -981,6 +990,15 @@ def _dispatch_parallel_actions(
             resolved_names.append(name)
             if name in _WRITE_TOOLS:
                 has_write_tool = True
+            if assess_approval_risk(name).level in {"medium", "high", "critical"}:
+                has_risky_or_untrusted = True
+            else:
+                try:
+                    _aff = registry.get(name).affinity
+                except (KeyError, AttributeError):
+                    _aff = None
+                if is_untrusted_tool(name, _aff):
+                    has_risky_or_untrusted = True
 
     # Pre-allocate per-action call_ids so tool_start/tool_end can be
     # paired even if work runs out-of-order.
@@ -1001,7 +1019,7 @@ def _dispatch_parallel_actions(
             "parallel_batch_size": len(actions),
         }
 
-    serial = has_write_tool or has_unregistered
+    serial = has_write_tool or has_unregistered or has_risky_or_untrusted
 
     def _run_one(idx: int) -> tuple[str | None, Any]:
         # Skip dispatch for unregistered tools — the single-action
@@ -2868,15 +2886,23 @@ def stream_react_loop(
                     else:
                         def _sink_scope() -> Any:
                             return contextlib.nullcontext()
+                    # This single-action path ran its own approval gate
+                    # (incl. the injection-taint escalation) above, so tell
+                    # the executor's chokepoint block this call was reviewed
+                    # — otherwise it would double-block an approved tool.
                     with _sink_scope():
-                        observation, beak_step = _execute_action_via_beak(
-                            stack,
-                            step.action,
-                            react_task_id=react_task_id,
-                            react_step_counter=i + 1,
-                            agent=agent,
-                            intent=intent,
-                        )
+                        set_injection_gate_handled(True)
+                        try:
+                            observation, beak_step = _execute_action_via_beak(
+                                stack,
+                                step.action,
+                                react_task_id=react_task_id,
+                                react_step_counter=i + 1,
+                                agent=agent,
+                                intent=intent,
+                            )
+                        finally:
+                            set_injection_gate_handled(False)
                     if beak_step is not None:
                         executed_beak_steps.append(beak_step)
                     # Tool may have been killed mid-run by the cancel
@@ -2917,14 +2943,18 @@ def stream_react_loop(
                             i + 1, resolved_name,
                         )
                         with _sink_scope():
-                            retry_obs, retry_step = _execute_action_via_beak(
-                                stack,
-                                step.action,
-                                react_task_id=react_task_id,
-                                react_step_counter=i + 1,
-                                agent=agent,
-                                intent=intent,
-                            )
+                            set_injection_gate_handled(True)
+                            try:
+                                retry_obs, retry_step = _execute_action_via_beak(
+                                    stack,
+                                    step.action,
+                                    react_task_id=react_task_id,
+                                    react_step_counter=i + 1,
+                                    agent=agent,
+                                    intent=intent,
+                                )
+                            finally:
+                                set_injection_gate_handled(False)
                         if retry_step is not None:
                             executed_beak_steps.append(retry_step)
                         retry_ok = not (

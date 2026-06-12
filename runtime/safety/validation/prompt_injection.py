@@ -210,3 +210,22 @@ def injection_taint_gates(*, threshold: str = "medium") -> bool:
     """Whether the turn is tainted at/above ``threshold`` — i.e. a
     high-risk tool should be forced through human approval."""
     return _SEVERITY_ORDER.get(_TAINT.get(), 0) >= _SEVERITY_ORDER[threshold]
+
+
+# A loop that runs its OWN approval round-trip (the react_loop single-action
+# path, which can reach a human via an approval provider) marks the call it
+# is about to execute as "handled", so the executor's fail-closed taint
+# block lets it through. Execution paths that CANNOT request approval (the
+# parallel dispatch, the agentic-fallback loop, subagents) leave it unset,
+# so the executor blocks their risky tools after taint.
+_GATE_HANDLED: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "octopus_injection_gate_handled", default=False,
+)
+
+
+def set_injection_gate_handled(value: bool) -> None:
+    _GATE_HANDLED.set(bool(value))
+
+
+def injection_gate_already_handled() -> bool:
+    return _GATE_HANDLED.get()

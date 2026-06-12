@@ -31,7 +31,13 @@ from runtime.platform.models import (
     ToolCall,
 )
 from runtime.platform.process.utils import safe_repr as _safe_repr
+from runtime.safety.approval.approval_gate import injection_taint_block
 from runtime.safety.auth import TrustEngine, check_file_write
+from runtime.safety.validation.prompt_injection import (
+    is_untrusted_tool,
+    mark_injection_taint,
+    scan_for_injection,
+)
 
 _READ_BEFORE_WRITE_TOOLS = frozenset({
     "write_text_file",
@@ -217,6 +223,22 @@ class ToolExecutor:
                     call,
                     "immune_reject",
                     capability_reason or "capability disabled",
+                )
+                self.journal.write_step(task_id, arm_id, step, actor=actor)
+                return step
+
+            # Indirect prompt-injection taint gate (chokepoint). Every
+            # execution path crosses execute_step, so enforcing here closes
+            # the paths (parallel dispatch, agentic-fallback, subagents)
+            # that don't run their own approval gate: a risky tool can't
+            # run after untrusted content carried injection markers into the
+            # turn, unless an approval-capable loop already reviewed it.
+            _inj_block = injection_taint_block(str(sucker_id), str(args)[:500])
+            if _inj_block is not None:
+                span.set_attribute("octopus.injection.blocked", _inj_block)
+                step = _make_reject_step(
+                    step_id, node_id, call, "immune_reject",
+                    f"injection_taint_block: {_inj_block}",
                 )
                 self.journal.write_step(task_id, arm_id, step, actor=actor)
                 return step
@@ -595,6 +617,16 @@ class ToolExecutor:
                     error_type: str | None = None
                     stderr_tags: list[str] = retry_tags
                     _record_successful_read(str(sucker_id), args, output)
+                    # Taint the turn (chokepoint) if this tool's output is
+                    # external/untrusted and carries injection markers, so a
+                    # LATER risky tool on ANY path is gated. Setting it here
+                    # (not only in react_loop) covers the agentic-fallback
+                    # and subagent paths that never reach react_loop's
+                    # observation-wrap sites.
+                    if is_untrusted_tool(str(sucker_id), list(skill.affinity or [])):
+                        _inj_scan = scan_for_injection(str(output))
+                        if _inj_scan.flagged:
+                            mark_injection_taint(_inj_scan.severity)
                     # ── Structured output validation ──────
                     _output_schema = getattr(skill, "output_schema", None)
                     if (
