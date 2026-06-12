@@ -94,6 +94,15 @@ repos:
         # async_lock_baseline.txt.
         files: ^(runtime|tests)/.*\.py$
 
+      - id: async-blocking-check
+        name: no NEW blocking call in async control flow
+        entry: python tools/lint/async_blocking_check.py --strict
+        language: system
+        pass_filenames: false
+        # time.sleep / requests / subprocess.run inside `async def` stall
+        # the event loop. Baseline is empty. See async_blocking_baseline.txt.
+        files: ^(runtime|tests)/.*\.py$
+
       - id: root-hygiene
         name: repository root matches ROOT_LAYOUT.md allow-list
         entry: python tools/lint/root_hygiene.py --strict
