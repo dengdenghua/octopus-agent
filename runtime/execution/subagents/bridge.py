@@ -12,6 +12,7 @@ import contextlib
 import logging
 import os
 import random
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -25,6 +26,65 @@ SubAgentRunner = Callable[..., str]
 
 _RUNNER: SubAgentRunner | None = None
 _REGISTRY: SubagentRegistry | None = None
+
+
+# ── Sub-agent concurrency guard ──────────────────────────────
+#
+# Each call_subagent() holds a slot for the WHOLE time its child runs (the
+# call is on the stack — inline, or awaiting the inner timeout executor), so a
+# parent→child→grandchild chain holds one slot PER LEVEL. A single global cap
+# therefore bounds BOTH the depth and the width of the concurrently-executing
+# subagent tree, regardless of its shape, without threading a depth counter
+# through every spawn path. This bounds the runaway-tree resource/cost vector
+# (a malicious or buggy agent recursively spawning subagents, each with its
+# own per-task budget). Fail-closed: over the cap, refuse to spawn.
+#
+# A cumulative COST ceiling across the tree (charging every subagent's spend
+# against one shared pool, then hard-stopping) is a SEPARATE, policy-gated
+# knob — the session-level TokenBudgetTracker exists but is intentionally not
+# wired with a hard ceiling here, since the right cap is a deployment decision.
+#
+# Default 64 is generous (no legit workflow needs that many SIMULTANEOUS
+# agents); override via OCTOPUS_MAX_ACTIVE_SUBAGENTS.
+def _default_max_active_subagents() -> int:
+    raw = os.environ.get("OCTOPUS_MAX_ACTIVE_SUBAGENTS", "").strip()
+    if raw:
+        try:
+            v = int(raw)
+            if v > 0:
+                return v
+        except ValueError:
+            pass
+    return 64
+
+
+MAX_ACTIVE_SUBAGENTS: int = _default_max_active_subagents()
+_ACTIVE_SUBAGENTS: int = 0
+_ACTIVE_SUBAGENTS_LOCK = threading.Lock()
+
+
+def _acquire_subagent_slot() -> bool:
+    """Reserve a concurrency slot. Returns False when the global cap is
+    already reached (caller must refuse to spawn)."""
+    global _ACTIVE_SUBAGENTS
+    with _ACTIVE_SUBAGENTS_LOCK:
+        if _ACTIVE_SUBAGENTS >= MAX_ACTIVE_SUBAGENTS:
+            return False
+        _ACTIVE_SUBAGENTS += 1
+        return True
+
+
+def _release_subagent_slot() -> None:
+    global _ACTIVE_SUBAGENTS
+    with _ACTIVE_SUBAGENTS_LOCK:
+        if _ACTIVE_SUBAGENTS > 0:
+            _ACTIVE_SUBAGENTS -= 1
+
+
+def active_subagent_count() -> int:
+    """Current number of concurrently-executing subagents (test/introspection)."""
+    with _ACTIVE_SUBAGENTS_LOCK:
+        return _ACTIVE_SUBAGENTS
 
 # Permissive default for the cheap subagent model. Operators should
 # override this to point at their org's actual cheap model — either
@@ -571,61 +631,88 @@ def call_subagent(
         _safe_journal_emit(_finish_event)
         return result
 
-    if timeout_seconds is None:
-        return _augment(_do_call_with_retry())
-
-    # Timeout path: run in a thread so we can enforce a wall-clock limit.
-    # We use shutdown(wait=False) to avoid blocking forever if the worker
-    # thread is stuck (Python threads cannot be killed cleanly).
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(_do_call_with_retry)
-    try:
-        return _augment(future.result(timeout=timeout_seconds))
-    except concurrent.futures.TimeoutError:
-        # Signal cancellation to the subagent so any poll-aware loop
-        # (ReAct, subprocess waits) unwinds gracefully. ``future.cancel``
-        # only works if the task hasn't started — the token gives us
-        # co-operative shutdown even on running tasks.
-        _child_source.cancel(reason="subagent timeout")
-        future.cancel()
-        rounds = _rounds_state["max_round"]
-        _log.warning(
-            "subagent %s timed out after %ss (rounds_completed=%d)",
-            agent_id, timeout_seconds, rounds,
-        )
-        # Emit the subagent_finished lifecycle event for the timeout
-        # path too — frontend needs to mark the tile as failed.
-        elapsed = max(0.0, time.time() - _spawn_started_at)
-        _timeout_event = {
-            "type": "subagent_finished",
-            "agent_id": agent_id,
-            "role": _role_label,
-            "codename": _codename,
-            "avatar": _avatar,
-            "ok": False,
-            "duration_s": round(elapsed, 2),
-            "iteration_count": rounds,
-            "files_touched": list(_files_touched),
-            "error": f"subagent timed out after {timeout_seconds}s",
-            "status": "timeout",
-        }
-        _safe_emit(event_emitter, _timeout_event)
-        _safe_journal_emit(_timeout_event)
-        return {
-            "status": "timeout",
-            "error": f"subagent timed out after {timeout_seconds}s",
+    # Concurrency guard: hold a slot for the whole child run (see the helpers
+    # at module top). Over the global cap → refuse to spawn, fail-closed.
+    if not _acquire_subagent_slot():
+        _reject = {
+            "status": "rejected",
+            "error": (
+                f"subagent concurrency cap reached "
+                f"({MAX_ACTIVE_SUBAGENTS} active) — refused to spawn '{agent_id}'"
+            ),
             "agent_id": agent_id,
             "role": _role_label,
             "codename": _codename,
             "avatar": _avatar,
             "output": "",
             "success": False,
-            "rounds_completed": rounds,
-            "iteration_count": rounds,
-            "files_touched": list(_files_touched),
+            "rounds_completed": 0,
+            "iteration_count": 0,
+            "files_touched": [],
         }
+        _log.warning(
+            "subagent spawn refused (cap %d reached) · agent_id=%s role=%s",
+            MAX_ACTIVE_SUBAGENTS, agent_id, _role_label,
+        )
+        return _augment(_reject)
+    try:
+        if timeout_seconds is None:
+            return _augment(_do_call_with_retry())
+
+        # Timeout path: run in a thread so we can enforce a wall-clock limit.
+        # We use shutdown(wait=False) to avoid blocking forever if the worker
+        # thread is stuck (Python threads cannot be killed cleanly).
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(_do_call_with_retry)
+        try:
+            return _augment(future.result(timeout=timeout_seconds))
+        except concurrent.futures.TimeoutError:
+            # Signal cancellation to the subagent so any poll-aware loop
+            # (ReAct, subprocess waits) unwinds gracefully. ``future.cancel``
+            # only works if the task hasn't started — the token gives us
+            # co-operative shutdown even on running tasks.
+            _child_source.cancel(reason="subagent timeout")
+            future.cancel()
+            rounds = _rounds_state["max_round"]
+            _log.warning(
+                "subagent %s timed out after %ss (rounds_completed=%d)",
+                agent_id, timeout_seconds, rounds,
+            )
+            # Emit the subagent_finished lifecycle event for the timeout
+            # path too — frontend needs to mark the tile as failed.
+            elapsed = max(0.0, time.time() - _spawn_started_at)
+            _timeout_event = {
+                "type": "subagent_finished",
+                "agent_id": agent_id,
+                "role": _role_label,
+                "codename": _codename,
+                "avatar": _avatar,
+                "ok": False,
+                "duration_s": round(elapsed, 2),
+                "iteration_count": rounds,
+                "files_touched": list(_files_touched),
+                "error": f"subagent timed out after {timeout_seconds}s",
+                "status": "timeout",
+            }
+            _safe_emit(event_emitter, _timeout_event)
+            _safe_journal_emit(_timeout_event)
+            return {
+                "status": "timeout",
+                "error": f"subagent timed out after {timeout_seconds}s",
+                "agent_id": agent_id,
+                "role": _role_label,
+                "codename": _codename,
+                "avatar": _avatar,
+                "output": "",
+                "success": False,
+                "rounds_completed": rounds,
+                "iteration_count": rounds,
+                "files_touched": list(_files_touched),
+            }
+        finally:
+            executor.shutdown(wait=False)
     finally:
-        executor.shutdown(wait=False)
+        _release_subagent_slot()
 
 
 def _dispatch(
