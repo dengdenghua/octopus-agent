@@ -841,3 +841,49 @@ def test_ping_elicits_pong(gateway_client: Any) -> None:
         msg = _recv(ws)
     assert isinstance(msg, Notification)
     assert msg.method == "pong"
+
+
+class TestCreateAppApprovalBypassDefault:
+    """create_app must default client approval-bypass to OFF. It used to
+    hardcode allow_client_auto_approve=True / allow_client_approval_bypass
+    =True, letting any WS client set approvalPolicy="never" and skip the
+    human gate. Now it's driven by safety.allow_client_approval_bypass,
+    secure-by-default.
+    """
+
+    def _app(self, tmp_path: Path, monkeypatch: Any, allow_bypass: Any):
+        monkeypatch.chdir(tmp_path)
+        from runtime.platform.config.builder import build_from_config
+        from runtime.platform.config.schema import (
+            AgentConfig,
+            PlannerConfig,
+            SafetyConfig,
+        )
+        from runtime.platform.ui.app import create_app
+
+        safety = (
+            SafetyConfig(allow_client_approval_bypass=allow_bypass)
+            if allow_bypass is not None
+            else SafetyConfig()
+        )
+        cfg = AgentConfig(
+            planner=PlannerConfig(
+                type="llm", model="mock/ob",
+                mock_response='{"reasoning":"r","nodes":[]}',
+            ),
+            safety=safety,
+        )
+        stack = build_from_config(cfg)
+        return create_app(
+            journal=stack.journal, registry=stack.registry, stack=stack,
+        )
+
+    def test_secure_default_is_no_bypass(self, tmp_path: Path, monkeypatch: Any):
+        app = self._app(tmp_path, monkeypatch, allow_bypass=None)
+        gw = app.state.realtime_gateway
+        assert gw._allow_client_approval_bypass is False
+
+    def test_operator_can_opt_in(self, tmp_path: Path, monkeypatch: Any):
+        app = self._app(tmp_path, monkeypatch, allow_bypass=True)
+        gw = app.state.realtime_gateway
+        assert gw._allow_client_approval_bypass is True

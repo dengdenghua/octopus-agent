@@ -106,6 +106,13 @@ class SafetyConfig(BaseModel):
     # still read via their own paths; declared here so a populated
     # ``safety:`` block validates instead of being silently dropped.
     enable_trust_signal: bool | None = None
+    # Whether a realtime client may set ``approvalPolicy="never"`` to
+    # skip the human approval gate. Default (None / False) is SECURE:
+    # the gateway downgrades ``never`` → ``on-request`` so an untrusted
+    # client can't silently disable approvals. Operators on a trusted
+    # single-user host opt in with ``safety.allow_client_approval_bypass:
+    # true``.
+    allow_client_approval_bypass: bool | None = None
 
 
 class LearnConfig(BaseModel):

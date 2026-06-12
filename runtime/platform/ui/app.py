@@ -1212,6 +1212,16 @@ def create_app(
 
         _realtime_logs_root = _rt_app_paths().data_dir / "threads"
 
+        # Whether a client may set approvalPolicy="never" to skip the
+        # human approval gate. SECURE default: off unless the operator
+        # explicitly enables safety.allow_client_approval_bypass in the
+        # loaded config. Was previously hardcoded True, letting any WS
+        # client disable approvals.
+        _safety_cfg = getattr(getattr(stack, "config", None), "safety", None)
+        _allow_approval_bypass = bool(
+            getattr(_safety_cfg, "allow_client_approval_bypass", None) or False
+        )
+
         if stack is not None:
             from runtime.memory.threads.compaction import CompactionPolicy
             from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
@@ -1238,7 +1248,7 @@ def create_app(
                 thread_store=thread_store,
                 reflex_router=_reflex_router,
                 trace_store=getattr(state, "trace_store", None),
-                allow_client_auto_approve=True,
+                allow_client_auto_approve=_allow_approval_bypass,
             )
         else:
             from runtime.sensing.gateway.realtime_echo import EchoRuntime
@@ -1252,9 +1262,12 @@ def create_app(
             jwt_secret=molili_jwt_secret,
             jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
             jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
-            allow_client_approval_bypass=True,
+            allow_client_approval_bypass=_allow_approval_bypass,
         )
         app.include_router(_realtime_gateway.router)
+        # Exposed for introspection/tests (e.g. asserting the secure
+        # default for client approval bypass).
+        app.state.realtime_gateway = _realtime_gateway
 
         # Static permission policy ("always trust" rules) shares the
         # same JSON file as the realtime gateway uses for filtering, so
