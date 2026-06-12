@@ -660,7 +660,12 @@ def create_app(
 
     # ─── Persistent terminal WebSocket ─────────
     from runtime.sensing.gateway.terminal_router import mount_terminal_routes
-    mount_terminal_routes(app)
+    mount_terminal_routes(
+        app,
+        identity_store=cocoloop_identity_store,
+        require_auth=cocoloop_require_auth,
+        jwt_secret=molili_jwt_secret,
+    )
 
     # ─── IM Channels webhook / dashboard APIs ─────────
     # sessions where the full stack-backed ChannelManager was not created.
@@ -862,7 +867,12 @@ def create_app(
     # tests/test_app_fs_endpoints.py.
     from runtime.sensing.gateway.fs_router import create_fs_router
 
-    app.include_router(create_fs_router(thread_store=thread_store))
+    app.include_router(create_fs_router(
+        thread_store=thread_store,
+        identity_store=cocoloop_identity_store,
+        require_auth=cocoloop_require_auth,
+        jwt_secret=molili_jwt_secret,
+    ))
 
     try:
         from runtime.platform.process.paths import app_paths as _workspace_app_paths

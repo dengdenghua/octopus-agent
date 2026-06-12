@@ -40,7 +40,7 @@ import platform
 import subprocess
 from typing import Any
 
-from fastapi import WebSocket
+from fastapi import Request, WebSocket
 
 from runtime.execution.arms.output_buffer import ByteStreamBuffer, LineBuffer
 from runtime.execution.arms.safe_rm import SafeRmConfig, SafeRmProtector
@@ -263,21 +263,102 @@ async def kill_session(session_id: str) -> None:
 
 # ── FastAPI WebSocket route ────────────────────────────────────
 
-def mount_terminal_routes(app: Any) -> None:
-    """Attach /api/terminal/ws/{session_id} to a FastAPI app."""
+def mount_terminal_routes(
+    app: Any,
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> None:
+    """Attach /api/terminal/ws/{session_id} to a FastAPI app.
+
+    The WebSocket opens a persistent shell, so when ``require_auth`` is
+    set (and an identity store is wired) the handshake is authenticated
+    before the shell starts — an unauthenticated client is closed with
+    4401 and never reaches a process.
+    """
     try:
-        from fastapi import WebSocket, WebSocketDisconnect  # noqa: F401
+        from fastapi import Request, WebSocket, WebSocketDisconnect  # noqa: F401
     except ImportError:
         _logger.warning("fastapi not available, terminal WebSocket disabled")
         return
 
+    def _resolve_ws_actor(ws: WebSocket) -> str | None:
+        """Authenticate a terminal WS handshake. Returns actor_id, or
+        None when auth isn't required. Raises PermissionError on an
+        explicit auth failure so the caller closes the socket."""
+        if identity_store is None:
+            if require_auth:
+                raise PermissionError("identity store required for terminal auth")
+            return None
+        token: str | None = None
+        auth_header = ""
+        try:
+            auth_header = ws.headers.get("authorization") or ""
+        except Exception:  # noqa: BLE001
+            auth_header = ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if token is None:
+            try:
+                subproto = ws.headers.get("sec-websocket-protocol") or ""
+            except Exception:  # noqa: BLE001
+                subproto = ""
+            parts = [p.strip() for p in subproto.split(",") if p.strip()]
+            if len(parts) >= 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+        if token is None:
+            try:
+                token = ws.query_params.get("token")
+            except Exception:  # noqa: BLE001
+                token = None
+        if not token:
+            if require_auth:
+                raise PermissionError("missing terminal auth token")
+            return None
+        if jwt_secret and token.count(".") == 2:
+            identity = identity_store.verify_jwt(
+                token, secret=jwt_secret,
+                required_issuer=jwt_issuer, required_audience=jwt_audience,
+            )
+            if identity is not None:
+                return identity.actor_id
+            if require_auth:
+                raise PermissionError("invalid jwt")
+        identity = identity_store.verify_api_key(token)
+        if identity is not None:
+            return identity.actor_id
+        if require_auth:
+            raise PermissionError("invalid token")
+        return None
+
+    def _auth_http(request: Request) -> None:
+        from .openai_gateway_router import _resolve_actor
+        _resolve_actor(
+            request, identity_store, require_auth,
+            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @app.post("/api/terminal/kill/{session_id}")
-    async def terminal_kill(session_id: str) -> dict[str, bool]:
+    async def terminal_kill(session_id: str, request: Request) -> dict[str, bool]:
+        _auth_http(request)
         await kill_session(session_id)
         return {"ok": True}
 
     @app.websocket("/api/terminal/ws/{session_id}")
     async def terminal_ws(ws: WebSocket, session_id: str) -> None:
+        try:
+            _resolve_ws_actor(ws)
+        except PermissionError as exc:
+            # Refuse before accept(): no shell is ever spawned. 4401
+            # mirrors HTTP 401 in the WS application close-code range.
+            from contextlib import suppress
+            with suppress(Exception):
+                await ws.close(code=4401, reason=str(exc))
+            return
         await ws.accept()
         cwd = ws.query_params.get("cwd")
         session = get_session(session_id, cwd=cwd)

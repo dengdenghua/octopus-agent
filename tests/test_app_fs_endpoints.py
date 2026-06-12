@@ -12,12 +12,12 @@ Covered
     GET  /api/fs/read   · read file text with line cap + truncation
     POST /api/fs/write  · write file text
 
-Note: these endpoints currently have **no sandbox** — they take any
-path the caller asks for. That's a known gap (see the ADR-002 scope
-tier · workspace-grade endpoints will eventually route through the
-same resolver). The tests lock current behavior so that gap fix, if
-it ever lands, shows up as a test update rather than a silent
-semantic change.
+Sandbox: when a request carries no per-thread workspace scope, the
+endpoints now fail CLOSED to the process-wide allowed fs roots (data
+dir / home / project / OCTOPUS_FS_ALLOWED_ROOTS) instead of serving any
+absolute path the caller named — see ``_assert_in_scope`` and
+``TestFailClosed`` below. Auth is enforced once at the router level when
+an identity store is wired and ``require_auth`` is set (``TestFsAuth``).
 """
 from __future__ import annotations
 
@@ -443,3 +443,96 @@ class TestFsRevertDiff:
 
         assert r.status_code == 403
         assert outside.read_text(encoding="utf-8") == "new\n"
+
+
+class TestFailClosed:
+    """No per-thread workspace scope → the endpoints must fall back to
+    the allowed fs roots and reject an arbitrary absolute path, instead
+    of the old behaviour of serving any path the caller named.
+    """
+
+    def test_unscoped_read_outside_roots_is_403(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        forbidden = tmp_path / "forbidden"
+        forbidden.mkdir()
+        secret = forbidden / "secret.txt"
+        secret.write_text("top secret", encoding="utf-8")
+        monkeypatch.setenv("OCTOPUS_FS_ALLOWED_ROOTS", str(allowed))
+
+        app = FastAPI()
+        app.include_router(create_fs_router())
+        client = TestClient(app)
+
+        # No thread_id / workspace_path → unscoped → fail-closed.
+        r = client.get("/api/fs/read", params={"path": str(secret)})
+        assert r.status_code == 403
+
+    def test_unscoped_write_outside_roots_is_403(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        target = tmp_path / "forbidden" / "evil.txt"
+        monkeypatch.setenv("OCTOPUS_FS_ALLOWED_ROOTS", str(allowed))
+
+        app = FastAPI()
+        app.include_router(create_fs_router())
+        client = TestClient(app)
+
+        r = client.post("/api/fs/write", json={"path": str(target), "content": "x"})
+        assert r.status_code == 403
+        assert not target.exists()
+
+    def test_unscoped_read_inside_roots_is_allowed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        f = allowed / "ok.txt"
+        f.write_text("fine", encoding="utf-8")
+        monkeypatch.setenv("OCTOPUS_FS_ALLOWED_ROOTS", str(allowed))
+
+        app = FastAPI()
+        app.include_router(create_fs_router())
+        client = TestClient(app)
+
+        r = client.get("/api/fs/read", params={"path": str(f)})
+        assert r.status_code == 200
+        assert r.json()["content"] == "fine"
+
+
+class TestFsAuth:
+    """Router-level auth: a no-op by default (require_auth False), but
+    when an identity store is wired with require_auth the whole fs router
+    rejects unauthenticated requests.
+    """
+
+    def _client(self, require_auth: bool):
+        from runtime.safety.auth import Identity, IdentityStore
+
+        store = IdentityStore()
+        store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+        app = FastAPI()
+        app.include_router(create_fs_router(
+            identity_store=store, require_auth=require_auth,
+        ))
+        return TestClient(app)
+
+    def test_no_auth_required_by_default(self) -> None:
+        # require_auth False → endpoints reachable without credentials.
+        client = self._client(require_auth=False)
+        r = client.get("/api/fs/roots")
+        assert r.status_code == 200
+
+    def test_missing_token_rejected_when_required(self) -> None:
+        client = self._client(require_auth=True)
+        r = client.get("/api/fs/roots")
+        assert r.status_code == 401
+
+    def test_valid_token_accepted_when_required(self) -> None:
+        client = self._client(require_auth=True)
+        r = client.get("/api/fs/roots", headers={"Authorization": "Bearer sk-alice"})
+        assert r.status_code == 200

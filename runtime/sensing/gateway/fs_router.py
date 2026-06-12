@@ -49,7 +49,16 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+    from fastapi import (
+        APIRouter,
+        Depends,
+        File,
+        Form,
+        HTTPException,
+        Query,
+        Request,
+        UploadFile,
+    )
     from pydantic import BaseModel
 
     FASTAPI_AVAILABLE = True
@@ -379,14 +388,36 @@ def _reverse_unified_diff(current_text: str, diff_text: str) -> str:
 # ═══════════════════════════════════════════════════════════
 
 
-def create_fs_router(thread_store: Any = None) -> Any:
-    """Build the FastAPI router. No config required · all state is
-    per-request (the path parameter).
+def create_fs_router(
+    thread_store: Any = None,
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
+    """Build the FastAPI router. State is per-request (the path
+    parameter); auth, when an identity store is wired and ``require_auth``
+    is set, is enforced once at the router level for every fs endpoint.
     """
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
-    router = APIRouter(tags=["fs"])
+    def _auth_dep(request: Request) -> None:
+        # Router-level gate: applies to every fs endpoint at once. A
+        # no-op when require_auth is False (returns None without raising),
+        # so unauthenticated local-dev use is unchanged; raises 401 when
+        # auth is required and no valid actor is presented.
+        from .openai_gateway_router import _resolve_actor
+        _resolve_actor(
+            request, identity_store, require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["fs"], dependencies=[Depends(_auth_dep)])
 
     def _resolved_path(path_value: str | Path) -> Path:
         return Path(path_value).expanduser().resolve(strict=False)
@@ -450,7 +481,13 @@ def create_fs_router(thread_store: Any = None) -> Any:
             workspace_path=workspace_path,
         )
         if not roots:
-            return resolved
+            # No per-thread workspace scope (the common case for the
+            # desktop file browser). Fail CLOSED to the process-wide
+            # allowed fs roots (data dir / home / project / explicit
+            # OCTOPUS_FS_ALLOWED_ROOTS) instead of returning any absolute
+            # path the caller named — the latter was an arbitrary-file
+            # read/write primitive on an unauthenticated endpoint.
+            return _assert_within_allowed_roots(resolved)
         if any(_path_in_root(resolved, root) for root in roots):
             return resolved
         raise HTTPException(
