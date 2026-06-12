@@ -237,3 +237,147 @@ def test_dev_mode_bypasses_membership_checks(tmp_path: Path) -> None:
     assert create.status_code == 200
     resp = client.get("/api/teams/team-x")
     assert resp.status_code == 200
+
+
+# ── participant management: role/status/targeting is owner-only ─────
+#
+# Regression guard for the privilege-escalation hole where
+# ``update_participant`` / ``remove_participant`` only called
+# ``_require_member``: any member could promote themselves to owner,
+# rewrite another member's role, or kick anyone. The fix limits a plain
+# member to editing their OWN display_name and removing only themselves.
+
+
+def _invite_and_join(
+    client: TestClient,
+    keys: dict[str, str],
+    team_id: str,
+    owner: str,
+    joiner: str,
+    role: str = "member",
+) -> str:
+    """Owner mints an invite; ``joiner`` accepts it and becomes an active
+    participant. Returns the joiner's participant id (``actor-<joiner>``)."""
+    invite = client.post(
+        f"/api/teams/{team_id}/invite",
+        json={"role": role},
+        headers=_bearer(keys[owner]),
+    )
+    assert invite.status_code == 200, invite.json()
+    token = invite.json()["invite_token"]
+    joined = client.post(
+        f"/api/team-invites/{token}/join",
+        json={},
+        headers=_bearer(keys[joiner]),
+    )
+    assert joined.status_code == 200, joined.json()
+    return joined.json()["participant"]["id"]
+
+
+def test_member_cannot_promote_self_to_owner(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}",
+        json={"role": "owner"},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+    assert "role or status" in resp.json()["detail"]
+
+
+def test_member_cannot_change_another_participant(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    _invite_and_join(client, keys, "alice-team", "alice", "bob")
+    carol_pid = _invite_and_join(client, keys, "alice-team", "alice", "carol")
+
+    # bob tries to rewrite carol's role
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{carol_pid}",
+        json={"role": "owner"},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+
+
+def test_member_cannot_rename_another_participant(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    _invite_and_join(client, keys, "alice-team", "alice", "bob")
+    carol_pid = _invite_and_join(client, keys, "alice-team", "alice", "carol")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{carol_pid}",
+        json={"display_name": "Pwned"},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+    assert "your own" in resp.json()["detail"]
+
+
+def test_member_can_rename_self(tmp_path: Path) -> None:
+    """Self-service display-name change must still work for a plain member."""
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}",
+        json={"display_name": "Bobby"},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["participant"]["display_name"] == "Bobby"
+    # role is untouched — rename does not silently grant privilege
+    assert resp.json()["participant"]["role"] == "member"
+
+
+def test_member_cannot_kick_another(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    _invite_and_join(client, keys, "alice-team", "alice", "bob")
+    carol_pid = _invite_and_join(client, keys, "alice-team", "alice", "carol")
+
+    resp = client.delete(
+        f"/api/teams/alice-team/participants/{carol_pid}",
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+
+
+def test_member_can_leave(tmp_path: Path) -> None:
+    """A member removing THEMSELVES (leaving) is allowed."""
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.delete(
+        f"/api/teams/alice-team/participants/{bob_pid}",
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 200, resp.json()
+
+
+def test_owner_can_manage_participants(tmp_path: Path) -> None:
+    """The owner retains full control: promote, and kick others."""
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+    carol_pid = _invite_and_join(client, keys, "alice-team", "alice", "carol")
+
+    promote = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}",
+        json={"role": "owner"},
+        headers=_bearer(keys["alice"]),
+    )
+    assert promote.status_code == 200, promote.json()
+    assert promote.json()["participant"]["role"] == "owner"
+
+    kick = client.delete(
+        f"/api/teams/alice-team/participants/{carol_pid}",
+        headers=_bearer(keys["alice"]),
+    )
+    assert kick.status_code == 200, kick.json()

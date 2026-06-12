@@ -426,6 +426,24 @@ def create_team_rooms_router(
                 raise HTTPException(403, "only the team owner can delete the team")
         return actor
 
+    def _caller_is_team_admin(team: Any, actor: str | None) -> bool:
+        """True if ``actor`` is the team owner — either the recorded
+        ``owner_id`` or an active participant whose role is ``owner``.
+        Used to gate participant role/status mutations and the removal
+        of *other* members. Returns False for unauthenticated callers."""
+        if not actor:
+            return False
+        if actor == getattr(team, "owner_id", None):
+            return True
+        for p in getattr(team, "participants", []):
+            if (
+                getattr(p, "actor_id", None) == actor
+                and getattr(p, "status", None) != "removed"
+                and _normalize_participant_role(p.role) == "owner"
+            ):
+                return True
+        return False
+
     router.broadcast = _broadcast
     router.create_team_from_payload = _create_team_from_payload
     router.update_team_from_payload = _update_team_from_payload
@@ -439,7 +457,7 @@ def create_team_rooms_router(
         participant_id: str,
         body: UpdateTeamParticipantRequest,
     ) -> dict[str, Any]:
-        _require_member(request, team_id)
+        actor = _require_member(request, team_id)
         with lock:
             team = teams.get(team_id)
             if team is None:
@@ -453,6 +471,22 @@ def create_team_rooms_router(
                 else _normalize_participant_role(current.role)
             )
             next_status = _normalize_participant_status(body.status or current.status)
+            # Authorization (only meaningful when auth is enforced — local
+            # single-user mode has no distinct actors to protect against).
+            # A plain member may edit only their OWN display_name; changing
+            # any role/status, or touching another member's entry, is
+            # owner-only. This is the security boundary, not just UX — the
+            # frontend's hidden controls are not a substitute.
+            if require_auth and actor is not None and not _caller_is_team_admin(team, actor):
+                is_self = getattr(current, "actor_id", None) == actor
+                changing_role = next_role != _normalize_participant_role(current.role)
+                changing_status = next_status != _normalize_participant_status(current.status)
+                if changing_role or changing_status:
+                    raise HTTPException(
+                        403, "only the team owner can change a participant's role or status"
+                    )
+                if not is_self:
+                    raise HTTPException(403, "you can only update your own participant entry")
             if current.role == "owner" and (next_role != "owner" or next_status == "removed"):
                 other_owners = [
                     p for p in team.participants
@@ -496,7 +530,7 @@ def create_team_rooms_router(
         team_id: str,
         participant_id: str,
     ) -> dict[str, Any]:
-        _require_member(request, team_id)
+        actor = _require_member(request, team_id)
         socket: WebSocket | None = None
         with lock:
             team = teams.get(team_id)
@@ -505,6 +539,16 @@ def create_team_rooms_router(
             current = next((p for p in team.participants if p.id == participant_id), None)
             if current is None:
                 raise HTTPException(404, f"participant not found: {participant_id}")
+            # A plain member may remove only themselves (leave the room);
+            # kicking anyone else is owner-only. No-op under local
+            # single-user mode where auth is not enforced.
+            if (
+                require_auth
+                and actor is not None
+                and not _caller_is_team_admin(team, actor)
+                and getattr(current, "actor_id", None) != actor
+            ):
+                raise HTTPException(403, "only the team owner can remove other participants")
             if current.role == "owner":
                 other_owners = [
                     p for p in team.participants
