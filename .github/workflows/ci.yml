@@ -88,6 +88,9 @@ jobs:
       - name: pytest (with coverage)
         run: pytest --cov=runtime --cov=tools --cov-report=term --cov-fail-under=60
 
+      - name: Golden-path gate (plan→execute→replan→verify, incl. parallel/recovery)
+        run: pytest tests/test_golden_path_e2e.py tests/test_ganglia_runtime.py -v --tb=short
+
       - name: Delegation regression gate (timeout/fallback/retry/smart-budget)
         run: pytest tests/test_delegation_enhancements.py tests/test_delegation_smart_budget.py -v --tb=short
 
