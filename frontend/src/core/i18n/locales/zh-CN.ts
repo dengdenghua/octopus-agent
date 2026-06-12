@@ -5529,6 +5529,12 @@ export const zhCN: Translations = {
     mutedBadge: "已禁言",
     policyUpdated: "发言模式已更新",
     updatePolicyFailed: "更新发言模式失败",
+    speakingAs: "发言身份",
+    speakManual: "本人",
+    speakViaTwin: "由分身代言",
+    hostedBy: "托管给",
+    delegationUpdated: "发言委托已更新",
+    updateDelegationFailed: "更新发言委托失败",
   },
 
   teamFloor: {

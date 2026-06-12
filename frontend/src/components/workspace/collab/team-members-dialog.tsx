@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  BotIcon,
   CrownIcon,
   EyeIcon,
   Loader2Icon,
@@ -8,6 +9,7 @@ import {
   ShieldCheckIcon,
   Trash2Icon,
   UserCogIcon,
+  UserIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,10 +30,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   removeTeamParticipant,
+  updateDelegation,
   updateSpeakerPolicy,
   updateTeamParticipant,
   type SpeakerPolicy,
+  type SpeakMode,
   type Team,
   type TeamParticipant,
   type TeamParticipantRole,
@@ -145,6 +157,33 @@ export function TeamMembersDialog({
     }
   };
 
+  // Self-service delegation (the participant's OWN opt-in). The backend
+  // rejects setting this on anyone else, so this is wired only for the
+  // current user's own row.
+  const handleDelegationChange = async (
+    participant: TeamParticipant,
+    mode: SpeakMode,
+    binding?: { twin_agent_id?: string; host_id?: string },
+  ) => {
+    if (!team) return;
+    setBusyId(participant.id);
+    try {
+      const result = await updateDelegation(team.id, participant.id, {
+        speak_mode: mode,
+        twin_agent_id: binding?.twin_agent_id ?? null,
+        host_id: binding?.host_id ?? null,
+      });
+      onTeamChange(result.team);
+      toast.success(t.teamMembers.delegationUpdated);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t.teamMembers.updateDelegationFailed,
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const handleRoleChange = async (
     participant: TeamParticipant,
     role: TeamParticipantRole,
@@ -224,6 +263,8 @@ export function TeamMembersDialog({
               const isSelf = participant.id === currentParticipantId;
               const isLastOwner = participant.role === "owner" && ownerCount <= 1;
               const isBusy = busyId === participant.id;
+              const speakMode: SpeakMode = participant.speak_mode ?? "manual";
+              const otherParticipants = participants.filter((p) => p.id !== participant.id);
               return (
                 <div
                   key={participant.id}
@@ -259,6 +300,93 @@ export function TeamMembersDialog({
                       {t.teamMembers[meta.descriptionKey]}
                     </div>
                   </div>
+
+                  {isSelf && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs"
+                          disabled={isBusy}
+                          title={t.teamMembers.speakingAs}
+                        >
+                          {speakMode === "twin" ? (
+                            <BotIcon className="size-3.5" />
+                          ) : speakMode === "hosted" ? (
+                            <UserIcon className="size-3.5" />
+                          ) : (
+                            <MicIcon className="size-3.5" />
+                          )}
+                          {speakMode === "twin"
+                            ? t.teamMembers.speakViaTwin
+                            : speakMode === "hosted"
+                              ? t.teamMembers.hostedBy
+                              : t.teamMembers.speakManual}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuLabel className="text-xs">
+                          {t.teamMembers.speakingAs}
+                        </DropdownMenuLabel>
+                        <DropdownMenuCheckboxItem
+                          checked={speakMode === "manual"}
+                          onCheckedChange={() =>
+                            void handleDelegationChange(participant, "manual")
+                          }
+                        >
+                          {t.teamMembers.speakManual}
+                        </DropdownMenuCheckboxItem>
+                        {(team?.members.length ?? 0) > 0 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs text-muted-foreground">
+                              {t.teamMembers.speakViaTwin}
+                            </DropdownMenuLabel>
+                            {team?.members.map((agent) => (
+                              <DropdownMenuCheckboxItem
+                                key={agent.name}
+                                checked={
+                                  speakMode === "twin" &&
+                                  participant.twin_agent_id === agent.name
+                                }
+                                onCheckedChange={() =>
+                                  void handleDelegationChange(participant, "twin", {
+                                    twin_agent_id: agent.name,
+                                  })
+                                }
+                              >
+                                {agent.display_name ?? agent.name}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </>
+                        )}
+                        {otherParticipants.length > 0 && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuLabel className="text-xs text-muted-foreground">
+                              {t.teamMembers.hostedBy}
+                            </DropdownMenuLabel>
+                            {otherParticipants.map((p) => (
+                              <DropdownMenuCheckboxItem
+                                key={p.id}
+                                checked={
+                                  speakMode === "hosted" && participant.host_id === p.id
+                                }
+                                onCheckedChange={() =>
+                                  void handleDelegationChange(participant, "hosted", {
+                                    host_id: p.id,
+                                  })
+                                }
+                              >
+                                {p.display_name}
+                              </DropdownMenuCheckboxItem>
+                            ))}
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
                   <Select
                     value={participant.role}

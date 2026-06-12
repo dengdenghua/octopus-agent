@@ -5091,6 +5091,12 @@ export interface Translations {
     mutedBadge: string;
     policyUpdated: string;
     updatePolicyFailed: string;
+    speakingAs: string;
+    speakManual: string;
+    speakViaTwin: string;
+    hostedBy: string;
+    delegationUpdated: string;
+    updateDelegationFailed: string;
   };
 
   teamFloor: {

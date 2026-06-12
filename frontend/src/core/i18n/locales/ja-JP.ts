@@ -5700,6 +5700,12 @@ export const jaJP: Translations = {
     mutedBadge: "ミュート中",
     policyUpdated: "発言モードを更新しました",
     updatePolicyFailed: "発言モードの更新に失敗しました",
+    speakingAs: "発言者",
+    speakManual: "自分",
+    speakViaTwin: "分身に任せる",
+    hostedBy: "委任先",
+    delegationUpdated: "発言委任を更新しました",
+    updateDelegationFailed: "発言委任の更新に失敗しました",
   },
 
   teamFloor: {

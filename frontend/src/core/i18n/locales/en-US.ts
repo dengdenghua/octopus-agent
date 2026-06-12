@@ -5699,6 +5699,12 @@ export const enUS: Translations = {
     mutedBadge: "Muted",
     policyUpdated: "Speaker policy updated",
     updatePolicyFailed: "Failed to update speaker policy",
+    speakingAs: "Speaking as",
+    speakManual: "Myself",
+    speakViaTwin: "Via my twin",
+    hostedBy: "Hosted by",
+    delegationUpdated: "Speaking delegation updated",
+    updateDelegationFailed: "Failed to update delegation",
   },
 
   teamFloor: {

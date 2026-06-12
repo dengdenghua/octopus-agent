@@ -5700,6 +5700,12 @@ export const koKR: Translations = {
     mutedBadge: "음소거됨",
     policyUpdated: "발언 모드가 업데이트되었습니다",
     updatePolicyFailed: "발언 모드 업데이트 실패",
+    speakingAs: "발언 주체",
+    speakManual: "본인",
+    speakViaTwin: "분신에게 위임",
+    hostedBy: "위탁 대상",
+    delegationUpdated: "발언 위임이 업데이트되었습니다",
+    updateDelegationFailed: "발언 위임 업데이트 실패",
   },
 
   teamFloor: {
