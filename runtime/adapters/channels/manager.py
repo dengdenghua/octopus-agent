@@ -13,10 +13,10 @@ from runtime.platform.models import (
     BudgetLimits,
     ParsedIntent,
 )
-from runtime.sensing.gateway.openai_formatting import (
+from runtime.platform.step_format import (
     step_effective_success as _step_effective_success,
 )
-from runtime.sensing.gateway.openai_formatting import (
+from runtime.platform.step_format import (
     summarize_step_for_stream as _summarize_step_for_stream,
 )
 
