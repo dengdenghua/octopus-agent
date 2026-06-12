@@ -236,29 +236,26 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
         # screenshot to the inline chat stream.
         try:
             from runtime.memory.journal import BrowserArtifactEvent
+            # The browser artifact journal comes off the current Session
+            # metadata (set by the worker loop). A former
+            # ``sensing.gateway._active_streaming_journal`` singleton
+            # accessor was removed long ago — its import always raised and
+            # fell through to this path — so the upward gateway dependency
+            # is dropped with the dead import.
             journal = None
             try:
-                from runtime.sensing.gateway import _active_streaming_journal
-                journal = _active_streaming_journal()
+                from runtime.platform.process.session import current_session
+                sess = current_session()
+                if sess is not None:
+                    meta = getattr(sess, "metadata", None) or {}
+                    if isinstance(meta, dict):
+                        journal = meta.get("journal")
+                        if journal is None:
+                            stack = meta.get("stack")
+                            if stack is not None:
+                                journal = getattr(stack, "journal", None)
             except (ImportError, AttributeError):
                 journal = None
-            # Fallback: pull the journal off the current Session metadata
-            # (set by worker loops that didn't route through the
-            # streaming-journal singleton).
-            if journal is None:
-                try:
-                    from runtime.platform.process.session import current_session
-                    sess = current_session()
-                    if sess is not None:
-                        meta = getattr(sess, "metadata", None) or {}
-                        if isinstance(meta, dict):
-                            journal = meta.get("journal")
-                            if journal is None:
-                                stack = meta.get("stack")
-                                if stack is not None:
-                                    journal = getattr(stack, "journal", None)
-                except (ImportError, AttributeError):
-                    journal = None
             if journal is not None:
                 journal.write(
                     BrowserArtifactEvent(
@@ -276,21 +273,9 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
             # Mirroring is best-effort; never break the skill call.
             pass
 
-        # Legacy broadcast fallback kept for older non-agentic flows.
-        try:
-            journal_legacy: Any = None
-            try:
-                from runtime.sensing.gateway import _active_streaming_journal
-                journal_legacy = _active_streaming_journal()
-            except (ImportError, AttributeError):  # noqa: BLE001 — browser bridge best-effort
-                pass
-            if (
-                journal_legacy is not None
-                and hasattr(journal_legacy, "_broadcast")
-            ):
-                journal_legacy._broadcast(event)  # type: ignore[attr-defined]
-        except (OSError, TypeError, AttributeError):  # noqa: BLE001 — browser session restore best-effort
-            pass
+        # (A legacy broadcast fallback used to live here, but it only
+        # fired via the removed ``_active_streaming_journal`` accessor —
+        # always-None in practice — so it was inert dead code and is gone.)
     except Exception:  # noqa: BLE001 — browser bridge best-effort
         pass
 

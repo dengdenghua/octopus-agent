@@ -3,5 +3,4 @@
 # '<relpath>\t<target_module>'. Fixed an edge? Delete its line so
 # the audit locks in the win. Regenerate with --write-baseline.
 
-runtime/execution/suckers/browser_act_skills.py	sensing.gateway
 runtime/execution/suckers/ephemeral_runner.py	sensing.gateway.tool_bridge
