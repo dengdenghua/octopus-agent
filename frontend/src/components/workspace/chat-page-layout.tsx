@@ -7,6 +7,36 @@ import {
 } from "react";
 
 import { cn } from "@/lib/utils";
+import { swallow } from "@/core/utils/log";
+
+// Resized drawer width is persisted so it survives reloads / remounts.
+const SIDEBAR_WIDTH_KEY = "octopus:chatSidebarWidth";
+const MIN_SIDEBAR_PX = 280;
+const MAX_SIDEBAR_PX = 800;
+
+function readStoredSidebarWidth(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SIDEBAR_WIDTH_KEY);
+    if (!raw) return null;
+    const px = Number.parseInt(raw, 10);
+    if (Number.isFinite(px) && px >= MIN_SIDEBAR_PX && px <= MAX_SIDEBAR_PX) {
+      return px;
+    }
+  } catch (e) {
+    swallow(e, "storage");
+  }
+  return null;
+}
+
+function writeStoredSidebarWidth(px: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(px));
+  } catch (e) {
+    swallow(e, "storage");
+  }
+}
 
 interface ChatPageLayoutProps {
   header: ReactNode;
@@ -41,18 +71,24 @@ export function ChatPageLayout({
   // "lg:w-[44rem]". Extract the pixel/rem value so we can drive inline
   // width (which animates) instead of fighting breakpoint classes.
   const defaultWidth = resolveSidebarWidth(sidebarWidth);
-  const [customWidth, setCustomWidth] = useState<number | null>(null);
+  // Lazy init from localStorage so a previously-dragged width persists
+  // across reloads / remounts (SSR-safe — returns null on the server).
+  const [customWidth, setCustomWidth] = useState<number | null>(readStoredSidebarWidth);
   const resolvedWidth = customWidth ? `${customWidth}px` : defaultWidth;
 
-  // Resize drag handling
-  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  // Resize drag handling. ``latest`` mirrors the most recent width in a ref
+  // (the document-level mouseup listener captures a stale ``customWidth``
+  // closure, so it persists from the ref instead).
+  const resizeRef = useRef<{ startX: number; startWidth: number; latest: number } | null>(
+    null,
+  );
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const aside = (e.target as HTMLElement).parentElement;
     if (!aside) return;
     const rect = aside.getBoundingClientRect();
-    resizeRef.current = { startX: e.clientX, startWidth: rect.width };
+    resizeRef.current = { startX: e.clientX, startWidth: rect.width, latest: rect.width };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }, []);
@@ -62,14 +98,18 @@ export function ChatPageLayout({
       if (!resizeRef.current) return;
       const delta = resizeRef.current.startX - e.clientX;
       const newWidth = Math.max(
-        280,
-        Math.min(800, resizeRef.current.startWidth + delta),
+        MIN_SIDEBAR_PX,
+        Math.min(MAX_SIDEBAR_PX, resizeRef.current.startWidth + delta),
       );
+      resizeRef.current.latest = newWidth;
       setCustomWidth(newWidth);
     };
 
     const handleMouseUp = () => {
       if (resizeRef.current) {
+        // Persist only at drag-end (not per mousemove) to avoid thrashing
+        // localStorage.
+        writeStoredSidebarWidth(resizeRef.current.latest);
         resizeRef.current = null;
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
