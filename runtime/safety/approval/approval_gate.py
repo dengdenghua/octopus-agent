@@ -43,6 +43,21 @@ class ApprovalRisk:
     def requires_approval(self) -> bool:
         return self.level in {"medium", "high", "critical"}
 
+    def with_injection_taint(self) -> ApprovalRisk:
+        """Annotate that this approval was forced by prompt-injection
+        taint in the turn (untrusted content carried injection markers),
+        so the UI / audit log shows *why* a normally-auto tool is asking."""
+        if "prompt_injection_taint" in self.categories:
+            return self
+        return ApprovalRisk(
+            level=self.level,
+            categories=(*self.categories, "prompt_injection_taint"),
+            reason=(
+                f"{self.reason}; forced approval — untrusted content with "
+                "injection markers entered this turn"
+            ).lstrip("; "),
+        )
+
     def to_dict(self) -> dict[str, object]:
         return {
             "level": self.level,

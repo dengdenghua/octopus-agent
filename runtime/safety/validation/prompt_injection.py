@@ -21,6 +21,7 @@ fences. Treat its output as a risk signal, not a guarantee.
 """
 from __future__ import annotations
 
+import contextvars
 import re
 from dataclasses import dataclass
 
@@ -165,3 +166,41 @@ def wrap_untrusted_observation(
         f"{text}\n"
         f"{_BOUNDARY_CLOSE}"
     )
+
+
+# ─── Per-turn injection taint ──────────────────────────────
+#
+# Once untrusted content carrying injection markers enters the model's
+# context, it can influence ANY later tool call in the same turn — not
+# just the next one. We carry a per-turn "taint" so the executor loop can
+# refuse to auto-run a high-risk tool after such content appeared: the
+# defense escalates from "warn the model" (wrap_untrusted_observation) to
+# "force a human approval" (the loop reads current_injection_taint at the
+# approval gate). A contextvar keeps the state local to the running turn's
+# execution context without threading a flag through every call site.
+
+_TAINT: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "octopus_injection_taint", default="none",
+)
+
+
+def reset_injection_taint() -> None:
+    """Clear taint at the start of a turn."""
+    _TAINT.set("none")
+
+
+def mark_injection_taint(severity: str) -> None:
+    """Raise the turn's taint to at least ``severity`` (monotonic)."""
+    if _SEVERITY_ORDER.get(severity, 0) > _SEVERITY_ORDER.get(_TAINT.get(), 0):
+        _TAINT.set(severity)
+
+
+def current_injection_taint() -> str:
+    """Current taint severity for this turn (``"none"`` when clean)."""
+    return _TAINT.get()
+
+
+def injection_taint_gates(*, threshold: str = "medium") -> bool:
+    """Whether the turn is tainted at/above ``threshold`` — i.e. a
+    high-risk tool should be forced through human approval."""
+    return _SEVERITY_ORDER.get(_TAINT.get(), 0) >= _SEVERITY_ORDER[threshold]

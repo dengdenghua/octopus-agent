@@ -67,7 +67,10 @@ from runtime.platform.models import ParsedIntent, Step, TaskId
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.safety.experiments.variant import ABSplitter
 from runtime.safety.validation.prompt_injection import (
+    injection_taint_gates,
     is_untrusted_tool,
+    mark_injection_taint,
+    reset_injection_taint,
     scan_for_injection,
     wrap_untrusted_observation,
 )
@@ -1082,6 +1085,9 @@ def _dispatch_parallel_actions(
                     obs, source=name, scan=_scan,
                 )
                 if _scan.flagged:
+                    # Taint the turn so a later high-risk tool is forced
+                    # through human approval (read at the approval gate).
+                    mark_injection_taint(_scan.severity)
                     _logger.warning(
                         "prompt-injection markers in %s output "
                         "(severity=%s, signals=%s)",
@@ -2057,6 +2063,8 @@ def stream_react_loop(
 
     steps: list[ReActStep] = []
     executed_beak_steps: list[Step] = []
+    # Clear any prompt-injection taint from a prior turn in this context.
+    reset_injection_taint()
     final_answer: str | None = None
     final_answer_segments: list[str] = []
     final_answer_emitted = False
@@ -2751,6 +2759,24 @@ def stream_react_loop(
                         _permission_mode_value in {"acceptedits", "accept-edits"}
                         and resolved_name in _WRITE_TOOLS
                     )
+                    # Injection taint gate (hard): if untrusted content
+                    # carrying injection markers entered this turn, a
+                    # high-risk tool can no longer auto-run — force it
+                    # through human approval, overriding auto_approve and
+                    # the scoped-write / accept-edits fast paths. This is
+                    # the escalation from the in-context warning to an
+                    # actual stop: a poisoned web page can't drive an
+                    # exec_shell / write / send behind the user's back.
+                    if (
+                        injection_taint_gates()
+                        and _approval_risk.level in {"high", "critical"}
+                    ):
+                        _auto_approve = False
+                        _scoped_artifact_write = False
+                        _accept_edits_auto_approve = False
+                        if _approval_action not in {"ask", "confirm", "deny"}:
+                            _approval_action = "ask"
+                        _approval_risk = _approval_risk.with_injection_taint()
                     if (
                         _approval_action == "deny"
                         and not _auto_approve
@@ -2966,6 +2992,9 @@ def stream_react_loop(
                                 observation, source=resolved_name, scan=_pi_scan,
                             )
                             if _pi_scan.flagged:
+                                # Taint the turn → force human approval on a
+                                # later high-risk tool (read at the gate).
+                                mark_injection_taint(_pi_scan.severity)
                                 _logger.warning(
                                     "prompt-injection markers in %s output "
                                     "(severity=%s, signals=%s)",

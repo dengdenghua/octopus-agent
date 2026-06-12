@@ -77,3 +77,44 @@ class TestWrapper:
     def test_clean_payload_no_warning_banner(self):
         wrapped = wrap_untrusted_observation("just some page text", source="web_fetch")
         assert "POSSIBLE PROMPT INJECTION" not in wrapped
+
+
+class TestTaint:
+    def setup_method(self):
+        from runtime.safety.validation.prompt_injection import reset_injection_taint
+        reset_injection_taint()
+
+    def test_clean_does_not_gate(self):
+        from runtime.safety.validation import prompt_injection as pi
+        assert pi.current_injection_taint() == "none"
+        assert not pi.injection_taint_gates()
+
+    def test_low_does_not_gate_medium_does(self):
+        from runtime.safety.validation import prompt_injection as pi
+        pi.mark_injection_taint("low")
+        assert not pi.injection_taint_gates()       # threshold is medium
+        pi.mark_injection_taint("medium")
+        assert pi.injection_taint_gates()
+
+    def test_monotonic_never_lowers(self):
+        from runtime.safety.validation import prompt_injection as pi
+        pi.mark_injection_taint("high")
+        pi.mark_injection_taint("low")
+        assert pi.current_injection_taint() == "high"
+
+    def test_reset_clears(self):
+        from runtime.safety.validation import prompt_injection as pi
+        pi.mark_injection_taint("high")
+        pi.reset_injection_taint()
+        assert not pi.injection_taint_gates()
+
+
+class TestApprovalRiskTaint:
+    def test_with_injection_taint_annotates(self):
+        from runtime.safety.approval.approval_gate import assess_approval_risk
+        risk = assess_approval_risk("exec_shell")
+        tainted = risk.with_injection_taint()
+        assert "prompt_injection_taint" in tainted.categories
+        assert "injection markers" in tainted.reason
+        # idempotent
+        assert tainted.with_injection_taint() is tainted
