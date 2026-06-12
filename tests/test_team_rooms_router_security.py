@@ -285,7 +285,7 @@ def test_member_cannot_promote_self_to_owner(tmp_path: Path) -> None:
         headers=_bearer(keys["bob"]),
     )
     assert resp.status_code == 403
-    assert "role or status" in resp.json()["detail"]
+    assert "only the team owner" in resp.json()["detail"]
 
 
 def test_member_cannot_change_another_participant(tmp_path: Path) -> None:
@@ -381,3 +381,84 @@ def test_owner_can_manage_participants(tmp_path: Path) -> None:
         headers=_bearer(keys["alice"]),
     )
     assert kick.status_code == 200, kick.json()
+
+
+# ── governance: mute + speaker-policy are owner-only ───────────────
+
+
+def test_owner_can_mute_member(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}",
+        json={"muted": True},
+        headers=_bearer(keys["alice"]),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["participant"]["muted"] is True
+
+
+def test_member_cannot_mute_another(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    _invite_and_join(client, keys, "alice-team", "alice", "bob")
+    carol_pid = _invite_and_join(client, keys, "alice-team", "alice", "carol")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{carol_pid}",
+        json={"muted": True},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+
+
+def test_member_cannot_unmute_self(tmp_path: Path) -> None:
+    """A muted member must not be able to lift their own mute."""
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    # owner mutes bob
+    muted = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}",
+        json={"muted": True},
+        headers=_bearer(keys["alice"]),
+    )
+    assert muted.status_code == 200, muted.json()
+
+    # bob tries to unmute himself — privileged, denied
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}",
+        json={"muted": False},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+
+
+def test_owner_can_set_speaker_policy(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+
+    resp = client.patch(
+        "/api/teams/alice-team/speaker-policy",
+        json={"speaker_policy": "admin_only"},
+        headers=_bearer(keys["alice"]),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["speaker_policy"] == "admin_only"
+    assert resp.json()["team"]["speaker_policy"] == "admin_only"
+
+
+def test_member_cannot_set_speaker_policy(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.patch(
+        "/api/teams/alice-team/speaker-policy",
+        json={"speaker_policy": "admin_only"},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403

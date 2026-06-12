@@ -57,6 +57,10 @@ class TeamParticipantWire(BaseModel):
     joined_at: str
     last_seen_at: str | None = None
     status: str = "active"
+    # Governance: an admin-imposed per-member mute. Applies on top of any
+    # room ``speaker_policy`` — a muted member cannot broadcast messages
+    # regardless of the policy. Only the team owner can set it.
+    muted: bool = False
 
 
 class TeamRoomWire(BaseModel):
@@ -73,6 +77,11 @@ class TeamRoomWire(BaseModel):
     invite_token: str | None = None
     invite_role: str = "member"
     invite_created_at: str | None = None
+    # Governance: who may speak in the room. ``free`` = anyone not
+    # individually muted; ``admin_only`` = only the owner/admins (a
+    # whole-room mute). Turn-based modes (moderated/round_robin/roll_call)
+    # are reserved for the speaker-turn engine and are not enforced yet.
+    speaker_policy: str = "free"
 
 
 class CreateTeamRoomRequest(BaseModel):
@@ -103,6 +112,13 @@ class UpdateTeamParticipantRequest(BaseModel):
     display_name: str | None = None
     role: str | None = None
     status: str | None = None
+    muted: bool | None = None
+
+
+class UpdateSpeakerPolicyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    speaker_policy: str
 
 
 def create_team_rooms_router(
@@ -471,19 +487,23 @@ def create_team_rooms_router(
                 else _normalize_participant_role(current.role)
             )
             next_status = _normalize_participant_status(body.status or current.status)
+            next_muted = body.muted if body.muted is not None else bool(current.muted)
             # Authorization (only meaningful when auth is enforced — local
             # single-user mode has no distinct actors to protect against).
             # A plain member may edit only their OWN display_name; changing
-            # any role/status, or touching another member's entry, is
+            # any role/status/mute, or touching another member's entry, is
             # owner-only. This is the security boundary, not just UX — the
-            # frontend's hidden controls are not a substitute.
+            # frontend's hidden controls are not a substitute. (Self-unmute
+            # is privileged too, else a muted member could silence-bust.)
             if require_auth and actor is not None and not _caller_is_team_admin(team, actor):
                 is_self = getattr(current, "actor_id", None) == actor
                 changing_role = next_role != _normalize_participant_role(current.role)
                 changing_status = next_status != _normalize_participant_status(current.status)
-                if changing_role or changing_status:
+                changing_muted = next_muted != bool(current.muted)
+                if changing_role or changing_status or changing_muted:
                     raise HTTPException(
-                        403, "only the team owner can change a participant's role or status"
+                        403,
+                        "only the team owner can change a participant's role, status, or mute",
                     )
                 if not is_self:
                     raise HTTPException(403, "you can only update your own participant entry")
@@ -506,6 +526,7 @@ def create_team_rooms_router(
                 "display_name": next_name,
                 "role": next_role,
                 "status": next_status,
+                "muted": next_muted,
                 "last_seen_at": now,
             })
             participants = [
@@ -523,6 +544,26 @@ def create_team_rooms_router(
         await _broadcast_team_update(team_id, team)
         await _broadcast_presence(team_id)
         return {"team": team.model_dump(), "participant": updated_participant.model_dump()}
+
+    @router.patch("/api/teams/{team_id}/speaker-policy")
+    async def update_speaker_policy(
+        request: Request,
+        team_id: str,
+        body: UpdateSpeakerPolicyRequest,
+    ) -> dict[str, Any]:
+        # Whole-room governance is owner-only — a member must not be able
+        # to silence the room or lift a lock the owner imposed.
+        _require_owner(request, team_id)
+        policy = _normalize_speaker_policy(body.speaker_policy)
+        with lock:
+            team = teams.get(team_id)
+            if team is None:
+                raise HTTPException(404, f"team not found: {team_id}")
+            team = team.model_copy(update={"speaker_policy": policy, "updated_at": _now()})
+            teams[team_id] = team
+            _save()
+        await _broadcast_team_update(team_id, team)
+        return {"team": team.model_dump(), "speaker_policy": policy}
 
     @router.delete("/api/teams/{team_id}/participants/{participant_id}")
     async def remove_participant(
@@ -711,6 +752,10 @@ def create_team_rooms_router(
                         joined_at=existing.joined_at if existing else now,
                         last_seen_at=now,
                         status="active",
+                        # Preserve an admin-imposed mute across reconnects —
+                        # otherwise a muted member could silence-bust by
+                        # simply dropping and re-opening the socket.
+                        muted=bool(existing.muted) if existing else False,
                     )
                     participants.append(participant)
                     team = team.model_copy(update={
@@ -745,6 +790,7 @@ def create_team_rooms_router(
                 msg_type = msg.get("type")
                 with lock:
                     active_participant = _active_participant(team_id, participant_id)
+                    current_team = teams.get(team_id)
                 if active_participant is None:
                     await ws.send_json({"type": "error", "message": "participant removed"})
                     await ws.close(code=4403)
@@ -786,6 +832,20 @@ def create_team_rooms_router(
                 elif msg_type == "message":
                     text = str(msg.get("text") or "").strip()
                     if not text:
+                        continue
+                    # Speech chokepoint: enforce the per-member mute and the
+                    # room speaker policy before the message reaches anyone.
+                    # Reuses the snapshot taken under the lock at the top of
+                    # this iteration — no second acquisition (a second lock in
+                    # this hot path deadlocks the two-socket portal in tests).
+                    if current_team is None:
+                        allowed, reason = False, "participant removed"
+                    else:
+                        allowed, reason = _participant_can_speak(current_team, active_participant)
+                    if not allowed:
+                        await ws.send_json(
+                            {"type": "error", "code": "speech_denied", "message": reason}
+                        )
                         continue
                     msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
                     await _broadcast(
@@ -885,6 +945,53 @@ def _normalize_participant_status(status: str | None) -> str:
     if normalized not in {"active", "offline", "removed"}:
         return "active"
     return normalized
+
+
+# Speaker policies the room can currently *enforce*. Turn-based modes
+# (moderated/round_robin/roll_call) are intentionally absent until the
+# speaker-turn engine lands — persisting a mode we don't enforce would be
+# a lie to the operator. Unknown values fall back to the open default.
+_SPEAKER_POLICIES = {"free", "admin_only"}
+
+
+def _normalize_speaker_policy(value: str | None) -> str:
+    normalized = (value or "free").strip().lower()
+    aliases = {
+        "open": "free",
+        "all": "free",
+        "everyone": "free",
+        "admins_only": "admin_only",
+        "admin": "admin_only",
+        "owner_only": "admin_only",
+        "muted": "admin_only",
+        "locked": "admin_only",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in _SPEAKER_POLICIES:
+        return "free"
+    return normalized
+
+
+def _participant_is_admin(team: TeamRoomWire, participant: TeamParticipantWire) -> bool:
+    """An admin is an owner-role participant, or the recorded room owner."""
+    if _normalize_participant_role(participant.role) == "owner":
+        return True
+    actor_id = getattr(participant, "actor_id", None)
+    return bool(actor_id) and actor_id == getattr(team, "owner_id", None)
+
+
+def _participant_can_speak(
+    team: TeamRoomWire, participant: TeamParticipantWire
+) -> tuple[bool, str | None]:
+    """Resolve whether ``participant`` may broadcast a message right now.
+    Returns ``(allowed, reason)`` — ``reason`` is a human-facing string
+    when denied. This is the room's single speech chokepoint."""
+    if getattr(participant, "muted", False):
+        return False, "you have been muted by an admin"
+    policy = _normalize_speaker_policy(getattr(team, "speaker_policy", "free"))
+    if policy == "admin_only" and not _participant_is_admin(team, participant):
+        return False, "only admins can speak while the room is in admin-only mode"
+    return True, None
 
 
 def _team_by_invite(

@@ -8,7 +8,13 @@ fastapi = pytest.importorskip("fastapi")
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router  # noqa: E402
+from runtime.sensing.gateway.team_rooms_router import (  # noqa: E402
+    TeamParticipantWire,
+    TeamRoomWire,
+    _normalize_speaker_policy,
+    _participant_can_speak,
+    create_team_rooms_router,
+)
 
 
 def _client(
@@ -216,3 +222,104 @@ def test_delete_team(tmp_path: Path) -> None:
     deleted = client.delete(f"/api/teams/{team['id']}").json()
     assert deleted == {"ok": True, "deleted": True, "team_id": team["id"]}
     assert client.get("/api/teams").json()["count"] == 0
+
+
+# ── speaker governance: mute + speaker_policy resolution ───────────
+
+
+def _gov_participant(
+    pid: str = "p1",
+    *,
+    role: str = "member",
+    muted: bool = False,
+    actor_id: str | None = None,
+) -> TeamParticipantWire:
+    return TeamParticipantWire(
+        id=pid,
+        display_name=pid,
+        role=role,
+        actor_id=actor_id,
+        joined_at="t0",
+        muted=muted,
+    )
+
+
+def _gov_room(policy: str = "free", *, owner_id: str = "owner-actor") -> TeamRoomWire:
+    return TeamRoomWire(
+        id="t",
+        name="T",
+        created_at="t0",
+        updated_at="t0",
+        owner_id=owner_id,
+        speaker_policy=policy,
+    )
+
+
+def test_speaker_policy_normalization() -> None:
+    assert _normalize_speaker_policy("free") == "free"
+    assert _normalize_speaker_policy("ADMIN_ONLY") == "admin_only"
+    assert _normalize_speaker_policy("owner_only") == "admin_only"  # alias
+    assert _normalize_speaker_policy(None) == "free"
+    # turn-based modes have no engine yet → fall back to the open default
+    # rather than persisting a policy we cannot enforce
+    assert _normalize_speaker_policy("round_robin") == "free"
+    assert _normalize_speaker_policy("garbage") == "free"
+
+
+def test_can_speak_free_policy_allows_unmuted() -> None:
+    ok, reason = _participant_can_speak(_gov_room("free"), _gov_participant(muted=False))
+    assert ok is True
+    assert reason is None
+
+
+def test_can_speak_muted_member_denied_under_any_policy() -> None:
+    for policy in ("free", "admin_only"):
+        ok, reason = _participant_can_speak(_gov_room(policy), _gov_participant(muted=True))
+        assert ok is False
+        assert reason is not None and "muted" in reason
+
+
+def test_can_speak_admin_only_blocks_member_allows_owner() -> None:
+    room = _gov_room("admin_only", owner_id="alice")
+    # plain member → denied
+    ok, reason = _participant_can_speak(room, _gov_participant(role="member", actor_id="bob"))
+    assert ok is False
+    assert reason is not None and "admin-only" in reason
+    # owner-role participant → allowed
+    ok, _ = _participant_can_speak(room, _gov_participant(role="owner", actor_id="x"))
+    assert ok is True
+    # the recorded room owner (matched by actor_id) → allowed even if role differs
+    ok, _ = _participant_can_speak(room, _gov_participant(role="member", actor_id="alice"))
+    assert ok is True
+
+
+def test_muted_participant_cannot_speak_over_ws(tmp_path: Path) -> None:
+    """End-to-end: a muted member's message is rejected at the WS speech
+    chokepoint and the mute survives the connect rebuild."""
+    client = _client(tmp_path)
+    team = client.post("/api/teams", json=_team_body()).json()
+    tid = team["id"]
+
+    # bob joins, then is muted by the owner — all before he opens a socket
+    invite = client.post(f"/api/teams/{tid}/invite", json={"role": "member"}).json()
+    client.post(
+        f"/api/team-invites/{invite['invite_token']}/join",
+        json={"display_name": "Bob", "participant_id": "bob"},
+    )
+    muted = client.patch(f"/api/teams/{tid}/participants/bob", json={"muted": True})
+    assert muted.status_code == 200, muted.json()
+    assert muted.json()["participant"]["muted"] is True
+
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id=bob&display_name=Bob") as bob:
+        ready = bob.receive_json()
+        assert ready["type"] == "ready"
+        # the mute is preserved across the (re)connect participant rebuild
+        assert ready["participant"]["muted"] is True
+        assert bob.receive_json()["type"] == "presence"
+
+        bob.send_json({"type": "message", "text": "let me in"})
+        denied = bob.receive_json()
+        assert denied["type"] == "error"
+        assert denied["code"] == "speech_denied"
+        assert "muted" in denied["message"]
