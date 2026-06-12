@@ -55,6 +55,9 @@ jobs:
       - name: Import-direction ratchet (no NEW kernel→sensing/web imports)
         run: python tools/lint/import_direction_check.py --strict
 
+      - name: Orphan-module ratchet (no NEW exported-but-unimported modules)
+        run: python tools/lint/orphan_module_check.py --strict
+
       - name: Root hygiene (matches ROOT_LAYOUT.md allow-list)
         run: python tools/lint/root_hygiene.py --strict
 

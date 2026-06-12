@@ -75,6 +75,15 @@ repos:
         # See import_direction_baseline.txt.
         files: ^runtime/.*\.py$
 
+      - id: orphan-module-check
+        name: no NEW exported-but-unimported runtime modules
+        entry: python tools/lint/orphan_module_check.py --strict
+        language: system
+        pass_filenames: false
+        # Baselines current orphans; a newly-stranded module fails.
+        # See orphan_module_baseline.txt.
+        files: ^(runtime|tests|demos|benchmarks|tools|scripts)/.*\.py$
+
       - id: root-hygiene
         name: repository root matches ROOT_LAYOUT.md allow-list
         entry: python tools/lint/root_hygiene.py --strict
