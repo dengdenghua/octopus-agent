@@ -28,7 +28,7 @@ _log = logging.getLogger("runtime.safety.evolution.guard_judge")
 
 
 if TYPE_CHECKING:  # pragma: no cover
-    from runtime.sensing.model_router import ModelRouter
+    from runtime.platform.models.llm import ModelRouter
 
 
 GuardJudgeAction = Literal["true_positive", "false_positive", "uncertain"]
@@ -152,7 +152,7 @@ def build_guard_judge_from_router(
     GuardJudgeVerdict. Errors degrade to ``uncertain`` rather than
     raising.
     """
-    from runtime.sensing.model_router import Message, ModelRequest
+    from runtime.platform.models.llm import Message, ModelRequest
 
     def _judge(
         label: str, guard_message: str, trajectory_excerpt: str,

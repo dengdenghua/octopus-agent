@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
+from runtime.platform.models.llm import Message, ModelRequest, ModelRouter
 from runtime.platform.prompts import get_prompt
-from runtime.sensing.model_router import Message, ModelRequest, ModelRouter
 
 from .prompt_optimizer import PromptVariant
 

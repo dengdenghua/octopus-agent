@@ -23,12 +23,12 @@ from runtime.platform.models import (
     TaskNode,
     WorkflowEdge,
 )
-from runtime.platform.prompts import get_prompt
-from runtime.sensing.model_router import (
+from runtime.platform.models.llm import (
     Message,
     ModelRequest,
     ModelRouter,
 )
+from runtime.platform.prompts import get_prompt
 
 from .planner import PlannerError
 

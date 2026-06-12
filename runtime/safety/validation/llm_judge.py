@@ -41,7 +41,7 @@ _log = logging.getLogger("runtime.safety.validation.llm_judge")
 
 
 if TYPE_CHECKING:  # pragma: no cover
-    from runtime.sensing.model_router import ModelRouter
+    from runtime.platform.models.llm import ModelRouter
 
 
 # ═══════════════════════════════════════════════════════════
@@ -141,7 +141,7 @@ def build_judge_from_router(
         Override the default ``JUDGE_PROMPT`` if you want to
         retune the rubric.
     """
-    from runtime.sensing.model_router import Message, ModelRequest
+    from runtime.platform.models.llm import Message, ModelRequest
 
     cache = _TTLCache(ttl_s=cache_ttl_s, max_size=cache_max_size)
 
