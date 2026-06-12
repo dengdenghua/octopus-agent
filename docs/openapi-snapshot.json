@@ -29,10 +29,12 @@
             "title": "Avatar Url"
           },
           "budget": {
+            "additionalProperties": true,
             "title": "Budget",
             "type": "object"
           },
           "capabilities": {
+            "additionalProperties": true,
             "title": "Capabilities",
             "type": "object"
           },
@@ -86,6 +88,7 @@
             "type": "string"
           },
           "skill_policy": {
+            "additionalProperties": true,
             "title": "Skill Policy",
             "type": "object"
           },
@@ -172,6 +175,7 @@
             "title": "Avatar Url"
           },
           "capabilities": {
+            "additionalProperties": true,
             "title": "Capabilities",
             "type": "object"
           },
@@ -388,6 +392,7 @@
           },
           "members": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Members",
@@ -423,7 +428,7 @@
         "properties": {
           "files": {
             "items": {
-              "format": "binary",
+              "contentMediaType": "application/octet-stream",
               "type": "string"
             },
             "title": "Files",
@@ -448,7 +453,7 @@
         "properties": {
           "files": {
             "items": {
-              "format": "binary",
+              "contentMediaType": "application/octet-stream",
               "type": "string"
             },
             "title": "Files",
@@ -917,6 +922,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -972,6 +978,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -1059,6 +1066,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -1211,6 +1219,7 @@
             "title": "Estimate Hours"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -1394,6 +1403,7 @@
             "type": "string"
           },
           "metadata": {
+            "additionalProperties": true,
             "title": "Metadata",
             "type": "object"
           },
@@ -3027,6 +3037,7 @@
           "context": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -3835,6 +3846,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -3980,6 +3992,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4178,6 +4191,7 @@
           "metadata": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4343,6 +4357,19 @@
         "title": "UpdateProjectTaskRequest",
         "type": "object"
       },
+      "UpdateSpeakerPolicyRequest": {
+        "properties": {
+          "speaker_policy": {
+            "title": "Speaker Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker_policy"
+        ],
+        "title": "UpdateSpeakerPolicyRequest",
+        "type": "object"
+      },
       "UpdateTeamParticipantRequest": {
         "properties": {
           "display_name": {
@@ -4355,6 +4382,17 @@
               }
             ],
             "title": "Display Name"
+          },
+          "muted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Muted"
           },
           "role": {
             "anyOf": [
@@ -4562,6 +4600,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -4703,6 +4748,7 @@
             "type": "array"
           },
           "manifest": {
+            "additionalProperties": true,
             "title": "Manifest",
             "type": "object"
           },
@@ -4934,6 +4980,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Avatar Api Account Avatar Post",
                   "type": "object"
                 }
@@ -4956,6 +5003,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Billing Api Account Billing Get",
                   "type": "object"
                 }
@@ -4978,6 +5026,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Billing History Api Account Billing History Get",
                   "type": "object"
                 }
@@ -5011,6 +5060,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Invoice Api Account Billing Invoices  Invoice Id  Get",
                   "type": "object"
                 }
@@ -5044,6 +5094,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -5060,6 +5111,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Cancel Api Account Cancel Post",
                   "type": "object"
                 }
@@ -5092,6 +5144,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Linked Accounts Api Account Linked Accounts Get",
                   "type": "object"
                 }
@@ -5113,6 +5166,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -5129,6 +5183,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Link Account Api Account Linked Accounts Post",
                   "type": "object"
                 }
@@ -5172,6 +5227,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Unlink Account Api Account Linked Accounts  Provider  Delete",
                   "type": "object"
                 }
@@ -5204,6 +5260,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Overview Api Account Overview Get",
                   "type": "object"
                 }
@@ -5226,6 +5283,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Plans Api Account Plans Get",
                   "type": "object"
                 }
@@ -5248,6 +5306,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Privacy Api Account Privacy Get",
                   "type": "object"
                 }
@@ -5269,6 +5328,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -5285,6 +5345,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Privacy Patch Api Account Privacy Patch",
                   "type": "object"
                 }
@@ -5317,6 +5378,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Profile Api Account Profile Get",
                   "type": "object"
                 }
@@ -5338,6 +5400,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -5354,6 +5417,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Profile Patch Api Account Profile Patch",
                   "type": "object"
                 }
@@ -5387,6 +5451,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -5403,6 +5468,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Subscribe Api Account Subscribe Post",
                   "type": "object"
                 }
@@ -5435,6 +5501,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Subscription Api Account Subscription Get",
                   "type": "object"
                 }
@@ -5457,6 +5524,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Usage Api Account Usage Get",
                   "type": "object"
                 }
@@ -5479,6 +5547,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Usage Events Api Account Usage Events Get",
                   "type": "object"
                 }
@@ -5501,6 +5570,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Usage Summary Api Account Usage Summary Get",
                   "type": "object"
                 }
@@ -5534,6 +5604,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Memory Api Agent Market Memory  Agent Name  Get",
                   "type": "object"
                 }
@@ -5565,6 +5636,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -5577,6 +5649,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Pack Import Agent Api Agent Market Packs Import Agent Post",
                   "type": "object"
                 }
@@ -5620,6 +5693,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Pack Preview Api Agent Market Packs Preview Get",
                   "type": "object"
                 }
@@ -5663,6 +5737,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Profile Api Agent Market Profile  Agent Name  Get",
                   "type": "object"
                 }
@@ -5706,6 +5781,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Social Api Agent Market Social  Agent Name  Relationships Get",
                   "type": "object"
                 }
@@ -5805,6 +5881,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Store Api Agent Market Store Get",
                   "type": "object"
                 }
@@ -5851,6 +5928,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Featured Api Agent Market Store Featured Get",
                   "type": "object"
                 }
@@ -5894,6 +5972,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Detail Api Agent Market Store  Agent Id  Get",
                   "type": "object"
                 }
@@ -5937,6 +6016,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Uninstall Api Agent Market Store  Agent Id  Install Delete",
                   "type": "object"
                 }
@@ -5978,6 +6058,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Install Api Agent Market Store  Agent Id  Install Post",
                   "type": "object"
                 }
@@ -6021,6 +6102,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Market Ratings Api Agent Market Store  Agent Id  Ratings Get",
                   "type": "object"
                 }
@@ -6126,6 +6208,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Approvals Api Agent Trace Approvals Get",
                   "type": "object"
                 }
@@ -6263,6 +6346,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Checkpoints Api Agent Trace Checkpoints Get",
                   "type": "object"
                 }
@@ -6322,6 +6406,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Latest Checkpoint Api Agent Trace Checkpoints Latest Get",
                   "type": "object"
                 }
@@ -6365,6 +6450,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Resume Proposal Api Agent Trace Checkpoints  Checkpoint Id  Resume Proposal Get",
                   "type": "object"
                 }
@@ -6502,6 +6588,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Events Api Agent Trace Events Get",
                   "type": "object"
                 }
@@ -6623,6 +6710,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Experience Ledger Api Agent Trace Experience Ledger Get",
                   "type": "object"
                 }
@@ -6673,6 +6761,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Experience Weekly Summary Api Agent Trace Experience Ledger Weekly Summary Get",
                   "type": "object"
                 }
@@ -6810,6 +6899,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Resume Proposals Api Agent Trace Resume Proposals Get",
                   "type": "object"
                 }
@@ -6915,6 +7005,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Resume Requests Api Agent Trace Resume Requests Get",
                   "type": "object"
                 }
@@ -7036,6 +7127,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Review Queue Api Agent Trace Review Queue Get",
                   "type": "object"
                 }
@@ -7069,6 +7161,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -7085,6 +7178,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Review Queue Promotion Apply Api Agent Trace Review Queue Promotions Apply Post",
                   "type": "object"
                 }
@@ -7174,6 +7268,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Review Queue Promotion Audit Api Agent Trace Review Queue Promotions Audit Get",
                   "type": "object"
                 }
@@ -7207,6 +7302,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -7223,6 +7319,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Review Queue Promotion Plan Api Agent Trace Review Queue Promotions Plan Post",
                   "type": "object"
                 }
@@ -7255,6 +7352,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Review Queue Summary Api Agent Trace Review Queue Summary Get",
                   "type": "object"
                 }
@@ -7287,6 +7385,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Payload",
                 "type": "object"
               }
@@ -7299,6 +7398,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Review Queue Decision Api Agent Trace Review Queue  Item Id  Decision Post",
                   "type": "object"
                 }
@@ -7397,6 +7497,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Stats Api Agent Trace Stats Get",
                   "type": "object"
                 }
@@ -7534,6 +7635,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Task Runs Api Agent Trace Task Runs Get",
                   "type": "object"
                 }
@@ -7577,6 +7679,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Task Run Api Agent Trace Task Runs  Task Id  Get",
                   "type": "object"
                 }
@@ -7620,6 +7723,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Task Run Process Timeline Api Agent Trace Task Runs  Task Id  Process Timeline Get",
                   "type": "object"
                 }
@@ -7663,6 +7767,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Task Run Review Api Agent Trace Task Runs  Task Id  Review Get",
                   "type": "object"
                 }
@@ -7706,6 +7811,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Commit Task Run Review Api Agent Trace Task Runs  Task Id  Review Commit Post",
                   "type": "object"
                 }
@@ -7749,6 +7855,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Queue Task Run Review Api Agent Trace Task Runs  Task Id  Review Queue Post",
                   "type": "object"
                 }
@@ -7854,6 +7961,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Agent Trace Token Usage Api Agent Trace Token Usage Get",
                   "type": "object"
                 }
@@ -8031,6 +8139,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Batch Api Agents Parallel Batch  Batch Id  Get",
                   "type": "object"
                 }
@@ -8063,6 +8172,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Cancel All Api Agents Parallel Cancel All Post",
                   "type": "object"
                 }
@@ -8096,6 +8206,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Cancel One Api Agents Parallel Cancel  Task Id  Post",
                   "type": "object"
                 }
@@ -8138,6 +8249,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dispatch Api Agents Parallel Dispatch Post",
                   "type": "object"
                 }
@@ -8180,6 +8292,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Split Api Agents Parallel Split Post",
                   "type": "object"
                 }
@@ -8212,6 +8325,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Status Api Agents Parallel Status Get",
                   "type": "object"
                 }
@@ -8287,6 +8401,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reload All Agents Api Agents Reload Post",
                   "type": "object"
                 }
@@ -8446,6 +8561,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reload Agent Api Agents  Agent Id  Reload Post",
                   "type": "object"
                 }
@@ -8623,6 +8739,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Ai Mode Get Api Ai Mode Get",
                   "type": "object"
                 }
@@ -8643,6 +8760,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Payload",
                 "type": "object"
               }
@@ -8655,6 +8773,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Ai Mode Set Api Ai Mode Post",
                   "type": "object"
                 }
@@ -8732,6 +8851,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -8748,6 +8868,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Alert Rule Create Api Alerts Rules Post",
                   "type": "object"
                 }
@@ -8791,6 +8912,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Alert Rule Delete Api Alerts Rules  Name  Delete",
                   "type": "object"
                 }
@@ -8850,6 +8972,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Suggestions Api Ambient Suggestions Delete",
                   "type": "object"
                 }
@@ -8888,6 +9011,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Suggestions Api Ambient Suggestions Get",
                   "type": "object"
                 }
@@ -8918,6 +9042,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -8934,6 +9059,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Run Generator Api Ambient Suggestions Run Post",
                   "type": "object"
                 }
@@ -8975,6 +9101,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -8991,6 +9118,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Patch Status Api Ambient Suggestions  Suggestion Id  Patch",
                   "type": "object"
                 }
@@ -9021,6 +9149,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response  Apps Api Apps Get",
@@ -9056,6 +9185,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  App Get Api Apps  App Id  Get",
                   "type": "object"
                 }
@@ -9088,6 +9218,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Architecture Docs Api Architecture Docs Get",
                   "type": "object"
                 }
@@ -9121,6 +9252,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Read Architecture Doc Api Architecture Docs  Doc Id  Get",
                   "type": "object"
                 }
@@ -9154,6 +9286,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -9170,6 +9303,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Arena Battle Api Arena Battle Post",
                   "type": "object"
                 }
@@ -9202,6 +9336,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Arena Hist Api Arena History Get",
                   "type": "object"
                 }
@@ -9224,6 +9359,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Arena Lb Api Arena Leaderboard Get",
                   "type": "object"
                 }
@@ -9246,6 +9382,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Arena Stats Api Arena Stats Get",
                   "type": "object"
                 }
@@ -9269,6 +9406,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -9285,6 +9423,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Arena Vote Api Arena Vote Post",
                   "type": "object"
                 }
@@ -9342,6 +9481,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Auth Logout Api Auth Logout Post",
                   "type": "object"
                 }
@@ -9364,6 +9504,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Auth Me Api Auth Me Get",
                   "type": "object"
                 }
@@ -9408,6 +9549,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Auth Refresh Api Auth Refresh Post",
                   "type": "object"
                 }
@@ -9430,6 +9572,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Auth Status Api Auth Status Get",
                   "type": "object"
                 }
@@ -9478,6 +9621,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -9494,6 +9638,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Bg Submit Api Background Submit Post",
                   "type": "object"
                 }
@@ -9560,6 +9705,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Bg Delete Api Background Tasks  Task Id  Delete",
                   "type": "object"
                 }
@@ -9601,6 +9747,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Bg Task Get Api Background Tasks  Task Id  Get",
                   "type": "object"
                 }
@@ -9644,6 +9791,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Bg Cancel Api Background Tasks  Task Id  Cancel Post",
                   "type": "object"
                 }
@@ -9687,6 +9835,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Bg Output Api Background Tasks  Task Id  Output Poll Get",
                   "type": "object"
                 }
@@ -9730,6 +9879,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Bg Pause Api Background Tasks  Task Id  Pause Post",
                   "type": "object"
                 }
@@ -9773,6 +9923,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Bg Resume Api Background Tasks  Task Id  Resume Post",
                   "type": "object"
                 }
@@ -9824,6 +9975,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Blackboard Api Blackboard Get",
                   "type": "object"
                 }
@@ -9898,6 +10050,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -9910,6 +10063,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Action Api Browser Action Post",
                   "type": "object"
                 }
@@ -9965,6 +10119,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Action Log Api Browser Action Log Get",
                   "type": "object"
                 }
@@ -9996,6 +10151,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10008,6 +10164,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Close Api Browser Close Post",
                   "type": "object"
                 }
@@ -10040,6 +10197,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Config Api Browser Config Get",
                   "type": "object"
                 }
@@ -10059,6 +10217,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10071,6 +10230,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Config Update Api Browser Config Put",
                   "type": "object"
                 }
@@ -10103,6 +10263,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Extension Path Api Browser Extension Path Get",
                   "type": "object"
                 }
@@ -10136,6 +10297,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Extract Text Api Browser Extract Text Get",
                   "type": "object"
                 }
@@ -10167,6 +10329,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10179,6 +10342,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Launch Api Browser Launch Post",
                   "type": "object"
                 }
@@ -10210,6 +10374,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10222,6 +10387,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Navigate Api Browser Navigate Post",
                   "type": "object"
                 }
@@ -10254,6 +10420,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Open Extension Folder Api Browser Open Extension Folder Post",
                   "type": "object"
                 }
@@ -10287,6 +10454,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Page Info Api Browser Page Info Get",
                   "type": "object"
                 }
@@ -10390,6 +10558,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Relay Bookmarklet Result Api Browser Relay Bookmarklet Result Post",
                   "type": "object"
                 }
@@ -10432,6 +10601,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10444,6 +10614,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Relay Command Api Browser Relay Command Post",
                   "type": "object"
                 }
@@ -10475,6 +10646,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10487,6 +10659,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Relay Heartbeat Api Browser Relay Heartbeat Post",
                   "type": "object"
                 }
@@ -10518,6 +10691,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10530,6 +10704,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Relay Result Api Browser Relay Result Post",
                   "type": "object"
                 }
@@ -10562,6 +10737,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Relay Status Api Browser Relay Status Get",
                   "type": "object"
                 }
@@ -10595,6 +10771,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Screenshot Base64 Api Browser Screenshot Base64 Get",
                   "type": "object"
                 }
@@ -10626,6 +10803,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10638,6 +10816,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Session Ensure Api Browser Session Ensure Post",
                   "type": "object"
                 }
@@ -10669,6 +10848,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -10681,6 +10861,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Session Reset Api Browser Session Reset Post",
                   "type": "object"
                 }
@@ -10725,6 +10906,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Session Status Api Browser Session Status Get",
                   "type": "object"
                 }
@@ -10757,6 +10939,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser Sessions Api Browser Sessions Get",
                   "type": "object"
                 }
@@ -10779,6 +10962,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Browser System Info Api Browser System Info Get",
                   "type": "object"
                 }
@@ -10816,6 +11000,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Budget Summary Api Budget Summary Get",
                   "type": "object"
                 }
@@ -10963,6 +11148,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Capability Catalog Api Capability Catalog Get",
                   "type": "object"
                 }
@@ -11026,6 +11212,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -11070,6 +11257,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Channels Api Channels Get",
@@ -11094,6 +11282,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Credentials Api Channels Credentials Get",
                   "type": "object"
                 }
@@ -11127,6 +11316,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Credentials Api Channels Credentials  Platform  Delete",
                   "type": "object"
                 }
@@ -11168,6 +11358,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Set Credentials Api Channels Credentials  Platform  Post",
                   "type": "object"
                 }
@@ -11200,6 +11391,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Channels Detail Api Channels Detail Get",
                   "type": "object"
                 }
@@ -11233,6 +11425,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Approve Pairing Api Channels Pairing  Pairing Id  Approve Post",
                   "type": "object"
                 }
@@ -11276,6 +11469,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reject Pairing Api Channels Pairing  Pairing Id  Reject Post",
                   "type": "object"
                 }
@@ -11308,6 +11502,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Wechat Qr Poll Api Channels Wechat Qr Poll Post",
                   "type": "object"
                 }
@@ -11330,6 +11525,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Wechat Qr Start Api Channels Wechat Qr Start Post",
                   "type": "object"
                 }
@@ -11363,6 +11559,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Channel Assignment Api Channels  Channel Id  Assistant Delete",
                   "type": "object"
                 }
@@ -11404,6 +11601,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Channel Assignment Api Channels  Channel Id  Assistant Get",
                   "type": "object"
                 }
@@ -11445,6 +11643,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Set Channel Assignment Api Channels  Channel Id  Assistant Post",
                   "type": "object"
                 }
@@ -11530,6 +11729,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Pairings Api Channels  Channel Id  Pairings Get",
                   "type": "object"
                 }
@@ -11583,6 +11783,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Milestone Api Company Milestones  Milestone Id  Patch",
                   "type": "object"
                 }
@@ -11636,6 +11837,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Patent Risk Api Company Patents Risks  Risk Id  Patch",
                   "type": "object"
                 }
@@ -11689,6 +11891,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Patent Topic Api Company Patents Topics  Topic Id  Patch",
                   "type": "object"
                 }
@@ -11742,6 +11945,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Patent Api Company Patents  Patent Id  Patch",
                   "type": "object"
                 }
@@ -11774,6 +11978,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Projects Api Company Projects Get",
                   "type": "object"
                 }
@@ -11804,6 +12009,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Project Api Company Projects Post",
                   "type": "object"
                 }
@@ -11846,6 +12052,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Project Blueprint Api Company Projects Blueprint Post",
                   "type": "object"
                 }
@@ -11889,6 +12096,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Project Api Company Projects  Project Id  Delete",
                   "type": "object"
                 }
@@ -11930,6 +12138,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Project Api Company Projects  Project Id  Get",
                   "type": "object"
                 }
@@ -11981,6 +12190,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Project Api Company Projects  Project Id  Patch",
                   "type": "object"
                 }
@@ -12024,6 +12234,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Artifacts Api Company Projects  Project Id  Artifacts Get",
                   "type": "object"
                 }
@@ -12067,6 +12278,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Dependencies Api Company Projects  Project Id  Dependencies Get",
                   "type": "object"
                 }
@@ -12118,6 +12330,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Dependency Api Company Projects  Project Id  Dependencies Post",
                   "type": "object"
                 }
@@ -12161,6 +12374,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Gantt Api Company Projects  Project Id  Gantt Get",
                   "type": "object"
                 }
@@ -12204,6 +12418,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Insights Api Company Projects  Project Id  Insights Get",
                   "type": "object"
                 }
@@ -12247,6 +12462,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Milestones Api Company Projects  Project Id  Milestones Get",
                   "type": "object"
                 }
@@ -12298,6 +12514,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Milestone Api Company Projects  Project Id  Milestones Post",
                   "type": "object"
                 }
@@ -12341,6 +12558,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Patents Api Company Projects  Project Id  Patents Get",
                   "type": "object"
                 }
@@ -12392,6 +12610,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Patent Api Company Projects  Project Id  Patents Post",
                   "type": "object"
                 }
@@ -12446,6 +12665,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Bulk Import Patents Api Company Projects  Project Id  Patents Bulk Import Post",
                   "type": "object"
                 }
@@ -12489,6 +12709,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Patent Risks Api Company Projects  Project Id  Patents Risks Get",
                   "type": "object"
                 }
@@ -12540,6 +12761,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Patent Risk Api Company Projects  Project Id  Patents Risks Post",
                   "type": "object"
                 }
@@ -12583,6 +12805,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Patent Topics Api Company Projects  Project Id  Patents Topics Get",
                   "type": "object"
                 }
@@ -12634,6 +12857,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Patent Topic Api Company Projects  Project Id  Patents Topics Post",
                   "type": "object"
                 }
@@ -12677,6 +12901,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Tasks Api Company Projects  Project Id  Tasks Get",
                   "type": "object"
                 }
@@ -12728,6 +12953,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Task Api Company Projects  Project Id  Tasks Post",
                   "type": "object"
                 }
@@ -12771,6 +12997,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Assemble Project Team Api Company Projects  Project Id  Team Assembly Post",
                   "type": "object"
                 }
@@ -12833,6 +13060,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Materialize Team Assembly Member Api Company Projects  Project Id  Team Assembly  Member Id  Materialize Post",
                   "type": "object"
                 }
@@ -12886,6 +13114,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Bind Team Room Api Company Projects  Project Id  Team Room Post",
                   "type": "object"
                 }
@@ -12939,6 +13168,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Task Api Company Tasks  Task Id  Patch",
                   "type": "object"
                 }
@@ -12992,6 +13222,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dispatch Task Api Company Tasks  Task Id  Dispatch Post",
                   "type": "object"
                 }
@@ -13023,6 +13254,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13035,6 +13267,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Complete Api Complete Post",
                   "type": "object"
                 }
@@ -13066,6 +13299,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13078,6 +13312,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Execute Action Api Computer Actions Execute Post",
                   "type": "object"
                 }
@@ -13109,6 +13344,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13121,6 +13357,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Ground Actions Api Computer Actions Ground Post",
                   "type": "object"
                 }
@@ -13152,6 +13389,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13164,6 +13402,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Plan Actions Api Computer Actions Plan Post",
                   "type": "object"
                 }
@@ -13195,6 +13434,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13207,6 +13447,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Preview Action Api Computer Actions Preview Post",
                   "type": "object"
                 }
@@ -13238,6 +13479,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13250,6 +13492,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Vision Actions Api Computer Actions Vision Post",
                   "type": "object"
                 }
@@ -13283,6 +13526,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -13299,6 +13543,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Release Lease Api Computer Lease Release Post",
                   "type": "object"
                 }
@@ -13332,6 +13577,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -13348,6 +13594,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Screenshot Api Computer Screenshot Post",
                   "type": "object"
                 }
@@ -13380,6 +13627,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Status Api Computer Status Get",
                   "type": "object"
                 }
@@ -13480,6 +13728,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Uia Find Api Computer Uia Find Get",
                   "type": "object"
                 }
@@ -13512,6 +13761,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Uia Status Api Computer Uia Status Get",
                   "type": "object"
                 }
@@ -13592,6 +13842,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Uia Tree Api Computer Uia Tree Get",
                   "type": "object"
                 }
@@ -13646,6 +13897,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13741,6 +13993,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13753,6 +14006,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Upsert Custom Model Api Config Custom Models  Model Id  Put",
                   "type": "object"
                 }
@@ -13805,6 +14059,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13848,6 +14103,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -13860,6 +14116,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Import Local Model Api Config Local Models Import Post",
                   "type": "object"
                 }
@@ -13911,6 +14168,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Scan Local Models Api Config Local Models Scan Get",
                   "type": "object"
                 }
@@ -13972,6 +14230,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Conversations Api Conversations Get",
@@ -14027,6 +14286,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Conversation Events Api Conversations  Conversation Id  Events Get",
                   "type": "object"
                 }
@@ -14060,6 +14320,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Api Cron List Api Cron Get",
@@ -14079,6 +14340,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Cron Create Api Cron Post",
                   "type": "object"
                 }
@@ -14099,6 +14361,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Api Cron List Api Cron  Get",
@@ -14118,6 +14381,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Cron Create Api Cron  Post",
                   "type": "object"
                 }
@@ -14148,6 +14412,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Cron Delete Api Cron  Name  Delete",
                   "type": "object"
                 }
@@ -14177,6 +14442,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Active Tasks Api Dag Active Get",
                   "type": "object"
                 }
@@ -14198,6 +14464,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -14210,6 +14477,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dry Run Graph Api Dag Dry Run Post",
                   "type": "object"
                 }
@@ -14242,6 +14510,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dag Stats Api Dag Stats Get",
                   "type": "object"
                 }
@@ -14275,6 +14544,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Task Dag Api Dag Task  Task Id  Get",
                   "type": "object"
                 }
@@ -14330,6 +14600,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Task Timeline Api Dag Task  Task Id  Timeline Get",
                   "type": "object"
                 }
@@ -14384,6 +14655,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Debug Session Info Api Debug Session Info Get",
                   "type": "object"
                 }
@@ -14416,6 +14688,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Deployments Api Deployments Get",
                   "type": "object"
                 }
@@ -14528,6 +14801,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -14544,6 +14818,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reset Budget Breaker Api Evolution Budget Breaker Reset Post",
                   "type": "object"
                 }
@@ -14576,6 +14851,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Budget Snapshot Api Evolution Budget Snapshot Get",
                   "type": "object"
                 }
@@ -14638,6 +14914,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Canary Api Evolution Canary Get",
                   "type": "object"
                 }
@@ -14681,6 +14958,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Rollback Canary Api Evolution Canary  Skill Name  Rollback Post",
                   "type": "object"
                 }
@@ -14713,6 +14991,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Run Curriculum Cycle Api Evolution Curriculum Cycle Run Post",
                   "type": "object"
                 }
@@ -14754,6 +15033,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Curriculum Goals Api Evolution Curriculum Goals Get",
@@ -14789,6 +15069,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -14805,6 +15086,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Decide Curriculum Goal Api Evolution Curriculum Goals Decide Post",
                   "type": "object"
                 }
@@ -14837,6 +15119,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dispatch Snapshot Api Evolution Dispatch Snapshot Get",
                   "type": "object"
                 }
@@ -14870,6 +15153,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Drift Api Evolution Drift  Agent Id  Get",
                   "type": "object"
                 }
@@ -14925,6 +15209,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Fitness Api Evolution Fitness  Agent Id  Get",
                   "type": "object"
                 }
@@ -14957,6 +15242,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Addendums Api Evolution Forge Addendums Get",
                   "type": "object"
                 }
@@ -15027,6 +15313,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Delete Addendum Api Evolution Forge Addendums  Recipe Id  Delete",
                   "type": "object"
                 }
@@ -15059,6 +15346,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Applied Api Evolution Forge Applied Get",
                   "type": "object"
                 }
@@ -15100,6 +15388,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -15116,6 +15405,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Apply Api Evolution Forge Apply Post",
                   "type": "object"
                 }
@@ -15206,6 +15496,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Auto Propose Api Evolution Forge Auto Propose Post",
                   "type": "object"
                 }
@@ -15238,6 +15529,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Auto Tick Disable Api Evolution Forge Auto Tick Disable Post",
                   "type": "object"
                 }
@@ -15262,7 +15554,7 @@
             "required": false,
             "schema": {
               "default": 24,
-              "maximum": 720.0,
+              "maximum": 720,
               "minimum": 0.1,
               "title": "Interval Hours",
               "type": "number"
@@ -15286,8 +15578,8 @@
             "required": false,
             "schema": {
               "default": 0.15,
-              "maximum": 1.0,
-              "minimum": 0.0,
+              "maximum": 1,
+              "minimum": 0,
               "title": "Min Lead",
               "type": "number"
             }
@@ -15314,6 +15606,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Auto Tick Enable Api Evolution Forge Auto Tick Enable Post",
                   "type": "object"
                 }
@@ -15370,8 +15663,8 @@
             "required": false,
             "schema": {
               "default": 0.15,
-              "maximum": 1.0,
-              "minimum": 0.0,
+              "maximum": 1,
+              "minimum": 0,
               "title": "Min Lead",
               "type": "number"
             }
@@ -15382,6 +15675,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Auto Tick Run Now Api Evolution Forge Auto Tick Run Now Post",
                   "type": "object"
                 }
@@ -15414,6 +15708,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Auto Tick Status Api Evolution Forge Auto Tick Status Get",
                   "type": "object"
                 }
@@ -15436,6 +15731,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Recipes Api Evolution Forge Recipes Get",
                   "type": "object"
                 }
@@ -15536,6 +15832,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Run Api Evolution Forge Run Post",
                   "type": "object"
                 }
@@ -15582,6 +15879,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Runs Api Evolution Forge Runs Get",
                   "type": "object"
                 }
@@ -15646,6 +15944,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Variants Api Evolution Forge Variants  Recipe Id  Get",
                   "type": "object"
                 }
@@ -15701,8 +16000,8 @@
             "required": false,
             "schema": {
               "default": 0.1,
-              "maximum": 1.0,
-              "minimum": 0.0,
+              "maximum": 1,
+              "minimum": 0,
               "title": "Min Lead",
               "type": "number"
             }
@@ -15723,6 +16022,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Auto Promote Api Evolution Forge Variants  Recipe Id  Auto Promote Post",
                   "type": "object"
                 }
@@ -15766,6 +16066,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Variant Stats Api Evolution Forge Variants  Recipe Id  Stats Get",
                   "type": "object"
                 }
@@ -15826,6 +16127,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -15842,6 +16144,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Variant Weights Api Evolution Forge Variants  Recipe Id  Weights Post",
                   "type": "object"
                 }
@@ -15910,6 +16213,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Forge Delete Variant Api Evolution Forge Variants  Recipe Id   Variant Id  Delete",
                   "type": "object"
                 }
@@ -15942,6 +16246,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Evolution Learn From Intel Api Evolution Learn From Intel Post",
                   "type": "object"
                 }
@@ -15979,6 +16284,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Evolution Learning Curve Api Evolution Learning Curve Get",
@@ -16059,6 +16365,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Ledger Api Evolution Ledger Get",
                   "type": "object"
                 }
@@ -16102,6 +16409,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Ledger Proposal Api Evolution Ledger  Proposal Id  Get",
                   "type": "object"
                 }
@@ -16145,6 +16453,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Forget Memory Api Evolution Memories  Index  Delete",
                   "type": "object"
                 }
@@ -16192,6 +16501,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Evolution Memory Growth Api Evolution Memory Growth Get",
@@ -16226,6 +16536,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Evolution Overview Api Evolution Overview Get",
                   "type": "object"
                 }
@@ -16249,6 +16560,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Evolution Recommendations Api Evolution Recommendations Get",
@@ -16284,6 +16596,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Forget Rule Api Evolution Rules  Index  Delete",
                   "type": "object"
                 }
@@ -16331,6 +16644,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Evolution Skill History Api Evolution Skills History Get",
@@ -16366,6 +16680,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Evolution Skill Performance Api Evolution Skills Performance Get",
@@ -16390,6 +16705,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Evolution Status Api Evolution Status Get",
                   "type": "object"
                 }
@@ -16413,6 +16729,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Feature Flags List Api Feature Flags Get",
                   "type": "object"
                 }
@@ -16436,6 +16753,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Feature Flags Reload Api Feature Flags Reload Post",
                   "type": "object"
                 }
@@ -16517,6 +16835,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -16560,6 +16879,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -16572,6 +16892,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Files Rollback Apply Api Files Rollback Apply Post",
                   "type": "object"
                 }
@@ -16618,6 +16939,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Files Rollback History Api Files Rollback History Get",
                   "type": "object"
                 }
@@ -16729,6 +17051,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Files Rollback Preview Api Files Rollback Preview Get",
                   "type": "object"
                 }
@@ -16958,6 +17281,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -16970,6 +17294,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Fs Revert Api Fs Revert Post",
                   "type": "object"
                 }
@@ -17002,6 +17327,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -17014,6 +17340,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Fs Revert Diff Api Fs Revert Diff Post",
                   "type": "object"
                 }
@@ -17162,6 +17489,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -17218,6 +17546,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Git Status Api Git Status Get",
                   "type": "object"
                 }
@@ -17250,6 +17579,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Health Api Health Get",
                   "type": "object"
                 }
@@ -17287,6 +17617,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Hemolymph Recent Api Hemolymph Recent Get",
                   "type": "object"
                 }
@@ -17319,6 +17650,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Index Clear Api Index Delete",
                   "type": "object"
                 }
@@ -17341,6 +17673,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Index Rebuild Api Index Rebuild Post",
                   "type": "object"
                 }
@@ -17373,6 +17706,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Index Search Api Index Search Post",
                   "type": "object"
                 }
@@ -17415,6 +17749,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Index Start Api Index Start Post",
                   "type": "object"
                 }
@@ -17447,6 +17782,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Index Stats Api Index Stats Get",
                   "type": "object"
                 }
@@ -17469,6 +17805,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Index Status Api Index Status Get",
                   "type": "object"
                 }
@@ -17576,6 +17913,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Int Provider Api Integrations Auth Providers  Provider Id  Get",
                   "type": "object"
                 }
@@ -17609,6 +17947,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Framework Benchmarks Api Intel Evolution Frameworks Benchmarks Get",
@@ -17634,6 +17973,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Mcp Proposals Api Intel Evolution Mcp Proposals Get",
@@ -17659,6 +17999,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -17675,6 +18016,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Install Mcp Proposal Api Intel Evolution Mcp Proposals Install Post",
                   "type": "object"
                 }
@@ -17708,6 +18050,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -17724,6 +18067,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Vet Mcp Proposals Api Intel Evolution Mcp Proposals Vet Post",
                   "type": "object"
                 }
@@ -17756,6 +18100,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Run Model Benchmarks Api Intel Evolution Models Benchmarks Run Post",
                   "type": "object"
                 }
@@ -17779,6 +18124,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Model Proposals Api Intel Evolution Models Proposals Get",
@@ -17822,6 +18168,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Protocol Drift Api Intel Evolution Protocols Drift Get",
@@ -17856,6 +18203,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Scan Protocol Drift Api Intel Evolution Protocols Drift Scan Post",
                   "type": "object"
                 }
@@ -17889,6 +18237,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Acknowledge Protocol Drift Api Intel Evolution Protocols Drift  Drift Id  Acknowledge Post",
                   "type": "object"
                 }
@@ -17940,6 +18289,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Protocol Repair Proposals Api Intel Evolution Protocols Repair Proposals Get",
@@ -17974,6 +18324,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Sweep Protocol Repairs Api Intel Evolution Protocols Repair Sweep Post",
                   "type": "object"
                 }
@@ -18015,6 +18366,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response Skill Proposals Api Intel Evolution Skills Proposals Get",
@@ -18050,6 +18402,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -18066,6 +18419,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Approve Skill Proposal Api Intel Evolution Skills Proposals Approve Post",
                   "type": "object"
                 }
@@ -18099,6 +18453,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -18115,6 +18470,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reject Skill Proposal Api Intel Evolution Skills Proposals Reject Post",
                   "type": "object"
                 }
@@ -18147,6 +18503,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Reports Api Intelligence Reports Get",
                   "type": "object"
                 }
@@ -18180,6 +18537,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Report Detail Api Intelligence Reports  Report Id  Get",
                   "type": "object"
                 }
@@ -18212,6 +18570,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Run All Api Intelligence Run Post",
                   "type": "object"
                 }
@@ -18234,6 +18593,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Subs Api Intelligence Subscriptions Get",
                   "type": "object"
                 }
@@ -18254,6 +18614,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Subs Create Api Intelligence Subscriptions Post",
                   "type": "object"
                 }
@@ -18277,6 +18638,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -18293,6 +18655,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Draft Subscription Api Intelligence Subscriptions Draft Post",
                   "type": "object"
                 }
@@ -18333,6 +18696,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Subs Delete Api Intelligence Subscriptions  Sub Id  Delete",
                   "type": "object"
                 }
@@ -18374,6 +18738,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Subs Update Api Intelligence Subscriptions  Sub Id  Patch",
                   "type": "object"
                 }
@@ -18417,6 +18782,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Intel Subs Run Api Intelligence Subscriptions  Sub Id  Run Post",
                   "type": "object"
                 }
@@ -18450,6 +18816,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Invariants List Api Invariants Get",
                   "type": "object"
                 }
@@ -18473,6 +18840,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Invariants Refresh Api Invariants Refresh Post",
                   "type": "object"
                 }
@@ -18507,6 +18875,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Invariants Detail Api Invariants  Rule Id  Get",
                   "type": "object"
                 }
@@ -18553,6 +18922,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Journal Api Journal Get",
                   "type": "object"
                 }
@@ -18674,6 +19044,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Events Api Journal Events Get",
                   "type": "object"
                 }
@@ -18704,6 +19075,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -18720,6 +19092,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reindex Api Journal Reindex Post",
                   "type": "object"
                 }
@@ -18749,6 +19122,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Stats Api Journal Stats Get",
                   "type": "object"
                 }
@@ -18798,6 +19172,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Journal Timeline Api Journal Timeline Get",
                   "type": "object"
                 }
@@ -18876,6 +19251,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Kg Api Kg Get",
                   "type": "object"
                 }
@@ -18908,6 +19284,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Kg Export Api Kg Export Get",
                   "type": "object"
                 }
@@ -18940,6 +19317,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Kg Import Api Kg Import Post",
                   "type": "object"
                 }
@@ -18983,6 +19361,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Kg Entity Api Knowledge Entities  Entity Id  Get",
                   "type": "object"
                 }
@@ -19015,6 +19394,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Kg Graph Api Knowledge Graph Get",
                   "type": "object"
                 }
@@ -19072,6 +19452,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Knowledge Neighbors Api Knowledge Neighbors Get",
                   "type": "object"
                 }
@@ -19104,6 +19485,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Kg Stats Api Knowledge Stats Get",
                   "type": "object"
                 }
@@ -19126,6 +19508,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Llm Models Api Llm Models Get",
                   "type": "object"
                 }
@@ -19158,6 +19541,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Lsp Definition Api Lsp Definition Post",
                   "type": "object"
                 }
@@ -19200,6 +19584,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Lsp Diagnostics Api Lsp Diagnostics Post",
                   "type": "object"
                 }
@@ -19242,6 +19627,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Lsp References Api Lsp References Post",
                   "type": "object"
                 }
@@ -19274,6 +19660,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Mcp Config Api Mcp Config Get",
                   "type": "object"
                 }
@@ -19293,6 +19680,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -19305,6 +19693,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Mcp Config Update Api Mcp Config Put",
                   "type": "object"
                 }
@@ -19338,6 +19727,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Mcp Trust List Api Mcp Trust Get",
                   "type": "object"
                 }
@@ -19357,6 +19747,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -19369,6 +19760,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Mcp Trust Approve Api Mcp Trust Post",
                   "type": "object"
                 }
@@ -19413,6 +19805,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Mcp Trust Revoke Api Mcp Trust  Server Name  Delete",
                   "type": "object"
                 }
@@ -19445,6 +19838,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Clear Api Memory Delete",
                   "type": "object"
                 }
@@ -19465,6 +19859,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Api Memory Get",
                   "type": "object"
                 }
@@ -19487,6 +19882,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Config Api Memory Config Get",
                   "type": "object"
                 }
@@ -19507,6 +19903,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Memory Update Config Api Memory Config Put",
                   "type": "object"
                 }
@@ -19529,6 +19926,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Export Api Memory Export Get",
                   "type": "object"
                 }
@@ -19552,6 +19950,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -19568,6 +19967,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Fact Create Api Memory Facts Post",
                   "type": "object"
                 }
@@ -19611,6 +20011,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Fact Delete Api Memory Facts  Fact Id  Delete",
                   "type": "object"
                 }
@@ -19653,6 +20054,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -19669,6 +20071,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Fact Update Api Memory Facts  Fact Id  Patch",
                   "type": "object"
                 }
@@ -19702,6 +20105,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -19718,6 +20122,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Import Api Memory Import Post",
                   "type": "object"
                 }
@@ -19750,6 +20155,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Memory Reload Api Memory Reload Post",
                   "type": "object"
                 }
@@ -19886,6 +20292,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Mentions Autocomplete Api Mentions Autocomplete Get",
                   "type": "object"
                 }
@@ -19919,6 +20326,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Packs Api Meta Skills Get",
                   "type": "object"
                 }
@@ -19942,6 +20350,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -19958,6 +20367,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Match Pack Api Meta Skills Match Post",
                   "type": "object"
                 }
@@ -20001,6 +20411,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Pack Api Meta Skills  Name  Get",
                   "type": "object"
                 }
@@ -20065,6 +20476,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Mermaid Api Meta Skills  Name  Mermaid Get",
                   "type": "object"
                 }
@@ -20097,6 +20509,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Metrics Api Metrics Get",
                   "type": "object"
                 }
@@ -20139,6 +20552,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Metrics Summary Api Metrics Summary Get",
                   "type": "object"
                 }
@@ -20161,6 +20575,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Obs Health Api Observability Health Get",
                   "type": "object"
                 }
@@ -20183,6 +20598,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Topologies Api Organizations Topologies Get",
                   "type": "object"
                 }
@@ -20216,6 +20632,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Topology Api Organizations Topologies  Fingerprint  Get",
                   "type": "object"
                 }
@@ -20259,6 +20676,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Retire Topology Api Organizations Topologies  Fingerprint  Retire Post",
                   "type": "object"
                 }
@@ -20305,6 +20723,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Performance Api Organizations Topology Performance Get",
                   "type": "object"
                 }
@@ -20337,6 +20756,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Proposals Api Organizations Topology Proposals Get",
                   "type": "object"
                 }
@@ -20370,6 +20790,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Promote Proposal Api Organizations Topology Proposals  Idx  Promote Post",
                   "type": "object"
                 }
@@ -20402,6 +20823,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Payload",
                 "type": "object"
               }
@@ -20414,6 +20836,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Path Denylist Remove Api Path Denylist Delete",
                   "type": "object"
                 }
@@ -20445,6 +20868,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Path Denylist Get Api Path Denylist Get",
                   "type": "object"
                 }
@@ -20465,6 +20889,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Payload",
                 "type": "object"
               }
@@ -20477,6 +20902,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Path Denylist Add Api Path Denylist Post",
                   "type": "object"
                 }
@@ -20796,6 +21222,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -21058,6 +21485,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Plugin Get Api Plugins  Plugin Id  Get",
                   "type": "object"
                 }
@@ -21178,6 +21606,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Progress Api Progress Get",
                   "type": "object"
                 }
@@ -21210,6 +21639,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Prompts Api Prompts Get",
                   "type": "object"
                 }
@@ -21229,6 +21659,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Reload Prompts Api Prompts Reload Post",
                   "type": "object"
                 }
@@ -21275,6 +21706,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Prompt Api Prompts  Name  Get",
                   "type": "object"
                 }
@@ -21314,6 +21746,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -21330,6 +21763,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Put Prompt Api Prompts  Name  Put",
                   "type": "object"
                 }
@@ -21381,6 +21815,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Reflect Api Reflect Get",
                   "type": "object"
                 }
@@ -21403,6 +21838,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Evolution Status Api Regeneration Status Get",
                   "type": "object"
                 }
@@ -21426,6 +21862,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Regeneration Summary Api Regeneration Summary Get",
                   "type": "object"
                 }
@@ -21448,6 +21885,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Backends Api Remote Backends Get",
                   "type": "object"
                 }
@@ -21466,6 +21904,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -21482,6 +21921,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Add Backend Api Remote Backends Post",
                   "type": "object"
                 }
@@ -21522,6 +21962,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Remove Backend Api Remote Backends  Backend Id  Delete",
                   "type": "object"
                 }
@@ -21562,6 +22003,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Ping Backend Api Remote Backends  Backend Id  Health Post",
                   "type": "object"
                 }
@@ -21603,6 +22045,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -21619,6 +22062,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Proxy Api Remote Backends  Backend Id  Proxy Post",
                   "type": "object"
                 }
@@ -21648,6 +22092,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Deep Research Jobs Api Research Deep Jobs Get",
                   "type": "object"
                 }
@@ -21681,6 +22126,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Deep Research Job Api Research Deep Jobs  Job Id  Get",
                   "type": "object"
                 }
@@ -21723,6 +22169,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Plan Deep Research Api Research Deep Plan Post",
                   "type": "object"
                 }
@@ -21765,6 +22212,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Start Deep Research Api Research Deep Start Post",
                   "type": "object"
                 }
@@ -21796,6 +22244,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -21808,6 +22257,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Run Api Run Post",
                   "type": "object"
                 }
@@ -21858,6 +22308,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -21930,6 +22381,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Put Capabilities Api Settings Capabilities Put",
                   "type": "object"
                 }
@@ -21994,6 +22446,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Market Disable Api Skills Market  Skill Id  Disable Post",
                   "type": "object"
                 }
@@ -22037,6 +22490,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Market Enable Api Skills Market  Skill Id  Enable Post",
                   "type": "object"
                 }
@@ -22069,6 +22523,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Skills Custom Api Skills Custom Get",
                   "type": "object"
                 }
@@ -22114,6 +22569,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Install Skill Api Skills Install Post",
                   "type": "object"
                 }
@@ -22136,6 +22592,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Categories Api Skills Market Categories Get",
                   "type": "object"
                 }
@@ -22169,6 +22626,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Skill Info Api Skills Market Info  Name  Get",
                   "type": "object"
                 }
@@ -22212,6 +22670,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Uninstall Skill Api Skills Market Install  Name  Delete",
                   "type": "object"
                 }
@@ -22269,6 +22728,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Install Skill Api Skills Market Install  Name  Post",
                   "type": "object"
                 }
@@ -22301,6 +22761,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Installed Api Skills Market Installed Get",
                   "type": "object"
                 }
@@ -22322,6 +22783,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -22334,6 +22796,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Prepare Publish Api Skills Market Publish Post",
                   "type": "object"
                 }
@@ -22407,6 +22870,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Search Skills Api Skills Market Search Get",
                   "type": "object"
                 }
@@ -22473,6 +22937,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Disable Skill Api Skills  Skill Name  Disable Post",
                   "type": "object"
                 }
@@ -22516,6 +22981,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Enable Skill Api Skills  Skill Name  Enable Post",
                   "type": "object"
                 }
@@ -22559,6 +23025,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Uninstall Skill Api Skills  Skill Name  Uninstall Delete",
                   "type": "object"
                 }
@@ -22614,6 +23081,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Smart Routing Get Api Smart Routing Get",
                   "type": "object"
                 }
@@ -22636,6 +23104,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Status Api Status Get",
                   "type": "object"
                 }
@@ -22679,6 +23148,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Subagents Api Subagents Get",
                   "type": "object"
                 }
@@ -22711,6 +23181,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Dispatch Subagent Api Subagents Dispatch Post",
                   "type": "object"
                 }
@@ -22796,6 +23267,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Subagent Api Subagents  Name  Get",
                   "type": "object"
                 }
@@ -22828,6 +23300,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Swarm Status Api Swarm Status Get",
                   "type": "object"
                 }
@@ -22850,6 +23323,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Swarm Tasks Api Swarm Tasks Get",
                   "type": "object"
                 }
@@ -22870,6 +23344,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Swarm Tasks Create Api Swarm Tasks Post",
                   "type": "object"
                 }
@@ -22893,6 +23368,7 @@
               "schema": {
                 "anyOf": [
                   {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   {
@@ -22909,6 +23385,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Factory Reset Api System Factory Reset Post",
                   "type": "object"
                 }
@@ -22941,6 +23418,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Tb All Api Task Board All Get",
                   "type": "object"
                 }
@@ -22963,6 +23441,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Tb Stats Api Task Board Stats Get",
                   "type": "object"
                 }
@@ -22985,6 +23464,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Tb Timeline Api Task Board Timeline Get",
                   "type": "object"
                 }
@@ -23025,6 +23505,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Parallel List Tasks",
                   "type": "object"
                 }
@@ -23056,6 +23537,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -23068,6 +23550,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Parallel Submit Task",
                   "type": "object"
                 }
@@ -23111,6 +23594,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Task Api Tasks  Task Id  Delete",
                   "type": "object"
                 }
@@ -23152,6 +23636,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Parallel Get Task",
                   "type": "object"
                 }
@@ -23195,6 +23680,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Parallel Cancel Task",
                   "type": "object"
                 }
@@ -23251,6 +23737,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Pause Task Api Tasks  Task Id  Pause Post",
                   "type": "object"
                 }
@@ -23308,6 +23795,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Resume Task Api Tasks  Task Id  Resume Post",
                   "type": "object"
                 }
@@ -23351,6 +23839,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Inspect Invite Api Team Invites  Token  Get",
                   "type": "object"
                 }
@@ -23404,6 +23893,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Join Invite Api Team Invites  Token  Join Post",
                   "type": "object"
                 }
@@ -23455,6 +23945,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Tasks Api Team Tasks Get",
                   "type": "object"
                 }
@@ -23495,6 +23986,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Task Api Team Tasks Post",
                   "type": "object"
                 }
@@ -23538,6 +24030,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Task Api Team Tasks  Task Id  Delete",
                   "type": "object"
                 }
@@ -23579,6 +24072,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Task Api Team Tasks  Task Id  Get",
                   "type": "object"
                 }
@@ -23630,6 +24124,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Task Api Team Tasks  Task Id  Patch",
                   "type": "object"
                 }
@@ -23673,6 +24168,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Run Task Api Team Tasks  Task Id  Run Post",
                   "type": "object"
                 }
@@ -23705,6 +24201,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Teams Api Teams Get",
                   "type": "object"
                 }
@@ -23735,6 +24232,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Team Api Teams Post",
                   "type": "object"
                 }
@@ -23778,6 +24276,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Delete Team Api Teams  Team Id  Delete",
                   "type": "object"
                 }
@@ -23819,6 +24318,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Team Api Teams  Team Id  Get",
                   "type": "object"
                 }
@@ -23870,6 +24370,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Team Api Teams  Team Id  Put",
                   "type": "object"
                 }
@@ -23930,6 +24431,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Invite Api Teams  Team Id  Invite Post",
                   "type": "object"
                 }
@@ -23982,6 +24484,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Remove Participant Api Teams  Team Id  Participants  Participant Id  Delete",
                   "type": "object"
                 }
@@ -24042,6 +24545,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Participant Api Teams  Team Id  Participants  Participant Id  Patch",
                   "type": "object"
                 }
@@ -24066,6 +24570,60 @@
         ]
       }
     },
+    "/api/teams/{team_id}/speaker-policy": {
+      "patch": {
+        "operationId": "update_speaker_policy_api_teams__team_id__speaker_policy_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpeakerPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Speaker Policy Api Teams  Team Id  Speaker Policy Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Speaker Policy",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
     "/api/telemetry/stats": {
       "get": {
         "operationId": "_telemetry_stats_api_telemetry_stats_get",
@@ -24074,6 +24632,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response  Telemetry Stats Api Telemetry Stats Get",
                   "type": "object"
                 }
@@ -24151,6 +24710,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Thread Active Agents Api Threads  Thread Id  Active Agents Get",
                   "type": "object"
                 }
@@ -24665,6 +25225,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Verify Detect Api Verify Detect Post",
                   "type": "object"
                 }
@@ -24707,6 +25268,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Verify Run Api Verify Run Post",
                   "type": "object"
                 }
@@ -24768,6 +25330,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Docs List Api Wiki Docs Get",
                   "type": "object"
                 }
@@ -24827,6 +25390,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Doc Read Api Wiki Docs  Doc Path  Get",
                   "type": "object"
                 }
@@ -24868,6 +25432,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -24880,6 +25445,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Doc Write Api Wiki Docs  Doc Path  Put",
                   "type": "object"
                 }
@@ -24931,6 +25497,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Generate Api Wiki Generate Post",
                   "type": "object"
                 }
@@ -24963,6 +25530,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Progress Api Wiki Progress Get",
                   "type": "object"
                 }
@@ -24997,6 +25565,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Settings Get Api Wiki Settings Get",
                   "type": "object"
                 }
@@ -25038,6 +25607,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Body",
                 "type": "object"
               }
@@ -25050,6 +25620,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Settings Set Api Wiki Settings Post",
                   "type": "object"
                 }
@@ -25101,6 +25672,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Status Api Wiki Status Get",
                   "type": "object"
                 }
@@ -25152,6 +25724,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Api Wiki Update Api Wiki Update Post",
                   "type": "object"
                 }
@@ -25400,6 +25973,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Sessions V1 Sessions Get",
@@ -25422,6 +25996,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Session V1 Sessions Post",
                   "type": "object"
                 }
@@ -25455,6 +26030,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Session V1 Sessions  Session Id  Get",
                   "type": "object"
                 }
@@ -25499,6 +26075,7 @@
               "application/json": {
                 "schema": {
                   "items": {
+                    "additionalProperties": true,
                     "type": "object"
                   },
                   "title": "Response List Events V1 Sessions  Session Id  Events Get",
@@ -25542,6 +26119,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Send Events V1 Sessions  Session Id  Events Post",
                   "type": "object"
                 }
