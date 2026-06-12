@@ -79,6 +79,7 @@ class TentacleCoordinator:
         pc_screen: bool = False,
         pc_screen_config: PcScreenConfig | None = None,
         remote_input: bool = False,
+        auth_token: str | None = None,
     ) -> None:
         self.pool = TentaclePool()
         # 屏幕流中继服务
@@ -94,6 +95,7 @@ class TentacleCoordinator:
         self.ws_server = TentacleWebSocketServer(
             host=host,
             port=port,
+            auth_token=auth_token,
             on_device_hello=self._on_device_hello,
             on_device_disconnect=self._on_device_disconnect,
             on_heartbeat=self._on_heartbeat,

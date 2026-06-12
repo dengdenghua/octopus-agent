@@ -21,8 +21,10 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
+import os
 import struct
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -32,6 +34,8 @@ from websockets.server import WebSocketServerProtocol, serve
 from ..base import Heartbeat, ToolCall, ToolResult, now_ms
 
 logger = logging.getLogger(__name__)
+
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", ""})
 
 # ── 消息类型常量 ──────────────────────────────────────────
 
@@ -125,9 +129,21 @@ class TentacleWebSocketServer:
         on_task_execute: Callable[[TaskExecuteRequest, WebSocketServerProtocol], Awaitable[None]] | None = None,
         on_screen_frame: Callable[[str, bytes], Awaitable[None]] | None = None,
         on_remote_input: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+        auth_token: str | None = None,
     ) -> None:
         self.host = host
         self.port = port
+        # Shared secret a device must present in its ``device/hello`` to
+        # be allowed to register and drive the mother brain. Falls back
+        # to the ``OCTOPUS_TENTACLE_TOKEN`` env var. When unset AND the
+        # bind host is loopback, auth is skipped (local dev). When unset
+        # AND bound to a routable interface (the default 0.0.0.0, needed
+        # for phones on the LAN), every connection is rejected — an
+        # exposed port with no secret to check against is never safe.
+        self.auth_token = (
+            auth_token if auth_token is not None
+            else os.environ.get("OCTOPUS_TENTACLE_TOKEN") or None
+        )
         self.on_device_hello = on_device_hello
         self.on_device_disconnect = on_device_disconnect
         self.on_tool_result = on_tool_result
@@ -146,8 +162,33 @@ class TentacleWebSocketServer:
 
     # ── 生命周期 ────────────────────────────────────────────
 
+    def _is_loopback(self) -> bool:
+        return self.host in _LOOPBACK_HOSTS
+
+    def _conn_pre_authenticated(self) -> bool:
+        """A fresh connection is trusted only on a loopback bind with no
+        token configured. Any token (even on loopback) must be presented;
+        any non-loopback bind must present a token."""
+        return self.auth_token is None and self._is_loopback()
+
+    def _check_auth(self, msg: dict[str, Any]) -> bool:
+        """Validate the token carried by a ``device/hello`` message."""
+        if self.auth_token is None:
+            # No secret configured: only acceptable on a loopback bind.
+            return self._is_loopback()
+        params = msg.get("params") or {}
+        provided = params.get("auth_token") or params.get("token") or ""
+        return hmac.compare_digest(str(provided), self.auth_token)
+
     async def start(self) -> None:
         """启动 WebSocket 服务器."""
+        if self.auth_token is None and not self._is_loopback():
+            logger.warning(
+                "TentacleWebSocketServer bound to %s with NO auth token — "
+                "every connection will be REJECTED. Set OCTOPUS_TENTACLE_TOKEN "
+                "(or pass auth_token=) to allow devices, or bind 127.0.0.1.",
+                self.host,
+            )
         logger.info("TentacleWebSocketServer starting on %s:%d", self.host, self.port)
         self._server = await serve(
             self._handle_connection,
@@ -269,9 +310,39 @@ class TentacleWebSocketServer:
         remote = f"{ws.remote_address[0]}:{ws.remote_address[1]}"
         logger.info("ws connection from %s path=%s", remote, path)
         tentacle_id: str | None = None
+        # Until a device authenticates (valid device/hello token), no
+        # other method — and no binary frame — is processed. A loopback
+        # bind with no token configured starts pre-authenticated.
+        authenticated = self._conn_pre_authenticated()
 
         try:
             async for raw in ws:
+                if not authenticated:
+                    # Only a text device/hello carrying a valid token can
+                    # open the connection. Anything else is rejected.
+                    if isinstance(raw, bytes):
+                        await ws.close(code=1008, reason="unauthorized")
+                        return
+                    try:
+                        hello_msg = json.loads(raw)
+                    except json.JSONDecodeError:
+                        await self._send_error(ws, None, -32700, "Parse error")
+                        continue
+                    if (
+                        hello_msg.get("method") == MSG_DEVICE_HELLO
+                        and self._check_auth(hello_msg)
+                    ):
+                        authenticated = True
+                        tentacle_id = await self._handle_hello(ws, hello_msg)
+                        continue
+                    logger.warning("ws unauthorized hello from %s", remote)
+                    await self._send_error(
+                        ws, hello_msg.get("id"), -32099,
+                        "unauthorized: device/hello with a valid token required",
+                    )
+                    await ws.close(code=1008, reason="unauthorized")
+                    return
+
                 # 二进制帧：设备推送 screen_frame
                 if isinstance(raw, bytes):
                     await self._handle_binary_frame(ws, raw, tentacle_id)
