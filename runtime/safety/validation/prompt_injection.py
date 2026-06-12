@@ -31,7 +31,15 @@ from dataclasses import dataclass
 # mcp_ prefix can be renamed), so affinity, not the name, is the reliable
 # signal that the payload is untrusted.
 UNTRUSTED_AFFINITIES: frozenset[str] = frozenset(
-    {"web", "browser", "mcp", "external"},
+    # "network" covers remote-FETCH tools (git_pull/git_fetch/git_clone, http
+    # GET/download) whose output carries attacker-controllable content — a
+    # pulled repo's commit messages/refs, a fetched body. Their status output
+    # rarely trips a marker, so the false-taint cost is low while the
+    # remote-ingestion vector is closed. KNOWN BOUNDARY: content surfaced by
+    # LOCAL-read tools (read_file, git_diff/show/log) after an attacker plants
+    # it is NOT tainted here — marking every local read untrusted would taint
+    # nearly every turn. That residual is documented in the threat model.
+    {"web", "browser", "mcp", "external", "network"},
 )
 
 # Tool-name prefixes that are external regardless of declared affinity —
@@ -49,6 +57,14 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         r"system|earlier)", re.I),
      "override_prior"),
     (re.compile(r"forget\s+(?:everything|all|your|previous)\b", re.I),
+     "override_prior"),
+    # Synonyms for "ignore/forget your instructions" the verbs above miss —
+    # "change/modify/alter/replace/update your instructions/rules/task/persona".
+    (re.compile(
+        r"(?:change|modify|alter|replace|override|update)\s+"
+        r"(?:your\s+|the\s+|my\s+)?"
+        r"(?:instruction|directive|system\s*prompt|prompt|rule|task|"
+        r"behaviou?r|persona|role|objective|goal)s?\b", re.I),
      "override_prior"),
     (re.compile(r"you\s+are\s+now\s+(?:a|an|the|in|no\s+longer|going)\b", re.I),
      "role_override"),
@@ -72,9 +88,17 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         r"(?:secret|credential|api[ _-]?key|password|token|\.env|private\s+key|"
         r"id_rsa)", re.I),
      "exfil"),
+    # Credential term in close proximity to a URL. The English preposition
+    # "to/into/at" used to be REQUIRED here, which let any non-English exfil
+    # instruction ("api_key 发送到 https://…") slip through — the connecting
+    # word is the language-variable part, while the credential token and URL
+    # stay Latin. Match on proximity instead. False positives (a page that
+    # merely mentions a token near a link) only ESCALATE to human approval,
+    # never silently block, so erring toward catching exfil is acceptable.
     (re.compile(
-        r"(?:secret|credential|api[ _-]?key|password|token|\.env|private\s+key)"
-        r"\b[^\n]{0,80}?\b(?:to|into|at)\s+https?://", re.I),
+        r"(?:secret|credential|api[ _-]?key|password|token|\.env|"
+        r"private\s+key|id_rsa)"
+        r"[^\n]{0,100}?https?://", re.I),
      "exfil"),
 )
 
