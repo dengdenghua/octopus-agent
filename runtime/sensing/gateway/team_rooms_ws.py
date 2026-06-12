@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -46,6 +46,11 @@ except ImportError:  # pragma: no cover
 if TYPE_CHECKING:
     from .team_rooms_router import TeamParticipantWire, TeamRoomWire
 
+# How many recent spoken lines a room keeps so a twin responder has
+# conversational context. The room is otherwise a pure relay (it doesn't
+# persist messages), so this is a small in-memory transcript window.
+_RING_SIZE = 20
+
 
 @dataclass
 class TeamRoomWsContext:
@@ -62,6 +67,128 @@ class TeamRoomWsContext:
     broadcast_presence: Callable[[str], Awaitable[None]]
     broadcast_floor: Callable[[str, TeamRoomWire], Awaitable[None]]
     active_participant: Callable[[str, str], TeamParticipantWire | None]
+    # Twin speaking (optional injection — keeps the gateway a leaf): when the
+    # floor lands on a participant who bound a digital-twin agent
+    # (``speak_mode == "twin"``), the handler asks this callback for a line
+    # and emits it on that participant's behalf. Signature is
+    # ``(team, twin_participant, recent_transcript) -> utterance | None``;
+    # None on the field (the default) disables twin speaking entirely.
+    twin_responder: (
+        Callable[
+            [TeamRoomWire, TeamParticipantWire, list[dict[str, Any]]],
+            Awaitable[str | None],
+        ]
+        | None
+    ) = None
+    # Per-room ring buffer of the most recent spoken lines, so a twin
+    # responder has context. The router hands over one shared empty dict; the
+    # handler appends as messages land and trims to ``_RING_SIZE``.
+    recent_messages: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+
+
+def _remember_line(
+    ctx: TeamRoomWsContext,
+    team_id: str,
+    participant_id: str,
+    display_name: str,
+    text: str,
+) -> None:
+    """Append a spoken line to the room's bounded ring buffer. Locked (cheap,
+    no await) — the buffer is shared across the room's sockets."""
+    with ctx.lock:
+        buf = ctx.recent_messages.setdefault(team_id, [])
+        buf.append({
+            "participant_id": participant_id,
+            "display_name": display_name,
+            "text": text,
+        })
+        if len(buf) > _RING_SIZE:
+            del buf[: len(buf) - _RING_SIZE]
+
+
+async def _twin_speak(
+    ctx: TeamRoomWsContext, team_id: str, participant: TeamParticipantWire
+) -> bool:
+    """If ``participant`` delegated to a digital twin and a responder is
+    wired, ask it for a line and broadcast it on the participant's behalf —
+    reusing the on_behalf_of message shape (attributed to the participant,
+    ``spoken_by`` the twin agent, ``via`` ``"twin"``). Returns True iff a
+    line was emitted. None / empty / any error → no broadcast: the twin
+    simply stays silent, which callers treat like a silent human.
+
+    The model call happens inside ``responder`` and is awaited OUTSIDE the
+    room lock — only the snapshot read and the post-broadcast ring append
+    take the lock, and neither awaits while holding it."""
+    responder = ctx.twin_responder
+    if responder is None:
+        return False
+    if _normalize_speak_mode(getattr(participant, "speak_mode", "manual")) != "twin":
+        return False
+    twin_agent_id = (getattr(participant, "twin_agent_id", None) or "").strip()
+    if not twin_agent_id:
+        return False
+    with ctx.lock:
+        team = ctx.teams.get(team_id)
+        transcript = list(ctx.recent_messages.get(team_id, []))
+    if team is None:
+        return False
+    try:
+        line = await responder(team, participant, transcript)
+    except Exception:  # noqa: BLE001 — twin generation is best-effort; stay silent on any failure
+        return False
+    text = (str(line).strip() if line else "")[:4000]
+    if not text:
+        return False
+    await ctx.broadcast(
+        team_id,
+        {
+            "type": "message",
+            "team_id": team_id,
+            "thread_id": None,
+            "message_id": f"room-msg-{uuid4().hex}",
+            "participant_id": participant.id,
+            "display_name": participant.display_name,
+            "spoken_by": twin_agent_id,
+            "via": "twin",
+            "text": text,
+            "created_at": _now(),
+        },
+    )
+    _remember_line(ctx, team_id, participant.id, participant.display_name, text)
+    return True
+
+
+async def _drive_round_robin_twins(ctx: TeamRoomWsContext, team_id: str) -> None:
+    """Round_robin only: after the floor advances, let a twin floor-holder
+    speak, then advance past it — repeating for consecutive twins so the
+    rotation never stalls on an agent that can't self-advance. Each twin
+    speaks at most once per call (tracked in ``spoken``), and the walk stops
+    at the first human or when it wraps, so even an all-twin room makes one
+    pass and halts — never an unbounded advance."""
+    spoken: set[str] = set()
+    while True:
+        with ctx.lock:
+            room = ctx.teams.get(team_id)
+        if room is None:
+            return
+        holder_id = getattr(room, "current_speaker_id", None)
+        if not holder_id or holder_id in spoken:
+            return
+        holder = next((p for p in room.participants if p.id == holder_id), None)
+        if holder is None:
+            return
+        if not await _twin_speak(ctx, team_id, holder):
+            return
+        spoken.add(holder_id)
+        # The twin "spoke" → round_robin hands the floor to the next seat.
+        with ctx.lock:
+            room = ctx.teams.get(team_id)
+            if room is None:
+                return
+            advanced = advance_round_robin(room, holder_id)
+            ctx.teams[team_id] = advanced
+            ctx.save()
+        await ctx.broadcast_floor(team_id, advanced)
 
 
 async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> None:
@@ -274,6 +401,11 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                         "created_at": _now(),
                     },
                 )
+                # Keep the spoken line in the room's transcript window so a
+                # twin asked to speak next has context. Only when twins are
+                # wired — otherwise the message path is unchanged (no buffer).
+                if ctx.twin_responder is not None:
+                    _remember_line(ctx, team_id, speaker.id, speaker.display_name, text[:4000])
                 # round_robin hands the floor to the next eligible speaker
                 # once a message lands. The other turn modes hold the floor
                 # until the speaker yields or the moderator moves it.
@@ -289,6 +421,10 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                             _save()
                     if advanced is not None:
                         await _broadcast_floor(team_id, advanced)
+                        # If the floor just landed on a bound twin, let it (and
+                        # any consecutive twins) speak, advancing the rotation.
+                        if ctx.twin_responder is not None:
+                            await _drive_round_robin_twins(ctx, team_id)
             elif msg_type == "thread:update":
                 msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
                 if not msg_thread_id:
@@ -351,6 +487,21 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     })
                 elif floor_team is not None:
                     await _broadcast_floor(team_id, floor_team)
+                    # A twin granted the floor speaks once and keeps it — in
+                    # roll_call/moderated the moderator moves the floor on, so
+                    # there's no stall to advance past (unlike round_robin).
+                    if ctx.twin_responder is not None:
+                        granted_id = getattr(floor_team, "current_speaker_id", None)
+                        granted = (
+                            next(
+                                (p for p in floor_team.participants if p.id == granted_id),
+                                None,
+                            )
+                            if granted_id
+                            else None
+                        )
+                        if granted is not None:
+                            await _twin_speak(ctx, team_id, granted)
     except WebSocketDisconnect:  # noqa: BLE001 — WS closed normally during send; cleanup proceeds
         pass
     except (ConnectionError, TimeoutError, OSError):  # noqa: BLE001 — WS send failed; cleanup proceeds

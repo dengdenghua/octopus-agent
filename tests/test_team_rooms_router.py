@@ -26,6 +26,7 @@ def _client(
     *,
     identity_store=None,
     require_auth: bool = False,
+    twin_responder=None,
 ) -> TestClient:
     app = FastAPI()
     app.include_router(
@@ -33,6 +34,7 @@ def _client(
             state_path=tmp_path / "team_rooms.json",
             identity_store=identity_store,
             require_auth=require_auth,
+            twin_responder=twin_responder,
         ),
     )
     return TestClient(app)
@@ -426,9 +428,11 @@ def test_can_speak_moderated_floor_holder_and_moderator() -> None:
 # ── turn engine: end-to-end over the WebSocket (single-socket, drained) ──
 
 
-def _room_with_two_members(tmp_path: Path) -> tuple[TestClient, str]:
+def _room_with_two_members(
+    tmp_path: Path, *, twin_responder=None
+) -> tuple[TestClient, str]:
     """Team + two human members joined via invite (ids 'alice','bob')."""
-    client = _client(tmp_path)
+    client = _client(tmp_path, twin_responder=twin_responder)
     tid = client.post("/api/teams", json=_team_body()).json()["id"]
     invite = client.post(f"/api/teams/{tid}/invite", json={"role": "member"}).json()
     token = invite["invite_token"]
@@ -589,3 +593,186 @@ def test_unauthorized_delegation_denied_over_ws(tmp_path: Path) -> None:
         denied = alice.receive_json()
         assert denied["type"] == "error"
         assert denied["code"] == "delegation_denied"
+
+
+# ── twin speaking (C-layer → runtime bridge): an injected responder ────
+# generates the line; the gateway emits it on the represented person's
+# behalf when the turn-engine floor reaches a bound twin.
+
+
+def _recording_responder(reply: str | None = "On it — I'll take that."):
+    """A fake ``twin_responder`` that records each invocation and returns a
+    fixed ``reply`` (None to model a twin that declines to speak)."""
+    calls: list[dict] = []
+
+    async def responder(team, participant, transcript) -> str | None:
+        calls.append({
+            "participant_id": participant.id,
+            "twin_agent_id": getattr(participant, "twin_agent_id", None),
+            "transcript": [dict(e) for e in transcript],
+        })
+        return reply
+
+    return responder, calls
+
+
+def _drain_until_pong(ws) -> list[dict]:
+    """Send a ping and return every frame received up to (but excluding) the
+    pong. The pong is a per-socket barrier sent only after the handler has
+    finished the prior message — so any asynchronously broadcast twin lines
+    have already been queued. Lets a test assert on twin output without
+    guessing exact frame counts (and a non-terminating cascade would hang
+    here → caught by the suite's per-test timeout)."""
+    ws.send_json({"type": "ping"})
+    frames: list[dict] = []
+    while True:
+        frame = ws.receive_json()
+        if frame.get("type") == "pong":
+            return frames
+        frames.append(frame)
+
+
+def test_twin_speaks_when_floor_granted_over_ws(tmp_path: Path) -> None:
+    """roll_call: when the moderator grants the floor to a participant who
+    bound a digital twin, that twin generates a line and it's broadcast on
+    the participant's behalf (attributed to them, spoken_by the twin agent)."""
+    responder, calls = _recording_responder("I'll handle the deploy.")
+    client, tid = _room_with_two_members(tmp_path, twin_responder=responder)
+    # bob delegates to the 'general' team agent as his twin.
+    res = client.patch(
+        f"/api/teams/{tid}/participants/bob/delegation",
+        json={"speak_mode": "twin", "twin_agent_id": "general"},
+    )
+    assert res.status_code == 200, res.json()
+    client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "roll_call"})
+
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id=owner-local&display_name=Owner") as mod:
+        assert mod.receive_json()["type"] == "ready"
+        assert mod.receive_json()["type"] == "presence"
+        mod.send_json({"type": "floor:grant", "target": "bob"})
+        floor = mod.receive_json()
+        assert floor["type"] == "floor" and floor["current_speaker_id"] == "bob"
+        # the bound twin generated + emitted a line on bob's behalf
+        msg = mod.receive_json()
+        assert msg["type"] == "message"
+        assert msg["participant_id"] == "bob"     # attributed to bob
+        assert msg["spoken_by"] == "general"      # ...by his twin agent
+        assert msg["via"] == "twin"
+        assert msg["text"] == "I'll handle the deploy."
+    assert [c["participant_id"] for c in calls] == ["bob"]
+    assert calls[0]["twin_agent_id"] == "general"
+
+
+def test_twin_speaks_in_round_robin_over_ws(tmp_path: Path) -> None:
+    """round_robin: after a human's message advances the floor onto a bound
+    twin, the twin speaks; consecutive twins each speak once and the walk
+    halts at the first human. The twin sees the room's recent transcript."""
+    responder, calls = _recording_responder("Sounds good — let's ship it.")
+    client, tid = _room_with_two_members(tmp_path, twin_responder=responder)
+    res = client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "round_robin"})
+    team = res.json()["team"]
+    seated = team["current_speaker_id"]
+    assert seated is not None
+    others = [
+        p["id"] for p in team["participants"]
+        if p["id"] != seated and p["status"] != "removed"
+    ]
+    # Everyone except the seated speaker delegates to the 'general' twin, so
+    # wherever the floor advances next it lands on a twin.
+    for pid in others:
+        r = client.patch(
+            f"/api/teams/{tid}/participants/{pid}/delegation",
+            json={"speak_mode": "twin", "twin_agent_id": "general"},
+        )
+        assert r.status_code == 200, r.json()
+
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id={seated}&display_name=Seat") as ws:
+        assert ws.receive_json()["type"] == "ready"
+        assert ws.receive_json()["type"] == "presence"
+        ws.send_json({"type": "message", "text": "let's plan the launch"})
+        frames = _drain_until_pong(ws)
+
+    twin_msgs = [f for f in frames if f.get("via") == "twin"]
+    assert twin_msgs, f"expected a twin to speak; got {[f.get('type') for f in frames]}"
+    assert all(m["type"] == "message" and m["spoken_by"] == "general" for m in twin_msgs)
+    assert all(m["participant_id"] in others for m in twin_msgs)
+    assert twin_msgs[0]["text"] == "Sounds good — let's ship it."
+    # the twin was handed the human's line in its transcript window
+    assert calls, "responder was never called"
+    assert any(e["text"] == "let's plan the launch" for e in calls[0]["transcript"])
+
+
+def test_manual_participant_does_not_trigger_twin(tmp_path: Path) -> None:
+    """A participant who has NOT delegated to a twin never consults the
+    responder, even when the floor lands squarely on them."""
+    responder, calls = _recording_responder("(should never be sent)")
+    client, tid = _room_with_two_members(tmp_path, twin_responder=responder)
+    # bob stays manual (no delegation set).
+    client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "roll_call"})
+
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id=owner-local&display_name=Owner") as mod:
+        assert mod.receive_json()["type"] == "ready"
+        assert mod.receive_json()["type"] == "presence"
+        mod.send_json({"type": "floor:grant", "target": "bob"})
+        floor = mod.receive_json()
+        assert floor["type"] == "floor" and floor["current_speaker_id"] == "bob"
+        frames = _drain_until_pong(mod)
+
+    assert calls == []  # manual participant → responder never consulted
+    assert not [f for f in frames if f.get("via") == "twin"]
+
+
+def test_twin_responder_none_does_not_broadcast(tmp_path: Path) -> None:
+    """A twin that returns None (nothing to add) is consulted but emits no
+    message — the floor is unaffected, like a silent human."""
+    responder, calls = _recording_responder(None)
+    client, tid = _room_with_two_members(tmp_path, twin_responder=responder)
+    client.patch(
+        f"/api/teams/{tid}/participants/bob/delegation",
+        json={"speak_mode": "twin", "twin_agent_id": "general"},
+    )
+    client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "roll_call"})
+
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id=owner-local&display_name=Owner") as mod:
+        assert mod.receive_json()["type"] == "ready"
+        assert mod.receive_json()["type"] == "presence"
+        mod.send_json({"type": "floor:grant", "target": "bob"})
+        assert mod.receive_json()["current_speaker_id"] == "bob"
+        frames = _drain_until_pong(mod)
+
+    assert [c["participant_id"] for c in calls] == ["bob"]  # responder WAS consulted
+    assert not [f for f in frames if f.get("via") == "twin"]  # ...but emitted nothing
+
+
+def test_round_robin_twin_cascade_terminates(tmp_path: Path) -> None:
+    """Even when EVERY seat is a twin, a single human message drives exactly
+    one bounded pass — each seat speaks at most once and the walk halts when
+    it wraps (no unbounded advance). The drain returning at all proves it."""
+    responder, calls = _recording_responder("ack")
+    client, tid = _room_with_two_members(tmp_path, twin_responder=responder)
+    res = client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "round_robin"})
+    team = res.json()["team"]
+    seats = [p["id"] for p in team["participants"] if p["status"] != "removed"]
+    for pid in seats:
+        r = client.patch(
+            f"/api/teams/{tid}/participants/{pid}/delegation",
+            json={"speak_mode": "twin", "twin_agent_id": "general"},
+        )
+        assert r.status_code == 200, r.json()
+    seated = team["current_speaker_id"]
+
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id={seated}&display_name=Seat") as ws:
+        assert ws.receive_json()["type"] == "ready"
+        assert ws.receive_json()["type"] == "presence"
+        ws.send_json({"type": "message", "text": "kickoff"})
+        frames = _drain_until_pong(ws)  # returns ⇒ the cascade terminated
+
+    twin_msgs = [f for f in frames if f.get("via") == "twin"]
+    # one line per distinct seat, then the walk wraps and halts — bounded.
+    assert 1 <= len(twin_msgs) <= len(seats)
+    assert len({m["participant_id"] for m in twin_msgs}) == len(twin_msgs)  # each seat once

@@ -12,6 +12,7 @@ import contextlib
 import json
 import re
 import secrets
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -168,8 +169,23 @@ def create_team_rooms_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
     reset_callback: Any = None,
+    twin_responder: (
+        Callable[
+            [TeamRoomWire, TeamParticipantWire, list[dict[str, Any]]],
+            Awaitable[str | None],
+        ]
+        | None
+    ) = None,
 ) -> Any:
-    """Create `/api/teams/*` routes."""
+    """Create `/api/teams/*` routes.
+
+    ``twin_responder`` (optional) bridges the room to an agent runtime: when
+    the turn-engine floor lands on a participant who bound a digital-twin
+    agent, the WS handler calls it for a short line and emits it on that
+    participant's behalf. Injected as a callback so this gateway module never
+    imports the model/execution layer (it stays an import leaf). None
+    disables twin speaking — the human/host paths are unaffected.
+    """
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
@@ -797,6 +813,7 @@ def create_team_rooms_router(
         broadcast_presence=_broadcast_presence,
         broadcast_floor=_broadcast_floor,
         active_participant=_active_participant,
+        twin_responder=twin_responder,
     )
 
     @router.websocket("/api/teams/{team_id}/ws")

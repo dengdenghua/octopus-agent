@@ -515,12 +515,17 @@ def create_app(
                     exc,
                 )
 
+    from runtime.platform.ui.team_twin_speaker import make_twin_responder
     from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
     team_rooms_router = create_team_rooms_router(
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
         jwt_secret=molili_jwt_secret,
         reset_callback=getattr(getattr(app.state, "thread_store", None), "clear", None),
+        # Bridge bound digital twins to the model router so they actually
+        # generate + emit speech when the floor reaches them. None-safe: no
+        # router (e.g. no planner) → twins stay silent, human paths unchanged.
+        twin_responder=make_twin_responder(stack),
     )
     app.state.team_rooms_router = team_rooms_router
     app.include_router(team_rooms_router)
