@@ -11,6 +11,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 from runtime.sensing.gateway.team_rooms_router import (  # noqa: E402
     TeamParticipantWire,
     TeamRoomWire,
+    _initial_floor_state,
+    _next_speaker,
     _normalize_speaker_policy,
     _participant_can_speak,
     create_team_rooms_router,
@@ -244,7 +246,14 @@ def _gov_participant(
     )
 
 
-def _gov_room(policy: str = "free", *, owner_id: str = "owner-actor") -> TeamRoomWire:
+def _gov_room(
+    policy: str = "free",
+    *,
+    owner_id: str = "owner-actor",
+    current_speaker_id: str | None = None,
+    moderator_id: str | None = None,
+    participants: list[TeamParticipantWire] | None = None,
+) -> TeamRoomWire:
     return TeamRoomWire(
         id="t",
         name="T",
@@ -252,6 +261,9 @@ def _gov_room(policy: str = "free", *, owner_id: str = "owner-actor") -> TeamRoo
         updated_at="t0",
         owner_id=owner_id,
         speaker_policy=policy,
+        current_speaker_id=current_speaker_id,
+        moderator_id=moderator_id,
+        participants=participants or [],
     )
 
 
@@ -260,9 +272,12 @@ def test_speaker_policy_normalization() -> None:
     assert _normalize_speaker_policy("ADMIN_ONLY") == "admin_only"
     assert _normalize_speaker_policy("owner_only") == "admin_only"  # alias
     assert _normalize_speaker_policy(None) == "free"
-    # turn-based modes have no engine yet → fall back to the open default
-    # rather than persisting a policy we cannot enforce
-    assert _normalize_speaker_policy("round_robin") == "free"
+    # turn-based modes are now enforced (the floor engine landed)
+    assert _normalize_speaker_policy("round_robin") == "round_robin"
+    assert _normalize_speaker_policy("round-robin") == "round_robin"  # dash alias
+    assert _normalize_speaker_policy("rollcall") == "roll_call"  # alias
+    assert _normalize_speaker_policy("HOST") == "moderated"  # alias
+    # genuinely unknown values still fall back to the open default
     assert _normalize_speaker_policy("garbage") == "free"
 
 
@@ -323,3 +338,180 @@ def test_muted_participant_cannot_speak_over_ws(tmp_path: Path) -> None:
         assert denied["type"] == "error"
         assert denied["code"] == "speech_denied"
         assert "muted" in denied["message"]
+
+
+# ── turn engine: pure resolution (round_robin / roll_call / moderated) ──
+
+
+def test_next_speaker_wraps_and_skips_muted() -> None:
+    room = _gov_room(
+        "round_robin",
+        participants=[
+            _gov_participant("a"),
+            _gov_participant("b", muted=True),  # muted → not a seat
+            _gov_participant("c"),
+        ],
+    )
+    assert _next_speaker(room, None) == "a"  # first eligible
+    assert _next_speaker(room, "a") == "c"  # b skipped
+    assert _next_speaker(room, "c") == "a"  # wraps
+    assert _next_speaker(room, "ghost") == "a"  # departed holder → first seat
+
+
+def test_next_speaker_none_when_nobody_eligible() -> None:
+    room = _gov_room("round_robin", participants=[_gov_participant("a", muted=True)])
+    assert _next_speaker(room, None) is None
+
+
+def test_initial_floor_state_per_policy() -> None:
+    room = _gov_room(
+        "free",
+        owner_id="alice",
+        participants=[_gov_participant("a"), _gov_participant("b")],
+    )
+    rr = _initial_floor_state(room, "round_robin")
+    assert rr["current_speaker_id"] == "a"  # seats the first eligible speaker
+    assert rr["moderator_id"] == "alice"  # owner becomes moderator
+    assert rr["floor_requests"] == []
+    for mode in ("roll_call", "moderated"):
+        st = _initial_floor_state(room, mode)
+        assert st["current_speaker_id"] is None  # floor opens empty
+        assert st["moderator_id"] == "alice"
+    free = _initial_floor_state(room, "free")
+    assert free["current_speaker_id"] is None  # leaving a turn mode tears it down
+    assert free["moderator_id"] is None
+
+
+def test_can_speak_round_robin_only_floor_holder() -> None:
+    room = _gov_room(
+        "round_robin",
+        current_speaker_id="a",
+        participants=[_gov_participant("a"), _gov_participant("b")],
+    )
+    ok, _ = _participant_can_speak(room, _gov_participant("a"))
+    assert ok is True
+    ok, reason = _participant_can_speak(room, _gov_participant("b"))
+    assert ok is False and reason is not None and "turn" in reason
+    # strict: even an owner-role participant waits their turn in round_robin
+    ok, _ = _participant_can_speak(room, _gov_participant("oseat", role="owner"))
+    assert ok is False
+
+
+def test_can_speak_roll_call_moderator_and_called() -> None:
+    room = _gov_room(
+        "roll_call", owner_id="alice", current_speaker_id="b", participants=[_gov_participant("b")]
+    )
+    ok, _ = _participant_can_speak(room, _gov_participant("b"))  # called on
+    assert ok is True
+    ok, _ = _participant_can_speak(room, _gov_participant("pa", actor_id="alice"))  # moderator
+    assert ok is True
+    ok, reason = _participant_can_speak(room, _gov_participant("c", actor_id="carol"))
+    assert ok is False and reason is not None and "called on" in reason
+
+
+def test_can_speak_moderated_floor_holder_and_moderator() -> None:
+    room = _gov_room(
+        "moderated", owner_id="alice", current_speaker_id="b", participants=[_gov_participant("b")]
+    )
+    ok, _ = _participant_can_speak(room, _gov_participant("b"))  # holds the floor
+    assert ok is True
+    ok, _ = _participant_can_speak(room, _gov_participant("pa", actor_id="alice"))  # moderator
+    assert ok is True
+    ok, reason = _participant_can_speak(room, _gov_participant("c", actor_id="carol"))
+    assert ok is False and reason is not None and "raise your hand" in reason
+
+
+# ── turn engine: end-to-end over the WebSocket (single-socket, drained) ──
+
+
+def _room_with_two_members(tmp_path: Path) -> tuple[TestClient, str]:
+    """Team + two human members joined via invite (ids 'alice','bob')."""
+    client = _client(tmp_path)
+    tid = client.post("/api/teams", json=_team_body()).json()["id"]
+    invite = client.post(f"/api/teams/{tid}/invite", json={"role": "member"}).json()
+    token = invite["invite_token"]
+    for who in ("alice", "bob"):
+        client.post(
+            f"/api/team-invites/{token}/join",
+            json={"display_name": who.title(), "participant_id": who},
+        )
+    return client, tid
+
+
+def test_round_robin_enforces_and_advances_over_ws(tmp_path: Path) -> None:
+    client, tid = _room_with_two_members(tmp_path)
+    # Switch to round_robin; the response tells us who got seated first.
+    res = client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "round_robin"})
+    assert res.status_code == 200
+    seated = res.json()["team"]["current_speaker_id"]
+    assert seated is not None
+    # A participant who is NOT the seated speaker is blocked.
+    other = "bob" if seated != "bob" else "alice"
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id={other}&display_name={other}") as ws:
+        assert ws.receive_json()["type"] == "ready"
+        assert ws.receive_json()["type"] == "presence"
+        ws.send_json({"type": "message", "text": "my turn?"})
+        denied = ws.receive_json()
+        assert denied["type"] == "error"
+        assert denied["code"] == "speech_denied"
+
+    # The seated speaker CAN talk, and the floor then advances off them.
+    with client.websocket_connect(f"{url}?participant_id={seated}&display_name={seated}") as ws:
+        assert ws.receive_json()["type"] == "ready"
+        assert ws.receive_json()["type"] == "presence"
+        ws.send_json({"type": "message", "text": "hello team"})
+        echoed = ws.receive_json()
+        assert echoed["type"] == "message" and echoed["text"] == "hello team"
+        floor = ws.receive_json()
+        assert floor["type"] == "floor"
+        assert floor["current_speaker_id"] != seated  # advanced to the next seat
+
+
+def test_roll_call_moderator_grants_floor_over_ws(tmp_path: Path) -> None:
+    client, tid = _room_with_two_members(tmp_path)
+    client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "roll_call"})
+    url = f"/api/teams/{tid}/ws"
+
+    # The owner participant (role 'owner') is the moderator in dev mode.
+    with client.websocket_connect(f"{url}?participant_id=owner-local&display_name=Owner") as mod:
+        assert mod.receive_json()["type"] == "ready"
+        assert mod.receive_json()["type"] == "presence"
+        mod.send_json({"type": "floor:grant", "target": "bob"})
+        floor = mod.receive_json()
+        assert floor["type"] == "floor"
+        assert floor["current_speaker_id"] == "bob"
+
+    # A non-moderator cannot move the floor.
+    with client.websocket_connect(f"{url}?participant_id=alice&display_name=Alice") as ws:
+        assert ws.receive_json()["type"] == "ready"
+        assert ws.receive_json()["type"] == "presence"
+        ws.send_json({"type": "floor:grant", "target": "alice"})
+        err = ws.receive_json()
+        assert err["type"] == "error"
+        assert err["code"] == "not_moderator"
+
+
+def test_moderated_raise_hand_then_grant_over_ws(tmp_path: Path) -> None:
+    client, tid = _room_with_two_members(tmp_path)
+    client.patch(f"/api/teams/{tid}/speaker-policy", json={"speaker_policy": "moderated"})
+    url = f"/api/teams/{tid}/ws"
+
+    # bob raises his hand → queued.
+    with client.websocket_connect(f"{url}?participant_id=bob&display_name=Bob") as ws:
+        assert ws.receive_json()["type"] == "ready"
+        assert ws.receive_json()["type"] == "presence"
+        ws.send_json({"type": "floor:request"})
+        floor = ws.receive_json()
+        assert floor["type"] == "floor"
+        assert "bob" in floor["floor_requests"]
+
+    # the moderator grants bob the floor, clearing him from the queue.
+    with client.websocket_connect(f"{url}?participant_id=owner-local&display_name=Owner") as mod:
+        assert mod.receive_json()["type"] == "ready"
+        assert mod.receive_json()["type"] == "presence"
+        mod.send_json({"type": "floor:grant", "target": "bob"})
+        floor = mod.receive_json()
+        assert floor["type"] == "floor"
+        assert floor["current_speaker_id"] == "bob"
+        assert "bob" not in floor["floor_requests"]

@@ -79,9 +79,17 @@ class TeamRoomWire(BaseModel):
     invite_created_at: str | None = None
     # Governance: who may speak in the room. ``free`` = anyone not
     # individually muted; ``admin_only`` = only the owner/admins (a
-    # whole-room mute). Turn-based modes (moderated/round_robin/roll_call)
-    # are reserved for the speaker-turn engine and are not enforced yet.
+    # whole-room mute); ``round_robin`` / ``roll_call`` / ``moderated`` are
+    # turn-based — only the participant holding the floor may speak.
     speaker_policy: str = "free"
+    # Turn-engine floor state (only meaningful in turn-based policies):
+    #   current_speaker_id — participant id holding the floor (None = open)
+    #   moderator_id       — who controls the floor in roll_call/moderated
+    #                        (defaults to the owner on mode entry)
+    #   floor_requests     — raised-hands queue (participant ids) for moderated
+    current_speaker_id: str | None = None
+    moderator_id: str | None = None
+    floor_requests: list[str] = Field(default_factory=list)
 
 
 class CreateTeamRoomRequest(BaseModel):
@@ -287,6 +295,22 @@ def create_team_rooms_router(
                 "type": "team:update",
                 "team_id": team_id,
                 "team": team.model_dump(),
+                "server_time": _now(),
+            },
+        )
+
+    async def _broadcast_floor(team_id: str, team: TeamRoomWire) -> None:
+        """Push the current turn-engine floor state so clients can render
+        whose turn it is and the raised-hands queue."""
+        await _broadcast(
+            team_id,
+            {
+                "type": "floor",
+                "team_id": team_id,
+                "speaker_policy": _normalize_speaker_policy(team.speaker_policy),
+                "current_speaker_id": getattr(team, "current_speaker_id", None),
+                "moderator_id": _resolve_moderator(team),
+                "floor_requests": list(getattr(team, "floor_requests", []) or []),
                 "server_time": _now(),
             },
         )
@@ -559,7 +583,11 @@ def create_team_rooms_router(
             team = teams.get(team_id)
             if team is None:
                 raise HTTPException(404, f"team not found: {team_id}")
-            team = team.model_copy(update={"speaker_policy": policy, "updated_at": _now()})
+            team = team.model_copy(update={
+                "speaker_policy": policy,
+                **_initial_floor_state(team, policy),
+                "updated_at": _now(),
+            })
             teams[team_id] = team
             _save()
         await _broadcast_team_update(team_id, team)
@@ -861,6 +889,24 @@ def create_team_rooms_router(
                             "created_at": _now(),
                         },
                     )
+                    # round_robin hands the floor to the next eligible speaker
+                    # once a message lands. The other turn modes hold the floor
+                    # until the speaker yields or the moderator moves it.
+                    if (
+                        current_team is not None
+                        and _normalize_speaker_policy(current_team.speaker_policy) == "round_robin"
+                    ):
+                        with lock:
+                            advanced = teams.get(team_id)
+                            if advanced is not None:
+                                advanced = advanced.model_copy(update={
+                                    "current_speaker_id": _next_speaker(advanced, participant_id),
+                                    "updated_at": _now(),
+                                })
+                                teams[team_id] = advanced
+                                _save()
+                        if advanced is not None:
+                            await _broadcast_floor(team_id, advanced)
                 elif msg_type == "thread:update":
                     msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
                     if not msg_thread_id:
@@ -877,11 +923,83 @@ def create_team_rooms_router(
                             "created_at": _now(),
                         },
                     )
+                elif msg_type == "floor:request":
+                    # Raise hand — only meaningful in moderated mode; queued
+                    # for the moderator to grant. No-op under other policies.
+                    floor_team = None
+                    with lock:
+                        room_now = teams.get(team_id)
+                        if (
+                            room_now is not None
+                            and _normalize_speaker_policy(room_now.speaker_policy) == "moderated"
+                            and participant_id not in (room_now.floor_requests or [])
+                        ):
+                            floor_team = room_now.model_copy(update={
+                                "floor_requests": [*(room_now.floor_requests or []), participant_id],
+                                "updated_at": _now(),
+                            })
+                            teams[team_id] = floor_team
+                            _save()
+                    if floor_team is not None:
+                        await _broadcast_floor(team_id, floor_team)
+                elif msg_type == "floor:yield":
+                    # The floor holder gives it up: round_robin advances to the
+                    # next seat, the moderated/roll_call modes re-open the floor.
+                    floor_team = None
+                    with lock:
+                        room_now = teams.get(team_id)
+                        if room_now is not None and room_now.current_speaker_id == participant_id:
+                            policy_now = _normalize_speaker_policy(room_now.speaker_policy)
+                            nxt = (
+                                _next_speaker(room_now, participant_id)
+                                if policy_now == "round_robin"
+                                else None
+                            )
+                            floor_team = room_now.model_copy(update={
+                                "current_speaker_id": nxt,
+                                "updated_at": _now(),
+                            })
+                            teams[team_id] = floor_team
+                            _save()
+                    if floor_team is not None:
+                        await _broadcast_floor(team_id, floor_team)
+                elif msg_type == "floor:grant":
+                    # Moderator hands the floor to ``target`` (or, with no
+                    # target, re-opens it). roll_call + moderated only.
+                    target = str(msg.get("target") or "").strip() or None
+                    floor_team = None
+                    not_moderator = False
+                    with lock:
+                        room_now = teams.get(team_id)
+                        if room_now is not None and _normalize_speaker_policy(
+                            room_now.speaker_policy
+                        ) in {"roll_call", "moderated"}:
+                            if not _is_moderator(room_now, active_participant):
+                                not_moderator = True
+                            else:
+                                floor_team = room_now.model_copy(update={
+                                    "current_speaker_id": target,
+                                    "floor_requests": [
+                                        q for q in (room_now.floor_requests or []) if q != target
+                                    ],
+                                    "updated_at": _now(),
+                                })
+                                teams[team_id] = floor_team
+                                _save()
+                    if not_moderator:
+                        await ws.send_json({
+                            "type": "error",
+                            "code": "not_moderator",
+                            "message": "only the moderator can move the floor",
+                        })
+                    elif floor_team is not None:
+                        await _broadcast_floor(team_id, floor_team)
         except WebSocketDisconnect:  # noqa: BLE001 — WS closed normally during send; cleanup proceeds
             pass
         except (ConnectionError, TimeoutError, OSError):  # noqa: BLE001 — WS send failed; cleanup proceeds
             pass
         finally:
+            floor_broadcast: TeamRoomWire | None = None
             with lock:
                 room = live_sockets.get(team_id)
                 if room and room.get(participant_id) is ws:
@@ -897,12 +1015,36 @@ def create_team_rooms_router(
                         if p.id == participant_id else p
                         for p in current.participants
                     ]
-                    teams[team_id] = current.model_copy(update={
+                    updates: dict[str, Any] = {
                         "participants": participants,
                         "updated_at": left_at,
-                    })
+                    }
+                    # Keep turn-based rooms live if the floor holder drops:
+                    # round_robin advances past them, roll_call/moderated
+                    # re-open the floor. Also drop them from the hand queue.
+                    policy_now = _normalize_speaker_policy(current.speaker_policy)
+                    if (
+                        policy_now in _TURN_POLICIES
+                        and current.current_speaker_id == participant_id
+                    ):
+                        rebuilt = current.model_copy(update={"participants": participants})
+                        updates["current_speaker_id"] = (
+                            _next_speaker(rebuilt, participant_id)
+                            if policy_now == "round_robin"
+                            else None
+                        )
+                    if participant_id in (current.floor_requests or []):
+                        updates["floor_requests"] = [
+                            q for q in current.floor_requests if q != participant_id
+                        ]
+                    new_team = current.model_copy(update=updates)
+                    teams[team_id] = new_team
                     _save()
+                    if "current_speaker_id" in updates or "floor_requests" in updates:
+                        floor_broadcast = new_team
             await _broadcast_presence(team_id)
+            if floor_broadcast is not None:
+                await _broadcast_floor(team_id, floor_broadcast)
 
     return router
 
@@ -947,15 +1089,16 @@ def _normalize_participant_status(status: str | None) -> str:
     return normalized
 
 
-# Speaker policies the room can currently *enforce*. Turn-based modes
-# (moderated/round_robin/roll_call) are intentionally absent until the
-# speaker-turn engine lands — persisting a mode we don't enforce would be
-# a lie to the operator. Unknown values fall back to the open default.
-_SPEAKER_POLICIES = {"free", "admin_only"}
+# Speaker policies the room can enforce. ``free``/``admin_only`` are
+# stateless; the turn-based trio drives the floor state machine below.
+# Unknown values fall back to the open default rather than persisting a
+# mode we can't enforce.
+_TURN_POLICIES = {"round_robin", "roll_call", "moderated"}
+_SPEAKER_POLICIES = {"free", "admin_only"} | _TURN_POLICIES
 
 
 def _normalize_speaker_policy(value: str | None) -> str:
-    normalized = (value or "free").strip().lower()
+    normalized = (value or "free").strip().lower().replace("-", "_")
     aliases = {
         "open": "free",
         "all": "free",
@@ -965,6 +1108,16 @@ def _normalize_speaker_policy(value: str | None) -> str:
         "owner_only": "admin_only",
         "muted": "admin_only",
         "locked": "admin_only",
+        "rotation": "round_robin",
+        "roundrobin": "round_robin",
+        "take_turns": "round_robin",
+        "rollcall": "roll_call",
+        "call_on": "roll_call",
+        "host": "moderated",
+        "hosted": "moderated",
+        "facilitated": "moderated",
+        "queue": "moderated",
+        "raise_hand": "moderated",
     }
     normalized = aliases.get(normalized, normalized)
     if normalized not in _SPEAKER_POLICIES:
@@ -980,6 +1133,65 @@ def _participant_is_admin(team: TeamRoomWire, participant: TeamParticipantWire) 
     return bool(actor_id) and actor_id == getattr(team, "owner_id", None)
 
 
+def _resolve_moderator(team: TeamRoomWire) -> str | None:
+    """Floor controller for roll_call/moderated — the explicit moderator
+    if set, else the room owner."""
+    return getattr(team, "moderator_id", None) or getattr(team, "owner_id", None)
+
+
+def _is_moderator(team: TeamRoomWire, participant: TeamParticipantWire) -> bool:
+    """The moderator (by participant id or actor) or any owner/admin may
+    drive the floor in roll_call/moderated."""
+    moderator = _resolve_moderator(team)
+    if moderator is not None and moderator in {
+        participant.id,
+        getattr(participant, "actor_id", None),
+    }:
+        return True
+    return _participant_is_admin(team, participant)
+
+
+def _eligible_speakers(team: TeamRoomWire) -> list[TeamParticipantWire]:
+    """Active, non-muted participants in a stable rotation order (by join
+    time then id). These are the seats the floor rotates through."""
+    eligible = [
+        p
+        for p in team.participants
+        if getattr(p, "status", None) == "active" and not getattr(p, "muted", False)
+    ]
+    return sorted(eligible, key=lambda p: (p.joined_at or "", p.id))
+
+
+def _next_speaker(team: TeamRoomWire, current_id: str | None) -> str | None:
+    """Next floor holder after ``current_id`` in round-robin order, wrapping
+    around. Returns the first eligible speaker when ``current_id`` is unset
+    or no longer eligible, or None when nobody can speak."""
+    order = [p.id for p in _eligible_speakers(team)]
+    if not order:
+        return None
+    if current_id is None or current_id not in order:
+        return order[0]
+    idx = order.index(current_id)
+    return order[(idx + 1) % len(order)]
+
+
+def _initial_floor_state(team: TeamRoomWire, policy: str) -> dict[str, Any]:
+    """Floor fields to apply when a room switches to ``policy``. Entering a
+    turn mode seats the owner as moderator and clears the queue; round_robin
+    additionally hands the floor to the first eligible speaker; leaving for a
+    stateless policy tears the floor down."""
+    if policy not in _TURN_POLICIES:
+        return {"current_speaker_id": None, "moderator_id": None, "floor_requests": []}
+    base = {
+        "moderator_id": getattr(team, "owner_id", None),
+        "floor_requests": [],
+        "current_speaker_id": None,
+    }
+    if policy == "round_robin":
+        base["current_speaker_id"] = _next_speaker(team, None)
+    return base
+
+
 def _participant_can_speak(
     team: TeamRoomWire, participant: TeamParticipantWire
 ) -> tuple[bool, str | None]:
@@ -989,9 +1201,25 @@ def _participant_can_speak(
     if getattr(participant, "muted", False):
         return False, "you have been muted by an admin"
     policy = _normalize_speaker_policy(getattr(team, "speaker_policy", "free"))
-    if policy == "admin_only" and not _participant_is_admin(team, participant):
+    if policy == "free":
+        return True, None
+    if policy == "admin_only":
+        if _participant_is_admin(team, participant):
+            return True, None
         return False, "only admins can speak while the room is in admin-only mode"
-    return True, None
+    # Turn-based: only the floor holder speaks. In roll_call/moderated the
+    # moderator may always interject to facilitate; round_robin is strict
+    # (everyone, owner included, waits their turn).
+    if policy in {"roll_call", "moderated"} and _is_moderator(team, participant):
+        return True, None
+    if getattr(team, "current_speaker_id", None) == participant.id:
+        return True, None
+    reasons = {
+        "round_robin": "wait for your turn — the room is taking turns",
+        "roll_call": "the moderator hasn't called on you yet",
+        "moderated": "raise your hand and wait for the floor",
+    }
+    return False, reasons.get(policy, "you don't hold the floor right now")
 
 
 def _team_by_invite(
