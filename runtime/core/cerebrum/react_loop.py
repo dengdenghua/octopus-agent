@@ -2088,6 +2088,15 @@ def stream_react_loop(
     # intent). Without this, delegating a risky action to a subagent would
     # wash the taint clean.
     reset_injection_taint()
+    # Also clear the gate-handled flag. It is a per-thread contextvar that the
+    # single-action approval gate sets True around execute() to tell the
+    # executor chokepoint "this call was already reviewed". When a subagent is
+    # spawned INLINE in the parent's thread (call_subagent with the default
+    # timeout_seconds=None), it would otherwise inherit the parent's True and
+    # the subagent's OWN risky tools (e.g. via its parallel path) would skip
+    # the chokepoint without any approval round. A fresh loop has reviewed
+    # nothing yet, so reset it like the taint.
+    set_injection_gate_handled(False)
     _inherited_taint = intent.user_context.get("_inherited_injection_taint")
     if isinstance(_inherited_taint, str) and _inherited_taint not in ("", "none"):
         mark_injection_taint(_inherited_taint)

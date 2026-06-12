@@ -3388,3 +3388,76 @@ def test_tainted_turn_blocks_durable_memory_write() -> None:
     assert remember_ends, "remember should have produced a tool_end"
     assert remember_ends[0]["status"] != "success", "tainted memory write must be blocked"
     assert not wrote["remembered"], "blocked remember handler must NOT have run"
+
+
+def test_subagent_loop_resets_leaked_gate_handled_flag() -> None:
+    """#6 (red-team, critical): an inline subagent shares the parent's thread,
+    so it inherits the parent's gate_handled=True (the flag the single-action
+    approval wrapper sets to tell the executor chokepoint 'already reviewed').
+    Without resetting it at loop start, the subagent's OWN risky tools —
+    dispatched via its parallel path, which relies on the chokepoint rather
+    than the single-action gate — would skip the block. The loop now resets
+    gate_handled like the taint, so the tainted subagent's parallel exec_shell
+    is blocked at the chokepoint."""
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.tool_engine import ToolExecutor
+    from runtime.safety.auth import TrustEngine
+    from runtime.safety.validation.prompt_injection import (
+        set_injection_gate_handled,
+    )
+
+    ran = {"exec": False}
+
+    def _shell(command="", **_kw):
+        ran["exec"] = True
+        return {"exit_code": 0, "stdout": "ok"}
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="exec_shell", description="shell",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="builtin://exec_shell", handler=_shell,
+        ),
+        verify_tests=False,
+    )
+    reg.register(
+        Skill(
+            name="echo", description="echo", affinity=["io"],
+            trusted_source="builtin://echo",
+            handler=lambda text="", **_k: {"text": text},
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(_ScriptedRouter([
+        'Action:\n'
+        '    exec_shell({"command": "echo hi"})\n'
+        '    echo({"text": "x"})\n\n'
+        "Observation:",
+        "Final Answer: done",
+    ]))
+    stack.executor = ToolExecutor(
+        registry=reg,
+        immunity=TrustEngine(trusted_sources=["builtin://*"], unknown_policy="allow"),
+    )
+
+    # Simulate the inline-parent leak: the parent set gate_handled=True around
+    # the call_subagent execute; the inline subagent runs in the SAME thread.
+    set_injection_gate_handled(True)
+    intent = _intent("subagent risky batch")
+    intent.user_context["_inherited_injection_taint"] = "high"  # tainted parent
+    try:
+        events, result = _drain(stream_react_loop(
+            stack, intent, agent=None, max_iterations=4,
+        ))
+    finally:
+        set_injection_gate_handled(False)
+
+    assert result is not None
+    exec_ends = [
+        e for e in events
+        if e["type"] == "tool_end" and e["tool_name"] == "exec_shell"
+    ]
+    assert exec_ends, "exec_shell should have produced a tool_end"
+    assert exec_ends[0]["status"] != "success", "leaked gate_handled must not bypass the chokepoint"
+    assert not ran["exec"], "blocked exec_shell handler must NOT have run"
