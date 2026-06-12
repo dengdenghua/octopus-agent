@@ -8,5 +8,4 @@ runtime/adapters/integrations/molili/router_account.py	sensing.gateway.openai_ga
 runtime/adapters/integrations/molili/router_proxy.py	sensing.gateway.openai_gateway
 runtime/execution/suckers/browser_act_skills.py	sensing.gateway
 runtime/execution/suckers/capability_skills.py	sensing.gateway.plugins_router
-runtime/execution/suckers/cron_skills.py	sensing.gateway.cron_router
 runtime/execution/suckers/ephemeral_runner.py	sensing.gateway.tool_bridge

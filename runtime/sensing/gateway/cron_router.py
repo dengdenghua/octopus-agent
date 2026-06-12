@@ -12,7 +12,6 @@ actor); an admin may delete anything.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -26,45 +25,8 @@ except ImportError:  # pragma: no cover
     HTTPException = None  # type: ignore[assignment, misc]
     Request = object  # type: ignore[assignment, misc]
 
-from runtime.platform.io import atomic_write_json
+from runtime.execution.cron_store import _read_cron_jobs, _write_cron_jobs
 from runtime.platform.process.paths import app_paths
-
-
-def _read_cron_jobs(path: Path) -> list[dict[str, Any]]:
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return []
-    except (json.JSONDecodeError, ValueError, TypeError):
-        return []
-    if not isinstance(raw, list):
-        return []
-
-    jobs: list[dict[str, Any]] = []
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or "").strip()
-        command = str(item.get("command") or "").strip()
-        if not name or not command:
-            continue
-        jobs.append({
-            "name": name,
-            "command": command,
-            "cron_expression": str(item.get("cron_expression") or "0 * * * *"),
-            "last_run": item.get("last_run"),
-            "last_status": item.get("last_status"),
-            # ``creator_actor`` ties a job back to the identity that
-            # registered it. ``None`` is legacy (pre-auth) data that
-            # only an admin can delete. Anonymous deployments with
-            # ``require_auth=False`` all share the ``"*"`` bucket.
-            "creator_actor": item.get("creator_actor"),
-        })
-    return jobs
-
-
-def _write_cron_jobs(path: Path, jobs: list[dict[str, Any]]) -> None:
-    atomic_write_json(path, jobs)
 
 
 def _actor_is_admin(identity_store: Any, actor: str | None) -> bool:

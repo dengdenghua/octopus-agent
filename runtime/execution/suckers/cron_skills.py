@@ -30,11 +30,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from runtime.platform.process.paths import app_paths
-from runtime.sensing.gateway.cron_router import (
+from runtime.execution.cron_store import (
     _read_cron_jobs,
     _write_cron_jobs,
 )
+from runtime.platform.process.paths import app_paths
 
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
