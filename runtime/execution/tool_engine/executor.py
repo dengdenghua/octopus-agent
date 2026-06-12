@@ -623,7 +623,11 @@ class ToolExecutor:
                     # (not only in react_loop) covers the agentic-fallback
                     # and subagent paths that never reach react_loop's
                     # observation-wrap sites.
-                    if is_untrusted_tool(str(sucker_id), list(skill.affinity or [])):
+                    if is_untrusted_tool(
+                        str(sucker_id),
+                        list(skill.affinity or []),
+                        args if isinstance(args, dict) else None,
+                    ):
                         _inj_scan = scan_for_injection(str(output))
                         if _inj_scan.flagged:
                             mark_injection_taint(_inj_scan.severity)

@@ -22,6 +22,7 @@ fences. Treat its output as a risk signal, not a guarantee.
 from __future__ import annotations
 
 import contextvars
+import os
 import re
 from dataclasses import dataclass
 
@@ -45,6 +46,62 @@ UNTRUSTED_AFFINITIES: frozenset[str] = frozenset(
 # Tool-name prefixes that are external regardless of declared affinity —
 # the MCP bridge registers remote-server tools under these names.
 _UNTRUSTED_NAME_PREFIXES: tuple[str, ...] = ("mcp_", "mcp__")
+
+# World-writable / shared-temp roots an attacker (or an earlier download step)
+# can plant a file into. A READ tool targeting one of these surfaces content we
+# can't trust, so its output is scanned + can taint the turn. This is a
+# CONSERVATIVE narrowing of the documented "local reads aren't tainted"
+# boundary — it catches the common download-then-read pivot without tainting
+# ordinary repo/cwd reads (which would taint nearly every turn). macOS system
+# temp lives under /var/folders.
+_UNTRUSTED_READ_ROOTS: tuple[str, ...] = (
+    "/tmp/", "/var/tmp/", "/private/tmp/", "/private/var/tmp/",
+    "/dev/shm/", "/var/folders/",
+)
+# Read-type tool NAMES whose path argument we vet against the roots above.
+# Scoped to reads so a write INTO /tmp (not an ingestion) doesn't taint.
+_READ_TOOL_NAMES: frozenset[str] = frozenset({
+    "read_file", "read_text_file", "read", "cat", "head", "tail",
+    "git_diff", "git_show", "git_log", "view_file", "open_file",
+})
+
+
+def _path_in_untrusted_root(value: str) -> bool:
+    if not value or ("/" not in value and "\\" not in value):
+        return False
+    try:
+        p = os.path.normpath(os.path.expanduser(value.strip()))
+    except (ValueError, TypeError):
+        return False
+    p_slash = p if p.endswith("/") else p + "/"
+    if any(p_slash.startswith(root) for root in _UNTRUSTED_READ_ROOTS):
+        return True
+    home = os.path.expanduser("~")
+    if home and home != "~":
+        downloads = os.path.join(home, "Downloads") + "/"
+        if p_slash.startswith(downloads):
+            return True
+    return False
+
+
+def _reads_from_untrusted_location(
+    name: str | None, args: dict | None,
+) -> bool:
+    """True when a READ tool targets a world-writable / temp / downloads path —
+    content an attacker may have planted there."""
+    if not isinstance(args, dict) or not args:
+        return False
+    low = (name or "").lower()
+    is_read = (
+        low in _READ_TOOL_NAMES
+        or low.startswith(("read_", "git_diff", "git_show", "git_log"))
+    )
+    if not is_read:
+        return False
+    return any(
+        isinstance(v, str) and _path_in_untrusted_root(v)
+        for v in args.values()
+    )
 
 # (pattern, label). Ordered by rough specificity; each label fires once.
 _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -150,13 +207,25 @@ def scan_for_injection(text: str, *, max_chars: int = 20_000) -> InjectionScan:
     return InjectionScan(labels=tuple(found))
 
 
-def is_untrusted_tool(name: str | None, affinity: list[str] | None) -> bool:
-    """Whether a tool's output should be treated as external/untrusted."""
+def is_untrusted_tool(
+    name: str | None,
+    affinity: list[str] | None,
+    args: dict | None = None,
+) -> bool:
+    """Whether a tool's output should be treated as external/untrusted.
+
+    ``args`` is optional: when supplied, a READ tool whose path argument points
+    into a world-writable / temp / downloads location is also treated as
+    untrusted (the download-then-read pivot). Callers that don't have the args
+    handy keep the prior name+affinity behaviour.
+    """
     if name:
         low = name.lower()
         if any(low.startswith(p) for p in _UNTRUSTED_NAME_PREFIXES):
             return True
-    return bool(affinity and UNTRUSTED_AFFINITIES.intersection(affinity))
+    if affinity and UNTRUSTED_AFFINITIES.intersection(affinity):
+        return True
+    return _reads_from_untrusted_location(name, args)
 
 
 _BOUNDARY_OPEN = "⟦untrusted:{source}⟧"

@@ -182,6 +182,48 @@ class TestRedTeamHardening:
         assert not scan_for_injection("modify the function to return early").flagged
 
 
+class TestUntrustedReadLocation:
+    """#2 (red-team): a READ tool targeting a world-writable / temp / downloads
+    path surfaces attacker-plantable content (the download-then-read pivot), so
+    when the call args are available it is treated as untrusted — a CONSERVATIVE
+    narrowing of the documented 'local reads aren't tainted' boundary that keeps
+    ordinary repo/cwd reads trusted (else nearly every turn would taint)."""
+
+    def test_read_from_temp_roots_is_untrusted(self):
+        for path in (
+            "/tmp/evil.txt",
+            "/var/tmp/x",
+            "/private/tmp/y",
+            "/dev/shm/z",
+            "/var/folders/ab/cd/T/payload",  # macOS system temp
+        ):
+            assert is_untrusted_tool("read_file", ["file", "io"], {"path": path}), path
+
+    def test_repo_and_cwd_reads_stay_trusted(self):
+        # The documented boundary: relative + absolute project paths are NOT
+        # tainted (tainting every read would make auto_approve useless).
+        assert not is_untrusted_tool("read_file", ["file", "io"], {"path": "runtime/x.py"})
+        assert not is_untrusted_tool(
+            "read_file", ["file", "io"], {"path": "/Users/dev/proj/src/a.py"}
+        )
+
+    def test_write_into_temp_is_not_untrusted(self):
+        # A WRITE into /tmp is not an ingestion of untrusted content.
+        assert not is_untrusted_tool(
+            "write_text_file", ["file", "write"], {"path": "/tmp/out.txt"}
+        )
+
+    def test_read_without_args_keeps_prior_behaviour(self):
+        # No args supplied → name+affinity only (backward compatible).
+        assert not is_untrusted_tool("read_file", ["file", "io"])
+        assert not is_untrusted_tool("git_diff", ["git", "read"])
+
+    def test_affinity_and_mcp_signals_still_win(self):
+        # The new path check is additive; existing signals are unchanged.
+        assert is_untrusted_tool("web_fetch", ["web", "io"], {"url": "http://x"})
+        assert is_untrusted_tool("mcp_x_tool", None, {"q": "safe/path"})
+
+
 class TestDurablePersistenceTaintBlock:
     """Cross-turn laundering: a tainted turn must not persist attacker content
     into durable state (MEMORY.md/SOUL.md/USER.md) that a later CLEAN turn
