@@ -102,6 +102,7 @@ __all__ = [
     "_short",
     "_pick_preview_keys",
     "_pick_output_keys",
+    "_output_indicates_error",
     "step_effective_success",
     "_ARGS_PRIORITY",
     "_OUTPUT_PRIORITY",
