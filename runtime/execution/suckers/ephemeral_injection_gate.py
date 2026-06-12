@@ -53,7 +53,18 @@ def ephemeral_injection_taint_block(call: Any, tool_name: str) -> str | None:
         )
         if not injection_taint_gates():
             return None
-        from runtime.safety.approval.approval_gate import assess_approval_risk
+        from runtime.safety.approval.approval_gate import (
+            assess_approval_risk,
+            is_durable_persistence_write,
+        )
+        # Durable-persistence writes (memory/soul) launder injection across
+        # turns even though they're low-risk — block them too.
+        if is_durable_persistence_write(tool_name):
+            return (
+                f"(blocked: prompt_injection_taint) tool '{tool_name}' refused "
+                "— writing to durable agent state while the delegating turn is "
+                "injection-tainted would launder the injection into a later turn."
+            )
         try:
             args_preview = str(getattr(call, "input", ""))[:200]
         except Exception:  # noqa: BLE001

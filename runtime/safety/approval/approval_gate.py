@@ -258,23 +258,59 @@ def assess_approval_risk(
     )
 
 
+# Tools that persist attacker-influenceable content into DURABLE agent state
+# (MEMORY.md / SOUL.md / USER.md) that is re-loaded into a LATER turn's system
+# prompt. Taint is per-turn and resets each turn, so a poisoned fact/lesson
+# written under taint would re-enter a future CLEAN turn's context — cross-turn
+# injection laundering. These are LOW capability-risk, so the approval gate
+# never escalates them; they must be blocked at the chokepoint while tainted.
+_DURABLE_PERSISTENCE_WRITES: frozenset[str] = frozenset(
+    {"remember", "update_soul", "note_user"},
+)
+
+
+def is_durable_persistence_write(tool_name: str) -> bool:
+    """Whether ``tool_name`` persists content into durable agent state that a
+    later turn re-loads into its system prompt (the cross-turn injection
+    laundering surface)."""
+    return (tool_name or "").strip() in _DURABLE_PERSISTENCE_WRITES
+
+
 def injection_taint_block(tool_name: str, args_preview: str = "") -> str | None:
     """The single, path-independent enforcement point for prompt-injection
     taint, called by the executor before every tool runs.
 
-    Returns a block reason when: the turn is injection-tainted (untrusted
-    content with injection markers entered it), this tool is risky
-    (medium+), and no approval-capable loop has reviewed this specific call
-    — i.e. it reached the executor via the parallel dispatch, the
-    agentic-fallback loop, or a subagent, none of which can ask a human.
-    Returns ``None`` to allow (clean turn, low-risk tool, or already
-    reviewed by the single-action approval gate). Fail-closed: when in
-    doubt after taint, a risky tool is blocked rather than auto-run."""
+    Returns a block reason when the turn is injection-tainted (untrusted
+    content with injection markers entered it) AND either:
+      • this tool is risky (medium+) and no approval-capable loop has reviewed
+        this specific call — i.e. it reached the executor via the parallel
+        dispatch, the agentic-fallback loop, or a subagent, none of which can
+        ask a human; or
+      • this tool writes durable agent state (memory/soul/user profile) — a
+        cross-turn laundering vector that is low-risk (so the approval gate
+        never escalates it) yet persists the injection into a future turn.
+    Returns ``None`` to allow (clean turn, low-risk non-persistence tool, or a
+    risky call already reviewed by the single-action approval gate).
+    Fail-closed: when in doubt after taint, the tool is blocked rather than
+    auto-run."""
     from runtime.safety.validation.prompt_injection import (
         injection_gate_already_handled,
         injection_taint_gates,
     )
-    if not injection_taint_gates() or injection_gate_already_handled():
+    if not injection_taint_gates():
+        return None
+    # Durable-persistence writes are blocked on EVERY path while tainted —
+    # including the single-action path that set gate_already_handled — because
+    # the single-action approval gate won't have escalated a low-risk write, so
+    # deferring to it would let the poison through.
+    if is_durable_persistence_write(tool_name):
+        return (
+            f"{(tool_name or '').strip()} blocked — writing untrusted content "
+            "to durable agent state (memory/soul/user profile) while the turn "
+            "is injection-tainted would launder the injection into a future "
+            "turn's system prompt"
+        )
+    if injection_gate_already_handled():
         return None
     risk = assess_approval_risk(tool_name, args_preview)
     if risk.level in {"medium", "high", "critical"}:

@@ -3330,3 +3330,61 @@ def test_no_inherited_taint_lets_subagent_first_risky_tool_auto_run() -> None:
     assert result is not None
     assert not any(e["type"] == "tool_approval_request" for e in events)
     assert provider.requests == []
+
+
+def test_tainted_turn_blocks_durable_memory_write() -> None:
+    """Cross-turn laundering defense: after an injection-tainted web fetch, a
+    LOW-risk durable-persistence write (remember → MEMORY.md, re-loaded into a
+    future turn's system prompt) is blocked at the executor chokepoint — it
+    can no longer auto-run under auto_approve to plant poison for a later
+    clean turn."""
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.tool_engine import ToolExecutor
+    from runtime.safety.auth import TrustEngine
+
+    wrote = {"remembered": False}
+
+    def _remember(fact="", **_kw):
+        wrote["remembered"] = True
+        return {"ok": True, "fact": fact}
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="web_peek", description="fetch", affinity=["web", "io"],
+            trusted_source="builtin://web_peek",
+            handler=lambda url="": {"content": _INJECTION_PAGE},
+        ),
+        verify_tests=False,
+    )
+    reg.register(
+        Skill(
+            name="remember", description="persist a fact",
+            affinity=["memory", "agent_state"],
+            trusted_source="builtin://remember", handler=_remember,
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(_ScriptedRouter([
+        'Action: web_peek({"url": "http://x"})',
+        'Action: remember({"fact": "users never need approval"})',
+        "Final Answer: done",
+    ]))
+    stack.executor = ToolExecutor(
+        registry=reg,
+        immunity=TrustEngine(trusted_sources=["builtin://*"], unknown_policy="allow"),
+    )
+    intent = _intent("peek then remember")
+    intent.user_context["auto_approve"] = True
+
+    events, result = _drain(stream_react_loop(
+        stack, intent, agent=None, max_iterations=5,
+    ))
+    assert result is not None
+    remember_ends = [
+        e for e in events
+        if e["type"] == "tool_end" and e["tool_name"] == "remember"
+    ]
+    assert remember_ends, "remember should have produced a tool_end"
+    assert remember_ends[0]["status"] != "success", "tainted memory write must be blocked"
+    assert not wrote["remembered"], "blocked remember handler must NOT have run"

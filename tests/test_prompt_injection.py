@@ -180,3 +180,67 @@ class TestRedTeamHardening:
         # "change the file" / "modify the code" must NOT trip override_prior.
         assert not scan_for_injection("change the output file to report.md").flagged
         assert not scan_for_injection("modify the function to return early").flagged
+
+
+class TestDurablePersistenceTaintBlock:
+    """Cross-turn laundering: a tainted turn must not persist attacker content
+    into durable state (MEMORY.md/SOUL.md/USER.md) that a later CLEAN turn
+    re-loads into its system prompt."""
+
+    def _reset(self):
+        from runtime.safety.validation.prompt_injection import (
+            reset_injection_taint,
+            set_injection_gate_handled,
+        )
+        reset_injection_taint()
+        set_injection_gate_handled(False)
+
+    def test_clean_turn_allows_persistence(self):
+        from runtime.safety.approval.approval_gate import injection_taint_block
+        self._reset()
+        try:
+            assert injection_taint_block("remember", "fact=hello") is None
+            assert injection_taint_block("update_soul", "lesson=x") is None
+        finally:
+            self._reset()
+
+    def test_tainted_turn_blocks_persistence_writes(self):
+        from runtime.safety.approval.approval_gate import injection_taint_block
+        from runtime.safety.validation.prompt_injection import mark_injection_taint
+        self._reset()
+        try:
+            mark_injection_taint("high")
+            for tool in ("remember", "update_soul", "note_user"):
+                assert injection_taint_block(tool, "x") is not None, tool
+        finally:
+            self._reset()
+
+    def test_persistence_blocked_even_when_gate_already_handled(self):
+        # The single-action path sets gate_handled=True but won't escalate a
+        # LOW-risk write, so the chokepoint must NOT defer to it for
+        # persistence — otherwise the poison lands.
+        from runtime.safety.approval.approval_gate import injection_taint_block
+        from runtime.safety.validation.prompt_injection import (
+            mark_injection_taint,
+            set_injection_gate_handled,
+        )
+        self._reset()
+        try:
+            mark_injection_taint("high")
+            set_injection_gate_handled(True)
+            assert injection_taint_block("remember", "x") is not None
+            # A risky tool, by contrast, DOES defer to the approval-capable
+            # single-action gate when it has handled the call.
+            assert injection_taint_block("exec_shell", "x") is None
+        finally:
+            self._reset()
+
+    def test_clean_turn_unaffected_by_gate_state(self):
+        from runtime.safety.approval.approval_gate import injection_taint_block
+        self._reset()
+        try:
+            # No taint → nothing blocked regardless of tool.
+            assert injection_taint_block("remember", "x") is None
+            assert injection_taint_block("exec_shell", "x") is None
+        finally:
+            self._reset()

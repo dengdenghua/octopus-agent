@@ -46,9 +46,27 @@ def _reset_module_state():
     """
     from runtime.platform import identity_filter as _idf
     _idf.set_runtime_lock(None)
+    _reset_injection_taint()
     yield
     _idf.set_runtime_lock(None)
+    _reset_injection_taint()
     _reset_singletons()
+
+
+def _reset_injection_taint() -> None:
+    """Clear the per-thread prompt-injection taint + gate-handled contextvars.
+
+    These are set during a turn (untrusted tool output) and the react loop
+    only resets them at its OWN start — so executor-level tests that call
+    ``execute_step`` directly, or any test that runs after a taint-marking
+    one, would otherwise inherit a stale taint and spuriously block/allow
+    tools. Reset every test for isolation."""
+    try:
+        from runtime.safety.validation import prompt_injection as _pi
+        _pi.reset_injection_taint()
+        _pi.set_injection_gate_handled(False)
+    except Exception:  # noqa: BLE001 — never let cleanup break a test
+        pass
 
 
 def _reset_singletons() -> None:
