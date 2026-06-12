@@ -61,6 +61,15 @@ class TeamParticipantWire(BaseModel):
     # room ``speaker_policy`` — a muted member cannot broadcast messages
     # regardless of the policy. Only the team owner can set it.
     muted: bool = False
+    # Delegated speaking (the bound person's OWN opt-in — the owner cannot
+    # impose it, which would be impersonation):
+    #   speak_mode    — "manual" (the human speaks), "twin" (a bound agent
+    #                    speaks for them), or "hosted" (a human host does)
+    #   twin_agent_id — the digital-twin agent authorized when speak_mode=twin
+    #   host_id       — the human host authorized when speak_mode=hosted
+    speak_mode: str = "manual"
+    twin_agent_id: str | None = None
+    host_id: str | None = None
 
 
 class TeamRoomWire(BaseModel):
@@ -127,6 +136,14 @@ class UpdateSpeakerPolicyRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     speaker_policy: str
+
+
+class UpdateDelegationRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    speak_mode: str
+    twin_agent_id: str | None = None
+    host_id: str | None = None
 
 
 def create_team_rooms_router(
@@ -593,6 +610,55 @@ def create_team_rooms_router(
         await _broadcast_team_update(team_id, team)
         return {"team": team.model_dump(), "speaker_policy": policy}
 
+    @router.patch("/api/teams/{team_id}/participants/{participant_id}/delegation")
+    async def update_delegation(
+        request: Request,
+        team_id: str,
+        participant_id: str,
+        body: UpdateDelegationRequest,
+    ) -> dict[str, Any]:
+        # SELF-ONLY opt-in. Unlike mute (owner-only), delegation is the
+        # bound person's own choice — letting an admin bind a twin/host to
+        # someone else would be impersonation. So the caller must BE the
+        # participant. No-op gate under local single-user mode.
+        actor = _require_member(request, team_id)
+        mode = _normalize_speak_mode(body.speak_mode)
+        twin = (body.twin_agent_id or "").strip() or None
+        host = (body.host_id or "").strip() or None
+        with lock:
+            team = teams.get(team_id)
+            if team is None:
+                raise HTTPException(404, f"team not found: {team_id}")
+            current = next((p for p in team.participants if p.id == participant_id), None)
+            if current is None:
+                raise HTTPException(404, f"participant not found: {participant_id}")
+            if (
+                require_auth
+                and actor is not None
+                and getattr(current, "actor_id", None) != actor
+            ):
+                raise HTTPException(
+                    403, "only the participant themselves can set their speaking delegation"
+                )
+            if mode == "twin" and not twin:
+                raise HTTPException(400, "twin mode requires twin_agent_id")
+            if mode == "hosted" and not host:
+                raise HTTPException(400, "hosted mode requires host_id")
+            updated = current.model_copy(update={
+                "speak_mode": mode,
+                "twin_agent_id": twin if mode == "twin" else None,
+                "host_id": host if mode == "hosted" else None,
+                "last_seen_at": _now(),
+            })
+            participants = [
+                updated if p.id == participant_id else p for p in team.participants
+            ]
+            team = team.model_copy(update={"participants": participants, "updated_at": _now()})
+            teams[team_id] = team
+            _save()
+        await _broadcast_team_update(team_id, team)
+        return {"team": team.model_dump(), "participant": updated.model_dump()}
+
     @router.delete("/api/teams/{team_id}/participants/{participant_id}")
     async def remove_participant(
         request: Request,
@@ -784,6 +850,11 @@ def create_team_rooms_router(
                         # otherwise a muted member could silence-bust by
                         # simply dropping and re-opening the socket.
                         muted=bool(existing.muted) if existing else False,
+                        # Likewise preserve the participant's delegation opt-in
+                        # so a reconnect doesn't silently drop their twin/host.
+                        speak_mode=existing.speak_mode if existing else "manual",
+                        twin_agent_id=existing.twin_agent_id if existing else None,
+                        host_id=existing.host_id if existing else None,
                     )
                     participants.append(participant)
                     team = team.model_copy(update={
@@ -861,15 +932,43 @@ def create_team_rooms_router(
                     text = str(msg.get("text") or "").strip()
                     if not text:
                         continue
-                    # Speech chokepoint: enforce the per-member mute and the
-                    # room speaker policy before the message reaches anyone.
-                    # Reuses the snapshot taken under the lock at the top of
-                    # this iteration — no second acquisition (a second lock in
-                    # this hot path deadlocks the two-socket portal in tests).
+                    # Resolve the effective speaker. A message may be sent on
+                    # another participant's behalf (twin/hosted delegation),
+                    # honored only if that participant opted in and authorized
+                    # this sender. Everything downstream — mute/floor checks,
+                    # attribution, the round_robin advance — uses the effective
+                    # speaker, so a delegate stands fully in their shoes.
+                    on_behalf_of = str(msg.get("on_behalf_of") or "").strip() or None
+                    speaker = active_participant
+                    spoken_by: str | None = None
+                    if on_behalf_of and on_behalf_of != participant_id:
+                        target = (
+                            next(
+                                (p for p in current_team.participants if p.id == on_behalf_of),
+                                None,
+                            )
+                            if current_team is not None
+                            else None
+                        )
+                        if target is None or not _authorized_to_speak_for(
+                            active_participant, target
+                        ):
+                            await ws.send_json({
+                                "type": "error",
+                                "code": "delegation_denied",
+                                "message": f"not authorized to speak for {on_behalf_of}",
+                            })
+                            continue
+                        speaker = target
+                        spoken_by = participant_id
+                    # Speech chokepoint: mute + room policy, evaluated against
+                    # the effective speaker. Reuses the loop-top locked snapshot
+                    # — no second acquisition (a second lock here deadlocks the
+                    # two-socket portal in tests).
                     if current_team is None:
                         allowed, reason = False, "participant removed"
                     else:
-                        allowed, reason = _participant_can_speak(current_team, active_participant)
+                        allowed, reason = _participant_can_speak(current_team, speaker)
                     if not allowed:
                         await ws.send_json(
                             {"type": "error", "code": "speech_denied", "message": reason}
@@ -883,8 +982,10 @@ def create_team_rooms_router(
                             "team_id": team_id,
                             "thread_id": msg_thread_id,
                             "message_id": f"room-msg-{uuid4().hex}",
-                            "participant_id": participant_id,
-                            "display_name": display_name,
+                            "participant_id": speaker.id,
+                            "display_name": speaker.display_name,
+                            "spoken_by": spoken_by,
+                            "via": _normalize_speak_mode(speaker.speak_mode) if spoken_by else None,
                             "text": text[:4000],
                             "created_at": _now(),
                         },
@@ -900,7 +1001,7 @@ def create_team_rooms_router(
                             advanced = teams.get(team_id)
                             if advanced is not None:
                                 advanced = advanced.model_copy(update={
-                                    "current_speaker_id": _next_speaker(advanced, participant_id),
+                                    "current_speaker_id": _next_speaker(advanced, speaker.id),
                                     "updated_at": _now(),
                                 })
                                 teams[team_id] = advanced
@@ -1220,6 +1321,32 @@ def _participant_can_speak(
         "moderated": "raise your hand and wait for the floor",
     }
     return False, reasons.get(policy, "you don't hold the floor right now")
+
+
+_SPEAK_MODES = {"manual", "twin", "hosted"}
+
+
+def _normalize_speak_mode(value: str | None) -> str:
+    normalized = (value or "manual").strip().lower()
+    aliases = {"self": "manual", "human": "manual", "agent": "twin", "delegate": "hosted"}
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in _SPEAK_MODES else "manual"
+
+
+def _authorized_to_speak_for(
+    sender: TeamParticipantWire, target: TeamParticipantWire
+) -> bool:
+    """Whether ``sender`` may speak on ``target``'s behalf. Honors the
+    target's OWN opt-in: hosted → the bound human host, twin → the bound
+    agent. Identity matches either the participant id or the actor id, so
+    both a connected human host and a backend twin agent resolve."""
+    mode = _normalize_speak_mode(getattr(target, "speak_mode", "manual"))
+    sender_ids = {sender.id, getattr(sender, "actor_id", None)}
+    if mode == "hosted":
+        return getattr(target, "host_id", None) in sender_ids
+    if mode == "twin":
+        return getattr(target, "twin_agent_id", None) in sender_ids
+    return False
 
 
 def _team_by_invite(

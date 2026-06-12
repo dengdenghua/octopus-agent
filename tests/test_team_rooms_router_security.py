@@ -462,3 +462,68 @@ def test_member_cannot_set_speaker_policy(tmp_path: Path) -> None:
         headers=_bearer(keys["bob"]),
     )
     assert resp.status_code == 403
+
+
+# ── delegation (twin/hosted): the bound person's OWN opt-in only ────
+#
+# The inverse of mute: an admin must NOT be able to bind a twin or host
+# to someone else (that would be impersonation). Only the participant
+# themselves can set their own speaking delegation.
+
+
+def test_participant_sets_own_delegation(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}/delegation",
+        json={"speak_mode": "hosted", "host_id": "alice"},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["participant"]["speak_mode"] == "hosted"
+    assert resp.json()["participant"]["host_id"] == "alice"
+
+
+def test_owner_cannot_impose_delegation(tmp_path: Path) -> None:
+    """The critical impersonation guard: even the owner cannot bind a
+    twin/host onto another participant."""
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}/delegation",
+        json={"speak_mode": "twin", "twin_agent_id": "alice-puppet"},
+        headers=_bearer(keys["alice"]),
+    )
+    assert resp.status_code == 403
+    assert "themselves" in resp.json()["detail"]
+
+
+def test_member_cannot_set_others_delegation(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    _invite_and_join(client, keys, "alice-team", "alice", "bob")
+    carol_pid = _invite_and_join(client, keys, "alice-team", "alice", "carol")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{carol_pid}/delegation",
+        json={"speak_mode": "hosted", "host_id": "bob"},
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+
+
+def test_hosted_mode_requires_host_id(tmp_path: Path) -> None:
+    client, keys = _build_app(tmp_path)
+    _create_team(client, keys, "alice-team", owner="alice")
+    bob_pid = _invite_and_join(client, keys, "alice-team", "alice", "bob")
+
+    resp = client.patch(
+        f"/api/teams/alice-team/participants/{bob_pid}/delegation",
+        json={"speak_mode": "hosted"},  # missing host_id
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 400

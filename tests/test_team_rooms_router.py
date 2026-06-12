@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from runtime.sensing.gateway.team_rooms_router import (  # noqa: E402
     TeamParticipantWire,
     TeamRoomWire,
+    _authorized_to_speak_for,
     _initial_floor_state,
     _next_speaker,
+    _normalize_speak_mode,
     _normalize_speaker_policy,
     _participant_can_speak,
     create_team_rooms_router,
@@ -515,3 +517,75 @@ def test_moderated_raise_hand_then_grant_over_ws(tmp_path: Path) -> None:
         assert floor["type"] == "floor"
         assert floor["current_speaker_id"] == "bob"
         assert "bob" not in floor["floor_requests"]
+
+
+# ── delegation (C-layer): twin / hosted speak-resolution ───────────
+
+
+def test_speak_mode_normalization() -> None:
+    assert _normalize_speak_mode("manual") == "manual"
+    assert _normalize_speak_mode(None) == "manual"
+    assert _normalize_speak_mode("SELF") == "manual"  # alias
+    assert _normalize_speak_mode("twin") == "twin"
+    assert _normalize_speak_mode("agent") == "twin"  # alias
+    assert _normalize_speak_mode("hosted") == "hosted"
+    assert _normalize_speak_mode("delegate") == "hosted"  # alias
+    assert _normalize_speak_mode("garbage") == "manual"
+
+
+def test_authorized_to_speak_for_honors_optin() -> None:
+    host = _gov_participant("host-h", actor_id="h")
+    twin = _gov_participant("agent-x", actor_id="x")
+    # manual participant: nobody may speak for them
+    p_manual = _gov_participant("p", actor_id="p")
+    assert _authorized_to_speak_for(host, p_manual) is False
+    # hosted: only the bound host_id matches
+    p_hosted = TeamParticipantWire(
+        id="p", display_name="P", joined_at="t0", speak_mode="hosted", host_id="host-h"
+    )
+    assert _authorized_to_speak_for(host, p_hosted) is True
+    assert _authorized_to_speak_for(twin, p_hosted) is False
+    # twin: matches by the bound agent id (or its actor id)
+    p_twin = TeamParticipantWire(
+        id="p", display_name="P", joined_at="t0", speak_mode="twin", twin_agent_id="x"
+    )
+    assert _authorized_to_speak_for(twin, p_twin) is True  # matched by actor_id
+    assert _authorized_to_speak_for(host, p_twin) is False
+
+
+def test_hosted_speaking_over_ws(tmp_path: Path) -> None:
+    """A host speaks on a consenting participant's behalf; the broadcast
+    is attributed to the participant, marked as spoken_by the host."""
+    client, tid = _room_with_two_members(tmp_path)
+    # bob opts in to being hosted by alice (self-service; dev mode).
+    res = client.patch(
+        f"/api/teams/{tid}/participants/bob/delegation",
+        json={"speak_mode": "hosted", "host_id": "alice"},
+    )
+    assert res.status_code == 200, res.json()
+
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id=alice&display_name=Alice") as alice:
+        assert alice.receive_json()["type"] == "ready"
+        assert alice.receive_json()["type"] == "presence"
+        alice.send_json({"type": "message", "text": "speaking for bob", "on_behalf_of": "bob"})
+        msg = alice.receive_json()
+        assert msg["type"] == "message"
+        assert msg["participant_id"] == "bob"  # attributed to bob
+        assert msg["spoken_by"] == "alice"  # ...via alice
+        assert msg["via"] == "hosted"
+        assert msg["text"] == "speaking for bob"
+
+
+def test_unauthorized_delegation_denied_over_ws(tmp_path: Path) -> None:
+    """Speaking on someone's behalf without their opt-in is rejected."""
+    client, tid = _room_with_two_members(tmp_path)
+    # bob has NOT opted in to anyone hosting him.
+    url = f"/api/teams/{tid}/ws"
+    with client.websocket_connect(f"{url}?participant_id=alice&display_name=Alice") as alice:
+        assert alice.receive_json()["type"] == "ready"
+        assert alice.receive_json()["type"] == "presence"
+        alice.send_json({"type": "message", "text": "hijack", "on_behalf_of": "bob"})
+        denied = alice.receive_json()
+        assert denied["type"] == "error"
+        assert denied["code"] == "delegation_denied"

@@ -3322,6 +3322,41 @@
         "title": "UpdateAgentRequest",
         "type": "object"
       },
+      "UpdateDelegationRequest": {
+        "properties": {
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host Id"
+          },
+          "speak_mode": {
+            "title": "Speak Mode",
+            "type": "string"
+          },
+          "twin_agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Twin Agent Id"
+          }
+        },
+        "required": [
+          "speak_mode"
+        ],
+        "title": "UpdateDelegationRequest",
+        "type": "object"
+      },
       "UpdatePatentRecordRequest": {
         "properties": {
           "abstract": {
@@ -24565,6 +24600,69 @@
           }
         },
         "summary": "Update Participant",
+        "tags": [
+          "team-rooms"
+        ]
+      }
+    },
+    "/api/teams/{team_id}/participants/{participant_id}/delegation": {
+      "patch": {
+        "operationId": "update_delegation_api_teams__team_id__participants__participant_id__delegation_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "team_id",
+            "required": true,
+            "schema": {
+              "title": "Team Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "participant_id",
+            "required": true,
+            "schema": {
+              "title": "Participant Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDelegationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Delegation Api Teams  Team Id  Participants  Participant Id  Delegation Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Delegation",
         "tags": [
           "team-rooms"
         ]
