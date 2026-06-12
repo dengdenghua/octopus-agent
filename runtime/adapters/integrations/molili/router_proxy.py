@@ -115,7 +115,7 @@ def create_proxy_router(
             )
 
     def _actor(request: Request) -> str:
-        from runtime.sensing.gateway.openai_gateway import _resolve_actor
+        from runtime.adapters.web_auth import _resolve_actor
 
         actor = _resolve_actor(
             request, identity_store, require_auth,

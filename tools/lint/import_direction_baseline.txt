@@ -3,8 +3,5 @@
 # '<relpath>\t<target_module>'. Fixed an edge? Delete its line so
 # the audit locks in the win. Regenerate with --write-baseline.
 
-runtime/adapters/integrations/local_auth/router.py	sensing.gateway.openai_gateway
-runtime/adapters/integrations/molili/router_account.py	sensing.gateway.openai_gateway
-runtime/adapters/integrations/molili/router_proxy.py	sensing.gateway.openai_gateway
 runtime/execution/suckers/browser_act_skills.py	sensing.gateway
 runtime/execution/suckers/ephemeral_runner.py	sensing.gateway.tool_bridge

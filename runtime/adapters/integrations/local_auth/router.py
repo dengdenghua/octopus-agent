@@ -178,7 +178,7 @@ def create_local_auth_router(
                 status_code=501,
                 detail="no identity_store configured · cannot verify token",
             )
-        from runtime.sensing.gateway.openai_gateway import _resolve_actor
+        from runtime.adapters.web_auth import _resolve_actor
 
         actor = _resolve_actor(
             request,
