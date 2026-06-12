@@ -145,7 +145,7 @@ def _registry_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any
 
 def _codex_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any]]:
     try:
-        from runtime.sensing.gateway.plugins_router import discover_codex_plugins
+        from runtime.platform.plugins.codex_discovery import discover_codex_plugins
     except Exception:
         return {}
     registered = set(registry.all_names())

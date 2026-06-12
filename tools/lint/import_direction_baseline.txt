@@ -7,5 +7,4 @@ runtime/adapters/integrations/local_auth/router.py	sensing.gateway.openai_gatewa
 runtime/adapters/integrations/molili/router_account.py	sensing.gateway.openai_gateway
 runtime/adapters/integrations/molili/router_proxy.py	sensing.gateway.openai_gateway
 runtime/execution/suckers/browser_act_skills.py	sensing.gateway
-runtime/execution/suckers/capability_skills.py	sensing.gateway.plugins_router
 runtime/execution/suckers/ephemeral_runner.py	sensing.gateway.tool_bridge
