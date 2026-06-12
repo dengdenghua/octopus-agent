@@ -2081,8 +2081,16 @@ def stream_react_loop(
 
     steps: list[ReActStep] = []
     executed_beak_steps: list[Step] = []
-    # Clear any prompt-injection taint from a prior turn in this context.
+    # Clear any prompt-injection taint from a prior turn in this context,
+    # then INHERIT the spawning parent's taint when this loop is a subagent
+    # spun up in a fresh thread/context (the taint contextvar doesn't cross
+    # the thread-pool boundary, so the parent passes it explicitly via the
+    # intent). Without this, delegating a risky action to a subagent would
+    # wash the taint clean.
     reset_injection_taint()
+    _inherited_taint = intent.user_context.get("_inherited_injection_taint")
+    if isinstance(_inherited_taint, str) and _inherited_taint not in ("", "none"):
+        mark_injection_taint(_inherited_taint)
     final_answer: str | None = None
     final_answer_segments: list[str] = []
     final_answer_emitted = False

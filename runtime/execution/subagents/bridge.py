@@ -285,6 +285,25 @@ def call_subagent(
             context = {}
         context.setdefault("thread_id", _memory_thread_id)
 
+    # ── Prompt-injection taint inheritance ──
+    # call_subagent's body runs in the spawning parent's thread, but the
+    # actual sub-agent runs behind an inner ThreadPoolExecutor (below) whose
+    # worker starts with a FRESH taint contextvar. Capture the parent's taint
+    # HERE and stamp it into the context that flows to the runner, so an
+    # injection-tainted parent cannot launder a risky action through a
+    # delegated sub-agent. Honored at the sub-agent's react-loop start.
+    try:
+        from runtime.safety.validation.prompt_injection import (
+            current_injection_taint,
+        )
+        _taint = current_injection_taint()
+        if _taint and _taint != "none":
+            if context is None:
+                context = {}
+            context.setdefault("_inherited_injection_taint", _taint)
+    except Exception:  # noqa: BLE001 - taint propagation is best-effort
+        pass
+
     # Emit lifecycle: spawn. Caller's emitter (typically the realtime
     # gateway) forwards this onto the WS so the frontend sees a new
     # sub-agent card the moment we start. Best-effort — emitter

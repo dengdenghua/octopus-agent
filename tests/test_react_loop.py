@@ -3277,3 +3277,56 @@ def test_parallel_batch_injection_blocks_high_risk_tool() -> None:
     assert exec_ends, "exec_shell should have produced a tool_end"
     assert exec_ends[0]["status"] != "success", "tainted exec_shell must be blocked"
     assert not ran["exec"], "blocked exec_shell handler must NOT have run"
+
+
+def test_inherited_injection_taint_gates_subagent_first_risky_tool() -> None:
+    """Subagent taint inheritance (consumer side): a parent whose turn was
+    injection-tainted delegates to a subagent spawned in a fresh thread/context
+    (the taint contextvar does NOT cross the thread-pool boundary). The parent
+    passes its taint explicitly via the intent's ``_inherited_injection_taint``;
+    stream_react_loop honors it at start, so the subagent's VERY FIRST risky
+    tool is forced through human approval — even though nothing in the
+    subagent's own turn fetched untrusted content."""
+    router = _ScriptedRouter([
+        'Action: exec_shell({"command": "echo hi"})',
+        "Final Answer: done",
+    ])
+    stack = _stack_with_web_and_shell(router, _INJECTION_PAGE)
+    provider = _ApprovingApprovalProvider()
+    intent = _intent("delegated risky action")
+    intent.user_context["auto_approve"] = True  # would normally skip approval
+    intent.user_context["_inherited_injection_taint"] = "high"  # from tainted parent
+
+    events, result = _drain(stream_react_loop(
+        stack, intent, agent=None, max_iterations=4, approval_provider=provider,
+    ))
+
+    assert result is not None
+    approvals = [e for e in events if e["type"] == "tool_approval_request"]
+    assert approvals, "inherited taint must force approval on the first risky tool"
+    assert approvals[0]["tool_name"] == "exec_shell"
+    assert "prompt_injection_taint" in approvals[0]["risk"]["categories"]
+
+
+def test_no_inherited_taint_lets_subagent_first_risky_tool_auto_run() -> None:
+    """Control: without inherited taint, the same first exec_shell auto-runs
+    under auto_approve. Inheritance is the SOLE taint source here, so the gate
+    is specific to a genuinely tainted parent — a clean delegated subagent is
+    not forced through approval (no false positives on every sub-call)."""
+    router = _ScriptedRouter([
+        'Action: exec_shell({"command": "echo hi"})',
+        "Final Answer: done",
+    ])
+    stack = _stack_with_web_and_shell(router, _INJECTION_PAGE)
+    provider = _ApprovingApprovalProvider()
+    intent = _intent("delegated clean action")
+    intent.user_context["auto_approve"] = True
+    # no _inherited_injection_taint
+
+    events, result = _drain(stream_react_loop(
+        stack, intent, agent=None, max_iterations=4, approval_provider=provider,
+    ))
+
+    assert result is not None
+    assert not any(e["type"] == "tool_approval_request" for e in events)
+    assert provider.requests == []

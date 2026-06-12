@@ -210,6 +210,11 @@ def make_stack_subagent_runner(
                 "research_materials",
                 "research_roles",
                 "research_prefetch_logs",
+                # Security: carry the spawning parent's prompt-injection taint
+                # into the sub-agent so a tainted parent can't launder a risky
+                # action through delegation. Honored at the sub-agent's
+                # react-loop start (stream_react_loop). MUST stay in this list.
+                "_inherited_injection_taint",
             ):
                 if key in ctx:
                     user_context[key] = ctx[key]

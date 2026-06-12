@@ -296,6 +296,21 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         if context:
             run_context.update(context)
 
+        # Carry the spawning parent's prompt-injection taint into the batch's
+        # subagents. dispatch() runs in the parent's context; the per-task
+        # threads spawned by the scheduler start with a fresh contextvar, so
+        # capture HERE (before the pool boundary) and let the runner thread it
+        # into each subagent intent's user_context (honored at react-loop start).
+        try:
+            from runtime.safety.validation.prompt_injection import (
+                current_injection_taint,
+            )
+            _taint = current_injection_taint()
+            if _taint and _taint != "none":
+                run_context.setdefault("_inherited_injection_taint", _taint)
+        except Exception:  # noqa: BLE001 - taint propagation is best-effort
+            pass
+
         with self._lock:
             self._batches[batch_id] = batch
             for tid in entries:

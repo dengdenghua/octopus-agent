@@ -71,6 +71,20 @@ class ParallelTaskRunner:
         self._cancelled: set[str] = set()
 
     def submit(self, task: ParallelTask) -> ParallelTask:
+        # Carry the spawning parent's prompt-injection taint into the
+        # subagent: the thread-pool worker starts with a fresh contextvar,
+        # so without this an injection-tainted parent could launder a risky
+        # action through a freshly-spawned subagent. Captured HERE, in the
+        # parent's context, before crossing the pool boundary.
+        try:
+            from runtime.safety.validation.prompt_injection import (
+                current_injection_taint,
+            )
+            _taint = current_injection_taint()
+            if _taint and _taint != "none" and isinstance(task.context, dict):
+                task.context.setdefault("_inherited_injection_taint", _taint)
+        except Exception:  # noqa: BLE001 - taint propagation is best-effort
+            pass
         self._tasks[task.id] = task
         self._pool.submit(self._run_task, task.id)
         return task

@@ -670,3 +670,84 @@ class TestToolBridgeParentIdTracking:
         assert 'metadata["_active_parent_tool_use_id"] = call.id' in text
         assert 'metadata.pop(' in text
         assert '"_active_parent_tool_use_id"' in text
+
+
+class TestEphemeralInjectionTaintGate:
+    """Ephemeral sub-agents run skills via a direct ``handler(**input)`` call
+    — they bypass ``stack.executor`` and so the injection-taint chokepoint AND
+    the approval channel. When the delegating parent's turn was
+    injection-tainted (carried in ``call.context``), a risky tool here must be
+    blocked fail-closed (there's no human to escalate to)."""
+
+    @staticmethod
+    def _call(name, args, *, context):
+        from types import SimpleNamespace
+        return SimpleNamespace(name=name, input=args, context=context, id="tu-1")
+
+    @pytest.fixture(autouse=True)
+    def _reset_taint(self):
+        from runtime.safety.validation.prompt_injection import (
+            reset_injection_taint,
+        )
+        reset_injection_taint()
+        yield
+        reset_injection_taint()
+
+    def test_inherited_taint_blocks_risky_tool(self):
+        from runtime.execution.suckers.ephemeral_runner import (
+            _execute_tool_in_subagent,
+        )
+        ran = {"exec": False}
+
+        def _shell(**_kw):
+            ran["exec"] = True
+            return {"exit_code": 0}
+
+        registry = _StubRegistry({"exec_shell": _shell})
+        call = self._call(
+            "exec_shell", {"command": "echo hi"},
+            context={"_inherited_injection_taint": "high"},
+        )
+
+        output, is_error = _execute_tool_in_subagent(registry, call)
+
+        assert is_error is True
+        assert "prompt_injection_taint" in output
+        assert ran["exec"] is False, "tainted risky handler must NOT run"
+
+    def test_inherited_taint_allows_low_risk_tool(self):
+        """The gate is risk-scoped: a tainted parent can still delegate a
+        read-only tool (low risk) — only medium+ tools are blocked."""
+        from runtime.execution.suckers.ephemeral_runner import (
+            _execute_tool_in_subagent,
+        )
+        registry = _StubRegistry({"read_file": lambda **_kw: {"content": "ok"}})
+        call = self._call(
+            "read_file", {"path": "x"},
+            context={"_inherited_injection_taint": "high"},
+        )
+
+        output, is_error = _execute_tool_in_subagent(registry, call)
+
+        assert is_error is False
+        assert "prompt_injection_taint" not in output
+
+    def test_clean_parent_lets_risky_tool_run(self):
+        """Control: no inherited taint → the risky tool runs normally."""
+        from runtime.execution.suckers.ephemeral_runner import (
+            _execute_tool_in_subagent,
+        )
+        ran = {"exec": False}
+
+        def _shell(**_kw):
+            ran["exec"] = True
+            return {"exit_code": 0, "stdout": "ok"}
+
+        registry = _StubRegistry({"exec_shell": _shell})
+        call = self._call("exec_shell", {"command": "echo hi"}, context={})
+
+        output, is_error = _execute_tool_in_subagent(registry, call)
+
+        assert is_error is False
+        assert ran["exec"] is True
+        assert "prompt_injection_taint" not in output

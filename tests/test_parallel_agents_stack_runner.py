@@ -350,3 +350,50 @@ class TestConstruct:
             runtime = None
         with pytest.raises(ValueError, match="runtime"):
             make_stack_subagent_runner(stack=_Bad())
+
+
+class TestInjectionTaintThreading:
+    """The spawning parent's prompt-injection taint must survive the hop into
+    the sub-agent: ``_inherited_injection_taint`` in the call context has to be
+    copied into the sub-agent intent's ``user_context`` (the allowlist of keys
+    threaded through is narrow, so this is an explicit, security-critical
+    member). The sub-agent's react loop honors it at start."""
+
+    def test_inherited_taint_lands_in_subagent_user_context(self):
+        stack = _build_stack()
+        real_planner = stack.planner
+        reg = _build_registry()
+
+        class _SpyPlanner:
+            captured: dict = {}
+
+            def plan(self, intent, *, allowed_skills=None,
+                     soul=None, model=None):
+                _SpyPlanner.captured = dict(intent.user_context)
+                return real_planner.plan(intent, allowed_skills=allowed_skills)
+
+        stack.planner = _SpyPlanner()  # type: ignore[assignment]
+        runner = make_stack_subagent_runner(stack=stack, agent_registry=reg)
+        runner(
+            "list", subagent_name="scout",
+            context={"_inherited_injection_taint": "high"},
+        )
+        assert _SpyPlanner.captured.get("_inherited_injection_taint") == "high"
+
+    def test_clean_context_leaves_no_taint_key(self):
+        stack = _build_stack()
+        real_planner = stack.planner
+        reg = _build_registry()
+
+        class _SpyPlanner:
+            captured: dict = {}
+
+            def plan(self, intent, *, allowed_skills=None,
+                     soul=None, model=None):
+                _SpyPlanner.captured = dict(intent.user_context)
+                return real_planner.plan(intent, allowed_skills=allowed_skills)
+
+        stack.planner = _SpyPlanner()  # type: ignore[assignment]
+        runner = make_stack_subagent_runner(stack=stack, agent_registry=reg)
+        runner("list", subagent_name="scout", context={})
+        assert "_inherited_injection_taint" not in _SpyPlanner.captured

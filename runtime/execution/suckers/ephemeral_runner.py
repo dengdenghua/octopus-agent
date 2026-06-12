@@ -61,6 +61,12 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from runtime.execution.suckers.ephemeral_injection_gate import (
+    ephemeral_injection_taint_block,
+    mark_inherited_ephemeral_taint,
+    scan_and_escalate_ephemeral_taint,
+)
+
 _log = logging.getLogger("runtime.execution.ephemeral_runner")
 
 # Bound on the per-sub-agent tool-use loop. Role-specific caps allow
@@ -227,6 +233,15 @@ def make_llm_ephemeral_runner(
         """
         # Lazy import · keeps module-level dep light (see module doc).
         from runtime.sensing.model_router import Message, ModelRequest
+
+        # ── Prompt-injection taint inheritance ──
+        # The spawning parent stamps its taint into ``call.context`` (see
+        # bridge.call_subagent). The timeout dispatch path runs this runner in
+        # a fresh thread whose taint contextvar started clean, so re-mark it
+        # here. Gated risky tools are then blocked in
+        # ``_execute_tool_in_subagent`` (ephemeral runs bypass the executor
+        # chokepoint, so the gate lives there).
+        mark_inherited_ephemeral_taint(getattr(call, "context", None))
 
         # Single-shot fallback path · used when no registry was
         # plumbed through (legacy bootstrap, unit tests).
@@ -891,6 +906,12 @@ def _execute_tool_in_subagent(
     except Exception as exc:  # noqa: BLE001
         return (f"(registry error: {exc})", True)
 
+    # Injection-taint gate — ephemeral runs bypass the executor chokepoint, so
+    # enforce here, fail-closed (block, since there's no approval channel).
+    _taint_block = ephemeral_injection_taint_block(call, call.name)
+    if _taint_block is not None:
+        return (_taint_block, True)
+
     try:
         output = skill.handler(**call.input)
     except TypeError as exc:
@@ -905,6 +926,13 @@ def _execute_tool_in_subagent(
             rendered = json.dumps(output, ensure_ascii=False, default=str)
         except (TypeError, ValueError):
             rendered = repr(output)
+
+    # If this tool ingested untrusted content carrying injection markers,
+    # escalate the turn taint so a LATER risky tool in the same ephemeral run
+    # is gated too — mirrors the executor chokepoint's post-success scan.
+    scan_and_escalate_ephemeral_taint(
+        call.name, getattr(skill, "affinity", None), rendered,
+    )
     # Same 4kB cap as parent agentic loop · keeps sub-agent context
     # from blowing up on a single huge tool result (e.g. a full-page
     # web_search output).
