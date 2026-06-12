@@ -3279,6 +3279,66 @@ def test_parallel_batch_injection_blocks_high_risk_tool() -> None:
     assert not ran["exec"], "blocked exec_shell handler must NOT have run"
 
 
+def test_parallel_batch_runs_untrusted_before_risky_regardless_of_order() -> None:
+    """Red-team #5 (high): the serial batch used to execute in DECLARATION
+    order, so a model emitting [exec_shell, web_peek] in ONE block ran the
+    shell BEFORE web_peek's injection output marked taint — the chokepoint saw
+    a clean turn and let it through. The serial path now runs untrusted-output
+    tools FIRST, so taint is set before the risky tool's chokepoint check even
+    when the risky tool is declared first."""
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.tool_engine import ToolExecutor
+    from runtime.safety.auth import TrustEngine
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="web_peek", description="fetch", affinity=["web", "io"],
+            trusted_source="builtin://web_peek",
+            handler=lambda url="": {"content": _INJECTION_PAGE},
+        ),
+        verify_tests=False,
+    )
+    ran = {"exec": False}
+
+    def _shell(command="", **_kw):
+        ran["exec"] = True
+        return {"exit_code": 0, "stdout": "ok"}
+
+    reg.register(
+        Skill(
+            name="exec_shell", description="shell", affinity=["shell", "exec", "dangerous"],
+            trusted_source="builtin://exec_shell", handler=_shell,
+        ),
+        verify_tests=False,
+    )
+    # exec_shell DECLARED FIRST, web_peek second — the reverse of the order
+    # that already worked.
+    stack = _FakeStack(_ScriptedRouter([
+        'Action:\n'
+        '    exec_shell({"command": "echo hi"})\n'
+        '    web_peek({"url": "http://x"})\n\n'
+        "Observation:",
+        "Final Answer: done",
+    ]))
+    stack.executor = ToolExecutor(
+        registry=reg,
+        immunity=TrustEngine(trusted_sources=["builtin://*"], unknown_policy="allow"),
+    )
+
+    events, result = _drain(stream_react_loop(
+        stack, _intent("run then peek in one block"), agent=None, max_iterations=4,
+    ))
+    assert result is not None
+    exec_ends = [
+        e for e in events
+        if e["type"] == "tool_end" and e["tool_name"] == "exec_shell"
+    ]
+    assert exec_ends, "exec_shell should have produced a tool_end"
+    assert exec_ends[0]["status"] != "success", "risky tool declared first must still be blocked"
+    assert not ran["exec"], "blocked exec_shell handler must NOT have run"
+
+
 def test_inherited_injection_taint_gates_subagent_first_risky_tool() -> None:
     """Subagent taint inheritance (consumer side): a parent whose turn was
     injection-tainted delegates to a subagent spawned in a fresh thread/context

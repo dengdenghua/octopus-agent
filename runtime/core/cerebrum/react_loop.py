@@ -976,29 +976,37 @@ def _dispatch_parallel_actions(
     # inline also lets an untrusted tool's taint apply to a later risky tool
     # in the same batch via the executor's chokepoint block.
     has_risky_or_untrusted = False
+    # Per-action flag: does this tool's OUTPUT taint the turn (untrusted
+    # source)? Used to order the serial batch so untrusted tools run before
+    # risky ones (see below).
+    untrusted_flags: list[bool] = []
     for p in parsed_pairs:
         if p is None:
             resolved_names.append(None)
+            untrusted_flags.append(False)
             has_unregistered = True
             continue
         name = p[0]
         registry = getattr(executor, "registry", None)
         if registry is None or not registry.has(name):
             resolved_names.append(None)
+            untrusted_flags.append(False)
             has_unregistered = True
         else:
             resolved_names.append(name)
+            try:
+                _aff = registry.get(name).affinity
+            except (KeyError, AttributeError):
+                _aff = None
+            _is_untrusted = is_untrusted_tool(name, _aff)
+            untrusted_flags.append(_is_untrusted)
             if name in _WRITE_TOOLS:
                 has_write_tool = True
-            if assess_approval_risk(name).level in {"medium", "high", "critical"}:
+            if (
+                assess_approval_risk(name).level in {"medium", "high", "critical"}
+                or _is_untrusted
+            ):
                 has_risky_or_untrusted = True
-            else:
-                try:
-                    _aff = registry.get(name).affinity
-                except (KeyError, AttributeError):
-                    _aff = None
-                if is_untrusted_tool(name, _aff):
-                    has_risky_or_untrusted = True
 
     # Pre-allocate per-action call_ids so tool_start/tool_end can be
     # paired even if work runs out-of-order.
@@ -1042,7 +1050,19 @@ def _dispatch_parallel_actions(
     observations: list[str | None] = [None] * len(actions)
     beak_steps: list[Any] = [None] * len(actions)
     if serial or len(actions) <= 1:
-        for idx in range(len(actions)):
+        # Run untrusted-output tools FIRST. The serial path exists so an
+        # untrusted tool's injection taint reaches a later risky tool's
+        # executor chokepoint — but in DECLARATION order the model can place a
+        # risky tool (exec_shell) BEFORE the untrusted one (web_fetch), so the
+        # risky tool runs while taint is still "none". Reorder execution so
+        # taint is set first. Results stay indexed by original position, so the
+        # tool_end emit order + merged observation below are unchanged. (Stable
+        # sort preserves declared order within each group.)
+        exec_order = sorted(
+            range(len(actions)),
+            key=lambda j: 0 if (j < len(untrusted_flags) and untrusted_flags[j]) else 1,
+        )
+        for idx in exec_order:
             obs, bk = _run_one(idx)
             observations[idx] = obs
             beak_steps[idx] = bk
