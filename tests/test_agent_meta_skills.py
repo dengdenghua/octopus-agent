@@ -256,3 +256,72 @@ def test_use_capability_runs_registered_child_action() -> None:
     assert result["capability_id"] == "demo-plugin"
     assert result["action"] == "demo_plugin.list_items"
     assert result["result"] == {"ok": True, "kind": "task"}
+
+
+def test_use_capability_blocks_risky_inner_action_under_taint() -> None:
+    """Red-team #7 (critical): use_capability dispatches to the inner handler
+    DIRECTLY, bypassing executor.execute_step and so the injection-taint
+    chokepoint. A tainted turn must not be able to launder a risky action
+    (exec_shell) through this low-risk-named meta-skill."""
+    from runtime.safety.validation.prompt_injection import (
+        mark_injection_taint,
+        reset_injection_taint,
+    )
+
+    ran = {"shell": False}
+
+    def _shell(**_kw):
+        ran["shell"] = True
+        return {"exit_code": 0}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="exec_shell",  # risk-recognized name; resolved action tail
+            summary="run a shell command",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="plugin://dangerpack/exec_shell",
+            handler=_shell,
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    reset_injection_taint()
+    try:
+        mark_injection_taint("high")  # untrusted content tainted the turn
+        result = registry.get("use_capability").handler(
+            capability_id="dangerpack",
+            action="exec_shell",
+            args={"command": "echo hi"},
+        )
+    finally:
+        reset_injection_taint()
+
+    assert result["ok"] is False
+    assert "injection_taint_block" in result.get("error", "")
+    assert ran["shell"] is False, "blocked inner handler must NOT have run"
+
+
+def test_use_capability_allows_inner_action_on_clean_turn() -> None:
+    """Control: with no taint, use_capability dispatches normally."""
+    ran = {"shell": False}
+
+    def _shell(**_kw):
+        ran["shell"] = True
+        return {"exit_code": 0}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="exec_shell", summary="run a shell command",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="plugin://dangerpack/exec_shell", handler=_shell,
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    result = registry.get("use_capability").handler(
+        capability_id="dangerpack", action="exec_shell", args={"command": "x"},
+    )
+    assert result["ok"] is True
+    assert ran["shell"] is True

@@ -179,6 +179,25 @@ def _build_composite_handler_with_templates(
                     call_args = dict(kwargs)
                     if i > 0 and f"n{i-1}" in outputs:
                         call_args.setdefault("_prev", outputs[f"n{i-1}"])
+                # Injection-taint chokepoint. A forged composite calls each
+                # sub-skill's handler DIRECTLY (not via executor.execute_step),
+                # so the executor's taint gate is bypassed — a tainted turn
+                # could launder a risky sub-skill through a low-risk-named
+                # composite. Re-apply per sub-skill, fail-closed;
+                # defer_if_handled=False since the approval gate reviewed the
+                # OUTER composite, not this inner skill.
+                from runtime.safety.approval.approval_gate import (
+                    injection_taint_block,
+                )
+                _inj = injection_taint_block(
+                    skill_name, str(call_args)[:200], defer_if_handled=False,
+                )
+                if _inj is not None:
+                    success = False
+                    failed_at = i
+                    error_type = "InjectionTaintBlocked"
+                    error_msg = _inj
+                    break
                 outputs[f"n{i}"] = skill.handler(**call_args)
             except TemplateResolutionError as e:
                 success = False

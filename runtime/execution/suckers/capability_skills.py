@@ -489,6 +489,25 @@ def _use_capability_for_registry(registry: SkillRegistry):
         call_args = _coerce_args(args)
         if request and "request" not in call_args and "query" not in call_args:
             call_args["request"] = request
+        # Injection-taint chokepoint. This meta-skill dispatches to the inner
+        # handler DIRECTLY (not via executor.execute_step), so the executor's
+        # taint gate is bypassed — a tainted turn could otherwise launder a
+        # risky action (exec_shell / write / egress) through use_capability.
+        # Re-apply the gate here, fail-closed; defer_if_handled=False because
+        # the single-action approval gate reviewed use_capability, NOT this
+        # inner tool. (Broader gaps — immunity / file-safety also bypassed by
+        # this direct dispatch — are tracked separately.)
+        from runtime.safety.approval.approval_gate import injection_taint_block
+        _inj = injection_taint_block(
+            resolved, str(call_args)[:200], defer_if_handled=False,
+        )
+        if _inj is not None:
+            return {
+                "ok": False,
+                "capability_id": entry.get("id"),
+                "action": resolved,
+                "error": f"injection_taint_block: {_inj}",
+            }
         try:
             result = skill.handler(**call_args)
         except Exception as exc:  # noqa: BLE001

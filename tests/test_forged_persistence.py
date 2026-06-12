@@ -301,3 +301,72 @@ class TestRestartScenario:
         out_reloaded = reloaded_handler(**args)
         assert out_original["steps"] == out_reloaded["steps"]
         assert set(out_original["composite_output"]) == set(out_reloaded["composite_output"])
+
+
+def test_forged_composite_blocks_risky_subskill_under_taint() -> None:
+    """Red-team #7 (critical): a forged composite calls each sub-skill's
+    handler DIRECTLY (not via executor.execute_step), bypassing the
+    injection-taint chokepoint. A tainted turn must not launder a risky
+    sub-skill through a low-risk-named composite."""
+    from runtime.execution.suckers.forged_persistence import (
+        _build_composite_handler,
+    )
+    from runtime.execution.suckers.registry import Skill, SkillRegistry
+    from runtime.safety.validation.prompt_injection import (
+        mark_injection_taint,
+        reset_injection_taint,
+    )
+
+    ran = {"shell": False}
+
+    def _shell(**_kw):
+        ran["shell"] = True
+        return {"exit_code": 0}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="exec_shell", summary="shell",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="skill://public/exec_shell", handler=_shell,
+        )
+    )
+    composite = _build_composite_handler(["exec_shell"], registry)
+
+    reset_injection_taint()
+    try:
+        mark_injection_taint("high")
+        result = composite(command="echo hi")
+    finally:
+        reset_injection_taint()
+
+    assert result["success"] is False
+    assert result.get("error_type") == "InjectionTaintBlocked"
+    assert ran["shell"] is False, "blocked sub-skill handler must NOT have run"
+
+
+def test_forged_composite_runs_subskill_on_clean_turn() -> None:
+    """Control: with no taint, the composite runs its sub-skills normally."""
+    from runtime.execution.suckers.forged_persistence import (
+        _build_composite_handler,
+    )
+    from runtime.execution.suckers.registry import Skill, SkillRegistry
+
+    ran = {"shell": False}
+
+    def _shell(**_kw):
+        ran["shell"] = True
+        return {"exit_code": 0}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="exec_shell", summary="shell",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="skill://public/exec_shell", handler=_shell,
+        )
+    )
+    composite = _build_composite_handler(["exec_shell"], registry)
+    result = composite(command="echo hi")
+    assert result["success"] is True
+    assert ran["shell"] is True

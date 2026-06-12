@@ -276,7 +276,9 @@ def is_durable_persistence_write(tool_name: str) -> bool:
     return (tool_name or "").strip() in _DURABLE_PERSISTENCE_WRITES
 
 
-def injection_taint_block(tool_name: str, args_preview: str = "") -> str | None:
+def injection_taint_block(
+    tool_name: str, args_preview: str = "", *, defer_if_handled: bool = True,
+) -> str | None:
     """The single, path-independent enforcement point for prompt-injection
     taint, called by the executor before every tool runs.
 
@@ -292,7 +294,14 @@ def injection_taint_block(tool_name: str, args_preview: str = "") -> str | None:
     Returns ``None`` to allow (clean turn, low-risk non-persistence tool, or a
     risky call already reviewed by the single-action approval gate).
     Fail-closed: when in doubt after taint, the tool is blocked rather than
-    auto-run."""
+    auto-run.
+
+    ``defer_if_handled`` lets a caller opt OUT of the gate_already_handled
+    deferral. The executor passes True: a risky tool the single-action gate
+    already reviewed shouldn't double-block. But a META-SKILL dispatching to an
+    INNER handler (use_capability, a forged composite) must pass False — the
+    single-action gate reviewed the OUTER meta-skill (typically low-risk), not
+    the inner tool, so the inner call is effectively unreviewed."""
     from runtime.safety.validation.prompt_injection import (
         injection_gate_already_handled,
         injection_taint_gates,
@@ -310,7 +319,7 @@ def injection_taint_block(tool_name: str, args_preview: str = "") -> str | None:
             "is injection-tainted would launder the injection into a future "
             "turn's system prompt"
         )
-    if injection_gate_already_handled():
+    if defer_if_handled and injection_gate_already_handled():
         return None
     risk = assess_approval_risk(tool_name, args_preview)
     if risk.level in {"medium", "high", "critical"}:
