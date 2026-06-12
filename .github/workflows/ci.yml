@@ -170,7 +170,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: ESLint
         working-directory: frontend
-        run: pnpm exec eslint . --ext .ts,.tsx || true
+        # No `|| true`: the gate must fail on real errors. The tree is
+        # error-clean today (179 pre-existing warnings don't gate —
+        # eslint exits 0 on warnings-only). Add `--max-warnings N` later
+        # to ratchet the warning debt down.
+        run: pnpm exec eslint . --ext .ts,.tsx
       - name: Typecheck
         working-directory: frontend
         run: pnpm typecheck
