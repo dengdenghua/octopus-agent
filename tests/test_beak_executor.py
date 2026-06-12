@@ -322,3 +322,72 @@ class TestReadBeforeWriteGuard:
 
         assert written.success
         assert target.read_text(encoding="utf-8") == "new"
+
+
+class TestFileSafetyDenylist:
+    """The executor blocks writes to credential-file basenames via
+    file_safety.check_file_write — complementary to write-scope, which
+    only governs *where* (not *what name*) a skill may write.
+    """
+
+    def _registry(self) -> SkillRegistry:
+        reg = SkillRegistry()
+        reg.register(
+            Skill(
+                name="write_text_file",
+                description="Write a file.",
+                affinity=["file", "write"],
+                trusted_source="skill://public/write_text_file",
+                handler=_write_text_file,
+            ),
+            verify_tests=False,
+        )
+        return reg
+
+    def _executor(self) -> ToolExecutor:
+        return ToolExecutor(
+            self._registry(),
+            TrustEngine(trusted_sources=["skill://public/*"]),
+        )
+
+    def _budget(self) -> Budget:
+        return Budget(
+            task_id=TaskId(uuid4()),
+            limits=BudgetLimits(tokens=10_000, usd=1.0),
+        )
+
+    def test_denied_basename_write_blocked(self, tmp_path):
+        exe = self._executor()
+        budget = self._budget()
+        step = exe.execute_step(
+            step_id=0,
+            node_id="w",
+            sucker_id=SkillId("write_text_file"),
+            # In-scope sandbox path, but the basename is a credential file.
+            args={"path": ".env", "content": "SECRET=1",
+                  "sandbox_dir": str(tmp_path)},
+            caller="test",
+            task_id=budget.task_id,
+            arm_id=ArmId("test"),
+            budget=budget,
+        )
+        assert step.result.status == "failed"
+        assert "file-safety" in str(step.result.output)
+        assert not (tmp_path / ".env").exists()
+
+    def test_ordinary_write_still_allowed(self, tmp_path):
+        exe = self._executor()
+        budget = self._budget()
+        step = exe.execute_step(
+            step_id=0,
+            node_id="w",
+            sucker_id=SkillId("write_text_file"),
+            args={"path": "notes.md", "content": "# hi\n",
+                  "sandbox_dir": str(tmp_path)},
+            caller="test",
+            task_id=budget.task_id,
+            arm_id=ArmId("test"),
+            budget=budget,
+        )
+        assert step.success
+        assert (tmp_path / "notes.md").read_text(encoding="utf-8") == "# hi\n"

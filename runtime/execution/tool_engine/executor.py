@@ -31,7 +31,7 @@ from runtime.platform.models import (
     ToolCall,
 )
 from runtime.platform.process.utils import safe_repr as _safe_repr
-from runtime.safety.auth import TrustEngine
+from runtime.safety.auth import TrustEngine, check_file_write
 
 _READ_BEFORE_WRITE_TOOLS = frozenset({
     "write_text_file",
@@ -561,6 +561,20 @@ class ToolExecutor:
                     )
                     if _read_guard_reason is not None:
                         raise ReadBeforeWriteRequired(_read_guard_reason)
+                    # Credential-file denylist. Write scope decides
+                    # *where* a skill may write; this decides *what it may
+                    # never name* — .env, id_rsa, ~/.ssh/*, /etc/shadow,
+                    # etc. — regardless of scope. A sandbox-scoped write to
+                    # a `.env` is in-scope yet still a credential write, so
+                    # this layer is complementary, not redundant.
+                    _fs_target = _file_safety_target(skill, args)
+                    if _fs_target is not None:
+                        _fs_verdict = check_file_write(_fs_target)
+                        if not _fs_verdict.allow:
+                            raise PermissionError(
+                                f"write skill {sucker_id!r} blocked by "
+                                f"file-safety: {_fs_verdict.reason}"
+                            )
                     _lease_target = _file_write_lease_target(skill, args)
                     if _lease_target is not None:
                         from runtime.platform.process.session import current_session
@@ -611,6 +625,15 @@ class ToolExecutor:
                     status = "timeout"
                     error_type = "timeout"
                     stderr_tags = []
+                except PermissionError as e:
+                    # Write-scope escapes and file-safety denials both
+                    # surface here. Preserve the reason in output/tags so
+                    # the block is attributable (the catch-all below would
+                    # drop the message, keeping only the type name).
+                    output = {"error": str(e)}
+                    status = "failed"
+                    error_type = "PermissionError"
+                    stderr_tags = ["permission_denied", str(e)]
                 except Exception as e:  # noqa: BLE001 - we want to capture arbitrary handler errors
                     output = None
                     status = "failed"
@@ -981,6 +1004,20 @@ def _file_write_lease_target(skill: Skill, args: dict[str, Any]) -> Path | None:
     affinity = set(skill.affinity or [])
     if "file" not in affinity:
         return None
+    if not (affinity & {"write", "edit", "delete", "dangerous"}):
+        return None
+    return _canonical_tool_path(args)
+
+
+def _file_safety_target(skill: Skill, args: dict[str, Any]) -> Path | None:
+    """Write target to vet against the credential-file denylist.
+
+    Same mutation gate as the lease target, minus the ``"file"`` tag
+    requirement — any write/edit/delete/dangerous skill that names a
+    concrete path is checked, so a mis-tagged write skill can't slip a
+    credential write past the denylist.
+    """
+    affinity = set(skill.affinity or [])
     if not (affinity & {"write", "edit", "delete", "dangerous"}):
         return None
     return _canonical_tool_path(args)

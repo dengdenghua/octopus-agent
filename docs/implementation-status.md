@@ -16,7 +16,7 @@
 | Immunity 记忆层（抗体记忆：重复违规晶化、命中即拒、可持久化） | **已接线** | `runtime/safety/auth/attack_memory.py`；TrustEngine 在 tolerance 之后最先查（可拦截信任 glob 内的已知攻击者）；`immunity.attack_memory_path` 配置持久化 |
 | Immunity 自适应层（行为异常 z-score 评分） | **可选后端 · 实际惰性**（配置开启但当前无评分输入） | `runtime/safety/auth/adaptive_immunity.py`：每 sucker 滑动窗口基线 + z-score（取最异常轴，只收紧，I2 自旁路、I4 冷启动）。`executor.py` 执行后调 `TrustEngine.learn` 积累基线。**但 runtime 不填充 `ToolCall.predicted_cost`，`compute_risk` 收到 0/0 时按 no_prediction 返回冷启动**——故启用后基线会积累、却尚无预测成本可评分，该层目前对放行无实际影响。要真正生效需先填充预测成本。`immunity.enable_adaptive` 开启 |
 | 预算熔断（三态 CircuitBreaker） | **已接线** | `runtime/safety/budget_breaker/breaker.py` |
-| 敏感路径守卫（含 macOS /private 符号链接） | **已接线** | `runtime/safety/auth/path_guard.py`、`file_safety.py` |
+| 敏感路径守卫（含 macOS /private 符号链接） | **已接线** | `runtime/safety/auth/path_guard.py`（沙箱前缀校验）；`file_safety.py` 凭据文件名黑名单（`.env`/`id_rsa`/`~/.ssh/*` 等）由 `runtime/execution/tool_engine/executor.py` 写路径在调 handler 前经 `check_file_write` 强制（写作用域管"写哪"，本层管"绝不写这些名字"） |
 
 ## 分布式与编排
 
