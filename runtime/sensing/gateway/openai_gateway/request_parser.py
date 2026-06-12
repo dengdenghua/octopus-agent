@@ -182,17 +182,11 @@ def _model_runtime_options(model_name: str, resolved_model: str) -> tuple[bool, 
     return supports_thinking, _DEFAULT_MAX_TOKENS
 
 
-def _model_supports_thinking(model_name: str) -> bool:
-    m = (model_name or "").lower()
-    if m.startswith(("o1", "o3", "o4")):
-        return True
-    if "gpt-5" in m or "gpt-oss" in m:
-        return True
-    if "deepseek-v4" in m or "deepseek-reasoner" in m:
-        return True
-    if "sonnet-4" in m or "opus-4" in m:
-        return True
-    return bool("claude-4" in m or "claude-sonnet-4" in m or "claude-opus-4" in m)
+# Moved to platform.models.llm (model-capability knowledge belongs with
+# the model types). Re-exported here for the gateway's existing callers.
+from runtime.platform.models.llm import (  # noqa: E402
+    model_supports_thinking as _model_supports_thinking,
+)
 
 
 def _resolve_actor(

@@ -7,7 +7,7 @@ Reports char delta + a tokens-saved estimate for each fixture.
 """
 from __future__ import annotations
 
-from runtime.sensing.model_router.token_juicer import juice
+from runtime.core.cerebrum.token_juicer import juice
 
 
 def _approx_tokens(s: str) -> int:

@@ -426,10 +426,10 @@ def _rehydrate_messages_from_steps(messages: list, steps: list[ReActStep]) -> li
             # saves tokens proportional to history depth.
             _obs_text = observation
             try:
-                from runtime.sensing.model_router.token_juicer import (
+                from runtime.core.cerebrum.token_juicer import (
                     is_enabled as _juice_enabled,
                 )
-                from runtime.sensing.model_router.token_juicer import (
+                from runtime.core.cerebrum.token_juicer import (
                     juice as _juice,
                 )
                 if _juice_enabled():
@@ -2176,8 +2176,8 @@ def stream_react_loop(
     _format_violation_bail_at = 2
     _context_pressure_signaled: bool = False
 
-    from runtime.sensing.gateway.openai_gateway import (
-        _model_supports_thinking as _supports_thinking,
+    from runtime.platform.models.llm import (
+        model_supports_thinking as _supports_thinking,
     )
     _resolved_model = effective_model
     if hasattr(router, "_resolve"):
@@ -3350,10 +3350,10 @@ def stream_react_loop(
             # by default — opt in via OCTOPUS_TOKEN_JUICE=1.
             _obs_for_model = step.observation
             try:
-                from runtime.sensing.model_router.token_juicer import (
+                from runtime.core.cerebrum.token_juicer import (
                     is_enabled as _juice_enabled,
                 )
-                from runtime.sensing.model_router.token_juicer import (
+                from runtime.core.cerebrum.token_juicer import (
                     juice as _juice,
                 )
                 if _juice_enabled():

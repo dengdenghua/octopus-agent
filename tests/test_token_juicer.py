@@ -1,4 +1,4 @@
-"""Tests for runtime.sensing.model_router.token_juicer.
+"""Tests for runtime.core.cerebrum.token_juicer.
 
 Each test isolates one compression pass and verifies (a) the pass
 fires when expected, (b) it doesn't strip protected sentinels, and
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from runtime.sensing.model_router.token_juicer import (
+from runtime.core.cerebrum.token_juicer import (
     JuiceStats,
     is_enabled,
     juice,

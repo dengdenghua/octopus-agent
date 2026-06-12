@@ -84,6 +84,28 @@ def thinking_budget_for_effort(
     return max(1024, min(budget, max_tokens - 256))
 
 
+def model_supports_thinking(model_name: str) -> bool:
+    """Whether a model id supports an extended-thinking / reasoning mode.
+
+    Model-capability knowledge — lives with the model types so the kernel
+    can ask without importing the sensing/gateway layer.
+    """
+    m = (model_name or "").lower()
+    if m.startswith(("o1", "o3", "o4")):
+        return True
+    if "gpt-5" in m or "gpt-oss" in m:
+        return True
+    if "deepseek-v4" in m or "deepseek-reasoner" in m:
+        return True
+    if "sonnet-4" in m or "opus-4" in m:
+        return True
+    return bool("claude-4" in m or "claude-sonnet-4" in m or "claude-opus-4" in m)
+
+
+# Back-compat alias (the gateway historically exposed the underscore name).
+_model_supports_thinking = model_supports_thinking
+
+
 class ToolSpec(BaseModel):
     """One tool definition handed to the model provider's tool-use API.
 

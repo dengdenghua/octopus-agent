@@ -7,8 +7,6 @@ runtime/adapters/channels/manager.py	sensing.gateway.openai_formatting
 runtime/adapters/integrations/local_auth/router.py	sensing.gateway.openai_gateway
 runtime/adapters/integrations/molili/router_account.py	sensing.gateway.openai_gateway
 runtime/adapters/integrations/molili/router_proxy.py	sensing.gateway.openai_gateway
-runtime/core/cerebrum/react_loop.py	sensing.gateway.openai_gateway
-runtime/core/cerebrum/react_loop.py	sensing.model_router.token_juicer
 runtime/execution/suckers/browser_act_skills.py	sensing.gateway
 runtime/execution/suckers/capability_skills.py	sensing.gateway.plugins_router
 runtime/execution/suckers/cron_skills.py	sensing.gateway.cron_router
