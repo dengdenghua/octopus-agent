@@ -211,6 +211,25 @@ Adapter 的 `send()` 是 agent 向平台**说话的唯一出口** ·
 - Bug：先贴 `python -m runtime status` 输出 + 复现步骤
 - 生态集成（MCP server / 新 provider）：欢迎 · 按 FORKLIST 模式
 
+## 加 Skill 时记录来源
+
+新增或修改 `skills/public/` 等目录下的 SKILL.md 时，请在 front matter
+记录来源与许可，便于 [NOTICE](NOTICE) 保持准确：
+
+```yaml
+---
+name: my-skill
+description: ...
+source: <原始出处 URL 或 "original">   # 改编自他处务必注明
+license: <如 Apache-2.0 / MIT / original>
+author: <作者或团队>
+---
+```
+
+搬运/改编社区技能必须注明出处并确认许可与 Apache-2.0 兼容；无法确认来源
+的技能不要并入 `skills/public/`。
+
 ## 许可
 
-提交 PR 即视为同意以 [Apache-2.0](LICENSE) 许可贡献。
+提交 PR 即视为同意以 [Apache-2.0](LICENSE) 许可贡献。第三方/捆绑内容的
+归属见 [NOTICE](NOTICE)。

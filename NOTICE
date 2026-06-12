@@ -1,0 +1,34 @@
+Octopus-Agent
+Copyright 2026 octopus-agent contributors
+
+This product is licensed under the Apache License, Version 2.0 (the
+"License"); you may not use this product except in compliance with the
+License. A copy of the License is provided in the LICENSE file at the
+root of this repository, and may also be obtained at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+
+--------------------------------------------------------------------------
+Third-party and bundled content
+--------------------------------------------------------------------------
+
+The skill library bundled with this project — under `skills/public/`,
+`skills/local/`, `meta_skills/`, and `runtime/execution/.../all_skills/`
+— contains agent "skill" definitions (SKILL.md prompt/instruction files
+and their helper scripts). Some of these are authored within this
+project; others are, or are adapted from, external or community sources.
+
+Per-skill provenance is not yet recorded uniformly. This NOTICE does not
+assert original authorship of every bundled skill. Contributors adding or
+updating a skill should record its origin and license in the SKILL.md
+front matter (for example `source:`, `license:`, and `author:` fields) so
+that this NOTICE can be made precise over time. See CONTRIBUTING.md.
+
+If you believe any bundled content is misattributed, omits a required
+upstream notice, or is incompatible with redistribution under Apache-2.0,
+please open an issue so it can be corrected or removed.
+
+Python and JavaScript dependencies are distributed under their own
+licenses; see the lockfiles (`uv.lock`, `frontend/pnpm-lock.yaml`) for the
+authoritative dependency set.

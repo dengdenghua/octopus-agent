@@ -91,6 +91,7 @@ ROOT_ALLOWLIST: set[str] = {
     "CONTRIBUTING.md",
     "CHANGELOG.md",
     "LICENSE",
+    "NOTICE",
     # ── Container / build ───────────────────────────────────
     "Dockerfile",
     "docker-compose.yml",
