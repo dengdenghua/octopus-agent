@@ -5688,6 +5688,18 @@ export const jaJP: Translations = {
     memberRemoved: "Member removed",
     removeMemberFailed: "Failed to remove member",
     removeMember: "Remove Member",
+    speakerPolicy: "発言モード",
+    speakerPolicyHint: "このルームで発言できる人",
+    policyFree: "自由発言",
+    policyAdminOnly: "管理者のみ",
+    policyRoundRobin: "順番制",
+    policyRollCall: "指名制",
+    policyModerated: "挙手制",
+    mute: "ミュート",
+    unmute: "ミュート解除",
+    mutedBadge: "ミュート中",
+    policyUpdated: "発言モードを更新しました",
+    updatePolicyFailed: "発言モードの更新に失敗しました",
   },
 
   teamJoin: {

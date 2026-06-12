@@ -5687,6 +5687,18 @@ export const enUS: Translations = {
     memberRemoved: "Member removed",
     removeMemberFailed: "Failed to remove member",
     removeMember: "Remove Member",
+    speakerPolicy: "Speaker policy",
+    speakerPolicyHint: "Who may speak in this room",
+    policyFree: "Free for all",
+    policyAdminOnly: "Admins only",
+    policyRoundRobin: "Round robin",
+    policyRollCall: "Roll call",
+    policyModerated: "Moderated",
+    mute: "Mute",
+    unmute: "Unmute",
+    mutedBadge: "Muted",
+    policyUpdated: "Speaker policy updated",
+    updatePolicyFailed: "Failed to update speaker policy",
   },
 
   teamJoin: {

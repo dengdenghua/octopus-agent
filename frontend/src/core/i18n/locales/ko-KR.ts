@@ -5688,6 +5688,18 @@ export const koKR: Translations = {
     memberRemoved: "Member removed",
     removeMemberFailed: "Failed to remove member",
     removeMember: "Remove Member",
+    speakerPolicy: "발언 모드",
+    speakerPolicyHint: "이 방에서 발언할 수 있는 사람",
+    policyFree: "자유 발언",
+    policyAdminOnly: "관리자 전용",
+    policyRoundRobin: "순번제",
+    policyRollCall: "지명제",
+    policyModerated: "거수제",
+    mute: "음소거",
+    unmute: "음소거 해제",
+    mutedBadge: "음소거됨",
+    policyUpdated: "발언 모드가 업데이트되었습니다",
+    updatePolicyFailed: "발언 모드 업데이트 실패",
   },
 
   teamJoin: {

@@ -5079,6 +5079,18 @@ export interface Translations {
     memberRemoved: string;
     removeMemberFailed: string;
     removeMember: string;
+    speakerPolicy: string;
+    speakerPolicyHint: string;
+    policyFree: string;
+    policyAdminOnly: string;
+    policyRoundRobin: string;
+    policyRollCall: string;
+    policyModerated: string;
+    mute: string;
+    unmute: string;
+    mutedBadge: string;
+    policyUpdated: string;
+    updatePolicyFailed: string;
   };
 
   // Team Join page

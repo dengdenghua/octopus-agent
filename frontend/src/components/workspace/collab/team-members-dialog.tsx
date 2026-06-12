@@ -3,6 +3,8 @@ import {
   CrownIcon,
   EyeIcon,
   Loader2Icon,
+  MicIcon,
+  MicOffIcon,
   ShieldCheckIcon,
   Trash2Icon,
   UserCogIcon,
@@ -27,13 +29,31 @@ import {
 } from "@/components/ui/select";
 import {
   removeTeamParticipant,
+  updateSpeakerPolicy,
   updateTeamParticipant,
+  type SpeakerPolicy,
   type Team,
   type TeamParticipant,
   type TeamParticipantRole,
 } from "@/core/teams";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+
+const SPEAKER_POLICIES: {
+  value: SpeakerPolicy;
+  labelKey:
+    | "policyFree"
+    | "policyAdminOnly"
+    | "policyRoundRobin"
+    | "policyRollCall"
+    | "policyModerated";
+}[] = [
+  { value: "free", labelKey: "policyFree" },
+  { value: "admin_only", labelKey: "policyAdminOnly" },
+  { value: "round_robin", labelKey: "policyRoundRobin" },
+  { value: "roll_call", labelKey: "policyRollCall" },
+  { value: "moderated", labelKey: "policyModerated" },
+];
 
 interface TeamMembersDialogProps {
   open: boolean;
@@ -74,11 +94,56 @@ export function TeamMembersDialog({
 }: TeamMembersDialogProps) {
   const { t } = useI18n();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [policyBusy, setPolicyBusy] = useState(false);
   const participants = useMemo(
     () => (team?.participants ?? []).filter((p) => p.status !== "removed"),
     [team?.participants],
   );
   const ownerCount = participants.filter((p) => p.role === "owner").length;
+  // Owner-only controls (policy, mute). The caller is the owner when their
+  // participant carries the owner role or matches the room's owner_id.
+  const isOwner = useMemo(() => {
+    const self = participants.find((p) => p.id === currentParticipantId);
+    return (
+      self?.role === "owner" ||
+      (!!team?.owner_id && self?.actor_id === team.owner_id)
+    );
+  }, [participants, currentParticipantId, team?.owner_id]);
+  const speakerPolicy: SpeakerPolicy = team?.speaker_policy ?? "free";
+
+  const handlePolicyChange = async (policy: SpeakerPolicy) => {
+    if (!team || policy === speakerPolicy) return;
+    setPolicyBusy(true);
+    try {
+      const result = await updateSpeakerPolicy(team.id, policy);
+      onTeamChange(result.team);
+      toast.success(t.teamMembers.policyUpdated);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t.teamMembers.updatePolicyFailed,
+      );
+    } finally {
+      setPolicyBusy(false);
+    }
+  };
+
+  const handleToggleMute = async (participant: TeamParticipant) => {
+    if (!team) return;
+    setBusyId(participant.id);
+    try {
+      const result = await updateTeamParticipant(team.id, participant.id, {
+        muted: !participant.muted,
+      });
+      onTeamChange(result.team);
+      toast.success(t.teamMembers.permissionsUpdated);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t.teamMembers.updatePermissionsFailed,
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const handleRoleChange = async (
     participant: TeamParticipant,
@@ -124,6 +189,33 @@ export function TeamMembersDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {isOwner && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/15 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{t.teamMembers.speakerPolicy}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                {t.teamMembers.speakerPolicyHint}
+              </div>
+            </div>
+            <Select
+              value={speakerPolicy}
+              disabled={policyBusy}
+              onValueChange={(value) => void handlePolicyChange(value as SpeakerPolicy)}
+            >
+              <SelectTrigger size="sm" className="w-36">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SPEAKER_POLICIES.map((policy) => (
+                  <SelectItem key={policy.value} value={policy.value}>
+                    {t.teamMembers[policy.labelKey]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="max-h-[58vh] overflow-y-auto pr-1">
           <div className="space-y-2">
             {participants.map((participant) => {
@@ -146,6 +238,14 @@ export function TeamMembersDialog({
                         {participant.display_name}
                       </span>
                       {isSelf && <Badge variant="outline">You</Badge>}
+                      {participant.muted && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500/40 text-amber-600 dark:text-amber-400"
+                        >
+                          {t.teamMembers.mutedBadge}
+                        </Badge>
+                      )}
                       <span
                         className={cn(
                           "size-2 rounded-full",
@@ -181,6 +281,28 @@ export function TeamMembersDialog({
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {isOwner && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "size-8 rounded-lg",
+                        participant.muted
+                          ? "text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                          : "text-muted-foreground hover:bg-muted",
+                      )}
+                      disabled={isBusy}
+                      onClick={() => void handleToggleMute(participant)}
+                      title={participant.muted ? t.teamMembers.unmute : t.teamMembers.mute}
+                    >
+                      {participant.muted ? (
+                        <MicOffIcon className="size-4" />
+                      ) : (
+                        <MicIcon className="size-4" />
+                      )}
+                    </Button>
+                  )}
 
                   <Button
                     variant="ghost"

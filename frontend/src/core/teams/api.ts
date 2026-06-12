@@ -11,6 +11,11 @@ export interface TeamParticipant {
   joined_at: string;
   last_seen_at?: string | null;
   status: string;
+  // Governance (see team_rooms_router.py)
+  muted?: boolean;
+  speak_mode?: SpeakMode;
+  twin_agent_id?: string | null;
+  host_id?: string | null;
 }
 
 export interface Team {
@@ -24,9 +29,26 @@ export interface Team {
   participants?: TeamParticipant[];
   invite_token?: string | null;
   invite_role?: TeamParticipantRole;
+  // Turn-engine floor state
+  speaker_policy?: SpeakerPolicy;
+  current_speaker_id?: string | null;
+  moderator_id?: string | null;
+  floor_requests?: string[];
 }
 
 export type TeamParticipantRole = "owner" | "member" | "viewer";
+
+// Who may speak in a room. ``free``/``admin_only`` are stateless; the
+// trio drive the turn-engine floor. Mirrors the backend _SPEAKER_POLICIES.
+export type SpeakerPolicy =
+  | "free"
+  | "admin_only"
+  | "round_robin"
+  | "roll_call"
+  | "moderated";
+
+// How a participant's turn produces text. Their OWN opt-in only.
+export type SpeakMode = "manual" | "twin" | "hosted";
 
 export interface TeamInvite {
   team_id: string;
@@ -54,6 +76,13 @@ export interface UpdateTeamParticipantInput {
   display_name?: string;
   role?: TeamParticipantRole;
   status?: "active" | "offline" | "removed";
+  muted?: boolean;
+}
+
+export interface UpdateDelegationInput {
+  speak_mode: SpeakMode;
+  twin_agent_id?: string | null;
+  host_id?: string | null;
 }
 
 export interface UpdateTeamParticipantResult {
@@ -164,6 +193,37 @@ export async function updateTeamParticipant(
 ): Promise<UpdateTeamParticipantResult> {
   const res = await fetch(
     `${BASE()}/teams/${encodeURIComponent(teamId)}/participants/${encodeURIComponent(participantId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  return parseJson<UpdateTeamParticipantResult>(res);
+}
+
+export async function updateSpeakerPolicy(
+  teamId: string,
+  speakerPolicy: SpeakerPolicy,
+): Promise<{ team: Team; speaker_policy: SpeakerPolicy }> {
+  const res = await fetch(
+    `${BASE()}/teams/${encodeURIComponent(teamId)}/speaker-policy`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ speaker_policy: speakerPolicy }),
+    },
+  );
+  return parseJson<{ team: Team; speaker_policy: SpeakerPolicy }>(res);
+}
+
+export async function updateDelegation(
+  teamId: string,
+  participantId: string,
+  input: UpdateDelegationInput,
+): Promise<UpdateTeamParticipantResult> {
+  const res = await fetch(
+    `${BASE()}/teams/${encodeURIComponent(teamId)}/participants/${encodeURIComponent(participantId)}/delegation`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

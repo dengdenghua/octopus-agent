@@ -5517,6 +5517,18 @@ export const zhCN: Translations = {
     memberRemoved: "成员已移除",
     removeMemberFailed: "移除成员失败",
     removeMember: "移除成员",
+    speakerPolicy: "发言模式",
+    speakerPolicyHint: "谁可以在此房间发言",
+    policyFree: "自由发言",
+    policyAdminOnly: "仅管理员",
+    policyRoundRobin: "轮流发言",
+    policyRollCall: "主持点名",
+    policyModerated: "举手主持",
+    mute: "禁言",
+    unmute: "解除禁言",
+    mutedBadge: "已禁言",
+    policyUpdated: "发言模式已更新",
+    updatePolicyFailed: "更新发言模式失败",
   },
 
   teamJoin: {
