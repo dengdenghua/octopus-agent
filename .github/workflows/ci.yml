@@ -52,6 +52,9 @@ jobs:
       - name: God-file check (no NEW files ≥1000 lines)
         run: python tools/lint/god_file_check.py --strict
 
+      - name: Import-direction ratchet (no NEW kernel→sensing/web imports)
+        run: python tools/lint/import_direction_check.py --strict
+
       - name: Root hygiene (matches ROOT_LAYOUT.md allow-list)
         run: python tools/lint/root_hygiene.py --strict
 

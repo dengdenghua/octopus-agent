@@ -51,7 +51,7 @@ repos:
         files: ^runtime/execution/all_skills/
 
       - id: exception-audit
-        name: silent except: pass must be justified
+        name: "silent except: pass must be justified"
         entry: python tools/lint/exception_audit.py --strict
         language: system
         pass_filenames: false
@@ -64,6 +64,15 @@ repos:
         entry: python tools/lint/god_file_check.py --strict
         language: system
         pass_filenames: false
+        files: ^runtime/.*\.py$
+
+      - id: import-direction-check
+        name: no NEW wrong-way cross-package imports
+        entry: python tools/lint/import_direction_check.py --strict
+        language: system
+        pass_filenames: false
+        # Baselines existing kernel→sensing/web edges; new ones fail.
+        # See import_direction_baseline.txt.
         files: ^runtime/.*\.py$
 
       - id: root-hygiene
