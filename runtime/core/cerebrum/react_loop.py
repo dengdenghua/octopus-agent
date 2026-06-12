@@ -66,6 +66,11 @@ from runtime.platform.config.builder import StackProtocol
 from runtime.platform.models import ParsedIntent, Step, TaskId
 from runtime.safety.approval.approval_gate import ApprovalProvider
 from runtime.safety.experiments.variant import ABSplitter
+from runtime.safety.validation.prompt_injection import (
+    is_untrusted_tool,
+    scan_for_injection,
+    wrap_untrusted_observation,
+)
 
 if TYPE_CHECKING:
     from runtime.execution.agents.base import Agent
@@ -1055,6 +1060,33 @@ def _dispatch_parallel_actions(
         if bk is not None:
             _ok = _beak_step_effective_success(bk)
         _duration_ms = int((time.monotonic() - started_at[idx]) * 1000)
+        # Indirect prompt-injection defense: a tool whose output is
+        # external (web/browser/MCP) is attacker-influenceable. Fence its
+        # observation as DATA-not-instructions before it re-enters the
+        # model's context, and flag known injection markers. The UI
+        # preview keeps the raw text; only the model-facing copy is
+        # wrapped. Failed-tool observations are error strings, not
+        # untrusted content, so they're left alone.
+        model_obs = obs
+        if _ok and isinstance(obs, str) and obs:
+            _reg = getattr(executor, "registry", None)
+            _affinity: list[str] | None = None
+            if _reg is not None and resolved_names[idx] and _reg.has(name):
+                try:
+                    _affinity = _reg.get(name).affinity
+                except (KeyError, AttributeError):
+                    _affinity = None
+            if is_untrusted_tool(name, _affinity):
+                _scan = scan_for_injection(obs)
+                model_obs = wrap_untrusted_observation(
+                    obs, source=name, scan=_scan,
+                )
+                if _scan.flagged:
+                    _logger.warning(
+                        "prompt-injection markers in %s output "
+                        "(severity=%s, signals=%s)",
+                        name, _scan.severity, ",".join(_scan.labels),
+                    )
         yield {
             "type": "tool_end",
             "tool_name": name,
@@ -1073,14 +1105,14 @@ def _dispatch_parallel_actions(
         results.append({
             "tool_name": name,
             "ok": _ok,
-            "observation": obs or "",
+            "observation": model_obs or "",
             "duration_ms": _duration_ms,
             "call_id": call_ids[idx],
         })
         # Per-call header keeps the model from confusing which
         # observation belongs to which action.
         merged_lines.append(
-            f"[{idx + 1}/{n} {name}]\n{obs or '(no output)'}"
+            f"[{idx + 1}/{n} {name}]\n{model_obs or '(no output)'}"
         )
 
     merged_obs = "\n\n".join(merged_lines)
@@ -2915,6 +2947,31 @@ def stream_react_loop(
                             "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
                             **_tool_event_extras_from_beak_step(beak_step, resolved_name),
                         }
+                    # Indirect prompt-injection defense (single-action
+                    # path; mirrors _dispatch_parallel_actions): fence an
+                    # external tool's output as data before it becomes the
+                    # observation the model reads next.
+                    if tool_ok and isinstance(observation, str) and observation:
+                        _pi_affinity: list[str] | None = None
+                        try:
+                            if executor.registry.has(resolved_name):
+                                _pi_affinity = executor.registry.get(
+                                    resolved_name,
+                                ).affinity
+                        except (KeyError, AttributeError):
+                            _pi_affinity = None
+                        if is_untrusted_tool(resolved_name, _pi_affinity):
+                            _pi_scan = scan_for_injection(observation)
+                            observation = wrap_untrusted_observation(
+                                observation, source=resolved_name, scan=_pi_scan,
+                            )
+                            if _pi_scan.flagged:
+                                _logger.warning(
+                                    "prompt-injection markers in %s output "
+                                    "(severity=%s, signals=%s)",
+                                    resolved_name, _pi_scan.severity,
+                                    ",".join(_pi_scan.labels),
+                                )
                 else:
                     observation, beak_step = _execute_action_via_beak(
                         stack,

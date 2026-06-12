@@ -17,6 +17,7 @@
 | Immunity 自适应层（行为异常 z-score 评分） | **可选后端 · 实际惰性**（配置开启但当前无评分输入） | `runtime/safety/auth/adaptive_immunity.py`：每 sucker 滑动窗口基线 + z-score（取最异常轴，只收紧，I2 自旁路、I4 冷启动）。`executor.py` 执行后调 `TrustEngine.learn` 积累基线。**但 runtime 不填充 `ToolCall.predicted_cost`，`compute_risk` 收到 0/0 时按 no_prediction 返回冷启动**——故启用后基线会积累、却尚无预测成本可评分，该层目前对放行无实际影响。要真正生效需先填充预测成本。`immunity.enable_adaptive` 开启 |
 | 预算熔断（三态 CircuitBreaker） | **已接线** | `runtime/safety/budget_breaker/breaker.py` |
 | 敏感路径守卫（含 macOS /private 符号链接） | **已接线** | `runtime/safety/auth/path_guard.py`（沙箱前缀校验）；`file_safety.py` 凭据文件名黑名单（`.env`/`id_rsa`/`~/.ssh/*` 等）由 `runtime/execution/tool_engine/executor.py` 写路径在调 handler 前经 `check_file_write` 强制（写作用域管"写哪"，本层管"绝不写这些名字"） |
+| 间接提示注入防御（不可信工具输出定界 + 注入启发式） | **已接线**（第一道，启发式非完备） | `runtime/safety/validation/prompt_injection.py`：`is_untrusted_tool`（web/browser 亲和或 `mcp_*` 前缀）+ `scan_for_injection`（override/role/exfil/control-token 等标记）+ `wrap_untrusted_observation`（围栏化为"数据非指令"并在命中时升级告警）；`react_loop.py` 单动作与并行两路在 observation 回灌 LLM 前对外部工具输出加固。**定界+标注，不改写内容**，是风险信号非保证；高危工具硬门控（taint→审批）仍待后续 |
 
 ## 分布式与编排
 
