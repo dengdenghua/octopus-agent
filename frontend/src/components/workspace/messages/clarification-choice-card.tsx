@@ -177,7 +177,7 @@ export function ClarificationChoiceCard({
       <div className="grid gap-2 sm:grid-cols-2">
         {parsed.choices.map((choice, index) => (
           <Button
-            key={choice.key}
+            key={`${choice.key}-${index}`}
             type="button"
             variant={index === 0 ? "default" : "outline"}
             className="h-auto justify-start gap-2 rounded-md px-3 py-2 text-left"

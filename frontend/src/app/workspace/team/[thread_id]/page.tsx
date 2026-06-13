@@ -86,6 +86,7 @@ import {
   writePreferredTeam,
   type Team,
 } from "@/core/teams";
+import { useCreateTeamTask, type TaskAssignee } from "@/core/team-tasks";
 import { useThreadStream } from "@/core/threads/hooks";
 import { type TeamMode } from "@/components/workspace/team-mode-picker";
 import { isAbsolutePath } from "@/lib/path-utils";
@@ -117,6 +118,15 @@ function filterRemovedTeamsForLocalUser(teams: Team[]) {
     const participantId = readTeamParticipantIdForTeam(team);
     return !isParticipantRemoved(team, participantId);
   });
+}
+
+function teamTaskTitleFromText(text: string) {
+  const firstLine = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  const title = firstLine || "Team task";
+  return title.length > 80 ? `${title.slice(0, 77)}...` : title;
 }
 
 function readInitialTeamWorkDir(threadId?: string | null) {
@@ -468,6 +478,7 @@ export default function TeamPage() {
       selected.has(member.name),
     );
   }, [selectedTaskAgentIds, teamConfig?.members]);
+  const createTeamTask = useCreateTeamTask();
   const removalHandledRef = useRef(false);
 
   useEffect(() => {
@@ -743,6 +754,44 @@ export default function TeamPage() {
     if (previewBlocks && !showPreview) setShowPreview(true);
   }, [previewBlocks]);
 
+  const createTaskFromSubmit = useCallback(
+    async (text: string) => {
+      if (!teamId || !canRunTeamTask) return;
+      const assignees: TaskAssignee[] = selectedTaskAgents.map((agent) => ({
+        kind: "agent",
+        ref: agent.name,
+      }));
+      try {
+        await createTeamTask.mutateAsync({
+          room_id: teamId,
+          title: teamTaskTitleFromText(text),
+          description: text,
+          assignees,
+          metadata: {
+            source: "team_input",
+            thread_id: isNewThread ? undefined : threadId,
+            team_mode: teamMode,
+          },
+        });
+        setShowTeamWorkbench(true);
+        setTeamWorkbenchTab("tasks");
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "创建团队待办失败",
+        );
+      }
+    },
+    [
+      canRunTeamTask,
+      createTeamTask,
+      isNewThread,
+      selectedTaskAgents,
+      teamId,
+      teamMode,
+      threadId,
+    ],
+  );
+
   const handleSubmit = useCallback(
     (message: { text: string }) => {
       const taskAgentNames = selectedTaskAgents.map(
@@ -752,9 +801,10 @@ export default function TeamPage() {
         taskAgentNames.length > 0
           ? `本次任务优先交给：${taskAgentNames.join("、")}。\n\n${message.text}`
           : message.text;
+      void createTaskFromSubmit(message.text);
       void sendMessage(threadId, { text, files: [] });
     },
-    [selectedTaskAgents, sendMessage, threadId],
+    [createTaskFromSubmit, selectedTaskAgents, sendMessage, threadId],
   );
 
   const handleStop = useCallback(async () => {
@@ -934,6 +984,7 @@ export default function TeamPage() {
                         </button>
                       )}
                       <Button
+                        data-testid="team-workbench-toggle"
                         variant="ghost"
                         size="icon"
                         className={cn(

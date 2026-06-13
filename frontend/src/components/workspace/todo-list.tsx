@@ -75,7 +75,7 @@ export function TodoList({
       >
         <QueueList className="mt-0 w-full rounded-t-lg bg-muted/30">
           {todos.map((todo, i) => (
-            <QueueItem key={i + (todo.content ?? "")}>
+            <QueueItem key={`${todo.status}-${i}-${todo.content ?? ""}`}>
               <div className="flex items-center gap-2">
                 <QueueItemIndicator
                   className={
@@ -99,4 +99,3 @@ export function TodoList({
     </div>
   );
 }
-

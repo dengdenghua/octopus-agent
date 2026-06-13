@@ -24,8 +24,7 @@ import { cn } from "@/lib/utils";
  * Official LLM endpoint baked in here as a fallback for one-click enabling.
  * The visible official model catalog itself comes from the backend.
  */
-const MOLILI_LLM_BASE_URL =
-  "https://molili.8kbl.com/molili-agi/chatApi/v1";
+const MOLILI_LLM_BASE_URL = "https://molili.8kbl.com/molili-agi/chatApi/v1";
 
 /** Minimal slice of the backend model shape used by the picker. */
 export interface PickerModel {
@@ -69,7 +68,8 @@ function metaFromCatalog(m: OfficialCatalogModel): OfficialMeta {
  * to nothing.
  */
 function rightHint(m: PickerModel): string {
-  const probe = `${m.name} ${m.model ?? ""} ${m.display_name ?? ""}`.toLowerCase();
+  const probe =
+    `${m.name} ${m.model ?? ""} ${m.display_name ?? ""}`.toLowerCase();
   for (const [needle, label] of [
     ["claude", "Claude"],
     ["gpt", "OpenAI"],
@@ -269,7 +269,9 @@ export function ModelPicker({
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(`${getBackendBaseURL()}/api/molili/openai/v1/catalog`);
+        const r = await fetch(
+          `${getBackendBaseURL()}/api/molili/openai/v1/catalog`,
+        );
         if (!r.ok) return;
         const j = (await r.json()) as { data?: OfficialCatalogModel[] };
         if (cancelled) return;
@@ -282,7 +284,10 @@ export function ModelPicker({
         );
       } catch (err) {
         if (!cancelled) {
-          console.warn("[model-picker] official model catalog unavailable:", err);
+          console.warn(
+            "[model-picker] official model catalog unavailable:",
+            err,
+          );
         }
       }
     })();
@@ -343,6 +348,14 @@ export function ModelPicker({
     }
     return [official, custom];
   }, [models, officialMetas]);
+
+  const selectedForDisplay = useMemo(() => {
+    if (!isGuest || isAutoMode || !selectedMeta) return selected;
+    return customEntries[0];
+  }, [customEntries, isAutoMode, isGuest, selected, selectedMeta]);
+
+  const selectedMetaForDisplay =
+    selectedForDisplay === selected ? selectedMeta : null;
 
   const handleSelect = (name: string) => {
     onChange(name);
@@ -431,6 +444,7 @@ export function ModelPicker({
   const triggerButton = (
     <button
       type="button"
+      data-testid="model-picker-trigger"
       className={cn(
         "inline-flex min-w-0 items-center gap-1 rounded-lg border border-transparent",
         "bg-transparent px-2 py-1 text-xs text-muted-foreground transition outline-none",
@@ -440,16 +454,14 @@ export function ModelPicker({
       aria-label={t.modelPicker.selectModel}
       title={t.modelPicker.selectModel}
     >
-      {isAutoMode && (
-        <SparklesIcon className="size-3 shrink-0 text-blue-500" />
-      )}
+      {isAutoMode && <SparklesIcon className="size-3 shrink-0 text-blue-500" />}
       <span className="truncate max-w-[140px]">
         {isAutoMode
           ? t.modelPicker.autoModelLabel
-          : (cleanModelName(selectedMeta?.displayName) ||
-              cleanModelName(selected?.display_name) ||
-              cleanModelName(selected?.name) ||
-              t.modelPicker.selectModel)}
+          : cleanModelName(selectedMetaForDisplay?.displayName) ||
+            cleanModelName(selectedForDisplay?.display_name) ||
+            cleanModelName(selectedForDisplay?.name) ||
+            t.modelPicker.selectModel}
       </span>
       <ChevronDownIcon className="size-3 opacity-60" />
     </button>
@@ -477,12 +489,13 @@ export function ModelPicker({
     <DropdownMenu open={open} onOpenChange={setOpen}>
       {renderTrigger ? (
         <DropdownMenuTrigger asChild>
-          {renderTrigger(selected)}
+          {renderTrigger(selectedForDisplay)}
         </DropdownMenuTrigger>
       ) : (
         defaultTriggerContainer
       )}
       <DropdownMenuContent
+        data-testid="model-picker-menu"
         align="end"
         side="top"
         sideOffset={6}
@@ -525,6 +538,7 @@ export function ModelPicker({
             {/* Official tab. Guests can see it, but rows are
                 disabled until they sign in. */}
             <TabsTrigger
+              data-testid="model-picker-tab-official"
               value="official"
               disabled={officialEntries.length === 0}
               className={cn(
@@ -539,9 +553,12 @@ export function ModelPicker({
               <span>{t.modelPicker.tabOfficial}</span>
             </TabsTrigger>
             <TabsTrigger
+              data-testid="model-picker-tab-custom"
               value="custom"
               disabled={
-                customEntries.length === 0 && !isGuest && officialEntries.length > 0
+                customEntries.length === 0 &&
+                !isGuest &&
+                officialEntries.length > 0
               }
               className={cn(
                 "flex-1 rounded-md text-[10px] font-medium uppercase tracking-wider transition-[opacity,color] duration-150",
@@ -599,14 +616,16 @@ export function ModelPicker({
                           />
                         ) : undefined
                       }
-                      selected={model.name === value && !unconfigured && !isGuest}
+                      selected={
+                        model.name === value && !unconfigured && !isGuest
+                      }
                       disabled={isGuest}
                       onSelect={() =>
                         isGuest
                           ? undefined
                           : unconfigured
-                          ? handleSelectUnconfigured(meta, model.name)
-                          : handleSelect(model.name)
+                            ? handleSelectUnconfigured(meta, model.name)
+                            : handleSelect(model.name)
                       }
                     />
                   );
@@ -675,9 +694,9 @@ function SelectedProviderBadges({ providerName }: { providerName?: string }) {
   const caps = useProvider(providerName ?? null);
   if (!caps) return null;
   const chips: Array<{ icon: string; label: string; good: boolean }> = [
-    { icon: "🖼", label: "vision",    good: caps.supports_vision },
-    { icon: "🔧", label: "tools",     good: caps.supports_tool_use },
-    { icon: "⚡", label: "cache",     good: caps.supports_prompt_cache },
+    { icon: "🖼", label: "vision", good: caps.supports_vision },
+    { icon: "🔧", label: "tools", good: caps.supports_tool_use },
+    { icon: "⚡", label: "cache", good: caps.supports_prompt_cache },
     { icon: "📦", label: "structured", good: caps.supports_structured_output },
   ];
   const supported = chips.filter((c) => c.good);

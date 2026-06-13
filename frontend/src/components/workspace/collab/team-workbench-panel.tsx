@@ -53,18 +53,20 @@ export function TeamWorkbenchPanel({
 }: TeamWorkbenchPanelProps) {
   return (
     <div
+      data-testid="team-workbench-panel"
       className={cn(
         "flex size-full min-h-0 flex-col bg-[color:color-mix(in_oklch,var(--muted)_46%,var(--background))]",
         className,
       )}
     >
-      <header className="relative shrink-0 border-b border-border/60 bg-background/95 px-3 pt-2">
-        <div className="flex items-end gap-2">
-          <div className="mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-2 text-xs font-medium text-muted-foreground shadow-sm">
+      <header className="relative shrink-0 border-b border-border/60 bg-background/95 px-2 pt-2 sm:px-3">
+        <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
+          <div className="mb-1.5 hidden h-8 shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-2 text-xs font-medium text-muted-foreground shadow-sm min-[520px]:flex">
             <MonitorIcon className="size-4" />
-            <span className="hidden min-[520px]:inline">Team 工作台</span>
+            <span>Team 工作台</span>
           </div>
           <div
+            data-testid="team-workbench-tabs"
             role="tablist"
             aria-label="Team 工作台"
             className="flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -75,11 +77,12 @@ export function TeamWorkbenchPanel({
                 <button
                   key={id}
                   type="button"
+                  data-testid={`team-workbench-tab-${id}`}
                   role="tab"
                   aria-selected={active}
                   onClick={() => onSelectTab(id)}
                   className={cn(
-                    "inline-flex h-9 max-w-[11rem] shrink-0 items-center gap-1.5 rounded-lg border border-transparent px-3 text-sm font-medium transition-all",
+                    "inline-flex h-9 max-w-[9rem] shrink-0 items-center gap-1 rounded-lg border border-transparent px-2 text-xs font-medium transition-all sm:max-w-[11rem] sm:gap-1.5 sm:px-3 sm:text-sm",
                     active
                       ? "-mb-px h-10 rounded-b-none border-border/70 border-b-background bg-background text-foreground shadow-sm"
                       : "mb-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground",

@@ -1,8 +1,6 @@
-
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import re
 import time
@@ -10,25 +8,42 @@ import uuid
 from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, Any
 
-from runtime.core.cerebrum.completion_receipt import build_completion_receipt
+from runtime.core.cerebrum.react_checkpointing import (
+    _checkpoint_interval,
+    _checkpoint_mirror,
+    _mirror_checkpoint,
+    _rehydrate_messages_from_steps,
+    _reset_checkpoint_mirror_for_tests,
+    _should_auto_checkpoint,
+)
 from runtime.core.cerebrum.react_context import (
     _build_code_context_prelude,
     _build_project_profile_prompt,
+    _build_user_message_content,
     _compress_context,
     _format_skill_catalog,
+    _image_blocks_from_attachments,
     _load_project_rules,
+    _looks_like_image_attachment,
     _prefetch_related_files,
     _restore_messages_from_checkpoint,
     _serialize_messages_for_checkpoint,
 )
 from runtime.core.cerebrum.react_execution import (
+    _background_task_info_from_observation,
+    _beak_step_effective_success,
     _build_progress_summary,
     _build_research_progress_summary,
     _detect_phase,
     _execute_action_via_beak,
+    _format_background_task_heartbeat,
+    _is_scoped_artifact_write,
     _persist_react_trajectory,
+    _react_completion_receipt,
     _reset_kg_throttle_for_tests,
     _run_auto_diagnostics,
+    _skill_available_in_executor,
+    _tool_event_extras_from_beak_step,
     _update_working_set,
 )
 from runtime.core.cerebrum.react_guards import (
@@ -36,6 +51,24 @@ from runtime.core.cerebrum.react_guards import (
     _completion_phrase_without_todo_guard,
     _path_verification_policy_guard,
     _unverified_write_followup_guard,
+)
+from runtime.core.cerebrum.react_loop_controls import (
+    _CONTEXT_PRESSURE_NUDGE,
+    _disabled_guard_labels,
+    _disabled_guards_from_yaml,
+    _estimate_context_fullness,
+    _guard_hit_recorder,
+    _long_task_budget_limits,
+    _reset_disabled_set_for_tests,
+    _reset_guard_telemetry_for_tests,
+    _reset_react_variants_for_tests,
+    get_react_variant_stats,
+    pick_react_variant,
+    record_react_variant_result,
+)
+from runtime.core.cerebrum.react_parallel_dispatch import (
+    _WRITE_TOOLS,
+    _dispatch_parallel_actions,
 )
 from runtime.core.cerebrum.react_parsing import (
     _ACTION_RE,
@@ -50,10 +83,8 @@ from runtime.core.cerebrum.react_parsing import (
     _summarize_observation,
 )
 from runtime.core.cerebrum.react_types import (
-    _DEFAULT_REACT_RECIPES,
     REACT_NO_TOOLS_NOTE,
     REACT_SYSTEM_PROMPT_BASE,
-    ReActRecipe,
     ReActResult,
     ReActStep,
 )
@@ -65,7 +96,6 @@ from runtime.core.cerebrum.todo_protocol import (
 from runtime.platform.config.builder import StackProtocol
 from runtime.platform.models import ParsedIntent, Step, TaskId
 from runtime.safety.approval.approval_gate import ApprovalProvider
-from runtime.safety.experiments.variant import ABSplitter
 from runtime.safety.validation.prompt_injection import (
     injection_taint_gates,
     is_untrusted_tool,
@@ -98,1069 +128,58 @@ def _looks_like_observation_echo(text: str) -> bool:
     )
 
 
-# ── Guard telemetry (P1 evolution-loop feed) ──────────────────────
-# Lazily-initialised singleton sink. evaluate_guards() calls the
-# returned recorder with (label, category) for every firing guard.
-# Disabled by env var OCTOPUS_DISABLE_GUARD_TELEMETRY=1 so tests and
-# air-gapped runs can opt out. Initialisation failures degrade to a
-# no-op — telemetry must never break the loop.
-_GUARD_TELEMETRY_SINGLETON: Any = None
-_GUARD_TELEMETRY_INIT_DONE = False
-
-
-def _guard_hit_recorder() -> Callable[[str, str], None] | None:
-    """Return a ``recorder(label, category)`` callable, or None when
-    telemetry is disabled / unavailable."""
-    global _GUARD_TELEMETRY_SINGLETON, _GUARD_TELEMETRY_INIT_DONE
-    import os
-
-    if os.environ.get("OCTOPUS_DISABLE_GUARD_TELEMETRY") == "1":
-        return None
-    if not _GUARD_TELEMETRY_INIT_DONE:
-        _GUARD_TELEMETRY_INIT_DONE = True
-        try:
-            from runtime.safety.evolution.guard_telemetry import GuardTelemetry
-            _GUARD_TELEMETRY_SINGLETON = GuardTelemetry()
-        except Exception as _exc:  # noqa: BLE001 — telemetry must not break loop
-            _logger.debug("guard telemetry unavailable: %s", _exc)
-            _GUARD_TELEMETRY_SINGLETON = None
-    sink = _GUARD_TELEMETRY_SINGLETON
-    if sink is None:
-        return None
-    return lambda label, category: sink.record(label, category)
-
-
-def _reset_guard_telemetry_for_tests() -> None:
-    """Reset the telemetry singleton — used by tests for isolation."""
-    global _GUARD_TELEMETRY_SINGLETON, _GUARD_TELEMETRY_INIT_DONE
-    _GUARD_TELEMETRY_SINGLETON = None
-    _GUARD_TELEMETRY_INIT_DONE = False
-
-
-# ── Operator kill-switch for individual guards ────────────────────
-# Two-layer source — env var is the emergency knob, settings.yaml is
-# the persistent project-level baseline.
-#
-# Env var: OCTOPUS_DISABLED_GUARDS="label1,label2"
-# YAML:    safety:
-#            disabled_guards:
-#              - label1
-#              - label2
-#
-# Both sources are MERGED (union) — env var adds to whatever YAML
-# already disables, never replaces. Operators can flip env at runtime
-# to add to the persistent list without editing the file.
-#
-# Whitespace around labels is stripped so an env var like
-# 'magic-number guard, long-function guard' works.
-# Re-read fresh on each call so an operator changing the env or
-# YAML at runtime takes effect on the next turn.
-#
-# Audit trail: when the disabled set CHANGES we emit one log line and
-# (when telemetry is wired) one structured record so a future operator
-# can answer "when did this guard get turned off and by whom".
-
-_LAST_DISABLED_SET: frozenset[str] | None = None
-_DEFAULT_SETTINGS_PATHS: tuple[str, ...] = (
-    "config.local.yaml",
-    "config.yaml",
-    "config.example.yaml",
-)
-
-
-def _disabled_guards_from_yaml(
-    candidate_paths: tuple[str, ...] = _DEFAULT_SETTINGS_PATHS,
-) -> frozenset[str]:
-    """Read ``safety.disabled_guards`` from the first existing config.
-
-    Returns frozenset on success; empty frozenset on any failure
-    (file missing / unreadable / no PyYAML / wrong shape). Never
-    raises — settings being broken must not break the loop.
-    """
-    import os
-    for raw_path in candidate_paths:
-        try:
-            if not os.path.exists(raw_path):
-                continue
-        except Exception:  # noqa: BLE001
-            continue
-        try:
-            import yaml  # type: ignore[import-untyped]
-        except ImportError:
-            return frozenset()
-        try:
-            with open(raw_path, encoding="utf-8") as fh:
-                data = yaml.safe_load(fh.read()) or {}
-        except Exception:  # noqa: BLE001
-            return frozenset()
-        if not isinstance(data, dict):
-            return frozenset()
-        safety = data.get("safety") or {}
-        if not isinstance(safety, dict):
-            return frozenset()
-        # Source A: safety.disabled_guards: [label, label, ...]
-        out: set[str] = set()
-        raw = safety.get("disabled_guards") or []
-        if isinstance(raw, list):
-            for item in raw:
-                if isinstance(item, str) and item.strip():
-                    out.add(item.strip())
-        # Source B: safety.guard_overrides: {label: bool}
-        # Per-spec on/off knob — operators can selectively re-enable
-        # guards that the project baseline disabled, or vice versa.
-        # Only the "False" entries contribute to the disabled set;
-        # explicit "True" wins over a same-label disabled_guards entry.
-        overrides = safety.get("guard_overrides") or {}
-        if isinstance(overrides, dict):
-            for label, enabled in overrides.items():
-                if not isinstance(label, str) or not label.strip():
-                    continue
-                clean = label.strip()
-                if isinstance(enabled, bool):
-                    if enabled:
-                        out.discard(clean)
-                    else:
-                        out.add(clean)
-        return frozenset(out)
-    return frozenset()
-
-
-def _disabled_guard_labels() -> frozenset[str]:
-    """Return labels of guards disabled via env var OR settings.yaml.
-
-    Sources are unioned: env-var entries add to the YAML baseline.
-    """
-    import os
-    raw = os.environ.get("OCTOPUS_DISABLED_GUARDS", "")
-    if not raw.strip():
-        env_set: frozenset[str] = frozenset()
-    else:
-        env_set = frozenset(
-            part.strip() for part in raw.split(",") if part.strip()
-        )
-    yaml_set = _disabled_guards_from_yaml()
-    current = env_set | yaml_set
-    _audit_disabled_set_change(current)
-    return current
-
-
-def _audit_disabled_set_change(current: frozenset[str]) -> None:
-    """Log + record telemetry when the disabled-guard set changes.
-
-    Idempotent: only fires when ``current`` differs from the last
-    observed value. The very first call after process start ALSO
-    fires when the set is non-empty so a fresh process inheriting
-    OCTOPUS_DISABLED_GUARDS leaves a trail.
-    """
-    global _LAST_DISABLED_SET
-    if current == _LAST_DISABLED_SET:
-        return
-    previous = _LAST_DISABLED_SET
-    _LAST_DISABLED_SET = current
-    if previous is None and not current:
-        # Process start with empty set — nothing notable to record.
-        return
-    added = sorted(current - (previous or frozenset()))
-    removed = sorted((previous or frozenset()) - current)
-    _logger.warning(
-        "OCTOPUS_DISABLED_GUARDS changed: now=%s added=%s removed=%s",
-        sorted(current), added, removed,
-    )
-    sink = _GUARD_TELEMETRY_SINGLETON
-    if sink is None:
-        return
-    with contextlib.suppress(Exception):
-        sink.record(
-            label="__kill_switch_change__",
-            category="audit",
-            metadata={
-                "now": sorted(current),
-                "added": added,
-                "removed": removed,
-            },
-        )
-
-
-def _reset_disabled_set_for_tests() -> None:
-    """Reset the cached last-seen set — used by tests for isolation."""
-    global _LAST_DISABLED_SET
-    _LAST_DISABLED_SET = None
-
-
-# ── Periodic auto-checkpoint (P3 — long-task durability) ──────────
-# Existing checkpoints fire only on explicit pause or final-answer.
-# When a process is hard-killed (SIGKILL, OOM, container restart) the
-# turn loses everything between the last checkpoint and the kill.
-# Periodic auto-checkpoint plugs that gap: every N iterations the
-# loop writes the same shape of checkpoint that pause writes, so a
-# resume request can pick up at the last completed iteration.
-#
-# Opt-in via OCTOPUS_CHECKPOINT_EVERY_N env var (e.g. "5"). 0 / unset
-# means off — preserves legacy behaviour exactly. Errors during
-# checkpoint write are swallowed; turn proceeds normally.
-
-_DEFAULT_CHECKPOINT_INTERVAL = 0  # off by default
-
-
-def _checkpoint_interval() -> int:
-    """How often (in iterations) to write an auto-checkpoint.
-
-    Reads ``OCTOPUS_CHECKPOINT_EVERY_N`` fresh on each call so an
-    operator can flip the knob without a restart. Returns ``0`` when
-    the value is missing, blank, or unparseable — i.e. feature off.
-    """
-    import os
-    raw = os.environ.get("OCTOPUS_CHECKPOINT_EVERY_N", "").strip()
-    if not raw:
-        return _DEFAULT_CHECKPOINT_INTERVAL
-    try:
-        n = int(raw)
-    except ValueError:
-        return _DEFAULT_CHECKPOINT_INTERVAL
-    return n if n > 0 else _DEFAULT_CHECKPOINT_INTERVAL
-
-
-def _should_auto_checkpoint(iteration: int, interval: int) -> bool:
-    """Whether iteration ``iteration`` should trigger an auto-checkpoint.
-
-    Centralised so tests can drive it without spinning up the full
-    react_loop. Returns False when ``interval <= 0`` (feature off) or
-    when ``iteration <= 0`` (we never write a checkpoint at iteration
-    0 — there's nothing to resume to). Otherwise fires when iteration
-    is a non-zero multiple of ``interval``.
-    """
-    if interval <= 0 or iteration <= 0:
-        return False
-    return iteration % interval == 0
-
-
-# ── Distributed checkpoint mirror (P3 cross-machine durability) ────
-# Optional layer on top of the local journal: each auto-checkpoint
-# also pushes a JSON snapshot to a shared KV store (Redis-shaped) so
-# another machine can pick up the task. Off by default. Turn on via
-# ``OCTOPUS_CHECKPOINT_MIRROR_URL=redis://...`` env var.
-
-_CHECKPOINT_MIRROR_SINGLETON: Any = None
-_CHECKPOINT_MIRROR_INIT_DONE = False
-
-
-def _checkpoint_mirror() -> Any:
-    """Return the shared ``CheckpointMirror`` instance, or None.
-
-    Disabled when ``OCTOPUS_CHECKPOINT_MIRROR_URL`` is unset / empty.
-    Build failures (redis package missing, bad URL) silently disable
-    the mirror — the local journal is the source of truth, mirroring
-    is a best-effort overlay.
-    """
-    global _CHECKPOINT_MIRROR_SINGLETON, _CHECKPOINT_MIRROR_INIT_DONE
-    import os
-    if not _CHECKPOINT_MIRROR_INIT_DONE:
-        _CHECKPOINT_MIRROR_INIT_DONE = True
-        url = os.environ.get("OCTOPUS_CHECKPOINT_MIRROR_URL", "").strip()
-        if not url:
-            _CHECKPOINT_MIRROR_SINGLETON = None
-        else:
-            try:
-                from runtime.core.cerebrum.checkpoint_mirror import (
-                    build_checkpoint_mirror_from_url,
-                )
-                _CHECKPOINT_MIRROR_SINGLETON = build_checkpoint_mirror_from_url(url)
-            except Exception as _exc:  # noqa: BLE001 — fail-soft
-                _logger.debug("checkpoint mirror init failed: %s", _exc)
-                _CHECKPOINT_MIRROR_SINGLETON = None
-    return _CHECKPOINT_MIRROR_SINGLETON
-
-
-def _reset_checkpoint_mirror_for_tests() -> None:
-    """Reset the cached mirror singleton — used by tests for isolation."""
-    global _CHECKPOINT_MIRROR_SINGLETON, _CHECKPOINT_MIRROR_INIT_DONE
-    _CHECKPOINT_MIRROR_SINGLETON = None
-    _CHECKPOINT_MIRROR_INIT_DONE = False
-
-
-def _mirror_checkpoint(task_id: Any, checkpoint_dict: dict[str, Any]) -> None:
-    """Best-effort write to the distributed mirror. Errors swallowed."""
-    mirror = _checkpoint_mirror()
-    if mirror is None:
-        return
-    with contextlib.suppress(Exception):
-        mirror.put(str(task_id), checkpoint_dict)
-
-
-def _rehydrate_messages_from_steps(messages: list, steps: list[ReActStep]) -> list:
-    """Append missing step transcript when resuming from a checkpoint.
-
-    Periodic checkpoints are written at a point where ``steps_snapshot``
-    already includes the completed iteration, but ``messages_snapshot``
-    may still be the pre-step conversation. Without this bridge a
-    killed process can resume with the internal step list restored while
-    the model cannot see the last Action/Observation in its prompt.
-    """
-    if not steps:
-        return messages
-    from runtime.platform.models.llm import Message
-
-    existing = "\n".join(
-        str(getattr(message, "content", "") or "") for message in messages
-    )
-    hydrated = list(messages)
-    for step in steps:
-        action = (step.action or "").strip()
-        observation = (step.observation or "").strip()
-        thought = (step.thought or "").strip()
-        if not action and not observation:
-            continue
-        if action and action in existing and (
-            not observation or observation in existing
-        ):
-            continue
-        assistant_lines: list[str] = []
-        if thought:
-            assistant_lines.append(f"Thought: {thought}")
-        if action:
-            assistant_lines.append(f"Action: {action}")
-        if assistant_lines:
-            assistant_content = "\n".join(assistant_lines)
-            hydrated.append(Message(role="assistant", content=assistant_content))
-            existing += "\n" + assistant_content
-        if observation and observation not in existing:
-            # TokenJuice on rehydration too — when resuming a
-            # paused/checkpointed thread, prior tool observations
-            # have to ride into the new prompt. Compressing them
-            # saves tokens proportional to history depth.
-            _obs_text = observation
-            try:
-                from runtime.core.cerebrum.token_juicer import (
-                    is_enabled as _juice_enabled,
-                )
-                from runtime.core.cerebrum.token_juicer import (
-                    juice as _juice,
-                )
-                if _juice_enabled():
-                    _juiced, _stats = _juice(observation)
-                    if _stats.passes:
-                        _obs_text = _juiced
-            except (ImportError, ValueError, TypeError):  # noqa: BLE001 — juice is best-effort, fall back to raw
-                pass
-            user_content = f"Observation: {_obs_text}\n\n继续下一轮推理。"
-            hydrated.append(Message(role="user", content=user_content))
-            existing += "\n" + user_content
-    return hydrated
-
-
-def _background_task_info_from_observation(observation: str | None) -> dict[str, Any] | None:
-    """Extract a background shell snapshot from a rendered tool observation."""
-
-    if not isinstance(observation, str) or not observation.strip():
-        return None
-    payload = observation.split("\n", 1)[1] if "\n" in observation else observation
-    try:
-        data = json.loads(payload)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    task_id = data.get("task_id")
-    if not isinstance(task_id, str) or not task_id:
-        return None
-    if data.get("running") is True or data.get("status") == "running":
-        return data
-    return None
-
-
-_VERIFICATION_TOOL_KINDS: dict[str, str] = {
-    "run_tests": "test",
-    "lint_check": "lint",
-    "format_code": "lint",
-}
-
-
-def _verification_kind_from_command(command: str) -> str | None:
-    """Classify shell commands that are actually verification steps."""
-
-    text = f" {command.lower()} "
-    test_markers = (
-        " pytest",
-        " -m pytest",
-        " unittest",
-        " vitest",
-        " jest",
-        " playwright test",
-        " npm test",
-        " npm run test",
-        " pnpm test",
-        " pnpm run test",
-        " yarn test",
-        " cargo test",
-        " go test",
-        " dotnet test",
-    )
-    lint_markers = (
-        " eslint",
-        " ruff check",
-        " flake8",
-        " biome lint",
-        " npm run lint",
-        " pnpm lint",
-        " pnpm run lint",
-        " yarn lint",
-    )
-    typecheck_markers = (
-        " tsc",
-        " vue-tsc",
-        " pyright",
-        " mypy",
-        " py_compile",
-        " npm run typecheck",
-        " pnpm typecheck",
-        " pnpm run typecheck",
-        " yarn typecheck",
-    )
-    build_markers = (
-        " npm run build",
-        " pnpm build",
-        " pnpm run build",
-        " yarn build",
-        " cargo build",
-        " go build",
-        " dotnet build",
-        " mvn package",
-        " gradle build",
-    )
-    if any(marker in text for marker in test_markers):
-        return "test"
-    if any(marker in text for marker in lint_markers):
-        return "lint"
-    if any(marker in text for marker in typecheck_markers):
-        return "typecheck"
-    if any(marker in text for marker in build_markers):
-        return "build"
-    return None
-
-
-def _command_from_tool_step(beak_step: Step, output: dict[str, Any]) -> str:
-    action_args = getattr(getattr(beak_step, "action", None), "args", {}) or {}
-    raw = action_args.get("command") or action_args.get("cmd")
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    if isinstance(raw, list):
-        return " ".join(str(part) for part in raw)
-    argv = output.get("argv")
-    if isinstance(argv, list):
-        return " ".join(str(part) for part in argv)
-    return ""
-
-
-def _tool_event_extras_from_beak_step(
-    beak_step: Step | None,
-    tool_name: str,
-) -> dict[str, Any]:
-    """Surface structured beak metadata on realtime tool_end events."""
-
-    if beak_step is None:
-        return {}
-    result = getattr(beak_step, "result", None)
-    output = getattr(result, "output", None)
-    if not isinstance(output, dict):
-        return {}
-
-    extras: dict[str, Any] = {}
-    diff = output.get("diff_preview") or output.get("diff")
-    if isinstance(diff, str) and diff.strip():
-        extras["diff"] = diff
-
-    command = _command_from_tool_step(beak_step, output)
-    kind = _VERIFICATION_TOOL_KINDS.get(tool_name)
-    if kind is None and tool_name in {"exec_shell", "shell_command", "bash"}:
-        kind = _verification_kind_from_command(command)
-    if kind is not None:
-        stdout = output.get("stdout")
-        stderr = output.get("stderr")
-        exit_code = output.get("exit_code")
-        success = output.get("success")
-        if not isinstance(success, bool) and isinstance(exit_code, int):
-            success = exit_code == 0
-        extras["verification"] = {
-            "command": command or output.get("command") or tool_name,
-            "kind": kind,
-            "exit_code": exit_code if isinstance(exit_code, int) else None,
-            "success": bool(success) if isinstance(success, bool) else None,
-            "stdout_tail": stdout if isinstance(stdout, str) else None,
-            "stderr_tail": stderr if isinstance(stderr, str) else None,
-        }
-    return extras
-
-
-def _beak_step_effective_success(step: Any) -> bool:
-    result = getattr(step, "result", None)
-    if getattr(result, "status", "success") != "success":
-        return False
-
-    output = getattr(result, "output", None)
-    if not isinstance(output, dict):
-        return True
-
-    success = output.get("success")
-    if isinstance(success, bool):
-        return success
-
-    exit_code = output.get("exit_code")
-    if isinstance(exit_code, int):
-        return exit_code == 0
-
-    return True
-
-
-def _format_background_task_heartbeat(task_ids: list[str]) -> str:
-    """Render the periodic 'background tasks still running' nudge.
-
-    Kept as a tiny helper so test_background_task_heartbeat can assert
-    the exact wording without spinning up the full ReAct loop.
-    """
-    ids_str = ", ".join(task_ids)
-    return (
-        "[background-task-tracker]\n"
-        f"Background processes still registered: {ids_str}.\n"
-        "Use read_shell_output(task_id) to check progress, or "
-        "kill_shell(task_id) to stop.\n"
-        "If you've already finalised the task without checking, do so now."
-    )
-
-
-def _react_completion_receipt(
-    *,
-    final_answer: str | None,
-    terminated_reason: str,
-    effective_success: bool,
-    executed_beak_steps: list[Any],
-) -> dict[str, object]:
-    if terminated_reason == "final_answer" and final_answer and effective_success:
-        run_status = "completed"
-    elif terminated_reason in {"paused", "cancelled"}:
-        run_status = "pending"
-    else:
-        run_status = "failed"
-
-    tool_statuses = [
-        str(getattr(getattr(step, "result", None), "status", "") or "")
-        for step in executed_beak_steps
-    ]
-    statuses = [
-        ("completed" if status == "success" else status)
-        for status in tool_statuses
-        if status
-    ] or [run_status]
-    if run_status != "completed":
-        statuses.append(run_status)
-
-    artifact_count = 0
-    for step in executed_beak_steps:
-        files = getattr(getattr(step, "result", None), "files_modified", None)
-        if isinstance(files, list):
-            artifact_count += len(files)
-
-    warnings: list[str] = []
-    if terminated_reason != "final_answer":
-        warnings.append(f"terminated:{terminated_reason}")
-
-    return build_completion_receipt(
-        statuses,
-        contract_warnings=warnings,
-        artifact_count=artifact_count,
-        output_present=bool(final_answer),
-    ).to_dict()
-
-_SCOPED_ARTIFACT_WRITE_TOOLS = frozenset({
-    "write_text_file",
-    "append_text_file",
-    "edit_text_file",
-    "edit_file",
-    "multi_edit_file",
-})
-
-
-def _skill_available_in_executor(executor: Any, skill_name: str) -> bool:
-    """Check if a skill is registered and available in the executor."""
-    if executor is None:
-        return False
-    try:
-        registry = getattr(executor, "registry", None)
-        if registry is None:
-            return False
-        if hasattr(registry, "has") and callable(registry.has):
-            return bool(registry.has(skill_name))
-        if hasattr(registry, "is_enabled") and callable(registry.is_enabled):
-            return bool(registry.is_enabled(skill_name))
-        return False
-    except (AttributeError, TypeError, ValueError):
-        return False
-
-
-def _build_user_message_content(
-    text: str,
-    attachments: Any,
-) -> Any:
-    """Construct the user-message ``content`` payload.
-
-    When the request carries one or more image attachments with a usable
-    URL (data: URL preferred, hosted https URL acceptable), we emit a
-    list of OpenAI-shaped blocks::
-
-        [
-          {"type": "text", "text": ...},
-          {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}},
-          ...
-        ]
-
-    Vision-capable routers (anthropic / openai / gemini / molili) all
-    accept this shape. Non-vision routers fall back to plain text via
-    their own input filtering, so we don't need to gate by model here.
-
-    When no image attachments are present, returns plain ``text``
-    unchanged so we don't break callers that assume a string.
-    """
-    text = (text or "").strip()
-    image_blocks = _image_blocks_from_attachments(attachments)
-    if not image_blocks:
-        return text
-    blocks: list[dict[str, Any]] = []
-    if text:
-        blocks.append({"type": "text", "text": text})
-    blocks.extend(image_blocks)
-    return blocks
-
-
-def _image_blocks_from_attachments(attachments: Any) -> list[dict[str, Any]]:
-    """Extract OpenAI-shaped image_url blocks from raw attachment dicts.
-
-    Recognized shapes (any of these is enough):
-
-    - ``data_url`` field with a ``data:image/...;base64,...`` string
-    - ``url`` field that is itself a ``data:image/...`` URL
-    - ``url`` field with ``mediaType`` / ``mime_type`` starting with
-      ``image/`` (we trust the caller, no fetch)
-
-    Filename-extension is a last-resort hint when no media type is set.
-    """
-    if not isinstance(attachments, list):
-        return []
-    blocks: list[dict[str, Any]] = []
-    for item in attachments:
-        if not isinstance(item, dict):
-            continue
-        url = ""
-        candidate = item.get("data_url") or item.get("dataUrl")
-        if isinstance(candidate, str) and candidate.startswith("data:image/"):
-            url = candidate
-        else:
-            raw_url = item.get("url") or item.get("artifact_url")
-            if isinstance(raw_url, str) and raw_url.strip():
-                if raw_url.startswith("data:image/") or _looks_like_image_attachment(item):
-                    url = raw_url
-        if not url:
-            continue
-        blocks.append({"type": "image_url", "image_url": {"url": url}})
-    return blocks
-
-
-def _looks_like_image_attachment(item: dict[str, Any]) -> bool:
-    """Heuristic: does this attachment look like an image?"""
-    mt = (
-        item.get("mediaType")
-        or item.get("media_type")
-        or item.get("mime_type")
-        or ""
-    )
-    if isinstance(mt, str) and mt.lower().startswith("image/"):
-        return True
-    name = item.get("filename") or item.get("name") or ""
-    if isinstance(name, str):
-        ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-        if ext in {"png", "jpg", "jpeg", "gif", "webp", "bmp"}:
-            return True
-    return False
-
-
-def _is_scoped_artifact_write(tool_name: str, args: dict[str, Any] | None) -> bool:
-    """Allow routine non-code deliverables without an approval round trip."""
-    if tool_name not in _SCOPED_ARTIFACT_WRITE_TOOLS or not isinstance(args, dict):
-        return False
-    raw_path = args.get("path")
-    if not isinstance(raw_path, str) or not raw_path.strip():
-        return False
-
-    from pathlib import Path
-
-    from runtime.platform.process.scope import resolve_write_scope, thread_artifact_root
-    from runtime.platform.process.session import current_session
-
-    session = current_session()
-    if session is None:
-        return False
-    scope = resolve_write_scope(session)
-    if scope.mode in {"code", "plan"}:
-        return False
-
-    artifact_root = thread_artifact_root(
-        session.thread_id or "default",
-        explicit_root=(
-            session.metadata.get("_artifact_output_root")
-            if isinstance(session.metadata.get("_artifact_output_root"), str)
-            else None
-        ),
-    )
-    supplied_sandbox = args.get("sandbox_dir")
-    sandbox = (
-        Path(supplied_sandbox).expanduser()
-        if isinstance(supplied_sandbox, str) and supplied_sandbox.strip()
-        else artifact_root
-    )
-    target = Path(raw_path).expanduser()
-    if not target.is_absolute():
-        target = sandbox / target
-    try:
-        target.resolve(strict=False).relative_to(artifact_root.resolve(strict=False))
-    except (OSError, ValueError):
-        return False
-    return True
-
-
-def _estimate_context_fullness(messages: list, model: str | None) -> float:
-    """Rough fraction of the model's context budget consumed by ``messages``.
-
-    Uses a coarse character-count proxy (no tokenizer in the hot path) and
-    a model-name-keyed budget. Returned value is clamped to ``[0.0, 1.0]``.
-    """
-    try:
-        used_chars = sum(len(str(getattr(m, "content", m))) for m in messages)
-    except (TypeError, AttributeError):
-        used_chars = 0
-
-    name = (model or "").lower()
-    if (
-        "claude-3-5" in name
-        or "claude-4" in name
-        or "claude-sonnet" in name
-    ):
-        budget = 600_000
-    elif "gpt-4o" in name or "gpt-5" in name:
-        budget = 400_000
-    else:
-        budget = 100_000
-
-    if budget <= 0:
-        return 0.0
-    ratio = used_chars / budget
-    if ratio < 0.0:
-        return 0.0
-    if ratio > 1.0:
-        return 1.0
-    return ratio
-
-
-_CONTEXT_PRESSURE_NUDGE = (
-    "[context-pressure] (level={level})\n"
-    "You are approaching the context window. Before this turn ends:\n"
-    "1. Update todo_write so every in-flight item shows accurate status.\n"
-    "2. In your next Thought, write a one-paragraph \"resume state\":\n"
-    "   - what you were about to do\n"
-    "   - any file paths you've written to\n"
-    "   - the next concrete action you'd take if continuing\n"
-    "This message survives compaction; raw step history may not."
-)
-
-
-def _long_task_budget_limits(
-    *,
-    is_research_mode: bool,
-    is_swarm_mode: bool,
-    max_tokens_budget: int,
-    max_usd_budget: float,
-) -> tuple[int, float, float]:
-    """Return accounting limits and pause threshold for this ReAct turn."""
-    if is_swarm_mode:
-        return (
-            max(max_tokens_budget, 250_000),
-            max(max_usd_budget, 5.0),
-            0.95,
-        )
-    if is_research_mode:
-        return (
-            max(max_tokens_budget, 150_000),
-            max(max_usd_budget, 3.0),
-            0.95,
-        )
-    return max_tokens_budget, max_usd_budget, 0.8
-
-
-# Re-exports for tests/test_react_loop.py — the helpers live in
-# react_parsing / react_execution / react_guards now, but tests import them
-# from this module. Listing them in __all__ keeps ruff from auto-removing
-# the imports as "unused".
+# Re-exports for tests/test_react_loop.py and friends — the helpers live
+# in react_parsing / react_execution / react_guards / react_context /
+# react_checkpointing / react_loop_controls / react_parallel_dispatch
+# now, but tests (and the loop body below) reference them through this
+# module. Listing them in __all__ keeps ruff from auto-removing the
+# imports as "unused".
 __all__ = [
     "ReActResult",
     "ReActStep",
+    "_background_task_info_from_observation",
+    "_beak_step_effective_success",
     "_build_code_context_prelude",
+    "_build_user_message_content",
+    "_checkpoint_interval",
+    "_checkpoint_mirror",
     "_code_mode_completion_guard",
+    "_CONTEXT_PRESSURE_NUDGE",
+    "_disabled_guard_labels",
+    "_disabled_guards_from_yaml",
+    "_dispatch_parallel_actions",
     "_escape_md_brackets",
+    "_estimate_context_fullness",
     "_execute_action_via_beak",
+    "_format_background_task_heartbeat",
     "_format_skill_catalog",
+    "_guard_hit_recorder",
+    "_image_blocks_from_attachments",
+    "_is_scoped_artifact_write",
+    "_long_task_budget_limits",
+    "_looks_like_image_attachment",
+    "_mirror_checkpoint",
     "_parse_action",
     "_parse_step",
     "_placeholder_observation",
+    "_react_completion_receipt",
+    "_rehydrate_messages_from_steps",
+    "_reset_checkpoint_mirror_for_tests",
+    "_reset_disabled_set_for_tests",
+    "_reset_guard_telemetry_for_tests",
     "_reset_kg_throttle_for_tests",
     "_reset_react_variants_for_tests",
     "_safe_for_streamdown",
+    "_should_auto_checkpoint",
+    "_skill_available_in_executor",
+    "_tool_event_extras_from_beak_step",
+    "_WRITE_TOOLS",
     "get_react_variant_stats",
     "pick_react_variant",
     "record_react_variant_result",
     "run_react_loop",
     "stream_react_loop",
 ]
-
-
-# Tools that mutate the workspace. When a multi-action block contains
-# any of these we force serial dispatch — concurrent file writes can
-# clobber each other and the auto-diagnostics path expects a single
-# resolved_name.
-_WRITE_TOOLS: frozenset[str] = frozenset({
-    "write_text_file", "edit_file", "multi_edit_file",
-    "edit_text_file", "edit_code", "str_replace",
-    "write_file", "create_file",
-})
-
-# Default cap on parallel actions. Beyond this we still execute every
-# call but slice them into pool-sized batches; protects against a
-# model hallucinating 30 read_files at once.
-_MAX_PARALLEL_ACTIONS = 4
-
-
-def _dispatch_parallel_actions(
-    actions: list[str],
-    *,
-    stack: Any,
-    executor: Any,
-    iteration: int,
-    react_task_id: Any,
-    agent: Any,
-    intent: ParsedIntent,
-) -> Iterator[Any]:
-    """Concurrent multi-action dispatcher (口子 2).
-
-    Generator helper invoked via ``yield from`` from the main loop.
-    Yields the same ``tool_start`` / ``tool_end`` events the legacy
-    single-action path emits, one pair per action, with unique
-    ``call_id`` per call. Returns ``(merged_observation, results)``
-    via StopIteration.value.
-
-    Force-serial fallbacks (executes via the same path but sequenced
-    rather than threaded):
-      * Any action targets a known write tool.
-      * Any action's parsed name is unregistered (so we surface a
-        "tool not found" observation immediately rather than after
-        partial work has run).
-    """
-    import concurrent.futures as _cf
-
-    parsed_pairs: list[tuple[str, dict[str, Any]] | None] = [
-        _parse_action(a) for a in actions
-    ]
-    from runtime.safety.approval.approval_gate import assess_approval_risk
-
-    resolved_names: list[str | None] = []
-    has_unregistered = False
-    has_write_tool = False
-    # Risky/untrusted tools must run serially (inline, in this thread) so
-    # the injection-taint contextvar the executor reads/writes is visible —
-    # the parallel thread-pool path doesn't propagate it. Running them
-    # inline also lets an untrusted tool's taint apply to a later risky tool
-    # in the same batch via the executor's chokepoint block.
-    has_risky_or_untrusted = False
-    # Per-action flag: does this tool's OUTPUT taint the turn (untrusted
-    # source)? Used to order the serial batch so untrusted tools run before
-    # risky ones (see below).
-    untrusted_flags: list[bool] = []
-    for p in parsed_pairs:
-        if p is None:
-            resolved_names.append(None)
-            untrusted_flags.append(False)
-            has_unregistered = True
-            continue
-        name = p[0]
-        registry = getattr(executor, "registry", None)
-        if registry is None or not registry.has(name):
-            resolved_names.append(None)
-            untrusted_flags.append(False)
-            has_unregistered = True
-        else:
-            resolved_names.append(name)
-            try:
-                _aff = registry.get(name).affinity
-            except (KeyError, AttributeError):
-                _aff = None
-            _is_untrusted = is_untrusted_tool(name, _aff)
-            untrusted_flags.append(_is_untrusted)
-            if name in _WRITE_TOOLS:
-                has_write_tool = True
-            if (
-                assess_approval_risk(name).level in {"medium", "high", "critical"}
-                or _is_untrusted
-            ):
-                has_risky_or_untrusted = True
-
-    # Pre-allocate per-action call_ids so tool_start/tool_end can be
-    # paired even if work runs out-of-order.
-    call_ids = [uuid.uuid4().hex[:12] for _ in actions]
-    started_at = [time.monotonic() for _ in actions]
-
-    # Emit tool_start for every action up-front so the UI shows them
-    # in parallel even if we end up running serially below.
-    for idx in range(len(actions)):
-        name = resolved_names[idx] or "unknown"
-        _input_preview = parsed_pairs[idx][1] if parsed_pairs[idx] else None
-        yield {
-            "type": "tool_start",
-            "tool_name": name,
-            "tool_call_id": call_ids[idx],
-            "iteration": iteration,
-            "input_preview": _input_preview,
-            "parallel_batch_size": len(actions),
-        }
-
-    serial = has_write_tool or has_unregistered or has_risky_or_untrusted
-
-    def _run_one(idx: int) -> tuple[str | None, Any]:
-        # Skip dispatch for unregistered tools — the single-action
-        # path's "(tool not registered)" message is reproduced here
-        # so the model gets a uniform observation.
-        if resolved_names[idx] is None:
-            return (
-                f"(工具未注册或无法解析) action: {actions[idx][:200]}",
-                None,
-            )
-        return _execute_action_via_beak(
-            stack,
-            actions[idx],
-            react_task_id=react_task_id,
-            react_step_counter=iteration,
-            agent=agent,
-            intent=intent,
-        )
-
-    observations: list[str | None] = [None] * len(actions)
-    beak_steps: list[Any] = [None] * len(actions)
-    if serial or len(actions) <= 1:
-        # Run untrusted-output tools FIRST. The serial path exists so an
-        # untrusted tool's injection taint reaches a later risky tool's
-        # executor chokepoint — but in DECLARATION order the model can place a
-        # risky tool (exec_shell) BEFORE the untrusted one (web_fetch), so the
-        # risky tool runs while taint is still "none". Reorder execution so
-        # taint is set first. Results stay indexed by original position, so the
-        # tool_end emit order + merged observation below are unchanged. (Stable
-        # sort preserves declared order within each group.)
-        exec_order = sorted(
-            range(len(actions)),
-            key=lambda j: 0 if (j < len(untrusted_flags) and untrusted_flags[j]) else 1,
-        )
-        for idx in exec_order:
-            obs, bk = _run_one(idx)
-            observations[idx] = obs
-            beak_steps[idx] = bk
-    else:
-        max_workers = min(len(actions), _MAX_PARALLEL_ACTIONS)
-        with _cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {
-                pool.submit(_run_one, idx): idx for idx in range(len(actions))
-            }
-            for fut in _cf.as_completed(futures):
-                idx = futures[fut]
-                try:
-                    obs, bk = fut.result()
-                except Exception as exc:  # noqa: BLE001 — surface any worker exception as a tool error observation
-                    obs, bk = (
-                        f"(工具执行异常) {type(exc).__name__}: {exc}",
-                        None,
-                    )
-                observations[idx] = obs
-                beak_steps[idx] = bk
-
-    # Emit tool_end events in declared (action) order so the UI
-    # transcript matches the model's intent.
-    results: list[dict[str, object]] = []
-    merged_lines: list[str] = []
-    n = len(actions)
-    for idx in range(n):
-        obs = observations[idx]
-        bk = beak_steps[idx]
-        name = resolved_names[idx] or "unknown"
-        _ok = not (
-            obs is not None
-            and isinstance(obs, str)
-            and obs.startswith(("(工具失败)", "(工具执行异常)", "(工具未注册"))
-        )
-        if bk is not None:
-            _ok = _beak_step_effective_success(bk)
-        _duration_ms = int((time.monotonic() - started_at[idx]) * 1000)
-        # Indirect prompt-injection defense: a tool whose output is
-        # external (web/browser/MCP) is attacker-influenceable. Fence its
-        # observation as DATA-not-instructions before it re-enters the
-        # model's context, and flag known injection markers. The UI
-        # preview keeps the raw text; only the model-facing copy is
-        # wrapped. Failed-tool observations are error strings, not
-        # untrusted content, so they're left alone.
-        model_obs = obs
-        if _ok and isinstance(obs, str) and obs:
-            _reg = getattr(executor, "registry", None)
-            _affinity: list[str] | None = None
-            if _reg is not None and resolved_names[idx] and _reg.has(name):
-                try:
-                    _affinity = _reg.get(name).affinity
-                except (KeyError, AttributeError):
-                    _affinity = None
-            if is_untrusted_tool(name, _affinity):
-                _scan = scan_for_injection(obs)
-                model_obs = wrap_untrusted_observation(
-                    obs, source=name, scan=_scan,
-                )
-                if _scan.flagged:
-                    # Taint the turn so a later high-risk tool is forced
-                    # through human approval (read at the approval gate).
-                    mark_injection_taint(_scan.severity)
-                    _logger.warning(
-                        "prompt-injection markers in %s output "
-                        "(severity=%s, signals=%s)",
-                        name, _scan.severity, ",".join(_scan.labels),
-                    )
-        yield {
-            "type": "tool_end",
-            "tool_name": name,
-            "tool_call_id": call_ids[idx],
-            "iteration": iteration,
-            "status": "success" if _ok else "error",
-            "output_preview": (
-                _summarize_observation(obs)
-                if isinstance(obs, str) and obs
-                else obs
-            ),
-            "duration_ms": _duration_ms,
-            "parallel_batch_size": n,
-            **_tool_event_extras_from_beak_step(bk, name),
-        }
-        results.append({
-            "tool_name": name,
-            "ok": _ok,
-            "observation": model_obs or "",
-            "duration_ms": _duration_ms,
-            "call_id": call_ids[idx],
-        })
-        # Per-call header keeps the model from confusing which
-        # observation belongs to which action.
-        merged_lines.append(
-            f"[{idx + 1}/{n} {name}]\n{model_obs or '(no output)'}"
-        )
-
-    merged_obs = "\n\n".join(merged_lines)
-    return merged_obs, results
 
 
 def stream_react_loop(
@@ -1241,6 +260,7 @@ def stream_react_loop(
     # request without re-plumbing the param through every layer.
     try:
         from runtime.platform.process.session import current_session as _cs_for_provider
+
         _session_for_provider = _cs_for_provider()
         if (
             _session_for_provider is not None
@@ -1253,9 +273,8 @@ def stream_react_loop(
 
     # ── PHASE 2 · mode + budget detection ──────────────────────────────
     from runtime.platform.models import TaskId as _TaskId
-    react_task_id: TaskId = (
-        resume_task_id if resume_task_id is not None else _TaskId(uuid.uuid4())
-    )
+
+    react_task_id: TaskId = resume_task_id if resume_task_id is not None else _TaskId(uuid.uuid4())
 
     _camouflage_variant_name = "baseline"
     _camouflage_suffix = ""
@@ -1263,6 +282,7 @@ def stream_react_loop(
         from runtime.safety.experiments.scheduler import (
             get_camouflage_scheduler,
         )
+
         _camouflage_variant_name, _camouflage_suffix = (
             get_camouflage_scheduler().assign_variant_suffix(str(react_task_id))
         )
@@ -1279,6 +299,7 @@ def stream_react_loop(
     volatile_parts: list[str] = []
 
     from datetime import datetime as _dt
+
     volatile_parts.append(
         f"\n当前日期: {_dt.now().strftime('%Y-%m-%d %A')}。"
         " 搜索时请注意信息时效性,优先引用最新来源。"
@@ -1304,31 +325,30 @@ def stream_react_loop(
         or (isinstance(_wp, str) and _wp.strip())
     )
     _browser_regression_enabled = bool(
-        _uc.get("browser_regression_enabled")
-        or _metadata.get("browser_regression_enabled")
+        _uc.get("browser_regression_enabled") or _metadata.get("browser_regression_enabled")
     )
-    _browser_regression_preview_url = (
-        _uc.get("browser_regression_preview_url")
-        or _metadata.get("browser_regression_preview_url")
+    _browser_regression_preview_url = _uc.get("browser_regression_preview_url") or _metadata.get(
+        "browser_regression_preview_url"
     )
     _mode_value = str(_uc.get("mode") or _metadata.get("mode") or "").lower()
     _capability_mode_value = str(
         _uc.get("capability_mode") or _metadata.get("capability_mode") or ""
     ).lower()
-    _is_swarm_mode = (
-        _mode_value in {"swarm", "swarms", "agent_swarm", "agent-swarm"}
-        or _capability_mode_value in {"swarm", "swarms", "agent_swarm", "agent-swarm"}
-    )
+    _is_swarm_mode = _mode_value in {
+        "swarm",
+        "swarms",
+        "agent_swarm",
+        "agent-swarm",
+    } or _capability_mode_value in {"swarm", "swarms", "agent_swarm", "agent-swarm"}
     if _is_swarm_mode and max_iterations < 100:
         max_iterations = 100
     _goal_for_mode = str(intent.normalized_goal or intent.raw or "")
-    _is_research_mode = (
-        _mode_value in {"deep", "deep_research", "research"}
-        or bool(re.search(
+    _is_research_mode = _mode_value in {"deep", "deep_research", "research"} or bool(
+        re.search(
             r"调研|研究报告|市场研究|行业报告|竞品分析|deep\s*research|market\s*research|research\s*report",
             _goal_for_mode,
             re.IGNORECASE,
-        ))
+        )
     )
     # Research turns often need: web_search × N → browse × N →
     # follow-up search → synthesize → refine. The default 30 cap
@@ -1378,14 +398,10 @@ def stream_react_loop(
         )
         _rules = _load_project_rules(_wp.strip())
         if _rules:
-            system_parts.append(
-                "\n<project-rules>\n" + _rules + "\n</project-rules>"
-            )
+            system_parts.append("\n<project-rules>\n" + _rules + "\n</project-rules>")
         _profile = _build_project_profile_prompt(_wp.strip(), include_diagnostics=_is_code_mode)
         if _profile:
-            system_parts.append(
-                "\n<project-profile>\n" + _profile + "\n</project-profile>"
-            )
+            system_parts.append("\n<project-profile>\n" + _profile + "\n</project-profile>")
         if _is_code_mode:
             system_parts.append(
                 "\n<code-mode>\n"
@@ -1415,8 +431,8 @@ def stream_react_loop(
                     "\n<browser-regression-guidance>\n"
                     "用户已在代码模式开启 UI 回归。完成代码修改和静态验证后，如果改动涉及前端、HTML、样式、交互或可视输出，"
                     "必须补充浏览器回归检查。\n"
-                    + _preview_line +
-                    "浏览器回归应模拟真人操作：使用可见鼠标移动、点击、输入和滚动路径，检查关键交互、布局、控制台错误和明显视觉回归。"
+                    + _preview_line
+                    + "浏览器回归应模拟真人操作：使用可见鼠标移动、点击、输入和滚动路径，检查关键交互、布局、控制台错误和明显视觉回归。"
                     "发现问题时回到执行阶段修复，再重新验证。\n"
                     "如果没有可测试 UI、缺少登录/权限或预览无法启动，请在 Final Answer 里明确说明阻塞原因和已完成的静态验证。\n"
                     "</browser-regression-guidance>"
@@ -1479,6 +495,7 @@ def stream_react_loop(
             from runtime.memory.users.user_preferences import (
                 _load_user_preferences as _load_prefs,
             )
+
             _prefs = _load_prefs(_uc.get("actor") or _metadata.get("actor"))
         except ImportError:
             _logger.debug("user_preferences module not available", exc_info=True)
@@ -1523,11 +540,11 @@ def stream_react_loop(
                 "<tool-choice-policy>\n"
                 "**工具选择硬约束**(优先级 / 危险性 / cwd):\n"
                 "- 文件发现: 用 `list_cwd` / `glob_files`(若可用); **不要**\n"
-                "  `exec_shell(\"find ...\")` / `exec_shell(\"ls ...\")`\n"
+                '  `exec_shell("find ...")` / `exec_shell("ls ...")`\n'
                 "- 内容搜索: 用 `code_search` / `grep`(项目内置, 跨平台);\n"
-                "  **不要** `exec_shell(\"grep -r ...\")`\n"
+                '  **不要** `exec_shell("grep -r ...")`\n'
                 "- 文件读取: 用 `read_file` 带 `offset`/`limit`(超 2000 行\n"
-                "  必带);**不要** `exec_shell(\"cat\"/\"head\"/\"tail\")`\n"
+                '  必带);**不要** `exec_shell("cat"/"head"/"tail")`\n'
                 "- exec_shell 限定用途: 编译 / 测试 / 构建 / git / 跑特定\n"
                 "  CLI(那种没专用 skill 的 ad-hoc 命令)\n"
                 "- 长运行命令(dev server / watcher / docker compose / 长测试):\n"
@@ -1558,11 +575,8 @@ def stream_react_loop(
             )
     try:
         from runtime.core.cerebrum.output_styles import render_output_style
-        output_style_value = (
-            _uc.get("output_style")
-            or _metadata.get("output_style")
-            or ""
-        )
+
+        output_style_value = _uc.get("output_style") or _metadata.get("output_style") or ""
         _output_style_block = render_output_style(output_style_value)
         if _output_style_block:
             # Volatile: user can switch per turn; would break cache prefix.
@@ -1571,6 +585,7 @@ def stream_react_loop(
         _logger.debug("output_styles overlay not available", exc_info=True)
     try:
         from runtime.core.cerebrum.thinking_mode import render_thinking_guidance
+
         _thinking_guidance = render_thinking_guidance(_uc.get("thinking_plan"))
     except (ImportError, AttributeError):
         _logger.debug("thinking_mode guidance not available", exc_info=True)
@@ -1590,10 +605,7 @@ def stream_react_loop(
         "debug details.\n"
         "</user-facing-process-language>"
     )
-    if (
-        not _is_swarm_mode
-        and _mode_value not in {"chat", "flash", "inspiration"}
-    ):
+    if not _is_swarm_mode and _mode_value not in {"chat", "flash", "inspiration"}:
         system_parts.append(
             "\n<agent-auto-delegation-guidance>\n"
             "Current mode is single-agent Agent/ReAct. You remain the lead, "
@@ -1671,9 +683,7 @@ def stream_react_loop(
         # at ``deep-research`` instead — the single-agent counterpart
         # that returns the 7-phase instruction document the parent
         # ReAct loop drives via plain ``web_search`` / ``fetch_url``.
-        _research_skill = (
-            "deep-research-swarm" if _is_swarm_mode else "deep-research"
-        )
+        _research_skill = "deep-research-swarm" if _is_swarm_mode else "deep-research"
         system_parts.append(
             "\n<research-skill-chain-guidance>\n"
             "This turn is a research/report task. Drive the work through "
@@ -1719,14 +729,13 @@ def stream_react_loop(
             from runtime.core.cerebrum.capability_router import (
                 activate_capabilities,
             )
+
             _capability_activation = activate_capabilities(
                 intent.normalized_goal,
                 user_context=_uc,
                 registry=executor.registry,
             )
-            _capability_activation_prompt = (
-                _capability_activation.render_prompt()
-            )
+            _capability_activation_prompt = _capability_activation.render_prompt()
         except (ImportError, AttributeError, TypeError, ValueError):
             _logger.debug(
                 "capability activation prompt unavailable",
@@ -1747,6 +756,7 @@ def stream_react_loop(
                     from runtime.core.cerebrum.plugin_auto_load import (
                         auto_load_pinned_plugins,
                     )
+
                     plugin_report = auto_load_pinned_plugins(
                         _capability_activation.pinned_plugins,
                     )
@@ -1757,7 +767,8 @@ def stream_react_loop(
                         )
             except (ImportError, AttributeError, TypeError):
                 _logger.debug(
-                    "plugin auto-load failed", exc_info=True,
+                    "plugin auto-load failed",
+                    exc_info=True,
                 )
 
             try:
@@ -1766,9 +777,11 @@ def stream_react_loop(
                 from runtime.memory.users.mention_history import (
                     get_mention_history_store,
                 )
+
                 actor = (
                     str(_uc.get("user_id") or _uc.get("actor") or "anonymous")
-                    if isinstance(_uc, dict) else "anonymous"
+                    if isinstance(_uc, dict)
+                    else "anonymous"
                 )
                 store = get_mention_history_store()
                 ts = _time.time()
@@ -1785,7 +798,8 @@ def stream_react_loop(
                     store.record_batch(actor, items, ts=ts)
             except (ImportError, AttributeError, OSError, TypeError):
                 _logger.debug(
-                    "mention history record failed", exc_info=True,
+                    "mention history record failed",
+                    exc_info=True,
                 )
 
         catalog = _format_skill_catalog(
@@ -1801,10 +815,12 @@ def stream_react_loop(
             _todo_protocol_visible = "  - todo_write:" in catalog
             system_parts.append(catalog)
             if _todo_protocol_visible:
-                system_parts.append(render_todo_protocol_guidance(
-                    required=_todo_protocol_required,
-                    mode=_todo_protocol_mode,
-                ))
+                system_parts.append(
+                    render_todo_protocol_guidance(
+                        required=_todo_protocol_required,
+                        mode=_todo_protocol_mode,
+                    )
+                )
     else:
         system_parts.append(REACT_NO_TOOLS_NOTE)
     if planning_mode:
@@ -1828,6 +844,7 @@ def stream_react_loop(
     if agent is not None and getattr(agent, "soul", None):
         try:
             from runtime.execution.agents.loader import compose_runtime_soul
+
             runtime_soul = compose_runtime_soul(agent)
         except (ImportError, AttributeError):
             _logger.debug("compose_runtime_soul not available", exc_info=True)
@@ -1836,6 +853,7 @@ def stream_react_loop(
             system_parts.insert(0, runtime_soul)
     try:
         from runtime.safety.validation import get_constitution_summary
+
         _constitution = get_constitution_summary()
     except ImportError:
         _logger.debug("constitution module not available", exc_info=True)
@@ -1846,6 +864,7 @@ def stream_react_loop(
         from runtime.core.cerebrum.llm_planner import (
             _render_team_roster_section,
         )
+
         _team_block = _render_team_roster_section(intent.user_context or {})
     except (ImportError, AttributeError):
         _logger.debug("team roster rendering not available", exc_info=True)
@@ -1859,6 +878,7 @@ def stream_react_loop(
             MemoryQuery,
             format_records_for_prompt,
         )
+
         _agent_id_for_memory = (
             str(getattr(agent, "agent_id", "") or "") if agent is not None else None
         )
@@ -1868,8 +888,7 @@ def stream_react_loop(
         _team_id_for_memory = _uc.get("team_id") or _metadata.get("team_id")
         _team_id_for_memory = (
             str(_team_id_for_memory).strip()
-            if isinstance(_team_id_for_memory, str)
-            and str(_team_id_for_memory).strip()
+            if isinstance(_team_id_for_memory, str) and str(_team_id_for_memory).strip()
             else None
         )
         _memory_block = format_records_for_prompt(
@@ -1904,9 +923,8 @@ def stream_react_loop(
     from runtime.core.cerebrum.stable_prompt import (
         render_volatile_as_user_message,
     )
-    _volatile_text = (
-        "\n\n".join(volatile_parts).strip() if volatile_parts else ""
-    )
+
+    _volatile_text = "\n\n".join(volatile_parts).strip() if volatile_parts else ""
     messages: list[Message] = [
         Message(role="system", content="\n\n".join(system_parts)),
     ]
@@ -1923,6 +941,7 @@ def stream_react_loop(
         if isinstance(profile_mems, list) and profile_mems:
             try:
                 from runtime.memory.users.profile import render_profile_memories
+
                 mem_block = render_profile_memories(profile_mems)
             except (ImportError, AttributeError, TypeError):
                 mem_block = ""
@@ -1936,8 +955,10 @@ def stream_react_loop(
             if role not in ("user", "assistant", "system"):
                 continue
             if (
-                isinstance(content, str) and content.strip()
-                or isinstance(content, list) and content
+                isinstance(content, str)
+                and content.strip()
+                or isinstance(content, list)
+                and content
             ):
                 messages.append(Message(role=role, content=content))
     _no_startup_code_context_modes = {
@@ -1972,7 +993,8 @@ def stream_react_loop(
     )
 
     effective_model = (
-        model if model and model not in ("octopus-agent", "")
+        model
+        if model and model not in ("octopus-agent", "")
         else getattr(stack.planner, "planner_model", None) or "molili"
     )
 
@@ -2001,6 +1023,7 @@ def stream_react_loop(
             from runtime.core.cerebrum.agent_auto_delegate import (
                 plan_auto_delegation,
             )
+
             _delegation_plan = plan_auto_delegation(
                 intent.normalized_goal,
                 registry=getattr(executor, "agent_registry", None)
@@ -2016,6 +1039,7 @@ def stream_react_loop(
         ):
             try:
                 from runtime.execution.subagents.bridge import call_subagent
+
                 _logger.info(
                     "react_loop auto-delegating to agent=%s reason=%s",
                     _delegation_plan.target_agent,
@@ -2066,7 +1090,8 @@ def stream_react_loop(
                     _logger.info(
                         "auto-delegation produced no usable output "
                         "(success=%s, error=%s) — falling back to model",
-                        _delegate_ok, err,
+                        _delegate_ok,
+                        err,
                     )
                     yield {
                         "type": "auto_delegation_skipped",
@@ -2076,18 +1101,22 @@ def stream_react_loop(
             except (ImportError, AttributeError, TypeError, ValueError) as exc:
                 _logger.debug(
                     "auto-delegation failed; falling back to model: %s",
-                    exc, exc_info=True,
+                    exc,
+                    exc_info=True,
                 )
                 yield {
                     "type": "auto_delegation_skipped",
                     "target_agent": getattr(
-                        _delegation_plan, "target_agent", None,
+                        _delegation_plan,
+                        "target_agent",
+                        None,
                     ),
                     "reason": f"{type(exc).__name__}: {exc}",
                 }
 
     # ── PHASE 5 · pre-loop state init + checkpoint resume ──────────────
     from runtime.core.cerebrum.pause_control import get_pause_controller
+
     _pause = get_pause_controller()
     _agent_id_for_pause = str(getattr(agent, "agent_id", "") or "")
     _pause.register_active(
@@ -2147,7 +1176,8 @@ def stream_react_loop(
         if journal is not None:
             try:
                 ckpts = [
-                    e for e in journal.read_by_type("react_checkpoint")
+                    e
+                    for e in journal.read_by_type("react_checkpoint")
                     if str(getattr(e, "task_id", "")) == str(resume_task_id)
                 ]
                 if ckpts:
@@ -2155,11 +1185,14 @@ def stream_react_loop(
                     from runtime.core.cerebrum.checkpoint_integrity import (
                         validate_checkpoint_state,
                     )
+
                     _checkpoint_state = {
                         "messages_snapshot": last.messages_snapshot,
                         "steps_snapshot": last.steps_snapshot,
                         "working_set_snapshot": getattr(
-                            last, "working_set_snapshot", [],
+                            last,
+                            "working_set_snapshot",
+                            [],
                         ),
                         "progress_summary": getattr(last, "progress_summary", ""),
                         "current_phase": getattr(last, "current_phase", ""),
@@ -2200,9 +1233,8 @@ def stream_react_loop(
                         _progress_summary = last.progress_summary
                     if getattr(last, "current_phase", ""):
                         _current_phase = last.current_phase
-                    if (
-                        getattr(last, "has_final_answer", False)
-                        and getattr(last, "final_answer", "")
+                    if getattr(last, "has_final_answer", False) and getattr(
+                        last, "final_answer", ""
                     ):
                         final_answer = str(last.final_answer)
                         terminated_reason = "final_answer"
@@ -2220,7 +1252,8 @@ def stream_react_loop(
                     }
                     _logger.info(
                         "react_loop resuming from iteration %d (task %s)",
-                        resume_from_iter, resume_task_id,
+                        resume_from_iter,
+                        resume_task_id,
                     )
             except (AttributeError, KeyError, TypeError, ValueError):
                 _logger.debug("resume checkpoint loading failed", exc_info=True)
@@ -2242,15 +1275,13 @@ def stream_react_loop(
     from runtime.platform.models.llm import (
         model_supports_thinking as _supports_thinking,
     )
+
     _resolved_model = effective_model
     if hasattr(router, "_resolve"):
         try:
             _sub = router._resolve(effective_model)
             if _sub is not router:
-                _resolved_model = (
-                    getattr(_sub, "default_model", None)
-                    or effective_model
-                )
+                _resolved_model = getattr(_sub, "default_model", None) or effective_model
         except (AttributeError, TypeError):  # noqa: BLE001 — subrouter doesn't expose default_model; fall back to effective_model
             pass
     _wants_thinking = _supports_thinking(_resolved_model)
@@ -2271,9 +1302,10 @@ def stream_react_loop(
         if _extra_iters > 0:
             max_iterations = max_iterations + _extra_iters
             _logger.info(
-                "react_loop resume grant: +%d iterations for task %s "
-                "(new max=%d)",
-                _extra_iters, resume_task_id, max_iterations,
+                "react_loop resume grant: +%d iterations for task %s (new max=%d)",
+                _extra_iters,
+                resume_task_id,
+                max_iterations,
             )
         _pause.clear(str(resume_task_id))
 
@@ -2286,12 +1318,15 @@ def stream_react_loop(
         # active the call is essentially free (one bool read).
         try:
             from runtime.safety.approval.cancellation import current_cancellation_token
+
             _ct = current_cancellation_token()
             if _ct.is_cancelled:
                 terminated_reason = "cancelled"
                 _logger.info(
                     "react_loop cancelled at iteration %d (task %s) — reason=%s",
-                    i, react_task_id, _ct.reason or "client disconnected",
+                    i,
+                    react_task_id,
+                    _ct.reason or "client disconnected",
                 )
                 break
         except (ImportError, AttributeError, TypeError):  # noqa: BLE001 — cancellation subsystem unavailable; proceed normally
@@ -2301,7 +1336,8 @@ def stream_react_loop(
             terminated_reason = "paused"
             _logger.info(
                 "react_loop paused at iteration %d (task %s) — checkpoint written",
-                i, react_task_id,
+                i,
+                react_task_id,
             )
             journal = getattr(stack, "journal", None)
             if journal is not None:
@@ -2380,9 +1416,7 @@ def stream_react_loop(
                     "type": "throughput",
                     "chars": chars,
                     "elapsed_ms": int(_elapsed * 1000),
-                    "chars_per_sec": (
-                        chars / _elapsed if _elapsed > 0 else 0.0
-                    ),
+                    "chars_per_sec": (chars / _elapsed if _elapsed > 0 else 0.0),
                 }
 
             for evt in router.call_stream(req):
@@ -2446,9 +1480,7 @@ def stream_react_loop(
                                 }
                                 _streamed_final_chars = len(answer_so_far)
                                 _throughput_chars += len(answer_so_far)
-                                _tp = _maybe_emit_throughput(
-                                    _throughput_chars
-                                )
+                                _tp = _maybe_emit_throughput(_throughput_chars)
                                 if _tp is not None:
                                     yield _tp
                                 _final_stream_started = True
@@ -2496,6 +1528,7 @@ def stream_react_loop(
                     resp = evt.final
             if resp is None:
                 from runtime.platform.models.llm import ModelResponse
+
                 resp = ModelResponse(
                     text="".join(text_parts),
                     thinking="".join(thinking_parts),
@@ -2504,14 +1537,14 @@ def stream_react_loop(
         except Exception as exc:
             _logger.warning(
                 "react_loop iter %d LLM 调用失败 (%s): %s",
-                i, type(exc).__name__, exc,
+                i,
+                type(exc).__name__,
+                exc,
             )
             if not steps:
                 _err_msg = str(exc)
                 _err_kind = (
-                    "auth"
-                    if "current_actor" in _err_msg or "登录" in _err_msg
-                    else "router"
+                    "auth" if "current_actor" in _err_msg or "登录" in _err_msg else "router"
                 )
                 yield {
                     "type": "react_error",
@@ -2550,30 +1583,24 @@ def stream_react_loop(
             )
             if (
                 _budget_auto_pause_enabled
-                and
-                _updated is not None
+                and _updated is not None
                 and react_task_id is not None
                 and not _pause.is_pause_requested(str(react_task_id))
             ):
                 _token_pct = (
-                    _updated.tokens_spent / _updated.max_tokens
-                    if _updated.max_tokens > 0 else 0
+                    _updated.tokens_spent / _updated.max_tokens if _updated.max_tokens > 0 else 0
                 )
-                _usd_pct = (
-                    _updated.cost_usd / _updated.max_usd
-                    if _updated.max_usd > 0 else 0
-                )
-                if (
-                    _token_pct >= _budget_pause_threshold
-                    or _usd_pct >= _budget_pause_threshold
-                ):
+                _usd_pct = _updated.cost_usd / _updated.max_usd if _updated.max_usd > 0 else 0
+                if _token_pct >= _budget_pause_threshold or _usd_pct >= _budget_pause_threshold:
                     _logger.info(
                         "react_loop budget auto-pause · task %s · "
                         "tokens %d/%d (%.0f%%) · usd %.3f/%.3f (%.0f%%)",
                         react_task_id,
-                        _updated.tokens_spent, _updated.max_tokens,
+                        _updated.tokens_spent,
+                        _updated.max_tokens,
                         _token_pct * 100,
-                        _updated.cost_usd, _updated.max_usd,
+                        _updated.cost_usd,
+                        _updated.max_usd,
                         _usd_pct * 100,
                     )
                     _pause.request_pause(
@@ -2583,10 +1610,10 @@ def stream_react_loop(
                         note=(
                             f"自动暂停 · tokens {_updated.tokens_spent:,}/"
                             f"{_updated.max_tokens:,} "
-                            f"({int(_token_pct*100)}%) · "
+                            f"({int(_token_pct * 100)}%) · "
                             f"${_updated.cost_usd:.3f}/"
                             f"${_updated.max_usd:.3f} "
-                            f"({int(_usd_pct*100)}%) · 加预算继续"
+                            f"({int(_usd_pct * 100)}%) · 加预算继续"
                         ),
                         thread_id=thread_id or "",
                         agent_id=_agent_id_for_pause,
@@ -2653,10 +1680,13 @@ def stream_react_loop(
             # not because it broke the protocol — the continuation
             # branch below will inject a "Continue exactly where it
             # stopped" nudge and the next iteration will finish.
-            _is_length_truncated = (
-                (getattr(resp, "finish_reason", "") or "").strip().lower()
-                in {"length", "max_tokens", "max_output_tokens", "output_limit", "token_limit"}
-            )
+            _is_length_truncated = (getattr(resp, "finish_reason", "") or "").strip().lower() in {
+                "length",
+                "max_tokens",
+                "max_output_tokens",
+                "output_limit",
+                "token_limit",
+            }
             if _is_length_truncated:
                 # Surface the partial text so the user sees streaming
                 # progress; don't count it against bail-at.
@@ -2720,9 +1750,7 @@ def stream_react_loop(
         resolved_name: str | None = None
         tool_ok = False
         tool_action_requested = (
-            tools_active
-            and step.action
-            and step.action.lower() not in {"none", "n/a", ""}
+            tools_active and step.action and step.action.lower() not in {"none", "n/a", ""}
         )
 
         if tool_action_requested:
@@ -2737,10 +1765,7 @@ def stream_react_loop(
         # exactly one action, preserving every existing
         # approval/retry/cancel/background-task behavior.
         _parallel_handled = False
-        if (
-            tool_action_requested
-            and len(step.actions) > 1
-        ):
+        if tool_action_requested and len(step.actions) > 1:
             _parallel_obs, _parallel_results = yield from _dispatch_parallel_actions(
                 step.actions,
                 stack=stack,
@@ -2758,16 +1783,10 @@ def stream_react_loop(
                 _parallel_handled = True
 
         if not _parallel_handled and not step.observation:
-            will_attempt_tool = (
-                tool_action_requested
-            )
+            will_attempt_tool = tool_action_requested
             if will_attempt_tool:
                 parsed = _parse_action(step.action)
-                resolved_name = (
-                    parsed[0]
-                    if parsed and executor.registry.has(parsed[0])
-                    else None
-                )
+                resolved_name = parsed[0] if parsed and executor.registry.has(parsed[0]) else None
                 if resolved_name is not None:
                     call_id = uuid.uuid4().hex[:12]
                     _input_preview = parsed[1] if parsed else None
@@ -2779,21 +1798,24 @@ def stream_react_loop(
                         "iteration": i + 1,
                         "input_preview": _input_preview,
                     }
-                    _auto_approve = (
-                        intent.user_context.get("auto_approve", False)
-                        or intent.flags.get("auto_approve", False)
-                    )
+                    _auto_approve = intent.user_context.get(
+                        "auto_approve", False
+                    ) or intent.flags.get("auto_approve", False)
                     from runtime.safety.approval.approval_gate import (
                         ApprovalRequest,
                         AutoDenyProvider,
                         approval_action_for_tool,
                     )
+
                     try:
                         from runtime.platform.process.session import current_session as _cs_ap
+
                         _sess_ap = _cs_ap()
                         _risk_policy_raw = (
-                            getattr(_sess_ap, "metadata", {}) or {}
-                        ).get("approval_risk_policy") if _sess_ap is not None else None
+                            (getattr(_sess_ap, "metadata", {}) or {}).get("approval_risk_policy")
+                            if _sess_ap is not None
+                            else None
+                        )
                     except (AttributeError, TypeError):
                         _risk_policy_raw = None
                     _approval_risk, _approval_action, _approval_policy = approval_action_for_tool(
@@ -2826,10 +1848,11 @@ def stream_react_loop(
                     # injection payload) is caught, not just destructive
                     # high-risk tools; only pure low-risk reads still
                     # auto-run after taint.
-                    if (
-                        injection_taint_gates()
-                        and _approval_risk.level in {"medium", "high", "critical"}
-                    ):
+                    if injection_taint_gates() and _approval_risk.level in {
+                        "medium",
+                        "high",
+                        "critical",
+                    }:
                         _auto_approve = False
                         _scoped_artifact_write = False
                         _accept_edits_auto_approve = False
@@ -2903,12 +1926,12 @@ def stream_react_loop(
                                 "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
                             }
                             observation = (
-                                "(工具被用户拒绝) 用户拒绝了此操作，"
-                                "请换一种方式或询问用户。"
+                                "(工具被用户拒绝) 用户拒绝了此操作，请换一种方式或询问用户。"
                             )
                             continue
                     if output_chunk_sink is not None:
                         from runtime.core.cerebrum.tool_output_sink import push_sink
+
                         _bound_call_id = call_id
 
                         def _local_sink(
@@ -2921,8 +1944,10 @@ def stream_react_loop(
                         def _sink_scope() -> Any:
                             return push_sink(_local_sink)
                     else:
+
                         def _sink_scope() -> Any:
                             return contextlib.nullcontext()
+
                     # This single-action path ran its own approval gate
                     # (incl. the injection-taint escalation) above, so tell
                     # the executor's chokepoint block this call was reviewed
@@ -2951,6 +1976,7 @@ def stream_react_loop(
                         from runtime.safety.approval.cancellation import (
                             current_cancellation_token,
                         )
+
                         _ct_post = current_cancellation_token()
                     except (ImportError, AttributeError, TypeError):  # noqa: BLE001 — cancellation subsystem unavailable; post-tool cancel check skipped
                         pass
@@ -2977,7 +2003,8 @@ def stream_react_loop(
                     if not tool_ok and observation:
                         _logger.info(
                             "react_loop iter %d · tool %s failed, auto-retrying once",
-                            i + 1, resolved_name,
+                            i + 1,
+                            resolved_name,
                         )
                         with _sink_scope():
                             set_injection_gate_handled(True)
@@ -3005,9 +2032,7 @@ def stream_react_loop(
                             beak_step = retry_step
                             tool_ok = True
                         else:
-                            observation = (
-                                observation + "\n[自动重试仍失败，请换方法或调整参数]"
-                            )
+                            observation = observation + "\n[自动重试仍失败，请换方法或调整参数]"
                     _background_task = (
                         _background_task_info_from_observation(observation)
                         if tool_ok and resolved_name in {"background_exec", "exec_shell"}
@@ -3060,7 +2085,9 @@ def stream_react_loop(
                         if is_untrusted_tool(resolved_name, _pi_affinity):
                             _pi_scan = scan_for_injection(observation)
                             observation = wrap_untrusted_observation(
-                                observation, source=resolved_name, scan=_pi_scan,
+                                observation,
+                                source=resolved_name,
+                                scan=_pi_scan,
                             )
                             if _pi_scan.flagged:
                                 # Taint the turn → force human approval on a
@@ -3069,7 +2096,8 @@ def stream_react_loop(
                                 _logger.warning(
                                     "prompt-injection markers in %s output "
                                     "(severity=%s, signals=%s)",
-                                    resolved_name, _pi_scan.severity,
+                                    resolved_name,
+                                    _pi_scan.severity,
                                     ",".join(_pi_scan.labels),
                                 )
                 else:
@@ -3088,11 +2116,18 @@ def stream_react_loop(
             step.observation = observation
 
         if _is_code_mode and observation and _current_phase in ("execute", "verify"):
-            _write_tools = frozenset({
-                "write_text_file", "edit_file", "multi_edit_file",
-                "edit_text_file", "edit_code", "str_replace",
-                "write_file", "create_file",
-            })
+            _write_tools = frozenset(
+                {
+                    "write_text_file",
+                    "edit_file",
+                    "multi_edit_file",
+                    "edit_text_file",
+                    "edit_code",
+                    "str_replace",
+                    "write_file",
+                    "create_file",
+                }
+            )
             if resolved_name in _write_tools and tool_ok:
                 _auto_diag = _run_auto_diagnostics(
                     stack,
@@ -3103,8 +2138,7 @@ def stream_react_loop(
                 _prefetch = _prefetch_related_files(step.action, _working_set)
                 if _prefetch:
                     step.observation = (
-                        (step.observation or observation)
-                        + "\n\n[关联文件预读]\n" + _prefetch
+                        (step.observation or observation) + "\n\n[关联文件预读]\n" + _prefetch
                     )
 
         # ── PHASE 6e · in-flight nudges + guards + step yield ──────────
@@ -3127,32 +2161,22 @@ def stream_react_loop(
         # Heartbeat: every 5 iterations (i > 0 and i % 5 == 0),
         # if we have any registered background tasks, append a
         # reminder to the NEXT step's observation injection.
-        if (
-            i > 0
-            and i % 5 == 0
-            and _known_background_tasks
-        ):
+        if i > 0 and i % 5 == 0 and _known_background_tasks:
             _midflight_nudges.append(
-                _format_background_task_heartbeat(
-                    list(_known_background_tasks.keys())
-                )
+                _format_background_task_heartbeat(list(_known_background_tasks.keys()))
             )
         _completion_nudge = _completion_phrase_without_todo_guard(
             _steps_with_current,
             todo_protocol_required=_todo_protocol_required and _todo_protocol_visible,
         )
         if _completion_nudge:
-            _midflight_nudges.append(
-                f"[completion-tracker]\n{_completion_nudge}"
-            )
+            _midflight_nudges.append(f"[completion-tracker]\n{_completion_nudge}")
         _verify_nudge = _unverified_write_followup_guard(
             _steps_with_current,
             is_code_mode=_is_code_mode,
         )
         if _verify_nudge:
-            _midflight_nudges.append(
-                f"[verification-tracker]\n{_verify_nudge}"
-            )
+            _midflight_nudges.append(f"[verification-tracker]\n{_verify_nudge}")
         # Context-pressure signal — fires once per turn when the rolling
         # message list approaches the model's context budget. Gives the
         # model a chance to write a "resume state" hand-off paragraph
@@ -3160,24 +2184,20 @@ def stream_react_loop(
         if not _context_pressure_signaled:
             _ctx_ratio = _estimate_context_fullness(messages, effective_model)
             if _ctx_ratio > 0.80:
-                _midflight_nudges.append(
-                    _CONTEXT_PRESSURE_NUDGE.format(level=f"{_ctx_ratio:.0%}")
-                )
+                _midflight_nudges.append(_CONTEXT_PRESSURE_NUDGE.format(level=f"{_ctx_ratio:.0%}"))
                 _context_pressure_signaled = True
         if _midflight_nudges:
             step.observation = (
                 ((step.observation or "") + "\n\n") if step.observation else ""
             ) + "\n\n".join(_midflight_nudges)
 
-        if maybe_final and (
-            _is_code_mode
-            or (_todo_protocol_required and _todo_protocol_visible)
-        ):
+        if maybe_final and (_is_code_mode or (_todo_protocol_required and _todo_protocol_visible)):
             _steps_with_current = steps + [step]
             from runtime.core.cerebrum.react_guards import (
                 GuardContext,
                 evaluate_guards,
             )
+
             _guard_ctx = GuardContext(
                 steps=_steps_with_current,
                 final_answer=maybe_final,
@@ -3197,13 +2217,13 @@ def stream_react_loop(
                 _guard_label, _guard_message = _guard_hit
                 maybe_final = None
                 step.observation = (
-                    ((step.observation or "") + "\n\n") if step.observation else ""
-                ) + f"[{_guard_label}]\n" + _guard_message
+                    (((step.observation or "") + "\n\n") if step.observation else "")
+                    + f"[{_guard_label}]\n"
+                    + _guard_message
+                )
 
         _public_progress_summary = (
-            _progress_summary
-            if _is_code_mode
-            else _build_research_progress_summary(steps + [step])
+            _progress_summary if _is_code_mode else _build_research_progress_summary(steps + [step])
         )
 
         yield {
@@ -3248,7 +2268,8 @@ def stream_react_loop(
                 "current_phase": _current_phase,
             }
             if _ckpt_journal_auto is not None and hasattr(
-                _ckpt_journal_auto, "write_react_checkpoint",
+                _ckpt_journal_auto,
+                "write_react_checkpoint",
             ):
                 with contextlib.suppress(Exception):
                     _ckpt_journal_auto.write_react_checkpoint(
@@ -3275,13 +2296,15 @@ def stream_react_loop(
         # pattern from Anthropic's harness-design research.
         if step_evaluator is not None:
             try:
-                _eval_score = step_evaluator({
-                    "iteration": step.iteration,
-                    "thought": step.thought,
-                    "action": step.action,
-                    "observation": step.observation,
-                    "progress_summary": _public_progress_summary,
-                })
+                _eval_score = step_evaluator(
+                    {
+                        "iteration": step.iteration,
+                        "thought": step.thought,
+                        "action": step.action,
+                        "observation": step.observation,
+                        "progress_summary": _public_progress_summary,
+                    }
+                )
                 if isinstance(_eval_score, (int, float)) and _eval_score < 0.3:
                     _retry_hint = (
                         f"[evaluator] The previous step scored {_eval_score:.2f}/1.0 "
@@ -3290,10 +2313,12 @@ def stream_react_loop(
                     )
                     from runtime.platform.models.llm import Message
 
-                    messages.append(Message(
-                        role="user",
-                        content=_retry_hint,
-                    ))
+                    messages.append(
+                        Message(
+                            role="user",
+                            content=_retry_hint,
+                        )
+                    )
                     yield {
                         "type": "evaluator_retry_hint",
                         "iteration": step.iteration,
@@ -3311,6 +2336,7 @@ def stream_react_loop(
         if planning_mode:
             try:
                 from runtime.platform.process.session import current_session as _cs_plan
+
                 _session_obj = _cs_plan()
             except (ImportError, AttributeError):  # noqa: BLE001
                 _session_obj = None
@@ -3332,22 +2358,18 @@ def stream_react_loop(
             _current_phase = _detect_phase(step, _current_phase)
             _progress_summary = _build_progress_summary(steps, _working_set, _current_phase)
 
-        _has_real_observation = bool(
-            step.observation and step.observation != "N/A"
-        )
+        _has_real_observation = bool(step.observation and step.observation != "N/A")
         _has_response_tool_calls = bool(getattr(resp, "tool_calls", None))
-        _length_limit_should_continue = (
-            _length_limited
-            and not (_has_response_tool_calls or _has_real_observation)
+        _length_limit_should_continue = _length_limited and not (
+            _has_response_tool_calls or _has_real_observation
         )
-        _checkpoint_has_final = (
-            maybe_final is not None and not _length_limit_should_continue
-        )
+        _checkpoint_has_final = maybe_final is not None and not _length_limit_should_continue
         if react_task_id is not None and _checkpoint_has_final:
             _ckpt_journal = getattr(stack, "journal", None)
             if _ckpt_journal is not None and hasattr(_ckpt_journal, "write_react_checkpoint"):
                 try:
                     from runtime.platform.models import ArmId
+
                     _ckpt_journal.write_react_checkpoint(
                         react_task_id,
                         arm_id=ArmId("react_arm"),
@@ -3399,7 +2421,9 @@ def stream_react_loop(
             _logger.info(
                 "react_loop auto-pause at iter %d · task %s · %d left · "
                 "will checkpoint next loop top",
-                i + 1, react_task_id, remaining,
+                i + 1,
+                react_task_id,
+                remaining,
             )
             _pause.request_pause(
                 task_id=str(react_task_id),
@@ -3456,13 +2480,16 @@ def stream_react_loop(
                 from runtime.core.cerebrum.token_juicer import (
                     juice as _juice,
                 )
+
                 if _juice_enabled():
                     _juiced, _stats = _juice(step.observation)
                     if _stats.passes:
                         _obs_for_model = _juiced
                         _logger.debug(
                             "token_juice iter %d · %d→%d chars (%.1f%% saved) passes=%s",
-                            i + 1, _stats.before, _stats.after,
+                            i + 1,
+                            _stats.before,
+                            _stats.after,
                             (1 - _stats.ratio) * 100,
                             ",".join(_stats.passes),
                         )
@@ -3473,7 +2500,10 @@ def stream_react_loop(
             )
 
         messages = _compress_context(
-            messages, max_tokens=60000, router=router, model=effective_model,
+            messages,
+            max_tokens=60000,
+            router=router,
+            model=effective_model,
             is_code_mode=_is_code_mode,
         )
 
@@ -3553,14 +2583,11 @@ def stream_react_loop(
             if final_m:
                 final_answer = final_m.group(1).strip()
                 if _is_code_mode:
-                    _guard_message = (
-                        _path_verification_policy_guard(
-                            steps,
-                            final_answer,
-                            is_code_mode=True,
-                        )
-                        or _code_mode_completion_guard(steps, final_answer)
-                    )
+                    _guard_message = _path_verification_policy_guard(
+                        steps,
+                        final_answer,
+                        is_code_mode=True,
+                    ) or _code_mode_completion_guard(steps, final_answer)
                     if _guard_message:
                         final_answer = (
                             "我还不能把这个 code 任务标记为完成。\n\n"
@@ -3613,6 +2640,7 @@ def stream_react_loop(
         from runtime.safety.experiments.scheduler import (
             get_camouflage_scheduler,
         )
+
         get_camouflage_scheduler().record_outcome(
             str(react_task_id),
             success=final_success,
@@ -3643,62 +2671,6 @@ def stream_react_loop(
     )
 
 
-_REACT_SPLITTER: ABSplitter | None = None
-
-
-def _build_default_splitter() -> ABSplitter:
-    from runtime.safety.experiments.variant import ABSplitter, Variant
-    return ABSplitter(
-        [Variant(name=r.name, payload=r, weight=1.0) for r in _DEFAULT_REACT_RECIPES],
-        seed=42,
-    )
-
-
-def _get_splitter() -> ABSplitter:
-    global _REACT_SPLITTER
-    if _REACT_SPLITTER is None:
-        _REACT_SPLITTER = _build_default_splitter()
-    return _REACT_SPLITTER
-
-
-def pick_react_variant(
-    *, task_id: str | None = None,
-) -> ReActRecipe:
-    splitter = _get_splitter()
-    v = splitter.next_variant() if task_id is None else splitter.assign_for(task_id)
-    return v.payload  # type: ignore[return-value]
-
-
-def record_react_variant_result(variant_name: str, *, success: bool) -> None:
-    splitter = _get_splitter()
-    with contextlib.suppress(KeyError):
-        splitter.record_outcome(variant_name, success=success)
-
-
-def get_react_variant_stats() -> list[dict[str, Any]]:
-    splitter = _get_splitter()
-    out: list[dict[str, Any]] = []
-    for name in splitter.names:
-        s = splitter.stats[name]
-        v = splitter.get(name)
-        recipe: ReActRecipe = v.payload
-        out.append({
-            "name": name,
-            "max_iterations": recipe.max_iterations,
-            "temperature": recipe.temperature,
-            "assignments": s.assignments,
-            "successes": s.successes,
-            "failures": s.failures,
-            "success_rate": round(s.success_rate, 3),
-        })
-    return out
-
-
-def _reset_react_variants_for_tests() -> None:
-    global _REACT_SPLITTER
-    _REACT_SPLITTER = None
-
-
 def run_react_loop(
     stack: StackProtocol,
     intent: ParsedIntent,
@@ -3713,7 +2685,9 @@ def run_react_loop(
     approval_provider: ApprovalProvider | None = None,
 ) -> ReActResult | None:
     gen = stream_react_loop(
-        stack, intent, agent,
+        stack,
+        intent,
+        agent,
         model=model,
         max_iterations=max_iterations,
         temperature=temperature,

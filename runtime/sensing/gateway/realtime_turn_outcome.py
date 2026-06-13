@@ -1,0 +1,449 @@
+"""Turn outcome inspection for the realtime runtime.
+
+Split out of ``realtime_cerebrum.py``: decide whether a finished turn's
+code changes are verified (test/lint/build evidence present and
+matching), and build the structured metadata that failed / successful
+turns contribute to the evolution proposal ledger.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import logging
+import os
+from typing import TYPE_CHECKING, Any
+
+from runtime.platform.models import ParsedIntent
+from runtime.protocol import (
+    ErrorItem,
+    FileChangeItem,
+    ItemStatus,
+    Turn,
+    TurnParams,
+    VerificationItem,
+)
+from runtime.sensing.gateway.realtime_turn_input import (
+    _agent_id_from_params,
+    _preview_text,
+    _turn_mode,
+)
+
+if TYPE_CHECKING:
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+_logger = logging.getLogger(__name__)
+
+_CODE_CHANGE_SUFFIXES = frozenset(
+    {
+        ".py",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".mjs",
+        ".cjs",
+        ".go",
+        ".rs",
+        ".java",
+        ".kt",
+        ".kts",
+        ".swift",
+        ".cs",
+        ".cpp",
+        ".cc",
+        ".cxx",
+        ".c",
+        ".h",
+        ".hpp",
+        ".rb",
+        ".php",
+        ".sh",
+        ".ps1",
+        ".sql",
+        ".vue",
+        ".svelte",
+    }
+)
+
+_CODE_CHANGE_FILENAMES = frozenset(
+    {
+        "package.json",
+        "pnpm-lock.yaml",
+        "package-lock.json",
+        "yarn.lock",
+        "pyproject.toml",
+        "pytest.ini",
+        "ruff.toml",
+        "tsconfig.json",
+        "vite.config.ts",
+        "vite.config.js",
+        "next.config.js",
+        "next.config.mjs",
+        "go.mod",
+        "go.sum",
+        "cargo.toml",
+        "cargo.lock",
+        "dockerfile",
+        "docker-compose.yml",
+        "docker-compose.yaml",
+    }
+)
+
+
+def _is_code_change_path(path: str) -> bool:
+    normalized = path.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if normalized in _CODE_CHANGE_FILENAMES:
+        return True
+    _, ext = os.path.splitext(normalized)
+    return ext.lower() in _CODE_CHANGE_SUFFIXES
+
+
+def _file_change_items(turn: Turn) -> list[FileChangeItem]:
+    return [item for item in turn.items if isinstance(item, FileChangeItem)]
+
+
+def _verification_items(turn: Turn) -> list[VerificationItem]:
+    return [item for item in turn.items if isinstance(item, VerificationItem)]
+
+
+def _code_change_paths(turn: Turn) -> list[str]:
+    paths: list[str] = []
+    for item in _file_change_items(turn):
+        for change in item.changes:
+            if _is_code_change_path(change.path) and change.path not in paths:
+                paths.append(change.path)
+    return paths
+
+
+def _file_change_item_ids(turn: Turn) -> list[str]:
+    return [item.id for item in _file_change_items(turn)]
+
+
+def _normalized_path_key(path: str) -> str:
+    return path.replace("\\", "/").lower()
+
+
+def _verification_matches_code_changes(
+    item: VerificationItem,
+    *,
+    code_paths: list[str],
+    change_item_ids: list[str],
+) -> bool:
+    if not code_paths:
+        return False
+
+    code_path_keys = {_normalized_path_key(path) for path in code_paths}
+    change_id_set = set(change_item_ids)
+    related_ids = set(item.related_change_item_ids)
+    if related_ids:
+        return bool(related_ids & change_id_set)
+
+    related_path_keys = {
+        _normalized_path_key(path)
+        for path in item.related_files
+        if isinstance(path, str) and path.strip()
+    }
+    if related_path_keys:
+        return bool(related_path_keys & code_path_keys)
+
+    # No explicit relationship means a completed verification command is
+    # a turn-level check. Once relationship metadata exists, it must match.
+    return True
+
+
+def _turn_has_passing_code_verification(turn: Turn) -> bool:
+    code_paths = _code_change_paths(turn)
+    if not code_paths:
+        return True
+    change_item_ids = _file_change_item_ids(turn)
+    return any(
+        item.status == ItemStatus.COMPLETED
+        and _verification_matches_code_changes(
+            item,
+            code_paths=code_paths,
+            change_item_ids=change_item_ids,
+        )
+        for item in _verification_items(turn)
+    )
+
+
+def _turn_has_failed_code_verification(turn: Turn) -> bool:
+    code_paths = _code_change_paths(turn)
+    change_item_ids = _file_change_item_ids(turn)
+    for item in _verification_items(turn):
+        if item.status != ItemStatus.FAILED:
+            continue
+        if _verification_matches_code_changes(
+            item,
+            code_paths=code_paths,
+            change_item_ids=change_item_ids,
+        ):
+            return True
+        if not code_paths and any(_is_code_change_path(path) for path in item.related_files):
+            return True
+    return False
+
+
+def _turn_has_unverified_code_changes(turn: Turn) -> bool:
+    return bool(_code_change_paths(turn)) and not _turn_has_passing_code_verification(turn)
+
+
+def _turn_model(turn: Turn) -> str | None:
+    model = getattr(turn.params, "model", None) if getattr(turn, "params", None) else None
+    return model if isinstance(model, str) and model.strip() else None
+
+
+def _turn_goal_text(turn: Turn, intent: ParsedIntent | None) -> str:
+    if intent is not None:
+        goal = getattr(intent, "normalized_goal", None)
+        if isinstance(goal, str) and goal.strip():
+            return goal.strip()
+    params = getattr(turn, "params", None)
+    if params is not None:
+        parts: list[str] = []
+        for block in getattr(params, "input", []) or []:
+            if not isinstance(block, dict):
+                continue
+            text = block.get("text")
+            if isinstance(text, str) and text.strip():
+                parts.append(text.strip())
+        if parts:
+            return "\n".join(parts).strip()
+    return ""
+
+
+def _turn_failure_text(turn: Turn) -> str:
+    if isinstance(turn.error, dict):
+        message = turn.error.get("message")
+        if isinstance(message, str) and message.strip():
+            return message.strip()
+    for item in reversed(turn.items):
+        if isinstance(item, ErrorItem) and item.message.strip():
+            return item.message.strip()
+        if isinstance(item, VerificationItem) and item.status == ItemStatus.FAILED:
+            for candidate in (item.summary, item.stderr_tail, item.stdout_tail):
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+    return "turn failed"
+
+
+def _turn_item_counts(turn: Turn) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in turn.items:
+        item_type = getattr(item.type, "value", str(item.type))
+        counts[item_type] = counts.get(item_type, 0) + 1
+    return counts
+
+
+def _failed_turn_metadata(
+    turn: Turn,
+    *,
+    intent: ParsedIntent | None,
+    failure_source: str,
+) -> dict[str, Any]:
+    verification_items = _verification_items(turn)
+    failed_verifications = [
+        {
+            "command": item.command,
+            "kind": item.kind,
+            "summary": item.summary,
+            "exit_code": item.exit_code,
+            "related_files": list(item.related_files),
+            "related_change_item_ids": list(item.related_change_item_ids),
+        }
+        for item in verification_items
+        if item.status == ItemStatus.FAILED
+    ]
+    return {
+        "turn_id": turn.id,
+        "thread_id": turn.thread_id,
+        "failure_source": failure_source,
+        "goal": _turn_goal_text(turn, intent),
+        "error": _turn_failure_text(turn),
+        "status": str(turn.status.value if hasattr(turn.status, "value") else turn.status),
+        "item_counts": _turn_item_counts(turn),
+        "code_change_paths": _code_change_paths(turn),
+        "verification_count": len(verification_items),
+        "failed_verifications": failed_verifications,
+        "has_code_changes": bool(_code_change_paths(turn)),
+    }
+
+
+def _failed_turn_description(metadata: dict[str, Any]) -> str:
+    goal = str(metadata.get("goal") or "").strip()
+    error = str(metadata.get("error") or "").strip()
+    source = str(metadata.get("failure_source") or "turn_failure").strip()
+    goal_part = goal[:120] if goal else "(no goal)"
+    error_part = error[:120] if error else "turn failed"
+    return f"{source}: {error_part} | goal={goal_part}"
+
+
+def _successful_turn_metadata(
+    turn: Turn,
+    *,
+    intent: ParsedIntent | None,
+) -> dict[str, Any]:
+    return {
+        "turn_id": turn.id,
+        "thread_id": turn.thread_id,
+        "goal": _turn_goal_text(turn, intent),
+        "status": str(turn.status.value if hasattr(turn.status, "value") else turn.status),
+        "item_counts": _turn_item_counts(turn),
+        "code_change_paths": _code_change_paths(turn),
+        "verification_count": len(_verification_items(turn)),
+        "has_code_changes": bool(_code_change_paths(turn)),
+    }
+
+
+def _successful_turn_description(metadata: dict[str, Any]) -> str:
+    goal = str(metadata.get("goal") or "").strip()
+    goal_part = goal[:120] if goal else "(no goal)"
+    return f"turn_success | goal={goal_part}"
+
+
+# ── Turn telemetry / evolution records ─────────────────────────
+# Moved from ``CerebrumRuntime``; each function takes the runtime as
+# its first argument and best-effort writes to the trace store or the
+# evolution proposal ledger. Failures must never fail the turn.
+
+
+def _record_task_run_started(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    *,
+    text: str,
+    params: TurnParams,
+) -> None:
+    if runtime._trace_store is None:
+        return
+    with contextlib.suppress(Exception):
+        runtime._trace_store.record_task_run_started(
+            task_id=turn.id,
+            thread_id=turn.thread_id,
+            turn_id=turn.id,
+            agent_id=_agent_id_from_params(params),
+            title=_preview_text(text, limit=80),
+            goal=text,
+            mode=_turn_mode(params) or "react",
+            metadata={
+                "topology_id": getattr(params, "topology_id", None),
+                "model": getattr(params, "model", None),
+                "planning_mode": bool(getattr(params, "planning_mode", False)),
+            },
+        )
+
+
+def _record_task_run_finished(runtime: CerebrumRuntime, turn: Turn) -> None:
+    if runtime._trace_store is None:
+        return
+    status_value = str(getattr(turn.status, "value", turn.status) or "").lower()
+    if status_value in {"in_progress", "in-progress", "pending", ""}:
+        return
+    status = {
+        "completed": "completed",
+        "failed": "failed",
+        "interrupted": "interrupted",
+        "cancelled": "cancelled",
+        "canceled": "cancelled",
+    }.get(status_value, "unknown")
+    with contextlib.suppress(Exception):
+        runtime._trace_store.record_task_run_finished(
+            task_id=turn.id,
+            thread_id=turn.thread_id,
+            turn_id=turn.id,
+            agent_id=_agent_id_from_params(turn.params),
+            status=status,
+            reason=status_value,
+            metadata={
+                "item_count": len(getattr(turn, "items", []) or []),
+                "error": getattr(turn, "error", None),
+            },
+        )
+
+
+def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[str, Any]) -> None:
+    if runtime._trace_store is None:
+        return
+    kind = str(evt.get("type") or "")
+    event_type = {
+        "tool_start": "TOOL_CALL_START",
+        "tool_end": "TOOL_CALL_END",
+        "tool_background": "TOOL_CALL_BACKGROUND",
+        "react_completed": "REACT_COMPLETED",
+        "react_cancelled": "REACT_CANCELLED",
+        "react_error": "REACT_ERROR",
+    }.get(kind)
+    if event_type is None:
+        return
+    payload = dict(evt)
+    if "tool_name" in payload and "tool" not in payload:
+        payload["tool"] = payload.get("tool_name")
+    with contextlib.suppress(Exception):
+        runtime._trace_store.record_event(
+            event_type=event_type,
+            payload=payload,
+            thread_id=turn.thread_id,
+            turn_id=turn.id,
+            task_id=turn.id,
+            agent_id=_agent_id_from_params(turn.params),
+            item_id=str(evt.get("tool_call_id") or evt.get("item_id") or "") or None,
+        )
+
+
+def _record_failed_turn_proposal(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    *,
+    intent: ParsedIntent | None,
+    failure_source: str,
+) -> None:
+    """Persist a failed turn as evolution fuel.
+
+    This is deliberately best-effort and non-blocking from the
+    user's perspective: learning infrastructure must never make a
+    failed turn fail harder. The record is small but carries enough
+    structured metadata for GEPA/canary pipelines to sample real
+    failures instead of synthetic anecdotes.
+    """
+
+    try:
+        from runtime.safety.evolution.proposal_ledger import ProposalLedger
+
+        ledger = ProposalLedger(runtime._proposal_ledger_path)
+        metadata = _failed_turn_metadata(
+            turn,
+            intent=intent,
+            failure_source=failure_source,
+        )
+        ledger.propose(
+            kind="turn_failure",
+            description=_failed_turn_description(metadata),
+            proposer="realtime_cerebrum",
+            model=_turn_model(turn),
+            metadata=metadata,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("failed-turn proposal record skipped: %s", exc, exc_info=True)
+
+
+def _record_successful_turn_example(
+    runtime: CerebrumRuntime,
+    turn: Turn,
+    *,
+    intent: ParsedIntent | None,
+) -> None:
+    """Persist a compact successful turn as positive evolution fuel."""
+
+    try:
+        from runtime.safety.evolution.proposal_ledger import ProposalLedger
+
+        metadata = _successful_turn_metadata(turn, intent=intent)
+        ProposalLedger(runtime._proposal_ledger_path).propose(
+            kind="turn_success",
+            description=_successful_turn_description(metadata),
+            proposer="realtime_cerebrum",
+            model=_turn_model(turn),
+            metadata=metadata,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("successful-turn example record skipped: %s", exc, exc_info=True)

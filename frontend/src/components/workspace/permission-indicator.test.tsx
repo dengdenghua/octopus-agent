@@ -1,5 +1,4 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
@@ -22,26 +21,33 @@ describe("<PermissionIndicator />", () => {
       />,
     );
 
-    const trigger = screen.getByRole("button", {
-      name: "Permissions: Trusted",
-    });
+    const trigger = screen.getByTestId("permission-mode-trigger");
     expect(trigger).toBeInTheDocument();
+    expect(trigger).toHaveAccessibleName("Permissions: Trusted");
     expect(trigger).toHaveTextContent("Trusted");
     expect(trigger.className).toContain("bg-muted/45");
     expect(trigger.className).not.toContain("amber");
 
     openPermissionMenu(trigger);
 
-    expect(await screen.findByText("Confirm")).toBeInTheDocument();
+    expect(
+      await screen.findByTestId("permission-mode-menu"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("permission-mode-option-default"),
+    ).toHaveTextContent("Confirm");
+    expect(
+      screen.getByTestId("permission-mode-option-acceptEdits"),
+    ).toHaveTextContent("Edit files");
     expect(screen.getByText("Edit files")).toBeInTheDocument();
     expect(screen.getAllByText("Trusted").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Plan")).toBeInTheDocument();
 
     expect(
-      screen.queryByText(
+      screen.getByText(
         "Allow file edits automatically; still confirm other risky actions.",
       ),
-    ).not.toBeInTheDocument();
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Edit files"));
 
@@ -50,9 +56,7 @@ describe("<PermissionIndicator />", () => {
     });
   });
 
-  it("shows the mode description only on hover", async () => {
-    const user = userEvent.setup();
-
+  it("shows mode descriptions directly in the menu", async () => {
     renderWithProviders(
       <PermissionIndicator mode="plan" onModeChange={vi.fn()} />,
     );
@@ -62,14 +66,13 @@ describe("<PermissionIndicator />", () => {
     );
 
     const confirmItem = await screen.findByText("Confirm");
-    expect(screen.queryByText("Confirm before risky tool use.")).toBeNull();
-
-    await user.hover(confirmItem);
+    expect(confirmItem).toBeInTheDocument();
+    expect(screen.getByTestId("permission-mode-option-plan")).toHaveTextContent(
+      "Plan",
+    );
 
     expect(
-      await screen.findByRole("tooltip", {
-        name: "Confirm before risky tool use.",
-      }),
+      screen.getByText("Confirm before risky tool use."),
     ).toBeInTheDocument();
   });
 });

@@ -91,6 +91,42 @@ import {
   type DigitalTwinStatus,
 } from "./agent-world-data";
 
+function normalizeAgentDisplayKey(agent: AgentWorldAgent): string {
+  return (agent.display_name || agent.name || agent.id)
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function scoreAgentForDisplay(agent: AgentWorldAgent): number {
+  let score = 0;
+  if (agent.is_installed) score += 1_000_000_000;
+  if (BUILTIN_LOCAL_AGENT_IDS.has(agent.id)) score += 100_000_000;
+  if (agent.is_official) score += 10_000_000;
+  if (agent.is_featured) score += 1_000_000;
+  score += Math.max(0, agent.downloads ?? 0);
+  score += Math.max(0, agent.rating_count ?? 0) * 10;
+  score += Math.round(Math.max(0, agent.rating ?? 0) * 100);
+  return score;
+}
+
+function dedupeAgentWorldAgents(agents: AgentWorldAgent[]): AgentWorldAgent[] {
+  const byName = new Map<string, AgentWorldAgent>();
+  for (const agent of agents) {
+    const key = normalizeAgentDisplayKey(agent);
+    if (!key) continue;
+    const current = byName.get(key);
+    if (
+      !current ||
+      scoreAgentForDisplay(agent) > scoreAgentForDisplay(current)
+    ) {
+      byName.set(key, agent);
+    }
+  }
+  return Array.from(byName.values());
+}
 
 // ---------------------------------------------------------------------------
 // Agents Tab
@@ -261,6 +297,7 @@ function AgentsTab({
 }) {
   const { t } = useI18n();
   const [installingAll, setInstallingAll] = useState(false);
+  const [confirmInstallAll, setConfirmInstallAll] = useState(false);
   const visibleAgents = useMemo(
     () =>
       filteredAgents.slice().sort((a, b) => {
@@ -284,8 +321,16 @@ function AgentsTab({
   );
   const installableCount = agents.length - installedCount;
 
+  useEffect(() => {
+    setConfirmInstallAll(false);
+  }, [activeCategory, installableAgents.length]);
+
   const handleInstallAll = async () => {
     if (installingAll || installableAgents.length === 0) return;
+    if (!confirmInstallAll) {
+      setConfirmInstallAll(true);
+      return;
+    }
     setInstallingAll(true);
     let installed = 0;
     let failed = 0;
@@ -299,6 +344,7 @@ function AgentsTab({
       }
     }
     setInstallingAll(false);
+    setConfirmInstallAll(false);
     onInstallChange();
     if (installed > 0) {
       toast.success(
@@ -313,7 +359,7 @@ function AgentsTab({
 
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div data-testid="agents-loading-skeleton" className="space-y-3">
         <div className="h-8 w-full animate-pulse rounded-lg bg-muted" />
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -334,7 +380,10 @@ function AgentsTab({
       </div>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
-          <div className="flex gap-1.5 overflow-x-auto pb-1 pr-1">
+          <div
+            data-testid="agents-category-scroll"
+            className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 pr-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
+          >
             {AGENT_CATEGORY_FILTERS.map((category) => {
               const CategoryIcon = CATEGORY_ICONS[category];
               const count = categoryCounts.get(category) ?? 0;
@@ -346,7 +395,9 @@ function AgentsTab({
                 <Button
                   key={category}
                   type="button"
-                  variant={activeCategory === category ? "secondary" : "outline"}
+                  variant={
+                    activeCategory === category ? "secondary" : "outline"
+                  }
                   size="sm"
                   onClick={() => onCategoryChange(category)}
                   className={cn(
@@ -386,17 +437,27 @@ function AgentsTab({
             className="h-8 rounded-lg border border-border/50 bg-background/65 px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
             disabled={installingAll || installableAgents.length === 0}
             onClick={() => void handleInstallAll()}
+            title={
+              confirmInstallAll
+                ? `再次点击会安装当前筛选下的 ${installableAgents.length} 个 Agent`
+                : "需要二次确认"
+            }
           >
             {installingAll && (
               <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             )}
-            全部安装
+            {confirmInstallAll
+              ? `确认安装 ${installableAgents.length} 个`
+              : "全部安装"}
           </Button>
         </div>
       </div>
 
       {visibleAgents.length > 0 ? (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div
+          data-testid="agents-card-grid"
+          className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+        >
           {visibleAgents.map((agent) =>
             agent.is_installed ? (
               <AgentCard
@@ -418,7 +479,10 @@ function AgentsTab({
           )}
         </div>
       ) : (
-        <div className="flex flex-col items-center py-16">
+        <div
+          data-testid="agents-empty-state"
+          className="flex flex-col items-center py-16"
+        >
           <StoreIcon className="text-muted-foreground/30 mb-3 h-10 w-10" />
           <p className="text-muted-foreground text-sm">
             {t.agentWorld.noAgentsFound}
@@ -732,8 +796,10 @@ export function AgentWorldUnified() {
   }, [location.search]);
 
   // Filter agents
+  const dedupedAgents = useMemo(() => dedupeAgentWorldAgents(agents), [agents]);
+
   const filteredAgents = useMemo(() => {
-    let nextAgents = agents;
+    let nextAgents = dedupedAgents;
     if (activeCategory !== "all") {
       nextAgents = nextAgents.filter(
         (agent) => agent.category === activeCategory,
@@ -748,17 +814,17 @@ export function AgentWorldUnified() {
         a.author.toLowerCase().includes(query) ||
         a.tags.some((tag) => tag.toLowerCase().includes(query)),
     );
-  }, [activeCategory, agents, searchQuery]);
+  }, [activeCategory, dedupedAgents, searchQuery]);
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<AgentCategoryFilter, number>([
-      ["all", agents.length],
+      ["all", dedupedAgents.length],
     ]);
-    for (const agent of agents) {
+    for (const agent of dedupedAgents) {
       counts.set(agent.category, (counts.get(agent.category) ?? 0) + 1);
     }
     return counts;
-  }, [agents]);
+  }, [dedupedAgents]);
 
   const handleSelectAgent = useCallback((agent: AgentWorldAgent) => {
     setSelectedAgent(agent);
@@ -796,6 +862,7 @@ export function AgentWorldUnified() {
           <div className="relative w-full md:max-w-[280px]">
             <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
             <Input
+              data-testid="agents-search-input"
               placeholder={t.agentWorld.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -852,7 +919,7 @@ export function AgentWorldUnified() {
 
           <TabsContent value="agents" className="mt-0">
             <AgentsTab
-              agents={agents}
+              agents={dedupedAgents}
               filteredAgents={filteredAgents}
               loading={loading}
               activeCategory={activeCategory}

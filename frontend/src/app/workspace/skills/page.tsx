@@ -1,6 +1,14 @@
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import { PuzzleIcon, SearchIcon, SparklesIcon, ToggleLeftIcon, ToggleRightIcon, WrenchIcon } from "lucide-react";
+import {
+  CheckCircle2Icon,
+  PuzzleIcon,
+  SearchIcon,
+  SparklesIcon,
+  ToggleLeftIcon,
+  ToggleRightIcon,
+  WrenchIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -104,17 +112,22 @@ function InstalledSkillsPanel() {
   }, []);
 
   // Implementation note.
-  const handleToggle = useCallback(async (name: string, currentEnabled: boolean) => {
-    try {
-      await enableSkill(name, !currentEnabled);
-      // Optimistic update
-      setSkills((prev) =>
-        prev.map((s) =>
-          s.name === name ? { ...s, enabled: !currentEnabled } : s
-        )
-      );
-    } catch (e) { swallow(e); }
-  }, []);
+  const handleToggle = useCallback(
+    async (name: string, currentEnabled: boolean) => {
+      try {
+        await enableSkill(name, !currentEnabled);
+        // Optimistic update
+        setSkills((prev) =>
+          prev.map((s) =>
+            s.name === name ? { ...s, enabled: !currentEnabled } : s,
+          ),
+        );
+      } catch (e) {
+        swallow(e);
+      }
+    },
+    [],
+  );
 
   // Implementation note.
   const grouped = useMemo(() => {
@@ -124,9 +137,7 @@ function InstalledSkillsPanel() {
           const name = (s.name || "").toLowerCase();
           const desc = (s.description || "").toLowerCase();
           const aff = (s.affinity || []).join(" ").toLowerCase();
-          return (
-            name.includes(q) || desc.includes(q) || aff.includes(q)
-          );
+          return name.includes(q) || desc.includes(q) || aff.includes(q);
         })
       : skills;
 
@@ -147,7 +158,11 @@ function InstalledSkillsPanel() {
   );
 
   if (loading) {
-    return <div className="text-sm text-muted-foreground">{t.skillsPage.loadingSkills}</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        {t.skillsPage.loadingSkills}
+      </div>
+    );
   }
 
   if (error) {
@@ -181,6 +196,7 @@ function InstalledSkillsPanel() {
         <div className="relative flex-1 max-w-md">
           <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
+            data-testid="skills-search-input"
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -200,7 +216,7 @@ function InstalledSkillsPanel() {
       </div>
 
       {/* Implementation note. */}
-      <div className="space-y-8">
+      <div data-testid="skills-category-list" className="space-y-8">
         {CATEGORY_ORDER.filter((c) => (grouped[c.id]?.length ?? 0) > 0).map(
           (cat) => (
             <CategorySection
@@ -223,7 +239,10 @@ function InstalledSkillsPanel() {
 }
 
 function CategorySection({
-  title, count, skills, onToggle,
+  title,
+  count,
+  skills,
+  onToggle,
 }: {
   title: string;
   count: number;
@@ -238,7 +257,10 @@ function CategorySection({
           {count}
         </span>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div
+        data-testid="skills-card-grid"
+        className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+      >
         {skills.map((s) => (
           <SkillCard key={s.name} skill={s} onToggle={onToggle} />
         ))}
@@ -247,29 +269,34 @@ function CategorySection({
   );
 }
 
-function SkillCard({ skill, onToggle }: { skill: Skill; onToggle?: (name: string, enabled: boolean) => void }) {
+function SkillCard({
+  skill,
+  onToggle,
+}: {
+  skill: Skill;
+  onToggle?: (name: string, enabled: boolean) => void;
+}) {
   const { t } = useI18n();
   const tested = skill.has_tests;
   const isEnabled = skill.enabled !== false; // Implementation note.
   return (
     <div
       className={cn(
-        "group relative flex items-start gap-3 rounded-xl border border-border/50",
-        "bg-background/60 px-3 py-3 transition-colors",
+        "group relative grid grid-cols-[2rem_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border border-border/50",
+        "bg-background/60 px-3 py-2.5 transition-colors",
         "hover:border-border/80 hover:bg-background",
         !isEnabled && "opacity-60",
       )}
-      title={
-        [
-          skill.trusted_source && t.skillsPage.tooltipSource(skill.trusted_source),
-          skill.cost_profile && t.skillsPage.tooltipCost(skill.cost_profile),
-          (skill.affinity || []).length > 0 &&
-            t.skillsPage.tooltipTags((skill.affinity || []).join(", ")),
-          tested ? t.skillsPage.tooltipTested : t.skillsPage.tooltipUntested,
-        ]
-          .filter(Boolean)
-          .join("\n")
-      }
+      title={[
+        skill.trusted_source &&
+          t.skillsPage.tooltipSource(skill.trusted_source),
+        skill.cost_profile && t.skillsPage.tooltipCost(skill.cost_profile),
+        (skill.affinity || []).length > 0 &&
+          t.skillsPage.tooltipTags((skill.affinity || []).join(", ")),
+        tested ? t.skillsPage.tooltipTested : t.skillsPage.tooltipUntested,
+      ]
+        .filter(Boolean)
+        .join("\n")}
     >
       <div
         className={cn(
@@ -282,18 +309,29 @@ function SkillCard({ skill, onToggle }: { skill: Skill; onToggle?: (name: string
         <WrenchIcon className="size-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <div className="truncate text-[13px] font-medium">{skill.name}</div>
           {tested && (
-            <span
-              className="inline-block size-1.5 rounded-full bg-emerald-500/80"
-              title={t.skillsPage.testedDotTitle}
-            />
+            <span title={t.skillsPage.testedDotTitle}>
+              <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
+            </span>
           )}
         </div>
-        <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+        <div className="mt-0.5 line-clamp-1 text-[11px] leading-snug text-muted-foreground">
           {skill.description || t.skillsPage.noDescription}
         </div>
+        {(skill.affinity || []).length > 0 && (
+          <div className="mt-1 flex max-w-full gap-1 overflow-hidden">
+            {(skill.affinity || []).slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="max-w-28 truncate rounded border border-border/50 bg-muted/35 px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       {/* Implementation note. */}
       {onToggle && (
@@ -318,6 +356,16 @@ export default function SkillsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("installed");
+  const createSkillPrompt = [
+    "创建一个新的技能，请按下面结构和我确认后再生成：",
+    "",
+    "1. 技能名称：",
+    "2. 使用场景：",
+    "3. 输入参数：",
+    "4. 输出结果：",
+    "5. 安全边界：",
+    "6. 验证用例：",
+  ].join("\n");
 
   return (
     <WorkspaceContainer>
@@ -342,7 +390,11 @@ export default function SkillsPage() {
             <Button
               size="sm"
               className="bg-gradient-to-r from-purple-500 to-blue-500 text-white h-7 text-xs"
-              onClick={() => navigate("/workspace/realtime/new?mode=skill")}
+              onClick={() =>
+                navigate(
+                  `/workspace/realtime/new?mode=skill&draft=${encodeURIComponent(createSkillPrompt)}`,
+                )
+              }
             >
               <SparklesIcon className="mr-1 size-3.5" />
               {t.skillsPage.createButton}
@@ -355,11 +407,16 @@ export default function SkillsPage() {
             className="w-full flex-1 flex flex-col"
           >
             <TabsList className="rounded-lg bg-white/55 p-1 dark:bg-white/[0.04] w-fit">
-              <TabsTrigger value="installed">{t.skillsPage.tabInstalled}</TabsTrigger>
+              <TabsTrigger value="installed">
+                {t.skillsPage.tabInstalled}
+              </TabsTrigger>
             </TabsList>
 
             <div className="mt-3 flex-1 w-full">
-              <TabsContent value="installed" className="workspace-panel w-full rounded-lg p-4 shadow-sm border border-border/50 min-h-[500px] outline-none">
+              <TabsContent
+                value="installed"
+                className="workspace-panel w-full rounded-lg p-4 shadow-sm border border-border/50 min-h-[500px] outline-none"
+              >
                 <InstalledSkillsPanel />
               </TabsContent>
             </div>

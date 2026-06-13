@@ -1,6 +1,6 @@
 /* Implementation note. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BrainIcon,
@@ -72,7 +72,9 @@ export function KnowledgeGraphPanel() {
       setRelationships(entitiesData.relationships || []);
       setStats(statsData);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t.knowledgeGraph.loadFailed);
+      toast.error(
+        err instanceof Error ? err.message : t.knowledgeGraph.loadFailed,
+      );
     } finally {
       setLoading(false);
     }
@@ -82,11 +84,17 @@ export function KnowledgeGraphPanel() {
     void loadData();
   }, [loadData]);
 
-  const filteredEntities = entities.filter(
-    (e) =>
-      e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const trimmedSearchQuery = searchQuery.trim();
+  const filteredEntities = useMemo(() => {
+    const q = trimmedSearchQuery.toLowerCase();
+    if (!q) return entities;
+    return entities.filter(
+      (entity) =>
+        entity.name.toLowerCase().includes(q) ||
+        entity.description.toLowerCase().includes(q) ||
+        entity.entity_type.toLowerCase().includes(q),
+    );
+  }, [entities, trimmedSearchQuery]);
 
   if (loading) {
     return (
@@ -99,11 +107,7 @@ export function KnowledgeGraphPanel() {
   // Empty state · KG booted fresh with zero entities. Without this
   // the page renders 3 zero-count cards + an empty list · no hint
   // that the extractor hasn't had source material yet.
-  if (
-    entities.length === 0 &&
-    relationships.length === 0 &&
-    !searchQuery
-  ) {
+  if (entities.length === 0 && relationships.length === 0 && !searchQuery) {
     return (
       <div className="flex min-h-48 flex-col items-center justify-center gap-3 px-4 py-10 text-center">
         <div className="rounded-xl bg-gradient-to-br from-violet-500/10 to-purple-500/5 p-3 text-violet-600 dark:text-violet-400">
@@ -153,103 +157,137 @@ export function KnowledgeGraphPanel() {
       {viewMode === "graph" ? (
         <KnowledgeGraphView />
       ) : (
-      <>
-      {/* Implementation note. */}
-      {stats && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {t.knowledgeGraph.totalEntities}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total_entities}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {t.knowledgeGraph.totalRelationships}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.total_relationships}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {t.knowledgeGraph.entityTypesCount}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {Object.keys(stats.entity_types).length}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Implementation note. */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder={t.knowledgeGraph.searchPlaceholder}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Button variant="outline" size="icon" onClick={() => void loadData()}>
-          <RefreshCwIcon className="h-4 w-4" />
-        </Button>
-      </div>
-
-      {/* Implementation note. */}
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {filteredEntities.map((entity) => (
-          <Card key={entity.id}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <BrainIcon className="h-4 w-4 text-primary" />
-                <CardTitle className="text-base">{entity.name}</CardTitle>
-              </div>
-              <Badge variant="secondary">{entity.entity_type}</Badge>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground line-clamp-3">
-                {entity.description}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Implementation note. */}
-      <section>
-        <h3 className="mb-4 text-lg font-semibold flex items-center gap-2">
-          <NetworkIcon className="h-5 w-5 text-primary" />
-          {t.knowledgeGraph.relationshipsHeader}
-        </h3>
-        <div className="space-y-2">
-          {relationships.slice(0, 20).map((rel) => (
-            <div
-              key={rel.id}
-              className="flex items-center gap-2 rounded-lg border p-3"
-            >
-              <span className="font-medium">{rel.source_name}</span>
-              <Badge variant="outline">{rel.relationship_type}</Badge>
-              <span className="font-medium">{rel.target_name}</span>
+        <>
+          {/* Implementation note. */}
+          {stats && (
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {t.knowledgeGraph.totalEntities}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {stats.total_entities}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {t.knowledgeGraph.totalRelationships}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {stats.total_relationships}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    {t.knowledgeGraph.entityTypesCount}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {Object.keys(stats.entity_types).length}
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          ))}
-        </div>
-      </section>
-      </>
+          )}
+
+          {/* Implementation note. */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder={t.knowledgeGraph.searchPlaceholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => void loadData()}
+            >
+              <RefreshCwIcon className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>
+              {trimmedSearchQuery
+                ? `找到 ${filteredEntities.length} / ${entities.length} 个实体`
+                : `共 ${entities.length} 个实体`}
+            </span>
+            {trimmedSearchQuery && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setSearchQuery("")}
+              >
+                清除搜索
+              </Button>
+            )}
+          </div>
+
+          {/* Implementation note. */}
+          {filteredEntities.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              {filteredEntities.map((entity) => (
+                <Card key={entity.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-2">
+                      <BrainIcon className="h-4 w-4 text-primary" />
+                      <CardTitle className="text-base">{entity.name}</CardTitle>
+                    </div>
+                    <Badge variant="secondary">{entity.entity_type}</Badge>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground line-clamp-3">
+                      {entity.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
+              <SearchIcon className="mx-auto mb-2 size-5 text-muted-foreground/50" />
+              <div className="text-sm font-medium">没有匹配的实体</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                换一个关键词，或清除搜索查看全部知识实体。
+              </p>
+            </div>
+          )}
+
+          {/* Implementation note. */}
+          <section>
+            <h3 className="mb-4 text-lg font-semibold flex items-center gap-2">
+              <NetworkIcon className="h-5 w-5 text-primary" />
+              {t.knowledgeGraph.relationshipsHeader}
+            </h3>
+            <div className="space-y-2">
+              {relationships.slice(0, 20).map((rel) => (
+                <div
+                  key={rel.id}
+                  className="flex items-center gap-2 rounded-lg border p-3"
+                >
+                  <span className="font-medium">{rel.source_name}</span>
+                  <Badge variant="outline">{rel.relationship_type}</Badge>
+                  <span className="font-medium">{rel.target_name}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
       )}
     </div>
   );

@@ -516,6 +516,25 @@ class SkillForge:
                                 "_prev", outputs[f"n{i-1}"],
                             )
 
+                    # Safety chokepoint. This in-process composite handler
+                    # calls each sub-skill's handler DIRECTLY (not via
+                    # executor.execute_step), so every pre-execution gate —
+                    # capability-permission, injection-taint, immunity,
+                    # file-safety — is bypassed. Identical to the persisted
+                    # twin in suckers/forged_persistence; re-apply the shared
+                    # gate sequence per sub-skill, fail-closed.
+                    from runtime.execution.tool_engine.skill_gate import (
+                        gate_inner_dispatch,
+                    )
+                    _block = gate_inner_dispatch(
+                        skill, call_args, caller="forged_composite",
+                    )
+                    if _block is not None:
+                        success = False
+                        failed_at = i
+                        error_type = _block.error_type
+                        error_msg = _block.message
+                        break
                     outputs[f"n{i}"] = skill.handler(**call_args)
                 except TemplateResolutionError as e:
                     # Previous step's output shape didn't match the

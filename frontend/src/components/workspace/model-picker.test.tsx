@@ -41,11 +41,36 @@ vi.mock("@/providers/AuthProvider", () => ({
   }),
 }));
 const CATALOG = [
-  { id: "minimax-m2.5", display_name: "MiniMax M2.5", multiplier: "0.2x", recommended: true },
-  { id: "glm-4.7", display_name: "GLM-4.7", multiplier: "0.6x", recommended: true },
-  { id: "kimi-k2.5", display_name: "Kimi K2.5", multiplier: "0.3x", recommended: false },
-  { id: "deepseek-v3.2", display_name: "DeepSeek-V3.2", multiplier: "0.5x", recommended: false },
-  { id: "qwen3-max", display_name: "Qwen3-Max", multiplier: "0.2x", recommended: false },
+  {
+    id: "minimax-m2.5",
+    display_name: "MiniMax M2.5",
+    multiplier: "0.2x",
+    recommended: true,
+  },
+  {
+    id: "glm-4.7",
+    display_name: "GLM-4.7",
+    multiplier: "0.6x",
+    recommended: true,
+  },
+  {
+    id: "kimi-k2.5",
+    display_name: "Kimi K2.5",
+    multiplier: "0.3x",
+    recommended: false,
+  },
+  {
+    id: "deepseek-v3.2",
+    display_name: "DeepSeek-V3.2",
+    multiplier: "0.5x",
+    recommended: false,
+  },
+  {
+    id: "qwen3-max",
+    display_name: "Qwen3-Max",
+    multiplier: "0.2x",
+    recommended: false,
+  },
 ];
 
 beforeEach(() => {
@@ -103,19 +128,21 @@ describe("<ModelPicker />", () => {
 
   it("renders the default trigger with the resolved model name", () => {
     setup();
-    expect(
-      screen.getByRole("button", { name: "选择模型" }),
-    ).toHaveTextContent("Kimi K2.5");
+    expect(screen.getByRole("button", { name: "选择模型" })).toHaveTextContent(
+      "Kimi K2.5",
+    );
   });
 
   it("opens the dropdown with the official tab active by default", async () => {
     const user = userEvent.setup();
     setup();
 
-    await user.click(screen.getByRole("button", { name: "选择模型" }));
-    const officialTab = await screen.findByRole("tab", { name: "官方模型" });
+    await user.click(screen.getByTestId("model-picker-trigger"));
+    const menu = await screen.findByTestId("model-picker-menu");
+    expect(menu).toBeInTheDocument();
+    const officialTab = await screen.findByTestId("model-picker-tab-official");
     expect(officialTab).toHaveAttribute("data-state", "active");
-    expect(screen.getByRole("tab", { name: "自定义" })).toBeInTheDocument();
+    expect(screen.getByTestId("model-picker-tab-custom")).toBeInTheDocument();
   });
 
   it("keeps reasoning effort inside the model dropdown", async () => {
@@ -200,9 +227,9 @@ describe("<ModelPicker />", () => {
     // dropdown portal. Label is in a nested span · find the button
     // via textContent.
     const root = menu.parentElement ?? menu;
-    const miniMaxBtn = Array.from(
-      root.querySelectorAll("button"),
-    ).find((b) => (b.textContent ?? "").includes("MiniMax M2.5"));
+    const miniMaxBtn = Array.from(root.querySelectorAll("button")).find((b) =>
+      (b.textContent ?? "").includes("MiniMax M2.5"),
+    );
     expect(miniMaxBtn).toBeTruthy();
     await user.click(miniMaxBtn!);
 
@@ -217,7 +244,9 @@ describe("<ModelPicker />", () => {
     await user.click(screen.getByRole("tab", { name: "自定义" }));
 
     const menu = await screen.findByRole("menu");
-    expect(within(menu).getByText("Claude Opus 4.6 (mirror)")).toBeInTheDocument();
+    expect(
+      within(menu).getByText("Claude Opus 4.6 (mirror)"),
+    ).toBeInTheDocument();
     // Right-hint resolves "claude" → "Claude" provider label.
     expect(within(menu).getByText("Claude")).toBeInTheDocument();
   });
@@ -255,9 +284,9 @@ describe("<ModelPicker />", () => {
 
     await user.click(screen.getByRole("button", { name: "选择模型" }));
 
-    const customTab = await screen.findByRole("tab", { name: "自定义" });
+    const customTab = await screen.findByTestId("model-picker-tab-custom");
     expect(customTab).toHaveAttribute("data-state", "active");
-    expect(screen.getByRole("tab", { name: "官方模型" })).toBeInTheDocument();
+    expect(screen.getByTestId("model-picker-tab-official")).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "官方模型" }));
     const menu = await screen.findByRole("menu");
@@ -279,6 +308,20 @@ describe("<ModelPicker />", () => {
     );
     expect(customBtn).toBeTruthy();
     await user.click(customBtn!);
+    expect(onChange).toHaveBeenCalledWith("claude-opus-4-6-mirror");
+  });
+
+  it("guest users do not see a disabled official model as the current trigger label", async () => {
+    authState.isGuest = true;
+    authState.isAuthenticated = false;
+    const { onChange } = setup("minimax-m2.7");
+
+    const trigger = screen.getByRole("button", { name: "选择模型" });
+    expect(
+      await screen.findByText("Claude Opus 4.6 (mirror)"),
+    ).toBeInTheDocument();
+    expect(trigger).toHaveTextContent("Claude Opus 4.6 (mirror)");
+    expect(trigger).not.toHaveTextContent("MiniMax M2.5");
     expect(onChange).toHaveBeenCalledWith("claude-opus-4-6-mirror");
   });
 

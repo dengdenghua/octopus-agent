@@ -1,4 +1,9 @@
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  test,
+  expect,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 
 /**
  * E2E regression lockdown · 2026-04-24
@@ -14,7 +19,7 @@ import { test, expect, type APIRequestContext, type Page } from "@playwright/tes
  *   #2 · Cost tab always 0 tokens · direct_llm path didn't emit budget_commit
  *   #5 · <Header> async Client Component warning (RSC code in SPA)
  *   #6 · Team invite page leaked hard-coded Chinese in en-US locale
- *   workflow-as-skill · UI save → /api/skills shows workflow_<id[:8]>
+ *   workflow-as-skill · workflow editor contract is intentionally gated off
  */
 
 const BACKEND = "http://127.0.0.1:8000";
@@ -35,13 +40,18 @@ const BACKEND = "http://127.0.0.1:8000";
  * ``HTMLTextAreaElement.prototype`` / ``HTMLInputElement.prototype``
  * and dispatch an ``input`` event so React's onChange fires.
  */
-async function reactFill(page: Page, selector: string, text: string): Promise<void> {
+async function reactFill(
+  page: Page,
+  selector: string,
+  text: string,
+): Promise<void> {
   const el = page.locator(selector).filter({ visible: true }).first();
   await el.waitFor({ state: "visible", timeout: 10_000 });
   await el.evaluate((node: Element, value: string) => {
-    const proto = (node instanceof HTMLTextAreaElement)
-      ? HTMLTextAreaElement.prototype
-      : HTMLInputElement.prototype;
+    const proto =
+      node instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
     if (!setter) throw new Error("no native value setter");
     setter.call(node, value);
@@ -120,43 +130,21 @@ test.describe("Bug#2 regression · Cost tab reflects real chat cost", () => {
 // workflow-as-skill · UI save registers skill
 // ═══════════════════════════════════════════════════════════
 
-test.describe("workflow-as-skill · saving registers a skill", () => {
-  test("POST /api/workflow-editor then /api/skills lists workflow_<id>", async ({
-    request,
+test.describe("workflow-as-skill · editor contract unavailable", () => {
+  test("workspace workflow route shows fallback instead of dead editor controls", async ({
+    page,
   }) => {
-    const created = await request.post(`${BACKEND}/api/workflow-editor`, {
-      data: {
-        name: "e2e-regression-wf",
-        description: "lockdown spec · expect skill reg",
-        definition: {
-          nodes: [
-            { id: "start-1", type: "start", data: {} },
-            { id: "tool-1", type: "tool", data: { path: "." } },
-            { id: "end-1", type: "end", data: {} },
-          ],
-          edges: [
-            { source: "start-1", target: "tool-1" },
-            { source: "tool-1", target: "end-1" },
-          ],
-        },
-      },
-    });
-    expect(created.ok()).toBeTruthy();
-    const wf = await created.json();
-    const wfId = wf.id as string;
-    const expectedSkill = `workflow_${wfId.slice(0, 8)}`;
+    await page.goto("/#/workspace/workflows");
+    await page.waitForLoadState("domcontentloaded");
 
-    try {
-      const skills = await request.get(`${BACKEND}/api/skills`);
-      expect(skills.ok()).toBeTruthy();
-      const body = await skills.json();
-      const items = body.skills ?? body;
-      const names: string[] = items.map((s: { name: string }) => s.name);
-      expect(names).toContain(expectedSkill);
-    } finally {
-      // Cleanup · keep /api/skills catalog tidy between runs
-      await request.delete(`${BACKEND}/api/workflow-editor/${wfId}`);
-    }
+    await expect(page.getByText("工作流编辑器暂不可用")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText("workflow-editor")).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /新建实时任务/ }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save" })).not.toBeVisible();
   });
 });
 
@@ -188,7 +176,9 @@ test.describe("Bug#1 regression · Intelligence subscriptions", () => {
       expect(body.topic).toBe(topic);
       expect(body.id).toMatch(/^sub_/);
 
-      const listed = await request.get(`${BACKEND}/api/intelligence/subscriptions`);
+      const listed = await request.get(
+        `${BACKEND}/api/intelligence/subscriptions`,
+      );
       expect(listed.ok()).toBeTruthy();
       const listedBody = await listed.json();
       expect(
@@ -214,7 +204,9 @@ test.describe("Bug#1 regression · Intelligence subscriptions", () => {
         "textarea",
         `Create a temporary subscription named ${topic} for E2E cleanup verification.`,
       );
-      await page.getByRole("button", { name: /生成订阅草案|Generate Draft/ }).click();
+      await page
+        .getByRole("button", { name: /生成订阅草案|Generate Draft/ })
+        .click();
 
       const createButton = page.getByRole("button", {
         name: /创建这个订阅|Create Subscription/,
@@ -227,7 +219,9 @@ test.describe("Bug#1 regression · Intelligence subscriptions", () => {
         page.getByText(/订阅添加成功|Subscription added/i),
       ).toBeVisible({ timeout: 5000 });
 
-      const listed = await page.request.get(`${BACKEND}/api/intelligence/subscriptions`);
+      const listed = await page.request.get(
+        `${BACKEND}/api/intelligence/subscriptions`,
+      );
       expect(listed.ok()).toBeTruthy();
       const listedBody = await listed.json();
       expect(
@@ -261,7 +255,9 @@ test.describe("Bug#6 regression · Team join page i18n", () => {
     await page.goto("/#/workspace/team/join");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page.getByRole("heading", { name: "Join team" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Join team" }),
+    ).toBeVisible();
     await expect(
       page.getByText("The invite link is missing a token."),
     ).toBeVisible();

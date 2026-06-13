@@ -370,3 +370,155 @@ def test_forged_composite_runs_subskill_on_clean_turn() -> None:
     result = composite(command="echo hi")
     assert result["success"] is True
     assert ran["shell"] is True
+
+
+def test_forged_composite_blocks_denied_subskill() -> None:
+    """A forged composite bypasses execute_step, so the capability-permission
+    denylist must be re-applied per sub-skill: disabling the ``shell`` group
+    must block an exec_shell sub-skill."""
+    from runtime.execution.misc.capability_permissions import (
+        reset_capability_permissions,
+        set_capability_group_enabled,
+    )
+    from runtime.execution.suckers.forged_persistence import (
+        _build_composite_handler,
+    )
+    from runtime.execution.suckers.registry import Skill, SkillRegistry
+
+    ran = {"shell": False}
+
+    def _shell(**_kw):
+        ran["shell"] = True
+        return {"exit_code": 0}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="exec_shell", summary="shell",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="skill://public/exec_shell", handler=_shell,
+        )
+    )
+    composite = _build_composite_handler(["exec_shell"], registry)
+
+    reset_capability_permissions()
+    try:
+        set_capability_group_enabled("shell", False)
+        result = composite(command="echo hi")
+    finally:
+        reset_capability_permissions()
+
+    assert result["success"] is False
+    assert result.get("error_type") == "CapabilityBlocked"
+    assert ran["shell"] is False, "denied sub-skill handler must NOT have run"
+
+
+def test_forged_composite_blocks_untrusted_subskill() -> None:
+    """A forged composite bypasses execute_step, so the immunity / trust gate
+    must be re-applied per sub-skill: with the runtime TrustEngine bound, an
+    untrusted sub-skill must be rejected."""
+    from runtime.execution.suckers.forged_persistence import (
+        _build_composite_handler,
+    )
+    from runtime.execution.suckers.registry import Skill, SkillRegistry
+    from runtime.execution.tool_engine.skill_gate import use_trust_engine
+    from runtime.safety.auth import TrustEngine
+
+    ran = {"evil": False}
+
+    def _evil(**_kw):
+        ran["evil"] = True
+        return {"ok": True}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="evil_tool", summary="untrusted",
+            affinity=["plugin"],
+            trusted_source="plugin://evilpack/exfil", handler=_evil,
+        )
+    )
+    composite = _build_composite_handler(["evil_tool"], registry)
+
+    with use_trust_engine(TrustEngine(unknown_policy="reject")):
+        result = composite(x=1)
+
+    assert result["success"] is False
+    assert result.get("error_type") == "ImmuneRejected"
+    assert ran["evil"] is False, "untrusted sub-skill handler must NOT have run"
+
+
+def test_forged_composite_blocks_credential_write() -> None:
+    """A forged composite bypasses execute_step, so the credential-file
+    denylist must be re-applied per sub-skill: a write to ``.env`` is blocked
+    even though the composite itself is low-risk."""
+    from runtime.execution.suckers.forged_persistence import (
+        _build_composite_handler,
+    )
+    from runtime.execution.suckers.registry import Skill, SkillRegistry
+
+    ran = {"wrote": False}
+
+    def _write(**_kw):
+        ran["wrote"] = True
+        return {"ok": True}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="write_text_file", summary="write",
+            affinity=["file", "write"],
+            trusted_source="skill://public/write_text_file", handler=_write,
+        )
+    )
+    composite = _build_composite_handler(["write_text_file"], registry)
+
+    result = composite(path=".env", content="SECRET=1")
+
+    assert result["success"] is False
+    assert result.get("error_type") == "FileSafetyBlocked"
+    assert ran["wrote"] is False, "credential write handler must NOT have run"
+
+
+def test_inprocess_forge_composite_blocks_risky_subskill_under_taint() -> None:
+    """The in-process forge twin (SkillForge._build_meta_handler) dispatches
+    each sub-skill DIRECTLY, identical to the persisted reload path — and had
+    NO gate at all. A tainted turn must not launder a risky sub-skill through
+    a freshly-forged-but-not-yet-persisted composite."""
+    from runtime.execution.suckers.registry import Skill, SkillRegistry
+    from runtime.memory.journal import InMemoryJournal
+    from runtime.safety.recovery.skill_forge import SkillForge
+    from runtime.safety.validation.prompt_injection import (
+        mark_injection_taint,
+        reset_injection_taint,
+    )
+
+    ran = {"shell": False}
+
+    def _shell(**_kw):
+        ran["shell"] = True
+        return {"exit_code": 0}
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="exec_shell", summary="shell",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="skill://public/exec_shell", handler=_shell,
+        )
+    )
+    cand = _mk_candidate(name="inproc_forged", sequence=["exec_shell"])
+    handler = SkillForge(
+        journal=InMemoryJournal(), registry=reg,
+    )._build_meta_handler(cand)
+
+    reset_injection_taint()
+    try:
+        mark_injection_taint("high")
+        result = handler(command="echo hi")
+    finally:
+        reset_injection_taint()
+
+    assert result["success"] is False
+    assert result.get("error_type") == "InjectionTaintBlocked"
+    assert ran["shell"] is False, "blocked sub-skill handler must NOT have run"

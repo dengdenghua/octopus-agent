@@ -31,8 +31,11 @@ test.describe("Chat golden path", () => {
     await page.goto("/#/workspace/chats/new");
     await page.waitForLoadState("domcontentloaded");
 
-    const chatLink = page.getByRole("link", { name: "Chats" });
-    await expect(chatLink).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/#\/workspace\/chats\/new/);
+    await expect(page.getByText("Octopus").first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator("textarea").first()).toBeVisible();
   });
 
   test("new chat page has a message input", async ({ page }) => {
@@ -40,7 +43,9 @@ test.describe("Chat golden path", () => {
     await page.waitForLoadState("domcontentloaded");
 
     const input = page
-      .locator("textarea, [contenteditable=true], [role=textbox], input[type=text]")
+      .locator(
+        "textarea, [contenteditable=true], [role=textbox], input[type=text]",
+      )
       .first();
     await expect(input).toBeVisible({ timeout: 15_000 });
   });

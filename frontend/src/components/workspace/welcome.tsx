@@ -1,5 +1,5 @@
 import { useSearchParams } from "react-router-dom";
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,6 @@ export function Welcome({
 }) {
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
-  const wavedRef = useRef(false);
   const isDeep = useMemo(() => mode === "deep", [mode]);
   const isSkillSeed = searchParams.get("mode") === "skill";
   const colors = useMemo(() => {
@@ -24,29 +23,25 @@ export function Welcome({
     }
     return ["var(--color-foreground)"];
   }, [isDeep]);
-  useEffect(() => {
-    wavedRef.current = true;
-  }, []);
+  const modeLabel = isDeep ? "Deep Research" : "Agent Mode";
+
   return (
     <div
       className={cn(
-        "mx-auto flex w-full flex-col items-center justify-center gap-2 px-8 py-4 text-center",
+        "mx-auto flex w-full flex-col items-center justify-center gap-3 px-5 py-4 text-center sm:px-8",
         className,
       )}
     >
-      <div className="text-2xl font-bold">
+      <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/72 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+        <span className="size-1.5 rounded-full bg-primary" />
+        {modeLabel}
+      </div>
+      <div className="text-2xl font-semibold tracking-tight">
         {isSkillSeed ? (
-          `✨ ${t.welcome.createYourOwnSkill} ✨`
+          t.welcome.createYourOwnSkill
         ) : (
           <div className="flex items-center gap-2">
-            <div
-              className={cn(
-                "inline-block",
-                !wavedRef.current ? "animate-wave" : "",
-              )}
-            >
-              {isDeep ? "🚀" : "👋"}
-            </div>
+            <span className="inline-block size-2 rounded-full bg-primary/80" />
             <AuroraText colors={colors}>{t.welcome.greeting}</AuroraText>
           </div>
         )}
@@ -59,11 +54,11 @@ export function Welcome({
           horizontally, and on desktop it rendered Latin text in
           monospace while the rest of the UI was sans-serif. */}
       {isSkillSeed ? (
-        <p className="text-muted-foreground whitespace-pre-line text-sm">
+        <p className="max-w-xl text-muted-foreground whitespace-pre-line text-sm leading-6">
           {t.welcome.createYourOwnSkillDescription}
         </p>
       ) : (
-        <p className="text-muted-foreground whitespace-pre-line text-sm">
+        <p className="max-w-xl text-muted-foreground whitespace-pre-line text-sm leading-6">
           {t.welcome.description}
         </p>
       )}

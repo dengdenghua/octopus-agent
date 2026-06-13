@@ -8,7 +8,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CopilotPanel } from "@/components/browser/copilot-panel";
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
-import { UnifiedStoreOverlay } from "@/components/store/unified-store";
 import {
   BrowserStoreProvider,
   setAppMode,
@@ -22,8 +21,11 @@ import { WorkspaceSurfaceSwitch } from "@/components/workspace/workspace-sidebar
 
 const isWindows = (): boolean =>
   typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
-const isMac = (): boolean =>
-  typeof navigator !== "undefined" && navigator.userAgent.includes("Mac");
+const inElectron = (): boolean =>
+  typeof window !== "undefined" && !!window.octopus?.isElectron;
+
+const CHROME_WEB_STORE_EXTENSIONS_URL =
+  "https://chromewebstore.google.com/category/extensions";
 
 /* Implementation note. */
 const ACTIVE_DEVICE_WIDTH = {
@@ -48,15 +50,29 @@ function BrowserShell() {
   const [activeHandle, setActiveHandle] = useState<WebviewTabHandle | null>(
     null,
   );
-  const [storeOpen, setStoreOpen] = useState(false);
   const [sidePanelHovered, setSidePanelHovered] = useState(false);
   const [sidePanelPinned, setSidePanelPinned] = useState(false);
   const sidePanelCloseTimerRef = useRef<number | null>(null);
+  const electron = inElectron();
   const activeTabId = activeTab?.id ?? null;
   const activeTabUrl = activeTab?.url ?? "";
   const activeTabTitle = activeTab?.title ?? "";
   const activeTabFavicon = activeTab?.favicon;
   const activeTabLoading = activeTab?.isLoading ?? false;
+
+  const openExtensionsStore = useCallback(() => {
+    if (window.octopus?.app?.openExternal) {
+      void window.octopus.app.openExternal(CHROME_WEB_STORE_EXTENSIONS_URL);
+      return;
+    }
+
+    const opened = window.open(
+      CHROME_WEB_STORE_EXTENSIONS_URL,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    if (!opened) openTab(CHROME_WEB_STORE_EXTENSIONS_URL);
+  }, [openTab]);
 
   // Implementation note.
   // Implementation note.
@@ -261,24 +277,24 @@ function BrowserShell() {
       {/* Implementation note. */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div
-          className="flex h-12 shrink-0 items-center gap-2 border-b border-border/45 bg-sidebar/65 px-2 shadow-[inset_0_-1px_0_rgba(255,255,255,0.36)] backdrop-blur-2xl"
+          className="flex h-11 shrink-0 items-center gap-1 border-b border-border/45 bg-sidebar/65 px-2 shadow-[inset_0_-1px_0_rgba(255,255,255,0.36)] backdrop-blur-2xl"
           style={
             {
-              paddingLeft: isMac() ? 80 : 8,
-              paddingRight: isWindows() ? 160 : 8,
+              paddingLeft: 18,
+              paddingRight: isWindows() && electron ? 160 : 8,
               WebkitAppRegion: "drag",
             } as React.CSSProperties
           }
         >
           <div
-            className="-ml-2 flex h-8 w-[209px] shrink-0 items-center justify-center"
+            className="flex h-8 w-[150px] shrink-0 items-center"
             style={
               {
                 WebkitAppRegion: "no-drag",
               } as React.CSSProperties
             }
           >
-            <WorkspaceSurfaceSwitch active="browser" />
+            <WorkspaceSurfaceSwitch active="browser" placement="topbar" />
           </div>
           <div className="flex h-8 min-w-0 flex-1 items-center">
             <TabBar />
@@ -316,7 +332,7 @@ function BrowserShell() {
         {/* URL bar */}
         <UrlBar
           webviewHandle={activeHandle}
-          onOpenExtensions={() => setStoreOpen(true)}
+          onOpenExtensions={openExtensionsStore}
         />
 
         {/* Implementation note. */}
@@ -371,7 +387,6 @@ function BrowserShell() {
           </div>
         </div>
       </div>
-      <UnifiedStoreOverlay open={storeOpen} onOpenChange={setStoreOpen} />
     </div>
   );
 }

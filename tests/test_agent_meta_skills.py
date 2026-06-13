@@ -325,3 +325,111 @@ def test_use_capability_allows_inner_action_on_clean_turn() -> None:
     )
     assert result["ok"] is True
     assert ran["shell"] is True
+
+
+def test_use_capability_blocks_denied_inner_action() -> None:
+    """use_capability bypasses execute_step, so the capability-permission
+    denylist must be re-applied at the inner dispatch: disabling the
+    ``shell`` capability group must block an inner exec_shell."""
+    from runtime.execution.misc.capability_permissions import (
+        reset_capability_permissions,
+        set_capability_group_enabled,
+    )
+
+    ran = {"shell": False}
+
+    def _shell(**_kw):
+        ran["shell"] = True
+        return {"exit_code": 0}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="exec_shell", summary="run a shell command",
+            affinity=["shell", "exec", "dangerous"],
+            trusted_source="plugin://dangerpack/exec_shell", handler=_shell,
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    reset_capability_permissions()
+    try:
+        set_capability_group_enabled("shell", False)
+        result = registry.get("use_capability").handler(
+            capability_id="dangerpack", action="exec_shell",
+            args={"command": "echo hi"},
+        )
+    finally:
+        reset_capability_permissions()
+
+    assert result["ok"] is False
+    assert "capability" in result.get("error", "")
+    assert ran["shell"] is False, "denied inner handler must NOT have run"
+
+
+def test_use_capability_blocks_untrusted_inner_action() -> None:
+    """use_capability bypasses execute_step, so the immunity / trust gate
+    must be re-applied at the inner dispatch: with the runtime TrustEngine
+    bound, dispatching to an untrusted inner skill must be rejected."""
+    from runtime.execution.tool_engine.skill_gate import use_trust_engine
+    from runtime.safety.auth import TrustEngine
+
+    ran = {"evil": False}
+
+    def _evil(**_kw):
+        ran["evil"] = True
+        return {"ok": True}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="evil_tool", summary="untrusted inner tool",
+            affinity=["plugin"],
+            # non-public source → not matched by default trusted_sources
+            trusted_source="plugin://evilpack/exfil", handler=_evil,
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    # unknown_policy="reject" → an untrusted source returns verdict "reject",
+    # which is the only immunity verdict execute_step (and the shared gate)
+    # blocks on.
+    engine = TrustEngine(unknown_policy="reject")
+    with use_trust_engine(engine):
+        result = registry.get("use_capability").handler(
+            capability_id="evilpack", action="evil_tool", args={"x": 1},
+        )
+
+    assert result["ok"] is False
+    assert "immune_reject" in result.get("error", "")
+    assert ran["evil"] is False, "untrusted inner handler must NOT have run"
+
+
+def test_use_capability_blocks_credential_file_write() -> None:
+    """use_capability bypasses execute_step, so the credential-file
+    denylist must be re-applied: an inner write to ``.env`` is blocked even
+    though the surrounding meta-skill is low-risk."""
+    ran = {"wrote": False}
+
+    def _write(**_kw):
+        ran["wrote"] = True
+        return {"ok": True}
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="write_text_file", summary="write a file",
+            affinity=["file", "write"],
+            trusted_source="plugin://fspack/write", handler=_write,
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    result = registry.get("use_capability").handler(
+        capability_id="fspack", action="write_text_file",
+        args={"path": ".env", "content": "SECRET=1"},
+    )
+
+    assert result["ok"] is False
+    assert "file_safety" in result.get("error", "")
+    assert ran["wrote"] is False, "credential write handler must NOT have run"

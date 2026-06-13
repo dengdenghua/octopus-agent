@@ -16,9 +16,14 @@ from runtime.execution.misc.file_write_leases import (
     acquire_file_write_lease,
 )
 from runtime.execution.suckers import Skill, SkillRegistry
+from runtime.execution.tool_engine.skill_gate import (
+    antigen_for,
+    canonical_tool_path,
+    file_safety_target,
+    use_trust_engine,
+)
 from runtime.memory.journal import InMemoryJournal, Journal
 from runtime.platform.models import (
-    AntigenSignature,
     ArmId,
     Budget,
     CostEntry,
@@ -198,7 +203,7 @@ class ToolExecutor:
                 args=args,
                 predicted_cost=predicted_cost,
             )
-            sig = self._antigen_for(skill)
+            sig = antigen_for(skill)
 
             allowed_by_capability, capability_reason = _check_capability_permission(
                 sucker_id,
@@ -589,7 +594,7 @@ class ToolExecutor:
                     # etc. — regardless of scope. A sandbox-scoped write to
                     # a `.env` is in-scope yet still a credential write, so
                     # this layer is complementary, not redundant.
-                    _fs_target = _file_safety_target(skill, args)
+                    _fs_target = file_safety_target(skill, args)
                     if _fs_target is not None:
                         _fs_verdict = check_file_write(_fs_target)
                         if not _fs_verdict.allow:
@@ -609,10 +614,17 @@ class ToolExecutor:
                                 caller=caller,
                             ),
                         )
-                    output, retry_tags = _call_handler_with_transient_retry(
-                        skill.handler,
-                        args,
-                    )
+                    # Bind the runtime TrustEngine as the ambient engine for
+                    # the handler call. A meta-skill (use_capability / forged
+                    # composite) dispatches to an inner handler DIRECTLY,
+                    # bypassing this execute_step; binding here lets that
+                    # nested dispatch run the SAME immunity policy via
+                    # skill_gate.gate_inner_dispatch.
+                    with use_trust_engine(self.immunity):
+                        output, retry_tags = _call_handler_with_transient_retry(
+                            skill.handler,
+                            args,
+                        )
                     status: ExecutionStatus = "success"
                     error_type: str | None = None
                     stderr_tags: list[str] = retry_tags
@@ -949,18 +961,6 @@ class ToolExecutor:
             return step
 
 
-    @staticmethod
-    def _antigen_for(skill: Skill) -> AntigenSignature:
-        return AntigenSignature(
-            entity_id=skill.trusted_source,
-            entity_type="skill",
-            content_hash=hashlib.blake2b(
-                skill.name.encode("utf-8"), digest_size=8
-            ).hexdigest(),
-            origin="public" if skill.trusted_source.startswith("skill://public") else "custom",
-        )
-
-
 # ═══════════════════════════════════════════════════════════
 # helpers
 # ═══════════════════════════════════════════════════════════
@@ -1012,7 +1012,7 @@ def _read_before_write_violation(
 ) -> str | None:
     if skill_name not in _READ_BEFORE_WRITE_TOOLS:
         return None
-    target = _canonical_tool_path(args)
+    target = canonical_tool_path(args)
     if target is None or not target.exists():
         return None
 
@@ -1042,21 +1042,7 @@ def _file_write_lease_target(skill: Skill, args: dict[str, Any]) -> Path | None:
         return None
     if not (affinity & {"write", "edit", "delete", "dangerous"}):
         return None
-    return _canonical_tool_path(args)
-
-
-def _file_safety_target(skill: Skill, args: dict[str, Any]) -> Path | None:
-    """Write target to vet against the credential-file denylist.
-
-    Same mutation gate as the lease target, minus the ``"file"`` tag
-    requirement — any write/edit/delete/dangerous skill that names a
-    concrete path is checked, so a mis-tagged write skill can't slip a
-    credential write past the denylist.
-    """
-    affinity = set(skill.affinity or [])
-    if not (affinity & {"write", "edit", "delete", "dangerous"}):
-        return None
-    return _canonical_tool_path(args)
+    return canonical_tool_path(args)
 
 
 def _file_write_lease_owner(
@@ -1077,7 +1063,7 @@ def _record_successful_read(
         return
     if isinstance(output, dict) and output.get("error"):
         return
-    path = _canonical_tool_path(args)
+    path = canonical_tool_path(args)
     if path is None:
         return
     try:
@@ -1094,21 +1080,6 @@ def _record_successful_read(
         session.metadata[_READ_TRACKING_KEY] = read_paths
     if key not in set(str(p) for p in read_paths):
         read_paths.append(key)
-
-
-def _canonical_tool_path(args: dict[str, Any]) -> Path | None:
-    raw = args.get("path") or args.get("file_path") or args.get("filepath")
-    if not isinstance(raw, str) or not raw.strip():
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        base = args.get("sandbox_dir") or args.get("cwd")
-        if isinstance(base, str) and base.strip():
-            path = Path(base).expanduser() / path
-    try:
-        return path.resolve(strict=False)
-    except OSError:
-        return path
 
 
 def _path_key(path: Path) -> str:

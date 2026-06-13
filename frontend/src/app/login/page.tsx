@@ -23,7 +23,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getAuthProviders, isMoliliDisabled, moliliSmsSend } from "@/core/auth/api";
+import {
+  getAuthProviders,
+  isMoliliDisabled,
+  moliliSmsSend,
+} from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
@@ -87,7 +91,9 @@ function SmsLoginForm() {
       if (isMoliliDisabled(err)) {
         toast.error(t.auth.errors.moliliNotEnabled);
       } else {
-        toast.error(err instanceof Error ? err.message : t.auth.errors.sendFailed);
+        toast.error(
+          err instanceof Error ? err.message : t.auth.errors.sendFailed,
+        );
       }
     } finally {
       setSending(false);
@@ -111,7 +117,9 @@ function SmsLoginForm() {
       toast.success(t.auth.success.loginSuccess);
       navigate("/workspace");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t.auth.errors.loginFailed);
+      toast.error(
+        err instanceof Error ? err.message : t.auth.errors.loginFailed,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -157,36 +165,34 @@ function SmsLoginForm() {
             disabled={sending || cooldown > 0}
             className="shrink-0"
           >
-            {cooldown > 0 ? `${cooldown}s` : sending ? t.auth.sending : t.auth.sendCode}
+            {cooldown > 0
+              ? `${cooldown}s`
+              : sending
+                ? t.auth.sending
+                : t.auth.sendCode}
           </Button>
         </div>
       </div>
-      <Button
-        type="submit"
-        className="w-full"
-        disabled={submitting}
-      >
+      <Button type="submit" className="w-full" disabled={submitting}>
         {submitting ? t.auth.loggingIn : t.auth.login}
         {!submitting && <ArrowRightIcon className="size-4" />}
       </Button>
       <p className="px-2 text-center text-[11px] leading-5 text-slate-500">
         {t.auth.terms.autoRegister}
-        {t.auth.terms.agreeTo}
-        <a
-          href="/terms"
+        {t.auth.terms.agreeTo}{" "}
+        <Link
+          to="/terms"
           className="text-slate-700 underline-offset-2 hover:text-blue-700 hover:underline"
-          rel="noreferrer"
         >
           {t.auth.terms.userAgreement}
-        </a>
-        {t.common.other}
-        <a
-          href="/privacy"
+        </Link>{" "}
+        {t.common.other}{" "}
+        <Link
+          to="/privacy"
           className="text-slate-700 underline-offset-2 hover:text-blue-700 hover:underline"
-          rel="noreferrer"
         >
           {t.auth.terms.privacyPolicy}
-        </a>
+        </Link>
       </p>
     </form>
   );
@@ -208,7 +214,9 @@ function GuestLoginForm() {
         navigate("/workspace", { replace: true });
       }, 100);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t.auth.errors.enterFailed);
+      toast.error(
+        err instanceof Error ? err.message : t.auth.errors.enterFailed,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -217,7 +225,9 @@ function GuestLoginForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-sm font-medium text-slate-900">{t.auth.guestMode.title}</p>
+        <p className="text-sm font-medium text-slate-900">
+          {t.auth.guestMode.title}
+        </p>
         <ul className="mt-2 space-y-1.5 text-xs text-slate-600">
           {t.auth.guestMode.features.map((feature, index) => (
             <li key={index} className="flex items-start gap-2">
@@ -285,7 +295,9 @@ export default function LoginPage() {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="animate-pulse text-sm text-slate-500">{t.common.loading}</div>
+        <div className="animate-pulse text-sm text-slate-500">
+          {t.common.loading}
+        </div>
       </div>
     );
   }
@@ -338,7 +350,9 @@ export default function LoginPage() {
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm">
                     <Icon className="size-3.5" />
                   </span>
-                  <span className="text-sm font-medium text-slate-800">{step}</span>
+                  <span className="text-sm font-medium text-slate-800">
+                    {step}
+                  </span>
                 </li>
               );
             })}
@@ -373,7 +387,9 @@ export default function LoginPage() {
                 <Tabs defaultValue="sms" className="w-full">
                   <TabsList className="mb-5 grid w-full grid-cols-2">
                     <TabsTrigger value="sms">{t.auth.phoneNumber}</TabsTrigger>
-                    <TabsTrigger value="guest">{t.auth.guestMode.title}</TabsTrigger>
+                    <TabsTrigger value="guest">
+                      {t.auth.guestMode.title}
+                    </TabsTrigger>
                   </TabsList>
                   <TabsContent value="sms">
                     <SmsLoginForm />
@@ -389,7 +405,10 @@ export default function LoginPage() {
               {authStatus?.allow_registration && (
                 <div className="mt-4 text-center text-sm text-muted-foreground">
                   {t.auth.terms.autoRegister}
-                  <Link to="/register" className="text-blue-700 hover:text-blue-800">
+                  <Link
+                    to="/register"
+                    className="text-blue-700 hover:text-blue-800"
+                  >
                     {t.auth.login}
                   </Link>
                 </div>

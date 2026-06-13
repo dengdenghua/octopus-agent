@@ -1,4 +1,3 @@
-
 import { Link, useLocation } from "react-router-dom";
 import { useMemo } from "react";
 
@@ -28,8 +27,13 @@ export function WorkspaceContainer({
   // Implementation note.
   return (
     <div
-      className={cn("flex h-screen w-full flex-col px-3 pb-3 md:px-4", className)}
-      style={inElectron() ? { paddingTop: ELECTRON_TITLE_BAR_HEIGHT } : undefined}
+      className={cn(
+        "flex h-screen w-full flex-col px-3 pb-3 md:px-4",
+        className,
+      )}
+      style={
+        inElectron() ? { paddingTop: ELECTRON_TITLE_BAR_HEIGHT } : undefined
+      }
       {...props}
     >
       {inElectron() && (
@@ -71,9 +75,7 @@ export function WorkspaceHeader({
           <BreadcrumbList>
             <BreadcrumbItem className="hidden md:block">
               <BreadcrumbLink asChild>
-                <Link to="/workspace">
-                  {t.breadcrumb.workspace}
-                </Link>
+                <Link to="/workspace">{t.breadcrumb.workspace}</Link>
               </BreadcrumbLink>
             </BreadcrumbItem>
             {segments.map((seg, idx) => {
@@ -130,7 +132,9 @@ export function WorkspaceBody({
           "The React Flow parent container needs a width and a height
           to render the graph" and render blank. Regression discovered
           2026-04-24 by browser-side regression sweep. */}
-      <div className="flex w-full flex-1 min-h-0 flex-col items-center">{children}</div>
+      <div className="flex w-full flex-1 min-h-0 flex-col items-center">
+        {children}
+      </div>
     </main>
   );
 }
@@ -148,6 +152,7 @@ function nameOfSegment(
   if (segment === "desktop-organizer") return t.sidebar.navDesktopOrganizer;
   if (segment === "knowledge") return t.sidebar.navKnowledgeGraph;
   if (segment === "evolution") return t.sidebar.evolution;
+  if (segment === "workflows") return "工作流";
   if (segment === "reflex") return t.sidebar.navReflex;
   if (segment === "observability") return t.sidebar.observability;
   if (segment === "diagnostics") return t.sidebar.diagnostics;

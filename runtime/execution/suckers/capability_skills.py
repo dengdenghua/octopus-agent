@@ -489,24 +489,25 @@ def _use_capability_for_registry(registry: SkillRegistry):
         call_args = _coerce_args(args)
         if request and "request" not in call_args and "query" not in call_args:
             call_args["request"] = request
-        # Injection-taint chokepoint. This meta-skill dispatches to the inner
-        # handler DIRECTLY (not via executor.execute_step), so the executor's
-        # taint gate is bypassed — a tainted turn could otherwise launder a
-        # risky action (exec_shell / write / egress) through use_capability.
-        # Re-apply the gate here, fail-closed; defer_if_handled=False because
-        # the single-action approval gate reviewed use_capability, NOT this
-        # inner tool. (Broader gaps — immunity / file-safety also bypassed by
-        # this direct dispatch — are tracked separately.)
-        from runtime.safety.approval.approval_gate import injection_taint_block
-        _inj = injection_taint_block(
-            resolved, str(call_args)[:200], defer_if_handled=False,
+        # Safety chokepoint. This meta-skill dispatches to the inner handler
+        # DIRECTLY (not via executor.execute_step), so EVERY pre-execution
+        # gate the executor enforces — capability-permission, injection-taint,
+        # immunity, file-safety — is bypassed. A tainted / denied / untrusted /
+        # credential-targeting inner action could otherwise be laundered
+        # through this low-risk-named meta-skill. Re-apply the shared gate
+        # sequence here, fail-closed (defer_taint_if_handled=False: the
+        # single-action approval gate reviewed use_capability, NOT this inner
+        # tool).
+        from runtime.execution.tool_engine.skill_gate import gate_inner_dispatch
+        _block = gate_inner_dispatch(
+            skill, call_args, caller=f"use_capability:{entry.get('id')}",
         )
-        if _inj is not None:
+        if _block is not None:
             return {
                 "ok": False,
                 "capability_id": entry.get("id"),
                 "action": resolved,
-                "error": f"injection_taint_block: {_inj}",
+                "error": _block.message,
             }
         try:
             result = skill.handler(**call_args)

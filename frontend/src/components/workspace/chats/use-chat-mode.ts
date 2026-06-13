@@ -17,6 +17,8 @@ export function useSpecificChatMode() {
     if (threadIdFromPath !== "new" || searchParams.get("mode") !== "skill") {
       return undefined;
     }
+    const draft = searchParams.get("draft")?.trim();
+    if (draft) return draft;
     return t.inputBox.createSkillPrompt;
   }, [threadIdFromPath, searchParams, t.inputBox.createSkillPrompt]);
   const lastInitialValueRef = useRef<string | undefined>(undefined);
@@ -40,4 +42,3 @@ export function useSpecificChatMode() {
     }
   }, [inputInitialValue]);
 }
-

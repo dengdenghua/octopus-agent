@@ -98,7 +98,8 @@ function extractLatestTodos(events: LiveToolEvent[]): TodoItem[] {
 
 function isLiveTodoStream(events: LiveToolEvent[]): boolean {
   return events.some(
-    (event) => event.status === "running" || event.status === "waiting_approval",
+    (event) =>
+      event.status === "running" || event.status === "waiting_approval",
   );
 }
 
@@ -146,7 +147,10 @@ export function TodoPanel({
     () => extractLatestTodos(liveToolEvents),
     [liveToolEvents],
   );
-  const live = useMemo(() => isLiveTodoStream(liveToolEvents), [liveToolEvents]);
+  const live = useMemo(
+    () => isLiveTodoStream(liveToolEvents),
+    [liveToolEvents],
+  );
   if (todos.length === 0) return null;
 
   const completed = todos.filter((item) => item.status === "completed").length;
@@ -223,7 +227,9 @@ export function TodoPanel({
       </div>
       <button
         type="button"
-        aria-label={open ? t.todoPanel.collapseTaskPlan : t.todoPanel.expandTaskPlan}
+        aria-label={
+          open ? t.todoPanel.collapseTaskPlan : t.todoPanel.expandTaskPlan
+        }
         className="block w-full px-3 pb-0.5"
         onClick={() => setOpen((value) => !value)}
       >
@@ -237,7 +243,11 @@ export function TodoPanel({
       {open && (
         <div className="max-h-44 overflow-y-auto px-3 py-2">
           {todos.map((item, index) => (
-            <TodoRow key={`${index}-${item.content}`} item={item} live={live} />
+            <TodoRow
+              key={`${item.status}-${index}-${item.content}`}
+              item={item}
+              live={live}
+            />
           ))}
         </div>
       )}

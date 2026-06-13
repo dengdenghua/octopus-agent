@@ -10,11 +10,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const PERMISSION_OPTIONS: PermissionMode[] = [
@@ -65,6 +60,7 @@ export function PermissionIndicator({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          data-testid="permission-mode-trigger"
           className={cn(
             "flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
             PERMISSION_TRIGGER_TONE,
@@ -78,7 +74,12 @@ export function PermissionIndicator({
           <ChevronDownIcon className="size-3 opacity-70" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-36">
+      <DropdownMenuContent
+        data-testid="permission-mode-menu"
+        side="top"
+        align="start"
+        className="w-64"
+      >
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           {t.chatInputBox.permissionModeLabel}
         </DropdownMenuLabel>
@@ -91,22 +92,19 @@ export function PermissionIndicator({
             return (
               <DropdownMenuRadioItem
                 key={option}
+                data-testid={`permission-mode-option-${option}`}
                 value={option}
-                className="h-8 py-1.5 text-left text-xs font-medium"
+                className="items-start py-2 text-left"
                 aria-label={`${item.label}: ${item.description}`}
               >
-                <Tooltip delayDuration={250}>
-                  <TooltipTrigger asChild>
-                    <span className="truncate">{item.label}</span>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="right"
-                    align="center"
-                    className="max-w-56 text-xs leading-5"
-                  >
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium leading-5">
+                    {item.label}
+                  </span>
+                  <span className="block text-[11px] leading-4 text-muted-foreground">
                     {item.description}
-                  </TooltipContent>
-                </Tooltip>
+                  </span>
+                </span>
               </DropdownMenuRadioItem>
             );
           })}

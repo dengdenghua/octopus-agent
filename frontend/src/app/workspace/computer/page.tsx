@@ -1,4 +1,11 @@
-import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIcon,
   CheckCircle2Icon,
@@ -55,7 +62,12 @@ import type { Model } from "@/core/models/types";
 import { cn } from "@/lib/utils";
 
 type ActionKind = "click" | "move" | "type" | "key" | "wait";
-type LogItem = { id: string; title: string; detail: string; tone: "ok" | "warn" | "error" };
+type LogItem = {
+  id: string;
+  title: string;
+  detail: string;
+  tone: "ok" | "warn" | "error";
+};
 type ScreenPoint = { x: number; y: number };
 type VisualTarget = ScreenPoint & {
   label: string;
@@ -87,17 +99,36 @@ export default function ComputerAutomationPage() {
   const [plan, setPlan] = useState<ComputerActionPlan | null>(null);
   const [preview, setPreview] = useState<ComputerPreview | null>(null);
   const [previewExpiresAt, setPreviewExpiresAt] = useState<number | null>(null);
-  const [selectedPoint, setSelectedPoint] = useState<{ x: number; y: number } | null>(null);
-  const [highlightedAction, setHighlightedAction] = useState<Record<string, unknown> | null>(null);
-  const [screenshotImageBox, setScreenshotImageBox] = useState<ScreenshotImageBox | null>(null);
+  const [selectedPoint, setSelectedPoint] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [highlightedAction, setHighlightedAction] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [screenshotImageBox, setScreenshotImageBox] =
+    useState<ScreenshotImageBox | null>(null);
   const [leaseOwner, setLeaseOwner] = useState<ComputerLeaseOwner | null>(null);
   const [logs, setLogs] = useState<LogItem[]>([]);
-  const [busy, setBusy] = useState<"status" | "capture" | "ground" | "vision" | "plan" | "preview" | "execute" | "release" | null>(null);
+  const [busy, setBusy] = useState<
+    | "status"
+    | "capture"
+    | "ground"
+    | "vision"
+    | "plan"
+    | "preview"
+    | "execute"
+    | "release"
+    | null
+  >(null);
   const screenshotFrameRef = useRef<HTMLDivElement | null>(null);
   const screenshotImageRef = useRef<HTMLImageElement | null>(null);
 
   const addLog = useCallback((item: Omit<LogItem, "id">) => {
-    setLogs((prev) => [{ ...item, id: crypto.randomUUID() }, ...prev].slice(0, 12));
+    setLogs((prev) =>
+      [{ ...item, id: crypto.randomUUID() }, ...prev].slice(0, 12),
+    );
   }, []);
 
   useEffect(() => {
@@ -147,8 +178,7 @@ export default function ComputerAutomationPage() {
     previewExpiresAt === null
       ? null
       : Math.max(0, Math.ceil((previewExpiresAt - now) / 1000));
-  const previewExpired =
-    previewExpiresAt !== null && previewSecondsLeft === 0;
+  const previewExpired = previewExpiresAt !== null && previewSecondsLeft === 0;
   const deviceState = getDeviceState(status);
   const activeAction = getActiveAction({
     busy,
@@ -166,10 +196,13 @@ export default function ComputerAutomationPage() {
   });
   const leaseState = getLeaseState(status?.lease, leaseOwner);
   const leaseBlocked = leaseState.tone === "blocked";
+  const computerUnavailable =
+    !status || !status.ok || !status.pyautogui_available;
+  const computerActionDisabled = busy !== null || computerUnavailable;
 
   const mergeLease = useCallback((lease?: ComputerLease) => {
     if (!lease) return;
-    setStatus((current) => current ? { ...current, lease } : current);
+    setStatus((current) => (current ? { ...current, lease } : current));
   }, []);
 
   // Auto-clear once the server-side token would be 404. We log it so
@@ -200,7 +233,9 @@ export default function ComputerAutomationPage() {
       setStatus(data);
       addLog({
         title: data.ok ? "本机助手可用" : "本机助手不可用",
-        detail: data.ok ? `屏幕 ${data.screen.width}x${data.screen.height}` : data.screen.error || "",
+        detail: data.ok
+          ? `屏幕 ${data.screen.width}x${data.screen.height}`
+          : data.screen.error || "",
         tone: data.ok ? "ok" : "error",
       });
     } catch (error) {
@@ -272,7 +307,13 @@ export default function ComputerAutomationPage() {
 
   const action = useMemo<ComputerAction>(() => {
     if (actionKind === "click" || actionKind === "move") {
-      return { action: actionKind, x: Number(x), y: Number(y), button: "left", clicks: 1 };
+      return {
+        action: actionKind,
+        x: Number(x),
+        y: Number(y),
+        button: "left",
+        clicks: 1,
+      };
     }
     if (actionKind === "type") {
       return { action: "type", text, interval: 0.01 };
@@ -338,7 +379,11 @@ export default function ComputerAutomationPage() {
       });
     } catch (error) {
       swallow(error);
-      addLog({ title: "坐标点击预演失败", detail: String(error), tone: "error" });
+      addLog({
+        title: "坐标点击预演失败",
+        detail: String(error),
+        tone: "error",
+      });
     } finally {
       setBusy(null);
     }
@@ -350,7 +395,10 @@ export default function ComputerAutomationPage() {
     setHighlightedAction(null);
     clearPreview();
     try {
-      const data = await planComputerActions(goal, { capture: true, leaseOwner });
+      const data = await planComputerActions(goal, {
+        capture: true,
+        leaseOwner,
+      });
       setPlan(data);
       mergeLease(data.lease);
       if (data.screenshot) setScreenshot(data.screenshot);
@@ -369,7 +417,9 @@ export default function ComputerAutomationPage() {
     }
   };
 
-  const acceptSuggestion = (suggestion: ComputerActionPlan["suggestions"][number]) => {
+  const acceptSuggestion = (
+    suggestion: ComputerActionPlan["suggestions"][number],
+  ) => {
     setHighlightedAction(null);
     applyPreview({
       ok: true,
@@ -391,7 +441,10 @@ export default function ComputerAutomationPage() {
     setHighlightedAction(null);
     clearPreview();
     try {
-      const data = await groundComputerActions(goal, visionOutput, { capture: true, leaseOwner });
+      const data = await groundComputerActions(goal, visionOutput, {
+        capture: true,
+        leaseOwner,
+      });
       setPlan(data);
       mergeLease(data.lease);
       if (data.screenshot) setScreenshot(data.screenshot);
@@ -404,7 +457,11 @@ export default function ComputerAutomationPage() {
       });
     } catch (error) {
       swallow(error);
-      addLog({ title: "视觉输出解析失败", detail: String(error), tone: "error" });
+      addLog({
+        title: "视觉输出解析失败",
+        detail: String(error),
+        tone: "error",
+      });
     } finally {
       setBusy(null);
     }
@@ -416,7 +473,9 @@ export default function ComputerAutomationPage() {
     setHighlightedAction(null);
     clearPreview();
     try {
-      const data = await askVisionModelForComputerActions(goal, visionModelId, { leaseOwner });
+      const data = await askVisionModelForComputerActions(goal, visionModelId, {
+        leaseOwner,
+      });
       setPlan(data);
       mergeLease(data.lease);
       if (data.screenshot) setScreenshot(data.screenshot);
@@ -429,7 +488,11 @@ export default function ComputerAutomationPage() {
       });
     } catch (error) {
       swallow(error);
-      addLog({ title: "视觉模型调用失败", detail: String(error), tone: "error" });
+      addLog({
+        title: "视觉模型调用失败",
+        detail: String(error),
+        tone: "error",
+      });
     } finally {
       setBusy(null);
     }
@@ -440,8 +503,12 @@ export default function ComputerAutomationPage() {
     if (!img) return;
     const rect = img.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    const realX = Math.round(((event.clientX - rect.left) / rect.width) * img.naturalWidth);
-    const realY = Math.round(((event.clientY - rect.top) / rect.height) * img.naturalHeight);
+    const realX = Math.round(
+      ((event.clientX - rect.left) / rect.width) * img.naturalWidth,
+    );
+    const realY = Math.round(
+      ((event.clientY - rect.top) / rect.height) * img.naturalHeight,
+    );
     const clampedX = Math.max(0, Math.min(realX, img.naturalWidth - 1));
     const clampedY = Math.max(0, Math.min(realY, img.naturalHeight - 1));
     setScreenshotImageBox((current) =>
@@ -508,7 +575,9 @@ export default function ComputerAutomationPage() {
     void loadModels()
       .then((data) => {
         setModels(data);
-        const firstVisionModel = data.find((model) => model.supports_vision === true);
+        const firstVisionModel = data.find(
+          (model) => model.supports_vision === true,
+        );
         if (firstVisionModel) {
           setVisionModelId((current) => current || firstVisionModel.id);
         }
@@ -528,18 +597,24 @@ export default function ComputerAutomationPage() {
                   <MonitorCheckIcon className="size-5" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-semibold tracking-tight">本机助手</h1>
+                  <h1 className="text-xl font-semibold tracking-tight">
+                    本机助手
+                  </h1>
                   <p className="text-sm text-muted-foreground">
                     让 Agent 看见并操作这台电脑。每一步先预演，再由你确认。
                   </p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <Button variant="outline" onClick={refreshStatus} disabled={busy !== null}>
+                <Button
+                  variant="outline"
+                  onClick={refreshStatus}
+                  disabled={busy !== null}
+                >
                   <RefreshCwIcon className="size-4" />
                   刷新状态
                 </Button>
-                <Button onClick={capture} disabled={busy !== null || status?.ok === false}>
+                <Button onClick={capture} disabled={computerActionDisabled}>
                   <EyeIcon className="size-4" />
                   观察屏幕
                 </Button>
@@ -560,7 +635,10 @@ export default function ComputerAutomationPage() {
             </div>
 
             <div className="grid gap-3 md:grid-cols-5">
-              <StatusTile label="确认方式" value={status?.mode ? "先预演再确认" : "加载中"} />
+              <StatusTile
+                label="确认方式"
+                value={status?.mode ? "先预演再确认" : "加载中"}
+              />
               <StatusTile
                 label="屏幕"
                 value={
@@ -583,6 +661,24 @@ export default function ComputerAutomationPage() {
               />
               <StatusTile label="接管租约" value={leaseState.label} />
             </div>
+
+            {computerUnavailable && status && (
+              <div className="rounded-2xl border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
+                <div className="flex items-start gap-2">
+                  <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" />
+                  <div>
+                    <div className="font-medium">本机控制依赖未就绪</div>
+                    <p className="mt-1">
+                      {status.screen.error ||
+                        "后端已启动，但 pyautogui 不可用，暂时不能截图、预演或执行鼠标键盘动作。"}
+                    </p>
+                    <p className="mt-1 font-mono text-xs">
+                      python -m pip install pyautogui
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1.35fr_0.95fr]">
@@ -591,7 +687,9 @@ export default function ComputerAutomationPage() {
                 <h2 className="text-sm font-semibold">屏幕观察</h2>
                 {screenshot?.created_at && (
                   <span className="text-xs text-muted-foreground">
-                    {new Date(screenshot.created_at * 1000).toLocaleTimeString()}
+                    {new Date(
+                      screenshot.created_at * 1000,
+                    ).toLocaleTimeString()}
                   </span>
                 )}
               </div>
@@ -616,7 +714,8 @@ export default function ComputerAutomationPage() {
                     />
                     {visualTarget && (
                       <div className="pointer-events-none absolute left-3 top-3 rounded-full border border-border bg-background/90 px-3 py-1 text-xs font-medium shadow-sm">
-                        {visualTarget.label} · {Math.round(visualTarget.x)}, {Math.round(visualTarget.y)}
+                        {visualTarget.label} · {Math.round(visualTarget.x)},{" "}
+                        {Math.round(visualTarget.y)}
                       </div>
                     )}
                   </>
@@ -642,7 +741,10 @@ export default function ComputerAutomationPage() {
                     placeholder="例如：打开 Edge 并访问 https://gemini.google.com"
                     className="min-h-20"
                   />
-                  <Button onClick={planNextActions} disabled={busy !== null || status?.ok === false}>
+                  <Button
+                    onClick={planNextActions}
+                    disabled={computerActionDisabled}
+                  >
                     <ListChecksIcon className="size-4" />
                     观察并生成下一步
                   </Button>
@@ -653,20 +755,26 @@ export default function ComputerAutomationPage() {
                           key={item.id}
                           className={cn(
                             "rounded-2xl border border-border bg-background/70 p-3 transition-colors",
-                            highlightedAction === item.action
-                              && "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900/70 dark:bg-emerald-950/20",
+                            highlightedAction === item.action &&
+                              "border-emerald-300 bg-emerald-50/60 dark:border-emerald-900/70 dark:bg-emerald-950/20",
                           )}
                           onMouseEnter={() => setHighlightedAction(item.action)}
                           onMouseLeave={() => setHighlightedAction(null)}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="text-sm font-semibold">{item.title}</div>
+                              <div className="text-sm font-semibold">
+                                {item.title}
+                              </div>
                               <p className="mt-1 text-xs leading-5 text-muted-foreground">
                                 {item.rationale}
                               </p>
                             </div>
-                            <Button size="sm" variant="outline" onClick={() => acceptSuggestion(item)}>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => acceptSuggestion(item)}
+                            >
                               加入确认
                             </Button>
                           </div>
@@ -691,7 +799,10 @@ export default function ComputerAutomationPage() {
                         <MousePointerClickIcon className="size-4" />
                         填入坐标
                       </Button>
-                      <Button onClick={previewSelectedPoint} disabled={busy !== null}>
+                      <Button
+                        onClick={previewSelectedPoint}
+                        disabled={computerActionDisabled}
+                      >
                         <ShieldAlertIcon className="size-4" />
                         加入确认
                       </Button>
@@ -708,7 +819,10 @@ export default function ComputerAutomationPage() {
                 <div className="flex flex-col gap-3">
                   <div className="grid grid-cols-[1fr_auto] gap-2">
                     {visionModels.length > 0 ? (
-                      <Select value={visionModelId} onValueChange={setVisionModelId}>
+                      <Select
+                        value={visionModelId}
+                        onValueChange={setVisionModelId}
+                      >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="选择视觉模型" />
                         </SelectTrigger>
@@ -729,7 +843,11 @@ export default function ComputerAutomationPage() {
                     )}
                     <Button
                       onClick={askVisionModel}
-                      disabled={busy !== null || status?.ok === false || !goal.trim() || !visionModelId.trim()}
+                      disabled={
+                        computerActionDisabled ||
+                        !goal.trim() ||
+                        !visionModelId.trim()
+                      }
                     >
                       <ScanSearchIcon className="size-4" />
                       调用模型
@@ -738,7 +856,10 @@ export default function ComputerAutomationPage() {
                   {visionModels.length > 0 ? (
                     <div className="flex items-center justify-between rounded-xl border border-border bg-background/70 px-3 py-2 text-xs text-muted-foreground">
                       <span>
-                        当前：{selectedVisionModel?.display_name || selectedVisionModel?.name || visionModelId}
+                        当前：
+                        {selectedVisionModel?.display_name ||
+                          selectedVisionModel?.name ||
+                          visionModelId}
                       </span>
                       <span>{visionModels.length} 个视觉模型</span>
                     </div>
@@ -749,7 +870,11 @@ export default function ComputerAutomationPage() {
                           ? "模型列表读取失败，可手动输入模型 ID。"
                           : "暂无标记 supports_vision 的模型，可先在设置里给自定义模型开启视觉能力。"}
                       </span>
-                      <Button size="sm" variant="outline" onClick={openModelSettings}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={openModelSettings}
+                      >
                         去模型设置
                       </Button>
                     </div>
@@ -766,7 +891,7 @@ export default function ComputerAutomationPage() {
                   <Button
                     variant="outline"
                     onClick={groundVisionOutput}
-                    disabled={busy !== null || status?.ok === false || !visionOutput.trim()}
+                    disabled={computerActionDisabled || !visionOutput.trim()}
                   >
                     <ScanSearchIcon className="size-4" />
                     解析并加入候选
@@ -780,7 +905,12 @@ export default function ComputerAutomationPage() {
                   <h2 className="text-sm font-semibold">动作预演</h2>
                 </div>
                 <div className="flex flex-col gap-3">
-                  <Select value={actionKind} onValueChange={(value) => setActionKind(value as ActionKind)}>
+                  <Select
+                    value={actionKind}
+                    onValueChange={(value) =>
+                      setActionKind(value as ActionKind)
+                    }
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue />
                     </SelectTrigger>
@@ -795,8 +925,16 @@ export default function ComputerAutomationPage() {
 
                   {(actionKind === "click" || actionKind === "move") && (
                     <div className="grid grid-cols-2 gap-2">
-                      <Input value={x} onChange={(e) => setX(e.target.value)} placeholder="x" />
-                      <Input value={y} onChange={(e) => setY(e.target.value)} placeholder="y" />
+                      <Input
+                        value={x}
+                        onChange={(e) => setX(e.target.value)}
+                        placeholder="x"
+                      />
+                      <Input
+                        value={y}
+                        onChange={(e) => setY(e.target.value)}
+                        placeholder="y"
+                      />
                     </div>
                   )}
                   {actionKind === "type" && (
@@ -822,7 +960,10 @@ export default function ComputerAutomationPage() {
                     />
                   )}
 
-                  <Button onClick={previewAction} disabled={busy !== null || status?.ok === false}>
+                  <Button
+                    onClick={previewAction}
+                    disabled={computerActionDisabled}
+                  >
                     <ShieldAlertIcon className="size-4" />
                     生成确认
                   </Button>
@@ -846,7 +987,9 @@ export default function ComputerAutomationPage() {
                           : "border-border bg-background",
                       )}
                     >
-                      <div className="font-semibold">风险：{preview.risk.level}</div>
+                      <div className="font-semibold">
+                        风险：{preview.risk.level}
+                      </div>
                       <p className="mt-1 leading-6">{preview.risk.reason}</p>
                       <pre className="mt-2 overflow-auto rounded-xl bg-black/5 p-2 text-xs dark:bg-white/10">
                         {JSON.stringify(preview.action, null, 2)}
@@ -860,7 +1003,9 @@ export default function ComputerAutomationPage() {
                     </div>
                     <Button
                       onClick={executePreview}
-                      disabled={busy !== null || previewExpired || leaseBlocked}
+                      disabled={
+                        computerActionDisabled || previewExpired || leaseBlocked
+                      }
                     >
                       <PlayIcon className="size-4" />
                       确认执行
@@ -880,7 +1025,10 @@ export default function ComputerAutomationPage() {
                     <p className="text-sm text-muted-foreground">还没有记录</p>
                   ) : (
                     logs.map((item) => (
-                      <div key={item.id} className="rounded-xl border border-border bg-background/70 p-3">
+                      <div
+                        key={item.id}
+                        className="rounded-xl border border-border bg-background/70 p-3"
+                      >
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <CheckCircle2Icon
                             className={cn(
@@ -950,7 +1098,8 @@ function getLeaseState(
       canRelease: false,
     };
   }
-  const ttl = typeof lease.ttl_seconds === "number" ? Math.max(0, lease.ttl_seconds) : 0;
+  const ttl =
+    typeof lease.ttl_seconds === "number" ? Math.max(0, lease.ttl_seconds) : 0;
   const ownerLabel = lease.owner_label || "其他项目";
   if (owner && lease.owner_id === owner.owner_id) {
     return {
@@ -1062,7 +1211,11 @@ function getActiveAction({
 
 function formatActionLabel(action: Record<string, unknown>) {
   const kind = String(action.action || "动作");
-  if ((kind === "click" || kind === "move") && action.x != null && action.y != null) {
+  if (
+    (kind === "click" || kind === "move") &&
+    action.x != null &&
+    action.y != null
+  ) {
     const target = getControlIdentity(getMatchedControl(action));
     const coordinate = `${action.x}, ${action.y}`;
     return target
@@ -1070,7 +1223,8 @@ function formatActionLabel(action: Record<string, unknown>) {
       : `${kind === "click" ? "点击" : "移动"} ${coordinate}`;
   }
   if (kind === "type") return "输入文字";
-  if (kind === "key") return `快捷键 ${Array.isArray(action.keys) ? action.keys.join("+") : action.keys || ""}`;
+  if (kind === "key")
+    return `快捷键 ${Array.isArray(action.keys) ? action.keys.join("+") : action.keys || ""}`;
   if (kind === "wait") return `等待 ${action.ms || 0}ms`;
   return kind;
 }
@@ -1089,9 +1243,12 @@ function ScreenshotActionOverlay({
   const cursorPosition = cursor ? projectScreenPoint(cursor, imageBox) : null;
   const targetPosition = target ? projectScreenPoint(target, imageBox) : null;
   const shouldDrawPath =
-    cursorPosition
-    && targetPosition
-    && Math.hypot(cursorPosition.left - targetPosition.left, cursorPosition.top - targetPosition.top) > 12;
+    cursorPosition &&
+    targetPosition &&
+    Math.hypot(
+      cursorPosition.left - targetPosition.left,
+      cursorPosition.top - targetPosition.top,
+    ) > 12;
 
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -1157,7 +1314,10 @@ function ScreenshotActionOverlay({
 }
 
 function getCursorPoint(status: ComputerStatus | null): ScreenPoint | null {
-  if (typeof status?.screen.cursor_x !== "number" || typeof status.screen.cursor_y !== "number") {
+  if (
+    typeof status?.screen.cursor_x !== "number" ||
+    typeof status.screen.cursor_y !== "number"
+  ) {
     return null;
   }
   return { x: status.screen.cursor_x, y: status.screen.cursor_y };
@@ -1175,16 +1335,30 @@ function getVisualTarget({
   selectedPoint: ScreenPoint | null;
 }): VisualTarget | null {
   if (preview) {
-    return getActionVisualTarget(preview.action, formatActionLabel(preview.action), "preview");
+    return getActionVisualTarget(
+      preview.action,
+      formatActionLabel(preview.action),
+      "preview",
+    );
   }
 
   if (highlightedAction) {
-    return getActionVisualTarget(highlightedAction, formatActionLabel(highlightedAction), "candidate");
+    return getActionVisualTarget(
+      highlightedAction,
+      formatActionLabel(highlightedAction),
+      "candidate",
+    );
   }
 
-  const firstPointSuggestion = plan?.suggestions.find((item) => getActionPoint(item.action));
+  const firstPointSuggestion = plan?.suggestions.find((item) =>
+    getActionPoint(item.action),
+  );
   if (firstPointSuggestion) {
-    return getActionVisualTarget(firstPointSuggestion.action, firstPointSuggestion.title, "candidate");
+    return getActionVisualTarget(
+      firstPointSuggestion.action,
+      firstPointSuggestion.title,
+      "candidate",
+    );
   }
 
   if (selectedPoint) {
@@ -1212,7 +1386,9 @@ function getActionVisualTarget(
   };
 }
 
-function getActionPoint(action: Record<string, unknown> | null | undefined): ScreenPoint | null {
+function getActionPoint(
+  action: Record<string, unknown> | null | undefined,
+): ScreenPoint | null {
   if (!action) return null;
   const kind = String(action.action || "");
   if (kind !== "click" && kind !== "move") return null;
@@ -1244,12 +1420,18 @@ function toFiniteNumber(value: unknown) {
   return null;
 }
 
-function MatchedControlSummary({ action }: { action: Record<string, unknown> }) {
+function MatchedControlSummary({
+  action,
+}: {
+  action: Record<string, unknown>;
+}) {
   const control = getMatchedControl(action);
   if (!control) return null;
 
   const identity = getControlIdentity(control) || "未命名控件";
-  const typeText = [control.control_type, control.class_name].filter(Boolean).join(" · ");
+  const typeText = [control.control_type, control.class_name]
+    .filter(Boolean)
+    .join(" · ");
   const centerText = formatPoint(control.center);
   const scoreText =
     typeof control.score === "number" && Number.isFinite(control.score)
@@ -1280,7 +1462,9 @@ function MatchedControlSummary({ action }: { action: Record<string, unknown> }) 
   );
 }
 
-function getMatchedControl(action: Record<string, unknown>): ComputerMatchedControl | null {
+function getMatchedControl(
+  action: Record<string, unknown>,
+): ComputerMatchedControl | null {
   const value = action.matched_control;
   if (!isRecord(value)) return null;
   return value as ComputerMatchedControl;
@@ -1294,7 +1478,8 @@ function getControlIdentity(control: ComputerMatchedControl | null) {
 function firstText(...values: Array<unknown>) {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    if (typeof value === "number" && Number.isFinite(value))
+      return String(value);
   }
   return "";
 }
@@ -1389,7 +1574,10 @@ function PermissionGuardPanel({
       </div>
       <div className="mt-3 grid gap-2">
         {rows.map((row) => (
-          <div key={row.label} className="grid grid-cols-[3.5rem_1fr] gap-2 text-xs leading-5">
+          <div
+            key={row.label}
+            className="grid grid-cols-[3.5rem_1fr] gap-2 text-xs leading-5"
+          >
             <span className="text-muted-foreground">{row.label}</span>
             <span className="font-medium">{row.value}</span>
           </div>
@@ -1402,7 +1590,8 @@ function PermissionGuardPanel({
 function CurrentActionPanel({ action }: { action: ActiveAction }) {
   const toneClass = {
     idle: "border-border bg-background/70",
-    active: "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100",
+    active:
+      "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100",
     warn: "border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100",
     ok: "border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100",
   }[action.tone];
@@ -1429,10 +1618,7 @@ function CountdownChip({ secondsLeft }: { secondsLeft: number }) {
       : secondsLeft <= 15
         ? "border-amber-300 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100"
         : "border-border bg-background text-muted-foreground";
-  const label =
-    secondsLeft === 0
-      ? "已过期"
-      : `${secondsLeft}s`;
+  const label = secondsLeft === 0 ? "已过期" : `${secondsLeft}s`;
   return (
     <span
       className={cn(

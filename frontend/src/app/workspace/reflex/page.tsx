@@ -86,7 +86,11 @@ type Rule = {
   enabled_when?: Record<string, unknown>;
 };
 
-type TimeseriesBucket = { ts: number; count: number; by_rule: Record<string, number> };
+type TimeseriesBucket = {
+  ts: number;
+  count: number;
+  by_rule: Record<string, number>;
+};
 type Timeseries = {
   window_minutes: number;
   bucket_seconds: number;
@@ -121,7 +125,9 @@ export default function ReflexMonitorPage() {
   const fetchAll = useCallback(async () => {
     try {
       const [s, r, t, ti] = await Promise.all([
-        fetch(`${getBackendBaseURL()}/api/reflex/stats`).then((r) => r.json() as Promise<Stats>),
+        fetch(`${getBackendBaseURL()}/api/reflex/stats`).then(
+          (r) => r.json() as Promise<Stats>,
+        ),
         fetch(`${getBackendBaseURL()}/api/reflex/rules`).then(
           (r) => r.json() as Promise<{ rules: Rule[] }>,
         ),
@@ -173,7 +179,9 @@ export default function ReflexMonitorPage() {
         void fetchAll();
       } catch (e) {
         swallow(e);
-        setReloadMsg(e instanceof Error ? e.message : t.reflexPage.reloadFailed);
+        setReloadMsg(
+          e instanceof Error ? e.message : t.reflexPage.reloadFailed,
+        );
       }
       window.setTimeout(() => setReloadMsg(null), 4000);
     },
@@ -199,21 +207,25 @@ export default function ReflexMonitorPage() {
       <WorkspaceBody className="px-4 pb-4">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           {/* Hero / actions */}
-          <section className="workspace-panel rounded-[1.75rem] px-6 py-5">
-            <div className="flex items-center gap-4">
+          <section className="workspace-panel rounded-[1.75rem] px-4 py-4 sm:px-6 sm:py-5">
+            <div className="flex flex-col items-start gap-4 lg:flex-row lg:items-center">
               <div className="flex size-11 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 text-white shadow-lg shadow-emerald-500/20">
                 <ZapIcon className="size-5" />
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <h1 className="text-2xl font-bold tracking-tight">
                   {t.reflexPage.pageTitle}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {t.reflexPage.subtitle}
-                  {tickedAt ? t.reflexPage.lastRefreshPrefix(tickedAt.toLocaleTimeString()) : ""}
+                  {tickedAt
+                    ? t.reflexPage.lastRefreshPrefix(
+                        tickedAt.toLocaleTimeString(),
+                      )
+                    : ""}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
                 {/* Gene-lock badge · shows current maturity level +
                     panic state · click to drill into governance
                     controls. Auto-hides when the /api/gene-locks/
@@ -225,11 +237,19 @@ export default function ReflexMonitorPage() {
                     {t.reflexPage.editRulesButton}
                   </Link>
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => reload(false)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reload(false)}
+                >
                   <RefreshCwIcon className="mr-2 size-4" />
                   {t.reflexPage.reloadButton}
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => reload(true)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reload(true)}
+                >
                   {t.reflexPage.reloadResetButton}
                 </Button>
               </div>
@@ -266,9 +286,7 @@ export default function ReflexMonitorPage() {
             <StatCard
               icon={<BarChart3Icon className="size-4" />}
               label={t.reflexPage.statHitRate}
-              value={
-                stats ? `${(stats.hit_rate * 100).toFixed(1)}%` : "0%"
-              }
+              value={stats ? `${(stats.hit_rate * 100).toFixed(1)}%` : "0%"}
               tone="good"
             />
             <StatCard
@@ -280,7 +298,9 @@ export default function ReflexMonitorPage() {
               icon={<HourglassIcon className="size-4" />}
               label={t.reflexPage.statStale}
               value={stats?.coverage?.stale.length ?? 0}
-              tone={(stats?.coverage?.stale.length ?? 0) > 0 ? "warn" : undefined}
+              tone={
+                (stats?.coverage?.stale.length ?? 0) > 0 ? "warn" : undefined
+              }
             />
             <StatCard
               icon={<ClockIcon className="size-4" />}
@@ -313,7 +333,9 @@ export default function ReflexMonitorPage() {
           {tiers.length > 0 && (
             <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">{t.reflexPage.responseTiersTitle}</CardTitle>
+                <CardTitle className="text-base">
+                  {t.reflexPage.responseTiersTitle}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -328,22 +350,38 @@ export default function ReflexMonitorPage() {
           {/* Rules table */}
           <Card className="workspace-panel rounded-[1.5rem] border-white/40 shadow-none dark:border-white/10">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{t.reflexPage.rulesTableTitle}</CardTitle>
+              <CardTitle className="text-base">
+                {t.reflexPage.rulesTableTitle}
+              </CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-xs uppercase tracking-wide text-muted-foreground">
                   <tr className="border-b border-border/60">
-                    <th className="pb-2 text-left font-medium">{t.reflexPage.colRule}</th>
-                    <th className="pb-2 text-left font-medium">{t.reflexPage.colKind}</th>
+                    <th className="pb-2 text-left font-medium">
+                      {t.reflexPage.colRule}
+                    </th>
+                    <th className="pb-2 text-left font-medium">
+                      {t.reflexPage.colKind}
+                    </th>
                     <th className="pb-2 text-left font-medium">
                       {t.reflexPage.colPatternType}
                     </th>
-                    <th className="pb-2 text-right font-medium">{t.reflexPage.colPrio}</th>
-                    <th className="pb-2 text-right font-medium">{t.reflexPage.colTries}</th>
-                    <th className="pb-2 text-right font-medium">{t.reflexPage.colHits}</th>
-                    <th className="pb-2 text-right font-medium">{t.reflexPage.colRate}</th>
-                    <th className="pb-2 text-right font-medium">{t.reflexPage.colLast}</th>
+                    <th className="pb-2 text-right font-medium">
+                      {t.reflexPage.colPrio}
+                    </th>
+                    <th className="pb-2 text-right font-medium">
+                      {t.reflexPage.colTries}
+                    </th>
+                    <th className="pb-2 text-right font-medium">
+                      {t.reflexPage.colHits}
+                    </th>
+                    <th className="pb-2 text-right font-medium">
+                      {t.reflexPage.colRate}
+                    </th>
+                    <th className="pb-2 text-right font-medium">
+                      {t.reflexPage.colLast}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

@@ -198,7 +198,10 @@ export function TeamInputBox({
   );
 
   return (
-    <div className="rounded-xl border border-border/70 bg-card overflow-hidden focus-within:border-primary/40 focus-within:shadow-sm focus-within:shadow-primary/10 transition-[border-color,box-shadow] duration-200">
+    <div
+      data-testid="team-composer"
+      className="rounded-xl border border-border/70 bg-card overflow-hidden focus-within:border-primary/40 focus-within:shadow-sm focus-within:shadow-primary/10 transition-[border-color,box-shadow] duration-200"
+    >
       <FloorBar />
       <div className="relative">
         {slashPicker}
@@ -213,6 +216,7 @@ export function TeamInputBox({
         )}
       </div>
       <textarea
+        data-testid="team-composer-input"
         ref={textareaRef}
         className="w-full resize-none border-none bg-transparent px-3 py-2 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/50"
         placeholder={t.teamInput.placeholder}
@@ -236,6 +240,7 @@ export function TeamInputBox({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
+                  data-testid="team-assignee-trigger"
                   className={cn(
                     "flex h-7 items-center gap-1.5 rounded-full bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors",
                     selectedAgentIds.length > 0 && "bg-primary/10 text-primary",
@@ -297,6 +302,7 @@ export function TeamInputBox({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                data-testid="team-mode-trigger"
                 className={cn(
                   "flex h-7 items-center gap-1.5 rounded-full bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors",
                   "hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
@@ -353,6 +359,7 @@ export function TeamInputBox({
           ) : (
             <button
               onClick={handleSubmit}
+              data-testid="team-send-button"
               disabled={!input.trim()}
               title={submitBehavior === "message" ? "Send message" : "Send"}
               className={cn(

@@ -73,24 +73,44 @@ export function ChatPageLayout({
   const defaultWidth = resolveSidebarWidth(sidebarWidth);
   // Lazy init from localStorage so a previously-dragged width persists
   // across reloads / remounts (SSR-safe — returns null on the server).
-  const [customWidth, setCustomWidth] = useState<number | null>(readStoredSidebarWidth);
+  const [customWidth, setCustomWidth] = useState<number | null>(
+    readStoredSidebarWidth,
+  );
+  const [isNarrowViewport, setIsNarrowViewport] = useState(false);
   const resolvedWidth = customWidth ? `${customWidth}px` : defaultWidth;
+  const drawerWidth = isNarrowViewport
+    ? "min(calc(100vw - 0.75rem), 420px)"
+    : resolvedWidth;
+  const shouldOffsetMain = Boolean(sidebar && showSidebar && !isNarrowViewport);
 
   // Resize drag handling. ``latest`` mirrors the most recent width in a ref
   // (the document-level mouseup listener captures a stale ``customWidth``
   // closure, so it persists from the ref instead).
-  const resizeRef = useRef<{ startX: number; startWidth: number; latest: number } | null>(
-    null,
-  );
+  const resizeRef = useRef<{
+    startX: number;
+    startWidth: number;
+    latest: number;
+  } | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const aside = (e.target as HTMLElement).parentElement;
     if (!aside) return;
     const rect = aside.getBoundingClientRect();
-    resizeRef.current = { startX: e.clientX, startWidth: rect.width, latest: rect.width };
+    resizeRef.current = {
+      startX: e.clientX,
+      startWidth: rect.width,
+      latest: rect.width,
+    };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    const update = () => setIsNarrowViewport(window.innerWidth < 768);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, []);
 
   useEffect(() => {
@@ -143,7 +163,7 @@ export function ChatPageLayout({
         <div
           className="relative flex min-h-0 max-w-full grow overflow-hidden transition-[margin-right] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{
-            marginRight: sidebar && showSidebar ? resolvedWidth : "0px",
+            marginRight: shouldOffsetMain ? resolvedWidth : "0px",
           }}
         >
           <main className="relative flex min-h-0 max-w-full grow flex-col overflow-hidden overscroll-none">
@@ -172,7 +192,7 @@ export function ChatPageLayout({
         {sidebar && (
           <aside
             aria-hidden={!showSidebar}
-            style={{ width: resolvedWidth }}
+            style={{ width: drawerWidth }}
             className={cn(
               // Overlay drawer from the right, same language as the
               // artifact drawer in ChatBox — slides in regardless of

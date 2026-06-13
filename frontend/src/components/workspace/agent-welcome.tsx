@@ -24,13 +24,12 @@ export function AgentWelcome({
   return (
     <div
       className={cn(
-        "mx-auto flex w-full flex-col items-center justify-center gap-4 px-8 py-6 text-center",
+        "mx-auto flex w-full flex-col items-center justify-center gap-3 px-5 py-5 text-center sm:px-8",
         className,
       )}
     >
-      <div className="relative group">
-        <div className="absolute -inset-1 bg-gradient-to-r from-primary/20 via-violet-500/20 to-primary/20 rounded-lg blur-md opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
-        <div className="relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg ring-1 ring-primary/10 shadow-xl shadow-primary/10 bg-gradient-to-br from-background to-muted/50 transition-transform duration-300 group-hover:scale-105">
+      <div className="relative">
+        <div className="flex size-[72px] items-center justify-center overflow-hidden rounded-lg border border-border/70 bg-card shadow-sm">
           {agent?.avatar_url ? (
             <img
               src={`${getBackendBaseURL()}${withAgentAvatarVersion(agent.avatar_url)}`}
@@ -38,22 +37,25 @@ export function AgentWelcome({
               className="h-full w-full object-cover"
             />
           ) : (
-            <span className="bg-gradient-to-br from-primary/10 to-violet-500/10 flex h-full w-full items-center justify-center">
+            <span className="flex h-full w-full items-center justify-center bg-primary/10">
               <BotIcon className="text-primary h-8 w-8" />
             </span>
           )}
         </div>
+        <span className="absolute -right-1 -bottom-1 flex h-5 items-center rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-muted-foreground shadow-sm">
+          Agent
+        </span>
       </div>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+      <div className="space-y-1.5">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
           {displayName}
         </h2>
         {description ? (
-          <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
+          <p className="text-muted-foreground max-w-md text-sm leading-6">
             {description}
           </p>
         ) : (
-          <p className="text-muted-foreground max-w-sm text-sm leading-relaxed">
+          <p className="text-muted-foreground max-w-md text-sm leading-6">
             Ready for the next turn.
           </p>
         )}

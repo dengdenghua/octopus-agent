@@ -37,8 +37,9 @@ export async function promptInputFilePartToFile(
       );
     }
     const blob = await response.blob();
+    const bytes = await blob.arrayBuffer();
 
-    return new File([blob], filePart.filename, {
+    return new File([bytes], filePart.filename, {
       type: filePart.mediaType || blob.type,
     });
   } catch (error) {
@@ -50,4 +51,3 @@ export async function promptInputFilePartToFile(
     return null;
   }
 }
-

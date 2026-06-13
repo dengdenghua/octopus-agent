@@ -339,7 +339,7 @@ export function ClarificationQuestionnaire({
           const checked = selected === option.value;
           return (
             <button
-              key={option.value}
+              key={`${option.value}-${index}`}
               type="button"
               aria-pressed={checked}
               onClick={() =>

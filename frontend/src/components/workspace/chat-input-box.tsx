@@ -16,7 +16,6 @@ import {
   SquareIcon,
   TableIcon,
   Trash2Icon,
-  WorkflowIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -633,6 +632,7 @@ export function ChatInputBox({
   return (
     <>
       <div
+        data-testid="chat-composer"
         className={cn(
           "group relative",
           "rounded-xl border border-transparent bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)]",
@@ -685,6 +685,7 @@ export function ChatInputBox({
           </div>
         )}
         <textarea
+          data-testid="chat-composer-input"
           ref={textareaRef}
           autoFocus={autoFocus}
           disabled={isBusy}
@@ -910,6 +911,7 @@ export function ChatInputBox({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
+                  data-testid="chat-tools-trigger"
                   disabled={isBusy || status === "streaming"}
                   className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
                   title={t.chatInputBox.quickCapabilities}
@@ -919,6 +921,7 @@ export function ChatInputBox({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
+                data-testid="chat-tools-menu"
                 align="start"
                 sideOffset={8}
                 className="w-60 rounded-xl border-border/70 p-1.5 shadow-[0_16px_48px_-24px_rgba(0,0,0,0.35)]"
@@ -1000,13 +1003,6 @@ export function ChatInputBox({
                     >
                       <CalendarClockIcon className="size-4" />
                       {t.chatInputBox.scheduledTask}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => seedDraft(t.chatInputBox.seedWorkflow)}
-                      className="gap-2 rounded-lg text-[13px]"
-                    >
-                      <WorkflowIcon className="size-4" />
-                      {t.chatInputBox.workflow}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => seedDraft(t.chatInputBox.seedProjectFiles)}
@@ -1092,6 +1088,7 @@ export function ChatInputBox({
               <button
                 type="button"
                 onClick={handleSubmit}
+                data-testid="chat-send-button"
                 disabled={!draft.trim() || isBusy}
                 className={cn(
                   "flex size-7 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",

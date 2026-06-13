@@ -13,7 +13,7 @@ _logger = logging.getLogger(__name__)
 
 
 def _estimate_tokens(text: str) -> int:
-    cn = sum(1 for c in text if '\u4e00' <= c <= '\u9fff')
+    cn = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
     en = len(text) - cn
     return int(cn / 1.5 + en / 4)
 
@@ -53,19 +53,19 @@ def _compress_context(
         summary = _summarize_messages(mid_messages, router, model)
         if summary:
             from runtime.platform.models.llm import Message
+
             compressed = list(messages[:mid_start])
-            compressed.append(Message(
-                role="system",
-                content=(
-                    "[以下是之前对话的摘要]\n"
-                    f"{summary}\n"
-                    "[摘要结束 · 最近对话如下]"
-                ),
-            ))
+            compressed.append(
+                Message(
+                    role="system",
+                    content=(f"[以下是之前对话的摘要]\n{summary}\n[摘要结束 · 最近对话如下]"),
+                )
+            )
             compressed.extend(messages[mid_end:])
             _logger.info(
                 "context compressed with LLM summary: %d tokens → ~%d tokens",
-                total, _estimate_messages_tokens(compressed),
+                total,
+                _estimate_messages_tokens(compressed),
             )
             return compressed
 
@@ -80,9 +80,13 @@ def _compress_context(
                 and any(
                     marker in content
                     for marker in (
-                        "read_file", "edit_text_file", "edit_file",
-                        "multi_edit_file", "write_text_file",
-                        "list_cwd", "todo_write",
+                        "read_file",
+                        "edit_text_file",
+                        "edit_file",
+                        "multi_edit_file",
+                        "write_text_file",
+                        "list_cwd",
+                        "todo_write",
                     )
                 )
             )
@@ -91,13 +95,15 @@ def _compress_context(
             elif role == "user" and content.startswith("Observation:"):
                 short = content[:200] + "... [已压缩]" if len(content) > 200 else content
                 from runtime.platform.models.llm import Message
+
                 compressed.append(Message(role=role, content=short))
             else:
                 compressed.append(m)
         compressed.extend(messages[mid_end:])
         _logger.info(
             "context compressed (code-aware): %d tokens → ~%d tokens",
-            total, _estimate_messages_tokens(compressed),
+            total,
+            _estimate_messages_tokens(compressed),
         )
         return compressed
 
@@ -108,6 +114,7 @@ def _compress_context(
         if role == "user" and content.startswith("Observation:"):
             short = content[:200] + "... [已压缩]" if len(content) > 200 else content
             from runtime.platform.models.llm import Message
+
             compressed.append(Message(role=role, content=short))
         else:
             compressed.append(m)
@@ -115,8 +122,10 @@ def _compress_context(
     compressed.extend(messages[mid_end:])
     _logger.info(
         "context compressed (truncation): %d tokens → ~%d tokens (%d msgs → %d msgs)",
-        total, _estimate_messages_tokens(compressed),
-        len(messages), len(compressed),
+        total,
+        _estimate_messages_tokens(compressed),
+        len(messages),
+        len(compressed),
     )
     return compressed
 
@@ -124,6 +133,7 @@ def _compress_context(
 def _summarize_messages(messages: list, router: Any, model: str) -> str:
     try:
         from runtime.platform.models.llm import Message, ModelRequest
+
         content_parts = []
         for m in messages:
             role = getattr(m, "role", "")
@@ -232,8 +242,7 @@ def _format_skill_catalog(
                     try:
                         skill = registry.get(name)
                         skill_aff = {
-                            str(a).lower()
-                            for a in (getattr(skill, "affinity", None) or [])
+                            str(a).lower() for a in (getattr(skill, "affinity", None) or [])
                         }
                     except (AttributeError, TypeError, ValueError):  # noqa: BLE001
                         return True
@@ -256,7 +265,6 @@ def _format_skill_catalog(
         "use_capability",
         "search_skills",
         "query_skill",
-
         # Files + code inspection/editing.
         "list_cwd",
         "read_file",
@@ -269,19 +277,16 @@ def _format_skill_catalog(
         "multi_edit_file",
         "append_text_file",
         "edit_text_file",
-
         # Web research + URL reading.
         "web_search",
         "web_fetch",
         "fetch_url",
-
         # Local execution + background jobs.
         "exec_shell",
         "ipython",
         "background_exec",
         "read_background_output",
         "kill_background_exec",
-
         # Git workflow.
         "git_status",
         "git_diff",
@@ -289,13 +294,11 @@ def _format_skill_catalog(
         "git_add",
         "git_commit",
         "git_branch",
-
         # Delegation + shared blackboard.
         "call_agent_parallel",
         "bb_write",
         "bb_read",
         "bb_keys",
-
         # Browser/Desktop observation for UI work.
         "browser_navigate",
         "browser_get",
@@ -304,16 +307,13 @@ def _format_skill_catalog(
         "browser_click",
         "screen_capture",
         "screen_info",
-
         # High-level document/research workflows.
         "deep-research",
         "report-writing",
         "docx",
     ]
     priority_set = set(priority)
-    names = [n for n in priority if n in names] + [
-        n for n in names if n not in priority_set
-    ]
+    names = [n for n in priority if n in names] + [n for n in names if n not in priority_set]
     activation = activate_capabilities(
         goal,
         user_context=user_context,
@@ -334,10 +334,9 @@ def _format_skill_catalog(
             # parameter schema + long description when it actually
             # needs to invoke the skill. This keeps the system prompt
             # small and stable so prompt cache stays warm.
-            short = (
-                (getattr(skill, "summary", "") or "").strip()
-                or (getattr(skill, "effective_summary", "") or "").strip()
-            )
+            short = (getattr(skill, "summary", "") or "").strip() or (
+                getattr(skill, "effective_summary", "") or ""
+            ).strip()
             if not short:
                 # Fall back to first sentence of description, capped
                 # at 30 characters. Prefer to break at the first
@@ -351,7 +350,7 @@ def _format_skill_catalog(
                         idx = full.find(sep)
                         if 0 < idx < cut:
                             cut = idx
-                    short = full[:min(cut, 30)].strip()
+                    short = full[: min(cut, 30)].strip()
             if not short:
                 short = "(无描述)"
         except (AttributeError, TypeError, KeyError, ValueError):  # noqa: BLE001
@@ -361,7 +360,7 @@ def _format_skill_catalog(
         lines.append(f"  ... (还有 {len(names) - max_skills} 个,省略)")
     lines.append(
         "提示: 上面只列名+短描述; 调用前若需完整参数 schema 请用 "
-        "`query_skill(name=\"<skill_name>\")`。",
+        '`query_skill(name="<skill_name>")`。',
     )
     lines.append(
         "Capability-first: prefer `search_capabilities`, "
@@ -380,6 +379,7 @@ _PROJECT_RULES_MAX_BYTES = 8 * 1024
 
 def _load_project_rules(workspace_path: str) -> str:
     from pathlib import Path
+
     root = Path(workspace_path)
     for name in _PROJECT_RULES_FILES:
         p = root / name
@@ -431,14 +431,8 @@ def _git_status_summary(root: Any) -> str:
 
     branch = _git("branch", "--show-current") or "(detached)"
     porcelain = _git("status", "--porcelain")
-    modified = sum(
-        1 for line in porcelain.splitlines()
-        if line and not line.startswith("??")
-    )
-    untracked = sum(
-        1 for line in porcelain.splitlines()
-        if line.startswith("??")
-    )
+    modified = sum(1 for line in porcelain.splitlines() if line and not line.startswith("??"))
+    untracked = sum(1 for line in porcelain.splitlines() if line.startswith("??"))
 
     ahead = behind = 0
     upstream = _git("rev-list", "--left-right", "--count", "@{u}...HEAD")
@@ -491,6 +485,7 @@ def _build_project_profile_prompt(workspace_path: str, *, include_diagnostics: b
             pkg_path = root / "package.json"
             if pkg_path.is_file():
                 import json
+
                 try:
                     pkg = json.loads(pkg_path.read_text(encoding="utf-8"))
                     if pkg.get("name"):
@@ -504,12 +499,16 @@ def _build_project_profile_prompt(workspace_path: str, *, include_diagnostics: b
                     if (root / "tsconfig.json").is_file():
                         lines.append("TypeScript: 已启用")
                     for fw in [
-                        "next", "nuxt", "vite", "react",
-                        "vue", "svelte", "angular",
+                        "next",
+                        "nuxt",
+                        "vite",
+                        "react",
+                        "vue",
+                        "svelte",
+                        "angular",
                     ]:
-                        if (
-                            fw in pkg.get("dependencies", {})
-                            or fw in pkg.get("devDependencies", {})
+                        if fw in pkg.get("dependencies", {}) or fw in pkg.get(
+                            "devDependencies", {}
                         ):
                             lines.append(f"框架: {fw}")
                             break
@@ -551,9 +550,9 @@ def _build_project_profile_prompt(workspace_path: str, *, include_diagnostics: b
 def _collect_initial_diagnostics(profile: Any, workspace_path: str) -> list[str]:
     try:
         from runtime.execution.suckers.verify_skills import run_checks
+
         fast_checks = [
-            c for c in profile.checks
-            if c["name"] in ("typecheck", "check", "vet", "syntax")
+            c for c in profile.checks if c["name"] in ("typecheck", "check", "vet", "syntax")
         ]
         if not fast_checks:
             return []
@@ -604,8 +603,7 @@ def _serialize_messages_for_checkpoint(messages: list) -> list[dict[str, Any]]:
         tool_calls = getattr(m, "tool_calls", None)
         if tool_calls:
             entry["tool_calls"] = [
-                {"id": tc.id, "name": tc.name, "input": tc.input}
-                for tc in tool_calls
+                {"id": tc.id, "name": tc.name, "input": tc.input} for tc in tool_calls
             ]
         tool_call_id = getattr(m, "tool_call_id", None)
         if tool_call_id:
@@ -619,6 +617,7 @@ def _serialize_messages_for_checkpoint(messages: list) -> list[dict[str, Any]]:
 
 def _restore_messages_from_checkpoint(snapshot: list[dict[str, Any]]) -> list:
     from runtime.platform.models.llm import Message, ToolCall
+
     result: list[Message] = []
     for m in snapshot:
         if not isinstance(m, dict) or not m.get("role"):
@@ -651,11 +650,13 @@ def _prefetch_related_files(
         return None
     try:
         import re
+
         _path_match = re.search(r'["\']([^"\']+\.(?:py|ts|tsx|js|jsx|go|rs))["\']', action)
         if not _path_match:
             return None
         edited_path = _path_match.group(1)
         import os
+
         if not os.path.isfile(edited_path):
             return None
         with open(edited_path, encoding="utf-8", errors="replace") as f:
@@ -796,3 +797,86 @@ def _read_code_context_file(path: Path, *, max_chars: int) -> str:
     if len(text) > max_chars:
         text = text[:max_chars] + "\n...(truncated)"
     return text
+
+
+# ── User-message content assembly (moved from react_loop.py) ──────
+
+
+def _build_user_message_content(
+    text: str,
+    attachments: Any,
+) -> Any:
+    """Construct the user-message ``content`` payload.
+
+    When the request carries one or more image attachments with a usable
+    URL (data: URL preferred, hosted https URL acceptable), we emit a
+    list of OpenAI-shaped blocks::
+
+        [
+          {"type": "text", "text": ...},
+          {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}},
+          ...
+        ]
+
+    Vision-capable routers (anthropic / openai / gemini / molili) all
+    accept this shape. Non-vision routers fall back to plain text via
+    their own input filtering, so we don't need to gate by model here.
+
+    When no image attachments are present, returns plain ``text``
+    unchanged so we don't break callers that assume a string.
+    """
+    text = (text or "").strip()
+    image_blocks = _image_blocks_from_attachments(attachments)
+    if not image_blocks:
+        return text
+    blocks: list[dict[str, Any]] = []
+    if text:
+        blocks.append({"type": "text", "text": text})
+    blocks.extend(image_blocks)
+    return blocks
+
+
+def _image_blocks_from_attachments(attachments: Any) -> list[dict[str, Any]]:
+    """Extract OpenAI-shaped image_url blocks from raw attachment dicts.
+
+    Recognized shapes (any of these is enough):
+
+    - ``data_url`` field with a ``data:image/...;base64,...`` string
+    - ``url`` field that is itself a ``data:image/...`` URL
+    - ``url`` field with ``mediaType`` / ``mime_type`` starting with
+      ``image/`` (we trust the caller, no fetch)
+
+    Filename-extension is a last-resort hint when no media type is set.
+    """
+    if not isinstance(attachments, list):
+        return []
+    blocks: list[dict[str, Any]] = []
+    for item in attachments:
+        if not isinstance(item, dict):
+            continue
+        url = ""
+        candidate = item.get("data_url") or item.get("dataUrl")
+        if isinstance(candidate, str) and candidate.startswith("data:image/"):
+            url = candidate
+        else:
+            raw_url = item.get("url") or item.get("artifact_url")
+            if isinstance(raw_url, str) and raw_url.strip():
+                if raw_url.startswith("data:image/") or _looks_like_image_attachment(item):
+                    url = raw_url
+        if not url:
+            continue
+        blocks.append({"type": "image_url", "image_url": {"url": url}})
+    return blocks
+
+
+def _looks_like_image_attachment(item: dict[str, Any]) -> bool:
+    """Heuristic: does this attachment look like an image?"""
+    mt = item.get("mediaType") or item.get("media_type") or item.get("mime_type") or ""
+    if isinstance(mt, str) and mt.lower().startswith("image/"):
+        return True
+    name = item.get("filename") or item.get("name") or ""
+    if isinstance(name, str):
+        ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        if ext in {"png", "jpg", "jpeg", "gif", "webp", "bmp"}:
+            return True
+    return False

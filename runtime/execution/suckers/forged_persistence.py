@@ -123,24 +123,16 @@ def _build_composite_handler(
     *,
     step_templates: list[dict[str, Any]] | None = None,
 ) -> Any:
+    """重建 meta-handler · 依次跑 sub-skills · 与 SkillForge._build_meta_handler 一致。
+
+    Thin public entry point — the live implementation is
+    :func:`_build_composite_handler_with_templates`.
+    """
     return _build_composite_handler_with_templates(
         underlying,
         registry,
         step_templates=step_templates,
     )
-    """重建 meta-handler · 依次跑 sub-skills · 与 SkillForge._build_meta_handler 一致。"""
-
-    def _meta(**kwargs: Any) -> dict[str, Any]:
-        outputs: dict[str, Any] = {}
-        for i, skill_name in enumerate(underlying):
-            skill = registry.get(skill_name)
-            call_args = dict(kwargs)
-            if i > 0 and f"n{i-1}" in outputs:
-                call_args.setdefault("_prev", outputs[f"n{i-1}"])
-            outputs[f"n{i}"] = skill.handler(**call_args)
-        return {"composite_output": outputs, "steps": len(underlying)}
-
-    return _meta
 
 
 def _build_composite_handler_with_templates(
@@ -179,24 +171,26 @@ def _build_composite_handler_with_templates(
                     call_args = dict(kwargs)
                     if i > 0 and f"n{i-1}" in outputs:
                         call_args.setdefault("_prev", outputs[f"n{i-1}"])
-                # Injection-taint chokepoint. A forged composite calls each
-                # sub-skill's handler DIRECTLY (not via executor.execute_step),
-                # so the executor's taint gate is bypassed — a tainted turn
-                # could launder a risky sub-skill through a low-risk-named
-                # composite. Re-apply per sub-skill, fail-closed;
-                # defer_if_handled=False since the approval gate reviewed the
-                # OUTER composite, not this inner skill.
-                from runtime.safety.approval.approval_gate import (
-                    injection_taint_block,
+                # Safety chokepoint. A forged composite calls each sub-skill's
+                # handler DIRECTLY (not via executor.execute_step), so EVERY
+                # pre-execution gate — capability-permission, injection-taint,
+                # immunity, file-safety — is bypassed. A tainted turn (or a
+                # denied / untrusted / credential-targeting sub-skill) could
+                # otherwise be laundered through a low-risk-named composite.
+                # Re-apply the shared gate sequence per sub-skill, fail-closed
+                # (defer_taint_if_handled=False: the approval gate reviewed the
+                # OUTER composite, not this inner skill).
+                from runtime.execution.tool_engine.skill_gate import (
+                    gate_inner_dispatch,
                 )
-                _inj = injection_taint_block(
-                    skill_name, str(call_args)[:200], defer_if_handled=False,
+                _block = gate_inner_dispatch(
+                    skill, call_args, caller="forged_composite",
                 )
-                if _inj is not None:
+                if _block is not None:
                     success = False
                     failed_at = i
-                    error_type = "InjectionTaintBlocked"
-                    error_msg = _inj
+                    error_type = _block.error_type
+                    error_msg = _block.message
                     break
                 outputs[f"n{i}"] = skill.handler(**call_args)
             except TemplateResolutionError as e:
