@@ -161,10 +161,45 @@ def test_verify_drops_minority(monkeypatch):
         return {"ok": True, "verdict": verdict}
 
     monkeypatch.setattr(ds, "_call_agent_vote", fake_vote)
-    r = ds._run_orchestration(goal="g", n=1, rounds=1, verify=True)
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, verify=True, max_spawns=20)
     assert r["collected"] == ["keep-me", "drop-me"]
     assert r["confirmed"] == ["keep-me"]
     assert r["verified"] is True
+
+
+def test_verify_budget_limits_how_many_checked(monkeypatch):
+    monkeypatch.setattr(
+        ds, "_call_agent_parallel", _fake_parallel_seq([["a\nb\nc\nd"]]),
+    )
+    calls = {"n": 0}
+    lock = threading.Lock()
+
+    def fake_vote(question: str = "", **_kw: Any) -> dict[str, Any]:
+        with lock:
+            calls["n"] += 1
+        return {"ok": True, "verdict": "keep"}
+
+    monkeypatch.setattr(ds, "_call_agent_vote", fake_vote)
+    # max_spawns=7 → affordable = 7 // 3 = 2 findings verified; the other 2 are
+    # kept but flagged unverified (deterministic which two: the first two).
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, verify=True, max_spawns=7)
+    assert calls["n"] == 2
+    assert r["unverified"] == 2
+    assert r["count"] == 4  # all kept (2 verified-keep + 2 unverified)
+
+
+def test_parallel_verify_preserves_order(monkeypatch):
+    monkeypatch.setattr(
+        ds, "_call_agent_parallel", _fake_parallel_seq([["keep1\ndrop1\nkeep2"]]),
+    )
+
+    def fake_vote(question: str = "", **_kw: Any) -> dict[str, Any]:
+        return {"ok": True, "verdict": "drop" if "drop1" in question else "keep"}
+
+    monkeypatch.setattr(ds, "_call_agent_vote", fake_vote)
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, verify=True, max_spawns=30)
+    assert r["collected"] == ["keep1", "drop1", "keep2"]
+    assert r["confirmed"] == ["keep1", "keep2"]  # order kept, drop1 removed
 
 
 def test_missing_goal_errors():

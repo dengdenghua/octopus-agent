@@ -1520,7 +1520,10 @@ def _run_orchestration(
     rounds = _clamp(rounds, 1, 5, 2)
     patience = _clamp(patience, 0, 3, 1)
     if max_spawns is None:
-        planned = n * rounds + (n * rounds if verify else 0)
+        # find spends n per round; verify spends ``voters`` per finding, so
+        # budget ~``n*rounds`` findings worth of voting on top of the search.
+        verify_cost = n * rounds * _ORCH_VERIFY_VOTERS if verify else 0
+        planned = n * rounds + verify_cost
         max_spawns = min(_ORCH_MAX_SPAWNS_CEILING, max(n, planned))
     else:
         max_spawns = _clamp(max_spawns, n, _ORCH_MAX_SPAWNS_CEILING, n * rounds)
@@ -1590,21 +1593,52 @@ def _run_orchestration(
         unverified = 0
         if verify and collected:
             verified = True
-            kept: list[str] = []
-            for finding in collected:
-                if not budget.has_room():
-                    kept.append(finding)  # ran out of budget — keep + flag
-                    unverified += 1
-                    continue
-                vote = _call_agent_vote(
-                    question=f"Is this finding correct and worth keeping?\n\n{finding}",
-                    n=_ORCH_VERIFY_VOTERS, choices=ballot,
-                    timeout_s=timeout_s, context=context, session=session,
-                )
-                # Drop only on an explicit majority "drop"; ties/no-verdict keep.
-                if vote.get("verdict") != ballot[-1]:
-                    kept.append(finding)
-            confirmed = kept
+            voters = _ORCH_VERIFY_VOTERS
+            # Deterministic budget split: verify as many findings as the
+            # remaining spawn budget affords (each vote spends ``voters``); the
+            # rest are kept but flagged unverified. WHICH findings get verified
+            # is deterministic (the first ``affordable``); only the verdicts
+            # vary with the model — as verification inherently must.
+            affordable = max(0, budget.remaining() // voters)
+            to_verify = collected[:affordable]
+            unverified = len(collected) - len(to_verify)
+
+            def _verdict_for(finding: str) -> str | None:
+                try:
+                    vote = _call_agent_vote(
+                        question=f"Is this finding correct and worth keeping?\n\n{finding}",
+                        n=voters, choices=ballot,
+                        timeout_s=timeout_s, context=context, session=session,
+                    )
+                    return vote.get("verdict")
+                except Exception:  # noqa: BLE001 — a failed vote keeps the finding
+                    return None
+
+            verdicts: list[str | None] = [None] * len(to_verify)
+            if to_verify:
+                import concurrent.futures as _cf
+                import contextvars as _ctxvars
+
+                pool_workers = max(1, min(4, len(to_verify)))
+                with _cf.ThreadPoolExecutor(
+                    max_workers=pool_workers, thread_name_prefix="orch-verify",
+                ) as pool:
+                    # copy_context per task so each pool thread sees the ambient
+                    # orchestration budget (a ContextVar doesn't auto-propagate
+                    # into pool workers); the votes then charge the same envelope.
+                    futures = {
+                        pool.submit(_ctxvars.copy_context().run, _verdict_for, f): idx
+                        for idx, f in enumerate(to_verify)
+                    }
+                    for fut in _cf.as_completed(futures):
+                        verdicts[futures[fut]] = fut.result()
+
+            # Drop only on an explicit majority "drop"; ties/no-verdict keep.
+            kept = [
+                f for f, v in zip(to_verify, verdicts, strict=True)
+                if v != ballot[-1]
+            ]
+            confirmed = kept + collected[len(to_verify):]
         budget_used = budget.used
 
     return {
