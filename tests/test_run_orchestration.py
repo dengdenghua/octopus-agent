@@ -38,9 +38,23 @@ def _reset_budget_state():
 # ── pure helpers ─────────────────────────────────────────────────
 
 
-def test_split_findings_strips_bullets_and_nulls():
-    assert ds._split_findings("- a\n2. b\n\nNONE\n* c") == ["a", "b", "c"]
+def test_split_findings_strips_markers_keeps_content_digits():
+    # bullets + space-delimited enumerators ("2.", "(3)") stripped; NONE dropped
+    assert ds._split_findings("- a\n2. b\n\nNONE\n* c\n(3) d") == [
+        "a", "b", "c", "d",
+    ]
     assert ds._split_findings("nothing\nN/A") == []
+    # a finding whose CONTENT starts with a number must survive intact — the
+    # marker regex requires a space after the enumerator, so a decimal or a
+    # leading count is never mangled.
+    assert ds._split_findings("3 retries observed\n10ms latency\n3.14s p99") == [
+        "3 retries observed", "10ms latency", "3.14s p99",
+    ]
+
+
+def test_split_findings_caps_per_worker():
+    many = "\n".join(f"item {i}" for i in range(100))
+    assert len(ds._split_findings(many)) == ds._ORCH_MAX_FINDINGS_PER_WORKER
 
 
 def test_dedupe_findings_normalises_and_tracks_seen():
@@ -115,6 +129,25 @@ def test_missing_goal_errors():
     r = ds._run_orchestration(goal="")
     assert r["ok"] is False
     assert "required" in (r["error"] or "")
+
+
+def test_total_findings_cap(monkeypatch):
+    calls = {"i": 0}
+
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        rnd = calls["i"]
+        calls["i"] += 1
+        out = "\n".join(f"r{rnd}-item{j}" for j in range(50))  # 50 fresh/round
+        return {
+            "ok": True,
+            "successes": [{"output": out, "agent_id": "researcher"}],
+            "success_count": 1,
+        }
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    r = ds._run_orchestration(goal="g", n=1, rounds=10, patience=3)
+    assert r["count"] == ds._ORCH_MAX_FINDINGS_TOTAL
+    assert r["stopped_reason"] == "cap"
 
 
 # ── budget gate (real _call_agent_parallel, mocked call_subagent) ─

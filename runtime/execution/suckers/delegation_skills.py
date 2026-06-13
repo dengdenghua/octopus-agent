@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import OrderedDict
 from typing import Any
 
@@ -1407,19 +1408,31 @@ def _call_agent_vote(
 
 _ORCH_MAX_SPAWNS_CEILING = 48
 _ORCH_VERIFY_VOTERS = 3
+_ORCH_MAX_FINDINGS_PER_WORKER = 50
+_ORCH_MAX_FINDINGS_TOTAL = 200
 _NULL_FINDING_TOKENS = frozenset({
     "none", "n/a", "na", "nothing", "no new findings", "no findings", "(none)",
 })
+# A LEADING list marker only: a bullet, or an enumerator like "1." / "2)" /
+# "(3)" / "4、" followed by a space. Deliberately NOT a bare digit run, so a
+# finding whose content starts with a number ("3 retries observed") is kept
+# intact rather than mangled.
+_LIST_MARKER = re.compile(r"^\s*(?:[-*•·]|\(?\d{1,3}[.)）、])\s+")
 
 
-def _split_findings(output: str) -> list[str]:
-    """One finding per line; strip bullet/number prefixes, drop null markers."""
+def _split_findings(
+    output: str, *, max_items: int = _ORCH_MAX_FINDINGS_PER_WORKER,
+) -> list[str]:
+    """One finding per line; strip a leading list marker, drop null markers,
+    and cap how many lines a single worker can contribute (runaway guard)."""
     out: list[str] = []
     for line in (output or "").splitlines():
-        s = line.strip().lstrip("-*•·0123456789.)（）[] #").strip()
+        s = _LIST_MARKER.sub("", line.strip()).strip()
         if not s or s.lower() in _NULL_FINDING_TOKENS:
             continue
         out.append(s)
+        if len(out) >= max_items:
+            break
     return out
 
 
@@ -1547,6 +1560,10 @@ def _run_orchestration(
                 continue
             dry = 0
             collected.extend(fresh)
+            if len(collected) >= _ORCH_MAX_FINDINGS_TOTAL:
+                del collected[_ORCH_MAX_FINDINGS_TOTAL:]
+                stopped = "cap"
+                break
 
         confirmed = list(collected)
         verified = False
