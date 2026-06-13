@@ -106,3 +106,89 @@ class TestSelectToolSpecs:
         specs = [_FakeSpec("read_file")]
         out = [s.name for s in select_tool_specs(("read_file", "ghost_skill"), specs)]
         assert out == ["read_file"]  # ghost_skill not in registry → dropped
+
+
+# ═══════════════════════════════════════════════════════════
+# C1 — bind/unbind_thread_session symmetry (unbind was missing)
+# ═══════════════════════════════════════════════════════════
+
+
+class TestThreadSessionBindUnbind:
+    def test_bind_returns_tokens_and_unbind_resets(self):
+        from runtime.platform.process.session import (
+            Session,
+            bind_thread_session,
+            current_agent_id,
+            current_session,
+            unbind_thread_session,
+        )
+
+        before_sess = current_session()
+        before_agent = current_agent_id()
+        sess = Session(actor="tester")
+        toks = bind_thread_session(sess)
+        assert isinstance(toks, tuple) and len(toks) == 3
+        assert current_session() is sess
+        assert current_agent_id() == sess.agent_id
+
+        unbind_thread_session(*toks)
+        # ContextVars reset to their PRIOR state (isolation-safe) — no leak.
+        assert current_session() is before_sess
+        assert current_agent_id() == before_agent
+
+
+# ═══════════════════════════════════════════════════════════
+# C2 — scheduler.max_workers config wiring (was hardcoded)
+# ═══════════════════════════════════════════════════════════
+
+
+class TestSchedulerConfig:
+    def test_default_max_workers_is_one(self):
+        from runtime.platform.config.schema import AgentConfig, SchedulerConfig
+
+        assert SchedulerConfig().max_workers == 1
+        assert AgentConfig().scheduler.max_workers == 1
+
+    def test_max_workers_below_one_rejected(self):
+        import pytest
+        from pydantic import ValidationError
+
+        from runtime.platform.config.schema import SchedulerConfig
+
+        with pytest.raises(ValidationError):
+            SchedulerConfig(max_workers=0)
+
+
+# ═══════════════════════════════════════════════════════════
+# PL3 — plugin manifest.provides drift warning (load-time)
+# ═══════════════════════════════════════════════════════════
+
+
+class TestManifestProvidesValidation:
+    def _call(self, provides, cap_names, caplog):
+        import logging
+        from types import SimpleNamespace
+
+        from runtime.platform.plugins.plugin_hub import PluginHub
+
+        instance = SimpleNamespace(
+            capabilities=[SimpleNamespace(name=n) for n in cap_names],
+        )
+        manifest = SimpleNamespace(provides=provides)
+        with caplog.at_level(logging.WARNING):
+            PluginHub._validate_manifest_provides("p", instance, manifest)
+        return caplog.text
+
+    def test_match_is_silent(self, caplog):
+        txt = self._call(["a", "b"], ["a", "b"], caplog)
+        assert "mismatch" not in txt
+
+    def test_empty_provides_is_silent(self, caplog):
+        txt = self._call([], ["a"], caplog)
+        assert "mismatch" not in txt
+
+    def test_mismatch_warns(self, caplog):
+        txt = self._call(["a", "ghost"], ["a", "extra"], caplog)
+        assert "mismatch" in txt
+        assert "ghost" in txt  # declared but not provided
+        assert "extra" in txt  # provided but not declared

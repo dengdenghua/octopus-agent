@@ -210,6 +210,12 @@ class PluginHub:
             # 6. Auto-mount webhook routes from manifest
             self._mount_webhooks(name, manifest_data, plugin_dir)
 
+            # 7. Diagnostic: warn if manifest.provides diverges from the
+            # capabilities the code actually registered (auto-detected
+            # capabilities remain the source of truth — this only surfaces
+            # drift at load time instead of letting it pass silently).
+            self._validate_manifest_provides(name, instance, manifest)
+
             with self._lock_internal:
                 self._plugins[name] = instance
                 self._contexts[name] = ctx
@@ -221,6 +227,33 @@ class PluginHub:
                 len(instance.capabilities),
             )
             return instance
+
+    @staticmethod
+    def _validate_manifest_provides(
+        name: str, instance: Any, manifest: Any,
+    ) -> None:
+        """Warn when ``manifest.provides`` doesn't match the instance's actual
+        registered capabilities. An empty ``provides`` is fine (auto-detection
+        is the design intent) and is skipped."""
+        declared = {str(p) for p in (getattr(manifest, "provides", None) or [])}
+        if not declared:
+            return
+        actual = {
+            str(getattr(c, "name", c))
+            for c in (getattr(instance, "capabilities", None) or [])
+        }
+        missing = declared - actual
+        extra = actual - declared
+        if missing or extra:
+            parts = []
+            if missing:
+                parts.append(f"declared but not provided: {sorted(missing)}")
+            if extra:
+                parts.append(f"provided but not declared: {sorted(extra)}")
+            _LOG.warning(
+                "Plugin %s manifest.provides mismatch — %s",
+                name, "; ".join(parts),
+            )
 
     def load_all(self) -> list[str]:
         """Discover and load all plugins in the plugin directory."""

@@ -234,7 +234,10 @@ def run_serve(
         return 2
 
     stack = build_from_config(cfg)
-    runner = BackgroundRunner(name=f"scheduler-{cfg.name}")
+    runner = BackgroundRunner(
+        name=f"scheduler-{cfg.name}",
+        max_workers=cfg.scheduler.max_workers,
+    )
 
     # Optional OTel span export. No-op unless OTEL_EXPORTER_OTLP_ENDPOINT
     # or OCTOPUS_OTEL_CONSOLE is set AND the [tracing] extra is installed

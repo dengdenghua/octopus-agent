@@ -101,10 +101,10 @@ class ServerMethod(StrEnum):
     # handler so wiring emission only requires a backend change.
     ITEM_PLAN_DELTA = "item/plan/delta"
     ITEM_COMMAND_OUTPUT_DELTA = "item/commandExecution/outputDelta"
-    # ``ITEM_FILE_CHANGE_OUTPUT_DELTA`` and
-    # ``ITEM_FILE_CHANGE_HUNK_DELTA`` are reserved but not currently
-    # emitted — file-edit streaming sees only the final FileChangeItem
-    # today. Wiring would unlock the streaming hunks UX.
+    # ``ITEM_FILE_CHANGE_OUTPUT_DELTA`` is reserved but not currently
+    # emitted. ``ITEM_FILE_CHANGE_HUNK_DELTA`` IS emitted (see
+    # realtime_event_bridge.py) — file-edit streaming surfaces incremental
+    # hunks today; only the whole-file output-delta variant is unwired.
     ITEM_FILE_CHANGE_OUTPUT_DELTA = "item/fileChange/outputDelta"
     ITEM_FILE_CHANGE_HUNK_DELTA = "item/fileChange/hunkDelta"
     ITEM_FILE_CHANGE_HUNK_DECISION = "item/fileChange/hunkDecision"
@@ -114,6 +114,10 @@ class ServerMethod(StrEnum):
 
     # Errors / model events
     ERROR = "error"
+    # ``MODEL_REROUTED`` is reserved but not currently emitted/consumed —
+    # intended for when smart routing falls back from the requested model to an
+    # available alternative, so the UI can surface an inline notice. Wiring
+    # needs backend emission + a reducer handler + UI rendering.
     MODEL_REROUTED = "model/rerouted"
 
     # ── Server-initiated requests (client must reply) ────────

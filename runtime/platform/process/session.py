@@ -172,22 +172,50 @@ def session_scope(session: Session) -> Iterator[Session]:
                 pass
 
 
-def bind_thread_session(session: Session) -> None:
+def bind_thread_session(
+    session: Session,
+) -> tuple[Token, Token, Token | None]:
     """Non-context-manager variant — sets the session on the CURRENT
     thread/task without auto-resetting. Use this when the caller owns
     thread lifecycle (e.g. a Starlette-spawned SSE generator) and will
-    manually `unbind_thread_session` at the end.
+    manually ``unbind_thread_session`` at the end.
+
+    Returns ``(tok_session, tok_agent, tok_molili)`` — pass them to
+    :func:`unbind_thread_session` in a ``finally`` to reset the ContextVars
+    and avoid leaking the session onto a reused thread.
     """
-    _current_session.set(session)
-    _current_agent_id.set(session.agent_id)
+    tok_session = _current_session.set(session)
+    tok_agent = _current_agent_id.set(session.agent_id)
+    tok_molili: Token | None = None
     try:
         from runtime.sensing.model_router.molili_router import (
             current_actor as _molili_actor,
         )
         if session.actor:
-            _molili_actor.set(session.actor)
+            tok_molili = _molili_actor.set(session.actor)
     except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
         pass
+    return tok_session, tok_agent, tok_molili
+
+
+def unbind_thread_session(
+    tok_session: Token,
+    tok_agent: Token,
+    tok_molili: Token | None = None,
+) -> None:
+    """Reset the ContextVars set by :func:`bind_thread_session` using its
+    returned tokens. The documented partner that was previously referenced but
+    never existed."""
+    _current_session.reset(tok_session)
+    _current_agent_id.reset(tok_agent)
+    if tok_molili is not None:
+        try:
+            from runtime.sensing.model_router.molili_router import (
+                current_actor as _molili_actor,
+            )
+            _molili_actor.reset(tok_molili)
+        except ImportError:  # noqa: BLE001 — molili optional; absence is no-op
+            pass
 
 
 __all__ = [
@@ -197,4 +225,5 @@ __all__ = [
     "current_agent_id",
     "session_scope",
     "bind_thread_session",
+    "unbind_thread_session",
 ]

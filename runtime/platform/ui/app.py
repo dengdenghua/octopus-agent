@@ -377,8 +377,20 @@ def create_app(
         _per_agent_base: Path | None = None
         if isinstance(inferred_thread_store_path, Path):
             _per_agent_base = inferred_thread_store_path.parent.parent
+        # Session-layout feature flags. Defaults (dated_layout off,
+        # index_enabled on) match ThreadStateStore's own defaults, so this is
+        # behaviour-preserving — it just lets the flags actually reach the
+        # store instead of being registered-but-inert.
+        try:
+            from runtime.platform import feature_flags as _ff
+            _dated_layout = _ff.is_on("sessions.dated_layout")
+            _index_enabled = _ff.is_on("sessions.index_enabled")
+        except Exception:  # noqa: BLE001 — flags optional; keep store defaults
+            _dated_layout, _index_enabled = False, True
         thread_store = ThreadStateStore(
             per_agent_base=_per_agent_base,
+            dated_layout=_dated_layout,
+            index_enabled=_index_enabled,
         )
         app.state.thread_store = thread_store
         # Defer: feed stack.config.mcp_servers into the mcp_router

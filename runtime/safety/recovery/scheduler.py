@@ -275,11 +275,13 @@ class RegenerationScheduler:
             summary["recipe_scores"] = "err"
 
         try:
-            import os as _os
-
+            from runtime.platform import feature_flags as _ff
             from runtime.safety.recovery import forge_auto_tick as _fat
             _fat.bind_stack(self._stack)
-            _apply = _os.environ.get("OCTOPUS_GEPA_AUTO_APPLY", "0") == "1"
+            # Source of truth is the feature-flag system (env → legacy_env →
+            # file → default); reading os.environ directly ignored runtime
+            # flag changes via feature_flags.json. Default stays disabled.
+            _apply = _ff.is_on("regeneration.gepa_auto_apply")
             _tr = _fat.run_tick(apply=_apply, journal=journal)
             payload = {
                 "tick": n,

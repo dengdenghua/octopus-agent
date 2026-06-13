@@ -277,6 +277,16 @@ class DriftConfig(BaseModel):
     score_threshold: float = 0.15
     critical_auto_rollback: bool = True
 
+
+class SchedulerConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Background scheduler worker pool. Default 1 matches BackgroundRunner's
+    # own default (single-threaded, no pool) — raise to run periodic ticks
+    # concurrently.
+    max_workers: int = Field(default=1, ge=1, le=128)
+
+
 class AgentConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
@@ -297,6 +307,7 @@ class AgentConfig(BaseModel):
     drift: DriftConfig = Field(default_factory=DriftConfig)
     molili: MoliliConfig = Field(default_factory=MoliliConfig)
     local_auth: LocalAuthConfig = Field(default_factory=LocalAuthConfig)
+    scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
 
     intel_sources: list[IntelSourceConfig] = Field(default_factory=list)
     mcp_servers: list[MCPServerConfigEntry] = Field(default_factory=list)
