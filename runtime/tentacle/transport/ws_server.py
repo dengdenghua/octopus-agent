@@ -129,6 +129,7 @@ class TentacleWebSocketServer:
         on_task_execute: Callable[[TaskExecuteRequest, WebSocketServerProtocol], Awaitable[None]] | None = None,
         on_screen_frame: Callable[[str, bytes], Awaitable[None]] | None = None,
         on_remote_input: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
+        on_custom: Callable[[str | None, dict[str, Any], WebSocketServerProtocol], Awaitable[None]] | None = None,
         auth_token: str | None = None,
     ) -> None:
         self.host = host
@@ -151,6 +152,7 @@ class TentacleWebSocketServer:
         self.on_task_execute = on_task_execute
         self.on_screen_frame = on_screen_frame
         self.on_remote_input = on_remote_input
+        self.on_custom = on_custom  # 未识别方法的兜底钩子（webrtc 信令等自定义消息）
 
         # tentacle_id → WebSocket 连接映射
         self._connections: dict[str, WebSocketServerProtocol] = {}
@@ -212,6 +214,14 @@ class TentacleWebSocketServer:
         logger.info("TentacleWebSocketServer stopped")
 
     # ── 向设备发送指令 ──────────────────────────────────────
+
+    async def send_json(self, tentacle_id: str, obj: dict[str, Any]) -> bool:
+        """向指定设备发送一条任意 JSON 消息（webrtc 信令等用）。"""
+        ws = self._connections.get(tentacle_id)
+        if ws is None or ws.closed:
+            return False
+        await ws.send(json.dumps(obj))
+        return True
 
     async def send_tool_execute(
         self,
@@ -378,6 +388,8 @@ class TentacleWebSocketServer:
                     pass
                 elif method == MSG_PING:
                     await ws.send(json.dumps({"jsonrpc": "2.0", "result": "pong", "id": msg_id}))
+                elif self.on_custom is not None:
+                    await self.on_custom(tentacle_id, msg, ws)
                 else:
                     await self._send_error(ws, msg_id, -32601, f"Method not found: {method}")
         except Exception as e:
