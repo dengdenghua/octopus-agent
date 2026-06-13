@@ -1346,4 +1346,20 @@ def create_app(
             "anthropic compat router failed to mount: %s", _anth_exc,
         )
 
+    # 扩展点:消费者(企业版/octopus-os/mobile)经 OCTOPUS_APP_EXTENSIONS 在此挂
+    # 自定义路由,无需 fork agent。未配置则 no-op。见 runtime/platform/extensions.py。
+    from runtime.platform.extensions import (
+        AppExtensionContext,
+        load_app_extensions,
+    )
+
+    load_app_extensions(
+        app,
+        AppExtensionContext(
+            identity_store=cocoloop_identity_store,
+            stack=stack,
+            agent_registry=agent_registry,
+        ),
+    )
+
     return app
