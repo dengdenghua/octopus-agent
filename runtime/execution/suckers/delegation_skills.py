@@ -1167,6 +1167,226 @@ def _build_parallel_envelope(
     }
 
 
+# ── consensus / vote gate ────────────────────────────────────────
+# A verification gate: spawn N INDEPENDENT voters on the SAME question,
+# parse each one's VERDICT line, and tally a majority. This is the
+# "adversarial verify / judge panel" pattern — confirm or refute a claim
+# with independent voters instead of trusting one agent. The aggregation
+# (``_extract_verdict`` / ``_tally_votes``) is a pure function · unit
+# tested in isolation; the spawn reuses ``_call_agent_parallel`` so the
+# concurrency cap, injection taint, budget, retry and timeout are all the
+# same already-tested machinery.
+
+_VOTE_MIN = 2
+_VOTE_MAX = 5  # aligns with the per-turn delegation cap
+
+
+def _coerce_vote_choices(choices: Any) -> list[str] | None:
+    """Normalise a ballot into distinct labels, or None for a free verdict."""
+    if choices is None:
+        return None
+    if isinstance(choices, str):
+        parts = [c.strip() for c in choices.replace("|", ",").split(",")]
+    elif isinstance(choices, (list, tuple)):
+        parts = [str(c).strip() for c in choices]
+    else:
+        return None
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in parts:
+        if p and p.lower() not in seen:
+            seen.add(p.lower())
+            out.append(p)
+    return out or None
+
+
+def _build_ballot_prompt(question: str, choices: list[str] | None) -> str:
+    if choices:
+        opts = " / ".join(choices)
+        ballot = (
+            f"Choose exactly one of: {opts}.\n"
+            f"Line 1 MUST be `VERDICT: <one of {opts}>`.\n"
+            "Line 2 MUST be `REASON: <one sentence, <=30 words>`."
+        )
+    else:
+        ballot = (
+            "Line 1 MUST be `VERDICT: <your short answer / label>`.\n"
+            "Line 2 MUST be `REASON: <one sentence, <=30 words>`."
+        )
+    return (
+        "You are ONE independent voter on a panel. Judge the question "
+        "below on your own merits — do not assume other voters agree.\n\n"
+        f"QUESTION:\n{question}\n\n{ballot}"
+    )
+
+
+def _normalize_verdict(raw: str, choices: list[str] | None) -> str:
+    # Whitespace-only strip is enough: the substring match below tolerates
+    # markdown / trailing punctuation noise ("**yes**", "yes.") on its own.
+    v = (raw or "").strip()
+    if not v:
+        return ""
+    if not choices:
+        return v[:48]
+    vl = v.lower()
+    for c in choices:  # exact (casefold)
+        if vl == c.lower():
+            return c
+    for c in choices:  # verdict line may be a sentence containing the choice
+        cl = c.lower()
+        if vl.startswith(cl) or cl in vl:
+            return c
+    return ""  # could not map to a ballot choice → abstention
+
+
+def _extract_verdict(output: str, choices: list[str] | None) -> tuple[str, str]:
+    """Parse (verdict, reason) from a voter's free text. verdict is ""
+    when unparseable (counted as an abstention)."""
+    text = (output or "").strip()
+    verdict_raw = ""
+    reason = ""
+    for line in text.splitlines():
+        s = line.strip().lstrip("-*# ").strip()
+        low = s.lower()
+        if not verdict_raw and low.startswith("verdict"):
+            verdict_raw = s.split(":", 1)[-1].strip() if ":" in s else s[7:].strip()
+        elif not reason and low.startswith("reason"):
+            reason = s.split(":", 1)[-1].strip() if ":" in s else s[6:].strip()
+    if not verdict_raw:
+        for line in text.splitlines():
+            if line.strip():
+                verdict_raw = line.strip()
+                break
+    verdict = _normalize_verdict(verdict_raw, choices)
+    if not reason:
+        reason = " ".join(text.split())[:200]
+    return verdict, reason
+
+
+def _tally_votes(
+    votes: list[dict[str, Any]], choices: list[str] | None,
+) -> dict[str, Any]:
+    """Pure majority aggregation over parsed votes."""
+    abstentions = sum(1 for v in votes if not v.get("verdict"))
+    tally: dict[str, int] = {}
+    for v in votes:
+        key = v.get("verdict")
+        if key:
+            tally[key] = tally.get(key, 0) + 1
+    votes_cast = sum(tally.values())
+    if votes_cast == 0:
+        return {
+            "verdict": None, "confidence": 0.0, "unanimous": False,
+            "tie": False, "tie_between": [], "tally": {},
+            "voter_count": len(votes), "votes_cast": 0,
+            "abstentions": abstentions,
+        }
+    top = max(tally.values())
+    winners = sorted(k for k, c in tally.items() if c == top)
+    tie = len(winners) > 1
+    return {
+        "verdict": None if tie else winners[0],
+        "confidence": round(top / votes_cast, 3),
+        "unanimous": len(tally) == 1 and abstentions == 0,
+        "tie": tie,
+        "tie_between": winners if tie else [],
+        "tally": dict(sorted(tally.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "voter_count": len(votes),
+        "votes_cast": votes_cast,
+        "abstentions": abstentions,
+    }
+
+
+def _vote_note(tally: dict[str, Any]) -> str:
+    if tally["votes_cast"] == 0:
+        return (
+            "[no-verdict] no voter produced a parseable VERDICT; treat as "
+            "inconclusive and decide yourself."
+        )
+    if tally["tie"]:
+        return (
+            f"[no-consensus] split {tally['tally']} between "
+            f"{', '.join(tally['tie_between'])} — no majority. Do NOT claim a "
+            "decision; break the tie yourself or escalate."
+        )
+    if tally["unanimous"]:
+        return (
+            f"[unanimous] all {tally['votes_cast']} voters agree: "
+            f"{tally['verdict']}."
+        )
+    return (
+        f"[majority] {tally['verdict']} at {tally['confidence']:.0%} "
+        f"({tally['tally']}); minority dissent present — weigh it before acting."
+    )
+
+
+def _call_agent_vote(
+    question: str = "",
+    *,
+    n: int | str = 3,
+    agent_id: str = "reviewer",
+    choices: Any = None,
+    timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
+    context: dict[str, Any] | None = None,
+    session: Any = None,
+    **_kw: Any,
+) -> dict[str, Any]:
+    """Verification gate: spawn N independent voters on the SAME question,
+    parse each VERDICT, return a majority decision + confidence + dissent.
+
+    Use it to CONFIRM or REFUTE a claim with independent judgment rather
+    than trusting a single agent (e.g. "is this bug real?", "does this
+    patch fix it?", "which design is safer: A or B?").
+    """
+    q = str(
+        question or _kw.get("prompt") or _kw.get("task")
+        or _kw.get("claim") or _kw.get("query") or "",
+    ).strip()
+    if not q:
+        return {
+            "ok": False, "error": "question is required", "verdict": None,
+            "confidence": 0.0, "tally": {}, "votes": [], "voter_count": 0,
+            "votes_cast": 0, "abstentions": 0,
+            "note": "[no-verdict] nothing to vote on",
+        }
+    try:
+        n_int = int(n)
+    except (TypeError, ValueError):
+        n_int = 3
+    n_int = max(_VOTE_MIN, min(_VOTE_MAX, n_int))
+    ballot_choices = _coerce_vote_choices(choices)
+    voter = str(agent_id or "reviewer").strip() or "reviewer"
+    ballot = _build_ballot_prompt(q, ballot_choices)
+    specs = [{"agent_id": voter, "prompt": ballot} for _ in range(n_int)]
+
+    env = _call_agent_parallel(
+        specs=specs, timeout_s=timeout_s, context=context, session=session,
+    )
+
+    votes: list[dict[str, Any]] = []
+    for s in env.get("successes", []):
+        verdict, reason = _extract_verdict(str(s.get("output") or ""), ballot_choices)
+        votes.append({
+            "verdict": verdict,
+            "reason": reason,
+            "agent_id": s.get("agent_id"),
+            "codename": s.get("codename"),
+            "abstained": not verdict,
+        })
+
+    tally = _tally_votes(votes, ballot_choices)
+    return {
+        "ok": bool(env.get("ok")) and tally["votes_cast"] > 0,
+        "question": q[:240],
+        "choices": ballot_choices,
+        **tally,
+        "votes": votes,
+        "note": _vote_note(tally),
+        "subagent_status": env.get("status_summary"),
+        "honesty_warning": env.get("honesty_warning") or "",
+    }
+
+
 def register_delegation_skills(registry: SkillRegistry) -> int:
     """Register `call_agent` for sub-agent delegation. Returns count.
 
@@ -1338,7 +1558,62 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
             ),
         ],
     ), replace=True)
-    return 2
+
+    # ── consensus / vote gate ────────────────────────────────
+    vote_description = (
+        "Verification gate — spawn N INDEPENDENT voters on the SAME "
+        "question and tally a MAJORITY verdict (with confidence + dissent). "
+        "This is the adversarial-verify / judge-panel pattern: confirm or "
+        "refute a claim with independent judgment instead of trusting one "
+        "agent.\n"
+        "\n"
+        "Use it for decisions that matter: 'is this bug real?', 'does this "
+        "patch actually fix it?', 'is this answer correct?', 'which option is "
+        "safer: A or B?'. A natural pairing is call_agent_parallel (gather "
+        "candidate answers) → call_agent_vote (adjudicate them).\n"
+        "\n"
+        "Each voter runs in its own context and must emit `VERDICT: <choice>` "
+        "then `REASON: <one line>`. Unparseable replies count as abstentions; "
+        "a split returns verdict=null with tie=true (no decision — you break "
+        "it or escalate).\n"
+        "\n"
+        "Args: {question: string (the claim / question to judge), n?: int "
+        "2-5 voters (default 3 · odd avoids ties), choices?: list[string] a "
+        "fixed ballot e.g. [\"yes\",\"no\"] (omit for a free-form verdict), "
+        "agent_id?: voter role (default reviewer), timeout_s?: int}.\n"
+        "\n"
+        "Returns: {ok, verdict (null on tie / no-verdict), confidence (0-1), "
+        "unanimous, tie, tie_between, tally:{choice:count}, "
+        "votes:[{verdict, reason, codename, abstained}], votes_cast, "
+        "abstentions, note, honesty_warning}.\n"
+        "\n"
+        "Budget: each voter is one delegation against the 5/turn cap, so a "
+        "3-voter vote uses 3. Reserve it for decisions worth the spend."
+    )
+    registry.register(Skill(
+        name="call_agent_vote",
+        description=vote_description,
+        affinity=["delegation", "verify", "vote", "consensus", "judge"],
+        cost_profile="high",  # spawns N separate LLM turns
+        trusted_source="skill://public/call_agent_vote",
+        handler=_call_agent_vote,
+        tests=[
+            SkillTestCase(
+                name="missing_question_returns_error",
+                tier="golden",
+                args={"question": ""},
+                expect=SkillExpect(schema_keys=[
+                    "ok", "verdict", "tally", "votes", "note",
+                ]),
+                custom_predicate=lambda r: (
+                    isinstance(r, dict)
+                    and r.get("ok") is False
+                    and "required" in (r.get("error") or "")
+                ),
+            ),
+        ],
+    ), replace=True)
+    return 3
 
 
 __all__ = ["register_delegation_skills"]
