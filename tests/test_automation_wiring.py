@@ -69,3 +69,71 @@ def test_browser_endpoints_enforce_auth_when_enabled():
     # router (previously these endpoints had no auth at all).
     c = _browser_client(require_auth=True, identity_store=object())
     assert c.get("/api/browser/config").status_code == 401
+
+
+# ── vision-loop semantic grounding (window list into the planner prompt) ──
+
+
+class _RecordingRouter:
+    """Captures the ModelRequest the planner sends and returns a done action."""
+
+    def __init__(self) -> None:
+        self.last = None
+
+    def call(self, request):
+        self.last = request
+
+        class _R:
+            text = '{"action": "done"}'
+
+        return _R()
+
+
+def test_window_grounding_returns_str_and_never_raises():
+    from runtime.execution.suckers.desktop_grounding import window_grounding
+
+    out = window_grounding()
+    # macOS: a non-empty window list; other platforms / no perms: "".
+    assert isinstance(out, str)
+
+
+def test_planner_injects_grounding_into_prompt(tmp_path):
+    from runtime.execution.suckers.computer_use_loop import ModelRouterVisionPlanner
+
+    shot = tmp_path / "s.png"
+    shot.write_bytes(b"\x89PNG\r\n")
+    rec = _RecordingRouter()
+    planner = ModelRouterVisionPlanner(
+        router=rec, grounding=lambda: "On-screen windows:\n- Finder @ (0,0) 800x600",
+    )
+    planner.next_action(goal="open a file", screenshot_path=str(shot), history=[])
+
+    user_msg = rec.last.messages[1].content
+    assert "On-screen windows" in user_msg
+    assert "Finder" in user_msg
+
+
+def test_planner_pure_pixel_without_grounding(tmp_path):
+    from runtime.execution.suckers.computer_use_loop import ModelRouterVisionPlanner
+
+    shot = tmp_path / "s.png"
+    shot.write_bytes(b"\x89PNG\r\n")
+    rec = _RecordingRouter()
+    planner = ModelRouterVisionPlanner(router=rec)  # grounding=None (default)
+    planner.next_action(goal="open a file", screenshot_path=str(shot), history=[])
+
+    assert "On-screen windows" not in rec.last.messages[1].content
+
+
+def test_planner_grounding_failure_is_swallowed(tmp_path):
+    from runtime.execution.suckers.computer_use_loop import ModelRouterVisionPlanner
+
+    def _boom() -> str:
+        raise RuntimeError("grounding blew up")
+
+    shot = tmp_path / "s.png"
+    shot.write_bytes(b"\x89PNG\r\n")
+    planner = ModelRouterVisionPlanner(router=_RecordingRouter(), grounding=_boom)
+    # A failing grounding hook must NOT break the planner step.
+    out = planner.next_action(goal="g", screenshot_path=str(shot), history=[])
+    assert isinstance(out, dict)

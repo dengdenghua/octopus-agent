@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -97,6 +98,10 @@ class ModelRouterVisionPlanner:
     system_provider: str = "anthropic"   # anthropic / openai / mock
     max_tokens: int = 512
     system_prompt: str = _SYSTEM_PROMPT
+    # Optional semantic-grounding hook. Called fresh each step; its text (e.g.
+    # the on-screen window list) is added to the prompt alongside the
+    # screenshot. ``None`` or a "" return → pure-pixel behaviour (unchanged).
+    grounding: Callable[[], str] | None = None
 
     def next_action(
         self,
@@ -115,8 +120,16 @@ class ModelRouterVisionPlanner:
         b64 = base64.standard_b64encode(image_bytes).decode("ascii")
 
         history_text = _compact_history(history)
+        grounding_text = ""
+        if self.grounding is not None:
+            try:
+                grounding_text = self.grounding() or ""
+            except Exception:  # noqa: BLE001 — grounding is best-effort, never fatal
+                grounding_text = ""
+        grounding_block = f"{grounding_text}\n\n" if grounding_text else ""
         user_text = (
             f"Goal: {goal}\n\n"
+            f"{grounding_block}"
             f"Previous actions (most recent last):\n{history_text}\n\n"
             f"Output ONE JSON action."
         )

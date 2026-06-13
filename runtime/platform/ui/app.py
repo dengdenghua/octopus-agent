@@ -310,11 +310,17 @@ def create_app(
                             ModelRouterVisionPlanner,
                             register_computer_use_loop,
                         )
+                        from runtime.execution.suckers.desktop_grounding import (
+                            window_grounding,
+                        )
                         register_computer_use_loop(
                             stack.executor.registry,
                             ModelRouterVisionPlanner(
                                 router=router,
                                 model=default_model or "claude-sonnet-4-6",
+                                # Best-effort semantic grounding (on-screen
+                                # window list); "" on non-macOS / no perms.
+                                grounding=window_grounding,
                             ),
                         )
                     except Exception as _cul_exc:  # noqa: BLE001
