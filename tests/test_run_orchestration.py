@@ -140,3 +140,39 @@ def test_budget_stops_the_loop(monkeypatch):
     assert r["stopped_reason"] == "budget"
     assert r["rounds_run"] == 2
     assert r["budget_used"] >= 4
+
+
+# ── full-stack composition (real parallel + real vote + real envelope) ─
+
+
+def test_full_stack_find_and_verify(monkeypatch):
+    """run_orchestration → real _call_agent_parallel → real _call_agent_vote →
+    real orchestration_budget_scope, mocking ONLY call_subagent at the bottom.
+    Proves the three pieces built this session actually compose: workers find
+    two candidates, the vote panel keeps the strong one and drops the weak."""
+
+    def fake_cs(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
+        if "VERDICT" in prompt:  # a ballot from call_agent_vote
+            verdict = "drop" if "weak finding" in prompt else "keep"
+            out = f"VERDICT: {verdict}\nREASON: test"
+        else:  # a finder prompt
+            out = "strong finding\nweak finding"
+        return {
+            "agent_id": agent_id, "output": out,
+            "success": True, "error": None, "codename": "X",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_cs)
+    monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", fake_cs)
+
+    r = ds._run_orchestration(
+        goal="enumerate findings", n=2, rounds=1, verify=True, max_spawns=20,
+    )
+
+    assert r["ok"] is True
+    assert r["collected"] == ["strong finding", "weak finding"]
+    # the vote gate dropped the weak one
+    assert r["confirmed"] == ["strong finding"]
+    assert r["verified"] is True
+    # 2 finders + 2 findings * 3 voters = 8 spawns charged to the one envelope
+    assert r["budget_used"] == 8
