@@ -156,12 +156,18 @@ async def on_hello(hello, ws):
 
 async def main():
     global server
+    # 本机/同机测试:默认 127.0.0.1(回环,免 token)。
+    # 跨网(Tailscale/局域网):OCTOPUS_TENTACLE_HOST=0.0.0.0 OCTOPUS_TENTACLE_TOKEN=<密码> 再起。
+    # 非回环绑定时 ws_server 强制要 token(token 由 OCTOPUS_TENTACLE_TOKEN 环境变量提供)。
+    import os
+    host = os.environ.get("OCTOPUS_TENTACLE_HOST", "127.0.0.1")
     server = TentacleWebSocketServer(
-        host="127.0.0.1", port=8765,
+        host=host, port=8765,
         on_device_hello=on_hello, on_custom=on_custom, auth_token=None,
     )
     await server.start()
-    log.info("WebRTC PC-remote server READY  Mac=%dx%d  stream=%dx%d", W, H, EW, EH)
+    tok = "yes" if os.environ.get("OCTOPUS_TENTACLE_TOKEN") else "no"
+    log.info("WebRTC PC-remote server READY  bind=%s:8765  token=%s  Mac=%dx%d  stream=%dx%d", host, tok, W, H, EW, EH)
     await asyncio.Event().wait()
 
 
