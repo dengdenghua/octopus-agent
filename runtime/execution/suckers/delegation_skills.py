@@ -1418,17 +1418,26 @@ _NULL_FINDING_TOKENS = frozenset({
 # finding whose content starts with a number ("3 retries observed") is kept
 # intact rather than mangled.
 _LIST_MARKER = re.compile(r"^\s*(?:[-*•·]|\(?\d{1,3}[.)）、])\s+")
+# Markdown noise a real model emits around a list (observed live): horizontal
+# rules (--- *** ===), ATX headings (## Foo), and lines that are entirely one
+# bold/emphasis span used as a section label (**Critical issues**). A finding
+# that merely CONTAINS bold ("**Always** validate") is kept — only whole-line
+# emphasis is dropped.
+_NOISE_LINE = re.compile(
+    r"^(?:[-*=_~#]{3,}|#{1,6}\s.*|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*)$",
+)
 
 
 def _split_findings(
     output: str, *, max_items: int = _ORCH_MAX_FINDINGS_PER_WORKER,
 ) -> list[str]:
-    """One finding per line; strip a leading list marker, drop null markers,
-    and cap how many lines a single worker can contribute (runaway guard)."""
+    """One finding per line; strip a leading list marker, drop null markers and
+    markdown noise (rules / headings / section labels), and cap how many lines a
+    single worker can contribute (runaway guard)."""
     out: list[str] = []
     for line in (output or "").splitlines():
         s = _LIST_MARKER.sub("", line.strip()).strip()
-        if not s or s.lower() in _NULL_FINDING_TOKENS:
+        if not s or s.lower() in _NULL_FINDING_TOKENS or _NOISE_LINE.match(s):
             continue
         out.append(s)
         if len(out) >= max_items:
@@ -1455,8 +1464,10 @@ def _finder_prompt(goal: str, seen: list[str]) -> str:
     base = (
         "You are one worker in a parallel discovery pass.\n\n"
         f"GOAL:\n{goal}\n\n"
-        "List concrete findings, ONE per line — no preamble, no numbering. "
-        "Keep each line atomic (one idea)."
+        "Output ONLY findings — exactly one per line, each an atomic idea. "
+        "No preamble, no 'Let me…' / 'Here are…', no headings, no markdown "
+        "rules or bold section labels, no numbering, no closing commentary. "
+        "Just the finding lines. If you have nothing, reply exactly NONE."
     )
     if seen:
         shown = "\n".join(f"- {s}" for s in seen[:40])

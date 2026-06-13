@@ -57,6 +57,23 @@ def test_split_findings_caps_per_worker():
     assert len(ds._split_findings(many)) == ds._ORCH_MAX_FINDINGS_PER_WORKER
 
 
+def test_split_findings_drops_markdown_noise():
+    # the exact noise shape a real model emitted around its list (observed live):
+    # a horizontal rule, a bold section label, an ATX heading.
+    raw = (
+        "---\n"
+        "**Critical issues**\n"
+        "## Heading\n"
+        '`parseInt("")` returns NaN with no exception\n'
+        "**Always** validate the radix argument\n"  # bold WORD inside → kept
+        "*note*\n"  # whole-line emphasis label → dropped
+    )
+    assert ds._split_findings(raw) == [
+        '`parseInt("")` returns NaN with no exception',
+        "**Always** validate the radix argument",
+    ]
+
+
 def test_dedupe_findings_normalises_and_tracks_seen():
     seen: set[str] = set()
     assert ds._dedupe_findings(["A", "a ", "B"], seen) == ["A", "B"]
