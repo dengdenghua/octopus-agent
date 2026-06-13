@@ -87,6 +87,46 @@ describe("buildReplayFromBlocks", () => {
     expect(withUrl.steps[0].image).toBeUndefined();
   });
 
+  it("reconstructs a data-URL from a read-image record", () => {
+    const data = buildReplayFromBlocks(
+      [
+        block({
+          kind: "read",
+          title: "read chart.png",
+          event: { output: { kind: "image", media_type: "image/png", data_base64: "AAAA" } },
+        }),
+      ],
+      { title: "Run" },
+    );
+    expect(data.steps[0].image).toBe("data:image/png;base64,AAAA");
+  });
+
+  it("skips an oversized or non-image read record", () => {
+    const big = buildReplayFromBlocks(
+      [
+        block({
+          kind: "read",
+          title: "huge",
+          event: { output: { kind: "image", media_type: "image/png", data_base64: "A".repeat(2_000_001) } },
+        }),
+      ],
+      { title: "Run" },
+    );
+    expect(big.steps[0].image).toBeUndefined();
+
+    const notImage = buildReplayFromBlocks(
+      [
+        block({
+          kind: "read",
+          title: "pdf",
+          event: { output: { kind: "image", media_type: "application/pdf", data_base64: "AAAA" } },
+        }),
+      ],
+      { title: "Run" },
+    );
+    expect(notImage.steps[0].image).toBeUndefined();
+  });
+
   it("truncates an overlong body", () => {
     const huge = "x".repeat(5000);
     const data = buildReplayFromBlocks(

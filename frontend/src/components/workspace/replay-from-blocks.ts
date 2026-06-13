@@ -14,12 +14,15 @@ import type { ReplayData, ReplayStep } from "@/core/sharing/replay-html";
 
 import {
   commandForBlock,
+  isRecord,
   stringFromKeys,
   textFromUnknown,
 } from "./agent-workbench-utils";
 import type { WorkBlock } from "./work-blocks";
 
 const MAX_BODY = 1200;
+/** Cap an inlined image's base64 length (~1.5 MB binary) so the HTML stays portable. */
+const MAX_IMAGE_B64 = 2_000_000;
 
 /** Best-effort secret scrub applied to every embedded body. */
 export function redactSecrets(text: string): string {
@@ -65,7 +68,17 @@ function bodyForBlock(block: WorkBlock): string {
   return joined ? truncate(redactSecrets(joined)) : "";
 }
 
-/** Inline a screenshot only if the event already holds a ``data:image`` URL. */
+/**
+ * Inline an image that the event **already carries** — never fetches:
+ *   1. a ready-made ``data:image/...`` URL in a known field, or
+ *   2. a structured image record from reading an image file
+ *      (``{ kind: "image", media_type, data_base64 }`` — see
+ *      ``builtins._read_file_image``), reconstructed into a data-URL.
+ *
+ * Note: computer-use screenshots are NOT available here — the backend strips
+ * their ``data_url`` before the event stream (``_compact_screenshot``), leaving
+ * only a size marker. So there is nothing remote to fetch even if we wanted to.
+ */
 function imageForBlock(block: WorkBlock): string | undefined {
   for (const source of [block.event.output, block.event.input]) {
     const candidate = stringFromKeys(source, [
@@ -77,6 +90,14 @@ function imageForBlock(block: WorkBlock): string | undefined {
       "preview",
     ]);
     if (candidate.startsWith("data:image/")) return candidate;
+
+    if (isRecord(source) && source.kind === "image") {
+      const media = typeof source.media_type === "string" ? source.media_type : "";
+      const b64 = typeof source.data_base64 === "string" ? source.data_base64 : "";
+      if (media.startsWith("image/") && b64 && b64.length <= MAX_IMAGE_B64) {
+        return `data:${media};base64,${b64}`;
+      }
+    }
   }
   return undefined;
 }
