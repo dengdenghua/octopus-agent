@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import threading
 from typing import Any
 
 from .registry import Skill, SkillRegistry
@@ -208,6 +209,26 @@ def _with_page(
 
     if not PLAYWRIGHT_AVAILABLE:
         return {"error": "playwright not installed"}
+
+    # Inside an agent session, reuse a persistent per-session page so multi-step
+    # flows (navigate → click → type) share state. The page lives on a dedicated
+    # worker thread (Playwright sync is thread-affine) and ``action`` runs there.
+    # Outside a session (direct / unit-test calls) keep the original stateless
+    # throwaway-browser behaviour — no surprise persistence, no regression.
+    try:
+        from runtime.platform.process.session import current_session
+        sess = current_session()
+    except Exception:  # noqa: BLE001 — session module optional
+        sess = None
+    if sess is not None:
+        try:
+            from runtime.execution.suckers.browser_session_worker import (
+                get_browser_session_pool,
+            )
+            key = f"thr:{getattr(sess, 'thread_id', None) or threading.get_ident()}"
+            return get_browser_session_pool().get_or_create(key).submit(action)
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"browser_error: {type(e).__name__}: {e}"}
 
     try:
         with sync_playwright() as pw:
