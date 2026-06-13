@@ -82,6 +82,10 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 - 每个 spec 完成后 `bb_write('result_<n>', ...)` 写黑板,你再 `bb_read` 综合
 - 不要并行跑顺序依赖的工作 → 用串行
 - 不要为了"看起来像 swarm"凑人数 → 1 人能做就别召唤
+
+`call_agent_vote(question, choices=["yes","no"])`: N 个独立投票者裁决一个判断,返回多数票+置信度+异见。验证"这 bug 真的吗 / 补丁修好没 / A 还是 B",别只信一个 worker。
+
+`run_orchestration(goal, verify=True)`: 确定性多轮发现循环(扇出→去重→可选投票验证→直到无新增或预算用尽),用于穷尽式发现("找出所有边界情况/枚举每处 X")。一次调用跑完整个循环,代码控流不会漏步。
 """
 
 REACT_NO_TOOLS_NOTE = """
