@@ -332,6 +332,33 @@ tool_allowlist=("fetch_url", "web_search", "read_file", "list_cwd", "grep_text")
             "todo_read", "todo_write",
         ),
     ),
+    # Like implementer but with NO shell / network: every write must stay inside
+    # the locked worktree, and shell would bypass the sandbox_dir confinement
+    # (verified live — a shell-capable role escapes). All its write skills accept
+    # sandbox_dir, so the ephemeral chokepoint can confine them. Used by
+    # run_worktree_loop's subagent worker.
+    "worktree_writer": EphemeralRoleDef(
+        id="worktree_writer",
+        display_name="Worktree Writer",
+        description=(
+            "Confined implementer with NO shell · for worktree-isolated runs "
+            "where every write must stay inside the locked worktree."
+        ),
+        system_prompt=(
+            "You are a confined implementer working inside an isolated git "
+            "worktree. Apply the requested changes using write_text_file / "
+            "edit_file / multi_edit_file ONLY — you have no shell. Use relative "
+            "paths inside the workspace; never absolute paths outside it. "
+            "Verify by reading files back. Report changes via Final Answer."
+        ),
+        share_context=True,
+        share_memory=True,
+        tool_allowlist=(
+            "read_file", "list_cwd", "glob_files", "grep_text",
+            "edit_file", "multi_edit_file", "write_text_file",
+            "bb_read", "bb_keys", "todo_read", "todo_write",
+        ),
+    ),
     "designer": EphemeralRoleDef(
         id="designer",
         display_name="Refactor Designer",

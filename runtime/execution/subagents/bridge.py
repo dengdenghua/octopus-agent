@@ -254,6 +254,7 @@ def call_subagent(
     session: Any = None,
     use_cheap_model: bool = False,
     extra_denied_paths: list[str] | None = None,
+    workspace_path: str = "",
     **_kw: Any,
 ) -> dict[str, Any]:
     """Invoke a subagent and return a structured result.
@@ -295,6 +296,18 @@ def call_subagent(
             "success": False,
             "error": "prompt is required",
         }
+
+    # Trusted callers (e.g. the worktree loop) confine this sub-agent's file
+    # writes to ONE directory by passing ``workspace_path`` (or
+    # context["workspace_path"]). It is carried as ``_locked_write_root`` on the
+    # sub-agent's Session; the ephemeral chokepoint injects it as the
+    # sandbox_dir for write skills (ephemeral runs bypass the executor's own
+    # sandbox-arg injector). NOT a model-facing argument.
+    _locked_root = str(
+        workspace_path
+        or (context.get("workspace_path") if isinstance(context, dict) else "")
+        or "",
+    ).strip()
 
     # Track the highest round number seen via the emitter so we can
     # report rounds_completed on timeout.
@@ -458,6 +471,20 @@ def call_subagent(
                 denylist_token = push_turn_denylist(extra_denied_paths)
             except ImportError:
                 denylist_token = None
+        run_session = session
+        scope_token = None
+        if _locked_root:
+            import dataclasses
+
+            from runtime.platform.process.session import Session, _current_session
+            base = session if isinstance(session, Session) else Session()
+            run_session = dataclasses.replace(
+                base,
+                metadata={**(base.metadata or {}), "_locked_write_root": _locked_root},
+            )
+            # Bind on THIS worker thread so the ephemeral chokepoint's
+            # current_session() carries the locked root.
+            scope_token = _current_session.set(run_session)
         try:
             with scoped_cancellation(_child_source.token):
                 return _dispatch(
@@ -465,11 +492,14 @@ def call_subagent(
                     prompt=prompt,
                     context=context,
                     timeout_s=timeout_s,
-                    session=session,
+                    session=run_session,
                     event_emitter=_tracking_emitter,
                     use_cheap_model=use_cheap_model,
                 )
         finally:
+            if scope_token is not None:
+                from runtime.platform.process.session import _current_session
+                _current_session.reset(scope_token)
             if denylist_token is not None:
                 try:
                     from runtime.safety.auth.path_denylist import (

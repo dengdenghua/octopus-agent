@@ -112,6 +112,34 @@ def shell_worktree_worker(
     return _worker
 
 
+def subagent_worktree_worker(
+    agent_id: str = "worktree_writer", *, timeout_s: int = 600,
+) -> Callable[[str, Any], None]:
+    """A worker that runs an LLM sub-agent inside each worktree, with the
+    sub-agent's OWN file tools confined to that worktree.
+
+    Confinement goes through ``call_subagent(workspace_path=...)``: the locked
+    worktree is pinned on the sub-agent's Session and the ephemeral chokepoint
+    injects it as ``sandbox_dir`` for every write skill, so the sub-agent can
+    write ONLY inside its worktree (verified live with an escape test). The
+    default role ``worktree_writer`` has no shell — a shell would bypass the
+    sandbox_dir confinement. A failed run raises so the loop marks it failed."""
+
+    def _worker(path: str, task: Any) -> None:
+        from runtime.execution.subagents import call_subagent
+
+        result = call_subagent(
+            agent_id=agent_id,
+            prompt=str(task),
+            workspace_path=path,
+            timeout_s=timeout_s,
+        )
+        if not result.get("success"):
+            raise RuntimeError(result.get("error") or "subagent failed")
+
+    return _worker
+
+
 def run_worktree_loop(
     repo_root: str,
     tasks: list[Any],

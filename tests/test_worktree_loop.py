@@ -16,6 +16,7 @@ from runtime.execution.subagents.worktree_loop import (
     is_git_repo,
     run_worktree_loop,
     shell_worktree_worker,
+    subagent_worktree_worker,
     worktree_scope,
 )
 
@@ -129,6 +130,35 @@ def test_shell_worktree_worker_nonzero_exit_marks_failure(tmp_path: Path):
     assert r["succeeded"] == 0
     assert r["results"][0]["ok"] is False
     assert _worktree_count(repo) == 1
+
+
+def test_subagent_worktree_worker_passes_workspace_path(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake(agent_id: str = "", prompt: str = "", workspace_path: str = "", **_kw):
+        captured.update(
+            agent_id=agent_id, prompt=prompt, workspace_path=workspace_path,
+        )
+        return {"success": True, "output": "ok"}
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake)
+    worker = subagent_worktree_worker(agent_id="worktree_writer")
+    worker("/some/worktree", "do the thing")
+    assert captured == {
+        "agent_id": "worktree_writer",
+        "prompt": "do the thing",
+        "workspace_path": "/some/worktree",
+    }
+
+
+def test_subagent_worktree_worker_raises_on_failure(monkeypatch):
+    def fake(**_kw):
+        return {"success": False, "error": "boom"}
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake)
+    worker = subagent_worktree_worker()
+    with pytest.raises(RuntimeError, match="boom"):
+        worker("/wt", "task")
 
 
 def test_worktree_scope_cleans_up_on_error(tmp_path: Path):

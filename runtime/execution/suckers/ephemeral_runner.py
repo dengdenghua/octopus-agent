@@ -884,6 +884,48 @@ def _emit_subagent_lifecycle_event(
         pass
 
 
+def _ephemeral_write_confine_block(call: Any, skill: Any) -> str | None:
+    """Confine a sub-agent's file writes to a locked worktree.
+
+    Ephemeral runs bypass the executor's sandbox-arg injector, so a write skill
+    would otherwise run with ``sandbox_dir=None`` (no confinement → it can write
+    anywhere, verified live). When the Session pins ``_locked_write_root`` (set
+    by ``call_subagent(workspace_path=...)``), we replicate the injector here:
+    inject the locked root as ``sandbox_dir`` so the skill's own ``check_path``
+    confines relative writes into the worktree and blocks escapes. A write skill
+    that can't take a sandbox_dir is blocked (fail-closed) rather than allowed to
+    escape. Returns a block message, or None to proceed.
+    """
+    from runtime.platform.process.session import current_session
+
+    meta = getattr(current_session(), "metadata", None) or {}
+    locked = meta.get("_locked_write_root")
+    if not locked:
+        return None
+    name = (getattr(call, "name", "") or "").lower()
+    affinity = [str(a).lower() for a in (getattr(skill, "affinity", None) or [])]
+    is_write = (
+        any(tok in name for tok in ("write", "edit", "patch", "create", "append"))
+        or any(a in ("write", "edit", "filesystem", "file-write") for a in affinity)
+    )
+    if not is_write:
+        return None
+    try:
+        import inspect
+
+        params = inspect.signature(skill.handler).parameters
+    except (TypeError, ValueError):
+        params = {}
+    if "sandbox_dir" not in params:
+        return (
+            f"(blocked: '{getattr(call, 'name', '?')}' can't be confined to the "
+            f"locked worktree — refusing to write unsandboxed)"
+        )
+    if isinstance(getattr(call, "input", None), dict) and not call.input.get("sandbox_dir"):
+        call.input["sandbox_dir"] = str(locked)
+    return None
+
+
 def _execute_tool_in_subagent(
     registry: Any, call: Any,
 ) -> tuple[str, bool]:
@@ -911,6 +953,10 @@ def _execute_tool_in_subagent(
     _taint_block = ephemeral_injection_taint_block(call, call.name)
     if _taint_block is not None:
         return (_taint_block, True)
+
+    _confine_block = _ephemeral_write_confine_block(call, skill)
+    if _confine_block is not None:
+        return (_confine_block, True)
 
     try:
         output = skill.handler(**call.input)
