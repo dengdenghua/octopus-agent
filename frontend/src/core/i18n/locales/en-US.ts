@@ -5725,7 +5725,7 @@ export const enUS: Translations = {
     imageSaved: "Saved as image",
     imageCopied: "Image copied",
     imageFailed: "Failed to make the image",
-    replayHint: "Replayable HTML · export from the workbench",
+    exportReplay: "Export replayable HTML",
   },
 
   teamJoin: {

@@ -5,14 +5,10 @@
   ChevronRightIcon,
   CircleIcon,
   CopyIcon,
-  DownloadIcon,
   FolderIcon,
   GlobeIcon,
   LayoutGridIcon,
   MonitorIcon,
-  PauseIcon,
-  PlayIcon,
-  SkipForwardIcon,
   TerminalIcon,
   UsersIcon,
   XIcon,
@@ -32,9 +28,6 @@ import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 import { BrowserPreviewPanel } from "./browser-preview-panel";
 import { LivePreviewPanel } from "./live-preview-panel";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
-import { buildReplayHtml } from "@/core/sharing/replay-html";
-import { downloadTextFile, shareSlug } from "@/core/sharing/download";
-import { buildReplayFromBlocks } from "./replay-from-blocks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -418,7 +411,6 @@ export function AgentWorkbenchPanel({
   onClose,
   threadId,
   workDir,
-  replayTitle,
   browserPreviewBlocks,
 }: {
   activeTab?: AgentWorkbenchTabId;
@@ -434,8 +426,6 @@ export function AgentWorkbenchPanel({
   className?: string;
   onClose?: () => void;
   browserPreviewBlocks?: ExtractedCodeBlocks | null;
-  /** Human title for an exported replay (defaults to a generic label). */
-  replayTitle?: string;
 }) {
   const { t } = useI18n();
   const {
@@ -473,8 +463,6 @@ export function AgentWorkbenchPanel({
   const [activityView, setActivityView] = useState<"summary" | "screen">(
     "summary",
   );
-  const [replayPlaying, setReplayPlaying] = useState(false);
-  const [replayCompleted, setReplayCompleted] = useState(false);
   const [closedTabs, setClosedTabs] = useState<Set<AgentWorkbenchTabId>>(
     () => new Set(),
   );
@@ -519,17 +507,6 @@ export function AgentWorkbenchPanel({
     }
     return progressForWorkBlocks(screenBlocks, screenFrame.block);
   }, [screenBlocks, screenFrame.block]);
-  const replayIndex = useMemo(() => {
-    if (!screenFrame.block) return -1;
-    return screenBlocks.findIndex(
-      (block) => block.id === screenFrame.block?.id,
-    );
-  }, [screenBlocks, screenFrame.block]);
-  const replayPrompt = useMemo(
-    () => composeReplayPrompt(selectedAgent, screenBlocks),
-    [screenBlocks, selectedAgent],
-  );
-
   useEffect(() => {
     if (!currentPhase) {
       setSelectedPhaseId(null);
@@ -571,75 +548,6 @@ export function AgentWorkbenchPanel({
         : null,
     );
   }, [agentTiles]);
-
-  useEffect(() => {
-    setReplayPlaying(false);
-    setReplayCompleted(false);
-  }, [selectedAgent?.id]);
-
-  useEffect(() => {
-    if (!replayPlaying) return;
-    if (screenBlocks.length === 0) {
-      setReplayPlaying(false);
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setManualBlockSelection(true);
-      setSelectedBlockId((current) => {
-        const index = current
-          ? screenBlocks.findIndex((block) => block.id === current)
-          : -1;
-        const nextIndex = index < 0 ? 0 : index + 1;
-        if (nextIndex >= screenBlocks.length) {
-          setReplayPlaying(false);
-          setReplayCompleted(true);
-          return current ?? screenBlocks[screenBlocks.length - 1]?.id ?? null;
-        }
-        return screenBlocks[nextIndex]?.id ?? current;
-      });
-    }, 1100);
-    return () => window.clearInterval(timer);
-  }, [replayPlaying, screenBlocks]);
-
-  const startReplay = useCallback(() => {
-    if (screenBlocks.length === 0) return;
-    setActivityView("screen");
-    onSelectTab?.("agent");
-    setReplayCompleted(false);
-    setManualBlockSelection(true);
-    setSelectedBlockId(screenBlocks[0]?.id ?? null);
-    setReplayPlaying(true);
-  }, [onSelectTab, screenBlocks]);
-
-  const pauseReplay = useCallback(() => {
-    setReplayPlaying(false);
-  }, []);
-
-  const jumpToCurrent = useCallback(() => {
-    setActivityView("screen");
-    onSelectTab?.("agent");
-    setReplayPlaying(false);
-    setReplayCompleted(false);
-    setManualBlockSelection(false);
-    setSelectedBlockId(null);
-  }, [onSelectTab]);
-
-  const copyReplayPrompt = useCallback(() => {
-    copyText(replayPrompt);
-  }, [replayPrompt]);
-
-  const exportReplayHtml = useCallback(() => {
-    if (screenBlocks.length === 0) return;
-    const title = replayTitle?.trim() || "Octopus 运行回放";
-    const html = buildReplayHtml(
-      buildReplayFromBlocks(screenBlocks, {
-        title,
-        brand: "Octopus Agent",
-        footer: `${new Date().toLocaleDateString()} · 自包含离线回放`,
-      }),
-    );
-    downloadTextFile(html, `octopus-replay-${shareSlug(title)}.html`);
-  }, [screenBlocks, replayTitle]);
 
   const openMainProcess = useCallback(() => {
     setSelectedAgentId(null);
@@ -1473,133 +1381,7 @@ export function AgentWorkbenchPanel({
           )}
         </main>
       )}
-      {showSubagentDock && screenBlocks.length > 0 ? (
-        <ReplayController
-          playing={replayPlaying}
-          completed={replayCompleted}
-          current={replayIndex >= 0 ? replayIndex + 1 : 0}
-          total={screenBlocks.length}
-          agentLabel={selectedAgent ? selectedAgent.label : "主控"}
-          onPlay={startReplay}
-          onPause={pauseReplay}
-          onJumpCurrent={jumpToCurrent}
-          onCopyPrompt={copyReplayPrompt}
-          onExportHtml={exportReplayHtml}
-        />
-      ) : null}
       {showSubagentDock ? subagentDock : null}
-    </div>
-  );
-}
-
-function ReplayController({
-  playing,
-  completed,
-  current,
-  total,
-  agentLabel,
-  onPlay,
-  onPause,
-  onJumpCurrent,
-  onCopyPrompt,
-  onExportHtml,
-}: {
-  playing: boolean;
-  completed: boolean;
-  current: number;
-  total: number;
-  agentLabel: string;
-  onPlay: () => void;
-  onPause: () => void;
-  onJumpCurrent: () => void;
-  onCopyPrompt: () => void;
-  onExportHtml: () => void;
-}) {
-  const label = playing
-    ? "Octopus Agent 正在回放"
-    : completed
-      ? "Octopus Agent 回放完成"
-      : "Octopus Agent 可回放";
-  const progress = total > 0 ? Math.max(0, Math.min(1, current / total)) : 0;
-
-  return (
-    <div className="shrink-0 border-t border-border/45 bg-background/95 px-3 py-2">
-      <div className="mx-auto flex max-w-3xl items-center gap-3 rounded-xl border border-border/55 bg-background px-3 py-2 shadow-sm">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45 text-foreground">
-          <BotIcon className="size-4" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-foreground">
-              {label}
-            </span>
-            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-              {agentLabel}
-            </span>
-            {total > 0 && (
-              <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">
-                {Math.max(0, current)}/{total}
-              </span>
-            )}
-          </div>
-          <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-300",
-                completed ? "bg-emerald-500" : "bg-primary",
-              )}
-              style={{ width: `${progress * 100}%` }}
-            />
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={playing ? onPause : onPlay}
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors",
-              playing
-                ? "bg-muted text-foreground hover:bg-muted/75"
-                : "bg-foreground text-background hover:opacity-90",
-            )}
-            title={playing ? "暂停回放" : "看回放"}
-          >
-            {playing ? (
-              <PauseIcon className="size-3.5" aria-hidden="true" />
-            ) : (
-              <PlayIcon className="size-3.5" aria-hidden="true" />
-            )}
-            {playing ? "暂停" : "看回放"}
-          </button>
-          <button
-            type="button"
-            onClick={onJumpCurrent}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/75"
-            title="跳到当前步骤"
-          >
-            <SkipForwardIcon className="size-3.5" aria-hidden="true" />
-            跳当前
-          </button>
-          <button
-            type="button"
-            onClick={onCopyPrompt}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/75"
-            title="复制同款任务提示"
-          >
-            <CopyIcon className="size-3.5" aria-hidden="true" />
-            做同款
-          </button>
-          <button
-            type="button"
-            onClick={onExportHtml}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/75"
-            title="导出可离线回放的自包含 HTML"
-          >
-            <DownloadIcon className="size-3.5" aria-hidden="true" />
-            导出
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1709,37 +1491,6 @@ function dockAgentStatusLabel(status: AgentTile["status"]): string {
   if (status === "error") return "异常";
   if (status === "done") return "已完成";
   return "等待中";
-}
-
-function composeReplayPrompt(
-  agent: AgentTile | null,
-  blocks: WorkBlock[],
-): string {
-  const target = agent
-    ? `${repairMojibakeText(agent.codename ?? agent.name)} (${repairMojibakeText(agent.role ?? agent.label)})`
-    : "主控 Agent";
-  const brief = repairMojibakeText(
-    agent?.prompt ?? agent?.task ?? agent?.lastThought ?? "",
-  );
-  const steps = blocks
-    .slice(0, 12)
-    .map((block, index) => {
-      const detail = compactDetail(
-        repairMojibakeText(
-          block.subtitle || block.inputText || block.outputText || block.title,
-        ),
-        120,
-      );
-      return `${index + 1}. ${block.title}${detail ? ` - ${detail}` : ""}`;
-    })
-    .join("\n");
-  return [
-    `请按类似方式复刻这个多 Agent 工作流：${target}`,
-    brief ? `\n任务说明：\n${brief}` : "",
-    steps ? `\n关键过程：\n${steps}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
 }
 
 function SubagentProcessView({

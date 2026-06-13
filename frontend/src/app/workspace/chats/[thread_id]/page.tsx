@@ -50,6 +50,11 @@ import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older
 import { ThreadProviders } from "@/components/workspace/messages/context";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { ShareMenu } from "@/components/workspace/share-menu";
+import { toWorkBlocks } from "@/components/workspace/work-blocks";
+import { screenBlocksForAgent } from "@/components/workspace/agent-workbench-snapshot";
+import { buildReplayFromBlocks } from "@/components/workspace/replay-from-blocks";
+import { buildReplayHtml } from "@/core/sharing/replay-html";
+import { downloadTextFile, shareSlug } from "@/core/sharing/download";
 import { TodoPanel } from "@/components/workspace/todo-panel";
 import { Welcome } from "@/components/workspace/welcome";
 import {
@@ -690,6 +695,23 @@ function ChatsPageContent({
     () => workspaceFocusTabFromEvents(agentDisplayEvents),
     [agentDisplayEvents],
   );
+  // Self-contained replay export, surfaced from the unified share menu.
+  const replayBlocks = useMemo(
+    () => screenBlocksForAgent(toWorkBlocks(agentDisplayEvents), null),
+    [agentDisplayEvents],
+  );
+  const handleExportReplay = useCallback(() => {
+    if (replayBlocks.length === 0) return;
+    const title = thread?.values?.title || initialPrompt || "Octopus 运行回放";
+    const html = buildReplayHtml(
+      buildReplayFromBlocks(replayBlocks, {
+        title,
+        brand: "Octopus Agent",
+        footer: `${new Date().toLocaleDateString()} · 自包含离线回放`,
+      }),
+    );
+    downloadTextFile(html, `octopus-replay-${shareSlug(title)}.html`);
+  }, [replayBlocks, thread, initialPrompt]);
   const latestArtifactFocusPath = useMemo(
     () => latestArtifactFocusPathFromEvents(agentDisplayEvents),
     [agentDisplayEvents],
@@ -1202,6 +1224,9 @@ function ChatsPageContent({
                       iconOnly
                       title={thread?.values?.title || initialPrompt || "Octopus"}
                       prompt={initialPrompt || undefined}
+                      onExportReplay={
+                        replayBlocks.length > 0 ? handleExportReplay : undefined
+                      }
                     />
                   )}
                   <RightPanelMenu
@@ -1426,7 +1451,6 @@ function ChatsPageContent({
                   paused={hasPausedOrPendingBackgroundTask}
                   threadId={threadId}
                   workDir={workDir}
-                  replayTitle={thread?.values?.title || initialPrompt || undefined}
                   browserPreviewBlocks={previewBlocks}
                   onClose={closeAgentWorkbenchPanel}
                   onSelectTab={selectAgentWorkbenchTab}

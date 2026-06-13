@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ClockIcon, CopyIcon, ImageIcon, Loader2Icon, Share2Icon } from "lucide-react";
+import { CopyIcon, DownloadIcon, ImageIcon, Loader2Icon, Share2Icon } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -29,14 +29,20 @@ interface ShareMenuProps {
   className?: string;
   /** Render only the icon (compact header placement). */
   iconOnly?: boolean;
+  /**
+   * Export the run as a self-contained, offline-playable replay ``.html``.
+   * Omitted when the thread has no replayable steps — the item is then hidden.
+   * The caller assembles the replay data (it owns the run's events); this menu
+   * is just the unified entry point.
+   */
+  onExportReplay?: () => void;
 }
 
 /**
- * Share affordance: turns the current task/result into a branded PNG the user
- * can download or copy. Replayable HTML export lives in the workbench replay
- * bar (it needs the run's WorkBlocks, which this header menu doesn't hold), so
- * the menu just points there — the self-contained file keeps redaction at
- * export time, which is the privacy-safe form of an outward share.
+ * Unified share affordance in the chat header: turns the current task/result
+ * into a branded PNG (download or copy), and — when the run has replayable
+ * steps — exports a self-contained replay ``.html``. Both are outward shares
+ * the user can inspect before sending; the HTML keeps redaction at export time.
  */
 export function ShareMenu({
   title,
@@ -45,6 +51,7 @@ export function ShareMenu({
   footer,
   className,
   iconOnly = false,
+  onExportReplay,
 }: ShareMenuProps) {
   const { t } = useI18n();
   const [busy, setBusy] = useState<"save" | "copy" | null>(null);
@@ -108,13 +115,15 @@ export function ShareMenu({
             {t.share.copyImage}
           </DropdownMenuItem>
         )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
-          <span className="flex items-center gap-2">
-            <ClockIcon className="size-4" />
-            {t.share.replayHint}
-          </span>
-        </DropdownMenuItem>
+        {onExportReplay && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => onExportReplay()}>
+              <DownloadIcon className="size-4" />
+              {t.share.exportReplay}
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

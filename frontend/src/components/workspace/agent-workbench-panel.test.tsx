@@ -242,38 +242,6 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByTitle("执行任务中...")).toBeInTheDocument();
   });
 
-  test("renders replay controls for computer view work blocks", () => {
-    renderWorkbench(
-      <AgentWorkbenchPanel
-        events={[
-          event({
-            id: "read-1",
-            name: "read_file",
-            input: { path: "src/app.tsx" },
-            output: "const value = 1;",
-          }),
-          event({
-            id: "shell-1",
-            name: "shell_command",
-            status: "running",
-            startedAt: 2000,
-            input: { command: "npm run typecheck" },
-          }),
-        ]}
-      />,
-    );
-
-    expect(screen.getByText("Octopus Agent 可回放")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "看回放" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "跳当前" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "做同款" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "看回放" }));
-
-    expect(screen.getByText("Octopus Agent 正在回放")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument();
-  });
-
   test("groups screen frames by phase while keeping phase titles visible", () => {
     renderWorkbench(
       <AgentWorkbenchPanel

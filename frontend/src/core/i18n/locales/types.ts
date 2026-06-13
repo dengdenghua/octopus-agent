@@ -5117,7 +5117,7 @@ export interface Translations {
     imageSaved: string;
     imageCopied: string;
     imageFailed: string;
-    replayHint: string;
+    exportReplay: string;
   };
 
   // Team Join page
