@@ -36,6 +36,8 @@ function HashRedirect({ to }: { to: string }) {
 const LoginPage = lazy(() => import("./app/login/page"));
 const RegisterPage = lazy(() => import("./app/register/page"));
 const AboutPage = lazy(() => import("./app/about/page"));
+const TermsPage = lazy(() => import("./app/terms/page"));
+const PrivacyPage = lazy(() => import("./app/privacy/page"));
 const DesktopPage = lazy(() => import("./app/desktop/page"));
 const TopBrowserPage = lazy(() => import("./app/browser/page"));
 const PluginsPage = lazy(() => import("./app/plugins/page"));
@@ -80,6 +82,7 @@ const IntelligencePage = lazy(
 );
 const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
 const EvolutionPage = lazy(() => import("./app/workspace/evolution/page"));
+const WorkflowsPage = lazy(() => import("./app/workspace/workflows/page"));
 // Reflex monitor + YAML editor · ports the inline-HTML
 // /admin/reflex pages into the workspace shell so they pick up
 // theming + sidebar nav. See app/workspace/reflex/page.tsx.
@@ -110,6 +113,8 @@ export function AppRouter() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/about" element={<AboutPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
 
           <Route element={<ProtectedRoute />}>
             {/* Implementation note. */}
@@ -189,6 +194,7 @@ export function AppRouter() {
               />
               <Route path="knowledge" element={<KnowledgePage />} />
               <Route path="evolution" element={<EvolutionPage />} />
+              <Route path="workflows" element={<WorkflowsPage />} />
               <Route path="reflex" element={<ReflexMonitorPage />} />
               <Route path="reflex/edit" element={<ReflexEditorPage />} />
               <Route

@@ -904,10 +904,10 @@ function isAgentChatRoute(pathname: string) {
 function isChatSurfaceRoute(pathname: string) {
   return (
     pathname === "/workspace/realtime" ||
-    pathname.startsWith("/workspace/realtime/") ||
+    pathname === "/workspace/realtime/new" ||
     pathname === "/workspace/chats" ||
-    pathname.startsWith("/workspace/chats/") ||
-    isAgentChatRoute(pathname)
+    pathname === "/workspace/chats/new" ||
+    /^\/workspace\/agents\/[^/]+\/chats\/new$/.test(pathname)
   );
 }
 
@@ -941,8 +941,10 @@ type WorkspaceSurfaceMode = "agent" | "work" | "browser";
 
 export function WorkspaceSurfaceSwitch({
   active,
+  placement = "sidebar",
 }: {
   active: WorkspaceSurfaceMode;
+  placement?: "sidebar" | "topbar";
 }) {
   const { t } = useI18n();
   const items = [
@@ -970,7 +972,13 @@ export function WorkspaceSurfaceSwitch({
   ];
 
   return (
-    <div className="grid w-[150px] min-w-0 -translate-x-3 grid-cols-[30px_minmax(0,1fr)_30px] items-center gap-0.5 rounded-[14px] border border-border/45 bg-background/72 p-px shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.42)] group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:translate-x-[-4px] group-data-[collapsible=icon]:grid-cols-1 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:shadow-none">
+    <div
+      className={cn(
+        "grid w-[150px] min-w-0 grid-cols-[30px_minmax(0,1fr)_30px] items-center gap-0.5 rounded-[14px] border border-border/45 bg-background/72 p-px shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.42)]",
+        placement === "sidebar" && "-translate-x-3",
+        "group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:translate-x-[-4px] group-data-[collapsible=icon]:grid-cols-1 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:shadow-none",
+      )}
+    >
       {items.map((item) => {
         const Icon = item.icon;
         return (
