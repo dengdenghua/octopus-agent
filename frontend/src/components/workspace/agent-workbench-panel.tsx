@@ -5,6 +5,7 @@
   ChevronRightIcon,
   CircleIcon,
   CopyIcon,
+  DownloadIcon,
   FolderIcon,
   GlobeIcon,
   LayoutGridIcon,
@@ -31,6 +32,9 @@ import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 import { BrowserPreviewPanel } from "./browser-preview-panel";
 import { LivePreviewPanel } from "./live-preview-panel";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
+import { buildReplayHtml } from "@/core/sharing/replay-html";
+import { downloadTextFile, shareSlug } from "@/core/sharing/download";
+import { buildReplayFromBlocks } from "./replay-from-blocks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -414,6 +418,7 @@ export function AgentWorkbenchPanel({
   onClose,
   threadId,
   workDir,
+  replayTitle,
   browserPreviewBlocks,
 }: {
   activeTab?: AgentWorkbenchTabId;
@@ -429,6 +434,8 @@ export function AgentWorkbenchPanel({
   className?: string;
   onClose?: () => void;
   browserPreviewBlocks?: ExtractedCodeBlocks | null;
+  /** Human title for an exported replay (defaults to a generic label). */
+  replayTitle?: string;
 }) {
   const { t } = useI18n();
   const {
@@ -620,6 +627,19 @@ export function AgentWorkbenchPanel({
   const copyReplayPrompt = useCallback(() => {
     copyText(replayPrompt);
   }, [replayPrompt]);
+
+  const exportReplayHtml = useCallback(() => {
+    if (screenBlocks.length === 0) return;
+    const title = replayTitle?.trim() || "Octopus 运行回放";
+    const html = buildReplayHtml(
+      buildReplayFromBlocks(screenBlocks, {
+        title,
+        brand: "Octopus Agent",
+        footer: `${new Date().toLocaleDateString()} · 自包含离线回放`,
+      }),
+    );
+    downloadTextFile(html, `octopus-replay-${shareSlug(title)}.html`);
+  }, [screenBlocks, replayTitle]);
 
   const openMainProcess = useCallback(() => {
     setSelectedAgentId(null);
@@ -1464,6 +1484,7 @@ export function AgentWorkbenchPanel({
           onPause={pauseReplay}
           onJumpCurrent={jumpToCurrent}
           onCopyPrompt={copyReplayPrompt}
+          onExportHtml={exportReplayHtml}
         />
       ) : null}
       {showSubagentDock ? subagentDock : null}
@@ -1481,6 +1502,7 @@ function ReplayController({
   onPause,
   onJumpCurrent,
   onCopyPrompt,
+  onExportHtml,
 }: {
   playing: boolean;
   completed: boolean;
@@ -1491,6 +1513,7 @@ function ReplayController({
   onPause: () => void;
   onJumpCurrent: () => void;
   onCopyPrompt: () => void;
+  onExportHtml: () => void;
 }) {
   const label = playing
     ? "Octopus Agent 正在回放"
@@ -1565,6 +1588,15 @@ function ReplayController({
           >
             <CopyIcon className="size-3.5" aria-hidden="true" />
             做同款
+          </button>
+          <button
+            type="button"
+            onClick={onExportHtml}
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted/75"
+            title="导出可离线回放的自包含 HTML"
+          >
+            <DownloadIcon className="size-3.5" aria-hidden="true" />
+            导出
           </button>
         </div>
       </div>
