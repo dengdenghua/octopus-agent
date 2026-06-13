@@ -89,6 +89,29 @@ def _capture_diff(worktree: str) -> tuple[str, list[str]]:
     return diff, files
 
 
+def shell_worktree_worker(
+    command: list[str], *, timeout_s: int = 300,
+) -> Callable[[str, Any], None]:
+    """A ready-made worker that runs a FIXED argv inside each worktree
+    (``cwd`` = the worktree), with the task exposed as the env var
+    ``$OCTOPUS_WORKTREE_TASK``. The task string is never interpolated into the
+    command and no shell is spawned by us, so an untrusted task can't inject
+    argv. A non-zero exit raises (the loop marks that task failed). This is the
+    works-today consumer — running a sub-agent as the worker (so the agent's
+    own file tools target the worktree) needs per-worker write-scope wiring in
+    the executor and is deferred until it can be verified against a live run."""
+    argv = [str(part) for part in command]
+
+    def _worker(path: str, task: Any) -> None:
+        env = {**os.environ, "OCTOPUS_WORKTREE_TASK": str(task)}
+        subprocess.run(
+            argv, cwd=path, env=env, timeout=timeout_s,
+            check=True, capture_output=True, text=True,
+        )
+
+    return _worker
+
+
 def run_worktree_loop(
     repo_root: str,
     tasks: list[Any],

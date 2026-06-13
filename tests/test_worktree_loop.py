@@ -15,6 +15,7 @@ import pytest
 from runtime.execution.subagents.worktree_loop import (
     is_git_repo,
     run_worktree_loop,
+    shell_worktree_worker,
     worktree_scope,
 )
 
@@ -101,6 +102,32 @@ def test_worker_failure_is_isolated_and_cleaned_up(tmp_path: Path):
     assert by_index[1]["ok"] is False
     assert "boom" in by_index[1]["error"]
     # the failed task's worktree was still removed
+    assert _worktree_count(repo) == 1
+
+
+def test_shell_worktree_worker_writes_in_isolation(tmp_path: Path):
+    repo = _init_repo(tmp_path)
+    worker = shell_worktree_worker(
+        ["sh", "-c", 'printf "%s" "$OCTOPUS_WORKTREE_TASK" > note.txt'],
+    )
+    r = run_worktree_loop(str(repo), ["one", "two"], worker)
+
+    assert r["succeeded"] == 2
+    by_index = {res["index"]: res for res in r["results"]}
+    # each worktree got note.txt with ITS OWN task content
+    assert by_index[0]["files"] == ["note.txt"]
+    assert "one" in by_index[0]["diff"]
+    assert "two" in by_index[1]["diff"]
+    assert "two" not in by_index[0]["diff"]
+    assert _worktree_count(repo) == 1
+
+
+def test_shell_worktree_worker_nonzero_exit_marks_failure(tmp_path: Path):
+    repo = _init_repo(tmp_path)
+    worker = shell_worktree_worker(["sh", "-c", "exit 3"])
+    r = run_worktree_loop(str(repo), ["x"], worker)
+    assert r["succeeded"] == 0
+    assert r["results"][0]["ok"] is False
     assert _worktree_count(repo) == 1
 
 
