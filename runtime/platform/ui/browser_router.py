@@ -18,7 +18,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
 from runtime.platform.process.paths import project_root
@@ -62,9 +62,32 @@ def mark_session_closed(profile_dir: Path | str | None) -> None:
         (Path(profile_dir) / _SESSION_SENTINEL_NAME).unlink(missing_ok=True)
 
 
-def create_browser_router() -> APIRouter:
-    """Create the ``/api/browser/*`` session and relay router."""
-    router = APIRouter(tags=["browser"])
+def create_browser_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
+    """Create the ``/api/browser/*`` session and relay router.
+
+    These endpoints drive a real browser (navigation, form fill, credential
+    entry). They previously had NO auth at all — inconsistent with the other
+    routers that honour ``require_auth``. The router-level dependency below
+    closes that gap: when ``require_auth`` is off (default / single-user dev)
+    ``_resolve_actor`` is a no-op so local preview is unchanged; when auth is
+    enabled it enforces 401 across every browser endpoint.
+    """
+
+    def _auth_dep(request: Request) -> None:
+        from runtime.adapters.web_auth import _resolve_actor
+        _resolve_actor(
+            request, identity_store, require_auth,
+            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer, jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["browser"], dependencies=[Depends(_auth_dep)])
     browser_config_state: dict[str, Any] = {
         "max_open_tabs": 20,
         "max_saved_tabs": 10,

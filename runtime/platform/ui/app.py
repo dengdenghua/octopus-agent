@@ -855,7 +855,13 @@ def create_app(
     # Browser session and relay APIs.
     from runtime.platform.ui.browser_router import create_browser_router
 
-    app.include_router(create_browser_router())
+    app.include_router(create_browser_router(
+        identity_store=cocoloop_identity_store,
+        require_auth=cocoloop_require_auth,
+        jwt_secret=molili_jwt_secret,
+        jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
+        jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
+    ))
 
     # ─── FS router · extracted to fs_router.py ─────────
     # The 3 endpoints + 2 helpers that used to live here inline now
