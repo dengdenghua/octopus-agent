@@ -63,6 +63,15 @@ def test_dedupe_findings_normalises_and_tracks_seen():
     assert ds._dedupe_findings(["B", "C"], seen) == ["C"]
 
 
+def test_coerce_roles():
+    assert ds._coerce_roles("researcher") == ["researcher"]
+    assert ds._coerce_roles(["a", "b"]) == ["a", "b"]
+    assert ds._coerce_roles(["a", "a", "b"]) == ["a", "b"]  # dedupe, order kept
+    assert ds._coerce_roles([]) == ["researcher"]
+    assert ds._coerce_roles(None) == ["researcher"]  # None is not a role
+    assert ds._coerce_roles(["", "  ", "x"]) == ["x"]
+
+
 # ── loop logic (sub-skills mocked) ───────────────────────────────
 
 
@@ -107,6 +116,39 @@ def test_dedupe_across_rounds(monkeypatch):
     assert r["collected"] == ["a", "b", "c"]
     assert r["fresh_per_round"] == [2, 0, 1]
     assert r["rounds_run"] == 3
+
+
+def test_heterogeneous_roles_rotate_across_workers(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        captured["specs"] = specs
+        return {
+            "ok": True,
+            "successes": [{"output": "x", "agent_id": "r"}],
+            "success_count": 1,
+        }
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    ds._run_orchestration(
+        goal="g", agent_id=["researcher", "explorer", "critic"], n=3, rounds=1,
+    )
+    assert [s["agent_id"] for s in captured["specs"]] == [
+        "researcher", "explorer", "critic",
+    ]
+
+
+def test_roles_rotate_when_workers_exceed_roles(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    def fake(specs: Any = None, **_kw: Any) -> dict[str, Any]:
+        captured["specs"] = specs
+        return {"ok": True, "successes": [{"output": "x"}], "success_count": 1}
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    # ["a","a","b"] dedupes to [a,b]; n=3 rotates a, b, a
+    ds._run_orchestration(goal="g", agent_id=["a", "a", "b"], n=3, rounds=1)
+    assert [s["agent_id"] for s in captured["specs"]] == ["a", "b", "a"]
 
 
 def test_verify_drops_minority(monkeypatch):

@@ -1467,10 +1467,26 @@ def _finder_prompt(goal: str, seen: list[str]) -> str:
     return base
 
 
+def _coerce_roles(agent_id: Any) -> list[str]:
+    """Normalise ``agent_id`` into a worker-role roster (deduped, order kept).
+    A LIST gives heterogeneous lenses (e.g. researcher + explorer + critic)
+    that are rotated across the per-round workers — diverse lenses surface more
+    than N copies of one role (the multi-modal-sweep principle)."""
+    raw = agent_id if isinstance(agent_id, (list, tuple)) else [agent_id]
+    roles: list[str] = []
+    for entry in raw:
+        if entry is None:
+            continue
+        role = str(entry).strip()
+        if role and role not in roles:
+            roles.append(role)
+    return roles or ["researcher"]
+
+
 def _run_orchestration(
     goal: str = "",
     *,
-    agent_id: str = "researcher",
+    agent_id: str | list[str] = "researcher",
     n: int | str = 3,
     rounds: int | str = 2,
     patience: int | str = 1,
@@ -1508,6 +1524,7 @@ def _run_orchestration(
         max_spawns = min(_ORCH_MAX_SPAWNS_CEILING, max(n, planned))
     else:
         max_spawns = _clamp(max_spawns, n, _ORCH_MAX_SPAWNS_CEILING, n * rounds)
+    roles = _coerce_roles(agent_id)
 
     # Outer gate: an orchestration costs ONE against the per-turn cap so the
     # model can't spawn unboundedly by launching many orchestrations.
@@ -1542,8 +1559,11 @@ def _run_orchestration(
                 break
             env = _call_agent_parallel(
                 specs=[
-                    {"agent_id": agent_id, "prompt": _finder_prompt(goal, collected)}
-                    for _ in range(n)
+                    {
+                        "agent_id": roles[i % len(roles)],
+                        "prompt": _finder_prompt(goal, collected),
+                    }
+                    for i in range(n)
                 ],
                 timeout_s=timeout_s, context=context, session=session,
             )
@@ -1849,8 +1869,9 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "rounds tolerated before stopping (default 1), verify?: bool "
         "(default false — vote-verify each finding), choices?: [keep,drop]-"
         "style ballot for verify, max_spawns?: int total spawn budget "
-        "(auto-sized, capped at 48), agent_id?: worker role (default "
-        "researcher)}.\n"
+        "(auto-sized, capped at 48), agent_id?: worker role, or a LIST of "
+        "roles rotated across workers for diverse lenses, e.g. "
+        "[researcher, explorer, critic] (default researcher)}.\n"
         "\n"
         "Returns: {ok, goal, collected:[...], confirmed:[...] (== collected "
         "unless verify), count, rounds_run, fresh_per_round:[...], verified, "
