@@ -1028,6 +1028,9 @@ def create_browser_router() -> APIRouter:
         try:
             if os.name == "nt":
                 os.startfile(str(extension_path))  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                # macOS has no xdg-open; the file opener is `open`.
+                subprocess.Popen(["open", str(extension_path)])
             else:
                 subprocess.Popen(["xdg-open", str(extension_path)])
         except (OSError, ValueError):  # noqa: BLE001 — browser session cleanup; best-effort

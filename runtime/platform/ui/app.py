@@ -296,6 +296,32 @@ def create_app(
                         )
                     except (ImportError, AttributeError, TypeError):  # noqa: BLE001
                         pass  # skills will return clean "router not wired" error
+                    # ─── Computer-use vision loop · autonomous desktop ───
+                    # register_computer_use_loop needs a VisionPlanner built
+                    # from the router, so it can't go through the _CATALOG
+                    # group registrars (which take only a registry). Wire it
+                    # here, mirroring the other router consumers. The skill is
+                    # non-atomic (agents opt in via allowlist, e.g. the
+                    # desktop_operator_arm) and pyautogui-gated at exec time;
+                    # without this it was registered only by the demo server,
+                    # so the arm's ``computer_use_loop`` reference never resolved.
+                    try:
+                        from runtime.execution.suckers.computer_use_loop import (
+                            ModelRouterVisionPlanner,
+                            register_computer_use_loop,
+                        )
+                        register_computer_use_loop(
+                            stack.executor.registry,
+                            ModelRouterVisionPlanner(
+                                router=router,
+                                model=default_model or "claude-sonnet-4-6",
+                            ),
+                        )
+                    except Exception as _cul_exc:  # noqa: BLE001
+                        import logging as _logging
+                        _logging.getLogger(__name__).debug(
+                            "computer_use_loop not wired: %s", _cul_exc,
+                        )
         except (ImportError, AttributeError, TypeError, OSError) as exc:  # noqa: BLE001
             # Non-fatal · sub-agent delegation stays in
             # "not configured" state · rest of app boots normally.
