@@ -5726,7 +5726,7 @@ export const koKR: Translations = {
     imageSaved: "이미지로 저장됨",
     imageCopied: "이미지 복사됨",
     imageFailed: "이미지 생성 실패",
-    replayLinkSoon: "재생 가능한 링크 · 출시 예정",
+    replayHint: "재생 가능한 HTML · 워크벤치에서 내보내기",
   },
 
   teamJoin: {

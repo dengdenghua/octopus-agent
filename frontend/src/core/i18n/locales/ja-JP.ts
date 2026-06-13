@@ -5726,7 +5726,7 @@ export const jaJP: Translations = {
     imageSaved: "画像を保存しました",
     imageCopied: "画像をコピーしました",
     imageFailed: "画像の生成に失敗しました",
-    replayLinkSoon: "再生可能リンク · 近日公開",
+    replayHint: "再生可能な HTML · ワークベンチから書き出し",
   },
 
   teamJoin: {

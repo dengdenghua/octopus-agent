@@ -33,9 +33,10 @@ interface ShareMenuProps {
 
 /**
  * Share affordance: turns the current task/result into a branded PNG the user
- * can download or copy. The replayable-link option is intentionally a disabled
- * "coming soon" — it needs the public-hosting + redaction model decided first
- * (sharing is an outward publish; never ship the link path before redaction).
+ * can download or copy. Replayable HTML export lives in the workbench replay
+ * bar (it needs the run's WorkBlocks, which this header menu doesn't hold), so
+ * the menu just points there — the self-contained file keeps redaction at
+ * export time, which is the privacy-safe form of an outward share.
  */
 export function ShareMenu({
   title,
@@ -111,7 +112,7 @@ export function ShareMenu({
         <DropdownMenuItem disabled className="flex-col items-start gap-0.5">
           <span className="flex items-center gap-2">
             <ClockIcon className="size-4" />
-            {t.share.replayLinkSoon}
+            {t.share.replayHint}
           </span>
         </DropdownMenuItem>
       </DropdownMenuContent>

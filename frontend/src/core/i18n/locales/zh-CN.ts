@@ -5555,7 +5555,7 @@ export const zhCN: Translations = {
     imageSaved: "已存为图片",
     imageCopied: "图片已复制",
     imageFailed: "生成图片失败",
-    replayLinkSoon: "可回放链接 · 即将上线",
+    replayHint: "可回放 HTML · 在工作台回放区导出",
   },
 
   teamJoin: {
