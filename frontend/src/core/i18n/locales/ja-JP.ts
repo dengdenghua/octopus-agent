@@ -5719,6 +5719,16 @@ export const jaJP: Translations = {
     grantFloor: "発言権を渡す",
   },
 
+  share: {
+    share: "共有",
+    saveImage: "画像として保存",
+    copyImage: "画像をコピー",
+    imageSaved: "画像を保存しました",
+    imageCopied: "画像をコピーしました",
+    imageFailed: "画像の生成に失敗しました",
+    replayLinkSoon: "再生可能リンク · 近日公開",
+  },
+
   teamJoin: {
     missingToken: "The invite link is missing a token.",
     invalidInvite: "The invite link is invalid or has expired.",

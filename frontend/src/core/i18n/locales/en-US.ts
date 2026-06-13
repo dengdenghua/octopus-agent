@@ -5718,6 +5718,16 @@ export const enUS: Translations = {
     grantFloor: "Give the floor",
   },
 
+  share: {
+    share: "Share",
+    saveImage: "Save as image",
+    copyImage: "Copy image",
+    imageSaved: "Saved as image",
+    imageCopied: "Image copied",
+    imageFailed: "Failed to make the image",
+    replayLinkSoon: "Replayable link · coming soon",
+  },
+
   teamJoin: {
     missingToken: "The invite link is missing a token.",
     invalidInvite: "The invite link is invalid or has expired.",

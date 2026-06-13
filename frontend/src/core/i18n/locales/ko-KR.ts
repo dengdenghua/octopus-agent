@@ -5719,6 +5719,16 @@ export const koKR: Translations = {
     grantFloor: "발언권 주기",
   },
 
+  share: {
+    share: "공유",
+    saveImage: "이미지로 저장",
+    copyImage: "이미지 복사",
+    imageSaved: "이미지로 저장됨",
+    imageCopied: "이미지 복사됨",
+    imageFailed: "이미지 생성 실패",
+    replayLinkSoon: "재생 가능한 링크 · 출시 예정",
+  },
+
   teamJoin: {
     missingToken: "The invite link is missing a token.",
     invalidInvite: "The invite link is invalid or has expired.",

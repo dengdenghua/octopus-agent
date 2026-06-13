@@ -5548,6 +5548,16 @@ export const zhCN: Translations = {
     grantFloor: "授予发言权",
   },
 
+  share: {
+    share: "分享",
+    saveImage: "存为图片",
+    copyImage: "复制图片",
+    imageSaved: "已存为图片",
+    imageCopied: "图片已复制",
+    imageFailed: "生成图片失败",
+    replayLinkSoon: "可回放链接 · 即将上线",
+  },
+
   teamJoin: {
     missingToken: "邀请链接缺少 token。",
     invalidInvite: "邀请链接无效或已失效。",

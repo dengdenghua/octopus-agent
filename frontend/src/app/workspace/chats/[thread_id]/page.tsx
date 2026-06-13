@@ -49,6 +49,7 @@ import {
 import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older-turns-banner";
 import { ThreadProviders } from "@/components/workspace/messages/context";
 import { ThreadTitle } from "@/components/workspace/thread-title";
+import { ShareMenu } from "@/components/workspace/share-menu";
 import { TodoPanel } from "@/components/workspace/todo-panel";
 import { Welcome } from "@/components/workspace/welcome";
 import {
@@ -112,30 +113,35 @@ const NEW_CHAT_STARTERS: Array<{
   label: string;
   prompt: string;
   icon: LucideIcon;
+  tone: string;
 }> = [
   {
     label: "调研一个方向",
     prompt:
       "调研一个值得进入的细分赛道，输出机会点、竞品格局、风险和下一步行动。",
     icon: SearchIcon,
+    tone: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
   },
   {
     label: "规划一项工作",
     prompt:
       "把这个目标拆成可执行计划，按优先级列出里程碑、风险和今天要做的第一步。",
     icon: ListChecksIcon,
+    tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   },
   {
     label: "写一份文档",
     prompt:
       "帮我写一份清晰的项目说明，包含背景、目标、方案、时间线和验收标准。",
     icon: FileTextIcon,
+    tone: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
   },
   {
     label: "检查一段代码",
     prompt:
       "帮我审查这段代码，找出潜在 bug、边界情况、性能问题和可以直接修改的地方。",
     icon: Code2Icon,
+    tone: "bg-rose-500/10 text-rose-700 dark:text-rose-300",
   },
 ];
 
@@ -1191,6 +1197,13 @@ function ChatsPageContent({
                   />
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1">
+                  {(thread?.values?.title || initialPrompt) && (
+                    <ShareMenu
+                      iconOnly
+                      title={thread?.values?.title || initialPrompt || "Octopus"}
+                      prompt={initialPrompt || undefined}
+                    />
+                  )}
                   <RightPanelMenu
                     activePage={activeRightPanel}
                     artifactCount={artifactCount}
@@ -1249,8 +1262,8 @@ function ChatsPageContent({
               <div
                 className={cn(
                   "relative w-full transition-all duration-300",
-                  isNewThread && "md:-translate-y-[calc(50vh-128px)]",
-                  isNewThread ? "max-w-2xl" : "max-w-(--container-width-md)",
+                  isNewThread && "md:-translate-y-[calc(50vh-168px)]",
+                  isNewThread ? "max-w-3xl" : "max-w-(--container-width-md)",
                 )}
               >
                 {mounted ? (
@@ -1441,11 +1454,16 @@ function ChatsPageContent({
 
 function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
   return (
-    <div className="mt-2 space-y-1.5">
-      <div className="text-[12px] font-medium text-muted-foreground">
-        快速开始
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center justify-between gap-3 px-1">
+        <div className="text-[12px] font-medium text-muted-foreground">
+          常用任务
+        </div>
+        <div className="hidden text-[11px] text-muted-foreground/70 sm:block">
+          精选场景
+        </div>
       </div>
-      <div className="grid gap-1.5 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {NEW_CHAT_STARTERS.map((item) => {
           const Icon = item.icon;
           return (
@@ -1454,19 +1472,24 @@ function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
               type="button"
               onClick={() => onPick(item.prompt)}
               className={cn(
-                "group flex min-h-14 items-start gap-2.5 rounded-lg border border-border/55 bg-background/72 px-2.5 py-2 text-left",
-                "transition-[border-color,background-color,transform] duration-150 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-card",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
+                "group flex min-h-[76px] items-start gap-3 rounded-lg border border-border/60 bg-background/78 px-3 py-3 text-left shadow-sm",
+                "transition-[border-color,background-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-md",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0",
               )}
             >
-              <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+              <span
+                className={cn(
+                  "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-transform group-hover:scale-[1.03]",
+                  item.tone,
+                )}
+              >
                 <Icon className="size-3.5" />
               </span>
-              <span className="min-w-0">
-                <span className="block text-[12.5px] font-medium">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium text-foreground">
                   {item.label}
                 </span>
-                <span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-muted-foreground">
+                <span className="mt-1 line-clamp-2 block text-[11.5px] leading-4 text-muted-foreground">
                   {item.prompt}
                 </span>
               </span>

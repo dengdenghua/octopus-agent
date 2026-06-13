@@ -5110,6 +5110,16 @@ export interface Translations {
     grantFloor: string;
   };
 
+  share: {
+    share: string;
+    saveImage: string;
+    copyImage: string;
+    imageSaved: string;
+    imageCopied: string;
+    imageFailed: string;
+    replayLinkSoon: string;
+  };
+
   // Team Join page
   teamJoin: {
     missingToken: string;
