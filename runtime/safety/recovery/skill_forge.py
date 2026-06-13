@@ -225,6 +225,14 @@ class SkillForge:
                 shadow_failed.append(cand.name)
                 retired.append(cand.name)
                 continue
+            if self.registry.has(cand.name):
+                # Already promoted on an earlier tick. The forge re-proposes
+                # identical auto-generated skills every tick (deterministic
+                # clustering by signature), so without this skip
+                # promote_to_public() → registry.register() raises a bare
+                # ``ValueError("duplicate skill name")`` every tick.
+                retired.append(cand.name)
+                continue
             try:
                 self.promote_to_public(cand)
                 promoted.append(cand.name)
@@ -234,7 +242,15 @@ class SkillForge:
                     CanaryManager().register(cand.name)
                 except Exception as _exc:
                     _LOG.debug("canary register after forge failed: %s", _exc)
-            except (SkillTestsFailed, UnsafeSkillPromotionError):
+            except (SkillTestsFailed, ValueError) as exc:
+                # ValueError subsumes UnsafeSkillPromotionError (a subclass)
+                # AND the bare duplicate-name ValueError from
+                # registry.register(). The latter is NOT a subclass match for
+                # UnsafeSkillPromotionError, so it used to escape this except
+                # and crash the whole regeneration tick.
+                _LOG.debug(
+                    "forge promote skipped (%s): %s", type(exc).__name__, exc,
+                )
                 shadow_failed.append(cand.name)
                 retired.append(cand.name)
 

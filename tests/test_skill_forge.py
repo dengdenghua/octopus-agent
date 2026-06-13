@@ -411,3 +411,42 @@ class TestNameGeneration:
         a = _default_name_for(["x", "y"])
         b = _default_name_for(["y", "x"])
         assert a != b
+
+
+# ═══════════════════════════════════════════════════════════
+# Regression: duplicate forged name must NOT crash the tick
+# ═══════════════════════════════════════════════════════════
+
+
+class TestDuplicateNameNoCrash:
+    """A forged skill re-proposed on a later tick (name already registered)
+    must be skipped, not crash ``run()`` with a bare ``ValueError``.
+
+    The forge clusters deterministically (``_default_name_for`` = blake2b of
+    the sequence), so every tick re-proposes the same names.
+    ``promote_to_public`` → ``registry.register()`` raises a *bare*
+    ``ValueError('duplicate skill name')`` which is NOT a subclass match for
+    ``UnsafeSkillPromotionError`` — it used to escape ``run()`` and crash the
+    whole regeneration tick (seen live as "SkillForge tick failed: duplicate
+    skill name: forged_...").
+    """
+
+    def test_promote_skips_already_registered_name(
+        self, journal_with_samples, base_registry,
+    ):
+        forge = SkillForge(journal=journal_with_samples, registry=base_registry)
+        cands = forge.propose()
+        assert cands, "fixture should yield at least one forge candidate"
+        name = cands[0].name
+        # Simulate "already promoted on an earlier tick".
+        base_registry.register(
+            Skill(
+                name=name,
+                trusted_source=f"skill://forged/{name}",
+                handler=lambda **kw: {"ok": True},
+            ),
+            verify_tests=False,
+        )
+        result = forge.run()  # must NOT raise
+        assert name not in result.promoted
+        assert name in result.retired

@@ -320,8 +320,13 @@ class RegenerationScheduler:
             else:
                 summary["forged"] = "skip(no_registry)"
         except Exception as exc:  # noqa: BLE001
-            _LOG.warning("SkillForge tick failed: %s", exc)
-            summary["forged"] = "err"
+            _LOG.warning(
+                "SkillForge tick failed (%s): %s", type(exc).__name__, exc,
+            )
+            # Keep the exception type in the summary so recurring patterns
+            # (e.g. a duplicate-name crash loop) are visible without grepping
+            # logs — a bare "err" hid the type.
+            summary["forged"] = f"err:{type(exc).__name__}"
 
         # ─── 7. TopologyEvolver ─────────────────────
         # Organization-level reflection: read team-topology

@@ -341,6 +341,7 @@ def make_llm_ephemeral_runner(
 
         # ── Agentic loop path ────────────────────────────────
         # Build the tool spec list (filtered by role allowlist).
+        from runtime.execution.suckers.layers import select_tool_specs
         from runtime.execution.tool_spec_builder import (
             build_anthropic_tool_specs,
         )
@@ -359,22 +360,7 @@ def make_llm_ephemeral_runner(
                 tuple(call.role.tool_allowlist)
                 if call.role.tool_allowlist else ()
             )
-        if allowlist:
-            spec_set = set(allowlist)
-            by_name = {s.name: s for s in all_specs}
-            tool_specs = [by_name[name] for name in allowlist if name in by_name]
-            # Always inject blackboard skills · they're the substrate
-            # for parallel sibling collaboration. Without these, the
-            # whole swarm-with-shared-state design is dead. We only
-            # add bb_* if they're in the registry (defensive — older
-            # builds without blackboard_skills.py won't have them).
-            for s in all_specs:
-                if s.name in {"bb_read", "bb_write", "bb_keys"}:  # noqa: SIM102
-                    if s.name not in spec_set:
-                        tool_specs.append(s)
-        else:
-            # Empty allowlist = "full atomic + role inherits".
-            tool_specs = all_specs
+        tool_specs = select_tool_specs(allowlist, all_specs)
 
         if not tool_specs:
             # No tools to expose · degrade to single-shot.

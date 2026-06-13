@@ -216,11 +216,21 @@ class EvolutionAutoTrigger:
                 ))
             except Exception:  # noqa: BLE001 — event publish best-effort
                 pass
-            _LOG.info(
-                "auto-evolve result: ok=%s rounds=%s applied=%d",
-                result.get("ok"), result.get("rounds_run"),
-                len(result.get("applied", [])),
-            )
+            applied_n = len(result.get("applied", []))
+            if result.get("ok") and applied_n == 0:
+                # Expected when the judge rejected every proposal — log it
+                # distinctly so a persistent no-op isn't mistaken for either
+                # a failure or an effective evolution.
+                _LOG.info(
+                    "auto-evolve: no changes applied for %s "
+                    "(rounds=%s · all proposals rejected by judge)",
+                    agent_id, result.get("rounds_run"),
+                )
+            else:
+                _LOG.info(
+                    "auto-evolve result: ok=%s rounds=%s applied=%d",
+                    result.get("ok"), result.get("rounds_run"), applied_n,
+                )
         except Exception as exc:
             _LOG.warning("auto-evolve failed: %s", exc)
 

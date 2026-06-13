@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import random
 import threading
@@ -238,7 +239,12 @@ class BackgroundRunner:
             started = time.monotonic()
             task.stats.last_run_ts = started
             try:
-                task.callback()
+                # Run in a fresh context copy so ContextVars a task sets
+                # (e.g. _current_session / _current_agent_id via
+                # bind_thread_session) don't leak into the next task that
+                # reuses this pool/loop thread — that cross-task bleed would
+                # break per-task session isolation.
+                contextvars.copy_context().run(task.callback)
                 task.stats.success_count += 1
                 task.stats.last_error = None
             except Exception as e:  # noqa: BLE001
