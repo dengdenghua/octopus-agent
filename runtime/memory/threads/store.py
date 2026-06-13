@@ -394,10 +394,12 @@ class ThreadStateStore:
             if sess_root.exists():
                 hits = list(sess_root.rglob(f"{thread_id}.jsonl"))
                 if hits:
-                    # Take the deepest match — dated paths are
-                    # /YYYY/MM/<id>.jsonl, flat is /<id>.jsonl;
-                    # already-exists short-circuits flat above.
-                    return hits[0]
+                    # A thread touched across months can have several dated
+                    # files (/YYYY/MM/<id>.jsonl). Pick the LATEST: the path is
+                    # zero-padded so max() is chronological. rglob() order is
+                    # filesystem-arbitrary, so the old hits[0] could return a
+                    # stale month for both reads and appends.
+                    return max(hits)
             now = datetime.utcnow()
             return (
                 sess_root
