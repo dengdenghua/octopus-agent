@@ -116,6 +116,8 @@ button { background:#1e293b; color:#e2e8f0; border:1px solid #334155; border-rad
 button:hover { background:#334155; }
 input[type=range] { flex:1; accent-color:#6366f1; }
 .counter { color:#64748b; font-variant-numeric:tabular-nums; min-width:64px; text-align:right; }
+.hint { margin-top:8px; color:#475569; font-size:11px; }
+button[aria-pressed="true"] { background:#4338ca; border-color:#6366f1; color:#fff; }
 .empty { color:#64748b; padding:48px; text-align:center; }
 footer { margin-top:20px; color:#475569; font-size:12px; }
 </style>
@@ -141,9 +143,12 @@ ${
 <button id="prev" type="button">⟨ Prev</button>
 <button id="play" type="button">▶ Play</button>
 <button id="next" type="button">Next ⟩</button>
+<button id="loop" type="button" aria-pressed="false" title="循环播放">⟲ Loop</button>
+<button id="speed" type="button" title="播放速度">1×</button>
 <input id="seek" type="range" min="0" value="0"/>
 <span class="counter" id="counter"></span>
 </div>
+<div class="hint">← → 切换 · 空格 播放/暂停 · Home/End 首尾</div>
 </div>
 </div>`
   }
@@ -158,7 +163,8 @@ ${
   var MS = ${frameMs};
   var GLYPH = { terminal:'❯', browser:'\u{1f310}', file:'\u{1f4c4}', read:'\u{1f4d6}', search:'\u{1f50d}', todo:'☑', agent:'\u{1f916}', skill:'\u{1f9e9}', swarm:'\u{1f41d}' };
   var DOT = { done:'#22c55e', error:'#ef4444', running:'#6366f1', waiting_approval:'#f59e0b' };
-  var i = 0, timer = null;
+  var i = 0, timer = null, loop = false, speedIdx = 1;
+  var SPEEDS = [0.5, 1, 2];
   var stepsEl = document.getElementById('steps');
   var dtitle = document.getElementById('dtitle');
   var dsub = document.getElementById('dsub');
@@ -167,6 +173,8 @@ ${
   var counter = document.getElementById('counter');
   var seek = document.getElementById('seek');
   var play = document.getElementById('play');
+  var loopBtn = document.getElementById('loop');
+  var speedBtn = document.getElementById('speed');
   var rows = [];
   seek.max = String(STEPS.length - 1);
   STEPS.forEach(function(s, idx){
@@ -192,18 +200,33 @@ ${
     seek.value = String(i);
   }
   function stop(){ if (timer){ clearInterval(timer); timer = null; } play.textContent = '▶ Play'; }
-  function start(){
-    if (i >= STEPS.length - 1) i = 0;
-    play.textContent = '❚❚ Pause';
-    timer = setInterval(function(){
-      if (i >= STEPS.length - 1){ stop(); return; }
-      i++; render();
-    }, MS);
+  function tick(){
+    if (i >= STEPS.length - 1){ if (loop){ i = 0; render(); return; } stop(); return; }
+    i++; render();
   }
+  function start(){
+    if (i >= STEPS.length - 1 && !loop) i = 0;
+    play.textContent = '❚❚ Pause';
+    timer = setInterval(tick, Math.round(MS / SPEEDS[speedIdx]));
+  }
+  function go(n){ stop(); i = Math.max(0, Math.min(STEPS.length - 1, n)); render(); }
   play.onclick = function(){ timer ? stop() : start(); };
-  document.getElementById('prev').onclick = function(){ stop(); i = Math.max(0, i - 1); render(); };
-  document.getElementById('next').onclick = function(){ stop(); i = Math.min(STEPS.length - 1, i + 1); render(); };
-  seek.oninput = function(){ stop(); i = Number(seek.value) || 0; render(); };
+  loopBtn.onclick = function(){ loop = !loop; loopBtn.setAttribute('aria-pressed', loop ? 'true' : 'false'); };
+  speedBtn.onclick = function(){
+    speedIdx = (speedIdx + 1) % SPEEDS.length;
+    speedBtn.textContent = SPEEDS[speedIdx] + '×';
+    if (timer){ clearInterval(timer); timer = setInterval(tick, Math.round(MS / SPEEDS[speedIdx])); }
+  };
+  document.getElementById('prev').onclick = function(){ go(i - 1); };
+  document.getElementById('next').onclick = function(){ go(i + 1); };
+  seek.oninput = function(){ go(Number(seek.value) || 0); };
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'ArrowLeft'){ go(i - 1); }
+    else if (e.key === 'ArrowRight'){ go(i + 1); }
+    else if (e.key === 'Home'){ go(0); }
+    else if (e.key === 'End'){ go(STEPS.length - 1); }
+    else if (e.key === ' ' || e.key === 'Spacebar'){ e.preventDefault(); timer ? stop() : start(); }
+  });
   render();
 })();
 </script>`

@@ -29,6 +29,15 @@ describe("buildReplayHtml", () => {
     expect(html).not.toMatch(/src=["']https?:\/\//);
   });
 
+  it("exposes loop, speed and keyboard controls", () => {
+    const html = buildReplayHtml(sample());
+    expect(html).toContain('id="loop"');
+    expect(html).toContain('id="speed"');
+    expect(html).toContain("addEventListener('keydown'");
+    expect(html).toContain("ArrowRight");
+    expect(html).toContain("SPEEDS");
+  });
+
   it("embeds every step's title and body in the data", () => {
     const html = buildReplayHtml(sample());
     expect(html).toContain("run tests");
