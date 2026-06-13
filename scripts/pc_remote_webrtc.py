@@ -37,7 +37,14 @@ server: TentacleWebSocketServer | None = None
 pcs: dict[str, RTCPeerConnection] = {}
 W, H = pyautogui.size()
 EW, EH = 1280, 720
-STUN = [RTCIceServer(urls="stun:stun.l.google.com:19302")]
+# 多个 STUN(并行查、谁通用谁=降级切换)。只放实测可达的,避免等死服务器超时拖慢 ICE。
+# 对称 NAT 仍需 TURN —— 把 turn: 项加进这个列表即可(urls/username/credential)。
+STUN = [
+    RTCIceServer(urls="stun:stun.cloudflare.com:3478"),
+    RTCIceServer(urls="stun:stun.chat.bilibili.com:3478"),
+    RTCIceServer(urls="stun:stun.l.google.com:19302"),
+    RTCIceServer(urls="stun:stun.nextcloud.com:3478"),
+]
 
 
 class ScreenTrack(VideoStreamTrack):
