@@ -18,7 +18,12 @@ by ``Session.turn_id`` upstream.
 from __future__ import annotations
 
 import hashlib
+import threading
 from collections import OrderedDict
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 
 _PER_TURN_ABSOLUTE_LIMIT: int = 5
 _MAX_TRACKED_TURNS: int = 1024
@@ -26,6 +31,76 @@ _MAX_TRACKED_TURNS: int = 1024
 # Per-turn state. OrderedDict for LRU eviction.
 _TURN_DELEGATIONS: OrderedDict[str, int] = OrderedDict()
 _TURN_FAILED_FINGERPRINTS: OrderedDict[str, set[str]] = OrderedDict()
+
+
+# ── opt-in orchestration budget envelope ─────────────────────────
+# The flat per-turn cap (5) is the right guardrail for ad-hoc, model-driven
+# delegation, but it makes any multi-stage / looping orchestration
+# impossible (a 3rd fan-out in the same turn is refused). A deterministic
+# orchestration recipe instead runs inside an ``orchestration_budget_scope``:
+# for the duration of the scope the flat cap is REPLACED by a single bounded
+# total — the recipe may spawn up to ``max_spawns`` sub-agent runs across all
+# its stages, hard-stopping when exhausted.
+#
+# Opt-in by design: with no active scope, behaviour is unchanged. The scope
+# is entered by TRUSTED recipe code with a sane bound — it is NOT a knob the
+# model sets per call (that would defeat the turn cap). This is the wiring
+# the cumulative-ceiling note in ``subagents/bridge.py`` deferred as "a
+# deployment decision".
+
+
+@dataclass
+class OrchestrationBudget:
+    """A bounded total spawn budget for one orchestration. Thread-safe so
+    the parallel fan-out workers can charge it concurrently."""
+
+    max_spawns: int
+    _used: int = field(default=0)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    @property
+    def used(self) -> int:
+        with self._lock:
+            return self._used
+
+    def remaining(self) -> int:
+        with self._lock:
+            return max(0, self.max_spawns - self._used)
+
+    def has_room(self) -> bool:
+        with self._lock:
+            return self._used < self.max_spawns
+
+    def charge(self, n: int = 1) -> None:
+        with self._lock:
+            self._used += n
+
+
+_ORCH_BUDGET: ContextVar[OrchestrationBudget | None] = ContextVar(
+    "octopus_orchestration_budget", default=None,
+)
+
+
+def current_orchestration_budget() -> OrchestrationBudget | None:
+    """The orchestration budget for the current context, or None.
+
+    Reads a ``ContextVar`` — visible on the thread that entered the scope,
+    NOT auto-propagated into pool workers. The parallel fan-out captures it
+    on the calling thread and passes it explicitly into per-spec accounting.
+    """
+    return _ORCH_BUDGET.get()
+
+
+@contextmanager
+def orchestration_budget_scope(max_spawns: int) -> Iterator[OrchestrationBudget]:
+    """Run an orchestration under a bounded total spawn budget, replacing the
+    flat per-turn delegation cap for the duration of the scope."""
+    budget = OrchestrationBudget(max_spawns=max(1, int(max_spawns)))
+    token = _ORCH_BUDGET.set(budget)
+    try:
+        yield budget
+    finally:
+        _ORCH_BUDGET.reset(token)
 
 
 def compute_fingerprint(agent_id: str, prompt: str) -> str:
@@ -43,16 +118,27 @@ def compute_fingerprint(agent_id: str, prompt: str) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
-def check_absolute_cap(turn_id: str | None) -> tuple[int, bool]:
-    """Check if we're under the absolute per-turn delegation cap.
+def check_absolute_cap(
+    turn_id: str | None,
+    *,
+    budget: OrchestrationBudget | None = None,
+) -> tuple[int, bool]:
+    """Check if we're under the spawn cap.
 
     Returns ``(current_count, within_cap)``. When ``turn_id`` is None
-    (raw unit tests, no Session) enforcement is OFF.
+    (raw unit tests, no Session) the per-turn enforcement is OFF.
+
+    When an orchestration budget is active (passed explicitly, or the
+    ambient ``orchestration_budget_scope`` on this thread), the flat
+    per-turn cap is REPLACED by the budget's remaining room.
 
     Does NOT increment the counter — that happens in ``record_delegation``
     after we know whether the call counts (success vs. first-time
     structural failure).
     """
+    env = budget if budget is not None else current_orchestration_budget()
+    if env is not None:
+        return (env.used, env.has_room())
     if not turn_id:
         return (0, True)
     cur = _TURN_DELEGATIONS.get(turn_id, 0)
@@ -64,8 +150,15 @@ def record_delegation(
     fingerprint: str,
     *,
     succeeded: bool,
+    budget: OrchestrationBudget | None = None,
 ) -> None:
-    """Record a delegation attempt. Smart-budget rules:
+    """Record a delegation attempt.
+
+    Under an active orchestration budget the envelope is a hard TOTAL: every
+    spawn charges one unit (no smart-budget free retries — the bound is the
+    point), and the per-turn counter/fingerprints are left untouched.
+
+    Otherwise the per-turn smart-budget rules apply:
 
     * Success → bump counter (counts against absolute cap)
     * First-time failure (fingerprint not seen) → record fingerprint,
@@ -73,6 +166,10 @@ def record_delegation(
     * Repeat failure (fingerprint already seen) → bump counter
       (treat as wasted call, prevents infinite loops)
     """
+    env = budget if budget is not None else current_orchestration_budget()
+    if env is not None:
+        env.charge()
+        return
     if not turn_id:
         return
     failed_fps = _TURN_FAILED_FINGERPRINTS.setdefault(turn_id, set())

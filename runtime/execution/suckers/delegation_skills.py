@@ -14,6 +14,9 @@ from .delegation_budget import (
     compute_fingerprint as _compute_fingerprint,
 )
 from .delegation_budget import (
+    current_orchestration_budget as _current_orchestration_budget,
+)
+from .delegation_budget import (
     record_delegation as _record_delegation,
 )
 from .registry import Skill, SkillRegistry
@@ -864,7 +867,10 @@ def _call_agent_parallel(
     parent_sess, turn_id = _resolve_session_and_turn()
     if session is None:
         session = parent_sess
-    cur_count, within = _check_absolute_cap(turn_id)
+    # Captured on THIS (calling) thread so the pool workers can charge it via
+    # closure — the ContextVar itself doesn't propagate into the pool.
+    orch_budget = _current_orchestration_budget()
+    cur_count, within = _check_absolute_cap(turn_id, budget=orch_budget)
     if not within:
         return _empty_parallel_result(
             f"delegation budget exhausted for this turn "
@@ -947,7 +953,8 @@ def _call_agent_parallel(
         # but a repeat of the same {agent, prompt} does count.
         spec_fingerprint = _compute_fingerprint(spec["agent_id"], spec["prompt"])
         _record_delegation(
-            turn_id, spec_fingerprint, succeeded=bool(result.get("success")),
+            turn_id, spec_fingerprint,
+            succeeded=bool(result.get("success")), budget=orch_budget,
         )
         # Preserve operator's original agent_id in response
         if role_label:
