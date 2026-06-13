@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -10,6 +11,11 @@ from runtime.adapters.instrumentation import trace_stage
 from .models import ModelRequest, ModelResponse, ModelRouter
 
 _LOG = logging.getLogger("octopus.eyes.multi_router")
+
+# Cap the in-memory dispatch log so a long-lived router can't grow it without
+# bound (one record per call). It's a rolling debug/observability buffer —
+# only the most recent dispatches matter; tests read dispatch_log[-1].
+_DISPATCH_LOG_MAX = 256
 
 
 def _is_transient_error(exc: BaseException) -> bool:
@@ -67,7 +73,7 @@ class MultiModelRouter(ModelRouter):
         self.primary = primary
         self.strong = strong
         self.fallbacks = list(fallbacks or [])
-        self.dispatch_log: list[DispatchRecord] = []
+        self.dispatch_log: deque[DispatchRecord] = deque(maxlen=_DISPATCH_LOG_MAX)
         # Retry config — same provider gets up to ``retry_attempts``
         # tries on a transient failure before falling back to the
         # next provider in the chain. Set to 1 to disable.

@@ -324,3 +324,16 @@ class TestLLMPlannerUpgradeOnLosing:
         intent = ParsedIntent(raw="x", intent_type="task", normalized_goal="y")
         planner.plan(intent)
         assert mr.dispatch_log[-1].final_role == "primary"
+
+
+class TestDispatchLogBounded:
+    def test_dispatch_log_does_not_grow_unbounded(self):
+        from runtime.sensing.model_router.multi_router import _DISPATCH_LOG_MAX
+
+        mr = MultiModelRouter(primary=MockModelRouter(response="ok"))
+        for _ in range(_DISPATCH_LOG_MAX + 50):
+            mr.call(_make_request())
+        # Rolling cap: one record per call would otherwise leak forever on a
+        # long-lived router. Newest record stays readable (tests use [-1]).
+        assert len(mr.dispatch_log) == _DISPATCH_LOG_MAX
+        assert mr.dispatch_log[-1].final_role == "primary"
