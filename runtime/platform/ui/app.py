@@ -572,55 +572,10 @@ def create_app(
     app.state.team_tasks_router = team_tasks_router
     app.include_router(team_tasks_router)
 
-    # Company Workbench: long-running project planning domain. This sits
-    # above team_tasks so milestones/Gantt data can evolve without
-    # disturbing existing team-room task execution.
-    from runtime.company.api import create_company_router
-
-    async def _company_team_task_dispatcher(
-        request: Any,
-        payload: dict[str, Any],
-        run: bool = False,
-    ) -> dict[str, Any]:
-        creator = getattr(team_tasks_router, "create_task_from_payload", None)
-        if creator is None:
-            raise RuntimeError("team task creator is not available")
-        team_task = await creator(request, payload)
-        if run:
-            runner = getattr(team_tasks_router, "run_task_from_request", None)
-            if runner is None:
-                raise RuntimeError("team task runner is not available")
-            team_task = await runner(request, str(team_task["id"]))
-        return team_task
-
-    async def _company_team_room_creator(
-        request: Any,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        creator = getattr(team_rooms_router, "create_team_from_payload", None)
-        if creator is None:
-            raise RuntimeError("team room creator is not available")
-        return creator(request, payload)
-
-    async def _company_team_room_updater(
-        request: Any,
-        team_id: str,
-        payload: dict[str, Any],
-    ) -> dict[str, Any]:
-        updater = getattr(team_rooms_router, "update_team_from_payload", None)
-        if updater is None:
-            raise RuntimeError("team room updater is not available")
-        return await updater(request, team_id, payload)
-
-    company_router = create_company_router(
-        team_task_dispatcher=_company_team_task_dispatcher,
-        team_room_creator=_company_team_room_creator,
-        team_room_updater=_company_team_room_updater,
-        agent_registry=agent_registry,
-        runtime=stack.runtime if stack is not None else None,
-    )
-    app.state.company_router = company_router
-    app.include_router(company_router)
+    # Company Workbench(人类项目管理:项目/任务/里程碑/甘特)已移除——PM 交给
+    # 企业版(octopus-enterprise)。team_rooms/team_tasks(Agent 协调)保留;
+    # 上面 team 事件广播里的 getattr(app.state, "company_router", None) 会因
+    # company_router 不存在而自动跳过同步,无需改动。
 
     if parallel_agent_orchestrator is None:
         from runtime.execution.parallel_agents import ParallelAgentOrchestrator
