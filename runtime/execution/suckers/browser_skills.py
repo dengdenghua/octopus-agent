@@ -225,8 +225,15 @@ def _with_page(
             from runtime.execution.suckers.browser_session_worker import (
                 get_browser_session_pool,
             )
+            pool = get_browser_session_pool()
             key = f"thr:{getattr(sess, 'thread_id', None) or threading.get_ident()}"
-            return get_browser_session_pool().get_or_create(key).submit(action)
+            try:
+                return pool.get_or_create(key).submit(action)
+            except RuntimeError:
+                # The worker was closed (reaper eviction / timeout retirement)
+                # between get_or_create and submit — one fresh retry resolves
+                # the race (get_or_create makes a new worker for a closed key).
+                return pool.get_or_create(key).submit(action)
         except Exception as e:  # noqa: BLE001
             return {"error": f"browser_error: {type(e).__name__}: {e}"}
 

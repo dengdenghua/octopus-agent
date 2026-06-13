@@ -84,6 +84,23 @@ def test_worker_submit_after_close_raises():
         w.submit(lambda page: page)
 
 
+def test_op_timeout_retires_worker():
+    # An op that outlives op_timeout_s → caller gets TimeoutError AND the worker
+    # is retired (closed) so its busy/half-mutated page is never reused.
+    import threading as _t
+
+    factory, _ = _counting_factory()
+    w = BrowserSessionWorker(page_factory=factory, op_timeout_s=0.1)
+    gate = _t.Event()
+    try:
+        with pytest.raises(TimeoutError):
+            w.submit(lambda page: gate.wait(5))  # blocks worker past the timeout
+        assert w.closed is True
+    finally:
+        gate.set()   # release the worker thread so it can tear down
+        w.close()
+
+
 # ── BrowserSessionPool ────────────────────────────────────
 
 

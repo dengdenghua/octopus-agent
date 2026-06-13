@@ -21,6 +21,7 @@ without a real browser.
 
 from __future__ import annotations
 
+import atexit
 import concurrent.futures
 import contextlib
 import queue
@@ -102,20 +103,30 @@ class BrowserSessionWorker:
 
     def submit(self, op: Callable[[Any], Any]) -> Any:
         """Run ``op(page)`` on the worker thread; return its result (blocking)."""
+        fut: concurrent.futures.Future = concurrent.futures.Future()
+        # Check ``_closed`` and enqueue ATOMICALLY under the lock. close() also
+        # enqueues its sentinel under the same lock, so the two can't interleave
+        # — an op is never queued after the close sentinel and then dropped.
         with self._lock:
             if self._closed:
                 raise RuntimeError("browser session is closed")
             self.last_used = time.monotonic()
-        fut: concurrent.futures.Future = concurrent.futures.Future()
-        self._q.put((op, fut))
-        return fut.result(timeout=self._op_timeout_s)
+            self._q.put((op, fut))
+        try:
+            return fut.result(timeout=self._op_timeout_s)
+        except TimeoutError:
+            # The op is still running on the worker thread and can't be
+            # cancelled. Retire this worker so its possibly half-mutated page is
+            # never reused; the next session call gets a fresh one.
+            self.close(wait=False)
+            raise
 
     def close(self, *, wait: bool = True, timeout: float = 10.0) -> None:
         with self._lock:
             if self._closed:
                 return
             self._closed = True
-        self._q.put(None)
+            self._q.put(None)  # sentinel enqueued under the lock (see submit)
         if wait:
             self._thread.join(timeout=timeout)
 
@@ -202,4 +213,7 @@ def get_browser_session_pool() -> BrowserSessionPool:
         with _POOL_LOCK:
             if _POOL is None:
                 _POOL = BrowserSessionPool()
+                # Stop the reaper + close all browsers cleanly at process exit
+                # (daemon threads would otherwise be killed mid-teardown).
+                atexit.register(_POOL.close_all)
     return _POOL
