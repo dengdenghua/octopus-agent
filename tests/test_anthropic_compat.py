@@ -101,3 +101,127 @@ def test_event_adapter_approval_emits_requires_action() -> None:
     assert out[1].type == "session.status_idle"
     assert out[1].stop_reason.type == "requires_action"
     assert out[0].id in out[1].stop_reason.event_ids
+
+
+# ═══════════════════════════════════════════════════════════
+# _SseEmitter — streaming / interrupt / approval (wired, was stubbed)
+# ═══════════════════════════════════════════════════════════
+
+
+def test_adapt_notify_maps_text_and_reasoning_deltas() -> None:
+    from runtime.sensing.gateway.anthropic_compat.router import _adapt_notify
+
+    msg = _adapt_notify("item/agentMessage/delta", {"delta": "tok"})
+    assert len(msg) == 1 and msg[0].type == "agent.message"
+    assert msg[0].content == [{"type": "text", "text": "tok"}]
+
+    think = _adapt_notify("item/reasoning/textDelta", {"delta": "hmm"})
+    assert len(think) == 1 and think[0].type == "agent.thinking"
+    assert think[0].content == [{"type": "thinking", "thinking": "hmm"}]
+
+    # empty delta and unmapped (item-level) methods produce nothing in v1.
+    assert _adapt_notify("item/agentMessage/delta", {"delta": ""}) == []
+    assert _adapt_notify("item/completed", {"item": {}}) == []
+
+
+def test_turn_completed_event_honours_interrupted_flag() -> None:
+    from runtime.sensing.gateway.anthropic_compat.event_adapter import (
+        turn_completed_event,
+    )
+
+    assert turn_completed_event().stop_reason.type == "end_turn"
+    assert turn_completed_event(interrupted=True).stop_reason.type == "interrupted"
+
+
+def test_sse_emitter_interrupt_registry() -> None:
+    from runtime.sensing.gateway.anthropic_compat.router import _SseEmitter
+
+    em = _SseEmitter(None, "sesn_x")
+    em.register_turn("turn_1")
+    assert em.is_turn_interrupted("turn_1") is False
+    assert em.interrupted is False
+
+    em.request_interrupt()  # "*" — interrupt whatever is in flight
+    assert em.is_turn_interrupted("turn_1") is True
+    assert em.is_turn_interrupted("any_other") is True
+    assert em.interrupted is True
+
+
+def test_sse_emitter_interrupt_survives_late_register() -> None:
+    # A client interrupt that races ahead of the turn's register_turn() must
+    # NOT be cleared (register_turn only discards the specific turn id).
+    from runtime.sensing.gateway.anthropic_compat.router import _SseEmitter
+
+    em = _SseEmitter(None, "sesn_x")
+    em.request_interrupt()         # "*" arrives first
+    em.register_turn("turn_2")     # turn registers afterwards
+    assert em.is_turn_interrupted("turn_2") is True
+
+
+def test_sse_emitter_notify_publishes_delta_to_subscribers() -> None:
+    import asyncio
+
+    from runtime.sensing.gateway.anthropic_compat.router import _SseEmitter
+    from runtime.sensing.gateway.anthropic_compat.session_manager import (
+        SessionManager,
+    )
+
+    async def _run():
+        mgr = SessionManager()
+        state = await mgr.create(title="t")
+        q = await mgr.subscribe(state.session_id)
+        em = _SseEmitter(mgr, state.session_id)
+        await em.notify("item/agentMessage/delta", {"delta": "hi"})
+        return q.get_nowait()
+
+    evt = asyncio.run(_run())
+    assert evt.type == "agent.message"
+    assert evt.content == [{"type": "text", "text": "hi"}]
+
+
+def test_sse_emitter_approval_resolves_allow_and_deny() -> None:
+    import asyncio
+
+    from runtime.sensing.gateway.anthropic_compat.router import _SseEmitter
+    from runtime.sensing.gateway.anthropic_compat.session_manager import (
+        SessionManager,
+    )
+
+    async def _run(allow: bool):
+        mgr = SessionManager()
+        state = await mgr.create(title="t")
+        em = _SseEmitter(mgr, state.session_id)
+        task = asyncio.create_task(em.request_approval(
+            "req", {"itemId": "tc_1", "tool": "exec_shell"}, timeout=5.0,
+        ))
+        await asyncio.sleep(0.02)  # let request_approval register the future
+        resolved = em.resolve_approval("tc_1", allow=allow)
+        return resolved, await task
+
+    resolved, result = asyncio.run(_run(True))
+    assert resolved is True
+    assert result == {"action": "accept"}
+
+    resolved, result = asyncio.run(_run(False))
+    assert resolved is True
+    assert result == {"action": "decline"}
+
+
+def test_sse_emitter_approval_fails_closed_on_timeout() -> None:
+    import asyncio
+
+    from runtime.sensing.gateway.anthropic_compat.router import _SseEmitter
+    from runtime.sensing.gateway.anthropic_compat.session_manager import (
+        SessionManager,
+    )
+
+    async def _run():
+        mgr = SessionManager()
+        state = await mgr.create(title="t")
+        em = _SseEmitter(mgr, state.session_id)
+        # No confirmation arrives → must DENY (old stub auto-accepted).
+        return await em.request_approval(
+            "req", {"itemId": "tc_x", "tool": "rm"}, timeout=0.05,
+        )
+
+    assert asyncio.run(_run()) == {"action": "decline"}

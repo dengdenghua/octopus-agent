@@ -37,7 +37,7 @@ def turn_completed_event(*, interrupted: bool = False) -> OutboundEvent:
         id=_new_event_id(),
         type="session.status_idle",
         status=SessionStatus.IDLE,
-        stop_reason=StopReason(type="end_turn"),
+        stop_reason=StopReason(type="interrupted" if interrupted else "end_turn"),
     )
 
 

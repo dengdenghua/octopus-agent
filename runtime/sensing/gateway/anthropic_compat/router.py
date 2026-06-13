@@ -26,17 +26,148 @@ except ImportError:  # pragma: no cover
     Request = object  # type: ignore[assignment, misc]
     StreamingResponse = None  # type: ignore[assignment, misc]
 
-from .event_adapter import turn_completed_event, turn_started_event
+from .event_adapter import (
+    requires_action_event,
+    turn_completed_event,
+    turn_started_event,
+)
 from .models import (
+    AgentCustomToolUseEvent,
+    AgentMessageEvent,
+    AgentThinkingEvent,
     CreateSessionRequest,
+    OutboundEvent,
     SendEventsRequest,
     SessionStatus,
+    _new_event_id,
 )
 from .session_manager import SessionManager
 
 _logger = logging.getLogger(__name__)
 
 _BETA_HEADER = "managed-agents-2026-04-01"
+_APPROVAL_TIMEOUT_DEFAULT = 600.0
+
+
+def _adapt_notify(method_str: str, params: dict[str, Any]) -> list[OutboundEvent]:
+    """Map a realtime ``emitter.notify(method, params)`` into Anthropic events.
+
+    v1 maps the streaming TEXT deltas — the bulk of what an SDK client renders
+    token-by-token. Item-level tool events (``item/started`` / ``item/completed``
+    carrying realtime item models) are a follow-up: they need the item-model
+    mapping and are skipped here rather than emitted malformed.
+    """
+    if method_str == "item/agentMessage/delta":
+        delta = params.get("delta") or ""
+        if delta:
+            return [AgentMessageEvent(content=[{"type": "text", "text": delta}])]
+    elif method_str == "item/reasoning/textDelta":
+        delta = params.get("delta") or ""
+        if delta:
+            return [AgentThinkingEvent(
+                content=[{"type": "thinking", "thinking": delta}],
+            )]
+    return []
+
+
+class _SseEmitter:
+    """A realtime ``EventEmitter`` that fans turn events out to a session's SSE
+    subscribers and bridges interrupt / approval back from inbound POST events.
+
+    Created per turn and pinned on ``SessionState.active_emitter`` so the
+    ``POST /events`` handler can reach the in-flight turn:
+    ``user.interrupt`` → :meth:`request_interrupt`; ``user.tool_confirmation``
+    → :meth:`resolve_approval`.
+    """
+
+    def __init__(
+        self,
+        manager: SessionManager,
+        session_id: str,
+        *,
+        approval_timeout: float = _APPROVAL_TIMEOUT_DEFAULT,
+    ) -> None:
+        self._manager = manager
+        self._session_id = session_id
+        self._approval_timeout = approval_timeout
+        self._interrupted: set[str] = set()
+        self._pending: dict[str, asyncio.Future] = {}
+
+    @property
+    def interrupted(self) -> bool:
+        return bool(self._interrupted)
+
+    # ── EventEmitter: streaming ──────────────────────────────
+    async def notify(self, method: Any, params: dict[str, Any]) -> None:
+        method_str = getattr(method, "value", None) or str(method)
+        for evt in _adapt_notify(method_str, params or {}):
+            await self._manager.publish(self._session_id, evt)
+
+    # ── EventEmitter: approval ───────────────────────────────
+    async def request_approval(
+        self,
+        method: Any,
+        params: dict[str, Any],
+        *,
+        timeout: float | None = None,
+    ) -> Any:
+        params = params or {}
+        item_id = str(
+            params.get("itemId") or params.get("toolCallId") or _new_event_id(),
+        )
+        # Surface the request over SSE so the client knows to confirm, then go
+        # idle with stop_reason=requires_action (Anthropic protocol).
+        await self._manager.publish(self._session_id, AgentCustomToolUseEvent(
+            tool_name=str(params.get("tool") or ""),
+            tool_use_id=item_id,
+            input={
+                "args_preview": str(
+                    params.get("argsPreview") or params.get("detail") or "",
+                ),
+            },
+        ))
+        await self._manager.publish(
+            self._session_id, requires_action_event(blocking_event_ids=[item_id]),
+        )
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._pending[item_id] = fut
+        try:
+            return await asyncio.wait_for(
+                fut, timeout=timeout or self._approval_timeout,
+            )
+        except TimeoutError:
+            # Fail-closed: no confirmation arrived → DENY (the old MVP stub
+            # auto-accepted, silently bypassing on-request approval).
+            return {"action": "decline"}
+        finally:
+            self._pending.pop(item_id, None)
+
+    def resolve_approval(self, tool_use_id: str, *, allow: bool) -> bool:
+        """Resolve a pending approval from an inbound user.tool_confirmation.
+
+        Returns True if a matching pending request was resolved.
+        """
+        fut = self._pending.get(tool_use_id)
+        if fut is None or fut.done():
+            return False
+        fut.set_result({"action": "accept" if allow else "decline"})
+        return True
+
+    # ── EventEmitter: interrupt registry ─────────────────────
+    def is_turn_interrupted(self, turn_id: str) -> bool:
+        return "*" in self._interrupted or turn_id in self._interrupted
+
+    def register_turn(self, turn_id: str) -> None:
+        self._interrupted.discard(turn_id)
+
+    def unregister_turn(self, turn_id: str) -> None:
+        self._interrupted.discard(turn_id)
+
+    def request_interrupt(self, turn_id: str = "*") -> None:
+        """Mark the in-flight turn interrupted. Defaults to '*' (any turn) so a
+        client interrupt lands even if it races the turn's register_turn()."""
+        self._interrupted.add(turn_id)
 
 
 def create_anthropic_compat_router(
@@ -150,14 +281,24 @@ def create_anthropic_compat_router(
                     _run_turn(session_id, state, text, actor),
                 )
             elif event_type == "user.interrupt":
-                # TODO: wire to turn interrupt
-                pass
+                emitter = getattr(state, "active_emitter", None)
+                if emitter is not None:
+                    # "*" interrupts whatever turn is in flight; the ReAct loop
+                    # polls is_turn_interrupted() cooperatively and bails out.
+                    emitter.request_interrupt()
             elif event_type == "user.tool_confirmation":
-                # TODO: wire to approval resolution
-                pass
+                emitter = getattr(state, "active_emitter", None)
+                tool_use_id = raw_event.get("tool_use_id") or ""
+                allow = raw_event.get("result") == "allow"
+                if emitter is not None and tool_use_id:
+                    emitter.resolve_approval(tool_use_id, allow=allow)
             elif event_type == "user.custom_tool_result":
-                # TODO: wire to custom tool result
-                pass
+                # Custom-tool results need the custom-tool round-trip (the agent
+                # must have an outstanding custom_tool_use). Not yet wired —
+                # left explicit rather than silently swallowed.
+                _logger.debug(
+                    "anthropic compat: user.custom_tool_result not yet wired",
+                )
             else:
                 _logger.debug("anthropic compat: unknown event type %s", event_type)
 
@@ -240,36 +381,16 @@ def create_anthropic_compat_router(
             if state.agent_id:
                 params["input"][0]["metadata"] = {"agent_id": state.agent_id}
 
-            # Create a lightweight emitter that adapts events and publishes.
-            class _SseEmitter:
-                async def notify(self, method, params_dict):
-                    # Map realtime protocol events to Anthropic events.
-                    # The realtime cerebrum emits item/* events; we need
-                    # to intercept at a lower level. For MVP, we drive
-                    # the turn via start_turn and capture the Turn result.
-                    pass
-
-                async def request_approval(self, method, params_dict, *, timeout=None):
-                    # For MVP, auto-approve (the approval flow needs
-                    # the full bidirectional channel which SSE doesn't
-                    # natively support — the client must POST back a
-                    # user.tool_confirmation event).
-                    return {"action": "accept"}
-
-                def is_turn_interrupted(self, turn_id):
-                    return False
-
-                def register_turn(self, turn_id):
-                    pass
-
-                def unregister_turn(self, turn_id):
-                    pass
-
-            emitter = _SseEmitter()
+            # Emitter that streams turn events to SSE subscribers and bridges
+            # interrupt / approval from inbound POST events. Pinned on the
+            # session so POST /events can reach this in-flight turn.
+            emitter = _SseEmitter(manager, session_id)
+            state.active_emitter = emitter
             await runtime.start_turn(params, emitter)
 
-            # After turn completes, publish completion event.
-            await manager.publish(session_id, turn_completed_event())
+            await manager.publish(
+                session_id, turn_completed_event(interrupted=emitter.interrupted),
+            )
 
         except Exception as exc:
             _logger.exception("anthropic compat: turn failed")
@@ -280,6 +401,7 @@ def create_anthropic_compat_router(
                 SessionErrorEvent(error={"message": str(exc)}),
             )
         finally:
+            state.active_emitter = None
             await manager.set_status(session_id, SessionStatus.IDLE)
 
     return router

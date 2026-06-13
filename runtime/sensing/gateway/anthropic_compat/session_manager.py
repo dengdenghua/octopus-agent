@@ -40,6 +40,10 @@ class SessionState:
     history: list[OutboundEvent] = field(default_factory=list)
     # Actor who created this session (for ownership checks).
     creator_actor: str | None = None
+    # The live EventEmitter for the in-flight turn — set by the router while a
+    # turn runs, cleared when it finishes. Lets POST /events reach the running
+    # turn to deliver an interrupt or an approval confirmation. None when idle.
+    active_emitter: Any = None
 
 
 class SessionManager:
