@@ -1426,6 +1426,7 @@ function ChatsPageContent({
                   paused={hasPausedOrPendingBackgroundTask}
                   threadId={threadId}
                   workDir={workDir}
+                  replayTitle={thread?.values?.title || initialPrompt || undefined}
                   browserPreviewBlocks={previewBlocks}
                   onClose={closeAgentWorkbenchPanel}
                   onSelectTab={selectAgentWorkbenchTab}
