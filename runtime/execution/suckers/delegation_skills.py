@@ -17,6 +17,9 @@ from .delegation_budget import (
     current_orchestration_budget as _current_orchestration_budget,
 )
 from .delegation_budget import (
+    orchestration_budget_scope as _orchestration_budget_scope,
+)
+from .delegation_budget import (
     record_delegation as _record_delegation,
 )
 from .registry import Skill, SkillRegistry
@@ -1394,6 +1397,195 @@ def _call_agent_vote(
     }
 
 
+# ── deterministic orchestration (find -> dedup -> loop, optional verify) ──
+# The model declares a goal; the recipe runs a DETERMINISTIC multi-round
+# discovery loop in code (fan-out -> split -> dedup vs seen -> loop until dry),
+# optionally gating each finding through call_agent_vote. The whole run is
+# bounded by an ``orchestration_budget_scope`` so loops are possible (the flat
+# 5/turn cap would otherwise refuse the 2nd round). The outer call still costs
+# one against the per-turn cap so orchestrations can't be spammed.
+
+_ORCH_MAX_SPAWNS_CEILING = 48
+_ORCH_VERIFY_VOTERS = 3
+_NULL_FINDING_TOKENS = frozenset({
+    "none", "n/a", "na", "nothing", "no new findings", "no findings", "(none)",
+})
+
+
+def _split_findings(output: str) -> list[str]:
+    """One finding per line; strip bullet/number prefixes, drop null markers."""
+    out: list[str] = []
+    for line in (output or "").splitlines():
+        s = line.strip().lstrip("-*•·0123456789.)（）[] #").strip()
+        if not s or s.lower() in _NULL_FINDING_TOKENS:
+            continue
+        out.append(s)
+    return out
+
+
+def _norm_finding(s: str) -> str:
+    return " ".join((s or "").lower().split())
+
+
+def _dedupe_findings(items: list[str], seen_norms: set[str]) -> list[str]:
+    """Return the items whose normalised form hasn't been seen; updates seen."""
+    fresh: list[str] = []
+    for it in items:
+        key = _norm_finding(it)
+        if key and key not in seen_norms:
+            seen_norms.add(key)
+            fresh.append(it)
+    return fresh
+
+
+def _finder_prompt(goal: str, seen: list[str]) -> str:
+    base = (
+        "You are one worker in a parallel discovery pass.\n\n"
+        f"GOAL:\n{goal}\n\n"
+        "List concrete findings, ONE per line — no preamble, no numbering. "
+        "Keep each line atomic (one idea)."
+    )
+    if seen:
+        shown = "\n".join(f"- {s}" for s in seen[:40])
+        base += (
+            "\n\nAlready found — do NOT repeat these; add only genuinely NEW "
+            f"ones, or reply exactly NONE if you have nothing new:\n{shown}"
+        )
+    return base
+
+
+def _run_orchestration(
+    goal: str = "",
+    *,
+    agent_id: str = "researcher",
+    n: int | str = 3,
+    rounds: int | str = 2,
+    patience: int | str = 1,
+    verify: bool = False,
+    choices: Any = None,
+    max_spawns: int | str | None = None,
+    timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
+    context: dict[str, Any] | None = None,
+    session: Any = None,
+    **_kw: Any,
+) -> dict[str, Any]:
+    """Run a deterministic discovery loop: fan out ``n`` workers per round,
+    split + dedupe their findings, loop up to ``rounds`` (stopping early after
+    ``patience`` dry rounds), optionally vote-verify each finding. The whole
+    run is bounded by a spawn budget so it can't run away.
+    """
+    goal = str(goal or _kw.get("prompt") or _kw.get("task") or _kw.get("query") or "").strip()
+    if not goal:
+        return {
+            "ok": False, "error": "goal is required",
+            "collected": [], "confirmed": [], "count": 0,
+        }
+
+    def _clamp(value: Any, lo: int, hi: int, default: int) -> int:
+        try:
+            return max(lo, min(hi, int(value)))
+        except (TypeError, ValueError):
+            return default
+
+    n = _clamp(n, 1, 6, 3)
+    rounds = _clamp(rounds, 1, 5, 2)
+    patience = _clamp(patience, 0, 3, 1)
+    if max_spawns is None:
+        planned = n * rounds + (n * rounds if verify else 0)
+        max_spawns = min(_ORCH_MAX_SPAWNS_CEILING, max(n, planned))
+    else:
+        max_spawns = _clamp(max_spawns, n, _ORCH_MAX_SPAWNS_CEILING, n * rounds)
+
+    # Outer gate: an orchestration costs ONE against the per-turn cap so the
+    # model can't spawn unboundedly by launching many orchestrations.
+    parent_sess, turn_id = _resolve_session_and_turn()
+    if session is None:
+        session = parent_sess
+    _, within = _check_absolute_cap(turn_id)
+    if not within:
+        return {
+            "ok": False,
+            "error": (
+                "delegation budget exhausted for this turn — do the rest "
+                "yourself, don't launch another orchestration."
+            ),
+            "collected": [], "confirmed": [], "count": 0,
+        }
+    _record_delegation(
+        turn_id, _compute_fingerprint("run_orchestration", goal), succeeded=True,
+    )
+
+    ballot = _coerce_vote_choices(choices) or ["keep", "drop"]
+    seen_norms: set[str] = set()
+    collected: list[str] = []
+    per_round: list[int] = []
+    dry = 0
+    stopped = "rounds"
+
+    with _orchestration_budget_scope(int(max_spawns)) as budget:
+        for _ in range(int(rounds)):
+            if not budget.has_room():
+                stopped = "budget"
+                break
+            env = _call_agent_parallel(
+                specs=[
+                    {"agent_id": agent_id, "prompt": _finder_prompt(goal, collected)}
+                    for _ in range(n)
+                ],
+                timeout_s=timeout_s, context=context, session=session,
+            )
+            items: list[str] = []
+            for s in env.get("successes", []):
+                items.extend(_split_findings(str(s.get("output") or "")))
+            fresh = _dedupe_findings(items, seen_norms)
+            per_round.append(len(fresh))
+            if not fresh:
+                dry += 1
+                if dry > patience:
+                    stopped = "dry"
+                    break
+                continue
+            dry = 0
+            collected.extend(fresh)
+
+        confirmed = list(collected)
+        verified = False
+        unverified = 0
+        if verify and collected:
+            verified = True
+            kept: list[str] = []
+            for finding in collected:
+                if not budget.has_room():
+                    kept.append(finding)  # ran out of budget — keep + flag
+                    unverified += 1
+                    continue
+                vote = _call_agent_vote(
+                    question=f"Is this finding correct and worth keeping?\n\n{finding}",
+                    n=_ORCH_VERIFY_VOTERS, choices=ballot,
+                    timeout_s=timeout_s, context=context, session=session,
+                )
+                # Drop only on an explicit majority "drop"; ties/no-verdict keep.
+                if vote.get("verdict") != ballot[-1]:
+                    kept.append(finding)
+            confirmed = kept
+        budget_used = budget.used
+
+    return {
+        "ok": True,
+        "goal": goal[:240],
+        "collected": collected,
+        "confirmed": confirmed,
+        "count": len(confirmed),
+        "rounds_run": len(per_round),
+        "fresh_per_round": per_round,
+        "verified": verified,
+        "unverified": unverified,
+        "stopped_reason": stopped,
+        "budget_used": budget_used,
+        "max_spawns": int(max_spawns),
+    }
+
+
 def register_delegation_skills(registry: SkillRegistry) -> int:
     """Register `call_agent` for sub-agent delegation. Returns count.
 
@@ -1620,7 +1812,62 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
             ),
         ],
     ), replace=True)
-    return 3
+
+    # ── deterministic orchestration loop ─────────────────────
+    orchestrate_description = (
+        "Run a DETERMINISTIC multi-round discovery loop end-to-end in one "
+        "call: fan out N workers per round, split their findings (one per "
+        "line), de-duplicate against everything seen so far, and loop until "
+        "no new findings arrive (or the round budget runs out) — optionally "
+        "vote-verifying each finding. The control flow (looping, dedup, "
+        "stop-when-dry) is code, not the model, so nothing is skipped.\n"
+        "\n"
+        "Use it for EXHAUSTIVE discovery where one pass isn't enough: 'find "
+        "all the edge cases', 'enumerate every place X happens', 'gather "
+        "everything known about Y'. This is the loop the flat per-turn cap "
+        "normally forbids — it runs inside a bounded spawn budget instead.\n"
+        "\n"
+        "Args: {goal: string (what to discover), n?: int 1-6 workers/round "
+        "(default 3), rounds?: int 1-5 (default 2), patience?: int 0-3 dry "
+        "rounds tolerated before stopping (default 1), verify?: bool "
+        "(default false — vote-verify each finding), choices?: [keep,drop]-"
+        "style ballot for verify, max_spawns?: int total spawn budget "
+        "(auto-sized, capped at 48), agent_id?: worker role (default "
+        "researcher)}.\n"
+        "\n"
+        "Returns: {ok, goal, collected:[...], confirmed:[...] (== collected "
+        "unless verify), count, rounds_run, fresh_per_round:[...], verified, "
+        "unverified, stopped_reason (rounds|dry|budget), budget_used, "
+        "max_spawns}.\n"
+        "\n"
+        "Budget: one orchestration costs ONE against the 5/turn delegation "
+        "cap; its internal fan-outs/votes draw from the bounded spawn budget, "
+        "not the turn cap. Reserve it for genuinely multi-round work."
+    )
+    registry.register(Skill(
+        name="run_orchestration",
+        description=orchestrate_description,
+        affinity=["delegation", "orchestration", "swarm", "discovery", "loop"],
+        cost_profile="high",  # spawns many LLM turns under a budget
+        trusted_source="skill://public/run_orchestration",
+        handler=_run_orchestration,
+        tests=[
+            SkillTestCase(
+                name="missing_goal_returns_error",
+                tier="golden",
+                args={"goal": ""},
+                expect=SkillExpect(schema_keys=[
+                    "ok", "collected", "confirmed", "count",
+                ]),
+                custom_predicate=lambda r: (
+                    isinstance(r, dict)
+                    and r.get("ok") is False
+                    and "required" in (r.get("error") or "")
+                ),
+            ),
+        ],
+    ), replace=True)
+    return 4
 
 
 __all__ = ["register_delegation_skills"]
