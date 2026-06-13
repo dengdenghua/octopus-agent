@@ -4,6 +4,8 @@ import {
   AlertTriangleIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  ExternalLinkIcon,
+  FolderIcon,
   GlobeIcon,
   Loader2Icon,
   MonitorIcon,
@@ -14,6 +16,7 @@ import {
   TrashIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -138,8 +141,11 @@ export default function AutomationSettingsPage() {
 
   if (error) {
     return (
-      <div className="py-6 text-sm text-destructive">
-        {t.settings.automation.loadFailed}: {error instanceof Error ? error.message : String(error)}
+      <div className="space-y-6">
+        <div className="py-6 text-sm text-destructive">
+          {t.settings.automation.loadFailed}: {error instanceof Error ? error.message : String(error)}
+        </div>
+        <LocalToolsSection />
       </div>
     );
   }
@@ -183,6 +189,8 @@ export default function AutomationSettingsPage() {
           groupLabel={t.settings.automation.groupLabel}
         />
       </div>
+
+      <LocalToolsSection />
 
       <Separator />
 
@@ -244,6 +252,50 @@ export default function AutomationSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function LocalToolsSection() {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const openTool = (path: string) => {
+    window.dispatchEvent(new Event("octopus:close-settings"));
+    navigate(path);
+  };
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold">
+          {t.settings.automation.localToolsTitle}
+        </h3>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          {t.settings.automation.localToolsDesc}
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="justify-start gap-2"
+          onClick={() => openTool("/workspace/computer")}
+        >
+          <MonitorIcon className="h-4 w-4" />
+          {t.sidebar.navComputer}
+          <ExternalLinkIcon className="ml-auto h-3.5 w-3.5 opacity-60" />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="justify-start gap-2"
+          onClick={() => openTool("/workspace/desktop-organizer")}
+        >
+          <FolderIcon className="h-4 w-4" />
+          {t.sidebar.navDesktopOrganizer}
+          <ExternalLinkIcon className="ml-auto h-3.5 w-3.5 opacity-60" />
+        </Button>
+      </div>
     </div>
   );
 }

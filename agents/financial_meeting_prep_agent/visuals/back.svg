@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="820" viewBox="0 0 640 820">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="hsl(91, 92%, 70%)"/>
+      <stop offset="0.58" stop-color="hsl(339, 82%, 58%)"/>
+      <stop offset="1" stop-color="#171b23"/>
+    </linearGradient>
+    <radialGradient id="core" cx="50%" cy="28%" r="58%">
+      <stop offset="0" stop-color="#ffe28a"/>
+      <stop offset="0.46" stop-color="#ff9f6e"/>
+      <stop offset="1" stop-color="#df3cf0"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="9" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <ellipse cx="320" cy="704" rx="248" ry="52" fill="#facc15" opacity=".10" stroke="#facc15" stroke-width="2"/>
+  <ellipse cx="320" cy="710" rx="158" ry="32" fill="#000000" opacity=".20" stroke="#ffffff" stroke-width="1"/>
+  <g opacity="0.72" filter="url(#glow)">
+    <rect x="210.0" y="220" width="220" height="330" rx="92.0" fill="url(#body)" opacity=".22" stroke="#7dd3fc" stroke-width="2"/>
+    <circle cx="320" cy="260" r="58" fill="url(#core)"/>
+    <rect x="245.2" y="320" width="149.6" height="202" rx="48.4" fill="url(#body)" stroke="#facc15" stroke-width="2" opacity=".96"/>
+    <path d="M227.6 396 C155.0 448 161.6 540 240.8 584" fill="none" stroke="#f472b6" stroke-width="34" stroke-linecap="round"/>
+    <path d="M412.4 396 C485.0 448 478.4 540 399.2 584" fill="none" stroke="#f472b6" stroke-width="34" stroke-linecap="round"/>
+    <path d="M276.0 514 C227.6 586 254.0 650 309.0 670" fill="none" stroke="#df3cf0" stroke-width="32" stroke-linecap="round"/>
+    <path d="M364.0 514 C412.4 586 386.0 650 331.0 670" fill="none" stroke="#df3cf0" stroke-width="32" stroke-linecap="round"/>
+    <circle cx="227.6" cy="246" r="14" fill="#37306b"/>
+    <circle cx="412.4" cy="246" r="14" fill="#37306b"/>
+  </g>
+  <text x="320" y="764" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff">Meeting Prep Agent</text>
+</svg>

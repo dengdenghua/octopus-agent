@@ -138,6 +138,183 @@ class TestDispatch:
             runner(_make_call())
 
 
+class TestModelOverride:
+    """The per-dispatch model is carried in ``call.context["model_name"]``
+    (set by the bridge for explicit overrides AND for ``use_cheap_model``
+    routing). The runner must select THAT model, not the factory default.
+
+    Regression guard for the bug where the ephemeral runner ignored the
+    override entirely and every sub-agent silently ran on the planner
+    default. These tests drive the REAL runner (not a stub) and assert on
+    the model the router actually received — the existing cheap-routing
+    tests only checked that the bridge injected the key, which is why the
+    runner-side bug went undetected.
+    """
+
+    def test_context_model_name_overrides_default(self):
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.sensing.model_router import MockModelRouter
+
+        router = MockModelRouter(response="ok")
+        runner = make_llm_ephemeral_runner(
+            router, default_model="planner-default",
+        )
+        call = _make_call()
+        call.context["model_name"] = "gpt-5.5"
+
+        runner(call)
+
+        assert router.call_log[0].model == "gpt-5.5"
+
+    def test_falls_back_to_default_when_no_override(self):
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.sensing.model_router import MockModelRouter
+
+        router = MockModelRouter(response="ok")
+        runner = make_llm_ephemeral_runner(
+            router, default_model="planner-default",
+        )
+        # No model_name in context → factory default is used.
+        runner(_make_call())
+
+        assert router.call_log[0].model == "planner-default"
+
+    def test_blank_model_name_falls_back_to_default(self):
+        """A whitespace-only override is ignored (treated as absent) so a
+        malformed context can't route the run to an empty model id."""
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.sensing.model_router import MockModelRouter
+
+        router = MockModelRouter(response="ok")
+        runner = make_llm_ephemeral_runner(
+            router, default_model="planner-default",
+        )
+        call = _make_call()
+        call.context["model_name"] = "   "
+
+        runner(call)
+
+        assert router.call_log[0].model == "planner-default"
+
+    def test_cheap_routing_model_name_is_honored(self):
+        """``use_cheap_model`` works by injecting the cheap model into
+        ``context["model_name"]`` (see bridge). Locks that the runner
+        honors it, i.e. cheap routing actually reaches the cheap tier."""
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.sensing.model_router import MockModelRouter
+
+        router = MockModelRouter(response="ok")
+        runner = make_llm_ephemeral_runner(
+            router, default_model="primary-model",
+        )
+        call = _make_call()
+        call.context["model_name"] = "glm-4-flash"  # what use_cheap_model sets
+
+        runner(call)
+
+        assert router.call_log[0].model == "glm-4-flash"
+
+    def test_agentic_loop_honors_context_model_name(self):
+        """The agentic (tool-loop) path builds its own ModelRequest per
+        round — it must also use the overridden model."""
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+
+        router = _ScriptedAgenticRouter(script=["done"])
+        registry = _StubRegistry({"web_search": lambda **kw: {"ok": True}})
+        runner = make_llm_ephemeral_runner(
+            router, registry=registry, default_model="planner-default",
+        )
+        call = _make_call(role_id="reviewer")
+        call.context["tool_allowlist"] = ["web_search"]
+        call.context["model_name"] = "gpt-5.5"
+
+        assert runner(call) == "done"
+        assert router.call_log[0].model == "gpt-5.5"
+
+    def test_helper_selects_override_over_default(self):
+        from runtime.execution.suckers.ephemeral_runner import (
+            _select_call_model,
+        )
+
+        assert _select_call_model("def", {"model_name": "x"}) == "x"
+        assert _select_call_model("def", {"model_name": "  y  "}) == "y"
+        assert _select_call_model("def", {"model_name": ""}) == "def"
+        assert _select_call_model("def", {"model_name": None}) == "def"
+        assert _select_call_model("def", {}) == "def"
+        assert _select_call_model("def", None) == "def"
+
+
+class TestDispatchModelOverrideEndToEnd:
+    """Reproduce the bug at the dispatch boundary the report used:
+    ``call_subagent(context={"model_name": ...})`` and
+    ``call_subagent(use_cheap_model=True)`` must each reach the router
+    with the requested model. Wires the REAL ephemeral runner so the
+    whole chain (bridge → run_ephemeral_role → runner → router) runs.
+    """
+
+    def test_explicit_model_override_reaches_router(self):
+        from runtime.execution.subagents import bridge
+        from runtime.execution.suckers.ephemeral_agents import (
+            set_ephemeral_role_runner,
+        )
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.sensing.model_router import MockModelRouter
+
+        router = MockModelRouter(response="ok")
+        set_ephemeral_role_runner(
+            make_llm_ephemeral_runner(router, default_model="mimo2.5"),
+        )
+
+        bridge.call_subagent(
+            agent_id="reviewer",
+            prompt="review the patch",
+            context={"model_name": "gpt-5.5"},
+        )
+
+        assert router.call_log, "runner was never invoked"
+        assert router.call_log[0].model == "gpt-5.5"
+
+    def test_use_cheap_model_reaches_router(self, monkeypatch):
+        monkeypatch.delenv("OCTOPUS_SUBAGENT_CHEAP_MODEL", raising=False)
+        from runtime.execution.subagents import bridge
+        from runtime.execution.suckers.ephemeral_agents import (
+            set_ephemeral_role_runner,
+        )
+        from runtime.execution.suckers.ephemeral_runner import (
+            make_llm_ephemeral_runner,
+        )
+        from runtime.sensing.model_router import MockModelRouter
+
+        router = MockModelRouter(response="ok")
+        set_ephemeral_role_runner(
+            make_llm_ephemeral_runner(router, default_model="mimo2.5"),
+        )
+
+        bridge.call_subagent(
+            agent_id="researcher",
+            prompt="dig into X",
+            use_cheap_model=True,
+        )
+
+        assert router.call_log, "runner was never invoked"
+        # cheap routing injected the resolved cheap default into context;
+        # the runner must have used it instead of the planner default.
+        assert router.call_log[0].model == bridge._resolve_cheap_subagent_model()
+        assert router.call_log[0].model != "mimo2.5"
+
+
 class TestEndToEnd:
     def test_call_agent_reviewer_via_live_runner(self):
         """Full loop · call_agent("reviewer", ...) → dispatch →

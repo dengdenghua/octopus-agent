@@ -125,7 +125,10 @@ export async function updateAgent(
   return (await res.json()) as Agent;
 }
 
-export async function generateAgentVisuals(name: string): Promise<{
+export async function generateAgentVisuals(
+  name: string,
+  request: { provider?: string; style_prompt?: string } = {},
+): Promise<{
   agent_id: string;
   provider: string;
   visual_urls: Record<string, string>;
@@ -134,7 +137,8 @@ export async function generateAgentVisuals(name: string): Promise<{
     `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}/visuals/generate`,
     {
       method: "POST",
-      headers: authHeaders(),
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(request),
     },
   );
   if (!res.ok) {

@@ -3,9 +3,6 @@ import {
   BotIcon,
   BrainIcon,
   BriefcaseIcon,
-  Building2Icon,
-  CalendarDaysIcon,
-  CheckCircle2Icon,
   ChevronRightIcon,
   Code2Icon,
   DatabaseIcon,
@@ -13,7 +10,6 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GlobeIcon,
-  MessageSquareIcon,
   MessageSquarePlusIcon,
   NetworkIcon,
   PanelLeftCloseIcon,
@@ -88,13 +84,16 @@ type NavRoute = {
   label?: string;
 };
 const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
-const COMPANY_WORKSPACE_ROUTE = "/workspace/company";
+// 「工作」surface 的落地页。公司 PM(/workspace/company)已删(交企业版),
+// 工作 surface 改以团队/多人协作为主,落地到团队页。
+const COMPANY_WORKSPACE_ROUTE = "/workspace/team";
 
 const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
+  { to: "/workspace/agents", labelKey: "navHR", icon: BriefcaseIcon },
   {
-    to: "/workspace/plugins?surface=chat",
-    labelKey: "navPlugins",
-    icon: PuzzleIcon,
+    to: "/workspace/intelligence?surface=chat",
+    labelKey: "navIntelligence",
+    icon: BrainIcon,
   },
   {
     to: "/workspace/knowledge?surface=chat",
@@ -102,9 +101,9 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
     icon: DatabaseIcon,
   },
   {
-    to: "/workspace/intelligence?surface=chat",
-    labelKey: "navIntelligence",
-    icon: BrainIcon,
+    to: "/workspace/plugins?surface=chat",
+    labelKey: "navPlugins",
+    icon: PuzzleIcon,
   },
   {
     to: "/workspace/evolution?surface=chat",
@@ -113,28 +112,9 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
   },
 ];
 
+// 工作 surface 的组织导航。公司 PM(工作台/项目/任务/里程碑/AI 助手)已移除
+// (交企业版);保留团队/多人协作与人力(Agent 管理)。
 const COMPANY_ORG_ROUTES: NavRoute[] = [
-  { to: COMPANY_WORKSPACE_ROUTE, label: "工作台", icon: BriefcaseIcon },
-  {
-    to: "/workspace/company/projects",
-    label: "项目",
-    icon: Building2Icon,
-  },
-  {
-    to: "/workspace/company/tasks",
-    label: "任务",
-    icon: CheckCircle2Icon,
-  },
-  {
-    to: "/workspace/company/milestones",
-    label: "里程碑",
-    icon: CalendarDaysIcon,
-  },
-  {
-    to: "/workspace/company/ai",
-    label: "AI 助手",
-    icon: BotIcon,
-  },
   { to: "/workspace/team/new", labelKey: "navTeam", icon: NetworkIcon },
   { to: "/workspace/agents", labelKey: "navHR", icon: BriefcaseIcon },
 ];
@@ -146,11 +126,6 @@ const COMPANY_CAPABILITY_ROUTES: NavRoute[] = [
     icon: BrainIcon,
   },
   {
-    to: "/workspace/evolution?surface=company",
-    labelKey: "navEvolution",
-    icon: DnaIcon,
-  },
-  {
     to: "/workspace/knowledge?surface=company",
     labelKey: "navKnowledgeGraph",
     icon: DatabaseIcon,
@@ -159,6 +134,11 @@ const COMPANY_CAPABILITY_ROUTES: NavRoute[] = [
     to: "/workspace/plugins?surface=company",
     labelKey: "navPlugins",
     icon: PuzzleIcon,
+  },
+  {
+    to: "/workspace/evolution?surface=company",
+    labelKey: "navEvolution",
+    icon: DnaIcon,
   },
 ];
 
@@ -435,25 +415,53 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDefaultSection, setSettingsDefaultSection] = useState<
-    "appearance" | "memory" | "notification" | "about" | "account" | "models"
+    | "appearance"
+    | "memory"
+    | "notification"
+    | "about"
+    | "account"
+    | "models"
+    | "automation"
   >("appearance");
+
+  const openSettingsSection = useCallback((tab?: string) => {
+    const next =
+      tab === "account" ||
+      tab === "appearance" ||
+      tab === "models" ||
+      tab === "memory" ||
+      tab === "notification" ||
+      tab === "about" ||
+      tab === "automation"
+        ? tab
+        : "appearance";
+    setSettingsDefaultSection(next);
+    setSettingsOpen(true);
+  }, []);
 
   // Listen for open-settings event via EventBus
   useEvent("ui:open-settings", (payload) => {
-    if (payload.tab) {
-      const next =
-        payload.tab === "account" ||
-        payload.tab === "appearance" ||
-        payload.tab === "models" ||
-        payload.tab === "memory" ||
-        payload.tab === "notification" ||
-        payload.tab === "about"
-          ? payload.tab
-          : "appearance";
-      setSettingsDefaultSection(next);
-    }
-    setSettingsOpen(true);
+    openSettingsSection(payload.tab);
   });
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const tab =
+        event instanceof CustomEvent &&
+        typeof event.detail?.tab === "string"
+          ? event.detail.tab
+          : undefined;
+      openSettingsSection(tab);
+    };
+    window.addEventListener("octopus:open-settings", handler);
+    return () => window.removeEventListener("octopus:open-settings", handler);
+  }, [openSettingsSection]);
+
+  useEffect(() => {
+    const handler = () => setSettingsOpen(false);
+    window.addEventListener("octopus:close-settings", handler);
+    return () => window.removeEventListener("octopus:close-settings", handler);
+  }, []);
 
   // Thread list is scoped to the currently-active agent (localStorage-
   // backed, `octopus.active-agent` key). Switching agent in the footer
@@ -914,8 +922,6 @@ function isChatSurfaceRoute(pathname: string) {
 function isCompanySurfaceRoute(pathname: string) {
   if (isAgentChatRoute(pathname)) return false;
   return (
-    pathname === COMPANY_WORKSPACE_ROUTE ||
-    pathname.startsWith(`${COMPANY_WORKSPACE_ROUTE}/`) ||
     pathname === "/workspace/team" ||
     pathname.startsWith("/workspace/team/") ||
     pathname === "/workspace/agents" ||

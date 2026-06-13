@@ -161,6 +161,28 @@ def _looks_truncated_text(
     return bool(len(stripped) >= 1200 and not stripped.endswith(_TRUNCATION_ENDINGS))
 
 
+def _select_call_model(default_model: str, context: Any) -> str:
+    """Pick the model for ONE ephemeral sub-agent run.
+
+    The dispatch bridge stamps ``context["model_name"]`` for BOTH explicit
+    per-dispatch overrides (caller passed ``context={"model_name": ...}``) AND
+    ``use_cheap_model`` routing (bridge injects the resolved cheap model). The
+    runner must honor it; the factory-captured ``default_model`` (the
+    planner/stack default) is only the fallback when no override is present.
+
+    This is the lever that actually changes the backend: ``ModelDispatchRouter``
+    resolves the provider/host from ``request.model``, so returning the override
+    here is what makes the sub-agent reach the requested model's host instead of
+    silently running on the planner default (the bug this fixes — the override
+    was carried all the way into ``call.context`` but never consulted).
+    """
+    if isinstance(context, dict):
+        override = context.get("model_name")
+        if isinstance(override, str) and override.strip():
+            return override.strip()
+    return default_model
+
+
 def make_llm_ephemeral_runner(
     router: Any,
     *,
@@ -243,11 +265,19 @@ def make_llm_ephemeral_runner(
         # chokepoint, so the gate lives there).
         mark_inherited_ephemeral_taint(getattr(call, "context", None))
 
+        # Per-dispatch model override. ``model`` (resolved at factory time) is
+        # only the default; the bridge carries the caller's requested model —
+        # explicit override or cheap-routing — in ``call.context["model_name"]``.
+        # Honor it so this run reaches the requested backend.
+        effective_model = _select_call_model(
+            model, getattr(call, "context", None),
+        )
+
         # Single-shot fallback path · used when no registry was
         # plumbed through (legacy bootstrap, unit tests).
         if registry is None:
             req = ModelRequest(
-                model=model,
+                model=effective_model,
                 messages=[
                     Message(role="system", content=call.composed_system_prompt),
                     Message(role="user", content=call.user_prompt),
@@ -288,7 +318,7 @@ def make_llm_ephemeral_runner(
                     _log.warning(
                         "ephemeral LLM runner (single-shot stream) · "
                         "role=%s model=%s · %s: %s",
-                        call.role.id, model, type(exc).__name__, exc,
+                        call.role.id, effective_model, type(exc).__name__, exc,
                     )
                     raise
                 return accumulated
@@ -296,7 +326,7 @@ def make_llm_ephemeral_runner(
                 "ephemeral LLM runner (single-shot) · role=%s "
                 "model=%s · call_stream unavailable, falling back "
                 "to non-streaming call() — no live token streaming",
-                call.role.id, model,
+                call.role.id, effective_model,
             )
             try:
                 resp = router.call(req)
@@ -304,7 +334,7 @@ def make_llm_ephemeral_runner(
                 _log.warning(
                     "ephemeral LLM runner (single-shot) · role=%s "
                     "model=%s · %s: %s",
-                    call.role.id, model, type(exc).__name__, exc,
+                    call.role.id, effective_model, type(exc).__name__, exc,
                 )
                 raise
             return str(getattr(resp, "text", None) or "")
@@ -349,7 +379,7 @@ def make_llm_ephemeral_runner(
         if not tool_specs:
             # No tools to expose · degrade to single-shot.
             req = ModelRequest(
-                model=model,
+                model=effective_model,
                 messages=[
                     Message(role="system", content=call.composed_system_prompt),
                     Message(role="user", content=call.user_prompt),
@@ -377,7 +407,7 @@ def make_llm_ephemeral_runner(
         accumulated_text = ""
         for round_i in range(max_rounds):
             req = ModelRequest(
-                model=model,
+                model=effective_model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
@@ -407,7 +437,7 @@ def make_llm_ephemeral_runner(
                     "round=%d · call_stream unavailable, falling back "
                     "to non-streaming call() — UI will show no "
                     "live token streaming for this role",
-                    call.role.id, model, round_i,
+                    call.role.id, effective_model, round_i,
                 )
                 try:
                     resp = router.call(req)
@@ -415,7 +445,7 @@ def make_llm_ephemeral_runner(
                     _log.warning(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · %s: %s",
-                        call.role.id, model, round_i,
+                        call.role.id, effective_model, round_i,
                         type(exc).__name__, exc,
                     )
                     return accumulated_text or ""
@@ -465,7 +495,7 @@ def make_llm_ephemeral_runner(
                     _log.warning(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · %s: %s",
-                        call.role.id, model, round_i,
+                        call.role.id, effective_model, round_i,
                         type(exc).__name__, exc,
                     )
                     return accumulated_text + text or accumulated_text
@@ -482,7 +512,7 @@ def make_llm_ephemeral_runner(
                     _log.info(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · continuing after finish_reason=%s",
-                        call.role.id, model, round_i, finish_reason_round,
+                        call.role.id, effective_model, round_i, finish_reason_round,
                     )
                     messages.append(Message(role="assistant", content=text))
                     messages.append(Message(
@@ -502,7 +532,7 @@ def make_llm_ephemeral_runner(
                     _log.info(
                         "ephemeral agentic runner · role=%s model=%s "
                         "round=%d · continuing after inferred truncation",
-                        call.role.id, model, round_i,
+                        call.role.id, effective_model, round_i,
                     )
                     messages.append(Message(role="assistant", content=text))
                     messages.append(Message(

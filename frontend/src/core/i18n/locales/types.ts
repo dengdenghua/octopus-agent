@@ -890,6 +890,7 @@ export interface Translations {
     navEvolution: string;
     navPlugins: string;
     navHR: string;
+    navComputer: string;
     navDesktopOrganizer: string;
     navMobile: string;
     navArchitecture: string;
@@ -1306,6 +1307,39 @@ export interface Translations {
     skillSubtitle: string;
     privateSkillsLabel: string;
     privateSkillsPlaceholder: string;
+    characterFileLabel: string;
+    characterBackgroundLabel: string;
+    characterAgeLabel: string;
+    characterTemperamentLabel: string;
+    characterPersonalityLabel: string;
+    characterVisualKeywordsLabel: string;
+    characterProfileReady: string;
+    characterPromptHint: string;
+    characterSkillHiddenHint: string;
+    capabilityPackLabel: string;
+    characterBackground: (
+      name: string,
+      role: string,
+      type: string,
+      faction: string,
+      description: string,
+    ) => string;
+    characterIntro: (
+      name: string,
+      role: string,
+      type: string,
+      faction: string,
+      origin: string,
+      personality: string,
+      temperament: string,
+    ) => string;
+    characterDefaultOrigin: string;
+    characterEpithets: Record<string, string>;
+    characterQuotes: Record<string, string>;
+    characterAgeArchetypes: Record<string, string>;
+    characterPersonalities: Record<string, string>;
+    characterTemperaments: Record<string, string>;
+    characterVisualKeywords: Record<string, string[]>;
     keySkillsLabel: string;
     browseSkillWhitelist: string;
     availableSkillPoolLabel: string;
@@ -1744,6 +1778,8 @@ export interface Translations {
       browserDesc: string;
       desktopTitle: string;
       desktopDesc: string;
+      localToolsTitle: string;
+      localToolsDesc: string;
       groupLabel: string;
       reset: string;
       save: string;

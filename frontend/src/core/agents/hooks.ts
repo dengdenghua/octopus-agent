@@ -73,8 +73,20 @@ export function useUpdateAgent() {
 export function useGenerateAgentVisuals() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => generateAgentVisuals(name),
-    onSuccess: (_data, name) => {
+    mutationFn: ({
+      name,
+      provider,
+      stylePrompt,
+    }: {
+      name: string;
+      provider?: string;
+      stylePrompt?: string;
+    }) =>
+      generateAgentVisuals(name, {
+        provider,
+        style_prompt: stylePrompt,
+      }),
+    onSuccess: (_data, { name }) => {
       void queryClient.invalidateQueries({ queryKey: ["agents"] });
       void queryClient.invalidateQueries({ queryKey: ["agents", name] });
     },

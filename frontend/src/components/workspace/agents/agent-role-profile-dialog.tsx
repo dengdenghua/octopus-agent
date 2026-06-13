@@ -35,6 +35,7 @@ import {
 } from "@/core/agents/tool-registry-hooks";
 import type { AgentWorldAgent } from "@/core/agents/types";
 import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales/types";
 import { cn } from "@/lib/utils";
 
 import { AgentArmsDialog } from "./agent-arms-dialog";
@@ -87,8 +88,124 @@ function sameList(left: string[], right: string[]): boolean {
   return left.every((item, index) => item === right[index]);
 }
 
-function displaySkillName(skill: string, allSkillsLabel: string): string {
-  return skill === "*" ? allSkillsLabel : skill;
+type AgentCharacterProfile = {
+  epithet: string;
+  quote: string;
+  intro: string;
+  background: string;
+  age: string;
+  personality: string;
+  temperament: string;
+  visualKeywords: string[];
+  prompt: string;
+};
+
+function pickCategoryValue<T>(
+  values: Record<string, T>,
+  category: AgentWorldAgent["category"],
+  fallback: T,
+): T {
+  return values[category] ?? fallback;
+}
+
+function buildCharacterProfile(
+  agent: AgentWorldAgent,
+  t: Translations,
+): AgentCharacterProfile {
+  const role = t.agentConfig.categoryRoles[agent.category] ?? agent.category;
+  const type = t.agentConfig.categoryTypes[agent.category] ?? agent.category;
+  const faction = agent.is_official
+    ? t.agentConfig.officialFaction
+    : t.agentConfig.authorFaction(agent.author);
+  const fallbackAge = t.agentConfig.characterAgeArchetypes.assistant ?? "";
+  const fallbackPersonality = t.agentConfig.characterPersonalities.assistant ?? "";
+  const fallbackTemperament = t.agentConfig.characterTemperaments.assistant ?? "";
+  const fallbackVisualKeywords =
+    t.agentConfig.characterVisualKeywords.assistant ?? [];
+  const fallbackEpithet = t.agentConfig.characterEpithets.assistant ?? role;
+  const fallbackQuote = t.agentConfig.characterQuotes.assistant ?? "";
+  const age = pickCategoryValue(
+    t.agentConfig.characterAgeArchetypes,
+    agent.category,
+    fallbackAge,
+  );
+  const personality = pickCategoryValue(
+    t.agentConfig.characterPersonalities,
+    agent.category,
+    fallbackPersonality,
+  );
+  const temperament = pickCategoryValue(
+    t.agentConfig.characterTemperaments,
+    agent.category,
+    fallbackTemperament,
+  );
+  const visualKeywords = pickCategoryValue(
+    t.agentConfig.characterVisualKeywords,
+    agent.category,
+    fallbackVisualKeywords,
+  );
+  const epithet = pickCategoryValue(
+    t.agentConfig.characterEpithets,
+    agent.category,
+    fallbackEpithet,
+  );
+  const quote = pickCategoryValue(
+    t.agentConfig.characterQuotes,
+    agent.category,
+    fallbackQuote,
+  );
+  const background = t.agentConfig.characterBackground(
+    agent.display_name,
+    role,
+    type,
+    faction,
+    agent.description,
+  );
+  const intro = t.agentConfig.characterIntro(
+    agent.display_name,
+    role,
+    type,
+    faction,
+    descriptionOrFallback(agent.description, t.agentConfig.characterDefaultOrigin),
+    personality,
+    temperament,
+  );
+  const prompt = [
+    `character epithet: ${epithet}`,
+    `signature line: ${quote}`,
+    `readable character intro: ${intro}`,
+    `character background: ${background}`,
+    `apparent age: ${age}`,
+    `personality: ${personality}`,
+    `temperament: ${temperament}`,
+    `visual keywords: ${visualKeywords.join(", ")}`,
+  ].join("; ");
+
+  return {
+    epithet,
+    quote,
+    intro,
+    background,
+    age,
+    personality,
+    temperament,
+    visualKeywords,
+    prompt,
+  };
+}
+
+function descriptionOrFallback(description: string, fallback: string): string {
+  const trimmed = description.trim();
+  if (!trimmed) return fallback;
+  const fallbackUsesCjk = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(fallback);
+  const descriptionCjkCount = (
+    trimmed.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) ?? []
+  ).length;
+  const descriptionLatinCount = (trimmed.match(/[A-Za-z]/g) ?? []).length;
+  if (fallbackUsesCjk && descriptionLatinCount > descriptionCjkCount * 3) {
+    return fallback;
+  }
+  return trimmed;
 }
 
 function FieldLabel({
@@ -120,6 +237,10 @@ function AgentCoreVisual({
   const { t } = useI18n();
   const [view, setView] = useState<"front" | "side" | "back">("front");
   const generateVisuals = useGenerateAgentVisuals();
+  const characterProfile = useMemo(
+    () => buildCharacterProfile(agent, t),
+    [agent, t],
+  );
   const viewOptions = [
     ["front", t.agentConfig.viewFront],
     ["side", t.agentConfig.viewSide],
@@ -133,7 +254,11 @@ function AgentCoreVisual({
 
   async function handleGenerateVisuals() {
     try {
-      await generateVisuals.mutateAsync(agent.name);
+      await generateVisuals.mutateAsync({
+        name: agent.name,
+        provider: "agnes",
+        stylePrompt: characterProfile.prompt,
+      });
       toast.success(t.agentConfig.visualGenerateSuccess);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -186,8 +311,10 @@ function AgentCoreVisual({
           </button>
         ))}
         <Button
+          aria-label={t.agentConfig.visualGenerateAction}
           className="h-8 w-[62px] rounded-sm border-primary/35 bg-black/15 px-1 text-[10px] xl:w-[78px]"
           disabled={generateVisuals.isPending}
+          title={t.agentConfig.visualGenerateAction}
           variant="outline"
           onClick={() => void handleGenerateVisuals()}
         >
@@ -291,6 +418,10 @@ export function AgentRoleProfileDialog({
   const fullAgent = agentQuery.agent;
   const arms = armsQuery.data ?? [];
   const registry = registryQuery.data;
+  const characterProfile = useMemo(
+    () => (agent ? buildCharacterProfile(agent, t) : null),
+    [agent, t],
+  );
 
   const meta = useMemo(() => {
     if (!agent) return null;
@@ -323,17 +454,10 @@ export function AgentRoleProfileDialog({
     }
   }, [open, serverState]);
 
-  if (!agent || !meta) return null;
+  if (!agent || !meta || !characterProfile) return null;
 
   const desiredExtraAffinity = parseList(form.extraAffinity);
   const desiredPrivateSkills = parseList(form.privateSkills);
-  const desiredPrivateSkillSet = new Set(desiredPrivateSkills);
-  const availableSkills = Array.from(
-    new Set([...(agent.available_skills ?? []), ...desiredPrivateSkills]),
-  ).filter(Boolean);
-  const additionalAvailableSkills = availableSkills.filter(
-    (skill) => !desiredPrivateSkillSet.has(skill),
-  );
   const agentDirty =
     !!serverState &&
     (form.description !== serverState.description ||
@@ -553,36 +677,96 @@ export function AgentRoleProfileDialog({
                   </div>
                   <div className="max-w-[360px]">
                     <div className="min-w-0">
-                      <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-                        {t.agentConfig.dialogTitle}
+                      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-primary">
+                        <span className="h-px w-6 bg-primary/70" />
+                        {t.agentConfig.characterFileLabel}
                       </div>
                       <h1 className="mt-4 truncate text-4xl font-semibold leading-none text-white">
                         {agent.display_name}
                       </h1>
-                      <p className="mt-3 truncate font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                        {meta.type} / {meta.role} / {meta.codeName}
+                      <p className="mt-3 text-xl font-medium leading-7 text-[#f4e86f]">
+                        {characterProfile.epithet}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                        <span className="rounded-sm border border-white/10 bg-black/15 px-2 py-1">
+                          {meta.type}
+                        </span>
+                        <span className="rounded-sm border border-white/10 bg-black/15 px-2 py-1">
+                          {meta.role}
+                        </span>
+                        <span className="rounded-sm border border-white/10 bg-black/15 px-2 py-1">
+                          {meta.codeName}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-7 border-y border-white/10 py-4">
+                      <p className="text-base font-medium leading-7 text-white/95">
+                        &ldquo;{characterProfile.quote}&rdquo;
                       </p>
                     </div>
 
-                    <div className="mt-8 border-l border-primary/50 pl-4">
-                    <p className="line-clamp-4 text-sm leading-7 text-white/85">
-                      {form.description || t.agentConfig.visualMissing}
-                    </p>
-                  </div>
-
-                    <div className="mt-6 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                      {loadoutChecks.length === 0 ? t.agentConfig.loadoutReady : t.agentConfig.unsaved}
+                    <div className="mt-5">
+                      <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        {t.agentConfig.characterBackgroundLabel}
+                      </div>
+                      <p className="line-clamp-7 text-sm leading-7 text-white/82">
+                        {characterProfile.intro}
+                      </p>
                     </div>
 
-                    <div className="mt-4">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                          {t.agentConfig.keySkillsLabel}
+                    <div className="mt-5 space-y-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="rounded-sm border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-white/85">
+                          {t.agentConfig.characterAgeLabel} · {characterProfile.age}
                         </span>
-                        {canAssembleCapabilityPack ? (
+                        <span className="rounded-sm border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-white/85">
+                          {t.agentConfig.characterTemperamentLabel} · {characterProfile.temperament}
+                        </span>
+                      </div>
+
+                      <div className="border-l border-primary/45 pl-3">
+                        <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
+                          {t.agentConfig.characterPersonalityLabel}
+                        </div>
+                        <p className="mt-1 line-clamp-3 text-sm leading-6 text-white/88">
+                          {characterProfile.personality}
+                        </p>
+                      </div>
+
+                      <div>
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                            {t.agentConfig.characterVisualKeywordsLabel}
+                          </span>
+                          <span className="font-mono text-[10px] text-muted-foreground">
+                            {t.agentConfig.characterPromptHint}
+                          </span>
+                        </div>
+                        <div className="flex max-h-20 flex-wrap gap-1.5 overflow-hidden">
+                          {characterProfile.visualKeywords.map((keyword) => (
+                            <span
+                              key={keyword}
+                              className="rounded-sm border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary"
+                            >
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                        {t.agentConfig.characterProfileReady}
+                      </div>
+
+                      {canAssembleCapabilityPack ? (
+                        <div className="rounded-sm border border-primary/20 bg-primary/10 p-2.5">
+                          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-primary">
+                            {t.agentConfig.capabilityPackLabel}
+                          </div>
                           <button
-                            className="inline-flex items-center gap-1 rounded-sm border border-primary/25 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-primary transition hover:border-primary/45 hover:bg-primary/15"
+                            className="inline-flex items-center gap-1 rounded-sm border border-primary/25 bg-black/15 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-primary transition hover:border-primary/45 hover:bg-primary/15"
                             disabled={installingPack}
                             type="button"
                             onClick={() => void handleAssembleCapabilityPack()}
@@ -594,73 +778,6 @@ export function AgentRoleProfileDialog({
                             )}
                             {t.agentWorld.assembleCapabilityPack}
                           </button>
-                        ) : (
-                          <button
-                            className="font-mono text-[10px] uppercase tracking-[0.12em] text-primary hover:text-primary/80"
-                            type="button"
-                            onClick={() => openArmsConfig("skills")}
-                          >
-                            {t.agentConfig.browseSkillWhitelist}
-                          </button>
-                        )}
-                      </div>
-                      {desiredPrivateSkills.length > 0 ? (
-                        <div className="flex max-h-20 flex-wrap gap-1.5 overflow-hidden">
-                          {desiredPrivateSkills.slice(0, 8).map((skill) => (
-                            <span
-                              key={skill}
-                              className="rounded-sm border border-primary/20 bg-primary/10 px-2 py-1 font-mono text-[10px] text-primary"
-                            >
-                              {displaySkillName(skill, t.agentConfig.allSkillsWildcard)}
-                            </span>
-                          ))}
-                          {desiredPrivateSkills.length > 8 ? (
-                            <span className="rounded-sm border border-white/10 bg-black/20 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                              {t.agentConfig.moreSkills(desiredPrivateSkills.length - 8)}
-                            </span>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <button
-                          className="rounded-sm border border-white/10 bg-black/20 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground transition hover:border-primary/35 hover:text-primary"
-                          type="button"
-                          onClick={() => openArmsConfig("skills")}
-                        >
-                          {t.agentConfig.emptySkillSlot}
-                        </button>
-                      )}
-
-                      {additionalAvailableSkills.length > 0 ? (
-                        <div className="mt-3 rounded-sm border border-white/10 bg-black/15 p-2.5">
-                          <div className="mb-1.5 flex items-center justify-between gap-2">
-                            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                              {t.agentConfig.availableSkillPoolLabel}
-                            </span>
-                            <span className="font-mono text-[10px] text-muted-foreground">
-                              {t.agentConfig.availableSkillPoolCount(
-                                desiredPrivateSkills.length,
-                                availableSkills.length,
-                              )}
-                            </span>
-                          </div>
-                          <p className="mb-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                            {t.agentConfig.availableSkillPoolHint}
-                          </p>
-                          <div className="flex max-h-16 flex-wrap gap-1.5 overflow-hidden">
-                            {additionalAvailableSkills.slice(0, 8).map((skill) => (
-                              <span
-                                key={skill}
-                                className="rounded-sm border border-white/10 bg-background/20 px-2 py-1 font-mono text-[10px] text-muted-foreground"
-                              >
-                                {displaySkillName(skill, t.agentConfig.allSkillsWildcard)}
-                              </span>
-                            ))}
-                            {additionalAvailableSkills.length > 8 ? (
-                              <span className="rounded-sm border border-white/10 bg-black/20 px-2 py-1 font-mono text-[10px] text-muted-foreground">
-                                {t.agentConfig.moreSkills(additionalAvailableSkills.length - 8)}
-                              </span>
-                            ) : null}
-                          </div>
                         </div>
                       ) : null}
                     </div>

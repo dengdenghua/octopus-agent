@@ -866,13 +866,11 @@ When making changes, first read the surrounding code.
     def generate_agent_visuals_route(
         request: Request,
         agent_id: str,
-        body: GenerateAgentVisualsRequest,
+        body: GenerateAgentVisualsRequest | None = None,
     ) -> AgentVisualsWire:
         _require_admin(request)  # Mutation: regenerates avatar via LLM, writes to disk
         if "/" in agent_id or "\\" in agent_id or agent_id in ("", ".", ".."):
             raise HTTPException(400, "invalid agent_id")
-        if not registry.has(agent_id):
-            raise HTTPException(404, f"agent not found: {agent_id}")
 
         from runtime.execution.agents.loader import default_agents_root
         from runtime.execution.misc.image_generation import generate_agent_visuals
@@ -890,15 +888,41 @@ When making changes, first read the surrounding code.
         if not agent_dir.is_dir():
             raise HTTPException(404, f"agent folder not found: {agent_id}")
 
-        agent = registry.get(agent_id)
+        display_name = agent_id
+        description = ""
+        if registry.has(agent_id):
+            agent = registry.get(agent_id)
+            display_name = agent.display_name or agent_id
+            description = agent.description or ""
+        else:
+            profile_path = agent_dir / "profile.jsonc"
+            if not profile_path.is_file():
+                raise HTTPException(404, f"agent profile not found: {agent_id}")
+            try:
+                from runtime.platform.process.utils import parse_jsonc
+
+                profile = parse_jsonc(profile_path.read_text(encoding="utf-8"))
+                display_name = str(
+                    profile.get("name")
+                    or profile.get("display_name")
+                    or profile.get("id")
+                    or agent_id
+                )
+                description = str(profile.get("description") or "")
+            except (OSError, ValueError, TypeError) as exc:
+                raise HTTPException(
+                    500,
+                    f"agent profile read failed: {type(exc).__name__}: {exc}",
+                ) from exc
+
         try:
             result = generate_agent_visuals(
                 agent_id=agent_id,
-                display_name=agent.display_name or agent_id,
-                description=agent.description or "",
+                display_name=display_name,
+                description=description,
                 output_dir=agent_dir / "visuals",
-                style_prompt=body.style_prompt,
-                provider=body.provider,
+                style_prompt=body.style_prompt if body else "",
+                provider=body.provider if body else None,
             )
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             raise HTTPException(

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import subprocess
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
+from typing import Any
 
 AGENT_VISUAL_VIEWS = ("front", "side", "back")
 
@@ -24,11 +29,11 @@ def build_agent_visual_prompt(
     style_prompt: str = "",
 ) -> str:
     base = (
-        "Generate a reusable 2D game/HUD agent character reference sheet, "
-        "front view, side view, back view, dark sci-fi interface mood, "
-        "neon yellow accents, clean full body character silhouettes, "
-        "transparent or dark neutral background, premium RPG character profile style. "
-        "Avoid 3D render, avoid wireframe, avoid rough sketch."
+        "Generate a reusable 2D game/HUD agent character information card, "
+        "dark sci-fi interface mood, neon yellow accents, clean full body "
+        "character silhouette, premium RPG character profile style, with "
+        "compact readable stat-card panels inspired by the agent identity. "
+        "Avoid 3D render, avoid wireframe, avoid rough sketch, avoid cropped body."
     )
     identity = f"Agent id: {agent_id}. Agent name: {display_name}."
     if description:
@@ -64,6 +69,14 @@ def generate_agent_visuals(
             display_name=display_name,
             output_dir=output_dir,
         )
+    if resolved_provider in {"agnes", "agnes-ai", "agnes-image"}:
+        return _generate_with_agnes(
+            provider=resolved_provider,
+            prompt=prompt,
+            agent_id=agent_id,
+            display_name=display_name,
+            output_dir=output_dir,
+        )
     if resolved_provider in {"opencli-jimeng", "jimeng-cli", "custom-command"}:
         return _generate_with_command(
             provider=resolved_provider,
@@ -73,6 +86,203 @@ def generate_agent_visuals(
             output_dir=output_dir,
         )
     raise ValueError(f"unsupported image generation provider: {resolved_provider}")
+
+
+def _generate_with_agnes(
+    *,
+    provider: str,
+    prompt: str,
+    agent_id: str,
+    display_name: str,
+    output_dir: Path,
+) -> AgentVisualResult:
+    agnes_config = _resolve_agnes_config()
+    api_key = agnes_config["api_key"]
+    if not api_key:
+        raise ValueError("AGNES_API_KEY not found")
+
+    base_url = agnes_config["base_url"].rstrip("/")
+    model = agnes_config["model"]
+    size = os.getenv("AGNES_IMAGE_SIZE", "").strip() or "1024x1536"
+    timeout = int(os.getenv("OCTOPUS_IMAGE_GEN_TIMEOUT_SECONDS") or "180")
+
+    files: dict[str, Path] = {}
+    for view in AGENT_VISUAL_VIEWS:
+        view_prompt = _agent_visual_view_prompt(
+            base_prompt=prompt,
+            view=view,
+            agent_id=agent_id,
+            display_name=display_name,
+        )
+        data = _post_agnes_image_generation(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            prompt=view_prompt,
+            size=size,
+            timeout=timeout,
+        )
+        out = output_dir / f"{view}.png"
+        _write_agnes_image_result(data, out, timeout=timeout)
+        files[view] = out
+
+    return AgentVisualResult(provider=provider, prompt=prompt, files=files)
+
+
+def _resolve_agnes_config() -> dict[str, str]:
+    env_key = (os.getenv("AGNES_API_KEY") or os.getenv("OPENAI_API_KEY") or "").strip()
+    env_base_url = (
+        os.getenv("AGNES_BASE_URL", "").strip() or "https://apihub.agnes-ai.com/v1"
+    )
+    env_model = os.getenv("AGNES_IMAGE_MODEL", "").strip()
+    config = {
+        "api_key": env_key,
+        "base_url": env_base_url,
+        "model": env_model or "agnes-image-2.1-flash",
+    }
+    if config["api_key"]:
+        return config
+
+    entry = _load_agnes_custom_model_entry()
+    if not entry:
+        return config
+
+    api_key = str(entry.get("api_key") or "").strip()
+    base_url = str(entry.get("base_url") or "").strip()
+    model = _pick_agnes_image_model(entry) or config["model"]
+    return {
+        "api_key": api_key,
+        "base_url": base_url or config["base_url"],
+        "model": env_model or model,
+    }
+
+
+def _load_agnes_custom_model_entry() -> dict[str, Any] | None:
+    try:
+        from runtime.platform.process.paths import app_paths
+
+        path = app_paths().custom_models_path
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    candidates = [
+        entry
+        for entry in data.values()
+        if isinstance(entry, dict) and _is_agnes_custom_model_entry(entry)
+    ]
+    return candidates[0] if candidates else None
+
+
+def _is_agnes_custom_model_entry(entry: dict[str, Any]) -> bool:
+    base_url = str(entry.get("base_url") or "").lower()
+    if "agnes-ai.com" in base_url:
+        return True
+    models = entry.get("models")
+    if isinstance(models, list):
+        return any(str(model).startswith("agnes-") for model in models)
+    return str(entry.get("model") or "").startswith("agnes-")
+
+
+def _pick_agnes_image_model(entry: dict[str, Any]) -> str | None:
+    models = entry.get("models")
+    if isinstance(models, list):
+        for model in models:
+            model_name = str(model or "").strip()
+            if model_name.startswith("agnes-image-"):
+                return model_name
+    model = str(entry.get("model") or "").strip()
+    return model if model.startswith("agnes-image-") else None
+
+
+def _agent_visual_view_prompt(
+    *,
+    base_prompt: str,
+    view: str,
+    agent_id: str,
+    display_name: str,
+) -> str:
+    view_label = {
+        "front": "front view, facing the viewer",
+        "side": "side profile view, facing screen right",
+        "back": "back view, showing rear silhouette and equipment",
+    }.get(view, view)
+    return (
+        f"{base_prompt} Generate ONLY the {view_label}. "
+        f"Use a single full-body character centered on one vertical info card. "
+        f"Include concise UI labels for name '{display_name}', id '{agent_id}', "
+        f"view '{view.upper()}', role, core skills, and loadout. "
+        "Keep the background transparent or very dark neutral so the web UI can "
+        "composite it. Do not create multiple separate characters in this image."
+    )
+
+
+def _post_agnes_image_generation(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    prompt: str,
+    size: str,
+    timeout: int,
+) -> dict[str, Any]:
+    payload = json.dumps(
+        {
+            "model": model,
+            "prompt": prompt,
+            "size": size,
+            "n": 1,
+        }
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        f"{base_url}/images/generations",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"agnes API error: HTTP {exc.code} - {body[:800]}") from exc
+    except OSError as exc:
+        raise RuntimeError(f"agnes API request failed: {type(exc).__name__}: {exc}") from exc
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"agnes API returned non-JSON: {raw[:200]!r}") from exc
+
+
+def _write_agnes_image_result(data: dict[str, Any], output: Path, *, timeout: int) -> None:
+    items = data.get("data")
+    if not isinstance(items, list) or not items:
+        raise RuntimeError(f"agnes API returned no image data: {data!r}")
+    first = items[0]
+    if not isinstance(first, dict):
+        raise RuntimeError(f"agnes API returned invalid image data: {first!r}")
+
+    if isinstance(first.get("b64_json"), str) and first["b64_json"]:
+        output.write_bytes(base64.b64decode(first["b64_json"]))
+        return
+
+    url = first.get("url")
+    if not isinstance(url, str) or not url:
+        raise RuntimeError(f"agnes API returned no image URL: {first!r}")
+    req = urllib.request.Request(url, headers={"Accept": "image/*"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            output.write_bytes(resp.read())
+    except OSError as exc:
+        raise RuntimeError(
+            f"agnes image download failed: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
 def _generate_with_command(
