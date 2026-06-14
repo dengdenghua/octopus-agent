@@ -170,6 +170,46 @@ class AdaptiveImmunity:
             reason=f"z_lat={z_lat:.1f} z_tok={z_tok:.1f}",
         )
 
+    def score_observed(
+        self,
+        sucker_id: str,
+        *,
+        latency_ms: float,
+        tokens: float,
+    ) -> RiskScore:
+        """Retrospective anomaly score of an OBSERVED, already-executed call
+        against the sucker's baseline.
+
+        Unlike ``compute_risk`` (pre-execute — needs a cost *prediction* the
+        runtime doesn't supply, so it stays cold-start/inert), this uses the
+        call's REAL observed latency/tokens — the SAME quantity the baseline
+        is built from — so it is sound. Audit-only: the caller logs it, it
+        never blocks (the call already ran). Cold-start until the baseline
+        is mature, so warm-up never false-flags.
+        """
+        with self._lock:
+            bl = self._baselines.get(sucker_id)
+            n = len(bl.latency) if bl else 0
+            if bl is None or n < _MIN_SAMPLES:
+                return RiskScore(
+                    sucker_id=sucker_id,
+                    composite=self._cold_start,
+                    reason=f"cold_start ({n} samples)",
+                )
+            lat_mean, lat_std = _mean_std(bl.latency)
+            tok_mean, tok_std = _mean_std(bl.tokens)
+            z_lat = _abs_z(latency_ms, lat_mean, lat_std)
+            z_tok = _abs_z(tokens, tok_mean, tok_std)
+        z_max = max(z_lat, z_tok)
+        composite = _sigmoid(z_max - 3.0)
+        return RiskScore(
+            sucker_id=sucker_id,
+            z_score_latency=z_lat,
+            z_score_tokens=z_tok,
+            composite=composite,
+            reason=f"observed z_lat={z_lat:.1f} z_tok={z_tok:.1f}",
+        )
+
     def is_anomalous(self, score: RiskScore) -> bool:
         return score.composite >= self.quarantine_threshold
 

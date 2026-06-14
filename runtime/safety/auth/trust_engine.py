@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import fnmatch
+import logging
 from typing import Literal
 
 from runtime.platform.models import AntigenSignature, ImmuneReport, ImmuneVerdict, ToolCall
 from runtime.safety.auth.adaptive_immunity import AdaptiveImmunity
 from runtime.safety.auth.attack_memory import AttackMemory
+
+_LOG = logging.getLogger("octopus.safety.trust")
 
 UnknownPolicy = Literal["quarantine", "reject", "allow"]
 
@@ -133,9 +136,29 @@ class TrustEngine:
     def learn(self, call: ToolCall, *, latency_ms: float, tokens: float) -> None:
         """Fold an executed call's observed cost into the adaptive
         baseline (protocols/immunity.md Execute-time learning loop).
-        No-op when the adaptive tier is disabled."""
-        if self.adaptive is not None:
-            self.adaptive.learn(str(call.sucker_id), latency_ms=latency_ms, tokens=tokens)
+        No-op when the adaptive tier is disabled.
+
+        Audit-only behavioural-anomaly observability: BEFORE folding the
+        observation in, score it against the sucker's existing baseline.
+        A call far from this sucker's normal latency/token profile (a
+        classic exfil/abuse/hang signature) is logged for telemetry — it
+        is NEVER blocked here (the call already ran). This gives the
+        adaptive tier a real, sound effect while its pre-execute quarantine
+        path stays inert (that path needs a cost *prediction* the runtime
+        doesn't supply yet — observed-vs-baseline is the sound substitute)."""
+        if self.adaptive is None:
+            return
+        sucker = str(call.sucker_id)
+        score = self.adaptive.score_observed(
+            sucker, latency_ms=latency_ms, tokens=tokens
+        )
+        if self.adaptive.is_anomalous(score):
+            _LOG.warning(
+                "adaptive immunity · behavioural anomaly (audit-only, not "
+                "blocked) · sucker=%s composite=%.2f · %s",
+                sucker, score.composite, score.reason,
+            )
+        self.adaptive.learn(sucker, latency_ms=latency_ms, tokens=tokens)
 
 
     def _is_self(self, call: ToolCall) -> bool:

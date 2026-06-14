@@ -171,3 +171,65 @@ class TestTrustEngineIntegration:
             _call(latency=9999, tokens=9999), _sig("skill://public/run_sql")
         )
         assert report.verdict == "allow"
+
+
+class TestObservedScoring:
+    """score_observed: retrospective audit-only anomaly on REAL observed cost
+    (sound where pre-execute prediction isn't supplied)."""
+
+    def test_observed_cold_start_conservative(self):
+        a = AdaptiveImmunity()
+        score = a.score_observed("x", latency_ms=9999, tokens=9999)
+        assert score.composite == 0.5
+        assert not a.is_anomalous(score)
+
+    def test_observed_normal_low_after_baseline(self):
+        a = AdaptiveImmunity()
+        for _ in range(50):
+            a.learn("x", latency_ms=100.0, tokens=200.0)
+        score = a.score_observed("x", latency_ms=105, tokens=205)
+        assert score.composite < 0.2
+        assert not a.is_anomalous(score)
+
+    def test_observed_outlier_flagged(self):
+        a = AdaptiveImmunity(quarantine_threshold=0.7)
+        for i in range(50):
+            a.learn("x", latency_ms=100.0 + (i % 5), tokens=200.0 + (i % 5))
+        # 100x the baseline latency — classic hang/exfil signature.
+        score = a.score_observed("x", latency_ms=10000, tokens=200)
+        assert score.composite >= 0.7
+        assert a.is_anomalous(score)
+
+
+class TestAuditOnlyLearn:
+    """TrustEngine.learn audit-only: flags anomalies via log, never blocks."""
+
+    def test_learn_flags_anomaly_but_never_blocks(self, caplog):
+        import logging
+
+        a = AdaptiveImmunity(quarantine_threshold=0.7)
+        engine = TrustEngine(adaptive=a)
+        call = _call(sucker="run_sql")
+        for i in range(30):  # tight normal baseline
+            engine.learn(call, latency_ms=100.0 + (i % 5), tokens=200.0 + (i % 5))
+        with caplog.at_level(logging.WARNING, logger="octopus.safety.trust"):
+            result = engine.learn(call, latency_ms=10000.0, tokens=200.0)
+        assert result is None  # learn carries no verdict — never blocks
+        assert any(
+            "behavioural anomaly (audit-only" in r.message for r in caplog.records
+        )
+        assert a.sample_count("run_sql") == 31  # observation still learned
+
+    def test_learn_normal_call_no_anomaly_log(self, caplog):
+        import logging
+
+        a = AdaptiveImmunity(quarantine_threshold=0.7)
+        engine = TrustEngine(adaptive=a)
+        call = _call(sucker="run_sql")
+        for _ in range(30):
+            engine.learn(call, latency_ms=100.0, tokens=200.0)
+        with caplog.at_level(logging.WARNING, logger="octopus.safety.trust"):
+            engine.learn(call, latency_ms=101.0, tokens=201.0)
+        assert not any(
+            "behavioural anomaly" in r.message for r in caplog.records
+        )
