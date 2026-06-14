@@ -278,9 +278,22 @@ class TestRealAllSkillsDirSmoke:
         assert count >= 3, f"expected >= 3 market skills, got {count}"
         # Implementation note.
         all_names = set(r.all_names())
-        likely = {"xlsx", "create-website", "image-prompt-guide"}
-        hit = likely & all_names
-        assert hit, f"no common skills found; registry has {sorted(all_names)[:20]}..."
+        # Derive the expectation from the catalog itself so this smoke check
+        # doesn't go stale when the all_skills/ set is reorganized. (The old
+        # hardcoded {xlsx, create-website, image-prompt-guide} live in
+        # skills/public/, which register_market_skills does NOT read — it reads
+        # runtime/execution/all_skills/. Most skills register under their
+        # directory name, so the registered names must overlap the actual
+        # all_skills/ subdirectories.)
+        import runtime.execution.all_skills as _all_skills_pkg
+
+        all_skills_dir = Path(_all_skills_pkg.__file__).resolve().parent
+        dir_names = {p.parent.name for p in all_skills_dir.glob("*/SKILL.md")}
+        hit = all_names & dir_names
+        assert hit, (
+            f"no registered skill matches an all_skills/ dir; "
+            f"registry={sorted(all_names)[:10]} dirs={sorted(dir_names)[:10]}"
+        )
 
 
 class TestAliases:

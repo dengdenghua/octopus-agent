@@ -84,13 +84,21 @@ def test_resources_root_honours_env(monkeypatch, tmp_path):
     assert resources_root() == res.resolve()
 
 
-def test_resources_root_falls_back_to_project_root(monkeypatch, tmp_path):
+def test_resources_root_resolves_assets_when_cwd_outside_tree(monkeypatch, tmp_path):
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     monkeypatch.chdir(scratch)
     monkeypatch.delenv("OCTOPUS_RESOURCES_DIR", raising=False)
     monkeypatch.delenv("OCTOPUS_DATA_DIR", raising=False)
     monkeypatch.delenv("OCTOPUS_HOME", raising=False)
-    # No env, no sentinels → same as project_root (dev/editable installs
-    # are unchanged).
-    assert resources_root() == project_root()
+    # No env, cwd outside the source tree: project_root() can only degrade to
+    # cwd, but resources_root() must still resolve to the real source-tree root
+    # via the package location so bundled skills/ load regardless of cwd — the
+    # whole reason the function exists (without this, tests/entrypoints that
+    # chdir elsewhere silently lose the file-backed skill catalog).
+    rr = resources_root()
+    assert (rr / "pyproject.toml").is_file()
+    assert (rr / "runtime").is_dir()
+    assert (rr / "skills" / "public").is_dir()
+    # project_root(), by contrast, degrades to cwd when no sentinel is found.
+    assert project_root() == scratch.resolve()

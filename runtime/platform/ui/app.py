@@ -106,9 +106,11 @@ def create_app(
 
     from runtime.platform.process.paths import app_paths as _app_paths
     from runtime.platform.process.paths import project_root as _project_root
+    from runtime.platform.process.paths import resources_root as _resources_root
 
     _paths = _app_paths()
     _project_root_path = _project_root()
+    _resources_root_path = _resources_root()
     trace_store_path = _paths.agent_trace_path.resolve()
     state = AppState(
         journal_path=journal_path,
@@ -801,7 +803,7 @@ def create_app(
     app.include_router(create_meta_router(
         registry=state.registry,
         tool_registry=get_tool_registry(),
-        skill_library_dirs=[_project_root_path / "skills" / "public"],
+        skill_library_dirs=[_resources_root_path / "skills" / "public"],
         include_default_skill_library=(registry is None or stack is not None),
         molili_config=molili_config,
         local_auth_config=local_auth_config,

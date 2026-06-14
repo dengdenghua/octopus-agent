@@ -137,12 +137,23 @@ def resources_root() -> Path:
     no bundled assets. The image copies them to ``/app/resources`` and
     sets ``OCTOPUS_RESOURCES_DIR`` so loaders find them; without this the
     container silently loses the file-backed skill catalog (87+ skills).
-    Honour the env var, else fall back to ``project_root()`` so dev and
-    editable installs are unchanged.
+    Honour the env var, else resolve relative to this package so source
+    checkouts and editable installs find the bundled assets regardless of cwd.
     """
     env = os.environ.get("OCTOPUS_RESOURCES_DIR")
     if env:
         return Path(env).expanduser().resolve()
+    # cwd may sit outside the source tree (tests chdir to a tmp dir; some
+    # entrypoints run from elsewhere). project_root() would then fall back to
+    # cwd and silently lose the bundled assets. Try the source-tree root
+    # relative to THIS package file first: paths.py lives at
+    # runtime/platform/process/paths.py, so parents[3] is the repo root. In a
+    # source checkout / editable install that root carries skills/, prompts/,
+    # etc. In a non-editable pip install it won't look like a project root, so
+    # fall through to project_root() (and the container sets the env var above).
+    pkg_root = Path(__file__).resolve().parents[3]
+    if _looks_like_project_root(pkg_root):
+        return pkg_root
     return project_root()
 
 
