@@ -49,9 +49,13 @@ def app_and_coord():
         tentacle_id="android-dash-001",
         device_meta={"brand": "Google", "model": "Pixel 8"},
     )
-    # 同步调用 async 方法
-    asyncio.get_event_loop().run_until_complete(device.connect())
-    asyncio.get_event_loop().run_until_complete(coord.pool.register(device))
+    # 同步调用 async 方法。Python 3.12 起 asyncio.get_event_loop() 在无运行
+    # loop 时抛 RuntimeError（不再隐式新建），故显式建一个 loop 并设为当前，
+    # 让 connect/register 共享同一个 loop（与 3.12 前的默认 loop 语义一致）。
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(device.connect())
+    loop.run_until_complete(coord.pool.register(device))
 
     app = FastAPI()
     app.include_router(create_tentacle_router(coord))
