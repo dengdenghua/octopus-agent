@@ -192,7 +192,13 @@ class Doctor:
             return
 
         try:
-            from .config.loader import load_from_yaml
+            # Absolute import: the config package is runtime.platform.config,
+            # NOT a subpackage of observability. The old relative
+            # ``.config.loader`` resolved to
+            # runtime.platform.observability.config.loader (nonexistent), so
+            # this check always failed with ModuleNotFoundError and aborted
+            # `quickstart`. Match the canonical import used across the CLI.
+            from runtime.platform.config import load_from_yaml
             load_from_yaml(self._config_path)
             report.results.append(CheckResult(
                 name="Config", status="ok",
