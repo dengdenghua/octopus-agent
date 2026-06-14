@@ -315,31 +315,12 @@ _BUILTIN: list[FlagSpec] = [
         ),
         coerce=lambda raw: raw.strip().lower() != "off",
     ),
-    FlagSpec(
-        name="safety.identity_lock",
-        default=False,
-        legacy_env=("OCTOPUS_IDENTITY_LOCK",),
-        description=(
-            "Bind the agent to a signed identity; rejects requests "
-            "whose signature doesn't match."
-        ),
-    ),
 
     # ─── Self-evolution ────────────────────────────────────
     FlagSpec(
         name="evolution.auto_trigger",
-        default=False,
-        description="Enable automatic evolution trigger when fitness drops below threshold",
-    ),
-    FlagSpec(
-        name="evolution.federation",
-        default=False,
-        description="Enable cross-agent proposal sharing (federated learning)",
-    ),
-    FlagSpec(
-        name="evolution.strategy_engine",
         default=True,
-        description="Enable strategy engine for automatic evolve/hold/explore decisions",
+        description="Enable automatic evolution trigger when fitness drops below threshold",
     ),
     FlagSpec(
         name="regeneration.enabled",
@@ -380,12 +361,6 @@ _BUILTIN: list[FlagSpec] = [
     ),
 
     # ─── Intelligence (daily brief) ────────────────────────
-    FlagSpec(
-        name="intelligence.poll_interval_sec",
-        default=1800,
-        legacy_env=("OCTOPUS_INTELLIGENCE_POLL_SECONDS",),
-        description="How often the daily-brief worker polls subscriptions.",
-    ),
 
     # ─── Session store ─────────────────────────────────────
     FlagSpec(

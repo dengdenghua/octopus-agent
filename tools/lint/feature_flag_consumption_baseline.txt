@@ -4,9 +4,4 @@
 # A line for a flag read via a computed name / os.environ documents
 # that the flag bypasses the flag system — keep it, fix when able.
 
-evolution.auto_trigger
-evolution.federation
-evolution.strategy_engine
-intelligence.poll_interval_sec
-safety.identity_lock
 ui.team_cowork

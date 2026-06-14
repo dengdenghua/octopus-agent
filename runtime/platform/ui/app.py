@@ -272,13 +272,19 @@ def create_app(
                         pass  # deep_reflect / deep_evolve will return clean error
                     # ─── Evolution auto-trigger · fitness-driven self-evolution ──
                     try:
+                        from runtime.platform import feature_flags as _ff
                         from runtime.safety.evolution.auto_trigger import (
                             AutoTriggerConfig,
                             get_auto_trigger,
                         )
+                        # Honour the evolution.auto_trigger flag (default True =
+                        # current behaviour) instead of a hardcoded enabled=True,
+                        # so the registered flag actually controls the trigger.
                         get_auto_trigger().start(
                             stack,
-                            AutoTriggerConfig(enabled=True),
+                            AutoTriggerConfig(
+                                enabled=_ff.is_on("evolution.auto_trigger"),
+                            ),
                         )
                     except Exception as _at_exc:
                         import logging as _logging

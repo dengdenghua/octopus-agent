@@ -127,18 +127,26 @@ def test_file_reload_picks_up_edits(
 
 
 def test_int_flags_parse_env_to_int(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OCTOPUS_INTELLIGENCE_POLL_SECONDS", "3600")
+    # Self-register a test int flag rather than hardcoding a production flag —
+    # so this mechanism test doesn't break when a flag is added/removed.
+    ff.register(ff.FlagSpec(
+        name="test.int_flag", default=1800, legacy_env=("OCTOPUS_TEST_INT_FLAG",),
+    ))
+    monkeypatch.setenv("OCTOPUS_TEST_INT_FLAG", "3600")
     ff.reload()
-    assert ff.value("intelligence.poll_interval_sec") == 3600
+    assert ff.value("test.int_flag") == 3600
 
 
 def test_int_flags_fall_back_when_env_invalid(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("OCTOPUS_INTELLIGENCE_POLL_SECONDS", "not-a-number")
+    ff.register(ff.FlagSpec(
+        name="test.int_flag", default=1800, legacy_env=("OCTOPUS_TEST_INT_FLAG",),
+    ))
+    monkeypatch.setenv("OCTOPUS_TEST_INT_FLAG", "not-a-number")
     ff.reload()
     # Falls through to default (1800), doesn't crash.
-    assert ff.value("intelligence.poll_interval_sec") == 1800
+    assert ff.value("test.int_flag") == 1800
 
 
 def test_custom_coerce_is_used(monkeypatch: pytest.MonkeyPatch) -> None:
