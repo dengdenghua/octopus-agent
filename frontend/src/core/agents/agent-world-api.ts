@@ -149,6 +149,23 @@ export async function listEnterpriseAssets(
   return res.json() as Promise<EnterpriseAssetsResponse>;
 }
 
+/** 把企业版角色导入本地(后端 scaffold + load+register),并刷新本地角色名册。 */
+export async function installEnterpriseAsset(
+  id: string,
+): Promise<{ installed: boolean; agent_id: string; name?: string }> {
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/enterprise/${id}/install`,
+    { method: "POST", headers: authHeaders() },
+  );
+  if (!res.ok) throw new Error(`安装失败: ${res.statusText}`);
+  const result = await res.json();
+  await fetch(`${getBackendBaseURL()}/api/agents/reload`, {
+    method: "POST",
+    headers: authHeaders(),
+  }).catch(() => {});
+  return result;
+}
+
 export async function getStoreAgent(id: string): Promise<AgentWorldAgent> {
   const res = await fetch(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/store/${id}`,

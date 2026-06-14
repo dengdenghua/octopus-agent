@@ -11,10 +11,13 @@ octopus-enterprise/backend/app/agent_assets)。本 router 让 agent 的市场前
 
 from __future__ import annotations
 
+import json
 import os
+import re
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 
 def _enterprise_base() -> str:
@@ -61,7 +64,69 @@ def _unwrap(body: Any, key: str) -> Any:
     return body if body is not None else ([] if key == "items" else None)
 
 
-def create_enterprise_assets_router() -> APIRouter:
+def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
+    """从企业版角色资产 dict 在本地 scaffold 一个 agent。返回 (agent_id, agent_root)。
+
+    自包含写最小可加载结构:profile.jsonc + agent-core/{SOUL,IDENTITY,
+    tool-registry}。SOUL 用资产的 persona body;无 body 则按元数据生成兜底。
+    """
+    from runtime.execution.agents.loader import default_agents_root
+
+    raw_id = str(asset.get("id") or "imported_role")
+    agent_id = re.sub(r"[^a-z0-9_]+", "_", raw_id.lower()).strip("_") or "imported_role"
+    name = str(asset.get("name") or agent_id)
+    category = str(asset.get("category") or "specialist")
+    tags = asset.get("tags") or []
+    description = str(asset.get("description") or "")
+    body = str(asset.get("body") or "")
+
+    agent_root = default_agents_root() / agent_id
+    core = agent_root / "agent-core"
+    core.mkdir(parents=True, exist_ok=True)
+
+    profile = {
+        "id": agent_id,
+        "name": name,
+        "icon": str(asset.get("icon") or "🤖"),
+        "did": f"DID-{agent_id.upper()}-ENTERPRISE",
+        "description": description,
+        "category": category,
+        "tags": tags,
+        "model": {"provider": "auto", "name": "auto"},
+        "runtime": "local",
+        "source": "enterprise",
+    }
+    (agent_root / "profile.jsonc").write_text(
+        json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    soul = body or (
+        f"You are {name}.\n\nPrimary mission: {description}\n\n"
+        f"Specialties: {', '.join(tags)}.\nBe concise, action-oriented, and precise."
+    )
+    (core / "SOUL.md").write_text(soul, encoding="utf-8")
+    (core / "IDENTITY.md").write_text(
+        f"- Name: {name}\n- Role: {category} specialist\n"
+        "- Source: enterprise asset library\n",
+        encoding="utf-8",
+    )
+    (core / "tool-registry.jsonc").write_text(
+        json.dumps(
+            {
+                "arms": ["fs_writer", "git", "shell"],
+                "extra_affinity": tags,
+                "private_skills": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return agent_id, agent_root
+
+
+def create_enterprise_assets_router(
+    *, registry: Any = None, runtime: Any = None
+) -> APIRouter:
     router = APIRouter(tags=["agent-market-enterprise"])
 
     @router.get("/api/agent-market/enterprise")
@@ -88,6 +153,37 @@ def create_enterprise_assets_router() -> APIRouter:
             "available": True,
             "asset": _unwrap(res.get("data"), "asset"),
             "error": res.get("error"),
+        }
+
+    @router.post("/api/agent-market/enterprise/{asset_id}/install")
+    def install_enterprise_asset(asset_id: str) -> dict[str, Any]:
+        """把企业版角色资产导入本地:取 body → scaffold → load+register。"""
+        res = _enterprise_get(f"/api/v1/agent-assets/{asset_id}")
+        if not res.get("available"):
+            raise HTTPException(503, res.get("error") or "enterprise not configured")
+        if res.get("error"):
+            raise HTTPException(502, res["error"])
+        asset = _unwrap(res.get("data"), "asset")
+        if not isinstance(asset, dict) or not asset.get("id"):
+            raise HTTPException(404, f"enterprise asset not found: {asset_id}")
+        agent_id, agent_root = _scaffold_local_agent(asset)
+        # 立即 load+register,导入即可用(同 agent_world_router 的安装路径)。
+        if registry is not None and runtime is not None:
+            from runtime.execution.agents.loader import (
+                default_agents_root,
+                load_agent,
+            )
+
+            loaded = load_agent(agent_root, runtime, default_agents_root() / "_shared")
+            if hasattr(registry, "replace") and registry.has(agent_id):
+                registry.replace(loaded)
+            elif not registry.has(agent_id):
+                registry.register(loaded)
+        return {
+            "installed": True,
+            "agent_id": agent_id,
+            "name": asset.get("name"),
+            "path": str(agent_root),
         }
 
     return router

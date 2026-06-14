@@ -7,8 +7,10 @@
  */
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import {
+  installEnterpriseAsset,
   listEnterpriseAssets,
   type EnterpriseAsset,
 } from "@/core/agents/agent-world-api";
@@ -17,6 +19,20 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
   const [items, setItems] = useState<EnterpriseAsset[]>([]);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [installing, setInstalling] = useState<string | null>(null);
+
+  async function handleInstall(a: EnterpriseAsset) {
+    if (installing) return;
+    setInstalling(a.id);
+    try {
+      const r = await installEnterpriseAsset(a.id);
+      toast.success(`已导入「${r.name || a.name}」到本地角色库`);
+    } catch (e) {
+      toast.error(`导入失败:${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setInstalling(null);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -103,6 +119,14 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
                 </div>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => handleInstall(a)}
+              disabled={installing !== null}
+              className="shrink-0 self-center rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary transition hover:bg-primary/20 disabled:opacity-50"
+            >
+              {installing === a.id ? "导入中…" : "导入本地"}
+            </button>
           </div>
         ))}
       </div>

@@ -1062,7 +1062,10 @@ def create_app(
         from runtime.sensing.gateway.enterprise_assets_router import (
             create_enterprise_assets_router,
         )
-        app.include_router(create_enterprise_assets_router())
+        app.include_router(create_enterprise_assets_router(
+            registry=agent_registry,
+            runtime=stack.runtime if stack is not None else None,
+        ))
     except Exception as _ea_exc:  # noqa: BLE001
         import logging as _logging
         _logging.getLogger(__name__).warning(
