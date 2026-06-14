@@ -1053,6 +1053,20 @@ def create_app(
         import logging as _logging
         _logging.getLogger(__name__).warning("agent_world_router failed to mount: %s", _aw_exc)
 
+    # ─── 企业版角色资产消费(数字分身归并 C·只读)──────────────
+    # 配 OCTOPUS_ENTERPRISE_URL 时,市场可列举企业版托管的角色资产;不配则
+    # available=false。消费而非 fork(见 enterprise_assets_router)。
+    try:
+        from runtime.sensing.gateway.enterprise_assets_router import (
+            create_enterprise_assets_router,
+        )
+        app.include_router(create_enterprise_assets_router())
+    except Exception as _ea_exc:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "enterprise_assets_router failed to mount: %s", _ea_exc
+        )
+
     # ─── Intelligence Web API ──────────────────────────────────────────────
     try:
         from runtime.sensing.gateway.intelligence_router import (
