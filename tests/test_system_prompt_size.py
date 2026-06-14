@@ -14,10 +14,17 @@ from runtime.core.cerebrum.react_types import REACT_SYSTEM_PROMPT_BASE
 
 # Anthropic prompt-cache hit requires a stable prefix; keeping the
 # base small means a) cache stays warm regardless of mode, b) short
-# chat turns don't pay for code-mode-specific prose. Current observed
-# size is around 1700 chars; budget gives room to grow but flags
-# bloat early.
-BASE_PROMPT_BUDGET_CHARS = 2400
+# chat turns don't pay for code-mode-specific prose. The budget gives
+# room to grow but flags bloat early.
+#
+# Raised 2400 → 2500 (2026-06-14): commit 7f5989c surfaced
+# call_agent_vote + run_orchestration in the base skill guidance, taking
+# the observed size to 2469 (committed, not WIP). Budget bumped to match
+# — the sanctioned option documented above. Headroom kept deliberately
+# tight so further creep still re-fires this guard; if that guidance
+# turns out to be mode-specific it can later move to a conditional
+# system_parts.append block in react_loop instead.
+BASE_PROMPT_BUDGET_CHARS = 2500
 
 
 def test_base_prompt_within_budget() -> None:
