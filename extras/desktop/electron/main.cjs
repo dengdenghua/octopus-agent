@@ -458,7 +458,7 @@ function desktopDataDir() {
     return process.env.OCTOPUS_DATA_DIR;
   }
   if (isDev) {
-    return path.resolve(__dirname, "..", "..", "data");
+    return path.resolve(__dirname, "..", "..", "..", "data");
   }
   return path.join(app.getPath("userData"), "data");
 }
@@ -468,14 +468,14 @@ function bundledAgentsRoot() {
     return process.env.OCTOPUS_AGENTS_ROOT;
   }
   if (isDev) {
-    return path.resolve(__dirname, "..", "..", "agents");
+    return path.resolve(__dirname, "..", "..", "..", "agents");
   }
   return path.join(process.resourcesPath, "agents");
 }
 
 function backendConfigTemplatePath() {
   if (isDev) {
-    return path.resolve(__dirname, "..", "..", "packaging", "desktop", "config.desktop.yaml");
+    return path.resolve(__dirname, "..", "..", "..", "packaging", "desktop", "config.desktop.yaml");
   }
   return path.join(process.resourcesPath, "config.desktop.yaml");
 }
@@ -485,7 +485,7 @@ function backendConfigPath() {
     return process.env.OCTOPUS_CONFIG_PATH;
   }
   if (isDev) {
-    return path.resolve(__dirname, "..", "..", "config.local.yaml");
+    return path.resolve(__dirname, "..", "..", "..", "config.local.yaml");
   }
   return path.join(app.getPath("userData"), "config.yaml");
 }
