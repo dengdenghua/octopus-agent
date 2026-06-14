@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { getBackendBaseURL } from "@/core/config";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
@@ -101,6 +102,12 @@ type ConstitutionProfileStatus = {
   available: ConstitutionProfile[];
 };
 
+// LLM 语义安全 judge:enabled=当前是否接了真 judge;available=有无模型路由可接。
+type JudgeStatus = {
+  enabled: boolean;
+  available: boolean;
+};
+
 export default function PrivacySettingsPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -117,6 +124,8 @@ export default function PrivacySettingsPage() {
     null,
   );
   const [profileBusy, setProfileBusy] = useState(false);
+  const [judge, setJudge] = useState<JudgeStatus | null>(null);
+  const [judgeBusy, setJudgeBusy] = useState(false);
   const [showFactoryResetDialog, setShowFactoryResetDialog] = useState(false);
   const [factoryResetConfirmText, setFactoryResetConfirmText] = useState("");
   const [factoryResetPending, setFactoryResetPending] = useState(false);
@@ -163,6 +172,10 @@ export default function PrivacySettingsPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((j: ConstitutionProfileStatus | null) => setProfile(j))
       .catch(() => setProfile(null));
+    fetch(`${getBackendBaseURL()}/api/safety/llm-judge`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: JudgeStatus | null) => setJudge(j))
+      .catch(() => setJudge(null));
     fetchAiMode();
     fetchDenylist();
   }, [fetchAiMode, fetchDenylist]);
@@ -256,6 +269,28 @@ export default function PrivacySettingsPage() {
       toast.error(t.privacySettings.toastProfileFailed(e instanceof Error ? e.message : String(e)));
     } finally {
       setProfileBusy(false);
+    }
+  }
+
+  async function setJudgeEnabled(enabled: boolean) {
+    if (judgeBusy) return;
+    setJudgeBusy(true);
+    try {
+      const res = await fetch(`${getBackendBaseURL()}/api/safety/llm-judge`, {
+        method: "PUT",
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const next: JudgeStatus = await res.json();
+      setJudge(next);
+      toast.success(next.enabled ? "已开启 LLM 语义审查" : "已关闭 LLM 语义审查");
+    } catch (e) {
+      toast.error(
+        `切换失败:${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setJudgeBusy(false);
     }
   }
 
@@ -588,6 +623,23 @@ export default function PrivacySettingsPage() {
             {t.privacySettings.profileLoadFailed}
           </div>
         )}
+
+        {/* LLM 语义审查 judge —— 运行时开关(无需重启)。上面的 profile 决定
+            judge 命中是硬拦截(strict)还是仅审计(normal/lax)。 */}
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border/50 p-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">LLM 语义审查 (judge)</div>
+            <div className="text-[11px] text-muted-foreground leading-snug">
+              每条出口消息多一次模型调用,审查诱导钓鱼 / 越权抓取等语义违规。默认关(有成本)。
+              {judge && !judge.available && " 当前无模型路由,不可开启。"}
+            </div>
+          </div>
+          <Switch
+            checked={!!judge?.enabled}
+            disabled={judgeBusy || !judge || !judge.available}
+            onCheckedChange={(v) => setJudgeEnabled(v)}
+          />
+        </div>
       </div>
 
       {/* ─── Alternative unlock paths ─── */}

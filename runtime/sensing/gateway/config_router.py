@@ -1119,6 +1119,50 @@ def create_config_router(
             "available": ["strict", "normal", "lax"],
         }
 
+    # ─── LLM semantic-safety judge · runtime toggle ──────────
+    #
+    # The constitution's judge tier (gate Pass 3) — per-message semantic
+    # review (PRIV/LAWF/DGNT). Off by default (one model call per unique
+    # outbound message). ``safety.enable_llm_judge`` wires it at boot;
+    # this lets the Privacy settings page flip it at RUNTIME via set_judge
+    # (no restart). The profile (above) still decides whether a block
+    # verdict hard-enforces (strict) or is audit-only (normal/lax).
+    # ``available`` is false when there's no model router (static planner).
+
+    def _judge_router() -> Any:
+        return getattr(getattr(stack, "planner", None), "router", None)
+
+    def _judge_state() -> dict[str, Any]:
+        from runtime.safety.validation.judge import get_judge, null_judge
+
+        return {
+            "enabled": get_judge() is not null_judge,
+            "available": _judge_router() is not None,
+        }
+
+    @router.get("/api/safety/llm-judge")
+    def api_llm_judge_get() -> dict[str, Any]:
+        return _judge_state()
+
+    @router.put("/api/safety/llm-judge")
+    def api_llm_judge_put(body: dict[str, Any]) -> dict[str, Any]:
+        from runtime.safety.validation.judge import set_judge
+
+        want = bool(body.get("enabled")) if isinstance(body, dict) else False
+        if want:
+            router_obj = _judge_router()
+            if router_obj is None:
+                raise HTTPException(
+                    400,
+                    "no model router available (static planner?) — cannot enable judge",
+                )
+            from runtime.safety.validation.llm_judge import build_judge_from_router
+
+            set_judge(build_judge_from_router(router_obj))
+        else:
+            set_judge(None)  # back to null_judge (allow-all)
+        return _judge_state()
+
     # ─── Feature flags ─────────────────────────────────────
     #
     # Returns the live catalog so the frontend can gate
