@@ -752,6 +752,9 @@ function DigitalTwinsTab({
 // 角色库(本地智能体库)暂时隐藏 —— 资产正迁往企业版 registry,本地仅保留 AOI 等
 // 少量核心角色;企业版 tab 是新的浏览/安装入口。置 true 即可恢复角色库入口。
 const SHOW_LOCAL_AGENT_LIBRARY = false;
+// 数字分身模板已迁往企业版资产库,本地 tab 一并隐藏(前端常量待 Codex 的
+// agent-world-data.ts WIP 落地后移除;后续经 SDK 从企业版消费)。
+const SHOW_LOCAL_DIGITAL_TWINS = false;
 
 export function AgentWorldUnified() {
   const { t } = useI18n();
@@ -762,12 +765,8 @@ export function AgentWorldUnified() {
   // State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState(() => {
-    // 角色库已隐藏(见 SHOW_LOCAL_AGENT_LIBRARY),默认落到数字分身。
-    if (typeof window === "undefined") return "digital-twins";
-    if (window.location.hash.includes("tab=enterprise")) {
-      return "enterprise";
-    }
-    return "digital-twins";
+    // 角色库 + 数字分身均已隐藏,企业版是默认且唯一入口。
+    return "enterprise";
   });
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
@@ -805,11 +804,9 @@ export function AgentWorldUnified() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
-    if (tab === "enterprise") {
+    // 角色库 + 数字分身均已隐藏,任何 tab 参数都落到企业版。
+    if (tab === "enterprise" || tab === "digital-twins" || tab === "agents") {
       setActiveTab("enterprise");
-    } else if (tab === "digital-twins" || tab === "agents") {
-      // 角色库已隐藏,?tab=agents 落回数字分身。
-      setActiveTab("digital-twins");
     }
     if (params.get("connect") === "local") {
       setConnectOpen(true);
@@ -931,13 +928,15 @@ export function AgentWorldUnified() {
                 角色库
               </TabsTrigger>
             )}
-            <TabsTrigger
-              value="digital-twins"
-              className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-            >
-              <FingerprintIcon className="h-3.5 w-3.5" />
-              数字分身
-            </TabsTrigger>
+            {SHOW_LOCAL_DIGITAL_TWINS && (
+              <TabsTrigger
+                value="digital-twins"
+                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+              >
+                <FingerprintIcon className="h-3.5 w-3.5" />
+                数字分身
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="enterprise"
               className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
