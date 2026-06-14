@@ -116,6 +116,39 @@ export async function listStoreAgents(
   return res.json() as Promise<AgentWorldListResponse>;
 }
 
+// ── 企业版角色资产(数字分身归并 C · 消费侧)─────────────────────
+export type EnterpriseAsset = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  icon: string;
+  source: string;
+  kind: string;
+};
+
+export type EnterpriseAssetsResponse = {
+  available: boolean;
+  items: EnterpriseAsset[];
+  error?: string | null;
+};
+
+/** 列举企业版托管的角色资产。未配 OCTOPUS_ENTERPRISE_URL → available:false。 */
+export async function listEnterpriseAssets(
+  params: { category?: string; search?: string } = {},
+): Promise<EnterpriseAssetsResponse> {
+  const qs = new URLSearchParams();
+  if (params.category) qs.set("category", params.category);
+  if (params.search) qs.set("search", params.search);
+  const res = await fetch(
+    `${getBackendBaseURL()}${AGENT_MARKET_API}/enterprise?${qs.toString()}`,
+    { headers: authHeaders() },
+  );
+  if (!res.ok) return { available: false, items: [] };
+  return res.json() as Promise<EnterpriseAssetsResponse>;
+}
+
 export async function getStoreAgent(id: string): Promise<AgentWorldAgent> {
   const res = await fetch(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/store/${id}`,

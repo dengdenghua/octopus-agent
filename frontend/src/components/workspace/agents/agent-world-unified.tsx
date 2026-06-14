@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
   BotIcon,
+  Building2Icon,
   ChevronDownIcon,
   Code2Icon,
   FingerprintIcon,
@@ -42,6 +43,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EnterpriseAssetsTab } from "@/components/workspace/agents/enterprise-assets-tab";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -349,8 +351,8 @@ function AgentsTab({
     if (installed > 0) {
       toast.success(
         failed > 0
-          ? `已安装 ${installed} 个 Agent，${failed} 个失败`
-          : `已安装 ${installed} 个 Agent`,
+          ? `已加入 ${installed} 个角色，${failed} 个失败`
+          : `已加入 ${installed} 个角色`,
       );
     } else if (failed > 0) {
       toast.error("安装失败，请稍后重试");
@@ -373,9 +375,12 @@ function AgentsTab({
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/12 px-3 py-2 md:flex-row md:items-center md:justify-between">
-        <div className="text-sm font-semibold">岗位模板库</div>
+        <div className="flex min-w-0 items-center gap-2">
+          <BotIcon className="h-4 w-4 shrink-0 text-primary/75" />
+          <div className="text-sm font-semibold">角色库</div>
+        </div>
         <div className="text-xs text-muted-foreground">
-          先选一个真实岗位，再补资料授权；分身会按这个岗位的口径进入对话。
+          挑选可直接出场的岗位角色；每张卡片代表它的职责、语气和可调用能力。
         </div>
       </div>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -419,13 +424,13 @@ function AgentsTab({
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:justify-end">
           <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
-            <span className="text-muted-foreground/80">已装</span>
+            <span className="text-muted-foreground/80">已加入</span>
             <span className="ml-1 font-medium text-foreground">
               {installedCount}
             </span>
           </span>
           <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
-            <span className="text-muted-foreground/80">可装</span>
+            <span className="text-muted-foreground/80">可加入</span>
             <span className="ml-1 font-medium text-foreground">
               {Math.max(0, installableCount)}
             </span>
@@ -439,7 +444,7 @@ function AgentsTab({
             onClick={() => void handleInstallAll()}
             title={
               confirmInstallAll
-                ? `再次点击会安装当前筛选下的 ${installableAgents.length} 个 Agent`
+                ? `再次点击会加入当前筛选下的 ${installableAgents.length} 个角色`
                 : "需要二次确认"
             }
           >
@@ -447,8 +452,8 @@ function AgentsTab({
               <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             )}
             {confirmInstallAll
-              ? `确认安装 ${installableAgents.length} 个`
-              : "全部安装"}
+              ? `确认加入 ${installableAgents.length} 个`
+              : "批量加入"}
           </Button>
         </div>
       </div>
@@ -543,6 +548,16 @@ function DigitalTwinsTab({
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/12 px-3 py-2 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <FingerprintIcon className="h-4 w-4 shrink-0 text-primary/75" />
+          <div className="text-sm font-semibold">数字分身</div>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          为真实岗位或个人建立可托付的角色档案：背景、口吻、资料来源和行动边界都会进入设定。
+        </div>
+      </div>
+
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex gap-1.5 overflow-x-auto pb-1 pr-1">
@@ -906,7 +921,7 @@ export function AgentWorldUnified() {
               className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
             >
               <BotIcon className="h-3.5 w-3.5" />
-              Agent
+              角色库
             </TabsTrigger>
             <TabsTrigger
               value="digital-twins"
@@ -914,6 +929,13 @@ export function AgentWorldUnified() {
             >
               <FingerprintIcon className="h-3.5 w-3.5" />
               数字分身
+            </TabsTrigger>
+            <TabsTrigger
+              value="enterprise"
+              className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+            >
+              <Building2Icon className="h-3.5 w-3.5" />
+              企业版
             </TabsTrigger>
           </TabsList>
 
@@ -938,6 +960,10 @@ export function AgentWorldUnified() {
               onCreateRole={handleCreateDigitalTwinRole}
               query={searchQuery}
             />
+          </TabsContent>
+
+          <TabsContent value="enterprise" className="mt-0">
+            <EnterpriseAssetsTab query={searchQuery} />
           </TabsContent>
         </Tabs>
       </div>
