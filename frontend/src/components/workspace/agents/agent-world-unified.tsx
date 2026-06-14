@@ -751,10 +751,13 @@ function DigitalTwinsTab({
 
 // 角色库(本地智能体库)暂时隐藏 —— 资产正迁往企业版 registry,本地仅保留 AOI 等
 // 少量核心角色;企业版 tab 是新的浏览/安装入口。置 true 即可恢复角色库入口。
-const SHOW_LOCAL_AGENT_LIBRARY = false;
+const SHOW_LOCAL_AGENT_LIBRARY = true;
 // 数字分身模板已迁往企业版资产库,本地 tab 一并隐藏(前端常量待 Codex 的
 // agent-world-data.ts WIP 落地后移除;后续经 SDK 从企业版消费)。
 const SHOW_LOCAL_DIGITAL_TWINS = false;
+// 企业版资产 tab 也隐藏:数字分身/financial 已搬企业版,但消费走「后续 SDK」,
+// 现在 agents 页只展示本地角色库(9 个角色)。置 true 可恢复企业版 tab。
+const SHOW_ENTERPRISE_ASSETS = false;
 
 export function AgentWorldUnified() {
   const { t } = useI18n();
@@ -765,8 +768,8 @@ export function AgentWorldUnified() {
   // State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState(() => {
-    // 角色库 + 数字分身均已隐藏,企业版是默认且唯一入口。
-    return "enterprise";
+    // 仅角色库可见,默认且唯一入口。
+    return "agents";
   });
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
@@ -804,9 +807,9 @@ export function AgentWorldUnified() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
-    // 角色库 + 数字分身均已隐藏,任何 tab 参数都落到企业版。
-    if (tab === "enterprise" || tab === "digital-twins" || tab === "agents") {
-      setActiveTab("enterprise");
+    // 仅角色库可见,任何 tab 参数都落回角色库。
+    if (tab === "agents" || tab === "digital-twins" || tab === "enterprise") {
+      setActiveTab("agents");
     }
     if (params.get("connect") === "local") {
       setConnectOpen(true);
@@ -937,13 +940,15 @@ export function AgentWorldUnified() {
                 数字分身
               </TabsTrigger>
             )}
-            <TabsTrigger
-              value="enterprise"
-              className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-            >
-              <Building2Icon className="h-3.5 w-3.5" />
-              企业版
-            </TabsTrigger>
+            {SHOW_ENTERPRISE_ASSETS && (
+              <TabsTrigger
+                value="enterprise"
+                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+              >
+                <Building2Icon className="h-3.5 w-3.5" />
+                企业版
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="agents" className="mt-0">
