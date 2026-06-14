@@ -1,4 +1,4 @@
-﻿"""Device pool — manage ALL connected devices (phones, robots, cars, ...).
+"""Device pool — manage ALL connected devices (phones, robots, cars, ...).
 
 Generic device abstraction: any device that speaks JSON-RPC over WebSocket
 can register itself.  Device-specific metadata lives in subclasses.

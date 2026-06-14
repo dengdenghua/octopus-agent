@@ -1,4 +1,4 @@
-﻿"""轻量 LLM 客户端 —— Python 端参考实现.
+"""轻量 LLM 客户端 —— Python 端参考实现.
 
 与 Octopus Mobile 端的 `LightweightLlmClient.kt` 完全对称：
 

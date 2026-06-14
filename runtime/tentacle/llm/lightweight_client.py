@@ -1,4 +1,4 @@
-﻿"""LightweightLlmClient —— 裸 HTTP 调 OpenAI 兼容 LLM API.
+"""LightweightLlmClient —— 裸 HTTP 调 OpenAI 兼容 LLM API.
 
 与 Octopus Mobile 端 ``LightweightLlmClient.kt`` 完全对称：
 

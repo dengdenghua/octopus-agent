@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tests for ``build_turn_session`` Â· the helper that merges request
 context + persisted thread metadata into a ``Session`` object.
 

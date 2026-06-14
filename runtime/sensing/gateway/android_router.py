@@ -1,4 +1,4 @@
-﻿"""Android device HTTP API — server-side counterpart to Octopus Mobile.
+"""Android device HTTP API — server-side counterpart to Octopus Mobile.
 
 Mirrors the design of computer_router.py (observe → preview → execute)
 but for Android devices connected via WebSocket.

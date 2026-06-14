@@ -1,4 +1,4 @@
-﻿"""LightweightReAct —— 极简 ReAct 循环.
+"""LightweightReAct —— 极简 ReAct 循环.
 
 与 Octopus Mobile 端 ``LightweightReAct.kt`` 对称：
 

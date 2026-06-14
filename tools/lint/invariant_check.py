@@ -166,10 +166,16 @@ class NoRawLLMCallRule(Rule):
     }
 
     def check(self, ctx: LintContext) -> Iterable[LintIssue]:
-        # Implementation note.
-        if ctx.in_package("eyes"):
+        # The model-router implementations ARE the abstraction boundary this
+        # rule protects: they must import the vendor SDKs so the rest of the
+        # tree can route through them. Exempt the router package. It was
+        # historically named ``eyes``; the live location is
+        # ``runtime/sensing/model_router`` (the rename left this exemption
+        # pointing at the dead name, which is why anthropic_router.py tripped
+        # LINT-04). Keep ``eyes`` too for backward compatibility.
+        if ctx.in_package("eyes") or ctx.in_package("model_router"):
             return
-        # Implementation note.
+        # Tests legitimately import SDKs to build fakes/fixtures.
         if ctx.in_package("tests"):
             return
         for node in ast.walk(ctx.tree):
