@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
-from runtime.core.nerves.bus import NervesEvent, publish
+from runtime.core.nerves.bus import NervesEvent, TypedEventBus
 
 # ── Device State ────────────────────────────────────────
 
@@ -188,14 +188,24 @@ class DevicePool:
 
     HEARTBEAT_TIMEOUT_S = 45.0
 
-    def __init__(self) -> None:
+    def __init__(self, bus: TypedEventBus | None = None) -> None:
         self._devices: dict[str, ConnectedDevice] = {}
+        self._bus = bus if bus is not None else TypedEventBus()
+
+    @property
+    def bus(self) -> TypedEventBus:
+        """Event bus carrying device-lifecycle events (online/offline/heartbeat).
+
+        Subscribe here to react to device changes, e.g.
+        ``get_device_pool().bus.subscribe(DeviceOnlineEvent, handler)``.
+        """
+        return self._bus
 
     # ── CRUD ───────────────────────────────────────────
 
     def register(self, device: ConnectedDevice) -> None:
         self._devices[device.device_id] = device
-        publish(DeviceOnlineEvent(
+        self._bus.publish(DeviceOnlineEvent(
             device_id=device.device_id,
             kind=device.kind.value,
             label=device.label,
@@ -208,7 +218,7 @@ class DevicePool:
                 if not fut.done():
                     fut.set_exception(ConnectionError(f"Device {device_id} disconnected"))
             dev.pending_calls.clear()
-            publish(DeviceOfflineEvent(
+            self._bus.publish(DeviceOfflineEvent(
                 device_id=device_id,
                 kind=dev.kind.value,
                 reason=reason,
@@ -233,7 +243,7 @@ class DevicePool:
         dev = self._devices.get(device_id)
         if dev is not None:
             dev.touch_heartbeat()
-            publish(DeviceHeartbeatEvent(device_id=device_id))
+            self._bus.publish(DeviceHeartbeatEvent(device_id=device_id))
 
     async def prune_stale(self) -> list[str]:
         pruned: list[str] = []
