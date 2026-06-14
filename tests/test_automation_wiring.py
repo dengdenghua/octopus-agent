@@ -97,6 +97,21 @@ def test_window_grounding_returns_str_and_never_raises():
     assert isinstance(out, str)
 
 
+def test_ax_control_grounding_returns_str_and_never_raises():
+    from runtime.execution.suckers.desktop_grounding import ax_control_grounding
+
+    # macOS+trusted: actionable AX controls of the frontmost app; otherwise "".
+    # Must never raise into the vision loop regardless of platform/permission.
+    assert isinstance(ax_control_grounding(), str)
+
+
+def test_combined_grounding_merges_best_effort_parts():
+    from runtime.execution.suckers.desktop_grounding import combined_grounding
+
+    out = combined_grounding()
+    assert isinstance(out, str)  # window list + AX controls, each best-effort
+
+
 def test_planner_injects_grounding_into_prompt(tmp_path):
     from runtime.execution.suckers.computer_use_loop import ModelRouterVisionPlanner
 
