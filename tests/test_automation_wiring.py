@@ -112,6 +112,70 @@ def test_combined_grounding_merges_best_effort_parts():
     assert isinstance(out, str)  # window list + AX controls, each best-effort
 
 
+# ── browser skills route through the 3-track resolver (EXT>ELEC>PW) ──
+
+
+class _FakeTrack:
+    """A recording higher-priority backend for the resolver."""
+
+    def __init__(self):
+        from runtime.execution.suckers.browser_backend import Track
+        self.track = Track.ELECTRON
+        self.calls = []
+
+    def available(self):
+        return True
+
+    def _call(self, action, payload):
+        from runtime.execution.suckers.browser_backend import BrowserResult, Track
+        self.calls.append((action, dict(payload)))
+        return BrowserResult.from_track(Track.ELECTRON, {"ok": True, "action": action})
+
+
+def test_with_page_navigate_then_acts_on_higher_track(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    fake = _FakeTrack()
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
+    # PW closure must NOT run — the higher track serves it.
+    out = bs._with_page(
+        None, lambda p: {"pw": True}, verb="click",
+        payload={"selector": "#go"}, url="http://h.test",
+    )
+    assert ("navigate", {"url": "http://h.test"}) in fake.calls  # navigate first
+    assert ("click", {"selector": "#go"}) in fake.calls           # then act
+    assert out.get("action") == "click" and out.get("pw") is None
+
+
+def test_navigate_verb_has_no_separate_prenavigate(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    fake = _FakeTrack()
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
+    bs._with_page(None, lambda p: {"pw": True}, verb="navigate",
+                  payload={"url": "http://h.test"}, url="http://h.test")
+    assert fake.calls == [("navigate", {"url": "http://h.test"})]
+
+
+def test_falls_back_to_pw_when_no_higher_track(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [])
+    # no higher track available → None, so _with_page uses the Playwright path
+    assert bs._dispatch_higher_track("click", {"selector": "#x"}, url="http://h") is None
+
+
+def test_unavailable_higher_track_is_skipped(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    class _Down(_FakeTrack):
+        def available(self):
+            return False
+
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [_Down()])
+    assert bs._dispatch_higher_track("click", {"selector": "#x"}) is None
+
+
 def test_planner_injects_grounding_into_prompt(tmp_path):
     from runtime.execution.suckers.computer_use_loop import ModelRouterVisionPlanner
 

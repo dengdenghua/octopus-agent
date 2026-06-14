@@ -198,14 +198,67 @@ def _extract_from_page(
 # ═══════════════════════════════════════════════════════════
 
 
+def _higher_track_backends() -> list[Any]:
+    """Non-Playwright browser tracks, highest priority first: the user's
+    extension and the desktop Electron browser. Built fresh each call so
+    availability is re-probed (the relay / bridge can come and go). A test
+    seam — monkeypatch to inject fakes."""
+    from runtime.execution.suckers.browser_backends import (
+        ElectronBackend,
+        ExtensionBackend,
+    )
+    return [ExtensionBackend(), ElectronBackend()]
+
+
+def _dispatch_higher_track(
+    verb: str, payload: dict[str, Any], *, url: str = "",
+) -> dict[str, Any] | None:
+    """Run ``verb`` on the highest-priority AVAILABLE non-Playwright track
+    (extension → Electron), preserving the PW skills' "navigate then act"
+    semantics so a flow stays on ONE browser. Returns the track's result dict,
+    or ``None`` when no higher track is available (caller falls back to
+    headless Playwright)."""
+    try:
+        from runtime.execution.suckers.browser_backend import resolve_backend
+        chosen = resolve_backend(_higher_track_backends())
+    except Exception:  # noqa: BLE001 — backend layer optional
+        return None
+    if chosen is None:
+        return None
+    try:
+        # Match the stateless PW skills: each call navigates first (except the
+        # navigate verb itself), then acts — so we never split a flow between
+        # the real browser and headless PW.
+        if url and verb != "navigate":
+            chosen._call("navigate", {"url": url})
+        res = chosen._call(verb, payload)
+        if res.raw is not None:
+            return res.raw
+        return {} if res.ok else {"error": res.error or "browser_error"}
+    except Exception as e:  # noqa: BLE001
+        return {"error": f"browser_error: {type(e).__name__}: {e}"}
+
+
 def _with_page(
     page: Any,
     action: Any,
     *,
     launch_timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    verb: str | None = None,
+    payload: dict[str, Any] | None = None,
+    url: str = "",
 ) -> dict[str, Any]:
     if page is not None:
         return action(page)
+
+    # Prefer the user's real browser (extension > desktop Electron) when one is
+    # live; fall back to headless Playwright. Unavailable tracks (the common
+    # case — no desktop app running) resolve to None, so the PW path below is
+    # unchanged. Only verbs the higher tracks implement pass ``verb``.
+    if verb is not None:
+        routed = _dispatch_higher_track(verb, payload or {}, url=url)
+        if routed is not None:
+            return routed
 
     if not PLAYWRIGHT_AVAILABLE:
         return {"error": "playwright not installed"}
@@ -283,7 +336,7 @@ def _browser_navigate(
             "title": title,
         }
 
-    return _with_page(page, _act)
+    return _with_page(page, _act, verb="navigate", payload={"url": url}, url=url)
 
 
 def _browser_find(
@@ -398,7 +451,9 @@ def _browser_state(
             **snapshot,
         }
 
-    return _with_page(page, _act)
+    return _with_page(
+        page, _act, verb="state", payload={"max_items": max_items}, url=url,
+    )
 
 
 def _browser_click(
@@ -441,7 +496,9 @@ def _browser_click(
             "title": title,
         }
 
-    return _with_page(page, _act)
+    return _with_page(
+        page, _act, verb="click", payload={"selector": selector}, url=url,
+    )
 
 
 def _browser_type(
@@ -485,7 +542,11 @@ def _browser_type(
             "final_url": p.url,
         }
 
-    return _with_page(page, _act)
+    return _with_page(
+        page, _act, verb="type",
+        payload={"selector": selector, "text": text, "clear": clear_first},
+        url=url,
+    )
 
 
 def _browser_scroll(
@@ -525,7 +586,14 @@ def _browser_scroll(
             return {"error": f"scroll_error: {type(e).__name__}: {e}"}
         return {"scrolled_to": scrolled_to, "final_url": p.url}
 
-    return _with_page(page, _act)
+    # Only scroll-to-selector maps to the higher tracks; absolute scroll-to-y
+    # has no adapter verb, so it stays on Playwright.
+    return _with_page(
+        page, _act,
+        verb="scroll" if to_selector is not None else None,
+        payload={"selector": to_selector} if to_selector is not None else None,
+        url=url,
+    )
 
 
 def _browser_wait(
@@ -565,7 +633,10 @@ def _browser_wait(
             }
         return {"waited_for": selector, "state": state, "final_url": p.url}
 
-    return _with_page(page, _act)
+    return _with_page(
+        page, _act, verb="wait",
+        payload={"selector": selector, "timeout": timeout_ms}, url=url,
+    )
 
 
 def _browser_screenshot(
