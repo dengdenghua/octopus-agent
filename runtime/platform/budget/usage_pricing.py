@@ -22,6 +22,21 @@ _PRICING: dict[str, dict[str, float]] = {
 }
 
 
+def price(model: str | None, input_tokens: int, output_tokens: int) -> float:
+    """按模型估算 USD 成本(单一定价真相源)。未知模型 → 0.0(=未定价,非免费)。
+
+    纯函数,不记账;成本估算/报告处复用,避免各处硬编码定价。
+    """
+    prices = _PRICING.get(model or "")
+    if prices is None:
+        return 0.0
+    return round(
+        (input_tokens / 1_000_000) * prices["input"]
+        + (output_tokens / 1_000_000) * prices["output"],
+        6,
+    )
+
+
 @dataclass
 class UsageRecord:
     model: str
@@ -98,12 +113,7 @@ class UsagePricing:
         return rec
 
     def compute_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        prices = _PRICING.get(model)
-        if prices is None:
-            return 0.0
-        in_cost = (input_tokens / 1_000_000) * prices["input"]
-        out_cost = (output_tokens / 1_000_000) * prices["output"]
-        return round(in_cost + out_cost, 6)
+        return price(model, input_tokens, output_tokens)
 
     @property
     def total_cost_usd(self) -> float:

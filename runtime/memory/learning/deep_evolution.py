@@ -47,6 +47,7 @@ import json
 import logging
 from typing import Any
 
+from runtime.platform.budget.usage_pricing import price
 from runtime.platform.llm_infra.llm_caller import LLMCaller
 from runtime.platform.process.service_provider import get_provider
 
@@ -320,6 +321,7 @@ def deep_evolve(
     audit: list[dict[str, Any]] = []
     total_in = 0
     total_out = 0
+    cost_model: str | None = None  # 实际所用模型,供按模型估算成本(非硬编码 Haiku)
     applied: list[dict[str, Any]] = []
 
     for round_i in range(max(1, int(max_rounds))):
@@ -360,6 +362,7 @@ def deep_evolve(
         )
         total_in += int(p_meta.get("input_tokens", 0) or 0)
         total_out += int(p_meta.get("output_tokens", 0) or 0)
+        cost_model = cost_model or p_meta.get("model") or model
         if proposal is None:
             audit.append({
                 "round": round_i + 1,
@@ -521,10 +524,10 @@ def deep_evolve(
         "cost": {
             "input_tokens": total_in,
             "output_tokens": total_out,
-            "approx_usd": round(
-                (total_in / 1e6) * 0.80 + (total_out / 1e6) * 4.0,  # haiku rates
-                4,
-            ),
+            # 按实际所用模型估算(单一定价真相源 usage_pricing.price);未知模型 → 0
+            # 并由 model 字段标明,胜过旧的"无论什么模型都按 Haiku 价"硬编码。
+            "model": cost_model,
+            "approx_usd": round(price(cost_model, total_in, total_out), 4),
         },
     }
 

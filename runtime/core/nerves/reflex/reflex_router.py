@@ -43,6 +43,9 @@ class ReflexMiss(BaseModel):
 
 class Reflex(ABC):
     rule_id: str = ""
+    # "slm" 是预留枚举,目前**没有** Reflex 子类发射它(仅 regex/deterministic/cache
+    # 三种)。真正的 SLM 小模型走的是另一条旁路 —— tiers.py 的 SLMTier(ReplyTier 体系),
+    # 不经 Reflex。保留此字面量以备将来的 Reflex 级 SLM 匹配器。
     kind: Literal["regex", "deterministic", "cache", "slm"] = "regex"
     priority: int = 0  # Implementation note.
 
