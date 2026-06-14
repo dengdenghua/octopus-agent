@@ -58,6 +58,9 @@ jobs:
       - name: Orphan-module ratchet (no NEW exported-but-unimported modules)
         run: python tools/lint/orphan_module_check.py --strict
 
+      - name: Feature-flag-consumption ratchet (no NEW registered-but-unread flags)
+        run: python tools/lint/feature_flag_consumption_check.py --strict
+
       - name: Async-lock ratchet (no NEW await held across a sync lock)
         run: python tools/lint/async_lock_check.py --strict
 
