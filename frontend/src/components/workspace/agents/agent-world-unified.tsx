@@ -749,6 +749,10 @@ function DigitalTwinsTab({
 // Main Unified Component
 // ---------------------------------------------------------------------------
 
+// 角色库(本地智能体库)暂时隐藏 —— 资产正迁往企业版 registry,本地仅保留 AOI 等
+// 少量核心角色;企业版 tab 是新的浏览/安装入口。置 true 即可恢复角色库入口。
+const SHOW_LOCAL_AGENT_LIBRARY = false;
+
 export function AgentWorldUnified() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -758,11 +762,12 @@ export function AgentWorldUnified() {
   // State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window === "undefined") return "agents";
-    if (window.location.hash.includes("tab=digital-twins")) {
-      return "digital-twins";
+    // 角色库已隐藏(见 SHOW_LOCAL_AGENT_LIBRARY),默认落到数字分身。
+    if (typeof window === "undefined") return "digital-twins";
+    if (window.location.hash.includes("tab=enterprise")) {
+      return "enterprise";
     }
-    return "agents";
+    return "digital-twins";
   });
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
@@ -800,10 +805,11 @@ export function AgentWorldUnified() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
-    if (tab === "digital-twins") {
+    if (tab === "enterprise") {
+      setActiveTab("enterprise");
+    } else if (tab === "digital-twins" || tab === "agents") {
+      // 角色库已隐藏,?tab=agents 落回数字分身。
       setActiveTab("digital-twins");
-    } else if (tab === "agents") {
-      setActiveTab("agents");
     }
     if (params.get("connect") === "local") {
       setConnectOpen(true);
@@ -916,13 +922,15 @@ export function AgentWorldUnified() {
       <div className="workspace-panel relative flex-1 overflow-y-auto rounded-lg border border-border/60 bg-background/58 px-3 py-3 shadow-sm shadow-black/[0.02]">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="relative mb-3 h-auto gap-1.5 rounded-none bg-transparent p-0">
-            <TabsTrigger
-              value="agents"
-              className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-            >
-              <BotIcon className="h-3.5 w-3.5" />
-              角色库
-            </TabsTrigger>
+            {SHOW_LOCAL_AGENT_LIBRARY && (
+              <TabsTrigger
+                value="agents"
+                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+              >
+                <BotIcon className="h-3.5 w-3.5" />
+                角色库
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="digital-twins"
               className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
