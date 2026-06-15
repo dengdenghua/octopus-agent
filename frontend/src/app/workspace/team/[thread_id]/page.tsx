@@ -466,6 +466,7 @@ export default function TeamPage() {
   const canRunTeamTask =
     !currentParticipantRemoved &&
     (participantRole === "owner" || participantRole === "member");
+  const canCreateTeamTask = isCoworkMode && canRunTeamTask;
   const canInvite =
     !currentParticipantRemoved &&
     (participantRole === "owner" || participantRole === "member");
@@ -709,6 +710,20 @@ export default function TeamPage() {
         }
       },
     });
+  const hasActiveTeamToolEvent = useMemo(
+    () =>
+      [...liveToolEvents, ...lastTurnToolEvents].some(
+        (event) =>
+          event.status === "running" || event.status === "waiting_approval",
+      ),
+    [lastTurnToolEvents, liveToolEvents],
+  );
+  const teamInputStatus =
+    thread.error
+      ? "error"
+      : thread.isLoading && (thread.streamingMessage || hasActiveTeamToolEvent)
+        ? "streaming"
+        : "ready";
 
   // See chats/[thread_id]/page.tsx for the rationale — if the first
   // stream fails before onStart fires, isNewThread can stay stuck at
@@ -756,7 +771,7 @@ export default function TeamPage() {
 
   const createTaskFromSubmit = useCallback(
     async (text: string) => {
-      if (!teamId || !canRunTeamTask) return;
+      if (!teamId || !canCreateTeamTask) return;
       const assignees: TaskAssignee[] = selectedTaskAgents.map((agent) => ({
         kind: "agent",
         ref: agent.name,
@@ -782,7 +797,7 @@ export default function TeamPage() {
       }
     },
     [
-      canRunTeamTask,
+      canCreateTeamTask,
       createTeamTask,
       isNewThread,
       selectedTaskAgents,
@@ -1066,13 +1081,7 @@ export default function TeamPage() {
                         )}
                         <TeamRoomMessageStrip />
                         <TeamInputBox
-                          status={
-                            thread.error
-                              ? "error"
-                              : thread.isLoading
-                                ? "streaming"
-                                : "ready"
-                          }
+                          status={teamInputStatus}
                           workDir={workDir}
                           showWorkDirSelector={false}
                           modelName={settings.context.model_name}
@@ -1080,7 +1089,9 @@ export default function TeamPage() {
                           teamMembers={teamConfig?.members ?? []}
                           selectedAgentIds={selectedTaskAgentIds}
                           onSelectedAgentIdsChange={setSelectedTaskAgentIds}
-                          submitBehavior={canRunTeamTask ? "run" : "message"}
+                          submitBehavior={
+                            canRunTeamTask ? "run" : "message"
+                          }
                           onWorkDirChange={setWorkDir}
                           onTeamModeChange={setTeamMode}
                           onModelChange={(modelName) =>
