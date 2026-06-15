@@ -882,6 +882,7 @@ export interface Translations {
     navSwarm: string;
     navCompany: string;
     navTeam: string;
+    navDatabase: string;
     navKnowledgeGraph: string;
     navReflex: string;
     navIntelligence: string;
@@ -1312,6 +1313,8 @@ export interface Translations {
     characterAgeLabel: string;
     characterTemperamentLabel: string;
     characterPersonalityLabel: string;
+    characterBestForLabel: string;
+    characterBoundaryLabel: string;
     characterVisualKeywordsLabel: string;
     characterProfileReady: string;
     characterPromptHint: string;
@@ -1363,10 +1366,15 @@ export interface Translations {
     checkBlockedSkills: (count: number) => string;
     checkNoExecutableSkills: string;
     checkUnsavedChanges: string;
+    configDockTitle: string;
     configureProfileAction: string;
+    configureProfileHint: string;
     configureArmAction: string;
+    configureArmHint: string;
     configureSkillsAction: string;
+    configureSkillsHint: string;
     configurePermissionsAction: string;
+    configurePermissionsHint: string;
     routingConfig: string;
     saveTitle: string;
     saveSubtitle: string;

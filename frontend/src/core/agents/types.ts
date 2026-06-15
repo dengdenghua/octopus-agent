@@ -53,6 +53,33 @@ export interface AgentWorldAgent {
   is_official: boolean;
   is_installed: boolean;
   created_at: string;
+  model?: string | null;
+  soul?: string | null;
+  tool_groups?: string[] | null;
+  extra_affinity?: string[];
+  private_skills?: string[];
+  character_profile?: {
+    gender?: string;
+    apparent_age?: string;
+    epithet?: string;
+    quote?: string;
+    intro?: string;
+    background?: string;
+    personality?: string;
+    temperament?: string;
+    likes?: string[];
+    dislikes?: string[];
+    quirks?: string[];
+    key_phrases?: string[];
+    tone?: string[];
+    appearance?: string[];
+    interaction?: string[];
+    current_state?: string[];
+    visual_keywords?: string[];
+    visual_assets?: Record<string, string>;
+    emotion_list?: string[];
+    emotion_videos?: Record<string, string[]>;
+  } | null;
   key_skills?: string[];
   available_skills?: string[];
 }
