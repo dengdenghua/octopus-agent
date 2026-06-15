@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -37,6 +38,11 @@ _COLD_START_SCORE = 0.5
 # Need a few samples before a mean/variance is meaningful; below this
 # we stay in cold-start (still I4-conservative).
 _MIN_SAMPLES = 5
+# How long a sucker stays quarantined after a behavioural anomaly.
+# Short enough that a transient spike (e.g. network hiccup) doesn't
+# permanently ban a healthy skill; long enough to block an active attack
+# for a meaningful window. Overrideable per-instance via quarantine_ttl_s.
+_DEFAULT_QUARANTINE_TTL_S = 300.0
 
 
 @dataclass
@@ -94,6 +100,7 @@ class AdaptiveImmunity:
         window_size: int = _DEFAULT_WINDOW,
         quarantine_threshold: float = _DEFAULT_THRESHOLD,
         cold_start_score: float = _COLD_START_SCORE,
+        quarantine_ttl_s: float = _DEFAULT_QUARANTINE_TTL_S,
     ) -> None:
         self._window = max(_MIN_SAMPLES, int(window_size))
         self._cold_start = float(cold_start_score)
@@ -104,7 +111,10 @@ class AdaptiveImmunity:
         self.quarantine_threshold = max(
             float(quarantine_threshold), self._cold_start + 1e-3
         )
+        self._quarantine_ttl = max(1.0, float(quarantine_ttl_s))
         self._baselines: dict[str, _Baseline] = {}
+        # sucker_id → monotonic expiry time; accessed under _lock.
+        self._quarantined: dict[str, float] = {}
         self._lock = threading.Lock()
 
     def _baseline_for(self, sucker_id: str) -> _Baseline:
@@ -223,6 +233,30 @@ class AdaptiveImmunity:
         """Fold an observed execution into the sucker's baseline."""
         with self._lock:
             self._baseline_for(sucker_id).add(latency_ms, tokens)
+
+    def quarantine(self, sucker_id: str, *, ttl_s: float | None = None) -> None:
+        """Mark *sucker_id* as quarantined for *ttl_s* seconds (default:
+        ``quarantine_ttl_s`` from init). Future ``is_quarantined()`` checks
+        block execution until the TTL elapses. Idempotent — re-quarantining
+        a still-quarantined sucker resets the clock."""
+        expiry = time.monotonic() + (ttl_s if ttl_s is not None else self._quarantine_ttl)
+        with self._lock:
+            self._quarantined[sucker_id] = expiry
+
+    def is_quarantined(self, sucker_id: str) -> bool:
+        """True if *sucker_id* is currently under a live quarantine.
+
+        Expired entries are pruned lazily here — no background timer needed.
+        """
+        now = time.monotonic()
+        with self._lock:
+            expiry = self._quarantined.get(sucker_id)
+            if expiry is None:
+                return False
+            if now < expiry:
+                return True
+            del self._quarantined[sucker_id]
+            return False
 
     def sample_count(self, sucker_id: str) -> int:
         with self._lock:

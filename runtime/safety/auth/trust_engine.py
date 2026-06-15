@@ -84,9 +84,18 @@ class TrustEngine:
         # second look), but a low score never relaxes Innate/Memory.
         # Self callers already returned above (I2: no autoimmunity).
         if self.adaptive is not None:
+            sucker_str = str(call.sucker_id)
+            # Fast path: sucker already in quarantine from a prior observed anomaly.
+            if self.adaptive.is_quarantined(sucker_str):
+                return ImmuneReport(
+                    verdict="quarantine",
+                    signature=signature,
+                    strategy_used="adaptive",
+                    reason="quarantined: recent behavioural anomaly",
+                )
             predicted = call.predicted_cost
             score = self.adaptive.compute_risk(
-                str(call.sucker_id),
+                sucker_str,
                 predicted_latency_ms=predicted.latency_ms if predicted else 0.0,
                 predicted_tokens=(
                     (predicted.tokens_in + predicted.tokens_out) if predicted else 0.0
@@ -154,10 +163,12 @@ class TrustEngine:
         )
         if self.adaptive.is_anomalous(score):
             _LOG.warning(
-                "adaptive immunity · behavioural anomaly (audit-only, not "
-                "blocked) · sucker=%s composite=%.2f · %s",
+                "adaptive immunity · behavioural anomaly · sucker=%s "
+                "composite=%.2f · %s · quarantining for %.0fs",
                 sucker, score.composite, score.reason,
+                self.adaptive._quarantine_ttl,
             )
+            self.adaptive.quarantine(sucker)
         self.adaptive.learn(sucker, latency_ms=latency_ms, tokens=tokens)
 
 
