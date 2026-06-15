@@ -3,5 +3,3 @@
 # Wired one up (or removed it)? Delete its line to lock the win.
 # A line for a flag read via a computed name / os.environ documents
 # that the flag bypasses the flag system — keep it, fix when able.
-
-ui.team_cowork

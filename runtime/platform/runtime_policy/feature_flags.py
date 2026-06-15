@@ -415,15 +415,6 @@ _BUILTIN: list[FlagSpec] = [
         ),
         experimental=True,
     ),
-    FlagSpec(
-        name="ui.team_cowork",
-        default=False,
-        description=(
-            "Multi-agent team-room UI. Currently under active dev — "
-            "hide behind flag until first release."
-        ),
-        experimental=True,
-    ),
 ]
 
 for _spec in _BUILTIN:
