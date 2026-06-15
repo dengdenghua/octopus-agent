@@ -62,7 +62,17 @@ class UsagePricing:
     @classmethod
     def get(cls) -> UsagePricing:
         if cls._instance is None:
-            cls._instance = cls()
+            import os
+            raw = os.environ.get("OCTOPUS_MAX_COST_USD", "").strip()
+            budget: float | None = None
+            if raw:
+                try:
+                    v = float(raw)
+                    if v > 0:
+                        budget = v
+                except ValueError:
+                    pass
+            cls._instance = cls(UsageConfig(budget_usd=budget))
         return cls._instance
 
     @classmethod

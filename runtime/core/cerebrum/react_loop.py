@@ -1576,6 +1576,16 @@ def stream_react_loop(
                         cost_usd=_cost,
                         model=str(getattr(resp, "model", "") or ""),
                     )
+            # Feed the process-level cost ledger so OCTOPUS_MAX_COST_USD can
+            # gate further subagent spawns in bridge.py.
+            if _in_tok or _out_tok:
+                with contextlib.suppress(Exception):
+                    from runtime.platform.budget import UsagePricing
+                    UsagePricing.get().record(
+                        str(getattr(resp, "model", "") or "unknown"),
+                        _in_tok,
+                        _out_tok,
+                    )
             _updated = _pause.update_active_usage(
                 str(react_task_id),
                 tokens_delta=_tok,

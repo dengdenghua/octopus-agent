@@ -661,6 +661,42 @@ def call_subagent(
         _safe_journal_emit(_finish_event)
         return result
 
+    # Cost ceiling gate: when OCTOPUS_MAX_COST_USD is set, refuse to spawn once
+    # the process-level ledger (UsagePricing) reports the ceiling is breached.
+    # Import failure is non-fatal — missing budget module never blocks spawning.
+    try:
+        from runtime.platform.budget import UsagePricing
+        _pricing = UsagePricing.get()
+        if _pricing.is_over_budget():
+            _cost_reject: dict[str, Any] = {
+                "status": "rejected",
+                "error": (
+                    f"subagent spawn refused: cumulative cost ceiling reached "
+                    f"(${_pricing.total_cost_usd:.4f} ≥ "
+                    f"${_pricing.config.budget_usd:.2f}) — "
+                    "raise OCTOPUS_MAX_COST_USD or unset to disable"
+                ),
+                "agent_id": agent_id,
+                "role": _role_label,
+                "codename": _codename,
+                "avatar": _avatar,
+                "output": "",
+                "success": False,
+                "rounds_completed": 0,
+                "iteration_count": 0,
+                "files_touched": [],
+            }
+            _log.warning(
+                "subagent spawn refused (cost ceiling $%.2f reached, spent $%.4f) "
+                "· agent_id=%s",
+                _pricing.config.budget_usd or 0,
+                _pricing.total_cost_usd,
+                agent_id,
+            )
+            return _augment(_cost_reject)
+    except Exception:  # noqa: BLE001
+        pass  # budget check failure is non-fatal
+
     # Concurrency guard: hold a slot for the whole child run (see the helpers
     # at module top). Over the global cap → refuse to spawn, fail-closed.
     if not _acquire_subagent_slot():
