@@ -1668,6 +1668,224 @@ def _run_orchestration(
     }
 
 
+_PIPELINE_MAX_ITEMS = 16
+_PIPELINE_MAX_STAGES = 4
+
+
+def _run_pipeline(
+    items: list[Any] | str | None = None,
+    *,
+    stages: list[dict[str, Any]] | None = None,
+    default_agent_id: str = "researcher",
+    timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
+    context: dict[str, Any] | None = None,
+    session: Any = None,
+    **_kw: Any,
+) -> dict[str, Any]:
+    """Process each item through ordered stages independently and concurrently.
+
+    Unlike ``call_agent_parallel`` (which fans out identical agents on
+    independent specs), ``run_pipeline`` chains stages for EACH item:
+    item-A runs stage1 → stage2 → stage3 while item-B is still in stage1.
+    Wall-clock = max(slowest single-item chain), not sum-of-slowest-per-stage.
+
+    Each stage prompt template may use:
+        {item}   — the original item value
+        {prev}   — the previous stage's output (empty for stage 0)
+        {stage0_output}, {stage1_output}, ... — any prior stage's output
+
+    Stage failure halts that item's chain; remaining stages are skipped.
+    """
+    import concurrent.futures as _cf
+    import contextvars as _ctxvars
+
+    from runtime.execution.subagents import call_subagent
+
+    # ── coerce items ─────────────────────────────────────────────────
+    if isinstance(items, str):
+        try:
+            import json as _json
+            _parsed = _json.loads(items)
+            items = _parsed if isinstance(_parsed, list) else [items]
+        except Exception:  # noqa: BLE001
+            items = [items]
+
+    if not items or not isinstance(items, list):
+        return {
+            "ok": False,
+            "error": "items is required (list of strings or dicts)",
+            "results": [], "success_count": 0, "failure_count": 0,
+            "total": 0, "stages_run": 0,
+        }
+
+    # ── coerce stages ────────────────────────────────────────────────
+    if not stages or not isinstance(stages, list):
+        return {
+            "ok": False,
+            "error": "stages is required (list of {prompt_template, agent_id?})",
+            "results": [], "success_count": 0, "failure_count": 0,
+            "total": len(items), "stages_run": 0,
+        }
+
+    items = list(items[:_PIPELINE_MAX_ITEMS])
+    stages = list(stages[:_PIPELINE_MAX_STAGES])
+    timeout_s = _coerce_timeout_s(timeout_s)
+    default_role = str(default_agent_id or "researcher").strip() or "researcher"
+
+    # ── delegation budget ─────────────────────────────────────────────
+    parent_sess, turn_id = _resolve_session_and_turn()
+    if session is None:
+        session = parent_sess
+    _, within = _check_absolute_cap(turn_id)
+    if not within:
+        return {
+            "ok": False,
+            "error": (
+                "delegation budget exhausted for this turn — do the rest "
+                "yourself, don't launch another pipeline."
+            ),
+            "results": [], "success_count": 0, "failure_count": 0,
+            "total": len(items), "stages_run": 0,
+        }
+    _record_delegation(
+        turn_id,
+        _compute_fingerprint("run_pipeline", str(items[:3])),
+        succeeded=True,
+    )
+
+    max_spawns = len(items) * len(stages)
+
+    # ── per-item chain worker ────────────────────────────────────────
+    def _run_item_chain(item: Any) -> dict[str, Any]:
+        item_str = item if isinstance(item, str) else str(item)
+        stage_outputs: list[dict[str, Any]] = []
+        prev = ""
+        chain_ok = True
+
+        for s_idx, stage_spec in enumerate(stages):
+            if not chain_ok:
+                # Previous stage failed — skip remaining stages for this item
+                stage_outputs.append({
+                    "stage": s_idx,
+                    "agent_id": str(stage_spec.get("agent_id") or default_role),
+                    "output": "", "ok": False, "skipped": True,
+                })
+                continue
+
+            tmpl = str(
+                stage_spec.get("prompt_template")
+                or stage_spec.get("prompt")
+                or ""
+            ).strip()
+            if not tmpl:
+                stage_outputs.append({
+                    "stage": s_idx,
+                    "agent_id": str(stage_spec.get("agent_id") or default_role),
+                    "output": "", "ok": False,
+                    "error": "prompt_template is required for this stage",
+                })
+                chain_ok = False
+                continue
+
+            # Build substitution context from prior stage outputs
+            sub_ctx: dict[str, str] = {"item": item_str, "prev": prev}
+            for i, prior in enumerate(stage_outputs):
+                sub_ctx[f"stage{i}_output"] = str(prior.get("output") or "")
+            try:
+                prompt = tmpl.format_map(sub_ctx)
+            except (KeyError, ValueError):
+                prompt = tmpl  # unknown placeholder — use template raw
+
+            role = str(stage_spec.get("agent_id") or default_role).strip() or default_role
+
+            try:
+                result = call_subagent(
+                    agent_id=role,
+                    prompt=prompt,
+                    context=context,
+                    timeout_s=timeout_s,
+                    session=session,
+                )
+            except Exception as exc:  # noqa: BLE001
+                result = {
+                    "success": False, "output": "",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+
+            ok = bool(result.get("success"))
+            out = str(result.get("output") or "")
+            entry: dict[str, Any] = {
+                "stage": s_idx, "agent_id": role, "output": out, "ok": ok,
+            }
+            if not ok:
+                entry["error"] = result.get("error") or "subagent failed"
+            stage_outputs.append(entry)
+
+            if ok:
+                prev = out
+            else:
+                chain_ok = False
+
+        return {
+            "item": item_str,
+            "stages": stage_outputs,
+            "final_output": prev,
+            "ok": chain_ok,
+        }
+
+    # ── concurrent fan-out of item chains ───────────────────────────
+    item_results: list[dict[str, Any]] = []
+    max_workers = min(len(items), 8)
+
+    with _orchestration_budget_scope(max_spawns), _cf.ThreadPoolExecutor(
+        max_workers=max_workers, thread_name_prefix="pipeline",
+    ) as pool:
+        # copy_context so each worker thread inherits the orchestration
+        # budget ContextVar from the calling thread.
+        futures = {
+            pool.submit(_ctxvars.copy_context().run, _run_item_chain, it): it
+            for it in items
+        }
+        done, not_done = _cf.wait(
+            futures.keys(),
+            timeout=timeout_s * len(stages) + 30,
+            return_when=_cf.ALL_COMPLETED,
+        )
+        for f in done:
+            try:
+                item_results.append(f.result(timeout=1))
+            except Exception as exc:  # noqa: BLE001
+                it = futures.get(f, "")
+                item_results.append({
+                    "item": str(it), "stages": [], "final_output": "",
+                    "ok": False, "error": f"{type(exc).__name__}: {exc}",
+                })
+        for f in not_done:
+            f.cancel()
+            it = futures.get(f, "")
+            item_results.append({
+                "item": str(it), "stages": [], "final_output": "",
+                "ok": False, "error": "timeout",
+            })
+
+    # Restore original insertion order
+    _order = {
+        (it if isinstance(it, str) else str(it)): i
+        for i, it in enumerate(items)
+    }
+    item_results.sort(key=lambda r: _order.get(r["item"], 9999))
+
+    success_count = sum(1 for r in item_results if r["ok"])
+    return {
+        "ok": success_count > 0,
+        "results": item_results,
+        "success_count": success_count,
+        "failure_count": len(item_results) - success_count,
+        "total": len(items),
+        "stages_run": len(stages),
+    }
+
+
 def register_delegation_skills(registry: SkillRegistry) -> int:
     """Register `call_agent` for sub-agent delegation. Returns count.
 
@@ -1950,7 +2168,78 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
             ),
         ],
     ), replace=True)
-    return 4
+
+    # ── pipeline (item-chain, no inter-stage barrier) ─────────────
+    pipeline_description = (
+        "Process a list of items through ORDERED STAGES without waiting for "
+        "all items to complete each stage before advancing — item A can be in "
+        "stage 3 while item B is still in stage 1.\n"
+        "\n"
+        "Use it when:\n"
+        "  - You have N independent items (files, URLs, tasks) that each need "
+        "the SAME sequence of specialist passes (find → review → fix, or "
+        "extract → classify → summarise).\n"
+        "  - Stages are sequential PER ITEM (each stage needs the previous "
+        "output for that item), but items themselves are independent.\n"
+        "  - You want true pipeline throughput: wall-clock = max(slowest item "
+        "chain), not sum of slowest-per-stage.\n"
+        "\n"
+        "Stage prompt templates use:\n"
+        "  {item}   — the original item value\n"
+        "  {prev}   — previous stage's output for this item (empty for stage 0)\n"
+        "  {stage0_output}, {stage1_output}, ... — any earlier stage's output\n"
+        "\n"
+        "A failed stage halts that item's chain; remaining stages for that item "
+        "are skipped. Other items continue.\n"
+        "\n"
+        "Args: {items: list[str|dict] (up to 16), "
+        "stages: list[{prompt_template: str, agent_id?: str}] (up to 4 stages), "
+        "default_agent_id?: str (used when stage omits agent_id, default researcher), "
+        "timeout_s?: int (per-subagent, default 900)}.\n"
+        "\n"
+        "Returns: {ok, results:[{item, stages:[{stage, agent_id, output, ok}], "
+        "final_output, ok}], success_count, failure_count, total, stages_run}.\n"
+        "\n"
+        "Budget: one pipeline costs ONE against the 5/turn delegation cap; "
+        "item × stage spawn budget is managed internally."
+    )
+    registry.register(Skill(
+        name="run_pipeline",
+        description=pipeline_description,
+        affinity=["delegation", "pipeline", "stages", "multi-step", "batch"],
+        cost_profile="high",
+        trusted_source="skill://public/run_pipeline",
+        handler=_run_pipeline,
+        tests=[
+            SkillTestCase(
+                name="empty_items_returns_error",
+                tier="golden",
+                args={"items": [], "stages": [{"prompt_template": "review {item}"}]},
+                expect=SkillExpect(schema_keys=[
+                    "ok", "results", "success_count", "failure_count", "total",
+                ]),
+                custom_predicate=lambda r: (
+                    isinstance(r, dict)
+                    and r.get("ok") is False
+                    and "required" in (r.get("error") or "")
+                ),
+            ),
+            SkillTestCase(
+                name="empty_stages_returns_error",
+                tier="golden",
+                args={"items": ["foo"], "stages": []},
+                expect=SkillExpect(schema_keys=[
+                    "ok", "results", "success_count", "failure_count", "total",
+                ]),
+                custom_predicate=lambda r: (
+                    isinstance(r, dict)
+                    and r.get("ok") is False
+                    and "required" in (r.get("error") or "")
+                ),
+            ),
+        ],
+    ), replace=True)
+    return 5
 
 
 __all__ = ["register_delegation_skills"]

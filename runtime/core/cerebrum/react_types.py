@@ -86,6 +86,8 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 `call_agent_vote(question, choices=["yes","no"])`: N 个独立投票者裁决一个判断,返回多数票+置信度+异见。验证"这 bug 真的吗 / 补丁修好没 / A 还是 B",别只信一个 worker。
 
 `run_orchestration(goal, verify=True)`: 确定性多轮发现循环(扇出→去重→可选投票验证→直到无新增或预算用尽),用于穷尽式发现("找出所有边界情况/枚举每处 X")。一次调用跑完整个循环,代码控流不会漏步。
+
+`run_pipeline(items, stages)`: 对 N 个独立 item 流水线化多阶段处理。每个 item 独立经历 stage1→stage2→... 而不互相等待;wall-clock = 最慢 item 链,不是各阶段最慢之和。stage 的 prompt_template 可用 {item}/{prev}/{stageN_output}。用于"对每个文件跑 extract→classify→summarise"这类批量多阶段场景。
 """
 
 REACT_NO_TOOLS_NOTE = """
