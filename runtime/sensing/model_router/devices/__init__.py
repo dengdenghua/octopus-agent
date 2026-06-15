@@ -95,12 +95,15 @@ class ConnectedDevice:
 class AndroidDevice(ConnectedDevice):
     """An Android phone running Octopus Mobile."""
     kind: DeviceKind = DeviceKind.ANDROID
+    model: str = ""          # Device model name, e.g. "Pixel 8 Pro"
     android_version: str = ""
     sdk_version: int = 0
 
     def __post_init__(self) -> None:
         if not self.label:
-            self.label = f"Android {self.android_version}" if self.android_version else f"Phone {self.device_id[:8]}"
+            self.label = self.model or (
+                f"Android {self.android_version}" if self.android_version else f"Phone {self.device_id[:8]}"
+            )
 
 
 @dataclass

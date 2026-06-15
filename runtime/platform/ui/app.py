@@ -939,6 +939,10 @@ def create_app(
 
     app.include_router(create_computer_router())
 
+    from runtime.sensing.gateway.android_router import create_android_router
+
+    app.include_router(create_android_router())
+
     from runtime.sensing.gateway.completion_router import create_completion_router
 
     app.include_router(create_completion_router())
