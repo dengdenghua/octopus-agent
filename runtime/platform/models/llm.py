@@ -52,14 +52,18 @@ class Message(BaseModel):
 
 
 ModelStrength = Literal["default", "strong"]
-ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh"]
-_REASONING_EFFORTS = {"minimal", "low", "medium", "high", "xhigh"}
+ReasoningEffort = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
+_REASONING_EFFORTS = {"minimal", "low", "medium", "high", "xhigh", "max"}
 _THINKING_BUDGET_BY_EFFORT: dict[ReasoningEffort, int] = {
     "minimal": 1024,
     "low": 1024,
     "medium": 2048,
     "high": 4096,
     "xhigh": 8192,
+    # Top tier: request the largest thinking budget; thinking_budget_for_effort
+    # still clamps it down to the response's max_tokens, so it only outspends
+    # xhigh when the per-call token budget is large enough to allow it.
+    "max": 16384,
 }
 
 

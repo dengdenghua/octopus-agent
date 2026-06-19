@@ -42,6 +42,7 @@ _OPENAI_REASONING_EFFORT: dict[str, str] = {
     "medium": "medium",
     "high": "high",
     "xhigh": "high",
+    "max": "high",
 }
 
 

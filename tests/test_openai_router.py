@@ -139,8 +139,9 @@ class TestRequestShape:
         assert _openai_reasoning_effort("low") == "low"
         assert _openai_reasoning_effort("medium") == "medium"
         assert _openai_reasoning_effort("high") == "high"
-        # xhigh (and the ultra/extra_high aliases) clamp to high.
+        # xhigh/max (and the ultra/extra_high aliases) clamp to high.
         assert _openai_reasoning_effort("xhigh") == "high"
+        assert _openai_reasoning_effort("max") == "high"
         assert _openai_reasoning_effort("ultra") == "high"
         assert _openai_reasoning_effort("extra_high") == "high"
         # Unset / unknown fall back to the prior default ("high").

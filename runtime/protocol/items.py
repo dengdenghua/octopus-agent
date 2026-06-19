@@ -428,7 +428,7 @@ class TurnParams(BaseModel):
         alias="sandboxPolicy",
     )
     model: str | None = None
-    effort: Literal["minimal", "low", "medium", "high", "xhigh"] = "medium"
+    effort: Literal["minimal", "low", "medium", "high", "xhigh", "max"] = "medium"
     summary: Literal["none", "auto", "detailed"] = "none"
     output_schema: dict[str, Any] | None = Field(default=None, alias="outputSchema")
     # Plan-first mode (renamed semantics 2026-05-31).
