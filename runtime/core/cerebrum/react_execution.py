@@ -423,6 +423,7 @@ def _persist_react_trajectory(
             )
 
     _react_kg_throttle(stack, journal, planner)
+    _react_recipe_throttle(journal, planner)
 
 
 _KG_REFRESH_EVERY = 5
@@ -447,6 +448,38 @@ def _react_kg_throttle(stack: Any, journal: Any, planner: Any) -> None:
 
 def _reset_kg_throttle_for_tests() -> None:
     _KG_COUNTERS.clear()
+
+
+_RECIPE_REFRESH_EVERY = 5
+_RECIPE_COUNTERS: dict[int, int] = {}
+
+
+def _react_recipe_throttle(journal: Any, planner: Any) -> None:
+    """Refresh the planner's recipe self-assessment from accumulating
+    experience, throttled like the KG refresh.
+
+    Without this the recipe verdict (which drives 'prefer a stronger model' +
+    the losing-recipe warning) is only ever set at startup and never reflects
+    how the current prompt recipe is actually performing this session. Parallels
+    the per-turn rules/memory/KG learning already wired here.
+    """
+    assess = getattr(planner, "assess_recipe_from_journal", None)
+    if assess is None:
+        return
+    key = id(journal)
+    cnt = _RECIPE_COUNTERS.get(key, 0) + 1
+    if cnt < _RECIPE_REFRESH_EVERY:
+        _RECIPE_COUNTERS[key] = cnt
+        return
+    _RECIPE_COUNTERS[key] = 0
+    try:
+        assess(journal)
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("react_loop assess_recipe_from_journal skipped: %s", exc)
+
+
+def _reset_recipe_throttle_for_tests() -> None:
+    _RECIPE_COUNTERS.clear()
 
 
 # ── Tool-step observation shaping (moved from react_loop.py) ──────
