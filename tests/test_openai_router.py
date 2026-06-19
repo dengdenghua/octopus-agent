@@ -123,8 +123,29 @@ class TestRequestShape:
         )
 
         payload = fake.calls[0]["json"]
-        assert payload["reasoning_effort"] == "xhigh"
+        # xhigh is octopus-only; OpenAI's reasoning_effort tops out at "high",
+        # so the wire value is clamped rather than sent verbatim (which a strict
+        # endpoint would 400 on).
+        assert payload["reasoning_effort"] == "high"
         assert payload["thinking"] == {"type": "enabled"}
+
+    def test_reasoning_effort_mapping_to_native_openai(self):
+        from runtime.sensing.model_router.openai_router import (
+            _openai_reasoning_effort,
+        )
+
+        # Native values pass through unchanged.
+        assert _openai_reasoning_effort("minimal") == "minimal"
+        assert _openai_reasoning_effort("low") == "low"
+        assert _openai_reasoning_effort("medium") == "medium"
+        assert _openai_reasoning_effort("high") == "high"
+        # xhigh (and the ultra/extra_high aliases) clamp to high.
+        assert _openai_reasoning_effort("xhigh") == "high"
+        assert _openai_reasoning_effort("ultra") == "high"
+        assert _openai_reasoning_effort("extra_high") == "high"
+        # Unset / unknown fall back to the prior default ("high").
+        assert _openai_reasoning_effort(None) == "high"
+        assert _openai_reasoning_effort("garbage") == "high"
 
     def test_extra_headers_merged(self):
         """Implementation note."""

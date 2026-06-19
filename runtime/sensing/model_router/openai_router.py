@@ -15,6 +15,7 @@ from .models import (
     ModelRequest,
     ModelResponse,
     ModelRouter,
+    normalize_reasoning_effort,
 )
 
 try:
@@ -28,6 +29,25 @@ except ImportError:  # pragma: no cover
 
 _DEFAULT_INPUT_USD_PER_TOKEN = 1e-7
 _DEFAULT_OUTPUT_USD_PER_TOKEN = 3e-7
+
+# OpenAI's reasoning_effort only accepts minimal/low/medium/high. Octopus's
+# xhigh tier (and the ultra/extra_high aliases that normalize to it) has no
+# native value, so clamp it to "high" rather than putting an unknown string on
+# the wire — a strict endpoint 400s on it, and a lenient one silently ignores
+# it (losing the high-effort signal entirely). Anthropic is unaffected: it
+# routes effort through a numeric thinking budget, not this string.
+_OPENAI_REASONING_EFFORT: dict[str, str] = {
+    "minimal": "minimal",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "high",
+}
+
+
+def _openai_reasoning_effort(value: Any) -> str:
+    """Map an octopus reasoning-effort tier onto a value native OpenAI accepts."""
+    return _OPENAI_REASONING_EFFORT.get(normalize_reasoning_effort(value) or "high", "high")
 
 
 class OpenAIRouterError(LLMResponseFormatError):
@@ -245,7 +265,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
             # default behavior and works for agentic loops.
             payload["tool_choice"] = "auto"
         if request.enable_thinking:
-            payload["reasoning_effort"] = request.reasoning_effort or "high"
+            payload["reasoning_effort"] = _openai_reasoning_effort(request.reasoning_effort)
             payload["thinking"] = {"type": "enabled"}
         return payload
 
