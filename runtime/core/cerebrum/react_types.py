@@ -23,8 +23,8 @@ Final Answer: 最终答案
 
 ## 多工具并发 (短任务关键加速)
 
-独立的工具可在同一个 Action: 块多行并列写,runtime 会**并发**执行,
-合并 Observation 一次回灌。最多 4 个并发,超过的会自动批量串行。
+独立工具可在同一 Action 块多行并列,runtime **并发**执行、
+合并 Observation 回灌。最多 4 个并发,超出自动批量串行。
 
 ```
 Thought: 三个文件相互独立, 一起读
@@ -39,9 +39,9 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 - 多个 read_file / grep_text / web_search / fetch_url 同时跑
 - 多个互不依赖的探查类调用
 
-什么时候**不要**并发(系统会自动串行,但你也别乱写):
+什么时候**不要**并发(系统会自动串行):
 - 含 `write_text_file` / `edit_file` / `multi_edit_file` 等写类工具
-- 后一个调用依赖前一个结果(读完才知道要搜什么 → 必须分两轮)
+- 后一个调用依赖前一个结果(必须分两轮)
 
 ## 工具选择
 
@@ -78,16 +78,13 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 
 ## 子 agent (按需,不是默认)
 
-`call_agent_parallel(specs=[...])`: 任务可拆成 N 个独立专长子任务时一次扇出。
-- 每个 spec 完成后 `bb_write('result_<n>', ...)` 写黑板,你再 `bb_read` 综合
-- 不要并行跑顺序依赖的工作 → 用串行
-- 不要为了"看起来像 swarm"凑人数 → 1 人能做就别召唤
+`call_agent_parallel(specs=[...])`: 任务可拆成 N 个独立专长子任务时一次扇出;每个 worker `bb_write('result_<n>',...)` 写黑板,你 `bb_read` 综合。顺序依赖的别并行;1 人能做就别召唤。
 
-`call_agent_vote(question, choices=["yes","no"])`: N 个独立投票者裁决一个判断,返回多数票+置信度+异见。验证"这 bug 真的吗 / 补丁修好没 / A 还是 B",别只信一个 worker。
+`call_agent_vote(question, choices=["yes","no"])`: N 个独立投票者裁决,返回多数票+置信度+异见。验证"这 bug 真的吗 / A 还是 B",别只信一个 worker。
 
-`run_orchestration(goal, verify=True)`: 确定性多轮发现循环(扇出→去重→可选投票验证→直到无新增或预算用尽),用于穷尽式发现("找出所有边界情况/枚举每处 X")。一次调用跑完整个循环,代码控流不会漏步。
+`run_orchestration(goal, verify=True)`: 确定性多轮发现循环(扇出→去重→可选投票验证→直到无新增/预算尽),用于穷尽式发现("枚举每处 X")。
 
-`run_pipeline(items, stages)`: 对 N 个独立 item 流水线化多阶段处理。每个 item 独立经历 stage1→stage2→... 而不互相等待;wall-clock = 最慢 item 链,不是各阶段最慢之和。stage 的 prompt_template 可用 {item}/{prev}/{stageN_output}。用于"对每个文件跑 extract→classify→summarise"这类批量多阶段场景。
+`run_pipeline(items, stages)`: 对 N 个独立 item 并行跑多阶段流水线(stage1→stage2→…,item 间不互等),如"对每个文件 extract→classify→summarise"。
 """
 
 REACT_NO_TOOLS_NOTE = """
