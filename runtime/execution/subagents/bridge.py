@@ -19,6 +19,11 @@ from collections.abc import Callable
 from typing import Any
 
 from .registry import SubagentRegistry
+from .schema_output import (
+    coerce_schema_output,
+    schema_correction,
+    schema_instruction,
+)
 
 _log = logging.getLogger("runtime.execution.subagents")
 
@@ -255,6 +260,8 @@ def call_subagent(
     use_cheap_model: bool = False,
     extra_denied_paths: list[str] | None = None,
     workspace_path: str = "",
+    output_schema: dict[str, Any] | None = None,
+    schema_max_retries: int = 1,
     **_kw: Any,
 ) -> dict[str, Any]:
     """Invoke a subagent and return a structured result.
@@ -279,6 +286,18 @@ def call_subagent(
         :func:`_resolve_cheap_subagent_model` is injected so the subagent
         runs on a lower-cost tier. Used by the swarm dispatcher to route
         research-style roles cheaply.
+    output_schema :
+        Optional JSON Schema. When set, the subagent is asked to return a
+        single JSON value matching the schema; the reply is extracted and
+        validated, and on a successful match the parsed object is attached to
+        the result as ``parsed`` with ``schema_ok=True``. On a validation
+        failure the subagent is re-asked up to ``schema_max_retries`` times
+        with the validation error; if it still fails, ``schema_ok`` is False
+        and ``schema_error`` carries the reason (the raw ``output`` is always
+        preserved). Default ``None`` leaves the free-text contract unchanged.
+    schema_max_retries :
+        How many extra attempts to grant when ``output_schema`` is set and the
+        first reply doesn't validate. Ignored when ``output_schema`` is None.
     """
     agent_id = agent_id or role or name
     prompt = prompt or task or message or query
@@ -296,6 +315,12 @@ def call_subagent(
             "success": False,
             "error": "prompt is required",
         }
+
+    # When a schema is requested, steer the model toward schema-valid JSON up
+    # front. Enforcement still happens post-hoc (see ``_do_call_with_schema``)
+    # so this works on any model, not just ones with native structured output.
+    if output_schema:
+        prompt = prompt + schema_instruction(output_schema)
 
     # Trusted callers (e.g. the worktree loop) confine this sub-agent's file
     # writes to ONE directory by passing ``workspace_path`` (or
@@ -588,6 +613,49 @@ def call_subagent(
             second.setdefault("partial", True)
         return second
 
+    def _do_call_with_schema() -> dict[str, Any]:
+        """Run the call, then enforce ``output_schema`` on the reply.
+
+        No-op when no schema was requested. Otherwise validate the reply and,
+        on a mismatch, re-ask the model (a single ``_do_call`` per retry, so it
+        stays bounded) with a correction prompt that names the error. The raw
+        ``output`` is always preserved; ``parsed`` / ``schema_ok`` /
+        ``schema_error`` describe the structured outcome.
+        """
+        result = _do_call_with_retry()
+        if not output_schema or not isinstance(result, dict):
+            return result
+
+        nonlocal prompt
+        base_prompt = prompt
+        attempts = 0
+        try:
+            while True:
+                raw = str(result.get("output") or "")
+                ok, parsed, err = coerce_schema_output(raw, output_schema)
+                if ok:
+                    result["parsed"] = parsed
+                    result["schema_ok"] = True
+                    result.pop("schema_error", None)
+                    return result
+                # Don't burn retries on a failed dispatch (router/tool error):
+                # the empty/error output won't get better by re-asking.
+                if attempts >= int(schema_max_retries) or not result.get("success"):
+                    result["schema_ok"] = False
+                    result["schema_error"] = err
+                    _log.info(
+                        "subagent %s schema mismatch after %d attempt(s): %s",
+                        agent_id, attempts, err,
+                    )
+                    return result
+                attempts += 1
+                prompt = base_prompt + schema_correction(err, output_schema, raw)
+                result = _do_call()
+                if not isinstance(result, dict):
+                    return result
+        finally:
+            prompt = base_prompt
+
     def _augment(result: dict[str, Any]) -> dict[str, Any]:
         """Attach context-isolation telemetry to the subagent result.
 
@@ -643,6 +711,24 @@ def call_subagent(
                 success=ok,
                 rounds=_rounds_state["max_round"],
                 error=result.get("error", ""),
+            )
+        try:
+            from runtime.memory.learning.subagent_review import (
+                queue_subagent_review_candidate,
+            )
+            result["review_candidate"] = queue_subagent_review_candidate(
+                agent_id=agent_id,
+                role=_role_label,
+                prompt=prompt,
+                result=result,
+                context=context,
+                session=session,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log.debug(
+                "subagent review candidate queue skipped · agent_id=%s error=%s",
+                agent_id,
+                exc,
             )
         _finish_event = {
             "type": "subagent_finished",
@@ -723,13 +809,13 @@ def call_subagent(
         return _augment(_reject)
     try:
         if timeout_seconds is None:
-            return _augment(_do_call_with_retry())
+            return _augment(_do_call_with_schema())
 
         # Timeout path: run in a thread so we can enforce a wall-clock limit.
         # We use shutdown(wait=False) to avoid blocking forever if the worker
         # thread is stuck (Python threads cannot be killed cleanly).
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(_do_call_with_retry)
+        future = executor.submit(_do_call_with_schema)
         try:
             return _augment(future.result(timeout=timeout_seconds))
         except concurrent.futures.TimeoutError:

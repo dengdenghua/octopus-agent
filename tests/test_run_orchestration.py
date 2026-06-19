@@ -8,6 +8,7 @@ through the real ``_call_agent_parallel`` with a mocked ``call_subagent``.
 """
 from __future__ import annotations
 
+import json
 import threading
 from typing import Any
 
@@ -279,7 +280,10 @@ def test_full_stack_find_and_verify(monkeypatch):
     two candidates, the vote panel keeps the strong one and drops the weak."""
 
     def fake_cs(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
-        if "VERDICT" in prompt:  # a ballot from call_agent_vote
+        # The ballot prompt is keyed off its panel framing (not the literal
+        # "VERDICT", which moved into the JSON-schema instruction that the real
+        # call_subagent — mocked away here — would append).
+        if "voter on a panel" in prompt:  # a ballot from call_agent_vote
             verdict = "drop" if "weak finding" in prompt else "keep"
             out = f"VERDICT: {verdict}\nREASON: test"
         else:  # a finder prompt
@@ -303,3 +307,51 @@ def test_full_stack_find_and_verify(monkeypatch):
     assert r["verified"] is True
     # 2 finders + 2 findings * 3 voters = 8 spawns charged to the one envelope
     assert r["budget_used"] == 8
+
+
+def test_orchestration_consumes_structured_findings(monkeypatch):
+    """Finders return a schema-validated ``{"findings": [...]}`` array; the loop
+    consumes the structured list rather than newline-splitting the text. A
+    finding that contains its own newline survives intact — line-splitting would
+    have shredded it into two."""
+
+    def fake_cs(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
+        parsed = {"findings": ["multi\nline finding", "second finding"]}
+        return {
+            "agent_id": agent_id,
+            "output": json.dumps(parsed),
+            "parsed": parsed,
+            "schema_ok": True,
+            "success": True, "error": None, "codename": "X",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_cs)
+    monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", fake_cs)
+
+    r = ds._run_orchestration(
+        goal="enumerate findings", n=1, rounds=1, verify=False, max_spawns=10,
+    )
+    assert r["ok"] is True
+    # structured array preserved verbatim (the embedded newline is NOT split)
+    assert r["collected"] == ["multi\nline finding", "second finding"]
+
+
+def test_orchestration_falls_back_to_line_split(monkeypatch):
+    """When a finder reply has no ``parsed`` (schema disabled or failed), the
+    loop still parses one-finding-per-line — no worse than before."""
+
+    def fake_cs(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
+        return {
+            "agent_id": agent_id,
+            "output": "alpha\nbeta",  # plain text, no parsed key
+            "success": True, "error": None, "codename": "X",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_cs)
+    monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", fake_cs)
+
+    r = ds._run_orchestration(
+        goal="enumerate findings", n=1, rounds=1, verify=False, max_spawns=10,
+    )
+    assert r["ok"] is True
+    assert r["collected"] == ["alpha", "beta"]

@@ -392,3 +392,57 @@ def test_budget_exhausted_no_retry(mock_subagent, mock_builtins):
     assert "budget exhausted" in result["error"]
     # call_subagent never invoked
     mock_subagent.assert_not_called()
+
+
+# ── output_schema passthrough (structured delegation) ─────────────
+
+
+def test_call_agent_threads_output_schema(mock_subagent, mock_builtins):
+    """A dict output_schema is forwarded verbatim to call_subagent, and the
+    parsed/schema_ok envelope flows back to the caller."""
+    from runtime.execution.suckers.delegation_skills import _call_agent
+
+    schema = {
+        "type": "object",
+        "properties": {"verdict": {"type": "string"}},
+        "required": ["verdict"],
+    }
+    mock_subagent.return_value = {
+        "agent_id": "researcher", "output": '{"verdict": "yes"}',
+        "parsed": {"verdict": "yes"}, "schema_ok": True, "success": True,
+    }
+
+    result = _call_agent(
+        agent_id="researcher", prompt="decide", output_schema=schema,
+    )
+
+    assert result["parsed"] == {"verdict": "yes"}
+    assert result["schema_ok"] is True
+    assert mock_subagent.call_args[1]["output_schema"] == schema
+
+
+def test_call_agent_parses_stringified_schema(mock_subagent, mock_builtins):
+    """Some models stringify nested objects — a JSON-string schema is parsed
+    into a dict before being forwarded."""
+    from runtime.execution.suckers.delegation_skills import _call_agent
+
+    mock_subagent.return_value = {"agent_id": "researcher", "output": "x", "success": True}
+
+    _call_agent(
+        agent_id="researcher", prompt="go",
+        output_schema='{"type": "object"}',
+    )
+
+    assert mock_subagent.call_args[1]["output_schema"] == {"type": "object"}
+
+
+def test_call_agent_ignores_malformed_schema(mock_subagent, mock_builtins):
+    """A non-dict, non-JSON schema is ignored (forwarded as None) rather than
+    crashing the delegation."""
+    from runtime.execution.suckers.delegation_skills import _call_agent
+
+    mock_subagent.return_value = {"agent_id": "researcher", "output": "x", "success": True}
+
+    _call_agent(agent_id="researcher", prompt="go", output_schema="not json {[")
+
+    assert mock_subagent.call_args[1]["output_schema"] is None

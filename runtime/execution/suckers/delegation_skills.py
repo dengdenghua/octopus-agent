@@ -522,10 +522,16 @@ def _call_agent(
     tool_allowlist: Any = None,
     timeout_s: int = _DEFAULT_SUBAGENT_TIMEOUT_S,
     session: Any = None,
+    output_schema: Any = None,
     **_kw: Any,
 ) -> dict[str, Any]:
     """Spawn an isolated subagent turn — escalation when you need
     specialized expertise or parallel work.
+
+    Pass ``output_schema`` (a JSON Schema object) to get a structured,
+    validated result: the subagent is asked for JSON matching the schema and
+    re-asked once on a mismatch; on success the parsed object is returned under
+    ``parsed`` with ``schema_ok=True`` (the raw ``output`` is always kept too).
 
     Returns ``{agent_id, output, success, error}``. On budget exhaustion
     returns ``success=False`` with a message that instructs the model to
@@ -611,6 +617,21 @@ def _call_agent(
     # correctly regardless of which retry branch we end up in.
     fingerprint = _compute_fingerprint(target, final_prompt)
 
+    # Optional structured output: the model (or an internal caller) may ask the
+    # subagent for a JSON value matching a schema. Accept a dict, or a JSON
+    # string some models stringify; anything else is ignored (no enforcement)
+    # rather than crashing the delegation.
+    schema_arg: dict[str, Any] | None = None
+    if isinstance(output_schema, dict):
+        schema_arg = output_schema
+    elif isinstance(output_schema, str) and output_schema.strip():
+        try:
+            _loaded = json.loads(output_schema)
+        except (json.JSONDecodeError, ValueError):
+            _loaded = None
+        if isinstance(_loaded, dict):
+            schema_arg = _loaded
+
     # First attempt
     subagent_context = _skill_context_from_spec({
         **_kw,
@@ -628,6 +649,7 @@ def _call_agent(
         context=subagent_context,
         timeout_s=timeout_s,
         session=session,
+        output_schema=schema_arg,
     )
 
     # Retry once on transient failure. Critical: retry does NOT bump
@@ -640,6 +662,7 @@ def _call_agent(
             context=subagent_context,
             timeout_s=timeout_s,
             session=session,
+            output_schema=schema_arg,
         )
         if retry_result.get("success"):
             retry_result.setdefault("retried", True)
@@ -857,6 +880,10 @@ def _call_agent_parallel(
             "role_label": role_label,
             "cheap": cheap_flag,
             "context": _skill_context_from_spec(raw, context),
+            # Optional JSON Schema: when a spec carries one, the sub-agent's
+            # reply is validated (and re-asked once on mismatch) by
+            # call_subagent, and the parsed object rides back in the envelope.
+            "output_schema": raw.get("output_schema"),
         })
 
     if not cleaned:
@@ -910,6 +937,7 @@ def _call_agent_parallel(
                 timeout_s=timeout_s,
                 session=session,
                 use_cheap_model=bool(spec.get("cheap")),
+                output_schema=spec.get("output_schema"),
             )
         except (ConnectionError, TimeoutError, TypeError, ValueError) as exc:  # noqa: BLE001
             result = {
@@ -934,6 +962,7 @@ def _call_agent_parallel(
                     timeout_s=timeout_s,
                     session=session,
                     use_cheap_model=bool(spec.get("cheap")),
+                    output_schema=spec.get("output_schema"),
                 )
                 if retry.get("success"):
                     retry["retried"] = True
@@ -1080,10 +1109,15 @@ def _build_parallel_envelope(
             "partial": bool(r.get("partial")),
         }
         if r.get("success"):
-            successes.append({
-                **common,
-                "output": output,
-            })
+            success_entry = {**common, "output": output}
+            # Carry schema-validated output through the envelope when present
+            # (a spec passed ``output_schema``); absent for plain free-text
+            # specs, so non-schema callers see no shape change.
+            if "parsed" in r:
+                success_entry["parsed"] = r.get("parsed")
+            if "schema_ok" in r:
+                success_entry["schema_ok"] = r.get("schema_ok")
+            successes.append(success_entry)
             if output.strip():
                 outputs.append(output)
         else:
@@ -1212,22 +1246,20 @@ def _coerce_vote_choices(choices: Any) -> list[str] | None:
 
 
 def _build_ballot_prompt(question: str, choices: list[str] | None) -> str:
+    # The exact JSON shape ({verdict, reason}) is enforced by the schema
+    # instruction call_subagent appends — here we only state the semantics so
+    # the two don't contradict ("Line 1 MUST be ..." vs "output ONLY JSON").
     if choices:
         opts = " / ".join(choices)
-        ballot = (
-            f"Choose exactly one of: {opts}.\n"
-            f"Line 1 MUST be `VERDICT: <one of {opts}>`.\n"
-            "Line 2 MUST be `REASON: <one sentence, <=30 words>`."
-        )
+        decide = f"Your `verdict` MUST be exactly one of: {opts}."
     else:
-        ballot = (
-            "Line 1 MUST be `VERDICT: <your short answer / label>`.\n"
-            "Line 2 MUST be `REASON: <one sentence, <=30 words>`."
-        )
+        decide = "Your `verdict` is a short answer / label."
     return (
         "You are ONE independent voter on a panel. Judge the question "
         "below on your own merits — do not assume other voters agree.\n\n"
-        f"QUESTION:\n{question}\n\n{ballot}"
+        f"QUESTION:\n{question}\n\n"
+        f"{decide}\n"
+        "Also give a one-sentence `reason` (<=30 words)."
     )
 
 
@@ -1368,7 +1400,22 @@ def _call_agent_vote(
     ballot_choices = _coerce_vote_choices(choices)
     voter = str(agent_id or "reviewer").strip() or "reviewer"
     ballot = _build_ballot_prompt(q, ballot_choices)
-    specs = [{"agent_id": voter, "prompt": ballot} for _ in range(n_int)]
+    # Ask each voter for a JSON object; call_subagent validates it and re-asks
+    # once on a mismatch. ``verdict`` is left a free string (not an enum) so
+    # _normalize_verdict keeps its lenient casefold/substring mapping to the
+    # ballot — avoids rejecting a valid "Keep" against choice "keep".
+    vote_schema = {
+        "type": "object",
+        "properties": {
+            "verdict": {"type": "string"},
+            "reason": {"type": "string"},
+        },
+        "required": ["verdict"],
+    }
+    specs = [
+        {"agent_id": voter, "prompt": ballot, "output_schema": vote_schema}
+        for _ in range(n_int)
+    ]
 
     env = _call_agent_parallel(
         specs=specs, timeout_s=timeout_s, context=context, session=session,
@@ -1376,7 +1423,18 @@ def _call_agent_vote(
 
     votes: list[dict[str, Any]] = []
     for s in env.get("successes", []):
-        verdict, reason = _extract_verdict(str(s.get("output") or ""), ballot_choices)
+        parsed = s.get("parsed")
+        if isinstance(parsed, dict) and "verdict" in parsed:
+            # Schema-validated reply — trust the structured fields.
+            verdict = _normalize_verdict(str(parsed.get("verdict") or ""), ballot_choices)
+            reason = str(parsed.get("reason") or "").strip()[:200]
+            if not reason:
+                reason = " ".join(str(s.get("output") or "").split())[:200]
+        else:
+            # No parsed object (schema failed after retry, or none requested):
+            # fall back to the legacy free-text parse so a malformed reply is
+            # no worse than before rather than a hard abstention.
+            verdict, reason = _extract_verdict(str(s.get("output") or ""), ballot_choices)
         votes.append({
             "verdict": verdict,
             "reason": reason,
@@ -1460,20 +1518,52 @@ def _dedupe_findings(items: list[str], seen_norms: set[str]) -> list[str]:
     return fresh
 
 
+# Finders return a JSON array of atomic findings; call_subagent validates it
+# (and re-asks once on mismatch). Structured output replaces the brittle
+# one-finding-per-line text parsing — the array survives multi-line findings,
+# prose wrappers and markdown that _split_findings would mangle or drop.
+_FINDER_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "findings": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["findings"],
+}
+
+
+def _findings_from_success(s: dict[str, Any]) -> list[str]:
+    """Extract one worker's findings, preferring the schema-validated array and
+    falling back to legacy one-per-line parsing when no parsed object is present
+    (schema disabled, or it failed after the retry). The per-worker cap and
+    null-marker filter apply on both paths."""
+    parsed = s.get("parsed")
+    if isinstance(parsed, dict) and isinstance(parsed.get("findings"), list):
+        out: list[str] = []
+        for raw in parsed["findings"]:
+            txt = str(raw).strip()
+            if not txt or txt.lower() in _NULL_FINDING_TOKENS:
+                continue
+            out.append(txt)
+            if len(out) >= _ORCH_MAX_FINDINGS_PER_WORKER:
+                break
+        return out
+    return _split_findings(str(s.get("output") or ""))
+
+
 def _finder_prompt(goal: str, seen: list[str]) -> str:
     base = (
         "You are one worker in a parallel discovery pass.\n\n"
         f"GOAL:\n{goal}\n\n"
-        "Output ONLY findings — exactly one per line, each an atomic idea. "
-        "No preamble, no 'Let me…' / 'Here are…', no headings, no markdown "
-        "rules or bold section labels, no numbering, no closing commentary. "
-        "Just the finding lines. If you have nothing, reply exactly NONE."
+        "Report your findings as JSON: a `findings` array where each element is "
+        "ONE atomic finding (a short string). No preamble or commentary — just "
+        'the findings. If you have nothing, return {"findings": []}.'
     )
     if seen:
         shown = "\n".join(f"- {s}" for s in seen[:40])
         base += (
-            "\n\nAlready found — do NOT repeat these; add only genuinely NEW "
-            f"ones, or reply exactly NONE if you have nothing new:\n{shown}"
+            "\n\nAlready found — do NOT repeat these; include only genuinely "
+            "NEW ones (or an empty array if you have nothing new):\n"
+            f"{shown}"
         )
     return base
 
@@ -1576,6 +1666,7 @@ def _run_orchestration(
                     {
                         "agent_id": roles[i % len(roles)],
                         "prompt": _finder_prompt(goal, collected),
+                        "output_schema": _FINDER_SCHEMA,
                     }
                     for i in range(n)
                 ],
@@ -1583,7 +1674,7 @@ def _run_orchestration(
             )
             items: list[str] = []
             for s in env.get("successes", []):
-                items.extend(_split_findings(str(s.get("output") or "")))
+                items.extend(_findings_from_success(s))
             fresh = _dedupe_findings(items, seen_norms)
             per_round.append(len(fresh))
             if not fresh:
@@ -1937,7 +2028,12 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "prompt: string (focused brief, written like a user message), "
         "skills?/tools?: list of concrete skill names, "
         "skill_pack(s)?: one or more of research/web/browser/files/code/"
-        "review/write/memory/shell, plugins?: plugin or package hints}. "
+        "review/write/memory/shell, plugins?: plugin or package hints, "
+        "output_schema?: a JSON Schema object — pass it when you need the "
+        "subagent's answer as a validated JSON object you can parse "
+        "(returned under `parsed`), e.g. "
+        '{"type":"object","properties":{"verdict":{"type":"string"}},'
+        '"required":["verdict"]}}. '
         "Use skill packs when the subtask needs tools beyond the role's "
         "default allowlist.\n"
         "\n"

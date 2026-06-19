@@ -7,6 +7,7 @@ the spawn path is exercised end-to-end with a mocked ``call_subagent``.
 """
 from __future__ import annotations
 
+import json
 import threading
 from typing import Any
 
@@ -188,6 +189,59 @@ def test_vote_missing_question_errors():
     assert r["ok"] is False
     assert "required" in (r["error"] or "")
     assert r["verdict"] is None
+
+
+def test_vote_reads_schema_parsed(monkeypatch):
+    """When call_subagent returns a schema-validated ``parsed`` object, the
+    vote trusts the structured fields instead of regex-parsing the text — and
+    it passes a JSON Schema down to each voter."""
+    seen_schema: list[Any] = []
+    lock = threading.Lock()
+    box = [
+        {"verdict": "yes", "reason": "reproduced"},
+        {"verdict": "yes", "reason": "confirmed"},
+        {"verdict": "no", "reason": "cannot repro"},
+    ]
+
+    def _fake(agent_id: str = "", prompt: str = "", **kw: Any) -> dict[str, Any]:
+        with lock:
+            seen_schema.append(kw.get("output_schema"))
+            parsed = box.pop(0) if box else {"verdict": "abstain"}
+        return {
+            "agent_id": agent_id,
+            "output": json.dumps(parsed),
+            "parsed": parsed,
+            "schema_ok": True,
+            "success": True,
+            "error": None,
+            "codename": "Voter",
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake)
+    monkeypatch.setattr("runtime.execution.subagents.bridge.call_subagent", _fake)
+
+    r = ds._call_agent_vote(question="is the bug real?", n=3, choices=["yes", "no"])
+    assert r["verdict"] == "yes"
+    assert r["tally"] == {"yes": 2, "no": 1}
+    # reason came from the structured field, not a free-text slice
+    assert "reproduced" in {v["reason"] for v in r["votes"]}
+    # every voter received a JSON Schema ballot
+    assert seen_schema and all(
+        isinstance(s, dict) and s.get("type") == "object" for s in seen_schema
+    )
+
+
+def test_vote_falls_back_when_no_parsed(monkeypatch):
+    """If call_subagent could not validate (no ``parsed`` key), the vote still
+    parses the raw VERDICT text rather than hard-abstaining."""
+    _patch_voters(monkeypatch, [
+        "VERDICT: yes\nREASON: a",
+        "VERDICT: yes\nREASON: b",
+    ])
+    r = ds._call_agent_vote(question="real?", n=2, choices=["yes", "no"])
+    assert r["verdict"] == "yes"
+    assert r["votes_cast"] == 2
+    assert r["unanimous"] is True
 
 
 def test_vote_n_is_clamped(monkeypatch):
