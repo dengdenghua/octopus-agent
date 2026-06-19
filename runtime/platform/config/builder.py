@@ -161,6 +161,10 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
         if kg_path.exists():
             kg_journal = JSONLJournal(kg_path)
             planner.kg_max_triples = config.learn.kg_max_triples
+            # Durable KG: accumulate learned facts into an on-disk store beside
+            # the journal so they survive restarts and compound across sessions,
+            # rather than being rebuilt in-memory and lost each process.
+            planner.enable_persistent_kg(kg_path.parent / "planner_kg.db")
             planner.learn_kg_from_journal(kg_journal)
 
     # 9. WorkflowRewriter auto-rewrite for the static planner.

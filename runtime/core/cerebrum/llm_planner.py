@@ -507,6 +507,10 @@ class LLMPlanner:
         self.learned_memories_section = learned_memories_section
         self.kg: Any = None
         self.kg_max_triples: int = 15
+        # When True, ``learn_kg_from_journal`` accumulates into the attached
+        # durable KG instead of rebuilding a throwaway in-memory graph — so
+        # learned facts survive restarts (see ``enable_persistent_kg``).
+        self._kg_persistent: bool = False
         self.current_recipe_verdict: Any = None  # RecipeScore | None
         self._rules_updated_count = 0  # Implementation note.
         self._memories_updated_count = 0
@@ -579,15 +583,49 @@ class LLMPlanner:
             span.set_attribute("octopus.kg.triples", size)
             span.set_attribute("octopus.kg.max_triples", max_triples)
 
+    def enable_persistent_kg(
+        self, db_path: Any, *, max_triples: int | None = None
+    ) -> int:
+        """Back the planner's KG with a durable on-disk store.
+
+        Once enabled, :meth:`learn_kg_from_journal` ACCUMULATES distilled
+        triples into this store instead of rebuilding a throwaway in-memory
+        graph each call, so knowledge survives process restarts and compounds
+        across sessions — the durable half of the self-evolution loop. Triples
+        already on disk are loaded immediately, so recall sees them on the very
+        first turn. Returns the triple count loaded from disk.
+        """
+        from runtime.memory.knowledge_graph.sqlite_kg import SqliteKnowledgeGraph
+
+        kg = SqliteKnowledgeGraph(db_path)
+        self.attach_kg(
+            kg,
+            max_triples=max_triples if max_triples is not None else self.kg_max_triples,
+        )
+        self._kg_persistent = True
+        return kg.count()
+
     def learn_kg_from_journal(
         self, journal: Journal, *, max_triples: int | None = None
     ) -> int:
-        from runtime.memory.knowledge_graph import KnowledgeGraph
         from runtime.safety.recovery import KGUpdater
+
+        if max_triples is not None:
+            self.kg_max_triples = max_triples
+
+        # Durable path: accumulate into the attached persistent store (de-duped
+        # + persisted) rather than discarding a fresh graph each call. This is
+        # not a re-attach, so ``_kg_attached_count`` is left untouched.
+        if self._kg_persistent and self.kg is not None:
+            KGUpdater(journal, self.kg).update()
+            return self.kg.count()
+
+        # Legacy ephemeral path (unchanged): rebuild an in-memory graph.
+        from runtime.memory.knowledge_graph import KnowledgeGraph
 
         kg = KnowledgeGraph()
         KGUpdater(journal, kg).update()
-        self.attach_kg(kg, max_triples=max_triples if max_triples is not None else self.kg_max_triples)
+        self.attach_kg(kg, max_triples=self.kg_max_triples)
         return kg.count()
 
     def _render_kg_section(self) -> str:
