@@ -29,7 +29,7 @@ from .intel_collector import (
     IntelRunReport,
     IntelSource,
 )
-from .kg_updater import KGUpdater, KGUpdateReport
+from .kg_updater import KGUpdater, KGUpdateReport, persist_kg_from_journal
 from .lightweight_shadow import (
     ShadowConfig,
     ShadowResult,
@@ -146,6 +146,7 @@ __all__ = [
     "KGUpdater",
     "KGUpdateReport",
     "LearnedRule",
+    "persist_kg_from_journal",
     "MemoryConsolidator",
     "MemoryScope",
     "LLMReplayCandidateReport",

@@ -21,6 +21,7 @@ def run_reflect(
     verbose: bool = False,
     skip: set[str] | None = None,
     color: bool = True,
+    kg_db: Path | None = None,
 ) -> int:
     from runtime.execution.suckers import SkillRegistry
     from runtime.execution.suckers.builtins import register_all
@@ -76,15 +77,26 @@ def run_reflect(
             print(c.dim("      " + prompt.replace("\n", "\n      ")))
 
     if "kg_updater" not in skip:
-        kg = KnowledgeGraph()
-        kg_report = KGUpdater(journal, kg).update()
-        print(
-            f"{c.cyan(_('cli.reflect.kgupdater_label'))} · "
-            f"{_('cli.reflect.kgupdater_fmt', accepted=c.green(str(kg_report.triples_accepted)), ignored=kg_report.triples_ignored, count=kg.count())}"
-        )
-        if verbose:
-            for t in list(kg)[:3]:
-                print(c.dim(_("cli.reflect.kg_detail", subject=t.subject[:30], predicate=t.predicate, object=t.object[:40])))
+        # With --kg-db the distilled triples PERSIST to a durable store the
+        # live agent's KG recall can read back (the apply half of the signal);
+        # without it the legacy in-memory graph is analyze-only and discarded.
+        if kg_db is not None:
+            from runtime.memory.knowledge_graph.sqlite_kg import SqliteKnowledgeGraph
+            kg: KnowledgeGraph = SqliteKnowledgeGraph(kg_db)
+        else:
+            kg = KnowledgeGraph()
+        try:
+            kg_report = KGUpdater(journal, kg).update()
+            print(
+                f"{c.cyan(_('cli.reflect.kgupdater_label'))} · "
+                f"{_('cli.reflect.kgupdater_fmt', accepted=c.green(str(kg_report.triples_accepted)), ignored=kg_report.triples_ignored, count=kg.count())}"
+            )
+            if verbose:
+                for t in list(kg)[:3]:
+                    print(c.dim(_("cli.reflect.kg_detail", subject=t.subject[:30], predicate=t.predicate, object=t.object[:40])))
+        finally:
+            if hasattr(kg, "close"):
+                kg.close()
 
     if "memory" not in skip:
         mc_report = MemoryConsolidator(journal).consolidate()

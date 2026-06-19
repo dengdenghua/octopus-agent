@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import BaseModel, ConfigDict
 
 from runtime.adapters.instrumentation import trace_stage
@@ -156,3 +158,33 @@ class KGUpdater:
                 source=src,
             )
         ]
+
+
+def persist_kg_from_journal(
+    journal: Journal,
+    kg_db_path: str | Path,
+    *,
+    multi_valued_predicates: set[str] | None = None,
+) -> KGUpdateReport:
+    """Distil triples from a journal and PERSIST them to a durable KG.
+
+    ``KGUpdater`` run against a fresh in-memory ``KnowledgeGraph`` discards
+    every triple when it returns — that is only the reflection *analyze* pass.
+    This wires the *apply* half of the signal: facts distilled from past
+    experience are written to an on-disk ``SqliteKnowledgeGraph`` so the live
+    agent's KG recall can surface them on later turns. That is the
+    experience → permanent-knowledge half of the self-evolution loop.
+
+    Re-runnable: the KG's own add/supersede logic de-duplicates, so persisting
+    the same journal twice does not grow the graph. The connection is always
+    closed before returning.
+    """
+    from runtime.memory.knowledge_graph.sqlite_kg import SqliteKnowledgeGraph
+
+    kg = SqliteKnowledgeGraph(
+        kg_db_path, multi_valued_predicates=multi_valued_predicates,
+    )
+    try:
+        return KGUpdater(journal, kg).update()
+    finally:
+        kg.close()
