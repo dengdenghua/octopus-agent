@@ -1,17 +1,24 @@
-"""End-to-end smoke for the native tool-use path against a real Anthropic API.
+"""End-to-end smoke for the native tool-use path against a real model.
 
 The unit suite (tests/test_react_native_tooluse.py) proves the wiring with a
 fake router. This script proves the *real* round-trip: a tool-use-capable
-Anthropic model is given native ``tools=``, returns structured ``tool_calls``,
-those get dispatched through the existing executor, and the loop reaches a
-final answer — all with ``OCTOPUS_NATIVE_TOOLUSE=1``.
+model is given native ``tools=``, returns structured ``tool_calls``, those get
+dispatched through the existing executor, and the loop reaches a final answer
+— all with ``OCTOPUS_NATIVE_TOOLUSE=1``.
 
 It is deliberately NOT a ``test_*`` file, so pytest does not collect it into
-the default suite (it costs real tokens). Run it manually:
+the default suite (it costs real tokens). Run it manually against either:
 
+    # an OpenAI-compatible provider from data/custom_models.json
+    python tests/integration_native_tooluse.py mimo2.5
+
+    # or Anthropic via env
     ANTHROPIC_API_KEY=sk-ant-... python tests/integration_native_tooluse.py
 
-Without a key it prints SKIP and exits 0, so it is safe to invoke anywhere.
+With neither it prints SKIP and exits 0, so it is safe to invoke anywhere.
+
+Validated 2026-06 end-to-end against mimo-v2.5-pro, agnes-2.0-flash, and
+gpt-5.5 (all returned structured tool_calls that dispatched + answered).
 
 What it asserts:
   1. native activation — at least one model request carried a non-empty
@@ -21,6 +28,7 @@ What it asserts:
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -34,11 +42,9 @@ from runtime.execution.suckers import Skill, SkillRegistry  # noqa: E402
 from runtime.execution.tool_engine import ToolExecutor  # noqa: E402
 from runtime.platform.models import ParsedIntent  # noqa: E402
 from runtime.safety.auth import TrustEngine  # noqa: E402
-from runtime.sensing.model_router.anthropic_router import (  # noqa: E402
-    AnthropicModelRouter,
-)
 
-_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+_DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _read_file(path: str = "") -> dict:
@@ -66,24 +72,20 @@ def _build_executor() -> ToolExecutor:
     return ToolExecutor(
         registry=reg,
         immunity=TrustEngine(
-            trusted_sources=["builtin://*"],
-            unknown_policy="allow",
+            trusted_sources=["builtin://*"], unknown_policy="allow",
         ),
     )
 
 
 class _ToolsCapturingRouter:
-    """Thin wrapper that records whether the loop passed native ``tools=``.
+    """Forwards to the real router but flags any request that carried a
+    non-empty tools list — proof the native gate fired and specs were
+    advertised to the model."""
 
-    Forwards everything to the real router but flags any request that
-    carried a non-empty tools list — that is the proof the native gate
-    fired and specs were advertised to the model.
-    """
-
-    def __init__(self, inner: Any) -> None:
+    def __init__(self, inner: Any, model: str) -> None:
         self._inner = inner
         self.capabilities = inner.capabilities
-        self.default_model = getattr(inner, "default_model", _DEFAULT_MODEL)
+        self.default_model = model
         self.requests_with_tools = 0
 
     def _note(self, req: Any) -> None:
@@ -103,35 +105,66 @@ class _ToolsCapturingRouter:
 
 
 class _Stack:
-    def __init__(self, executor: ToolExecutor, router: Any) -> None:
+    def __init__(self, executor: ToolExecutor, router: Any, model: str) -> None:
         self.executor = executor
 
         class _Planner:
-            planner_model = _DEFAULT_MODEL
-
             def __init__(self, r: Any) -> None:
                 self.router = r
+                self.planner_model = model
 
         self.planner = _Planner(router)
 
 
-def main() -> int:
+def _resolve_router_and_model(argv: list[str]) -> tuple[Any, str] | None:
+    """Pick a router+model from a custom_models provider arg or Anthropic env."""
+    if len(argv) > 1 and argv[1].strip():
+        key = argv[1].strip()
+        path = _REPO_ROOT / "data" / "custom_models.json"
+        cfgs = json.loads(path.read_text(encoding="utf-8"))
+        if key not in cfgs:
+            print(f"SKIP: '{key}' not in custom_models.json (have: {list(cfgs)})")
+            return None
+        cfg = cfgs[key]
+        models = cfg.get("models") or ([cfg["id"]] if cfg.get("id") else [])
+        model = models[0] if models else key
+        from runtime.sensing.model_router.openai_router import OpenAIModelRouter
+
+        router = OpenAIModelRouter(
+            base_url=cfg["base_url"], api_key=cfg["api_key"],
+            default_model=model, timeout_seconds=60.0,
+        )
+        return router, model
+
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        print("SKIP: ANTHROPIC_API_KEY not set — native tool-use smoke skipped.")
+    if api_key:
+        from runtime.sensing.model_router.anthropic_router import (
+            AnthropicModelRouter,
+        )
+
+        model = os.environ.get("OCTOPUS_NATIVE_SMOKE_MODEL", _DEFAULT_ANTHROPIC_MODEL)
+        return AnthropicModelRouter(api_key=api_key, default_model=model), model
+    return None
+
+
+def main(argv: list[str]) -> int:
+    resolved = _resolve_router_and_model(argv)
+    if resolved is None:
+        print(
+            "SKIP: pass a custom_models.json provider key (e.g. `mimo2.5`) "
+            "or set ANTHROPIC_API_KEY — native tool-use smoke skipped.",
+        )
         return 0
+    inner, model = resolved
 
     os.environ["OCTOPUS_NATIVE_TOOLUSE"] = "1"
-    model = os.environ.get("OCTOPUS_NATIVE_SMOKE_MODEL", _DEFAULT_MODEL)
     print(f"using model: {model} (native tool-use ON)")
-
-    inner = AnthropicModelRouter(api_key=api_key, default_model=model)
     if not getattr(inner.capabilities, "supports_tool_use", False):
         print("FAIL: router does not advertise supports_tool_use")
         return 1
-    router = _ToolsCapturingRouter(inner)
+    router = _ToolsCapturingRouter(inner, model)
 
-    stack = _Stack(_build_executor(), router)
+    stack = _Stack(_build_executor(), router, model)
     intent = ParsedIntent(
         raw=(
             "Read the file app.config with the read_config tool, then tell me "
@@ -146,7 +179,9 @@ def main() -> int:
     events: list[dict] = []
     result = None
     try:
-        gen = stream_react_loop(stack, intent, agent=None, model=model, max_iterations=5)
+        gen = stream_react_loop(
+            stack, intent, agent=None, model=model, max_iterations=5,
+        )
         while True:
             events.append(next(gen))
     except StopIteration as stop:
@@ -184,4 +219,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))
