@@ -413,6 +413,42 @@ def stream_react_loop(
     executor = getattr(stack, "executor", None) if enable_tools else None
     tools_active = executor is not None
 
+    # Resolve the model up-front (was computed later) so the native
+    # tool-use gate can be decided before the system prompt is built.
+    effective_model = (
+        model
+        if model and model not in ("octopus-agent", "")
+        else getattr(stack.planner, "planner_model", None) or "molili"
+    )
+
+    # ── Native tool-use gate (Phase 0) ─────────────────────────────────
+    # For tool-use-capable models, drive the loop via native ``tool_calls``
+    # instead of the text ``Action: name({...})`` protocol — eliminating the
+    # single biggest brittleness source (regex-parsing the action out of free
+    # text). Gated by ``OCTOPUS_NATIVE_TOOLUSE`` (default off) AND the model's
+    # advertised capability; otherwise the text protocol + its regex fallback
+    # run byte-identically to before. Specs are built once per turn.
+    from runtime.core.cerebrum.react_native import (
+        build_loop_tool_specs,
+        native_tool_use_active,
+        step_from_tool_calls,
+        trim_text_protocol_for_native,
+    )
+
+    _native_mode = bool(tools_active) and native_tool_use_active(router, effective_model)
+    _native_goal = (
+        getattr(intent, "normalized_goal", "") or getattr(intent, "raw", "") or ""
+    )
+    _native_tool_specs = (
+        build_loop_tool_specs(executor, agent=agent, goal=_native_goal)
+        if _native_mode
+        else []
+    )
+    if _native_mode and not _native_tool_specs:
+        # Spec build came back empty — nothing to call natively, so stay on
+        # the proven text protocol rather than passing an empty tools list.
+        _native_mode = False
+
     # Expose the live approval provider through the session so the
     # ``exit_plan_mode`` skill can issue an interactive approval
     # request without re-plumbing the param through every layer.
@@ -448,7 +484,16 @@ def stream_react_loop(
         _logger.debug("camouflage scheduler not available", exc_info=True)
 
     # ── PHASE 3 · system + volatile prompt assembly ────────────────────
-    system_parts: list[str] = [REACT_SYSTEM_PROMPT_BASE]
+    # Phase 1: when running native tool-use, strip the redundant text
+    # Action/Observation scaffolding — the model emits tool_use blocks and
+    # ignores the competing text protocol, so those lines are pure token
+    # overhead.
+    _base_system_prompt = (
+        trim_text_protocol_for_native(REACT_SYSTEM_PROMPT_BASE)
+        if _native_mode
+        else REACT_SYSTEM_PROMPT_BASE
+    )
+    system_parts: list[str] = [_base_system_prompt]
     # Volatile sections — per-turn signals (date / user prefs /
     # camouflage A-B / memory recall / output_style / thinking).
     # Routed to a prepended user message so they don't poison the
@@ -1161,12 +1206,6 @@ def stream_react_loop(
         ),
     )
 
-    effective_model = (
-        model
-        if model and model not in ("octopus-agent", "")
-        else getattr(stack.planner, "planner_model", None) or "molili"
-    )
-
     # ── PHASE 4 · message bootstrap done; emit react_started ───────────
     yield {
         "type": "react_started",
@@ -1552,6 +1591,7 @@ def stream_react_loop(
                     _reasoning_effort,
                     _max_tokens_per_iter,
                 ),
+                tools=_native_tool_specs if _native_mode else [],
             )
             text_parts: list[str] = []
             thinking_parts: list[str] = []
@@ -1792,7 +1832,20 @@ def stream_react_loop(
 
         # ── PHASE 6c · parse step / format-violation check ─────────────
         text = (resp.text or raw_text or "").strip()
-        step, maybe_final = _parse_step(text, iteration=i + 1)
+        if _native_mode and resp is not None and getattr(resp, "tool_calls", None):
+            # Native tool-use: read the action straight off the structured
+            # tool_calls instead of regex-parsing it out of free text. Only
+            # falls through to the text parser when the model returned no
+            # tool calls (i.e. it produced a final answer).
+            step = step_from_tool_calls(
+                resp.tool_calls,
+                text=resp.text or "",
+                thinking=getattr(resp, "thinking", "") or "",
+                iteration=i + 1,
+            )
+            maybe_final = None
+        else:
+            step, maybe_final = _parse_step(text, iteration=i + 1)
         if (
             _looks_like_observation_echo(text)
             and not step.observation
@@ -2640,7 +2693,13 @@ def stream_react_loop(
                 agent_id=_agent_id_for_pause,
             )
 
-        messages.append(Message(role="assistant", content=text))
+        _assistant_content = text
+        if _native_mode and not _assistant_content and step.action:
+            # Native tool-use turns often carry no prose — record the
+            # synthesised action so the history isn't an (API-invalid) empty
+            # assistant message and the model can see what it just called.
+            _assistant_content = step.action
+        messages.append(Message(role="assistant", content=_assistant_content))
         # Length-limit continuation. When the upstream model truncated
         # its response (finish_reason=="length" / "max_tokens" / etc.)
         # the assistant message we just appended is mid-sentence — the
