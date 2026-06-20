@@ -425,6 +425,138 @@
         "title": "Body_api_thread_uploads_api_threads__thread_id__uploads_post",
         "type": "object"
       },
+      "BrowserDesktopRepairRecipeEvidenceBody": {
+        "properties": {
+          "actor": {
+            "default": "operator_panel",
+            "title": "Actor",
+            "type": "string"
+          },
+          "artifacts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "title": "Notes",
+            "type": "string"
+          },
+          "passed": {
+            "default": false,
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "provided": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Provided",
+            "type": "array"
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "title": "BrowserDesktopRepairRecipeEvidenceBody",
+        "type": "object"
+      },
+      "BrowserDesktopRepairRecipeQueueBody": {
+        "properties": {
+          "limit": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "min_occurrences": {
+            "default": 1,
+            "maximum": 20.0,
+            "minimum": 1.0,
+            "title": "Min Occurrences",
+            "type": "integer"
+          }
+        },
+        "title": "BrowserDesktopRepairRecipeQueueBody",
+        "type": "object"
+      },
+      "BrowserDesktopRepairRecipeRerunBatchBody": {
+        "properties": {
+          "actor": {
+            "default": "operator_panel",
+            "title": "Actor",
+            "type": "string"
+          },
+          "api_base_url": {
+            "default": "http://127.0.0.1:8000",
+            "title": "Api Base Url",
+            "type": "string"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "promote_source_cases": {
+            "default": false,
+            "title": "Promote Source Cases",
+            "type": "boolean"
+          }
+        },
+        "title": "BrowserDesktopRepairRecipeRerunBatchBody",
+        "type": "object"
+      },
+      "BrowserDesktopRepairRecipeRerunBody": {
+        "properties": {
+          "actor": {
+            "default": "operator_panel",
+            "title": "Actor",
+            "type": "string"
+          },
+          "api_base_url": {
+            "default": "http://127.0.0.1:8000",
+            "title": "Api Base Url",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "promote_source_cases": {
+            "default": false,
+            "title": "Promote Source Cases",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "title": "BrowserDesktopRepairRecipeRerunBody",
+        "type": "object"
+      },
+      "BrowserDesktopStaleArtifactRejectionBody": {
+        "properties": {
+          "limit": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "BrowserDesktopStaleArtifactRejectionBody",
+        "type": "object"
+      },
       "CapabilitiesWire": {
         "properties": {
           "browser_automation": {
@@ -654,6 +786,59 @@
           "title"
         ],
         "title": "CreateTeamTaskRequest",
+        "type": "object"
+      },
+      "CurrentModeBody": {
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "CurrentModeBody",
+        "type": "object"
+      },
+      "CurrentModeResponse": {
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "ok",
+          "mode"
+        ],
+        "title": "CurrentModeResponse",
         "type": "object"
       },
       "CustomModelDeleteResponse": {
@@ -941,6 +1126,23 @@
             "title": "Source Kinds",
             "type": "array"
           },
+          "task_risk_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Risk Level"
+          },
           "thread_id": {
             "anyOf": [
               {
@@ -968,6 +1170,133 @@
           "topic"
         ],
         "title": "DeepResearchRequest",
+        "type": "object"
+      },
+      "DetectResponse": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "recommended_mode": {
+            "title": "Recommended Mode",
+            "type": "string"
+          },
+          "signals": {
+            "$ref": "#/components/schemas/DetectionSignals"
+          }
+        },
+        "required": [
+          "recommended_mode",
+          "confidence",
+          "reason",
+          "signals"
+        ],
+        "title": "DetectResponse",
+        "type": "object"
+      },
+      "DetectionSignals": {
+        "properties": {
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/VerificationCommand"
+            },
+            "title": "Commands",
+            "type": "array"
+          },
+          "exists": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exists"
+          },
+          "file_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Count"
+          },
+          "git_commits": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Commits"
+          },
+          "has_readme": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Has Readme"
+          },
+          "lock_files": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lock Files",
+            "type": "array"
+          },
+          "manifests": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Manifests",
+            "type": "array"
+          },
+          "raw_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Score"
+          },
+          "structure_dirs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Structure Dirs",
+            "type": "array"
+          },
+          "workspace_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Path"
+          }
+        },
+        "title": "DetectionSignals",
         "type": "object"
       },
       "DispatchRequest": {
@@ -1756,6 +2085,64 @@
         "title": "LspSymbolRequest",
         "type": "object"
       },
+      "ModeInfo": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "templates": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TemplateInfo"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Templates"
+          }
+        },
+        "required": [
+          "name",
+          "display_name",
+          "description",
+          "icon"
+        ],
+        "title": "ModeInfo",
+        "type": "object"
+      },
+      "ModesResponse": {
+        "properties": {
+          "modes": {
+            "items": {
+              "$ref": "#/components/schemas/ModeInfo"
+            },
+            "title": "Modes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "modes"
+        ],
+        "title": "ModesResponse",
+        "type": "object"
+      },
       "PauseTaskBody": {
         "properties": {
           "note": {
@@ -1846,6 +2233,19 @@
           "providers"
         ],
         "title": "ProvidersResponse",
+        "type": "object"
+      },
+      "RepairRoutePromotionQueueBody": {
+        "properties": {
+          "limit": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "RepairRoutePromotionQueueBody",
         "type": "object"
       },
       "ResearchMaterial": {
@@ -1981,6 +2381,36 @@
         "title": "ResumeTaskBody",
         "type": "object"
       },
+      "ScorecardGapQueueBody": {
+        "properties": {
+          "dimension_id": {
+            "default": "",
+            "title": "Dimension Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 10,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "reason": {
+            "default": "operator_scorecard_gap_review",
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_score": {
+            "default": 90,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Target Score",
+            "type": "integer"
+          }
+        },
+        "title": "ScorecardGapQueueBody",
+        "type": "object"
+      },
       "SkillWire": {
         "properties": {
           "affinity": {
@@ -1989,6 +2419,17 @@
             },
             "title": "Affinity",
             "type": "array"
+          },
+          "canonical_skill": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Skill"
           },
           "category": {
             "default": "other",
@@ -2034,6 +2475,22 @@
           "kind": {
             "default": "domain",
             "title": "Kind",
+            "type": "string"
+          },
+          "market_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Reason"
+          },
+          "market_visibility": {
+            "default": "market",
+            "title": "Market Visibility",
             "type": "string"
           },
           "name": {
@@ -2278,6 +2735,37 @@
         "title": "SubagentDispatchRequest",
         "type": "object"
       },
+      "SubagentPolicyDecisionBody": {
+        "properties": {
+          "action": {
+            "pattern": "^(watch|retire|clear)$",
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "default": "operator_panel",
+            "title": "Actor",
+            "type": "string"
+          },
+          "evidence_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Item Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "SubagentPolicyDecisionBody",
+        "type": "object"
+      },
       "TaskAssigneeWire": {
         "description": "Who the task is assigned to. Polymorphic so a task can target\nAI roster members AND human participants in the same field.",
         "properties": {
@@ -2374,6 +2862,46 @@
         "title": "TeamMemberWire",
         "type": "object"
       },
+      "TemplateInfo": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "framework": {
+            "title": "Framework",
+            "type": "string"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "display_name",
+          "description",
+          "language",
+          "framework"
+        ],
+        "title": "TemplateInfo",
+        "type": "object"
+      },
       "ToolRegistryWire": {
         "properties": {
           "arms": {
@@ -2403,6 +2931,18 @@
       },
       "UpdateAgentRequest": {
         "properties": {
+          "capabilities": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capabilities"
+          },
           "description": {
             "anyOf": [
               {
@@ -2765,6 +3305,42 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VerificationCommand": {
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "command",
+          "source"
+        ],
+        "title": "VerificationCommand",
+        "type": "object"
+      },
+      "VerifierDriftQueueBody": {
+        "properties": {
+          "limit": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "VerifierDriftQueueBody",
         "type": "object"
       },
       "VerifyDetectRequest": {
@@ -4412,6 +4988,111 @@
         ]
       }
     },
+    "/api/agent-modes": {
+      "get": {
+        "operationId": "list_agent_modes_api_agent_modes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Agent Modes",
+        "tags": [
+          "agent-modes"
+        ]
+      }
+    },
+    "/api/agent-modes/current": {
+      "put": {
+        "operationId": "set_current_mode_api_agent_modes_current_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CurrentModeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentModeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Current Mode",
+        "tags": [
+          "agent-modes"
+        ]
+      }
+    },
+    "/api/agent-modes/detect": {
+      "get": {
+        "operationId": "detect_agent_mode_api_agent_modes_detect_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "workspace_path",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Workspace Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detect Agent Mode",
+        "tags": [
+          "agent-modes"
+        ]
+      }
+    },
     "/api/agent-trace/approvals": {
       "get": {
         "operationId": "api_agent_trace_approvals_api_agent_trace_approvals_get",
@@ -4968,6 +5649,28 @@
           },
           {
             "in": "query",
+            "name": "include_contradicted",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Contradicted",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_reliability",
+            "required": false,
+            "schema": {
+              "default": 0.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Min Reliability",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "required": false,
             "schema": {
@@ -5020,6 +5723,53 @@
         ]
       }
     },
+    "/api/agent-trace/experience-ledger/quality-summary": {
+      "get": {
+        "operationId": "api_agent_trace_experience_quality_summary_api_agent_trace_experience_ledger_quality_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10000,
+              "maximum": 50000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Experience Quality Summary Api Agent Trace Experience Ledger Quality Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Experience Quality Summary",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
     "/api/agent-trace/experience-ledger/weekly-summary": {
       "get": {
         "operationId": "api_agent_trace_experience_weekly_summary_api_agent_trace_experience_ledger_weekly_summary_get",
@@ -5066,6 +5816,494 @@
           }
         },
         "summary": "Api Agent Trace Experience Weekly Summary",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/policy-review/rule-drafts": {
+      "get": {
+        "operationId": "api_agent_trace_policy_review_rule_drafts_api_agent_trace_policy_review_rule_drafts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Policy Review Rule Drafts Api Agent Trace Policy Review Rule Drafts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Policy Review Rule Drafts",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/policy-review/rule-drafts/install": {
+      "post": {
+        "operationId": "api_agent_trace_policy_review_rule_draft_install_api_agent_trace_policy_review_rule_drafts_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Policy Review Rule Draft Install Api Agent Trace Policy Review Rule Drafts Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Policy Review Rule Draft Install",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/replay-cases": {
+      "get": {
+        "operationId": "api_agent_trace_replay_cases_api_agent_trace_replay_cases_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "turn_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turn Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Replay Cases Api Agent Trace Replay Cases Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Replay Cases",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/replay-evaluations": {
+      "get": {
+        "operationId": "api_agent_trace_replay_evaluations_api_agent_trace_replay_evaluations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "turn_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turn Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Replay Evaluations Api Agent Trace Replay Evaluations Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Replay Evaluations",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/replay-gate": {
+      "get": {
+        "operationId": "api_agent_trace_replay_gate_api_agent_trace_replay_gate_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "turn_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turn Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_cases",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 1000,
+              "minimum": 0,
+              "title": "Min Cases",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_score",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Min Score",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Replay Gate Api Agent Trace Replay Gate Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Replay Gate",
         "tags": [
           "agent-trace"
         ]
@@ -5578,6 +6816,52 @@
         ]
       }
     },
+    "/api/agent-trace/review-queue/promotions/audit/export": {
+      "get": {
+        "operationId": "api_agent_trace_review_queue_promotion_audit_export_api_agent_trace_review_queue_promotions_audit_export_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Review Queue Promotion Audit Export Api Agent Trace Review Queue Promotions Audit Export Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Agent Trace Review Queue Promotion Audit Export",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/review-queue/promotions/audit/summary": {
+      "get": {
+        "operationId": "api_agent_trace_review_queue_promotion_audit_summary_api_agent_trace_review_queue_promotions_audit_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Review Queue Promotion Audit Summary Api Agent Trace Review Queue Promotions Audit Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Agent Trace Review Queue Promotion Audit Summary",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
     "/api/agent-trace/review-queue/promotions/plan": {
       "post": {
         "operationId": "api_agent_trace_review_queue_promotion_plan_api_agent_trace_review_queue_promotions_plan_post",
@@ -6033,6 +7317,94 @@
         ]
       }
     },
+    "/api/agent-trace/task-runs/{task_id}/replay-case": {
+      "get": {
+        "operationId": "api_agent_trace_task_run_replay_case_api_agent_trace_task_runs__task_id__replay_case_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Task Run Replay Case Api Agent Trace Task Runs  Task Id  Replay Case Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Task Run Replay Case",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/task-runs/{task_id}/replay-evaluation": {
+      "get": {
+        "operationId": "api_agent_trace_task_run_replay_evaluation_api_agent_trace_task_runs__task_id__replay_evaluation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Task Run Replay Evaluation Api Agent Trace Task Runs  Task Id  Replay Evaluation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Task Run Replay Evaluation",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
     "/api/agent-trace/task-runs/{task_id}/review": {
       "get": {
         "operationId": "api_agent_trace_task_run_review_api_agent_trace_task_runs__task_id__review_get",
@@ -6266,6 +7638,139 @@
           }
         },
         "summary": "Api Agent Trace Token Usage",
+        "tags": [
+          "agent-trace"
+        ]
+      }
+    },
+    "/api/agent-trace/trust-denials/summary": {
+      "get": {
+        "operationId": "api_agent_trace_trust_denials_summary_api_agent_trace_trust_denials_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "turn_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Turn Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "queue_repeated",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Queue Repeated",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_occurrences",
+            "required": false,
+            "schema": {
+              "default": 2,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Min Occurrences",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Agent Trace Trust Denials Summary Api Agent Trace Trust Denials Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Agent Trace Trust Denials Summary",
         "tags": [
           "agent-trace"
         ]
@@ -7430,6 +8935,244 @@
           }
         },
         "summary": "Patch Status"
+      }
+    },
+    "/api/android/devices": {
+      "get": {
+        "operationId": "list_devices_api_android_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Devices Api Android Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Devices",
+        "tags": [
+          "android"
+        ]
+      }
+    },
+    "/api/android/devices/{device_id}/call": {
+      "post": {
+        "operationId": "call_tool_api_android_devices__device_id__call_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Call Tool Api Android Devices  Device Id  Call Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Call Tool",
+        "tags": [
+          "android"
+        ]
+      }
+    },
+    "/api/android/devices/{device_id}/execute": {
+      "post": {
+        "operationId": "execute_action_api_android_devices__device_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Execute Action Api Android Devices  Device Id  Execute Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Execute Action",
+        "tags": [
+          "android"
+        ]
+      }
+    },
+    "/api/android/devices/{device_id}/preview": {
+      "post": {
+        "operationId": "preview_action_api_android_devices__device_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Action Api Android Devices  Device Id  Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Action",
+        "tags": [
+          "android"
+        ]
+      }
+    },
+    "/api/android/devices/{device_id}/status": {
+      "get": {
+        "operationId": "device_status_api_android_devices__device_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "device_id",
+            "required": true,
+            "schema": {
+              "title": "Device Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Device Status Api Android Devices  Device Id  Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Status",
+        "tags": [
+          "android"
+        ]
       }
     },
     "/api/apps": {
@@ -9133,6 +10876,164 @@
         ]
       }
     },
+    "/api/browser/session/health": {
+      "get": {
+        "operationId": "api_browser_session_health_api_browser_session_health_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": false,
+            "schema": {
+              "default": "default",
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Browser Session Health Api Browser Session Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Browser Session Health",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
+    "/api/browser/session/replay-case": {
+      "get": {
+        "operationId": "api_browser_session_replay_case_api_browser_session_replay_case_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Browser Session Replay Case Api Browser Session Replay Case Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Browser Session Replay Case",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
+    "/api/browser/session/replay-case/queue": {
+      "post": {
+        "operationId": "api_browser_session_replay_case_queue_api_browser_session_replay_case_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Browser Session Replay Case Queue Api Browser Session Replay Case Queue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Browser Session Replay Case Queue",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
     "/api/browser/session/reset": {
       "post": {
         "operationId": "api_browser_session_reset_api_browser_session_reset_post",
@@ -9218,6 +11119,51 @@
           }
         },
         "summary": "Api Browser Session Status",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
+    "/api/browser/session/viewport": {
+      "post": {
+        "operationId": "api_browser_session_viewport_api_browser_session_viewport_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Browser Session Viewport Api Browser Session Viewport Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Browser Session Viewport",
         "tags": [
           "browser"
         ]
@@ -10311,6 +12257,151 @@
           }
         },
         "summary": "Vision Actions",
+        "tags": [
+          "computer"
+        ]
+      }
+    },
+    "/api/computer/activity": {
+      "get": {
+        "operationId": "computer_activity_api_computer_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Computer Activity Api Computer Activity Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Computer Activity",
+        "tags": [
+          "computer"
+        ]
+      }
+    },
+    "/api/computer/activity/replay-case": {
+      "get": {
+        "operationId": "computer_activity_replay_case_api_computer_activity_replay_case_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Computer Activity Replay Case Api Computer Activity Replay Case Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Computer Activity Replay Case",
+        "tags": [
+          "computer"
+        ]
+      }
+    },
+    "/api/computer/activity/replay-case/queue": {
+      "post": {
+        "operationId": "computer_activity_replay_case_queue_api_computer_activity_replay_case_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Computer Activity Replay Case Queue Api Computer Activity Replay Case Queue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Computer Activity Replay Case Queue",
         "tags": [
           "computer"
         ]
@@ -11591,6 +13682,565 @@
         ]
       }
     },
+    "/api/evolution/agent-scorecard": {
+      "get": {
+        "operationId": "get_agent_scorecard_api_evolution_agent_scorecard_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_score",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Target Score",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Agent Scorecard Api Evolution Agent Scorecard Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Agent Scorecard",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/agent-scorecard/gaps/queue": {
+      "post": {
+        "operationId": "queue_agent_scorecard_gaps_api_evolution_agent_scorecard_gaps_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ScorecardGapQueueBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Queue Agent Scorecard Gaps Api Evolution Agent Scorecard Gaps Queue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue Agent Scorecard Gaps",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/auto-verifier-metrics": {
+      "get": {
+        "operationId": "get_auto_verifier_metrics_api_evolution_auto_verifier_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Auto Verifier Metrics Api Evolution Auto Verifier Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Auto Verifier Metrics",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/auto-verifier-metrics/drift/queue": {
+      "post": {
+        "operationId": "queue_auto_verifier_drift_api_evolution_auto_verifier_metrics_drift_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/VerifierDriftQueueBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Queue Auto Verifier Drift Api Evolution Auto Verifier Metrics Drift Queue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue Auto Verifier Drift",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-quality": {
+      "get": {
+        "operationId": "get_browser_desktop_quality_api_evolution_browser_desktop_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Browser Desktop Quality Api Evolution Browser Desktop Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Browser Desktop Quality",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-repair-recipes": {
+      "get": {
+        "operationId": "get_browser_desktop_repair_recipes_api_evolution_browser_desktop_repair_recipes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_occurrences",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Min Occurrences",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Browser Desktop Repair Recipes Api Evolution Browser Desktop Repair Recipes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Browser Desktop Repair Recipes",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-repair-recipes/queue": {
+      "post": {
+        "operationId": "queue_browser_desktop_repair_recipes_api_evolution_browser_desktop_repair_recipes_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BrowserDesktopRepairRecipeQueueBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Queue Browser Desktop Repair Recipes Api Evolution Browser Desktop Repair Recipes Queue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue Browser Desktop Repair Recipes",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-repair-recipes/stale-artifacts/reject": {
+      "post": {
+        "operationId": "reject_stale_browser_desktop_replay_artifacts_api_evolution_browser_desktop_repair_recipes_stale_artifacts_reject_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BrowserDesktopStaleArtifactRejectionBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Reject Stale Browser Desktop Replay Artifacts Api Evolution Browser Desktop Repair Recipes Stale Artifacts Reject Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reject Stale Browser Desktop Replay Artifacts",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-repair-recipes/verifications": {
+      "get": {
+        "operationId": "get_browser_desktop_repair_recipe_verifications_api_evolution_browser_desktop_repair_recipes_verifications_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Browser Desktop Repair Recipe Verifications Api Evolution Browser Desktop Repair Recipes Verifications Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Browser Desktop Repair Recipe Verifications",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-repair-recipes/verifications/evidence": {
+      "post": {
+        "operationId": "attach_browser_desktop_repair_recipe_evidence_api_evolution_browser_desktop_repair_recipes_verifications_evidence_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserDesktopRepairRecipeEvidenceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Attach Browser Desktop Repair Recipe Evidence Api Evolution Browser Desktop Repair Recipes Verifications Evidence Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Browser Desktop Repair Recipe Evidence",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-repair-recipes/verifications/rerun": {
+      "post": {
+        "operationId": "rerun_browser_desktop_repair_recipe_evidence_api_evolution_browser_desktop_repair_recipes_verifications_rerun_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserDesktopRepairRecipeRerunBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rerun Browser Desktop Repair Recipe Evidence Api Evolution Browser Desktop Repair Recipes Verifications Rerun Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rerun Browser Desktop Repair Recipe Evidence",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-repair-recipes/verifications/rerun-batch": {
+      "post": {
+        "operationId": "rerun_browser_desktop_repair_recipe_batch_api_evolution_browser_desktop_repair_recipes_verifications_rerun_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BrowserDesktopRepairRecipeRerunBatchBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rerun Browser Desktop Repair Recipe Batch Api Evolution Browser Desktop Repair Recipes Verifications Rerun Batch Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rerun Browser Desktop Repair Recipe Batch",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
     "/api/evolution/budget/breaker/reset": {
       "post": {
         "operationId": "reset_budget_breaker_api_evolution_budget_breaker_reset_post",
@@ -11777,6 +14427,29 @@
           }
         },
         "summary": "Rollback Canary",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/codex-gap": {
+      "get": {
+        "operationId": "get_codex_gap_api_evolution_codex_gap_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Codex Gap Api Evolution Codex Gap Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Codex Gap",
         "tags": [
           "evolution"
         ]
@@ -13376,6 +16049,103 @@
         ]
       }
     },
+    "/api/evolution/repair-route-quality": {
+      "get": {
+        "operationId": "get_repair_route_quality_api_evolution_repair_route_quality_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Repair Route Quality Api Evolution Repair Route Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Repair Route Quality",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/repair-route-quality/promotions/queue": {
+      "post": {
+        "operationId": "queue_repair_route_promotions_api_evolution_repair_route_quality_promotions_queue_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RepairRoutePromotionQueueBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Queue Repair Route Promotions Api Evolution Repair Route Quality Promotions Queue Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue Repair Route Promotions",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
     "/api/evolution/rules/{index}": {
       "delete": {
         "operationId": "api_forget_rule_api_evolution_rules__index__delete",
@@ -13516,6 +16286,146 @@
         "summary": "Api Evolution Status",
         "tags": [
           "observability"
+        ]
+      }
+    },
+    "/api/evolution/subagent-fitness": {
+      "get": {
+        "operationId": "get_subagent_fitness_api_evolution_subagent_fitness_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 2000,
+              "maximum": 5000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Subagent Fitness Api Evolution Subagent Fitness Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Subagent Fitness",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/subagent-policy": {
+      "get": {
+        "operationId": "get_subagent_policy_api_evolution_subagent_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Subagent Policy Api Evolution Subagent Policy Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Subagent Policy",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/subagent-policy/{role}/decision": {
+      "post": {
+        "operationId": "decide_subagent_policy_api_evolution_subagent_policy__role__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role",
+            "required": true,
+            "schema": {
+              "title": "Role",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubagentPolicyDecisionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Decide Subagent Policy Api Evolution Subagent Policy  Role  Decision Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide Subagent Policy",
+        "tags": [
+          "evolution"
         ]
       }
     },
@@ -17547,6 +20457,53 @@
         ]
       }
     },
+    "/api/organizations/topology-promotion-lift": {
+      "get": {
+        "operationId": "list_promotion_lift_api_organizations_topology_promotion_lift_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 2000,
+              "maximum": 10000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Promotion Lift Api Organizations Topology Promotion Lift Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Promotion Lift",
+        "tags": [
+          "organizations"
+        ]
+      }
+    },
     "/api/organizations/topology-proposals": {
       "get": {
         "operationId": "list_proposals_api_organizations_topology_proposals_get",
@@ -18265,6 +21222,29 @@
         ]
       }
     },
+    "/api/plugins/smoke-summary": {
+      "get": {
+        "operationId": "_plugin_smoke_summary_api_plugins_smoke_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Smoke Summary Api Plugins Smoke Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": " Plugin Smoke Summary",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
     "/api/plugins/{plugin_id}": {
       "get": {
         "operationId": "_plugin_get_api_plugins__plugin_id__get",
@@ -18353,6 +21333,94 @@
           }
         },
         "summary": " Plugin Asset",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/{plugin_id}/runtime": {
+      "get": {
+        "operationId": "_plugin_runtime_api_plugins__plugin_id__runtime_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Runtime Api Plugins  Plugin Id  Runtime Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Runtime",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/{plugin_id}/smoke": {
+      "get": {
+        "operationId": "_plugin_smoke_api_plugins__plugin_id__smoke_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Smoke Api Plugins  Plugin Id  Smoke Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Smoke",
         "tags": [
           "plugins"
         ]
@@ -20588,11 +23656,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PauseTaskBody",
-                "default": {
-                  "note": "",
-                  "reason": "user_request"
-                }
+                "$ref": "#/components/schemas/PauseTaskBody"
               }
             }
           }
@@ -20645,12 +23709,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ResumeTaskBody",
-                "default": {
-                  "extra_iterations": 0,
-                  "extra_tokens": 0,
-                  "extra_usd": 0.0
-                }
+                "$ref": "#/components/schemas/ResumeTaskBody"
               }
             }
           }

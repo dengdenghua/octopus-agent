@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { swallow } from "@/core/utils/log";
 import { getToken } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 import {
   createDefaultClient,
   type RealtimeClient,
@@ -38,6 +39,7 @@ function randomThreadId(): string {
 }
 
 export default function RealtimeIndex() {
+  const { t } = useI18n();
   const navigate = useNavigate();
   const [joinId, setJoinId] = useState("");
   const [threads, setThreads] = useState<ThreadSummary[] | null>(null);
@@ -98,18 +100,18 @@ export default function RealtimeIndex() {
   return (
     <div className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 p-8">
       <header className="flex flex-col gap-2 border-b pb-6">
-        <h1 className="text-2xl font-semibold">Realtime Threads</h1>
+        <h1 className="text-2xl font-semibold">{t.realtime.title}</h1>
         <p className="text-sm text-muted-foreground">
-          Item-oriented conversations over <code>/api/realtime</code>.
+          {t.realtime.subtitle}
         </p>
       </header>
 
       <section className="flex items-center gap-3">
-        <Button onClick={onNew}>New thread</Button>
-        <span className="text-muted-foreground">or resume</span>
+        <Button onClick={onNew}>{t.realtime.newThread}</Button>
+        <span className="text-muted-foreground">{t.realtime.orResume}</span>
         <div className="flex items-center gap-2">
           <Input
-            placeholder="thread id"
+            placeholder={t.realtime.threadIdPlaceholder}
             value={joinId}
             onChange={(e) => setJoinId(e.target.value)}
             className="w-60"
@@ -119,13 +121,15 @@ export default function RealtimeIndex() {
             onClick={onJoin}
             disabled={!joinId.trim()}
           >
-            Open
+            {t.realtime.open}
           </Button>
         </div>
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-muted-foreground">Recent</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">
+          {t.realtime.recent}
+        </h2>
         <ThreadGrid
           threads={threads}
           loadError={loadError}
@@ -141,22 +145,26 @@ function ThreadGrid(props: {
   loadError: string | null;
   onSelect: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const { threads, loadError, onSelect } = props;
   if (loadError) {
     return (
       <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-        Could not load thread list: <code>{loadError}</code>. Start a new thread
-        above to begin.
+        {t.realtime.loadError(loadError)}
       </div>
     );
   }
   if (threads === null) {
-    return <div className="text-sm text-muted-foreground">Loading…</div>;
+    return (
+      <div className="text-sm text-muted-foreground">
+        {t.realtime.loading}
+      </div>
+    );
   }
   if (threads.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-        No threads yet — click <strong>New thread</strong> to start.
+        {t.realtime.empty}
       </div>
     );
   }
@@ -173,6 +181,7 @@ function ThreadCard(props: {
   thread: ThreadSummary;
   onSelect: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const { thread, onSelect } = props;
   const updated = new Date(thread.updatedAt);
   const updatedLabel = isNaN(updated.getTime())
@@ -193,9 +202,9 @@ function ThreadCard(props: {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-1 text-xs text-muted-foreground">
-          <span>{thread.turnCount} turns</span>
-          <span>last status: {thread.lastTurnStatus ?? "—"}</span>
-          <span>updated: {updatedLabel}</span>
+          <span>{t.realtime.turns(thread.turnCount)}</span>
+          <span>{t.realtime.lastStatus(thread.lastTurnStatus ?? "—")}</span>
+          <span>{t.realtime.updated(updatedLabel)}</span>
         </CardContent>
       </Card>
     </button>

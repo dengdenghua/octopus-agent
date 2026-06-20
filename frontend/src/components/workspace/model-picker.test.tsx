@@ -5,7 +5,7 @@
  * We don't re-test Radix Tabs / DropdownMenu internals.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { AllProviders } from "@/test/harness";
@@ -322,7 +322,9 @@ describe("<ModelPicker />", () => {
     ).toBeInTheDocument();
     expect(trigger).toHaveTextContent("Claude Opus 4.6 (mirror)");
     expect(trigger).not.toHaveTextContent("MiniMax M2.5");
-    expect(onChange).toHaveBeenCalledWith("claude-opus-4-6-mirror");
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith("claude-opus-4-6-mirror");
+    });
   });
 
   it("header shows the curated displayName + multiplier of the current model", async () => {

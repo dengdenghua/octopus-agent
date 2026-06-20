@@ -4,7 +4,7 @@
 
 ## Per ADR
 
-### [ADR-001 · Bionic naming + dual-track contracts](../../adr/001-bionic-naming.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/001-bionic-naming.md) · *Accepted*
 
 - `docs/biomimetic/*`
 - `docs/invariants.md`
@@ -13,37 +13,37 @@
 - `runtime/core/hearts/`
 - `runtime/execution/suckers/`
 
-### [ADR-002 · Mode-gated write scope](../../adr/002-mode-gated-scope.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/002-mode-gated-scope.md) · *Accepted*
 
 - `agents/<id>/workspace/<thread_id>/`
 - `tests/test_scope.py`
 
-### [ADR-003 · Session object replaces scattered ContextVars](../../adr/003-session-object.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/003-session-object.md) · *Accepted*
 
 _未引用代码路径_
 
-### [ADR-004 · OpenAPI → TypeScript type generation pipeline](../../adr/004-openapi-ts-codegen.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/004-openapi-ts-codegen.md) · *Accepted*
 
 - `docs/openapi-snapshot.json`
 - `frontend/src/core/api/openapi-types.ts`
 
-### [ADR-005 · Agent capability flags](../../adr/005-agent-capabilities.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/005-agent-capabilities.md) · *Accepted*
 
 - `docs/agent-capabilities.md`
 - `frontend/src/core/agents/types.ts`
 
-### [ADR-006 · Lifecycle hook system](../../adr/006-lifecycle-hooks.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/006-lifecycle-hooks.md) · *Accepted*
 
 - `runtime/safety/hooks/{events,registry,runner}.py`
 - `tests/test_safety_hooks.py`
 
-### [ADR-007 · MCP server trust store](../../adr/007-mcp-trust-store.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/007-mcp-trust-store.md) · *Accepted*
 
 - `runtime/adapters/mcp_client/bridge.py:require_trust`
 - `runtime/adapters/mcp_client/trust.py`
 - `tests/test_mcp_trust.py`
 
-### [ADR-008 · Constitution enforcement profiles](../../adr/008-constitution-profiles.md) · *Accepted*
+### [ADR-008 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/008-constitution-profiles.md) · *Accepted*
 
 - `runtime/safety/constitution/gate.py`
 - `runtime/safety/constitution/profiles.py`

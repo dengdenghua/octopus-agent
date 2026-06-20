@@ -63,8 +63,9 @@ def isolated_cwd(
 
 
 @pytest.fixture
-def client(isolated_cwd: Path) -> TestClient:
-    return TestClient(create_app())
+def client(isolated_cwd: Path) -> Iterator[TestClient]:
+    with TestClient(create_app()) as test_client:
+        yield test_client
 
 
 # ═══════════════════════════════════════════════════════════

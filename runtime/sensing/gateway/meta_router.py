@@ -340,10 +340,15 @@ def create_meta_router(
             # Runtime-registered skills win because those entries are
             # executable and carry their real trust/test metadata.
             try:
+                # Dynamic plugin names hide executable all_skills registry
+                # entries so plugin-owned tools do not appear twice. Do not
+                # apply that rule to the read-only file catalog: bundled
+                # public SKILL.md entries (for example pdf) are the fallback
+                # surface when the executable registry entry was hidden.
                 if _is_hidden_skill_catalog_entry(
                     str(skill.get("name") or ""),
                     str(skill.get("trusted_source") or ""),
-                    dynamic_plugin_skills,
+                    set(),
                     seen_sources,
                 ):
                     continue

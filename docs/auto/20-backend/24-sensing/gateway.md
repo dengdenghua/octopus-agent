@@ -20,6 +20,7 @@
 | `agent_market_sources/financial-services/agent-plugins/model-builder/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
 | `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/dcf-model/scripts/validate_dcf.py` | DCF Model Validation Script Validates Excel DCF models for formula errors and common DCF mistakes |
 | `agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/ib-check-deck/scripts/extract_numbers.py` | Extract numerical values from presentation content for consistency checking. |
+| `agent_modes_router.py` | Agent project/code mode detection endpoints. |
 | `agent_trace_router.py` | Read-only API for the durable agent trace store. |
 | `agent_world_router.py` | Agent Market router · local agent marketplace. |
 | `agents_local_partner.py` | LocalPartner subsystem — detection + secure registration. |

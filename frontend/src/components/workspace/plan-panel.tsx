@@ -263,6 +263,7 @@ export function PlanButton({
   isActive: boolean;
   className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <button
       onClick={onClick}
@@ -275,7 +276,7 @@ export function PlanButton({
       )}
     >
       <ClipboardListIcon className="size-3.5" />
-      <span>Plan</span>
+      <span>{t.planPanel.title}</span>
       {stepCount > 0 && (
         <span className="rounded-lg bg-muted/80 px-1.5 py-0.5 text-[10px] tabular-nums">
           {completedCount}/{stepCount}
@@ -342,9 +343,9 @@ export function PlanPanel({
           <div className="flex size-6 items-center justify-center rounded-lg bg-primary/10">
             <ClipboardListIcon className="text-primary size-3.5" />
           </div>
-          <span className="text-sm font-semibold">Plan</span>
+          <span className="text-sm font-semibold">{t.planPanel.title}</span>
           <span className="text-muted-foreground text-[10px]">
-            {completedCount}/{steps.length} steps
+            {t.planPanel.steps(completedCount, steps.length)}
           </span>
         </div>
         <button

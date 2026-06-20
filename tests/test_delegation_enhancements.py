@@ -320,20 +320,27 @@ def test_retry_parallel_per_spec(mock_subagent, mock_builtins):
 
     # Spec A: timeout → success on retry
     # Spec B: success immediately
-    call_count = {"n": 0}
+    # Key the timeout off researcher's OWN call counter, not a shared
+    # global one: the two specs run in concurrent worker threads, so a
+    # shared "first call overall" check races on thread scheduling
+    # (debugger sometimes lands first, then researcher never times out).
+    # researcher's retry is sequential within its own worker, so a
+    # per-agent counter is deterministic.
+    researcher_calls = {"n": 0}
 
     def side_effect_fn(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        call_count["n"] += 1
         aid = kwargs.get("agent_id")
-        if aid == "researcher" and call_count["n"] == 1:
-            # First call to researcher times out
-            return {
-                "agent_id": "researcher",
-                "output": "",
-                "success": False,
-                "error": "timeout",
-                "error_type": "timeout",
-            }
+        if aid == "researcher":
+            researcher_calls["n"] += 1
+            if researcher_calls["n"] == 1:
+                # First call to researcher times out
+                return {
+                    "agent_id": "researcher",
+                    "output": "",
+                    "success": False,
+                    "error": "timeout",
+                    "error_type": "timeout",
+                }
         # All other calls succeed
         return {
             "agent_id": aid,

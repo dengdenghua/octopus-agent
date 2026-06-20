@@ -38,6 +38,7 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/hooks";
+import { useI18n } from "@/core/i18n/hooks";
 import type { NativeDesktopItem } from "@/types/electron";
 
 type DesktopApp = {
@@ -53,83 +54,14 @@ type DesktopCategory = {
   label: string;
 };
 
-const DESKTOP_APPS: DesktopApp[] = [
-  {
-    name: "工作台",
-    subtitle: "对话、编程、项目",
-    route: "/workspace/realtime/new",
-    icon: MonitorIcon,
-    color: "from-sky-500 to-blue-600",
-  },
-  {
-    name: "AI 浏览器",
-    subtitle: "浏览、调研、自动化",
-    route: "/browser",
-    icon: GlobeIcon,
-    color: "from-indigo-500 to-cyan-500",
-  },
-  {
-    name: "本地文件",
-    subtitle: "工作区与资料",
-    route: "/workspace/knowledge",
-    icon: FolderIcon,
-    color: "from-amber-400 to-orange-500",
-  },
-  {
-    name: "本地应用",
-    subtitle: "应用快捷入口",
-    route: "/workspace/store",
-    icon: AppWindowIcon,
-    color: "from-violet-500 to-fuchsia-500",
-  },
-  {
-    name: "终端日志",
-    subtitle: "运行状态",
-    route: "/workspace/observability",
-    icon: TerminalSquareIcon,
-    color: "from-slate-700 to-slate-500",
-  },
-  {
-    name: "设置",
-    subtitle: "账号、模型、权限",
-    route: "/workspace",
-    icon: SettingsIcon,
-    color: "from-stone-500 to-neutral-700",
-  },
-];
-
-const DOCK_APPS = DESKTOP_APPS.slice(0, 3);
-const LOCAL_APP_PLACEHOLDERS: DesktopApp[] = [
-  {
-    name: "浏览器",
-    subtitle: "本地应用占位",
-    route: "/workspace/store",
-    icon: GlobeIcon,
-    color: "from-white to-slate-100 text-slate-700",
-  },
-  {
-    name: "沟通",
-    subtitle: "本地应用占位",
-    route: "/workspace/store",
-    icon: AppWindowIcon,
-    color: "from-white to-slate-100 text-slate-700",
-  },
-  {
-    name: "笔记",
-    subtitle: "本地应用占位",
-    route: "/workspace/store",
-    icon: FileTextIcon,
-    color: "from-white to-slate-100 text-slate-700",
-  },
-];
-const DESKTOP_CATEGORIES: DesktopCategory[] = [
-  { key: "all", label: "全部" },
-  { key: "folder", label: "文件夹" },
-  { key: "app", label: "应用" },
-  { key: "image", label: "图片" },
-  { key: "document", label: "文档" },
-  { key: "package", label: "安装包" },
-  { key: "other", label: "其他" },
+const CATEGORY_ORDER: DesktopCategory["key"][] = [
+  "all",
+  "folder",
+  "app",
+  "image",
+  "document",
+  "package",
+  "other",
 ];
 
 const IMAGE_EXTENSIONS = new Set([
@@ -184,20 +116,9 @@ function getDesktopItemCategory(
   return "other";
 }
 
-function groupDesktopItems(items: NativeDesktopItem[]) {
-  return DESKTOP_CATEGORIES.filter((category) => category.key !== "all")
-    .map((category) => ({
-      key: category.key,
-      title: category.label,
-      items: items.filter(
-        (item) => getDesktopItemCategory(item) === category.key,
-      ),
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
 export default function DesktopShellPage() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [nativeDesktopItems, setNativeDesktopItems] = useState<
     NativeDesktopItem[]
@@ -235,17 +156,95 @@ export default function DesktopShellPage() {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const mousePassthroughRef = useRef(false);
   const today = useMemo(() => new Date(), []);
-  const weekday = [
-    "星期日",
-    "星期一",
-    "星期二",
-    "星期三",
-    "星期四",
-    "星期五",
-    "星期六",
-  ][today.getDay()];
+  const weekday = t.desktop.weekdays[today.getDay()] ?? "";
 
   const debouncedSearch = useDebounce(desktopSearch, 200);
+
+  const desktopCategories = useMemo<DesktopCategory[]>(
+    () =>
+      CATEGORY_ORDER.map((key) => ({
+        key,
+        label: t.desktop.categories[key],
+      })),
+    [t.desktop.categories],
+  );
+
+  const desktopApps = useMemo<DesktopApp[]>(
+    () => [
+      {
+        name: t.desktop.apps.workspace.name,
+        subtitle: t.desktop.apps.workspace.subtitle,
+        route: "/workspace/realtime/new",
+        icon: MonitorIcon,
+        color: "from-sky-500 to-blue-600",
+      },
+      {
+        name: t.desktop.apps.aiBrowser.name,
+        subtitle: t.desktop.apps.aiBrowser.subtitle,
+        route: "/browser",
+        icon: GlobeIcon,
+        color: "from-indigo-500 to-cyan-500",
+      },
+      {
+        name: t.desktop.apps.localFiles.name,
+        subtitle: t.desktop.apps.localFiles.subtitle,
+        route: "/workspace/knowledge",
+        icon: FolderIcon,
+        color: "from-amber-400 to-orange-500",
+      },
+      {
+        name: t.desktop.apps.localApps.name,
+        subtitle: t.desktop.apps.localApps.subtitle,
+        route: "/workspace/store",
+        icon: AppWindowIcon,
+        color: "from-violet-500 to-fuchsia-500",
+      },
+      {
+        name: t.desktop.apps.terminalLogs.name,
+        subtitle: t.desktop.apps.terminalLogs.subtitle,
+        route: "/workspace/observability",
+        icon: TerminalSquareIcon,
+        color: "from-slate-700 to-slate-500",
+      },
+      {
+        name: t.desktop.apps.settings.name,
+        subtitle: t.desktop.apps.settings.subtitle,
+        route: "/workspace",
+        icon: SettingsIcon,
+        color: "from-stone-500 to-neutral-700",
+      },
+    ],
+    [t.desktop.apps],
+  );
+
+  const dockApps = useMemo(() => desktopApps.slice(0, 3), [desktopApps]);
+
+  const localAppPlaceholders = useMemo<DesktopApp[]>(
+    () => [
+      {
+        name: t.desktop.placeholders.browser,
+        subtitle: t.desktop.placeholders.subtitle,
+        route: "/workspace/store",
+        icon: GlobeIcon,
+        color: "from-white to-slate-100 text-slate-700",
+      },
+      {
+        name: t.desktop.placeholders.communication,
+        subtitle: t.desktop.placeholders.subtitle,
+        route: "/workspace/store",
+        icon: AppWindowIcon,
+        color: "from-white to-slate-100 text-slate-700",
+      },
+      {
+        name: t.desktop.placeholders.notes,
+        subtitle: t.desktop.placeholders.subtitle,
+        route: "/workspace/store",
+        icon: FileTextIcon,
+        color: "from-white to-slate-100 text-slate-700",
+      },
+    ],
+    [t.desktop.placeholders],
+  );
 
   const openApp = (app: DesktopApp) => navigate(app.route);
 
@@ -318,7 +317,7 @@ export default function DesktopShellPage() {
         if (!alive) return;
         setLoadingItems(false);
         if (!result.ok) {
-          setItemsError(result.error || "读取桌面文件失败");
+          setItemsError(result.error || t.desktop.errors.listItems);
           setNativeDesktopItems([]);
           return;
         }
@@ -327,13 +326,15 @@ export default function DesktopShellPage() {
       .catch((e) => {
         if (!alive) return;
         setLoadingItems(false);
-        setItemsError(e instanceof Error ? e.message : "读取桌面文件失败");
+        setItemsError(
+          e instanceof Error ? e.message : t.desktop.errors.listItems,
+        );
         setNativeDesktopItems([]);
       });
     return () => {
       alive = false;
     };
-  }, [organizerEnabled]);
+  }, [organizerEnabled, t.desktop.errors.listItems]);
 
   useEffect(() => {
     if (!showWidget) return;
@@ -399,8 +400,18 @@ export default function DesktopShellPage() {
   }, [desktopCategory, debouncedSearch, nativeDesktopItems]);
 
   const groupedDesktopItems = useMemo(
-    () => groupDesktopItems(filteredDesktopItems),
-    [filteredDesktopItems],
+    () =>
+      desktopCategories
+        .filter((category) => category.key !== "all")
+        .map((category) => ({
+          key: category.key,
+          title: category.label,
+          items: filteredDesktopItems.filter(
+            (item) => getDesktopItemCategory(item) === category.key,
+          ),
+        }))
+        .filter((group) => group.items.length > 0),
+    [filteredDesktopItems, desktopCategories],
   );
 
   const openDesktopFile = (item: NativeDesktopItem) => {
@@ -418,12 +429,14 @@ export default function DesktopShellPage() {
         if (result.ok) {
           setNativeDesktopItems(result.items);
         } else {
-          setItemsError(result.error || "刷新失败");
+          setItemsError(result.error || t.desktop.errors.refresh);
         }
       })
       .catch((e) => {
         setLoadingItems(false);
-        setItemsError(e instanceof Error ? e.message : "刷新失败");
+        setItemsError(
+          e instanceof Error ? e.message : t.desktop.errors.refresh,
+        );
       });
   };
 
@@ -437,7 +450,7 @@ export default function DesktopShellPage() {
           item.kind === "file" && getDesktopItemCategory(item) !== "app",
       );
       if (fileItems.length === 0) {
-        toast.info("桌面上没有可整理的文件");
+        toast.info(t.desktop.toasts.noFilesToArchive);
         setArchiveResult({ moved: 0, skipped: 0 });
         return;
       }
@@ -449,12 +462,12 @@ export default function DesktopShellPage() {
       if (result.ok) {
         setArchiveResult({ moved: result.moved, skipped: result.skipped });
         refreshDesktopItems();
-        toast.success(`已整理 ${result.moved} 个文件到分类文件夹`);
+        toast.success(t.desktop.toasts.archived(result.moved));
       } else {
-        toast.error(result.error || "整理失败");
+        toast.error(result.error || t.desktop.errors.archive);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "整理失败");
+      toast.error(e instanceof Error ? e.message : t.desktop.errors.archive);
       setArchiveResult({ moved: 0, skipped: 0 });
     } finally {
       setArchiving(false);
@@ -469,14 +482,14 @@ export default function DesktopShellPage() {
       if (result.ok && result.undone > 0) {
         refreshDesktopItems();
         setArchiveResult(null);
-        toast.success(`已撤销 ${result.undone} 个文件的移动`);
+        toast.success(t.desktop.toasts.undone(result.undone));
       } else if (result.ok && result.undone === 0) {
-        toast.info("没有可撤销的操作");
+        toast.info(t.desktop.toasts.noUndoOperations);
       } else {
-        toast.error(result.error || "撤销失败");
+        toast.error(result.error || t.desktop.errors.undo);
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "撤销失败");
+      toast.error(e instanceof Error ? e.message : t.desktop.errors.undo);
     } finally {
       setUndoing(false);
     }
@@ -493,7 +506,7 @@ export default function DesktopShellPage() {
       if (!window.octopus?.desktop?.moveItem) return;
       const category = getDesktopItemCategory(item);
       if (category === "app" || category === "folder") {
-        toast.info("仅支持归档文件");
+        toast.info(t.desktop.errors.archiveOnlyFiles);
         return;
       }
       try {
@@ -508,22 +521,22 @@ export default function DesktopShellPage() {
         );
         if (result.ok) {
           refreshDesktopItems();
-          toast.success(`已将 "${item.name}" 归档到 ${folderName}`);
+          toast.success(t.desktop.toasts.fileArchived(item.name, folderName));
         } else {
-          toast.error(result.error || "归档失败");
+          toast.error(result.error || t.desktop.errors.archive);
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "归档失败");
+        toast.error(e instanceof Error ? e.message : t.desktop.errors.archive);
       }
     } else if (action === "delete") {
-      toast.info("删除功能暂未实现");
+      toast.info(t.desktop.errors.deleteNotImplemented);
     }
   };
 
   const submit = () => {
     const value = query.trim().toLowerCase();
     if (!value) return;
-    const app = DESKTOP_APPS.find((item) => {
+    const app = desktopApps.find((item) => {
       const haystack = `${item.name} ${item.subtitle}`.toLowerCase();
       return (
         haystack.includes(value) || value.includes(item.name.toLowerCase())
@@ -554,10 +567,11 @@ export default function DesktopShellPage() {
               <FolderIcon className="size-5" />
             </div>
             <div>
-              <h1 className="text-xl font-semibold">桌面助手未开启</h1>
+              <h1 className="text-xl font-semibold">
+                {t.desktop.disabledTitle}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                Octopus
-                默认进入欢迎、登录与工作区。需要处理系统桌面文件时，可以单独开启透明桌面助手。
+                {t.desktop.disabledDescription}
               </p>
             </div>
           </div>
@@ -567,21 +581,21 @@ export default function DesktopShellPage() {
               onClick={enableOrganizer}
               className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition hover:bg-primary/90"
             >
-              开启桌面助手
+              {t.desktop.enableButton}
             </button>
             <button
               type="button"
               onClick={() => navigate("/workspace/desktop-organizer")}
               className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
             >
-              打开插件设置
+              {t.desktop.pluginSettingsButton}
             </button>
             <button
               type="button"
               onClick={() => navigate("/workspace/realtime/new")}
               className="inline-flex h-10 items-center justify-center rounded-lg border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
             >
-              回到工作区
+              {t.desktop.backToWorkspaceButton}
             </button>
           </div>
         </section>
@@ -598,39 +612,41 @@ export default function DesktopShellPage() {
               type="button"
               onClick={() => navigate("/workspace/realtime/new")}
               className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-0.5 transition hover:bg-white/32"
-              title="打开工作台"
+              title={t.desktop.header.workspaceTooltip}
             >
               <span className="grid size-6 place-items-center rounded-md bg-white/50 text-slate-700 shadow-sm ring-1 ring-white/35">
                 <BotIcon className="size-4" />
               </span>
-              <span className="font-semibold">Octopus</span>
+              <span className="font-semibold">{t.desktop.header.brand}</span>
             </button>
             <button
               type="button"
               onClick={() => navigate("/workspace")}
               className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-slate-700 transition hover:bg-white/34 md:flex"
-              title="账号与模型"
+              title={t.desktop.header.accountModels}
             >
               <UserCircleIcon className="size-3.5" />
-              <span>官方模型</span>
+              <span>{t.desktop.header.accountModels}</span>
             </button>
             <button
               type="button"
               onClick={() => setDesktopDrawerOpen(true)}
               className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-slate-700 transition hover:bg-white/34 sm:flex"
-              title="桌面助手"
+              title={t.desktop.header.desktopAssistant}
             >
               <FolderIcon className="size-3.5" />
-              <span>桌面 {nativeDesktopItems.length || "--"}</span>
+              <span>
+                {t.desktop.header.desktopCount(nativeDesktopItems.length)}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => navigate("/workspace/store")}
               className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-slate-700 transition hover:bg-white/34 md:flex"
-              title="市场"
+              title={t.desktop.header.market}
             >
               <StoreIcon className="size-3.5" />
-              <span>市场</span>
+              <span>{t.desktop.header.market}</span>
             </button>
           </div>
 
@@ -639,14 +655,14 @@ export default function DesktopShellPage() {
               type="button"
               onClick={() => navigate("/workspace/observability")}
               className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 transition hover:bg-white/34 md:flex"
-              title="运行状态"
+              title={t.desktop.header.aiReady}
             >
               <SparklesIcon className="size-3.5 text-blue-600" />
-              <span>AI 就绪</span>
+              <span>{t.desktop.header.aiReady}</span>
             </button>
             <span className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 sm:flex">
               <WifiIcon className="size-3.5" />
-              <span>Wi-Fi</span>
+              <span>{t.desktop.header.wifi}</span>
             </span>
             <span className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 sm:flex">
               <BatteryFullIcon className="size-3.5" />
@@ -656,7 +672,7 @@ export default function DesktopShellPage() {
               type="button"
               onClick={() => navigate("/workspace")}
               className="grid size-7 place-items-center rounded-md transition hover:bg-white/34"
-              title="通知"
+              title={t.desktop.header.notifications}
             >
               <BellIcon className="size-4" />
             </button>
@@ -664,24 +680,35 @@ export default function DesktopShellPage() {
               type="button"
               onClick={() => navigate("/workspace")}
               className="grid size-7 place-items-center rounded-md transition hover:bg-white/34"
-              title="快捷设置"
+              title={t.desktop.header.quickSettings}
             >
               <SlidersHorizontalIcon className="size-4" />
             </button>
             <span className="min-w-[108px] text-right">
-              {today.getMonth() + 1}月{today.getDate()}日 · {weekday}
+              {t.desktop.header.date(
+                today.getMonth() + 1,
+                today.getDate(),
+                weekday,
+              )}
             </span>
           </div>
         </header>
 
         <div className="relative min-h-0 flex-1 px-8 pb-28 pt-7">
           <div className="pointer-events-none absolute right-8 top-8 rounded-[22px] bg-black/20 px-5 py-4 text-right shadow-2xl shadow-black/14 backdrop-blur-2xl">
-            <div className="text-xs font-semibold text-white/78">今日</div>
+            <div className="text-xs font-semibold text-white/78">
+              {t.desktop.widget.today}
+            </div>
             <div className="mt-1 text-4xl font-semibold leading-none">
               {today.getDate()}
             </div>
             <div className="mt-1 text-xs text-white/72">
-              {today.getFullYear()}年{today.getMonth() + 1}月 · {weekday}
+              {t.desktop.widget.date(
+                today.getFullYear(),
+                today.getMonth() + 1,
+                today.getDate(),
+                weekday,
+              )}
             </div>
           </div>
 
@@ -695,7 +722,7 @@ export default function DesktopShellPage() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="搜索任务、文件、应用，或打开工作台"
+                placeholder={t.desktop.searchPlaceholder}
                 className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
               />
               <button
@@ -703,7 +730,7 @@ export default function DesktopShellPage() {
                 onClick={submit}
                 className="rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-slate-700"
               >
-                打开
+                {t.desktop.open}
               </button>
             </div>
           </div>
@@ -736,21 +763,23 @@ export default function DesktopShellPage() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-semibold">桌面助手</h2>
+                <h2 className="text-base font-semibold">
+                  {t.desktop.drawer.title}
+                </h2>
                 <p className="mt-0.5 text-xs text-slate-500">
                   {loadingItems
-                    ? "正在读取桌面文件..."
+                    ? t.desktop.drawer.loading
                     : itemsError
-                      ? itemsError
+                      ? t.desktop.drawer.error(itemsError)
                       : window.octopus?.desktop
-                        ? `${nativeDesktopItems.length} 个桌面项目已收纳`
-                        : "Electron 模式下显示真实系统桌面"}
+                        ? t.desktop.drawer.count(nativeDesktopItems.length)
+                        : t.desktop.drawer.electronMode}
                 </p>
               </div>
               <div className="flex items-center gap-1.5">
                 {archiveResult && !itemsError && (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                    已整理 {archiveResult.moved} 项
+                    {t.desktop.drawer.archiveBadge(archiveResult.moved)}
                   </span>
                 )}
                 {window.octopus?.desktop?.moveItemsBatch && !itemsError && (
@@ -759,10 +788,12 @@ export default function DesktopShellPage() {
                     onClick={handleAutoArchive}
                     disabled={archiving || loadingItems}
                     className="inline-flex h-7 items-center gap-1 rounded-lg bg-blue-600 px-2.5 text-[11px] font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
-                    title="一键整理桌面文件"
+                    title={t.desktop.drawer.autoArchiveTooltip}
                   >
                     <ArchiveIcon className="size-3" />
-                    {archiving ? "整理中..." : "一键整理"}
+                    {archiving
+                      ? t.desktop.drawer.archiving
+                      : t.desktop.drawer.archive}
                   </button>
                 )}
                 {window.octopus?.desktop?.undoMoves && !itemsError && (
@@ -771,10 +802,12 @@ export default function DesktopShellPage() {
                     onClick={handleUndo}
                     disabled={undoing || loadingItems}
                     className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
-                    title="撤销上一次整理"
+                    title={t.desktop.drawer.undoTooltip}
                   >
                     <RotateCcwIcon className="size-3" />
-                    {undoing ? "撤销中..." : "撤销"}
+                    {undoing
+                      ? t.desktop.drawer.undoing
+                      : t.desktop.drawer.undo}
                   </button>
                 )}
                 <button
@@ -782,7 +815,7 @@ export default function DesktopShellPage() {
                   type="button"
                   onClick={() => setDesktopDrawerOpen(false)}
                   className="grid size-8 place-items-center rounded-full bg-slate-900/8 text-lg leading-none text-slate-600 transition hover:bg-slate-900/14"
-                  aria-label="关闭桌面文件"
+                  aria-label={t.desktop.drawer.closeAria}
                 >
                   ×
                 </button>
@@ -792,13 +825,15 @@ export default function DesktopShellPage() {
             {itemsError && (
               <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
                 <div className="flex items-center gap-2">
-                  <span className="font-medium">读取失败</span>
+                  <span className="font-medium">
+                    {t.desktop.drawer.readFailed}
+                  </span>
                   <button
                     type="button"
                     onClick={refreshDesktopItems}
                     className="ml-auto rounded-md bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 transition hover:bg-red-200"
                   >
-                    重试
+                    {t.desktop.drawer.retry}
                   </button>
                 </div>
                 <p className="mt-1 opacity-80">{itemsError}</p>
@@ -812,7 +847,7 @@ export default function DesktopShellPage() {
                   <input
                     value={desktopSearch}
                     onChange={(event) => setDesktopSearch(event.target.value)}
-                    placeholder="搜索桌面文件、应用、图片"
+                    placeholder={t.desktop.drawer.searchPlaceholder}
                     className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
                   />
                   {desktopSearch && (
@@ -827,7 +862,7 @@ export default function DesktopShellPage() {
                 </div>
 
                 <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-                  {DESKTOP_CATEGORIES.map((category) => {
+                  {desktopCategories.map((category) => {
                     const count =
                       category.key === "all"
                         ? nativeDesktopItems.length
@@ -865,9 +900,11 @@ export default function DesktopShellPage() {
                           );
                           if (result.ok) {
                             refreshDesktopItems();
-                            toast.success("文件已移动");
+                            toast.success(t.desktop.toasts.fileMoved);
                           } else {
-                            toast.error(result.error || "移动失败");
+                            toast.error(
+                              result.error || t.desktop.errors.move,
+                            );
                           }
                         }}
                         className={cn(
@@ -892,7 +929,7 @@ export default function DesktopShellPage() {
                       <div className="text-center">
                         <Loader2Icon className="mx-auto size-8 animate-spin text-slate-400" />
                         <p className="mt-3 text-sm font-medium text-slate-500">
-                          正在读取桌面文件...
+                          {t.desktop.loadingItems}
                         </p>
                       </div>
                     </div>
@@ -904,9 +941,9 @@ export default function DesktopShellPage() {
                             {
                               key: desktopCategory,
                               title:
-                                DESKTOP_CATEGORIES.find(
+                                desktopCategories.find(
                                   (item) => item.key === desktopCategory,
-                                )?.label || "文件",
+                                )?.label || t.desktop.fallbackGroupTitle,
                               items: filteredDesktopItems,
                             },
                           ]
@@ -984,15 +1021,15 @@ export default function DesktopShellPage() {
                         <SearchIcon className="mx-auto size-8 text-slate-400" />
                         <p className="mt-3 text-sm font-medium text-slate-600">
                           {desktopSearch.trim()
-                            ? "未找到匹配的文件"
+                            ? t.desktop.empty.noSearchResults
                             : nativeDesktopItems.length === 0
-                              ? "桌面暂无文件"
-                              : "该分类下暂无文件"}
+                              ? t.desktop.empty.noDesktopFiles
+                              : t.desktop.empty.noFilesInCategory}
                         </p>
                         <p className="mt-1 text-xs text-slate-400">
                           {desktopSearch.trim()
-                            ? "尝试更换搜索关键词"
-                            : "将文件放到桌面即可在此管理"}
+                            ? t.desktop.empty.tryAnotherKeyword
+                            : t.desktop.empty.dropFilesHere}
                         </p>
                       </div>
                     </div>
@@ -1015,7 +1052,7 @@ export default function DesktopShellPage() {
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 transition hover:bg-slate-100"
             >
               <ExternalLinkIcon className="size-3.5" />
-              打开
+              {t.desktop.contextMenu.open}
             </button>
             {contextMenu.item.kind === "file" && (
               <button
@@ -1026,7 +1063,7 @@ export default function DesktopShellPage() {
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 transition hover:bg-slate-100"
               >
                 <FolderInputIcon className="size-3.5" />
-                归档到分类
+                {t.desktop.contextMenu.archiveToCategory}
               </button>
             )}
             <div className="my-1 h-px bg-slate-200" />
@@ -1038,7 +1075,7 @@ export default function DesktopShellPage() {
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 transition hover:bg-red-50"
             >
               <Trash2Icon className="size-3.5" />
-              删除
+              {t.desktop.contextMenu.delete}
             </button>
           </div>
         )}
@@ -1047,7 +1084,7 @@ export default function DesktopShellPage() {
           data-desktop-interactive
           className="absolute bottom-5 left-1/2 z-20 flex -translate-x-1/2 items-end gap-2.5 rounded-[24px] border border-white/38 bg-white/48 px-3.5 py-2.5 shadow-2xl shadow-black/22 backdrop-blur-2xl"
         >
-          {DOCK_APPS.map((app) => {
+          {dockApps.map((app) => {
             const Icon = app.icon;
             return (
               <button
@@ -1065,7 +1102,7 @@ export default function DesktopShellPage() {
             );
           })}
           <span className="mx-1 h-10 w-px bg-slate-700/16" />
-          {LOCAL_APP_PLACEHOLDERS.map((app) => {
+          {localAppPlaceholders.map((app) => {
             const Icon = app.icon;
             return (
               <button
@@ -1086,7 +1123,7 @@ export default function DesktopShellPage() {
           <button
             type="button"
             onClick={() => setDesktopDrawerOpen(true)}
-            title="桌面文件"
+            title={t.desktop.dock.desktopFiles}
             className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-orange-500 shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
           >
             <FolderIcon className="size-6" />
@@ -1094,7 +1131,7 @@ export default function DesktopShellPage() {
           <button
             type="button"
             onClick={() => setShowWidget(!showWidget)}
-            title="系统监控"
+            title={t.desktop.dock.systemMonitor}
             className={cn(
               "grid size-[54px] place-items-center rounded-[15px] shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110",
               showWidget
@@ -1107,7 +1144,7 @@ export default function DesktopShellPage() {
           <button
             type="button"
             onClick={() => navigate("/workspace")}
-            title="设置"
+            title={t.desktop.dock.settings}
             className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-slate-700 shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
           >
             <SettingsIcon className="size-6" />
@@ -1120,7 +1157,7 @@ export default function DesktopShellPage() {
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-500">
-                系统监控
+                {t.desktop.systemWidget.title}
               </span>
               <button
                 type="button"
@@ -1134,7 +1171,7 @@ export default function DesktopShellPage() {
               <div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1 text-slate-600">
-                    <CpuIcon className="size-3" /> CPU
+                    <CpuIcon className="size-3" /> {t.desktop.systemWidget.cpu}
                   </span>
                   <span className="font-medium">{systemInfo.cpu.usage}%</span>
                 </div>
@@ -1153,13 +1190,14 @@ export default function DesktopShellPage() {
                 </div>
                 <div className="mt-0.5 text-[10px] text-slate-400">
                   {systemInfo.cpu.model.split(" ").slice(0, 3).join(" ")} ·{" "}
-                  {systemInfo.cpu.cores} 核心
+                  {systemInfo.cpu.cores} {t.desktop.systemWidget.cores}
                 </div>
               </div>
               <div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1 text-slate-600">
-                    <HardDriveIcon className="size-3" /> 内存
+                    <HardDriveIcon className="size-3" />{" "}
+                    {t.desktop.systemWidget.memory}
                   </span>
                   <span className="font-medium">
                     {systemInfo.memory.percent}%
@@ -1183,8 +1221,10 @@ export default function DesktopShellPage() {
                 </div>
               </div>
               <div className="text-[10px] text-slate-400">
-                运行时间: {Math.floor(systemInfo.uptime / 60)} 小时{" "}
-                {systemInfo.uptime % 60} 分钟
+                {t.desktop.systemWidget.uptime(
+                  Math.floor(systemInfo.uptime / 60),
+                  systemInfo.uptime % 60,
+                )}
               </div>
             </div>
           </div>

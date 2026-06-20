@@ -39,12 +39,15 @@ Agent runtime hooks · lifecycle events for the agent loop.
 
 ## Who imports this
 
-**4** file(s) reference this package:
+**6** file(s) reference this package:
 
+- **`runtime/core/`** · 1 file(s)
+  - `runtime/core/cerebrum/react_loop.py`
 - **`runtime/execution/`** · 2 file(s)
   - `runtime/execution/suckers/plan_mode.py`
   - `runtime/execution/tool_engine/executor.py`
-- **`runtime/sensing/`** · 2 file(s)
+- **`runtime/sensing/`** · 3 file(s)
   - `runtime/sensing/gateway/realtime_turn_lifecycle.py`
+  - `runtime/sensing/gateway/realtime_turn_outcome.py`
   - `runtime/sensing/model_router/anthropic_router.py`
 

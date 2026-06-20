@@ -8,6 +8,7 @@ import { TerminalIcon, XIcon, RotateCcwIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 import "@xterm/xterm/css/xterm.css";
 
 interface TerminalPanelProps {
@@ -23,6 +24,7 @@ export function TerminalPanel({
   className,
   onClose,
 }: TerminalPanelProps) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -151,7 +153,9 @@ export function TerminalPanel({
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <TerminalIcon className="size-3.5" />
-          <span className="text-sm font-semibold text-slate-950">Terminal</span>
+          <span className="text-sm font-semibold text-slate-950">
+            {t.codeMode.terminal}
+          </span>
           <span className="font-medium">powershell</span>
           <span
             className={cn(
@@ -165,7 +169,7 @@ export function TerminalPanel({
             type="button"
             onClick={handleRestart}
             className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-            title="Restart shell"
+            title={t.codeMode.terminalRestart}
           >
             <RotateCcwIcon className="size-3" />
           </button>
@@ -174,7 +178,7 @@ export function TerminalPanel({
               type="button"
               onClick={onClose}
               className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
-              title="Close terminal"
+              title={t.codeMode.terminalClose}
             >
               <XIcon className="size-3" />
             </button>
@@ -186,10 +190,10 @@ export function TerminalPanel({
         {!hasOutput && (
           <div className="pointer-events-none absolute inset-0 px-6 py-5 font-mono text-[13px] leading-6 text-slate-400">
             {connectionError
-              ? "Terminal connection failed. Use restart to reconnect."
+              ? t.codeMode.terminalConnectionFailed
               : connected
-                ? "Terminal connected. Type a command to begin."
-                : "Connecting terminal..."}
+                ? t.codeMode.terminalConnectedHint
+                : t.codeMode.terminalConnecting}
           </div>
         )}
       </div>

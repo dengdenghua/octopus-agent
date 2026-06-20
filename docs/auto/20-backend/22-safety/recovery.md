@@ -29,6 +29,7 @@
 - `KGUpdater`
 - `KGUpdateReport`
 - `LearnedRule`
+- `persist_kg_from_journal`
 - `MemoryConsolidator`
 - `MemoryScope`
 - `LLMReplayCandidateReport`
@@ -99,10 +100,10 @@
 | Module | Summary |
 | --- | --- |
 | `evolution_constraints.py` | — |
-| `evolution_dataset.py` | — |
+| `evolution_dataset.py` | Unified dataset builder for regeneration and prompt evolution. |
 | `external_importers.py` | — |
 | `forge_auto_tick.py` | RecipeForge auto-promote scheduler · the last-mile autonomy knob. |
-| `genome_registry.py` | — |
+| `genome_registry.py` | Genome Registry — versioned JSON snapshot store for system configuration. |
 | `gepa_addendum_store.py` | — |
 | `gepa_bridge.py` | Bridge between Octopus's existing reflection layer and the GEPA prompt optimizer. |
 | `gepa_optimizer.py` | GEPA-style prompt optimizer · 7th reflection path. |

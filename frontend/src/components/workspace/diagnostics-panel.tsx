@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/core/i18n/hooks";
 import type { PreviewDiagnostic } from "./live-preview-panel";
 
 interface SessionInfo {
@@ -51,6 +52,7 @@ export function DiagnosticsPanel({
   previewDiagnostics = [],
   className,
 }: DiagnosticsPanelProps) {
+  const { t } = useI18n();
   const [info, setInfo] = useState<SessionInfo | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -79,7 +81,7 @@ export function DiagnosticsPanel({
       <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
         <div className="flex items-center gap-2">
           <InfoIcon className="size-4 text-primary" />
-          <span className="text-sm font-medium">Diagnostics</span>
+          <span className="text-sm font-medium">{t.diagnosticsPanel.title}</span>
         </div>
         <button
           type="button"
@@ -102,11 +104,11 @@ export function DiagnosticsPanel({
           </div>
         ) : (
           <>
-            <Section title="Preview">
+            <Section title={t.diagnosticsPanel.sections.preview}>
               {previewDiagnostics.length === 0 ? (
                 <div className="flex items-center gap-1.5 text-[10px] text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2Icon className="size-3 shrink-0" />
-                  No preview diagnostics reported
+                  {t.diagnosticsPanel.noPreviewIssues}
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -117,36 +119,36 @@ export function DiagnosticsPanel({
               )}
             </Section>
 
-            <Section title="Workspace">
-              <Row label="Path" value={info.workspace_path} />
-              <Row label="Resolved" value={info.workspace_resolved ?? "—"} />
-              <StatusRow label="Exists" ok={info.workspace_exists} />
-              <StatusRow label="Git" ok={info.git_initialized} />
-              <Row label="Rules" value={info.rules_file ?? "none"} />
+            <Section title={t.diagnosticsPanel.sections.workspace}>
+              <Row label={t.diagnosticsPanel.labels.path} value={info.workspace_path} />
+              <Row label={t.diagnosticsPanel.labels.resolved} value={info.workspace_resolved ?? "—"} />
+              <StatusRow label={t.diagnosticsPanel.labels.exists} ok={info.workspace_exists} />
+              <StatusRow label={t.diagnosticsPanel.labels.git} ok={info.git_initialized} />
+              <Row label={t.diagnosticsPanel.labels.rules} value={info.rules_file ?? t.diagnosticsPanel.labels.none} />
             </Section>
 
-            <Section title="Project">
-              <Row label="Type" value={info.project.kind} />
+            <Section title={t.diagnosticsPanel.sections.project}>
+              <Row label={t.diagnosticsPanel.labels.type} value={info.project.kind} />
               <Row
-                label="Checks"
-                value={info.project.checks.join(", ") || "none"}
+                label={t.diagnosticsPanel.labels.checks}
+                value={info.project.checks.join(", ") || t.diagnosticsPanel.labels.none}
               />
             </Section>
 
             {info.thread_metadata && (
-              <Section title="Thread">
-                <Row label="Mode" value={info.thread_metadata.mode ?? "—"} />
+              <Section title={t.diagnosticsPanel.sections.thread}>
+                <Row label={t.diagnosticsPanel.labels.mode} value={info.thread_metadata.mode ?? "—"} />
                 <Row
-                  label="Sandbox"
+                  label={t.diagnosticsPanel.labels.sandbox}
                   value={info.thread_metadata.sandbox_mode ?? "—"}
                 />
                 <Row
-                  label="Agent"
+                  label={t.diagnosticsPanel.labels.agent}
                   value={info.thread_metadata.agent_name ?? "—"}
                 />
                 {info.thread_metadata.workspace_path && (
                   <Row
-                    label="Persisted WD"
+                    label={t.diagnosticsPanel.labels.persistedWD}
                     value={info.thread_metadata.workspace_path}
                   />
                 )}
@@ -154,22 +156,22 @@ export function DiagnosticsPanel({
             )}
 
             {info.write_scope && (
-              <Section title="Write Scope">
+              <Section title={t.diagnosticsPanel.sections.writeScope}>
                 {info.write_scope.error ? (
                   <div className="text-[10px] text-rose-500">
                     {info.write_scope.error}
                   </div>
                 ) : (
                   <>
-                    <Row label="Mode" value={info.write_scope.mode} />
+                    <Row label={t.diagnosticsPanel.labels.mode} value={info.write_scope.mode} />
                     <Row
-                      label="Requested"
+                      label={t.diagnosticsPanel.labels.requested}
                       value={info.write_scope.requested_mode}
                     />
                     {info.write_scope.roots.map((r, i) => (
                       <Row
                         key={i}
-                        label={i === 0 ? "Primary root" : `Root ${i + 1}`}
+                        label={i === 0 ? t.diagnosticsPanel.labels.primaryRoot : t.diagnosticsPanel.labels.rootN(i + 1)}
                         value={r}
                       />
                     ))}
@@ -178,13 +180,13 @@ export function DiagnosticsPanel({
               </Section>
             )}
 
-            <Section title="Server">
-              <Row label="CWD" value={info.server_cwd} />
-              <Row label="Python" value={info.python_executable} />
+            <Section title={t.diagnosticsPanel.sections.server}>
+              <Row label={t.diagnosticsPanel.labels.cwd} value={info.server_cwd} />
+              <Row label={t.diagnosticsPanel.labels.python} value={info.python_executable} />
               {info.server_cwd !== info.workspace_path && (
                 <div className="flex items-center gap-1.5 mt-1 text-[10px] text-amber-600 dark:text-amber-400">
                   <AlertTriangleIcon className="size-3 shrink-0" />
-                  Server CWD differs from workspace
+                  {t.diagnosticsPanel.serverCwdDiffers}
                 </div>
               )}
             </Section>
@@ -266,6 +268,7 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function StatusRow({ label, ok }: { label: string; ok: boolean }) {
+  const { t } = useI18n();
   return (
     <div className="flex items-center gap-2 text-[10px]">
       <span className="text-muted-foreground shrink-0 w-20">{label}</span>
@@ -275,7 +278,7 @@ function StatusRow({ label, ok }: { label: string; ok: boolean }) {
         <AlertTriangleIcon className="size-3 text-amber-500" />
       )}
       <span className={ok ? "text-emerald-600" : "text-amber-600"}>
-        {ok ? "Yes" : "No"}
+        {ok ? t.diagnosticsPanel.status.yes : t.diagnosticsPanel.status.no}
       </span>
     </div>
   );

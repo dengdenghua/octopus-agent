@@ -201,10 +201,11 @@ class TestObservedScoring:
         assert a.is_anomalous(score)
 
 
-class TestAuditOnlyLearn:
-    """TrustEngine.learn audit-only: flags anomalies via log, never blocks."""
+class TestLearnAnomalyDetection:
+    """TrustEngine.learn flags behavioural anomalies via log AND quarantines
+    the sucker; the observed call itself is never blocked (it already ran)."""
 
-    def test_learn_flags_anomaly_but_never_blocks(self, caplog):
+    def test_learn_flags_and_quarantines_anomaly(self, caplog):
         import logging
 
         a = AdaptiveImmunity(quarantine_threshold=0.7)
@@ -214,10 +215,13 @@ class TestAuditOnlyLearn:
             engine.learn(call, latency_ms=100.0 + (i % 5), tokens=200.0 + (i % 5))
         with caplog.at_level(logging.WARNING, logger="octopus.safety.trust"):
             result = engine.learn(call, latency_ms=10000.0, tokens=200.0)
-        assert result is None  # learn carries no verdict — never blocks
+        assert result is None  # learn carries no verdict — the call already ran
         assert any(
-            "behavioural anomaly (audit-only" in r.message for r in caplog.records
+            "behavioural anomaly" in r.message for r in caplog.records
         )
+        # 2026-06: audit-only logging upgraded to real isolation (895e82f) —
+        # the anomalous sucker is now quarantined for future check() calls.
+        assert a.is_quarantined("run_sql")
         assert a.sample_count("run_sql") == 31  # observation still learned
 
     def test_learn_normal_call_no_anomaly_log(self, caplog):

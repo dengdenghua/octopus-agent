@@ -456,6 +456,11 @@ export interface Translations {
     verificationFailedNoDetails: string;
     // Terminal input
     terminalPlaceholder: string;
+    terminalRestart: string;
+    terminalClose: string;
+    terminalConnectionFailed: string;
+    terminalConnectedHint: string;
+    terminalConnecting: string;
     stop: string;
     send: string;
     // File tree
@@ -525,6 +530,23 @@ export interface Translations {
     hideDetails: string;
     input: string;
     result: string;
+  };
+
+  // Realtime index page
+  realtime: {
+    title: string;
+    subtitle: string;
+    newThread: string;
+    orResume: string;
+    threadIdPlaceholder: string;
+    open: string;
+    recent: string;
+    loadError: (error: string) => string;
+    loading: string;
+    empty: string;
+    turns: (count: number) => string;
+    lastStatus: (status: string) => string;
+    updated: (date: string) => string;
   };
 
   // Realtime item views
@@ -5122,9 +5144,49 @@ export interface Translations {
 
   // Plan Panel extras
   planPanel: {
+    title: string;
     completed: string;
     inProgress: string;
     pending: string;
+    steps: (completed: number, total: number) => string;
+  };
+
+  // Diagnostics Panel
+  diagnosticsPanel: {
+    title: string;
+    noPreviewIssues: string;
+    sections: {
+      preview: string;
+      workspace: string;
+      project: string;
+      thread: string;
+      writeScope: string;
+      server: string;
+    };
+    labels: {
+      path: string;
+      resolved: string;
+      exists: string;
+      git: string;
+      rules: string;
+      type: string;
+      checks: string;
+      mode: string;
+      sandbox: string;
+      agent: string;
+      persistedWD: string;
+      requested: string;
+      primaryRoot: string;
+      rootN: (n: number) => string;
+      cwd: string;
+      python: string;
+      none: string;
+    };
+    status: {
+      yes: string;
+      no: string;
+    };
+    serverCwdDiffers: string;
   };
 
   // Todo Panel
@@ -5602,5 +5664,123 @@ export interface Translations {
     refresh: string;
     noAffinity: string;
     whenToUse: string;
+  };
+
+  // Desktop page
+  desktop: {
+    disabledTitle: string;
+    disabledDescription: string;
+    enableButton: string;
+    pluginSettingsButton: string;
+    backToWorkspaceButton: string;
+    header: {
+      workspaceTooltip: string;
+      brand: string;
+      accountModels: string;
+      desktopAssistant: string;
+      desktopCount: (count: number) => string;
+      market: string;
+      aiReady: string;
+      wifi: string;
+      notifications: string;
+      quickSettings: string;
+      date: (month: number, date: number, weekday: string) => string;
+    };
+    widget: {
+      today: string;
+      date: (
+        year: number,
+        month: number,
+        date: number,
+        weekday: string,
+      ) => string;
+    };
+    searchPlaceholder: string;
+    open: string;
+    drawer: {
+      title: string;
+      loading: string;
+      error: (error: string) => string;
+      count: (count: number) => string;
+      electronMode: string;
+      archiveBadge: (moved: number) => string;
+      autoArchiveTooltip: string;
+      archiving: string;
+      archive: string;
+      undoTooltip: string;
+      undoing: string;
+      undo: string;
+      closeAria: string;
+      readFailed: string;
+      retry: string;
+      searchPlaceholder: string;
+    };
+    categories: {
+      all: string;
+      folder: string;
+      app: string;
+      image: string;
+      document: string;
+      package: string;
+      other: string;
+    };
+    loadingItems: string;
+    fallbackGroupTitle: string;
+    empty: {
+      noSearchResults: string;
+      tryAnotherKeyword: string;
+      noDesktopFiles: string;
+      dropFilesHere: string;
+      noFilesInCategory: string;
+    };
+    contextMenu: {
+      open: string;
+      archiveToCategory: string;
+      delete: string;
+    };
+    dock: {
+      desktopFiles: string;
+      systemMonitor: string;
+      settings: string;
+    };
+    apps: {
+      workspace: { name: string; subtitle: string };
+      aiBrowser: { name: string; subtitle: string };
+      localFiles: { name: string; subtitle: string };
+      localApps: { name: string; subtitle: string };
+      terminalLogs: { name: string; subtitle: string };
+      settings: { name: string; subtitle: string };
+    };
+    placeholders: {
+      browser: string;
+      communication: string;
+      notes: string;
+      subtitle: string;
+    };
+    systemWidget: {
+      title: string;
+      cpu: string;
+      memory: string;
+      cores: string;
+      uptime: (hours: number, minutes: number) => string;
+    };
+    weekdays: string[];
+    errors: {
+      listItems: string;
+      refresh: string;
+      archive: string;
+      undo: string;
+      move: string;
+      archiveOnlyFiles: string;
+      deleteNotImplemented: string;
+    };
+    toasts: {
+      noFilesToArchive: string;
+      archived: (moved: number) => string;
+      undone: (undone: number) => string;
+      noUndoOperations: string;
+      fileMoved: string;
+      fileArchived: (name: string, folder: string) => string;
+    };
   };
 }

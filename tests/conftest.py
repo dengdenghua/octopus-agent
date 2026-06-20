@@ -72,14 +72,12 @@ def _reset_injection_taint() -> None:
 
 
 def _reset_delegation_budget() -> None:
-    """Clear the per-turn delegation budget ledgers between tests.
+    """Clear per-turn delegation ledgers between tests.
 
-    ``delegation_budget`` tracks two process-wide ``OrderedDict``s keyed by
-    ``turn_id`` (``_TURN_DELEGATIONS`` count + ``_TURN_FAILED_FINGERPRINTS``).
-    A test that leaks an active ``current_session`` (and thus a non-None
-    turn_id) lets the next session-less delegation test inherit that turn's
-    exhausted budget — every spawn then short-circuits as "budget exhausted"
-    and retry/parallel assertions flake. Reset every test for isolation."""
+    Delegation budget keeps process-wide OrderedDicts keyed by turn_id. Tests
+    that leak an active session can otherwise make a later session-less
+    delegation test inherit an exhausted budget and flake.
+    """
     try:
         from runtime.execution.suckers import delegation_budget as _db
         _db._TURN_DELEGATIONS.clear()

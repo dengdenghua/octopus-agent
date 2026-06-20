@@ -800,10 +800,17 @@ def create_app(
     from runtime.execution.arms.tool_registry import get_tool_registry
     from runtime.sensing.gateway.meta_router import create_meta_router
 
+    _source_public_skills = Path(__file__).resolve().parents[3] / "skills" / "public"
+    _skill_library_dirs = [
+        p
+        for p in (_resources_root_path / "skills" / "public", _source_public_skills)
+        if p.is_dir()
+    ]
+
     app.include_router(create_meta_router(
         registry=state.registry,
         tool_registry=get_tool_registry(),
-        skill_library_dirs=[_resources_root_path / "skills" / "public"],
+        skill_library_dirs=list(dict.fromkeys(_skill_library_dirs)),
         include_default_skill_library=(registry is None or stack is not None),
         molili_config=molili_config,
         local_auth_config=local_auth_config,
