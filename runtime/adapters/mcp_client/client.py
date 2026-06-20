@@ -20,6 +20,10 @@ except ImportError:  # pragma: no cover
     STDIO_AVAILABLE = False
     mcp = None  # type: ignore[assignment]
 
+# The same ``mcp`` SDK provides the remote (streamable-http / SSE) clients,
+# so HTTP availability tracks stdio availability.
+HTTP_AVAILABLE = STDIO_AVAILABLE
+
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
@@ -245,3 +249,125 @@ class StdioMCPClient(MCPClient):
                 error=text if is_err else None,
                 raw_content=raw,
             )
+
+
+# ═══════════════════════════════════════════════════════════
+# Remote (streamable-http / SSE) transport
+# ═══════════════════════════════════════════════════════════
+
+
+class HttpMCPClient(MCPClient):
+    """MCP client over a remote HTTP transport (streamable-http or SSE).
+
+    Mirrors ``StdioMCPClient`` but connects to a ``url`` instead of spawning
+    a subprocess — this is how most of the hosted MCP ecosystem (GitHub,
+    Slack, Linear, Notion, ...) is reached. The transport is picked from
+    ``config.transport``: ``"http"`` (default) → streamable-http,
+    ``"sse"`` → the legacy SSE transport.
+    """
+
+    def __init__(self, config: MCPServerConfig) -> None:
+        if not HTTP_AVAILABLE:
+            raise MCPClientError(
+                "mcp SDK not installed · `pip install mcp` or use MockMCPClient"
+            )
+        if not config.url:
+            raise MCPClientError("HttpMCPClient requires config.url")
+        self.config = config
+        self._closed = False
+        self._tools_cache: list[MCPTool] | None = None
+
+    def list_tools(self) -> list[MCPTool]:
+        if self._closed:
+            raise MCPClientError("client closed")
+        if self._tools_cache is None:
+            self._tools_cache = asyncio.run(self._list_tools_async())
+        return list(self._tools_cache)
+
+    def call_tool(self, name: str, args: dict[str, Any]) -> MCPInvocationResult:
+        if self._closed:
+            raise MCPClientError("client closed")
+        t0 = time.monotonic()
+        with trace_stage("mcp.http.call_tool") as span:
+            span.set_attribute("octopus.mcp.server", self.config.name)
+            span.set_attribute("octopus.mcp.tool", name)
+            try:
+                result = asyncio.run(self._call_tool_async(name, args))
+            except Exception as e:  # noqa: BLE001
+                return MCPInvocationResult(
+                    tool_name=name,
+                    success=False,
+                    error=f"{type(e).__name__}: {e}",
+                    latency_ms=(time.monotonic() - t0) * 1000,
+                )
+            return result.model_copy(
+                update={"latency_ms": (time.monotonic() - t0) * 1000}
+            )
+
+    def close(self) -> None:
+        self._closed = True
+
+    # ─── async implementations ─────────────────────
+
+    def _transport(self) -> Any:
+        """Return the transport async-context-manager for this config.
+
+        ``streamable-http`` yields a 3-tuple ``(read, write, get_id)`` and
+        ``sse`` a 2-tuple ``(read, write)``; callers index ``[0]``/``[1]``
+        so both shapes work uniformly.
+        """
+        headers = dict(self.config.headers) if self.config.headers else None
+        timeout = max(1.0, self.config.timeout_ms / 1000.0)
+        if self.config.transport == "sse":
+            from mcp.client.sse import sse_client
+
+            return sse_client(self.config.url, headers=headers, timeout=timeout)
+        from mcp.client.streamable_http import streamablehttp_client
+
+        return streamablehttp_client(self.config.url, headers=headers, timeout=timeout)
+
+    async def _list_tools_async(self) -> list[MCPTool]:
+        from mcp import ClientSession
+
+        async with self._transport() as conn:
+            read, write = conn[0], conn[1]
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.list_tools()
+                return [
+                    MCPTool(
+                        name=t.name,
+                        description=(t.description or ""),
+                        input_schema=(t.inputSchema or {}),
+                        server_name=self.config.name,
+                    )
+                    for t in result.tools
+                ]
+
+    async def _call_tool_async(
+        self, name: str, args: dict[str, Any]
+    ) -> MCPInvocationResult:
+        from mcp import ClientSession
+
+        async with self._transport() as conn:
+            read, write = conn[0], conn[1]
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(name, args)
+                text = "\n".join(
+                    getattr(b, "text", "")
+                    for b in result.content
+                    if hasattr(b, "text") and getattr(b, "text", None)
+                )
+                raw = [
+                    b.model_dump() if hasattr(b, "model_dump") else str(b)
+                    for b in result.content
+                ]
+                is_err = bool(getattr(result, "isError", False))
+                return MCPInvocationResult(
+                    tool_name=name,
+                    success=not is_err,
+                    output=text if text else None,
+                    error=text if is_err else None,
+                    raw_content=raw,
+                )

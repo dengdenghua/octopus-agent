@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from runtime.adapters.mcp_client import PersistentStdioMCPClient
+    from runtime.adapters.mcp_client import MCPClient
     from runtime.platform.config.schema import MCPServerConfigEntry
 
 from runtime.core.cerebrum import LLMPlanner, StaticPlanner
@@ -315,35 +315,51 @@ def _default_static_rules(*, enable_web_skills: bool) -> list[Rule]:
 
 def _register_mcp_server(
     registry: SkillRegistry, entry: MCPServerConfigEntry,
-) -> PersistentStdioMCPClient | None:
+) -> MCPClient | None:
     """Register one MCP server from config and expose its tools as skills.
 
-    Returns the persistent client bound to the registered skill handlers.
-    Callers are responsible for closing it during process teardown. Failures
-    or a missing SDK return ``None``.
+    Picks the transport from ``entry.transport`` (or an ``entry.url``):
 
-    ``PersistentStdioMCPClient`` avoids spawning a new subprocess for every
-    skill call, which can exhaust file descriptors and PIDs in long-running
-    sessions.
+    * ``stdio`` → ``PersistentStdioMCPClient`` (local subprocess server;
+      persistent so it isn't re-spawned per skill call, which can exhaust
+      file descriptors and PIDs in long-running sessions);
+    * ``http`` / ``sse`` → ``HttpMCPClient`` (remote/hosted server — most of
+      the public MCP ecosystem: GitHub, Slack, Linear, Notion, ...).
+
+    Returns the client bound to the registered skill handlers. Callers are
+    responsible for closing it during process teardown. Failures or a missing
+    SDK return ``None``.
     """
     from runtime.adapters.mcp_client import (
+        HttpMCPClient,
         MCPClientError,
         MCPServerConfig,
         PersistentStdioMCPClient,
         register_mcp_tools_as_skills,
     )
-    from runtime.adapters.mcp_client.client import STDIO_AVAILABLE
+    from runtime.adapters.mcp_client.client import HTTP_AVAILABLE, STDIO_AVAILABLE
 
-    if not STDIO_AVAILABLE:
+    is_remote = entry.transport in ("http", "sse") or bool(entry.url)
+    if (is_remote and not HTTP_AVAILABLE) or (not is_remote and not STDIO_AVAILABLE):
         # MCP SDK is not installed; skip instead of crashing.
         return None
+
+    config = MCPServerConfig(
+        name=entry.name,
+        command=entry.command,
+        args=list(entry.args),
+        env=dict(entry.env),
+        transport=entry.transport,
+        url=entry.url,
+        headers=dict(entry.headers),
+    )
+    client: MCPClient
     try:
-        client = PersistentStdioMCPClient(MCPServerConfig(
-            name=entry.name,
-            command=entry.command,
-            args=list(entry.args),
-            env=dict(entry.env),
-        ))
+        client = (
+            HttpMCPClient(config)
+            if is_remote
+            else PersistentStdioMCPClient(config)
+        )
     except MCPClientError:
         return None
     except OSError:
@@ -353,7 +369,7 @@ def _register_mcp_server(
             registry, client, name_prefix=entry.name_prefix
         )
     except (OSError, TypeError, ValueError):
-        # Close the already-created subprocess when registration fails.
+        # Release the client (subprocess / connection) when registration fails.
         with contextlib.suppress((OSError, IOError)):
             client.close()
         return None

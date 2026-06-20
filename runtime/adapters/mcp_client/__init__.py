@@ -1,7 +1,9 @@
 
 from .bridge import register_mcp_tools_as_skills
 from .client import (
+    HTTP_AVAILABLE,
     STDIO_AVAILABLE,
+    HttpMCPClient,
     MCPClient,
     MCPClientError,
     MCPInvocationResult,
@@ -22,6 +24,8 @@ from .trust import (
 from .types import MCPServerConfig
 
 __all__ = [
+    "HTTP_AVAILABLE",
+    "HttpMCPClient",
     "MCPClient",
     "MCPClientError",
     "MCPInvocationResult",

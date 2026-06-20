@@ -5,7 +5,9 @@ from __future__ import annotations
 import pytest
 
 from runtime.adapters.mcp_client import (
+    HTTP_AVAILABLE,
     STDIO_AVAILABLE,
+    HttpMCPClient,
     MCPClientError,
     MCPServerConfig,
     MCPTool,
@@ -142,6 +144,130 @@ class TestStdioClient:
         assert not result.success
         assert result.error is not None
         assert result.latency_ms >= 0
+        client.close()
+
+
+# ═══════════════════════════════════════════════════════════
+# HttpMCPClient (remote transport)
+# ═══════════════════════════════════════════════════════════
+
+
+class _FakeTool:
+    def __init__(self, name, desc="", schema=None):
+        self.name = name
+        self.description = desc
+        self.inputSchema = schema or {}
+
+
+class _FakeToolsResult:
+    def __init__(self, tools):
+        self.tools = tools
+
+
+class _FakeContent:
+    def __init__(self, text):
+        self.text = text
+
+    def model_dump(self):
+        return {"type": "text", "text": self.text}
+
+
+class _FakeCallResult:
+    def __init__(self, content, is_error=False):
+        self.content = content
+        self.isError = is_error
+
+
+class _FakeSession:
+    """Stand-in for mcp.ClientSession with canned tools/results."""
+
+    def __init__(self, *_a):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_a):
+        return False
+
+    async def initialize(self):
+        pass
+
+    async def list_tools(self):
+        return _FakeToolsResult(
+            [_FakeTool("remote_echo", "echo a message", {"type": "object"})]
+        )
+
+    async def call_tool(self, _name, args):
+        return _FakeCallResult([_FakeContent(f"echoed:{args.get('msg')}")])
+
+
+class _FakeTransport:
+    """Stand-in for streamablehttp_client — yields a 3-tuple, no network."""
+
+    async def __aenter__(self):
+        return (object(), object(), None)
+
+    async def __aexit__(self, *_a):
+        return False
+
+
+class TestHttpClient:
+    def test_errors_if_sdk_missing(self, monkeypatch):
+        from runtime.adapters.mcp_client import client as client_mod
+
+        monkeypatch.setattr(client_mod, "HTTP_AVAILABLE", False)
+        with pytest.raises(MCPClientError, match="mcp SDK not installed"):
+            HttpMCPClient(
+                MCPServerConfig(name="r", transport="http", url="http://x/mcp")
+            )
+
+    @pytest.mark.skipif(not HTTP_AVAILABLE, reason="mcp SDK required")
+    def test_requires_url(self):
+        with pytest.raises(MCPClientError, match="requires config.url"):
+            HttpMCPClient(MCPServerConfig(name="r", transport="http"))
+
+    @pytest.mark.skipif(not HTTP_AVAILABLE, reason="mcp SDK required")
+    def test_constructs_and_closes(self):
+        client = HttpMCPClient(
+            MCPServerConfig(name="r", transport="http", url="http://127.0.0.1:1/mcp")
+        )
+        assert not client._closed
+        client.close()
+        assert client._closed
+
+    @pytest.mark.skipif(not HTTP_AVAILABLE, reason="mcp SDK required")
+    def test_call_tool_catches_connection_failure(self):
+        client = HttpMCPClient(
+            MCPServerConfig(
+                name="r", transport="http",
+                url="http://127.0.0.1:1/mcp", timeout_ms=2000,
+            )
+        )
+        result = client.call_tool("any_tool", {})
+        assert not result.success
+        assert result.error is not None
+        assert result.latency_ms >= 0
+        client.close()
+
+    @pytest.mark.skipif(not HTTP_AVAILABLE, reason="mcp SDK required")
+    def test_success_path_maps_tools_and_results(self, monkeypatch):
+        import mcp
+
+        client = HttpMCPClient(
+            MCPServerConfig(name="srv", transport="http", url="http://x/mcp")
+        )
+        monkeypatch.setattr(client, "_transport", lambda: _FakeTransport())
+        monkeypatch.setattr(mcp, "ClientSession", _FakeSession)
+
+        tools = client.list_tools()
+        assert [t.name for t in tools] == ["remote_echo"]
+        assert tools[0].server_name == "srv"
+
+        result = client.call_tool("remote_echo", {"msg": "hi"})
+        assert result.success
+        assert result.output == "echoed:hi"
+        assert result.raw_content
         client.close()
 
 

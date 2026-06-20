@@ -79,9 +79,14 @@ class MCPServerConfigEntry(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str = Field(..., min_length=1)
-    command: str = Field(..., min_length=1)
+    # stdio transport (local subprocess server)
+    command: str = ""
     args: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
+    # http/sse transport (remote/hosted server)
+    transport: Literal["stdio", "http", "sse"] = "stdio"
+    url: str = ""
+    headers: dict[str, str] = Field(default_factory=dict)
     name_prefix: str | None = None       # Implementation note.
 
 
