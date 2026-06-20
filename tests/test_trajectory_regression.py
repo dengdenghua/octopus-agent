@@ -59,7 +59,14 @@ class _ReplayRouter:
     def _resp(self) -> ModelResponse:
         turn = self.turns[min(self.calls, len(self.turns) - 1)]
         self.calls += 1
-        if isinstance(turn, tuple):
+        finish_reason = "stop"
+        if isinstance(turn, dict):
+            # Advanced turn: lets a case drive finish_reason (e.g. "length"
+            # to exercise the truncated-output continuation path).
+            text = turn.get("text", "")
+            calls = turn.get("tool_calls", [])
+            finish_reason = turn.get("finish_reason", "stop")
+        elif isinstance(turn, tuple):
             text, calls = turn
         else:
             text, calls = turn, []
@@ -67,7 +74,7 @@ class _ReplayRouter:
             text=text,
             model="test-model",
             tool_calls=list(calls),
-            finish_reason="stop",
+            finish_reason=finish_reason,
             cost=CostEntry(),
         )
 
@@ -96,6 +103,10 @@ class _Stack:
 
 def _echo(path: str = "", **_kw: Any) -> dict[str, Any]:
     return {"path": path, "content": f"[content of {path}]"}
+
+
+def _fail(**_kw: Any) -> dict[str, Any]:
+    raise RuntimeError("boom: simulated tool failure")
 
 
 def _build_executor(skills: list[tuple[str, Any]]) -> ToolExecutor:
@@ -212,6 +223,64 @@ GOLDEN_CASES: list[dict[str, Any]] = [
         "responses": ["Final Answer: 你好,我在。"],
         "expect_tools": [],
         "expect_final": "你好",
+    },
+    {
+        # Multi-step sequencing: the second action is chosen after the first
+        # tool's observation. Pins read→edit ordering through the dispatch.
+        "id": "text_multi_step_sequence",
+        "native": False,
+        "skills": [("read_file", _echo), ("edit_file", _echo)],
+        "intent": "先读 a.py 再改它",
+        "responses": [
+            'Thought: 先读\nAction: read_file({"path": "a.py"})',
+            'Thought: 再改\nAction: edit_file({"path": "a.py"})',
+            "Final Answer: 读改完成。",
+        ],
+        "expect_tools": ["read_file", "edit_file"],
+        "expect_final": "读改完成",
+    },
+    {
+        # Error path: the handler raises — the loop must surface an error
+        # observation and recover to a final answer, not abort the turn.
+        "id": "text_error_observation_recovery",
+        "native": False,
+        "skills": [("flaky", _fail)],
+        "intent": "调用会失败的工具",
+        "responses": [
+            'Thought: 试一下\nAction: flaky({})',
+            "Final Answer: 工具失败,已知悉并改道。",
+        ],
+        "expect_tools": ["flaky"],
+        "expect_final": "已知悉",
+    },
+    {
+        # Graceful degradation: the model names a tool that is not in the
+        # registry — no dispatch fires and the loop still reaches a final
+        # answer instead of crashing.
+        "id": "text_unknown_tool_graceful",
+        "native": False,
+        "skills": [("read_file", _echo)],
+        "intent": "调一个不存在的工具",
+        "responses": [
+            'Thought: 调\nAction: nonexistent_tool({})',
+            "Final Answer: 该工具不存在,改用其它方案。",
+        ],
+        "expect_tools": [],
+        "expect_final": "不存在",
+    },
+    {
+        # Truncated-output continuation: finish_reason="length" with no final
+        # must make the loop continue the response rather than bail.
+        "id": "length_limit_continuation",
+        "native": False,
+        "skills": [],
+        "intent": "写一份长报告",
+        "responses": [
+            {"text": "报告第一部分,内容尚未写完", "finish_reason": "length"},
+            "Final Answer: 报告完整版,已续写完毕。",
+        ],
+        "expect_tools": [],
+        "expect_final": "报告完整版",
     },
 ]
 
