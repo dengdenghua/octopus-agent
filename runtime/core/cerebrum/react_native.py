@@ -40,12 +40,22 @@ from typing import Any
 from runtime.core.cerebrum.react_types import ReActStep
 
 _TRUTHY = {"1", "true", "yes", "on"}
+_FALSY = {"0", "false", "no", "off"}
 
 
 def native_tool_use_flag_enabled() -> bool:
     """Read ``OCTOPUS_NATIVE_TOOLUSE`` fresh each call (operator can flip
-    without a restart). Default OFF — opt-in until live-API validated."""
-    return os.environ.get("OCTOPUS_NATIVE_TOOLUSE", "").strip().lower() in _TRUTHY
+    without a restart).
+
+    Default ON: validated 2026-06 against a live function-calling API
+    (structured tool_calls dispatched + correct answer end-to-end). The
+    capability gate still applies, so only models advertising
+    ``supports_tool_use`` actually take the native path; everything else
+    transparently keeps the text protocol. Set ``OCTOPUS_NATIVE_TOOLUSE=0``
+    (or false/no/off) to force the text protocol even on capable models.
+    """
+    raw = os.environ.get("OCTOPUS_NATIVE_TOOLUSE", "").strip().lower()
+    return raw not in _FALSY
 
 
 def model_supports_tool_use(router: Any, model: str) -> bool:

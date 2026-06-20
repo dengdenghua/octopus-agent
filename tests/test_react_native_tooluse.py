@@ -30,12 +30,16 @@ from runtime.sensing.model_router.models import (
 # ── unit: gate ───────────────────────────────────────────────────────
 
 
-def test_flag_off_by_default(monkeypatch) -> None:
+def test_flag_on_by_default(monkeypatch) -> None:
+    # Default ON (validated against a live API). Only an explicit falsy
+    # value forces the text protocol.
     monkeypatch.delenv("OCTOPUS_NATIVE_TOOLUSE", raising=False)
+    assert native_tool_use_flag_enabled() is True
+    monkeypatch.setenv("OCTOPUS_NATIVE_TOOLUSE", "0")
     assert native_tool_use_flag_enabled() is False
 
 
-def test_gate_requires_flag_and_capability(monkeypatch) -> None:
+def test_gate_requires_capability_and_respects_escape_hatch(monkeypatch) -> None:
     class _Caps:
         supports_tool_use = True
 
@@ -43,14 +47,17 @@ def test_gate_requires_flag_and_capability(monkeypatch) -> None:
         capabilities = _Caps()
 
     monkeypatch.delenv("OCTOPUS_NATIVE_TOOLUSE", raising=False)
-    assert native_tool_use_active(_Router(), "m") is False  # flag off
+    assert native_tool_use_active(_Router(), "m") is True  # default on + capable
+    monkeypatch.setenv("OCTOPUS_NATIVE_TOOLUSE", "0")
+    assert native_tool_use_active(_Router(), "m") is False  # escape hatch forces off
     monkeypatch.setenv("OCTOPUS_NATIVE_TOOLUSE", "1")
     assert native_tool_use_active(_Router(), "m") is True
 
     class _NoCap:
         pass
 
-    assert native_tool_use_active(_NoCap(), "m") is False  # no capability
+    monkeypatch.delenv("OCTOPUS_NATIVE_TOOLUSE", raising=False)
+    assert native_tool_use_active(_NoCap(), "m") is False  # capability gate still holds
 
 
 def test_gate_resolves_dispatch_subrouter(monkeypatch) -> None:
@@ -237,14 +244,16 @@ def test_native_mode_passes_tools_and_consumes_tool_calls() -> None:
     assert "已读取配置" in (result.final_answer or "")
 
 
-def test_default_mode_passes_no_tools() -> None:
+def test_escape_hatch_forces_text_mode(monkeypatch) -> None:
     from runtime.core.cerebrum.react_loop import run_react_loop
 
+    # Capable router, but OCTOPUS_NATIVE_TOOLUSE=0 forces the text protocol:
+    # no native tools= must be passed even though the model could do them.
+    monkeypatch.setenv("OCTOPUS_NATIVE_TOOLUSE", "0")
     router = _Router([("Final Answer: 你好。", [])])
-    # No flag, no patch → native gate is off → text protocol → tools empty.
     result = run_react_loop(_Stack(router), _intent("你好"), agent=None)
     assert router.requests
     assert all(not getattr(r, "tools", None) for r in router.requests), (
-        "default (text) mode must not pass tools="
+        "forced text mode must not pass tools="
     )
     assert result is not None
