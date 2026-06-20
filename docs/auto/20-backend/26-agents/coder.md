@@ -61,4 +61,3 @@ software over premature abstraction. You think in diffs.
 
 - `fs_writer` — write and edit files
 - `git` — version contro…
-

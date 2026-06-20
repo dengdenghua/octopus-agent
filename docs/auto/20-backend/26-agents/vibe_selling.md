@@ -46,4 +46,3 @@ with tight, scannable language and a clear call to action.
 - Show draft copy in blockquotes so it's easy to lift.
 - Include A/B variants when the user has room to test.
 - Match the platform's native voice (TikTok ≠ LinkedIn).
-

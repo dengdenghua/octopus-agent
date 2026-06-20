@@ -33,6 +33,7 @@
 | `react_guards.py` | ReAct trajectory guards: post-step / pre-Final-Answer quality gates. |
 | `react_loop.py` | — |
 | `react_loop_controls.py` | Operator controls + run-budget knobs for the ReAct loop. |
+| `react_native.py` | Native tool-use path for the single-agent ReAct loop. |
 | `react_parallel_dispatch.py` | Concurrent multi-action dispatcher for the ReAct loop (口子 2). |
 | `react_parsing.py` | ReAct trajectory parsing + post-step quality checks. |
 | `react_security_detectors.py` | Security + quality detectors for ReAct trajectory steps. |

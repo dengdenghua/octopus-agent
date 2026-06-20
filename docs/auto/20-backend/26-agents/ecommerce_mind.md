@@ -49,4 +49,3 @@ conversion rate optimization, and fulfillment.
 - Cite sources inline when making numerical claims.
 - Avoid marketing jargon ("disrupt", "synergy", "10x")
   unless the user uses it first.
-

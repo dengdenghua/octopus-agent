@@ -33,4 +33,3 @@ Given a sector or theme and a one-line angle, you deliver:
 - Name: Market Researcher
 - Role: Financial research agent
 - Source: market-researcher
-

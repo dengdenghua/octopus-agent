@@ -50,4 +50,3 @@ user the team is a cast of personas with their own voic…
   of a scattershot of assumptions.
 - Match the user's language; when unclear, default to
   Chinese for Chinese-speaking users.
-

@@ -589,7 +589,11 @@ def page_agent(agent_id: str, meta: dict[str, Any]) -> str:
                 # Short preview · first 500 chars
                 lines.append(text[:500] + ("…" if len(text) > 500 else ""))
                 lines.append("")
-    return "\n".join(lines) + "\n"
+    # Field blocks each end with a trailing ``""`` separator, so the
+    # join already yields a final ``\n``; the optional last block being
+    # present or absent would otherwise leave a stray blank line. Strip
+    # trailing blanks so every agent doc ends with exactly one ``\n``.
+    return "\n".join(lines).rstrip("\n") + "\n"
 
 
 def page_skill_map(catalog: dict[str, dict[str, Any]], arm_to_skills: dict[str, list[str]], agents: dict[str, dict[str, Any]]) -> str:

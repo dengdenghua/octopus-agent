@@ -42,9 +42,9 @@ graph LR
   execution -- 14 --> core
   execution -- 13 --> memory
   platform -- 13 --> execution
+  core -- 12 --> execution
   platform -- 12 --> safety
   safety -- 12 --> adapters
-  core -- 11 --> execution
   platform -- 10 --> core
   platform -- 10 --> memory
   core -- 8 --> memory

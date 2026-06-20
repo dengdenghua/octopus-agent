@@ -6,6 +6,8 @@
 
 ## Exports
 
+- `HTTP_AVAILABLE`
+- `HttpMCPClient`
 - `MCPClient`
 - `MCPClientError`
 - `MCPInvocationResult`

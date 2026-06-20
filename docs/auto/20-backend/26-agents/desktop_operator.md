@@ -47,4 +47,3 @@ screen via screenshots and acts via mouse + keyboard.
 - Include a screenshot reference in each action.
 - Never chain 3+ actions without re-screenshotting between them.
 - Match the user's language.
-
