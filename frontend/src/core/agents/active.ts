@@ -50,34 +50,32 @@ function routeLock(pathname: string): string | null {
   return null;
 }
 
-// Agent ids the backend understands. Anything else (empty string, old
-// stub DIDs, etc.) falls back to null → "no agent filter applied",
-// which effectively shows all threads — right for guest/first-run,
-// wrong if the user actually picked one. The sidebar filters apply
-// only when this returns a known id.
-const KNOWN_AGENT_IDS = new Set([
-  "general",
-  "coder",
-  "admin",
-  "vibe_selling",
-  "ecommerce_mind",
-  "desktop_operator",
-]);
-
+function normalizeAgentId(value: string | null | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  // Reject only legacy placeholders / malformed values. The backend roster is
+  // dynamic now, so hard-coding known ids makes newly-created agents disappear
+  // when returning from the HUD.
+  if (raw.startsWith("DID-")) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(raw)) return null;
+  return raw;
+}
 
 function readActive(): string | null {
   try {
     const raw = window.localStorage.getItem(ACTIVE_AGENT_KEY);
-    if (raw && KNOWN_AGENT_IDS.has(raw)) return raw;
-    if (raw) {
+    const normalized = normalizeAgentId(raw);
+    if (normalized) return normalized;
+    if (raw?.trim()) {
       // Stale legacy id (e.g. DID-xxx) — clean it so the UI doesn't
       // keep trying to route to a backend-unknown agent.
       window.localStorage.removeItem(ACTIVE_AGENT_KEY);
     }
-  } catch (e) { swallow(e, "storage"); }
+  } catch (e) {
+    swallow(e, "storage");
+  }
   return null;
 }
-
 
 /** React hook · returns the currently-active agent id (or null).
  *
@@ -93,7 +91,7 @@ export function useActiveAgentId(): string | null {
 
   // Subscribe to EventBus agent changes
   useEvent("agent:changed", (payload) => {
-    setId(KNOWN_AGENT_IDS.has(payload.name) ? payload.name : null);
+    setId(normalizeAgentId(payload.name));
   });
 
   // Handle tab-to-tab sync too — user opens Privacy in one tab,

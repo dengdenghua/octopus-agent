@@ -9,9 +9,9 @@ healthy: continuing truncated reports, using tools when agent mode allows
 them, and closing progress state after the final answer.
 """
 
-import re
-from dataclasses import asdict, dataclass, field
-from typing import Any
+import re  # noqa: E402
+from dataclasses import asdict, dataclass, field  # noqa: E402
+from typing import Any  # noqa: E402
 
 
 @dataclass(frozen=True, slots=True)

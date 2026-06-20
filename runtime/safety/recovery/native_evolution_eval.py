@@ -7,14 +7,14 @@ against the signals Octopus owns: task scores, repeated failure clusters,
 positive examples, prompt size/growth, and hard constraint outcomes.
 """
 
-from dataclasses import asdict, dataclass, field
-from typing import Any
+from dataclasses import asdict, dataclass, field  # noqa: E402
+from typing import Any  # noqa: E402
 
-from runtime.safety.recovery.evolution_constraints import (
+from runtime.safety.recovery.evolution_constraints import (  # noqa: E402
     EvolutionConstraintResult,
     EvolutionConstraintValidator,
 )
-from runtime.safety.recovery.evolution_dataset import EvolutionDataset
+from runtime.safety.recovery.evolution_dataset import EvolutionDataset  # noqa: E402
 
 
 @dataclass(slots=True)

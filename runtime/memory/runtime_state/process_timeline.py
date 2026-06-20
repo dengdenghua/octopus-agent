@@ -11,8 +11,9 @@ _SCHEMA = "octopus.process_timeline.v1"
 _LANE_ORDER = {
     "execution": 0,
     "permission": 1,
-    "review": 2,
-    "learning": 3,
+    "verification": 2,
+    "review": 3,
+    "learning": 4,
 }
 _SEVERITY_ORDER = {
     "critical": 0,
@@ -34,9 +35,11 @@ def build_task_run_process_timeline(
 
     approval_rows = list(approvals or [])
     experience_rows = list(experience_records or [])
+    diagnostic_nodes = _post_write_diagnostic_nodes(review)
     timeline: list[dict[str, Any]] = []
     timeline.extend(_execution_nodes(review))
     timeline.extend(_approval_nodes(approval_rows))
+    timeline.extend(diagnostic_nodes)
     timeline.extend(_review_nodes(review, task_run))
     timeline.extend(_candidate_nodes(review, task_run))
     timeline.extend(_experience_nodes(experience_rows))
@@ -47,7 +50,13 @@ def build_task_run_process_timeline(
         "thread_id": task_run.get("thread_id"),
         "turn_id": task_run.get("turn_id"),
         "agent_id": task_run.get("agent_id"),
-        "overview": _overview(task_run, review, approval_rows, experience_rows),
+        "overview": _overview(
+            task_run,
+            review,
+            approval_rows,
+            experience_rows,
+            diagnostic_nodes,
+        ),
         "capabilities": _capability_summary(task_run, approval_rows),
         "timeline": timeline,
         "safety": {
@@ -108,6 +117,35 @@ def _approval_nodes(approvals: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "risk_categories": risk.get("categories") if isinstance(risk, dict) else [],
                 "trust_source": trust.get("source"),
                 "static_decision": trust.get("static_decision"),
+            },
+        })
+    return nodes
+
+
+def _post_write_diagnostic_nodes(review: dict[str, Any]) -> list[dict[str, Any]]:
+    replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
+    steps = replay.get("steps") if isinstance(replay.get("steps"), list) else []
+    nodes: list[dict[str, Any]] = []
+    for idx, step in enumerate(steps):
+        if not isinstance(step, dict) or step.get("kind") != "tool_end":
+            continue
+        output = str(step.get("output_preview") or "")
+        if not _looks_like_post_write_diagnostic(output):
+            continue
+        status = _post_write_diagnostic_status(output)
+        nodes.append({
+            "id": f"post-write-diagnostic-{idx}",
+            "lane": "verification",
+            "kind": "post_write_diagnostic",
+            "ts": step.get("ts"),
+            "title": f"Post-write diagnostic {status}",
+            "status": status,
+            "severity": "high" if status == "failed" else "info",
+            "tool": _clean(step.get("tool")) or None,
+            "summary": _post_write_diagnostic_summary(output),
+            "data": {
+                "tool_call_id": step.get("tool_call_id"),
+                "output_preview": output[:500],
             },
         })
     return nodes
@@ -215,6 +253,7 @@ def _overview(
     review: dict[str, Any],
     approvals: list[dict[str, Any]],
     experience_records: list[dict[str, Any]],
+    post_write_diagnostics: list[dict[str, Any]],
 ) -> dict[str, Any]:
     severity_counts = Counter()
     for finding in review.get("findings") or []:
@@ -235,6 +274,7 @@ def _overview(
         "tool_errors": task_run.get("tool_errors") or 0,
         "approval_count": len(approvals),
         "experience_record_count": len(experience_records),
+        "post_write_diagnostic_count": len(post_write_diagnostics),
         "finding_counts": dict(sorted(severity_counts.items())),
         "token_totals": task_run.get("token_totals") or {},
     }
@@ -326,6 +366,36 @@ def _safe_step_data(step: dict[str, Any]) -> dict[str, Any]:
         "output_preview": step.get("output_preview"),
         "approval": step.get("approval"),
     }
+
+
+def _looks_like_post_write_diagnostic(output: str) -> bool:
+    markers = (
+        "[post-write diagnostics]",
+        "[自动诊断结果]",
+        "ruff diagnostics",
+        "eslint diagnostics",
+    )
+    return any(marker in output for marker in markers)
+
+
+def _post_write_diagnostic_status(output: str) -> str:
+    lowered = output.lower()
+    if "ruff diagnostics" in lowered or "eslint diagnostics" in lowered:
+        return "failed"
+    if "failed" in lowered or "error" in lowered:
+        return "failed"
+    if "passed" in lowered:
+        return "passed"
+    return "recorded"
+
+
+def _post_write_diagnostic_summary(output: str) -> str:
+    after_marker = output.split("[post-write diagnostics]", 1)[-1]
+    for line in after_marker.splitlines():
+        cleaned = _clean(line)
+        if cleaned and cleaned not in {"[post-write diagnostics]", "[自动诊断结果]"}:
+            return cleaned[:240]
+    return _clean(output)[:240]
 
 
 def _finding_tool(finding: dict[str, Any]) -> str | None:

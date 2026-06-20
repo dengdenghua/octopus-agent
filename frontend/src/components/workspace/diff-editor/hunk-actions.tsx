@@ -49,12 +49,7 @@ export function HunkActions({
   const isDecided = hunk.accepted !== null;
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-1",
-        className,
-      )}
-    >
+    <div className={cn("flex items-center gap-1", className)}>
       {isDecided ? (
         <span
           className={cn(

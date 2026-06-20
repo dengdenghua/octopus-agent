@@ -4,12 +4,16 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from runtime.memory.learning.turn_scoring import (
     analyze_soul_impact,
     read_recent_scores,
 )
+from runtime.platform.io import read_json_with_backup
+from runtime.platform.process.paths import app_paths
+from runtime.safety.evolution.governance_audit import promotion_audit_signals
 
 _LOG = logging.getLogger("octopus.evolution.fitness")
 
@@ -32,6 +36,13 @@ class FitnessConfig:
     l2_weight: float = 0.6
     l2_model: str | None = None
     l2_max_tokens: int = 600
+    promotion_audit_path: str | None = None
+    promotion_audit_window: int = 20
+    governance_max_penalty: float = 0.25
+    governance_blocked_override_weight: float = 0.18
+    governance_gate_failed_weight: float = 0.08
+    governance_override_weight: float = 0.05
+    governance_failed_apply_weight: float = 0.08
 
 
 @dataclass
@@ -53,6 +64,19 @@ class L2Fitness:
 
 
 @dataclass
+class GovernanceFitness:
+    score: float
+    penalty: float
+    audit_total: int
+    recent_total: int
+    override_count: int
+    gate_failed_count: int
+    gate_blocked_override_count: int
+    failed_apply_count: int
+    reasons: list[str]
+
+
+@dataclass
 class FitnessReport:
     agent_id: str
     ts: str
@@ -60,6 +84,7 @@ class FitnessReport:
     l2: L2Fitness | None
     combined: float
     verdict: str
+    governance: GovernanceFitness | None = None
 
 
 _L2_SYSTEM = """You are a fitness evaluator for an AI agent. Given recent turn
@@ -174,6 +199,88 @@ def compute_l2(
     )
 
 
+def compute_governance_fitness(
+    *,
+    agent_id: str | None = None,
+    audit_path: str | Path | None = None,
+    window: int = 20,
+    max_penalty: float = 0.25,
+    blocked_override_weight: float = 0.18,
+    gate_failed_weight: float = 0.08,
+    override_weight: float = 0.05,
+    failed_apply_weight: float = 0.08,
+) -> GovernanceFitness:
+    path = Path(audit_path) if audit_path is not None else app_paths().promotion_audit_path
+    raw = read_json_with_backup(path, default=None)
+    records = raw.get("records") if isinstance(raw, dict) else []
+    rows = [row for row in records if isinstance(row, dict)] if isinstance(records, list) else []
+    if agent_id:
+        wanted_agent = str(agent_id)
+        rows = [row for row in rows if str(row.get("agent_id") or "") == wanted_agent]
+    recent = rows[-max(0, window):] if window > 0 else rows
+    if not recent:
+        return GovernanceFitness(
+            score=1.0,
+            penalty=0.0,
+            audit_total=len(rows),
+            recent_total=0,
+            override_count=0,
+            gate_failed_count=0,
+            gate_blocked_override_count=0,
+            failed_apply_count=0,
+            reasons=[],
+        )
+
+    override_count = 0
+    gate_failed_count = 0
+    gate_blocked_override_count = 0
+    failed_apply_count = 0
+    for row in recent:
+        signals = promotion_audit_signals(row)
+        if signals["failed_apply"]:
+            failed_apply_count += 1
+        if signals["gate_failed"]:
+            gate_failed_count += 1
+        if signals["override"]:
+            override_count += 1
+            if signals["gate_blocked_override"]:
+                gate_blocked_override_count += 1
+
+    total = len(recent)
+    override_rate = override_count / total
+    gate_failed_rate = gate_failed_count / total
+    blocked_override_rate = gate_blocked_override_count / total
+    failed_apply_rate = failed_apply_count / total
+    penalty = min(
+        max(0.0, max_penalty),
+        blocked_override_rate * blocked_override_weight
+        + gate_failed_rate * gate_failed_weight
+        + override_rate * override_weight
+        + failed_apply_rate * failed_apply_weight,
+    )
+    reasons: list[str] = []
+    if gate_blocked_override_count:
+        reasons.append(f"{gate_blocked_override_count} blocked replay override(s)")
+    if gate_failed_count:
+        reasons.append(f"{gate_failed_count} replay gate failure(s)")
+    if failed_apply_count:
+        reasons.append(f"{failed_apply_count} failed promotion apply attempt(s)")
+    if override_count and not gate_blocked_override_count:
+        reasons.append(f"{override_count} replay override(s)")
+
+    return GovernanceFitness(
+        score=round(max(0.0, 1.0 - penalty), 3),
+        penalty=round(penalty, 3),
+        audit_total=len(rows),
+        recent_total=total,
+        override_count=override_count,
+        gate_failed_count=gate_failed_count,
+        gate_blocked_override_count=gate_blocked_override_count,
+        failed_apply_count=failed_apply_count,
+        reasons=reasons,
+    )
+
+
 def compute_fitness(
     agent_id: str,
     config: FitnessConfig | None = None,
@@ -188,6 +295,18 @@ def compute_fitness(
         )
     else:
         combined = l1.score
+
+    governance = compute_governance_fitness(
+        agent_id=agent_id,
+        audit_path=config.promotion_audit_path,
+        window=config.promotion_audit_window,
+        max_penalty=config.governance_max_penalty,
+        blocked_override_weight=config.governance_blocked_override_weight,
+        gate_failed_weight=config.governance_gate_failed_weight,
+        override_weight=config.governance_override_weight,
+        failed_apply_weight=config.governance_failed_apply_weight,
+    )
+    combined = round(max(0.0, combined - governance.penalty), 3)
 
     if combined >= 0.8:
         verdict = "healthy"
@@ -205,6 +324,7 @@ def compute_fitness(
         l2=l2,
         combined=combined,
         verdict=verdict,
+        governance=governance,
     )
 
     _publish_fitness_event(report)
@@ -215,9 +335,11 @@ def compute_fitness(
 __all__ = [
     "FitnessConfig",
     "FitnessReport",
+    "GovernanceFitness",
     "L1Fitness",
     "L2Fitness",
     "compute_fitness",
+    "compute_governance_fitness",
     "compute_l1",
     "compute_l2",
 ]

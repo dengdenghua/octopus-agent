@@ -1,4 +1,3 @@
-
 import { useEffect } from "react";
 
 export function Overscroll({
@@ -14,4 +13,3 @@ export function Overscroll({
   }, [behavior, overflow]);
   return null;
 }
-

@@ -1,4 +1,3 @@
-
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -26,10 +25,26 @@ export function CreateProjectDialog({
   const { t } = useI18n();
   const CATEGORY_PRESETS = useMemo(
     () => [
-      { label: t.createProjectDialog.categoryInvest, icon: "📈", category: "investment" },
-      { label: t.createProjectDialog.categoryHomework, icon: "📝", category: "homework" },
-      { label: t.createProjectDialog.categoryWriting, icon: "✍️", category: "writing" },
-      { label: t.createProjectDialog.categoryTravel, icon: "✈️", category: "travel" },
+      {
+        label: t.createProjectDialog.categoryInvest,
+        icon: "📈",
+        category: "investment",
+      },
+      {
+        label: t.createProjectDialog.categoryHomework,
+        icon: "📝",
+        category: "homework",
+      },
+      {
+        label: t.createProjectDialog.categoryWriting,
+        icon: "✍️",
+        category: "writing",
+      },
+      {
+        label: t.createProjectDialog.categoryTravel,
+        icon: "✈️",
+        category: "travel",
+      },
     ],
     [t],
   );
@@ -89,15 +104,15 @@ export function CreateProjectDialog({
             }}
           />
           <div className="flex flex-col gap-2">
-            <span className="text-muted-foreground text-sm">{t.createProjectDialog.quickCategory}</span>
+            <span className="text-muted-foreground text-sm">
+              {t.createProjectDialog.quickCategory}
+            </span>
             <div className="flex flex-wrap gap-2">
               {CATEGORY_PRESETS.map((preset) => (
                 <Button
                   key={preset.category}
                   variant={
-                    selectedCategory === preset.category
-                      ? "default"
-                      : "outline"
+                    selectedCategory === preset.category ? "default" : "outline"
                   }
                   size="sm"
                   onClick={() => handleCategorySelect(preset)}
@@ -124,4 +139,3 @@ export function CreateProjectDialog({
     </Dialog>
   );
 }
-

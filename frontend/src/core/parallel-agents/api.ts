@@ -34,6 +34,18 @@ export interface TaskResult {
   work_contract?: WorkContract | null;
 }
 
+export interface SubagentRouteDecision {
+  schema: "octopus.subagent_route_decision.v1";
+  role: string;
+  action: "allow" | "allow_with_warning" | "block" | string;
+  reason: string;
+  risk_level: "low" | "medium" | "high" | "critical" | string;
+  verdict: string;
+  score: number | null;
+  confidence: number;
+  evidence_item_ids: string[];
+}
+
 export interface WorkContract {
   contract_id: string;
   agent_id: string;
@@ -154,10 +166,9 @@ export async function fetchBatch(batchId: string): Promise<BatchResult | null> {
 
 export async function cancelTask(taskId: string): Promise<boolean> {
   try {
-    const res = await authedFetch(
-      `/api/agents/parallel/cancel/${taskId}`,
-      { method: "POST" },
-    );
+    const res = await authedFetch(`/api/agents/parallel/cancel/${taskId}`, {
+      method: "POST",
+    });
     return res.ok;
   } catch (e) {
     swallow(e);
@@ -364,7 +375,9 @@ export function streamBatch(
                     callbacks.onBatchComplete?.(data);
                     return;
                   }
-                } catch (e) { swallow(e); }
+                } catch (e) {
+                  swallow(e);
+                }
               }
               eventType = "";
               eventData = "";
@@ -385,7 +398,9 @@ export function streamBatch(
           callbacks.onReconnecting?.(retryCount);
           await sleep(baseDelay * Math.pow(2, retryCount - 1));
         } else {
-          callbacks.onError?.(err instanceof Error ? err : new Error("SSE max retries exceeded"));
+          callbacks.onError?.(
+            err instanceof Error ? err : new Error("SSE max retries exceeded"),
+          );
           return;
         }
       }

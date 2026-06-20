@@ -63,8 +63,7 @@ export function TraceFeed({ entries, emptyHint }: Props) {
   const handleScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    const atBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     setDetached(!atBottom);
   };
 

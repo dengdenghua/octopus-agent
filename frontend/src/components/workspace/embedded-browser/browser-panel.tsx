@@ -1,11 +1,7 @@
 /* Implementation note. */
 
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  RefreshCwIcon,
-} from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon } from "lucide-react";
 import { useI18n } from "@/core/i18n/hooks";
 import { useBrowserPanel } from "./browser-context";
 import { WebviewRenderer, type WebviewHandle } from "./webview-renderer";

@@ -14,12 +14,16 @@ from runtime.core.cerebrum.react_guards import (
 from runtime.core.cerebrum.react_loop import (
     ReActResult,
     ReActStep,
+    _build_code_agent_mode_prompt,
     _build_code_context_prelude,
+    _build_project_signals_prompt,
+    _build_resume_context_prompt,
     _code_mode_completion_guard,
     _escape_md_brackets,
     _execute_action_via_beak,
     _format_skill_catalog,
     _long_task_budget_limits,
+    _normalized_tool_call_from_react_action,
     _parse_action,
     _parse_step,
     _placeholder_observation,
@@ -288,6 +292,117 @@ def test_code_mode_injects_startup_context_before_current_goal(tmp_path) -> None
     user_messages = [m.content for m in messages if m.role == "user"]
     assert "startup-code-context" in user_messages[-2]
     assert user_messages[-1] == "Patch the code"
+
+
+def test_code_agent_mode_prompt_distinguishes_architect_mode() -> None:
+    prompt = _build_code_agent_mode_prompt("architect")
+
+    assert "<code-agent-mode>" in prompt
+    assert "architect / 架构师" in prompt
+    assert "大范围修改前先分阶段执行" in prompt
+
+
+def test_project_signals_prompt_surfaces_stack_and_verification_hint() -> None:
+    prompt = _build_project_signals_prompt({
+        "recommended_mode": "coder",
+        "confidence": 0.82,
+        "reason": "package manifest and lock file detected",
+        "signals": {
+            "file_count": 128,
+            "manifests": ["package.json", "vite.config.ts"],
+            "lock_files": ["pnpm-lock.yaml"],
+            "structure_dirs": ["src", "tests"],
+            "has_readme": True,
+            "commands": [
+                {
+                    "kind": "typecheck",
+                    "command": "pnpm run typecheck",
+                    "source": "package.json scripts.typecheck",
+                },
+                {
+                    "kind": "test",
+                    "command": "pnpm run test",
+                    "source": "package.json scripts.test",
+                },
+            ],
+        },
+    })
+
+    assert "<project-signals>" in prompt
+    assert "package.json" in prompt
+    assert "pnpm-lock.yaml" in prompt
+    assert "候选验证命令" in prompt
+    assert "pnpm run typecheck" in prompt
+    assert "pnpm run test" in prompt
+
+
+def test_resume_context_prompt_renders_sanitized_tool_summary() -> None:
+    prompt = _build_resume_context_prompt({
+        "confirmed": True,
+        "checkpoint_id": 12,
+        "task_id": "task-12",
+        "checkpoint_type": "react",
+        "iteration": 2,
+        "continue_from_iteration": 3,
+        "phase": "verify",
+        "working_set": ["runtime/core/cerebrum/react_loop.py"],
+        "recent_tool_calls": [
+            {
+                "iteration": 2,
+                "tool": "exec_shell",
+                "input_preview": "pytest tests/test_react_loop.py -q",
+                "observation_preview": "failed once then fixed",
+            }
+        ],
+    })
+
+    assert "<resume-context>" in prompt
+    assert "not a new user instruction" in prompt
+    assert "continue_from_iteration: 3" in prompt
+    assert "runtime/core/cerebrum/react_loop.py" in prompt
+    assert "tool=exec_shell" in prompt
+    assert "failed once then fixed" in prompt
+
+
+def test_resume_context_prompt_skips_unconfirmed_intent() -> None:
+    assert _build_resume_context_prompt({"confirmed": False, "checkpoint_id": 1}) == ""
+
+
+def test_react_loop_injects_confirmed_resume_context_as_volatile_message() -> None:
+    router = _CapturingRouter(["Final Answer: resumed"])
+    intent = _intent("continue the task")
+    intent.user_context["resume_intent"] = {
+        "confirmed": True,
+        "checkpoint_id": 12,
+        "task_id": "task-12",
+        "checkpoint_type": "react",
+        "iteration": 2,
+        "continue_from_iteration": 3,
+        "phase": "verify",
+        "working_set": ["runtime/core/cerebrum/react_loop.py"],
+        "recent_tool_calls": [
+            {
+                "iteration": 2,
+                "tool": "exec_shell",
+                "input_preview": "pytest tests/test_react_loop.py -q",
+                "observation_preview": "failed once then fixed",
+            }
+        ],
+    }
+
+    result = run_react_loop(_FakeStack(router), intent, agent=None)
+
+    assert result is not None
+    messages = router.requests[0].messages
+    user_text = "\n".join(
+        message.content
+        for message in messages
+        if message.role == "user" and isinstance(message.content, str)
+    )
+    assert "<resume-context>" in user_text
+    assert "tool=exec_shell" in user_text
+    assert "runtime/core/cerebrum/react_loop.py" in user_text
+    assert messages[-1].content == "continue the task"
 
 
 def test_non_code_mode_does_not_inject_startup_context(tmp_path) -> None:
@@ -705,6 +820,19 @@ def test_parse_action_bare_name() -> None:
 def test_parse_action_json_parens() -> None:
     r = _parse_action('read_file({"path": "README.md"})')
     assert r == ("read_file", {"path": "README.md"})
+
+
+def test_react_action_normalizes_to_tool_protocol() -> None:
+    call = _normalized_tool_call_from_react_action(
+        'read_file({"path": "README.md"})',
+        react_step_counter=3,
+    )
+
+    assert call is not None
+    assert call.id == "react:3"
+    assert call.name == "read_file"
+    assert call.arguments == {"path": "README.md"}
+    assert call.origin == "react_compat"
 
 
 def test_parse_action_normalizes_deep_research_swarm_alias() -> None:
@@ -1181,6 +1309,53 @@ def test_execute_action_keeps_medium_tool_observation() -> None:
     assert "x" * 5000 in observation
 
 
+def test_execute_action_uses_normalized_result_truncation() -> None:
+    from runtime.core.cerebrum.react_execution import TOOL_OBSERVATION_MAX_CHARS
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="large_output",
+            description="Return a large payload.",
+            trusted_source="skill://public/large_output",
+            handler=lambda **_kwargs: "x" * (TOOL_OBSERVATION_MAX_CHARS + 7),
+        ),
+        verify_tests=False,
+    )
+    stack = _FakeStack(None)
+    stack.executor = ToolExecutor(reg, TrustEngine())
+
+    observation, step = _execute_action_via_beak(
+        stack,
+        'large_output({})',
+        react_task_id=TaskId(uuid4()),
+        react_step_counter=1,
+    )
+
+    assert step is not None
+    assert observation is not None
+    assert "(real tool execution succeeded) large_output" in observation
+    assert "(truncated, 7 more chars)" in observation
+
+
+def test_execute_action_command_failure_uses_normalized_result() -> None:
+    stack = _build_stack_with_executor(_ScriptedRouter([]))
+
+    observation, step = _execute_action_via_beak(
+        stack,
+        'exec_shell({"command": "fail tests"})',
+        react_task_id=TaskId(uuid4()),
+        react_step_counter=1,
+    )
+
+    assert step is not None
+    assert observation is not None
+    assert observation.startswith(
+        "(tool failed) status=command_failed error=non_zero_exit"
+    )
+    assert '"exit_code": 1' in observation
+
+
 # Implementation note.
 
 
@@ -1208,6 +1383,67 @@ def test_execute_action_via_beak_success() -> None:
     assert obs is not None
     assert "echoed" in obs and "hi" in obs
     assert step is not None  # Implementation note.
+
+
+def test_execute_action_preserves_code_permission_context_in_fallback_session() -> None:
+    from runtime.platform.process.session import current_session
+
+    captured: dict[str, Any] = {}
+
+    class _Registry:
+        def has(self, _name: str) -> bool:
+            return True
+
+    class _Executor:
+        registry = _Registry()
+
+        def execute_step(self, *args: Any, **kwargs: Any) -> Any:
+            session = current_session()
+            captured["metadata"] = dict(session.metadata if session else {})
+            captured["sucker_id"] = str(kwargs["sucker_id"])
+            captured["args"] = dict(kwargs["args"])
+            return SimpleNamespace(
+                result=SimpleNamespace(status="success", output={"ok": True}),
+            )
+
+    stack = SimpleNamespace(executor=_Executor())
+    agent = SimpleNamespace(agent_id="coder", capabilities={"code_mode_unlock": True})
+    intent = ParsedIntent(
+        raw="fix it",
+        intent_type="task",
+        normalized_goal="fix it",
+        user_context={
+            "mode": "code",
+            "workspace_path": "/tmp/project",
+            "sandbox_mode": "sandbox",
+            "permission_mode": "acceptEdits",
+            "approval_policy": "on-request",
+            "execution_environment": "sandbox",
+            "capability_mode": "code",
+            "code_mode": "solo",
+            "agent_mode": "coder",
+            "project_signals": {"recommended_mode": "coder"},
+        },
+    )
+
+    obs, step = _execute_action_via_beak(
+        stack,
+        'echo({"text": "hi"})',
+        react_task_id=TaskId(uuid4()),
+        react_step_counter=2,
+        agent=agent,
+        intent=intent,
+    )
+
+    assert step is not None
+    assert obs is not None
+    assert captured["sucker_id"] == "echo"
+    assert captured["args"] == {"text": "hi"}
+    assert captured["metadata"]["sandbox_mode"] == "sandbox"
+    assert captured["metadata"]["permission_mode"] == "acceptEdits"
+    assert captured["metadata"]["code_mode"] == "solo"
+    assert captured["metadata"]["agent_mode"] == "coder"
+    assert captured["metadata"]["project_signals"] == {"recommended_mode": "coder"}
 
 
 def test_execute_action_via_beak_unknown_skill() -> None:
@@ -2387,6 +2623,77 @@ def test_react_resume_rehydrates_observation_history(
     )
     assert 'Action: echo({"text": "first evidence"})' in resumed_messages
     assert "Observation: echoed: first evidence" in resumed_messages
+
+
+def test_react_resume_falls_back_to_trace_store_checkpoint(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from runtime.memory.diagnostics.trace_store import AgentTraceStore
+
+    monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
+    task_id = TaskId(uuid4())
+    trace = AgentTraceStore(tmp_path / "trace.sqlite")
+    checkpoint_id = trace.record_checkpoint(
+        task_id=str(task_id),
+        checkpoint_type="react",
+        iteration=1,
+        state={
+            "iteration_completed": 1,
+            "max_iterations": 3,
+            "messages_snapshot": [
+                {"role": "system", "content": "ReAct system"},
+                {"role": "user", "content": "continue the task"},
+            ],
+            "steps_snapshot": [
+                {
+                    "iteration": 1,
+                    "thought": "Need durable evidence",
+                    "action": 'echo({"text": "trace evidence"})',
+                    "observation": "echoed: trace evidence",
+                },
+            ],
+            "has_final_answer": False,
+            "working_set_snapshot": [{"path": "app.py", "relevance": "referenced"}],
+            "progress_summary": "trace checkpoint restored",
+            "current_phase": "verify",
+        },
+    )
+    stack = _build_stack_with_journal()
+    router = _CapturingRouter(["Final Answer: resumed from trace"])
+    stack.planner.router = router
+    intent = _intent("continue the task")
+    intent.user_context["resume_intent"] = {
+        "confirmed": True,
+        "checkpoint_id": checkpoint_id,
+        "task_id": str(task_id),
+        "checkpoint_type": "react",
+        "iteration": 1,
+        "continue_from_iteration": 2,
+    }
+    session = Session(metadata={"_trace_store": trace})
+
+    with session_scope(session):
+        events, result = _drain(stream_react_loop(
+            stack,
+            intent,
+            agent=None,
+            max_iterations=3,
+            resume_task_id=task_id,
+        ))
+
+    assert result is not None and result.success
+    resume_event = next(event for event in events if event["type"] == "react_resumed")
+    assert resume_event["checkpoint_source"] == "trace_store"
+    assert resume_event["current_phase"] == "verify"
+    resumed_messages = "\n".join(
+        message.content
+        for message in router.requests[0].messages
+        if isinstance(message.content, str)
+    )
+    assert 'Action: echo({"text": "trace evidence"})' in resumed_messages
+    assert "Observation: echoed: trace evidence" in resumed_messages
+    trace.close()
 
 
 def test_react_resume_from_generated_periodic_checkpoint(

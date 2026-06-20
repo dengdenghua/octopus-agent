@@ -49,7 +49,8 @@ function applyDensity(density: Density) {
 }
 
 export function useAppearance() {
-  const [cornerScale, setCornerScaleState] = useState<CornerScale>(DEFAULT_CORNER);
+  const [cornerScale, setCornerScaleState] =
+    useState<CornerScale>(DEFAULT_CORNER);
   const [density, setDensityState] = useState<Density>(DEFAULT_DENSITY);
 
   useEffect(() => {
@@ -66,7 +67,9 @@ export function useAppearance() {
     applyCorner(scale);
     try {
       window.localStorage.setItem(CORNER_KEY, String(scale));
-    } catch (e) { swallow(e, "storage"); }
+    } catch (e) {
+      swallow(e, "storage");
+    }
   }, []);
 
   const setDensity = useCallback((d: Density) => {
@@ -74,7 +77,9 @@ export function useAppearance() {
     applyDensity(d);
     try {
       window.localStorage.setItem(DENSITY_KEY, d);
-    } catch (e) { swallow(e, "storage"); }
+    } catch (e) {
+      swallow(e, "storage");
+    }
   }, []);
 
   return { cornerScale, density, setCornerScale, setDensity };

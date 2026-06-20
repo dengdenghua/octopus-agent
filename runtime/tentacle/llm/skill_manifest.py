@@ -111,10 +111,7 @@ class SkillManifestLoader:
             return []
 
         paths: Iterable[Path]
-        if recursive:
-            paths = sorted(root.rglob(pattern))
-        else:
-            paths = sorted(root.glob(pattern))
+        paths = sorted(root.rglob(pattern)) if recursive else sorted(root.glob(pattern))
 
         specs: list[SkillSpec] = []
         for p in paths:

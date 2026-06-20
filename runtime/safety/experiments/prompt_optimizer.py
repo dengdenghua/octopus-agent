@@ -5,14 +5,14 @@ import logging
 _logger = logging.getLogger(__name__)
 
 
-from dataclasses import dataclass
-from typing import Any
-from uuid import UUID
+from dataclasses import dataclass  # noqa: E402
+from typing import Any  # noqa: E402
+from uuid import UUID  # noqa: E402
 
-from runtime.core.cerebrum import LLMPlanner
-from runtime.platform.models import ParsedIntent, TaskGraph, TaskId
+from runtime.core.cerebrum import LLMPlanner  # noqa: E402
+from runtime.platform.models import ParsedIntent, TaskGraph, TaskId  # noqa: E402
 
-from .variant import ABSplitter, Variant, VariantStats
+from .variant import ABSplitter, Variant, VariantStats  # noqa: E402
 
 
 @dataclass(frozen=True)

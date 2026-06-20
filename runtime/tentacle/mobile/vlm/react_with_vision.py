@@ -31,6 +31,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import time
@@ -292,9 +293,8 @@ class VisionReAct:
             return None
 
         # 检查调用间隔
-        if self.trigger_policy.vlm_call_interval > 0:
-            if step - self._last_vlm_step < self.trigger_policy.vlm_call_interval:
-                return None
+        if self.trigger_policy.vlm_call_interval > 0 and step - self._last_vlm_step < self.trigger_policy.vlm_call_interval:
+            return None
 
         should_trigger = False
 
@@ -351,10 +351,8 @@ class VisionReAct:
             # 获取可选的无障碍树信息
             screen_info = None
             if self._screen_info_getter is not None:
-                try:
+                with contextlib.suppress(Exception):  # best-effort; fail-open
                     screen_info = self._screen_info_getter()
-                except Exception:
-                    pass
 
             logger.info("调用 VLM 分析截图 (step=%d)...", step)
             analysis = self.vlm_client.analyze_screenshot(

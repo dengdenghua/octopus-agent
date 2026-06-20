@@ -127,12 +127,12 @@ class TestDriftFailureScenarios:
                 )
                 for _ in range(10)
             ]
-            with patch.object(monitor, "_check_soul_drift", return_value=None):
-                with patch.object(monitor, "_check_genome_drift", return_value=None):
-                    with patch(
-                        "runtime.memory.learning.turn_scoring.read_recent_scores",
-                        return_value=scores,
-                    ):
+            with patch.object(monitor, "_check_soul_drift", return_value=None), \
+                 patch.object(monitor, "_check_genome_drift", return_value=None), \
+                 patch(
+                    "runtime.memory.learning.turn_scoring.read_recent_scores",
+                    return_value=scores,
+                ):
                         report = monitor.check()
                         reports.append(report)
 
@@ -156,13 +156,13 @@ class TestDriftFailureScenarios:
             )
             for _ in range(10)
         ]
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch(
-                    "runtime.memory.learning.turn_scoring.read_recent_scores",
-                    return_value=low_scores,
-                ):
-                    drift_report = monitor.check()
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch(
+                "runtime.memory.learning.turn_scoring.read_recent_scores",
+                return_value=low_scores,
+            ):
+                drift_report = monitor.check()
         assert drift_report.has_drift is True
         assert monitor._baseline_score == pytest.approx(0.60, abs=0.01)
 
@@ -173,22 +173,22 @@ class TestDriftFailureScenarios:
             )
             for _ in range(10)
         ]
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch(
-                    "runtime.memory.learning.turn_scoring.read_recent_scores",
-                    return_value=recovered_scores,
-                ):
-                    recovery_report = monitor.check()
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch(
+                "runtime.memory.learning.turn_scoring.read_recent_scores",
+                return_value=recovered_scores,
+            ):
+                monitor.check()
         assert monitor._baseline_score == pytest.approx(0.85, abs=0.01)
 
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch(
-                    "runtime.memory.learning.turn_scoring.read_recent_scores",
-                    return_value=recovered_scores,
-                ):
-                    stable_report = monitor.check()
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch(
+                "runtime.memory.learning.turn_scoring.read_recent_scores",
+                return_value=recovered_scores,
+            ):
+                stable_report = monitor.check()
         assert stable_report.has_drift is False
 
 

@@ -162,22 +162,22 @@ def _agent_visual_urls_for(agent_id: str) -> dict[str, str]:
 from .agents_local_partner import (  # noqa: E402
     LOCAL_PARTNER_SPECS as _LOCAL_PARTNER_SPECS,
 )
-from .agents_local_partner import (
+from .agents_local_partner import (  # noqa: E402
     identity_has_admin_role as _identity_has_admin_role,
 )
-from .agents_local_partner import (
+from .agents_local_partner import (  # noqa: E402
     safe_executable as _safe_local_partner_executable,
 )
-from .agents_local_partner import (
+from .agents_local_partner import (  # noqa: E402
     to_wire as _local_partner_wire,
 )
-from .agents_local_partner import (
+from .agents_local_partner import (  # noqa: E402
     validate_alias as _validate_local_partner_alias,
 )
-from .agents_local_partner import (
+from .agents_local_partner import (  # noqa: E402
     which_command as _which_local_partner_command,
 )
-from .agents_local_partner import (
+from .agents_local_partner import (  # noqa: E402
     write_partner_agent as _write_local_partner_agent,
 )
 from .agents_models import (  # noqa: E402
@@ -819,6 +819,8 @@ When making changes, first read the surrounding code.
             profile["description"] = body.description or ""
         if "model" in provided_fields:
             profile["model"] = {"provider": "auto", "name": (body.model or "").strip() or "auto"}
+        if "capabilities" in provided_fields:
+            profile["capabilities"] = body.capabilities or {}
 
         try:
             profile_text = (
@@ -922,6 +924,7 @@ When making changes, first read the surrounding code.
                 description=description,
                 output_dir=agent_dir / "visuals",
                 style_prompt=body.style_prompt if body else "",
+                reference_images=body.reference_images if body else [],
                 provider=body.provider if body else None,
             )
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
@@ -933,6 +936,7 @@ When making changes, first read the surrounding code.
             agent_id=agent_id,
             provider=result.provider,
             prompt=result.prompt,
+            avatar_url=_avatar_url_for(agent_id),
             visual_urls=_agent_visual_urls_for(agent_id),
         )
 
@@ -1360,8 +1364,10 @@ When making changes, first read the surrounding code.
 
     @router.post("/api/tasks/{task_id}/pause")
     async def pause_task(
-        request: Request, task_id: str, body: PauseTaskBody = PauseTaskBody(),
+        request: Request, task_id: str, body: PauseTaskBody = None,
     ) -> dict[str, Any]:
+        if body is None:
+            body = PauseTaskBody()
         _require_task_owner(request, task_id)
         from runtime.core.cerebrum.pause_control import get_pause_controller
         ctrl = get_pause_controller()
@@ -1381,8 +1387,10 @@ When making changes, first read the surrounding code.
 
     @router.post("/api/tasks/{task_id}/resume")
     async def resume_task(
-        request: Request, task_id: str, body: ResumeTaskBody = ResumeTaskBody(),
+        request: Request, task_id: str, body: ResumeTaskBody = None,
     ) -> dict[str, Any]:
+        if body is None:
+            body = ResumeTaskBody()
         _require_task_owner(request, task_id)
         from runtime.core.cerebrum.pause_control import get_pause_controller
         ctrl = get_pause_controller()

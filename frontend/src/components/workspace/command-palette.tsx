@@ -1,4 +1,3 @@
-
 import {
   ActivityIcon,
   BoxesIcon,
@@ -292,7 +291,10 @@ export function CommandPalette() {
           <div className="space-y-3 text-sm">
             {[
               { keys: `${metaKey}K`, label: t.shortcuts.openCommandPalette },
-              { keys: `${metaKey}${shiftKey}P`, label: t.shortcuts.openCommandPalette },
+              {
+                keys: `${metaKey}${shiftKey}P`,
+                label: t.shortcuts.openCommandPalette,
+              },
               { keys: `${metaKey}${shiftKey}N`, label: t.sidebar.newChat },
               { keys: `${metaKey}B`, label: t.shortcuts.toggleSidebar },
               { keys: `${metaKey}J`, label: t.shortcuts.focusChatInput },

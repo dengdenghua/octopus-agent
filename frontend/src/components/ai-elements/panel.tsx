@@ -13,4 +13,3 @@ export const Panel = ({ className, ...props }: PanelProps) => (
     {...props}
   />
 );
-

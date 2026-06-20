@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
 
-import { VerifyPanel, type AutoVerifySummary, type VerifyResult } from "./verify-panel";
+import {
+  VerifyPanel,
+  type AutoVerifySummary,
+  type VerifyResult,
+} from "./verify-panel";
 
 describe("<VerifyPanel /> auto verification", () => {
   afterEach(() => {
@@ -43,7 +47,9 @@ describe("<VerifyPanel /> auto verification", () => {
     );
 
     expect(screen.getByText("Auto verify attempt 2")).toBeInTheDocument();
-    expect(screen.getByText("Attempt 2. Auto-fix limit reached (2/2)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Attempt 2. Auto-fix limit reached (2/2)"),
+    ).toBeInTheDocument();
     expect(screen.getByText("typecheck")).toBeInTheDocument();
     expect(screen.getByText("0/1")).toBeInTheDocument();
   });

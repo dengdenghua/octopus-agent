@@ -4,7 +4,6 @@ import {
   CheckIcon,
   CopyIcon,
   EyeIcon,
-  FingerprintIcon,
   LinkIcon,
   Loader2Icon,
   PlusIcon,
@@ -57,18 +56,6 @@ function agentDisplayName(agent: Agent) {
   return agent.display_name?.trim() || agent.name;
 }
 
-function isDigitalTwinAgent(agent: Agent) {
-  return (
-    [agent.name, agent.display_name ?? "", agent.description]
-      .join(" ")
-      .toLowerCase()
-      .includes("digital") ||
-    [agent.name, agent.display_name ?? "", agent.description]
-      .join(" ")
-      .includes("分身")
-  );
-}
-
 function resolveAgentAvatar(agent: Agent) {
   if (!agent.avatar_url) return null;
   const src = withAgentAvatarVersion(agent.avatar_url);
@@ -103,12 +90,7 @@ export function InviteDialog({
     const query = agentQuery.trim().toLowerCase();
     if (!query) return agents;
     return agents.filter((agent) =>
-      [
-        agent.name,
-        agent.display_name ?? "",
-        agent.description,
-        isDigitalTwinAgent(agent) ? "数字分身 digital twin" : "",
-      ]
+      [agent.name, agent.display_name ?? "", agent.description]
         .join(" ")
         .toLowerCase()
         .includes(query),
@@ -173,7 +155,7 @@ export function InviteDialog({
         leaderId: team.leaderId ?? members[0]?.name ?? null,
       });
       onTeamChange?.(updated);
-      toast.success(`已添加 ${additions.length} 个 Agent / 数字分身`);
+      toast.success(`已添加 ${additions.length} 个 Agent`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "添加 Agent 失败");
     } finally {
@@ -259,7 +241,7 @@ export function InviteDialog({
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <BotIcon className="size-4 text-primary" />
-                    添加 Agent / 数字分身
+                    添加 Agent
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     已有 {team?.members.length ?? 0} 个 · 可选 {agents.length}{" "}
@@ -284,7 +266,7 @@ export function InviteDialog({
                 <Input
                   value={agentQuery}
                   onChange={(event) => setAgentQuery(event.target.value)}
-                  placeholder="搜索 Agent、角色或数字分身"
+                  placeholder="搜索 Agent 或角色"
                   className="h-8 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
                 />
               </div>
@@ -298,7 +280,7 @@ export function InviteDialog({
                 </div>
               ) : filteredAgents.length === 0 ? (
                 <div className="py-10 text-center text-sm text-muted-foreground">
-                  没有匹配的 Agent / 数字分身
+                  没有匹配的 Agent
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -307,7 +289,6 @@ export function InviteDialog({
                     const inTeam = teamMemberNames.has(agent.name);
                     const isAdding = addingAgentIds.has(agent.name);
                     const avatarSrc = resolveAgentAvatar(agent);
-                    const isTwin = isDigitalTwinAgent(agent);
                     return (
                       <div
                         key={agent.name}
@@ -334,12 +315,6 @@ export function InviteDialog({
                             <span className="truncate text-sm font-medium">
                               {displayName}
                             </span>
-                            {isTwin && (
-                              <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                                <FingerprintIcon className="size-3" />
-                                分身
-                              </span>
-                            )}
                           </div>
                           <div className="truncate text-[11px] text-muted-foreground">
                             {agent.description || agent.name}

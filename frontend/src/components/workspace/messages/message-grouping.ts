@@ -77,7 +77,7 @@ export function extractThinkingText(content: MessageContent): string {
   if (!Array.isArray(content)) return "";
   return content
     .filter(isThinkingContentPart)
-    .map((c) => c.thinking ?? "")
+    .map((c) => (c as unknown as ThinkingContentPart).thinking ?? "")
     .join("\n")
     .trim();
 }

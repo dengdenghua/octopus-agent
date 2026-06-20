@@ -1,5 +1,5 @@
 /**
- * 企业版角色资产 tab(数字分身归并 C · 消费侧前端)。
+ * 企业版角色资产 tab(消费侧前端)。
  *
  * 只读列举企业版(octopus-enterprise)托管的角色资产——消费而非 fork。配了
  * OCTOPUS_ENTERPRISE_URL(后端)才有数据,否则显示"未接通"提示。「导入到本地」
@@ -69,7 +69,10 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
       <div className="py-10 text-center text-xs leading-relaxed text-muted-foreground">
         企业版资产库未接通。
         <br />
-        后端配置 <code className="rounded bg-muted/50 px-1">OCTOPUS_ENTERPRISE_URL</code>{" "}
+        后端配置{" "}
+        <code className="rounded bg-muted/50 px-1">
+          OCTOPUS_ENTERPRISE_URL
+        </code>{" "}
         后,这里会列出企业版托管的角色资产。
       </div>
     );
@@ -93,7 +96,9 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
             key={a.id}
             className="flex gap-3 rounded-lg border border-border/50 bg-muted/20 p-3"
           >
-            <div className="shrink-0 text-2xl leading-none">{a.icon || "🤖"}</div>
+            <div className="shrink-0 text-2xl leading-none">
+              {a.icon || "🤖"}
+            </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-medium">{a.name}</span>

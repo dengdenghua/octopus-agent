@@ -36,7 +36,9 @@ export function EvolutionIndicator({
   // Implementation note.
   const prevRef = useRef<{ rules: number; memories: number } | null>(null);
   const [delta, setDelta] = useState<{
-    rules: number; memories: number; key: number;
+    rules: number;
+    memories: number;
+    key: number;
   } | null>(null);
 
   useEffect(() => {
@@ -74,8 +76,16 @@ export function EvolutionIndicator({
         animating && "text-foreground",
         className,
       )}
-      title={compact ? `${t.evolutionIndicator.clickToView} · ${summary}` : t.evolutionIndicator.clickToView}
-      aria-label={compact ? `${t.evolutionIndicator.clickToView} · ${summary}` : t.evolutionIndicator.clickToView}
+      title={
+        compact
+          ? `${t.evolutionIndicator.clickToView} · ${summary}`
+          : t.evolutionIndicator.clickToView
+      }
+      aria-label={
+        compact
+          ? `${t.evolutionIndicator.clickToView} · ${summary}`
+          : t.evolutionIndicator.clickToView
+      }
       data-testid="evolution-indicator"
     >
       <BrainCircuitIcon
@@ -123,7 +133,16 @@ export function EvolutionIndicator({
   return <EvolutionPanel status={data} trigger={trigger} />;
 }
 
-function formatDelta(dRules: number, dMem: number, t: { evolutionIndicator: { deltaRules: (n: number) => string; deltaMemories: (n: number) => string } }): string {
+function formatDelta(
+  dRules: number,
+  dMem: number,
+  t: {
+    evolutionIndicator: {
+      deltaRules: (n: number) => string;
+      deltaMemories: (n: number) => string;
+    };
+  },
+): string {
   const parts: string[] = [];
   if (dRules > 0) parts.push(t.evolutionIndicator.deltaRules(dRules));
   if (dMem > 0) parts.push(t.evolutionIndicator.deltaMemories(dMem));

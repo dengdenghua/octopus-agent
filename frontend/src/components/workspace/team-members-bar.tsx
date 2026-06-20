@@ -1,4 +1,3 @@
-
 import { UsersIcon } from "lucide-react";
 
 import { getBackendBaseURL } from "@/core/config";
@@ -68,4 +67,3 @@ export function TeamMembersBar({
     </div>
   );
 }
-

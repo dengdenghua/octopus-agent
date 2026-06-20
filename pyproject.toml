@@ -34,7 +34,7 @@ tracing = [
     "opentelemetry-sdk>=1.25",
 ]
 langfuse = [
-    "langfuse>=2.0",
+    "langfuse>=2.0,<3.0",
 ]
 serve = [
     "fastapi>=0.115,<1.0",
@@ -85,7 +85,8 @@ hearts-redis = [
     "redis>=5.0",
 ]
 hearts-etcd = [
-    "etcd3>=0.12",
+    # etcd3 包已停止维护,改用 etcd3-py(活跃维护,兼容 Python 3.12+)
+    "etcd3-py>=0.2",
 ]
 skin = [
     "watchdog>=4.0",
@@ -97,16 +98,16 @@ docs = [
 ]
 all = [
     # serve
-    "fastapi>=0.115",
+    "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.32",
     "pyyaml>=6.0",
     "python-multipart>=0.0.9",
     # web / IM
     "httpx>=0.27",
     # LLM providers
-    "anthropic>=0.40",
+    "anthropic>=0.40,<1.0",
     # MCP client
-    "mcp>=0.9",
+    "mcp>=0.9,<2.0",
     # browsers
     "playwright>=1.48",
     # desktop
@@ -116,6 +117,8 @@ all = [
     # observability
     "opentelemetry-api>=1.25",
     "opentelemetry-sdk>=1.25",
+    # langfuse (pinned <3.0 — v3 SDK API 不兼容)
+    "langfuse>=2.0,<3.0",
     # Implementation note.
     "cryptography>=42.0",
     # Implementation note.

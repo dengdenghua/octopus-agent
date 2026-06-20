@@ -95,8 +95,12 @@ export function useRollbackCanary() {
   return useMutation({
     mutationFn: (skillName: string) => rollbackCanary(skillName),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.evolution.overview, "canary"] });
-      void queryClient.invalidateQueries({ queryKey: [...queryKeys.evolution.overview, "ledger"] });
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.evolution.overview, "canary"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: [...queryKeys.evolution.overview, "ledger"],
+      });
     },
   });
 }

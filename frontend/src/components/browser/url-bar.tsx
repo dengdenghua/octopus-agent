@@ -28,6 +28,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from "react";
 
@@ -381,7 +382,10 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   }, [addressSuggestions.length, draft]);
 
   return (
-    <div className="flex h-14 items-center gap-2 border-b border-border/45 bg-sidebar/65 px-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.32),inset_0_-1px_0_rgba(255,255,255,0.26)] backdrop-blur-2xl">
+    <div
+      className="flex h-14 items-center gap-2 border-b border-border/45 bg-sidebar/65 px-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.32),inset_0_-1px_0_rgba(255,255,255,0.26)] backdrop-blur-2xl"
+      style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
+    >
       <button
         onClick={() => webviewHandle?.goBack()}
         disabled={!canBack}

@@ -16,7 +16,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppWindowIcon,
-  ArrowRightIcon,
   BookOpenIcon,
   BriefcaseIcon,
   CalendarIcon,
@@ -26,7 +25,6 @@ import {
   ClockIcon,
   CodeIcon,
   FileTextIcon,
-  FolderIcon,
   GamepadIcon,
   GlobeIcon,
   HelpCircleIcon,
@@ -212,7 +210,9 @@ export default function MobilePage() {
 
   // Devices
   const [devices, setDevices] = useState<TentacleDevice[]>([]);
-  const [pcScreenStats, setPcScreenStats] = useState<PcScreenStats | null>(null);
+  const [pcScreenStats, setPcScreenStats] = useState<PcScreenStats | null>(
+    null,
+  );
 
   // UI state
   const [deviceSwitcherOpen, setDeviceSwitcherOpen] = useState(false);
@@ -221,9 +221,8 @@ export default function MobilePage() {
 
   // Conversations (multiple chat sessions)
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string>(
-    newConversationId(),
-  );
+  const [activeConversationId, setActiveConversationId] =
+    useState<string>(newConversationId());
 
   // 派生当前对话
   const activeConversation = useMemo(
@@ -267,14 +266,11 @@ export default function MobilePage() {
   }, [refresh]);
 
   // Switch device handler
-  const handleSelectDevice = useCallback(
-    (device: ActiveDevice) => {
-      setActiveDevice(device);
-      setDeviceSwitcherOpen(false);
-      setTab("chat");
-    },
-    [],
-  );
+  const handleSelectDevice = useCallback((device: ActiveDevice) => {
+    setActiveDevice(device);
+    setDeviceSwitcherOpen(false);
+    setTab("chat");
+  }, []);
 
   // ── Conversation actions ────────────────────────────
 
@@ -317,13 +313,16 @@ export default function MobilePage() {
     [activeConversation],
   );
 
-  const deleteConversation = useCallback((id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (id === activeConversationId) {
-      setActiveConversationId(newConversationId());
-    }
-  }, [activeConversationId]);
+  const deleteConversation = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (id === activeConversationId) {
+        setActiveConversationId(newConversationId());
+      }
+    },
+    [activeConversationId],
+  );
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -671,11 +670,7 @@ function Drawer({
               label="办公室"
               onClick={onClose}
             />
-            <DrawerEntry
-              icon={FileTextIcon}
-              label="产出物"
-              onClick={onClose}
-            />
+            <DrawerEntry icon={FileTextIcon} label="产出物" onClick={onClose} />
 
             {/* 最近对话 */}
             {recentList.length > 0 && (
@@ -701,9 +696,7 @@ function Drawer({
                     <MessageCircleIcon
                       className={cn(
                         "size-3.5 shrink-0",
-                        c.isActive
-                          ? "text-blue-500"
-                          : "text-slate-400",
+                        c.isActive ? "text-blue-500" : "text-slate-400",
                       )}
                     />
                     <span
@@ -779,10 +772,7 @@ function DeviceSwitcher({
 
   return (
     <>
-      <div
-        className="absolute inset-0 z-40 bg-black/20"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 z-40 bg-black/20" onClick={onClose} />
       <div className="absolute left-3 right-3 top-[72px] z-50 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
         <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">
           切换设备
@@ -807,11 +797,7 @@ function DeviceSwitcher({
           <DeviceItem
             icon={MonitorIcon}
             label="我的电脑"
-            sub={
-              pcScreenStats?.running
-                ? "PC屏幕流运行中"
-                : "PC屏幕流未启动"
-            }
+            sub={pcScreenStats?.running ? "PC屏幕流运行中" : "PC屏幕流未启动"}
             active={activeDevice.id === "pc-host"}
             online={true}
             onClick={() => onSelect(PC_DEVICE)}
@@ -908,7 +894,7 @@ function DevicePreviewModal({
   open,
   onClose,
   devices,
-  activeDevice,
+  activeDevice: _activeDevice,
   onSelect,
 }: {
   open: boolean;
@@ -1044,14 +1030,12 @@ function PreviewCard({
 
 // ── Bottom Tab Bar ─────────────────────────────────────
 
-function BottomTabBar({
-  tab,
-  setTab,
-}: {
-  tab: Tab;
-  setTab: (t: Tab) => void;
-}) {
-  const tabs: Array<{ key: Tab; label: string; icon: typeof MessageCircleIcon }> = [
+function BottomTabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  const tabs: Array<{
+    key: Tab;
+    label: string;
+    icon: typeof MessageCircleIcon;
+  }> = [
     { key: "chat", label: "对话", icon: MessageCircleIcon },
     { key: "tasks", label: "任务", icon: ClockIcon },
     { key: "skills", label: "技能", icon: WrenchIcon },
@@ -1113,13 +1097,11 @@ function ChatTab({
   const [submitting, setSubmitting] = useState(false);
   const phoneCanvasRef = useRef<HTMLCanvasElement>(null);
   const pcCanvasRef = useRef<HTMLCanvasElement>(null);
-  const phoneStream = useScreenStream(
-    activeDevice.kind === "phone" && activeDevice.id
-      ? activeDevice.id
-      : null,
+  useScreenStream(
+    activeDevice.kind === "phone" && activeDevice.id ? activeDevice.id : null,
     phoneCanvasRef,
   );
-  const pcStream = usePcScreenStream(pcCanvasRef);
+  usePcScreenStream(pcCanvasRef);
 
   const showWelcome = conversation.messages.length === 0;
   const isPc = activeDevice.kind === "pc";
@@ -1490,11 +1472,7 @@ function MeTab({
             </div>
 
             <div className="mt-4 space-y-3">
-              <MeRow
-                icon={WrenchIcon}
-                label="我的技能"
-                onClick={() => {}}
-              />
+              <MeRow icon={WrenchIcon} label="我的技能" onClick={() => {}} />
               <MeRow
                 icon={MonitorSmartphoneIcon}
                 label="管理我的设备"
@@ -1518,9 +1496,7 @@ function MeTab({
               <div
                 className={cn(
                   "text-[11px]",
-                  pcScreenStats?.running
-                    ? "text-green-500"
-                    : "text-slate-400",
+                  pcScreenStats?.running ? "text-green-500" : "text-slate-400",
                 )}
               >
                 {pcScreenStats?.running ? "运行中" : "未启动"}
@@ -1553,7 +1529,11 @@ function MeTab({
           </div>
 
           <div className="rounded-2xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <MeRow icon={HelpCircleIcon} label="帮助与反馈" onClick={() => {}} />
+            <MeRow
+              icon={HelpCircleIcon}
+              label="帮助与反馈"
+              onClick={() => {}}
+            />
             <hr className="mx-4 border-slate-100 dark:border-slate-800" />
             <MeRow
               icon={InfoIcon}
@@ -1590,9 +1570,7 @@ function MeRow({
     >
       <Icon className="size-4 shrink-0 text-slate-600 dark:text-slate-400" />
       <span className="flex-1 text-sm">{label}</span>
-      {rightText && (
-        <span className="text-xs text-slate-400">{rightText}</span>
-      )}
+      {rightText && <span className="text-xs text-slate-400">{rightText}</span>}
       <ChevronRightIcon className="size-4 text-slate-300" />
     </button>
   );

@@ -1,4 +1,3 @@
-
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import { useCallback, useRef, type KeyboardEvent } from "react";
 import { useI18n } from "@/core/i18n/hooks";
@@ -47,9 +46,7 @@ export function TerminalInput({
     [onSubmit, onKeyDown],
   );
 
-  const _shortPath = workDir
-    ? workDir.split(/[/\\]/).slice(-2).join("/")
-    : "~";
+  const _shortPath = workDir ? workDir.split(/[/\\]/).slice(-2).join("/") : "~";
 
   return (
     <div

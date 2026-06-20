@@ -94,4 +94,3 @@ export const Loader = ({ className, size = 16, ...props }: LoaderProps) => (
     <LoaderIcon size={size} />
   </div>
 );
-

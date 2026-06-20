@@ -1,6 +1,7 @@
 """Unit tests for runtime.safety.evolution modules."""
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from runtime.platform.config.schema import EvolveConfig, PlannerConfig, _pick_cheaper
@@ -21,6 +22,7 @@ from runtime.safety.evolution.federation import (
 from runtime.safety.evolution.fitness import (
     FitnessReport,
     L1Fitness,
+    compute_governance_fitness,
     compute_l1,
 )
 from runtime.safety.evolution.proposal_ledger import (
@@ -109,11 +111,304 @@ class TestComputeL1:
         from runtime.memory.learning.turn_scoring import TurnScore
         scores = [TurnScore(ts="t", agent_id="a", score=1.0, reason="success", soul_hash="abc", rounds=3)]
         scores = scores * 10
-        with patch("runtime.safety.evolution.fitness.read_recent_scores", return_value=scores):
-            with patch("runtime.safety.evolution.fitness.analyze_soul_impact", return_value={}):
-                l1 = compute_l1("test_agent", window=10)
-                assert l1.score == 1.0
-                assert l1.success_rate == 1.0
+        with (
+            patch("runtime.safety.evolution.fitness.read_recent_scores", return_value=scores),
+            patch("runtime.safety.evolution.fitness.analyze_soul_impact", return_value={}),
+        ):
+            l1 = compute_l1("test_agent", window=10)
+            assert l1.score == 1.0
+            assert l1.success_rate == 1.0
+
+
+class TestGovernanceFitness:
+    def test_empty_audit_has_no_penalty(self, tmp_path):
+        audit_path = tmp_path / "promotion_audit.json"
+        audit_path.write_text(
+            json.dumps({"schema": "octopus.promotion_audit.v1", "records": []}),
+            encoding="utf-8",
+        )
+
+        risk = compute_governance_fitness(audit_path=audit_path)
+
+        assert risk.score == 1.0
+        assert risk.penalty == 0.0
+        assert risk.reasons == []
+
+    def test_malformed_records_field_has_no_penalty(self, tmp_path):
+        for payload in ({}, {"records": None}):
+            audit_path = tmp_path / f"promotion_audit_{len(payload)}.json"
+            audit_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            risk = compute_governance_fitness(audit_path=audit_path)
+
+            assert risk.score == 1.0
+            assert risk.penalty == 0.0
+            assert risk.audit_total == 0
+
+    def test_blocked_replay_override_penalizes_fitness(self, tmp_path):
+        audit_path = tmp_path / "promotion_audit.json"
+        audit_path.write_text(
+            json.dumps({
+                "schema": "octopus.promotion_audit.v1",
+                "records": [
+                    {
+                        "id": "p1",
+                        "review_queue_item_id": "rq-1",
+                        "agent_id": "test_agent",
+                        "target": "experience",
+                        "status": "applied",
+                        "applied_at": "2026-06-19T00:00:00",
+                        "decision_context": {
+                            "replay_gate": {"passed": False},
+                            "override_replay_gate": True,
+                        },
+                    }
+                ],
+            }),
+            encoding="utf-8",
+        )
+
+        risk = compute_governance_fitness(audit_path=audit_path)
+
+        assert risk.gate_blocked_override_count == 1
+        assert risk.gate_failed_count == 1
+        assert risk.override_count == 1
+        assert risk.penalty == 0.25
+        assert "1 blocked replay override(s)" in risk.reasons
+
+    def test_governance_audit_event_round_trips(self, tmp_path):
+        from runtime.memory.learning.experience_ledger import ExperienceLedger
+        from runtime.memory.learning.promotion_applier import PromotionApplier
+        from runtime.memory.learning.review_queue import ReviewQueue
+        from runtime.safety.evolution.governance_audit import (
+            append_governance_audit_event,
+            verify_governance_audit_chain,
+        )
+        from runtime.safety.evolution.proposal_ledger import ProposalLedger
+
+        audit_path = tmp_path / "promotion_audit.json"
+
+        record = append_governance_audit_event(
+            event_type="topology_policy_block",
+            target="topology_policy",
+            status="blocked",
+            artifact={"topology_id": "team-a"},
+            decision_context={"turn_id": "turn-1"},
+            audit_path=audit_path,
+        )
+        audit = PromotionApplier(
+            review_queue=ReviewQueue(tmp_path / "review_queue.json"),
+            experience_ledger=ExperienceLedger(tmp_path / "experience.json"),
+            proposal_ledger=ProposalLedger(tmp_path / "proposals.jsonl"),
+            audit_path=audit_path,
+        ).audit()
+
+        assert record["event_type"] == "topology_policy_block"
+        assert audit["total"] == 1
+        assert audit["records"][0]["event_type"] == "topology_policy_block"
+        assert audit["records"][0]["artifact"]["topology_id"] == "team-a"
+        integrity = verify_governance_audit_chain(audit_path=audit_path)
+        assert integrity["ok"] is True
+        assert integrity["entries_checked"] == 1
+
+    def test_governance_audit_chain_detects_tamper(self, tmp_path):
+        from runtime.safety.evolution.governance_audit import (
+            append_governance_audit_event,
+            verify_governance_audit_chain,
+        )
+
+        audit_path = tmp_path / "promotion_audit.json"
+        chain_path = tmp_path / "promotion_audit_chain.jsonl"
+
+        append_governance_audit_event(
+            event_type="topology_policy_block",
+            target="topology_policy",
+            status="blocked",
+            artifact={"topology_id": "team-a"},
+            decision_context={"turn_id": "turn-1"},
+            audit_path=audit_path,
+        )
+        append_governance_audit_event(
+            event_type="topology_policy_block",
+            target="topology_policy",
+            status="blocked",
+            artifact={"topology_id": "team-b"},
+            decision_context={"turn_id": "turn-2"},
+            audit_path=audit_path,
+        )
+
+        clean = verify_governance_audit_chain(audit_path=audit_path)
+        assert clean["ok"] is True
+        assert clean["entries_checked"] == 2
+
+        lines = chain_path.read_text(encoding="utf-8").splitlines()
+        first = json.loads(lines[0])
+        first["payload"]["status"] = "applied"
+        lines[0] = json.dumps(first)
+        chain_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        tampered = verify_governance_audit_chain(audit_path=audit_path)
+        assert tampered["ok"] is False
+        assert tampered["broken_at"] == 0
+
+    def test_governance_audit_chain_detects_json_mismatch(self, tmp_path):
+        from runtime.safety.evolution.governance_audit import (
+            append_governance_audit_event,
+            verify_governance_audit_chain,
+        )
+
+        audit_path = tmp_path / "promotion_audit.json"
+        append_governance_audit_event(
+            event_type="topology_policy_block",
+            target="topology_policy",
+            status="blocked",
+            artifact={"topology_id": "team-a"},
+            decision_context={"turn_id": "turn-1"},
+            audit_path=audit_path,
+        )
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+        audit["records"][0]["status"] = "applied"
+        audit_path.write_text(json.dumps(audit), encoding="utf-8")
+
+        integrity = verify_governance_audit_chain(audit_path=audit_path)
+
+        assert integrity["ok"] is False
+        assert "payload mismatch" in integrity["error"]
+
+    def test_governance_audit_export_bundle_contains_chain_and_hashes(self, tmp_path):
+        from runtime.safety.evolution.governance_audit import (
+            append_governance_audit_event,
+            export_governance_audit_bundle,
+        )
+
+        audit_path = tmp_path / "promotion_audit.json"
+        append_governance_audit_event(
+            event_type="topology_policy_block",
+            target="topology_policy",
+            status="blocked",
+            artifact={"topology_id": "team-a"},
+            decision_context={"turn_id": "turn-1"},
+            audit_path=audit_path,
+        )
+
+        bundle = export_governance_audit_bundle(audit_path=audit_path)
+
+        assert bundle["schema"] == "octopus.governance_audit_export.v1"
+        assert bundle["integrity"]["ok"] is True
+        assert bundle["audit"]["records"][0]["event_type"] == "topology_policy_block"
+        assert bundle["chain"]["line_count"] == 1
+        assert len(bundle["audit_sha256"]) == 64
+        assert len(bundle["chain_sha256"]) == 64
+
+    def test_governance_penalty_is_scoped_to_agent(self, tmp_path):
+        audit_path = tmp_path / "promotion_audit.json"
+        audit_path.write_text(
+            json.dumps({
+                "schema": "octopus.promotion_audit.v1",
+                "records": [
+                    {
+                        "id": "p1",
+                        "review_queue_item_id": "rq-1",
+                        "agent_id": "other_agent",
+                        "target": "experience",
+                        "status": "applied",
+                        "applied_at": "2026-06-19T00:00:00",
+                        "decision_context": {
+                            "replay_gate": {"passed": False},
+                            "override_replay_gate": True,
+                        },
+                    }
+                ],
+            }),
+            encoding="utf-8",
+        )
+
+        risk = compute_governance_fitness(
+            agent_id="test_agent",
+            audit_path=audit_path,
+        )
+
+        assert risk.audit_total == 0
+        assert risk.penalty == 0.0
+
+    def test_governance_window_zero_uses_all_records(self, tmp_path):
+        audit_path = tmp_path / "promotion_audit.json"
+        audit_path.write_text(
+            json.dumps({
+                "schema": "octopus.promotion_audit.v1",
+                "records": [
+                    {
+                        "id": "p1",
+                        "review_queue_item_id": "rq-1",
+                        "agent_id": "test_agent",
+                        "target": "experience",
+                        "status": "failed",
+                        "applied_at": "2026-06-19T00:00:00",
+                        "decision_context": {
+                            "replay_gate": {"passed": True},
+                            "override_replay_gate": False,
+                        },
+                    },
+                    {
+                        "id": "p2",
+                        "review_queue_item_id": "rq-2",
+                        "agent_id": "test_agent",
+                        "target": "experience",
+                        "status": "applied",
+                        "applied_at": "2026-06-19T00:00:01",
+                        "decision_context": {
+                            "replay_gate": {"passed": False},
+                            "override_replay_gate": True,
+                        },
+                    },
+                ],
+            }),
+            encoding="utf-8",
+        )
+
+        risk = compute_governance_fitness(
+            agent_id="test_agent",
+            audit_path=audit_path,
+            window=0,
+        )
+
+        assert risk.recent_total == 2
+        assert risk.failed_apply_count == 1
+        assert risk.gate_blocked_override_count == 1
+
+    def test_governance_mixed_window_penalty_is_stable(self, tmp_path):
+        audit_path = tmp_path / "promotion_audit.json"
+        records = [
+            {
+                "id": f"p{i}",
+                "review_queue_item_id": f"rq-{i}",
+                "agent_id": "test_agent",
+                "target": "experience",
+                "status": "applied",
+                "applied_at": f"2026-06-19T00:00:{i:02d}",
+                "decision_context": {
+                    "replay_gate": {"passed": i >= 3},
+                    "override_replay_gate": i < 3,
+                },
+            }
+            for i in range(20)
+        ]
+        audit_path.write_text(
+            json.dumps({"schema": "octopus.promotion_audit.v1", "records": records}),
+            encoding="utf-8",
+        )
+
+        risk = compute_governance_fitness(
+            agent_id="test_agent",
+            audit_path=audit_path,
+            window=20,
+        )
+
+        assert risk.recent_total == 20
+        assert risk.gate_blocked_override_count == 3
+        assert risk.override_count == 3
+        assert risk.penalty == 0.046
+        assert risk.score == 0.954
 
 
 class TestFitnessReport:
@@ -140,12 +435,14 @@ class TestFitnessReport:
 class TestDriftMonitor:
     def test_no_drift_on_first_check(self):
         monitor = DriftMonitor("test_agent")
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch.object(monitor, "_check_score_drift", return_value=None):
-                    report = monitor.check()
-                    assert report.has_drift is False
-                    assert report.max_severity == "none"
+        with (
+            patch.object(monitor, "_check_soul_drift", return_value=None),
+            patch.object(monitor, "_check_genome_drift", return_value=None),
+            patch.object(monitor, "_check_score_drift", return_value=None),
+        ):
+            report = monitor.check()
+            assert report.has_drift is False
+            assert report.max_severity == "none"
 
     def test_soul_change_detected(self):
         monitor = DriftMonitor("test_agent")
@@ -155,11 +452,585 @@ class TestDriftMonitor:
                 kind="soul_change", severity="info",
                 detail="changed", ts="t",
             )
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch.object(monitor, "_check_score_drift", return_value=None):
-                    report = monitor.check()
-                    assert report.has_drift is True
-                    assert report.max_severity == "info"
+            with (
+                patch.object(monitor, "_check_genome_drift", return_value=None),
+                patch.object(monitor, "_check_score_drift", return_value=None),
+            ):
+                report = monitor.check()
+                assert report.has_drift is True
+                assert report.max_severity == "info"
+
+
+# ═══════════════════════════════════════════════════════════
+# CodexGap
+# ═══════════════════════════════════════════════════════════
+
+
+class TestCodexGap:
+    def test_report_scores_missing_evidence(self, tmp_path):
+        from runtime.safety.evolution.codex_gap import compute_codex_gap_report
+
+        (tmp_path / "runtime/core/cerebrum").mkdir(parents=True)
+        (tmp_path / "runtime/core/cerebrum/react_loop.py").write_text(
+            "# loop\n",
+            encoding="utf-8",
+        )
+
+        report = compute_codex_gap_report(root=tmp_path)
+        code_loop = next(
+            item for item in report["capabilities"]
+            if item["id"] == "code_execution_loop"
+        )
+
+        assert report["schema"] == "octopus.codex_gap_report.v1"
+        assert report["combined_score"] < 1.0
+        assert code_loop["status"] == "gap"
+        assert "runtime/execution/tool_engine/executor.py" in (
+            code_loop["evidence"]["implementation"]["missing"]
+        )
+        assert report["top_gaps"]
+
+    def test_router_exposes_report(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from runtime.sensing.gateway.evolution_router import create_evolution_router
+
+        app = FastAPI()
+        app.include_router(create_evolution_router())
+        data = TestClient(app).get("/api/evolution/codex-gap").json()
+
+        assert data["ok"] is True
+        assert data["schema"] == "octopus.codex_gap_report.v1"
+        assert data["parity_score"] > 0
+        assert data["advantage_score"] > 0
+        assert {item["area"] for item in data["capabilities"]} == {
+            "codex_parity",
+            "octopus_advantage",
+        }
+        assert isinstance(data["next_focus"], list)
+
+
+# ═══════════════════════════════════════════════════════════
+# AgentCompetitorScorecard
+# ═══════════════════════════════════════════════════════════
+
+
+class TestAgentCompetitorScorecard:
+    def test_ecosystem_readiness_requires_public_operator_guide(self, tmp_path):
+        from runtime.safety.evolution.ecosystem_readiness import (
+            compute_ecosystem_readiness,
+        )
+
+        missing = compute_ecosystem_readiness(root=tmp_path)
+
+        assert missing["score"] == 0.0
+        assert missing["missing_count"] == 5
+
+        guide = tmp_path / "docs/guide/operator-readiness.md"
+        guide.parent.mkdir(parents=True)
+        guide.write_text(
+            "\n".join([
+                "# Operator Readiness",
+                "Code mode inspect edit verify.",
+                "Permission approval sandbox override.",
+                "Replay gate promotion evidence audit.",
+                "Plugin smoke permission review hook.",
+            ]),
+            encoding="utf-8",
+        )
+
+        partial = compute_ecosystem_readiness(root=tmp_path)
+
+        assert partial["passed"] == 4
+        assert partial["missing_count"] == 1
+
+        migration = tmp_path / "docs/guide/plugin-author-migration.md"
+        migration.write_text(
+            "\n".join([
+                "# Plugin Author Migration",
+                "Compatibility checks guide plugin migration.",
+                "Permission review is required before release.",
+                "Release checklist covers hooks and tests.",
+            ]),
+            encoding="utf-8",
+        )
+
+        ready = compute_ecosystem_readiness(root=tmp_path)
+
+        assert ready["score"] == 1.0
+        assert ready["passed"] == 5
+        assert ready["next_actions"] == []
+
+    def test_scorecard_weights_and_gaps_are_stable(self):
+        from runtime.safety.evolution.agent_competitor_scorecard import (
+            DIMENSIONS,
+            compute_agent_competitor_scorecard,
+        )
+
+        report = compute_agent_competitor_scorecard()
+
+        assert report["schema"] == "octopus.agent_competitor_scorecard.v1"
+        assert sum(dimension.weight for dimension in DIMENSIONS) == 100
+        assert report["overall"] == {
+            "codex": 93,
+            "claude_code": 91,
+            "cursor": 86,
+            "octopus": 93,
+        }
+        assert report["verdict"] == "competitive"
+        assert report["ranking"][0] == {"competitor": "octopus", "score": 93}
+        assert report["evidence_adjusted_overall"]["octopus"] == 93
+        assert report["evidence_adjusted_verdict"] == "competitive"
+        assert report["evidence_adjusted_ranking"][0] == {
+            "competitor": "octopus",
+            "score": 93,
+        }
+        assert report["scorecard_policy"] == {
+            "schema": "octopus.agent_scorecard_policy.v1",
+            "overall": "external_calibrated_baseline",
+            "evidence_adjusted_overall": "internal_certification_floor",
+            "certification_floors_do_not_change_overall": True,
+        }
+        assert report["octopus_below_target"] == []
+        product = next(
+            row for row in report["dimensions"]
+            if row["id"] == "product_experience"
+        )
+        assert product["octopus_baseline_score"] == 90
+        assert product["scores"]["octopus"] == 90
+        assert product["octopus_score_source"] == "external_calibrated_baseline"
+        assert product["octopus_evidence_adjusted_score"] == 90
+        assert product["octopus_evidence_adjusted_score_source"] == "baseline"
+        assert product["octopus_certified_score_floor"] == 97
+        assert product["octopus_certification_score_applied"] is False
+        assert product["octopus_certification_adjustment_available"] is False
+        browser = next(
+            row for row in report["dimensions"]
+            if row["id"] == "browser_desktop"
+        )
+        assert browser["scores"]["cursor"] == 82
+        assert browser["octopus_baseline_score"] == 92
+        assert browser["scores"]["octopus"] == 92
+        assert browser["octopus_evidence_adjusted_score"] == 92
+        assert browser["octopus_certified_score_floor"] == 97
+        assert browser["octopus_certification_score_applied"] is False
+        assert browser["octopus_certification_adjustment_available"] is False
+        differentiated = next(
+            row for row in report["dimensions"]
+            if row["id"] == "differentiated_agent_os"
+        )
+        assert differentiated["scores"]["octopus"] == 91
+        assert differentiated["octopus_certified_score_floor"] == 97
+        assert differentiated["octopus_certification_score_applied"] is False
+        ecosystem = next(
+            row for row in report["dimensions"]
+            if row["id"] == "ecosystem_maturity"
+        )
+        assert ecosystem["octopus_baseline_score"] == 90
+        assert ecosystem["scores"]["octopus"] == 90
+        assert ecosystem["octopus_evidence_adjusted_score"] == 90
+        assert ecosystem["octopus_certified_score_floor"] == 94
+        assert ecosystem["octopus_certification_score_applied"] is False
+        assert ecosystem["octopus_certification_adjustment_available"] is False
+        assert ecosystem["octopus_evidence_checklist"]
+        assert ecosystem["octopus_missing_evidence_count"] == 0
+        assert ecosystem["octopus_ecosystem_readiness"]["score"] == 1.0
+        assert report["ecosystem_readiness"]["passed"] == 5
+        assert report["parity_certification"]["passed"] == 14
+        assert report["parity_certification"]["ready"] is True
+        assert report["parity_certification"]["by_kind"]["operational_excellence"] == {
+            "passed": 4,
+            "total": 4,
+        }
+        assert report["parity_certification"]["by_kind"]["advantage"] == {
+            "passed": 4,
+            "total": 4,
+        }
+        assert report["octopus_strengths"]
+        assert report["next_focus"] == []
+
+    def test_scorecard_includes_local_evidence_readiness(self, tmp_path):
+        from runtime.safety.evolution.agent_competitor_scorecard import (
+            compute_agent_competitor_scorecard,
+        )
+
+        (tmp_path / "runtime/core/cerebrum").mkdir(parents=True)
+        (tmp_path / "runtime/core/cerebrum/react_loop.py").write_text(
+            "# loop\n",
+            encoding="utf-8",
+        )
+
+        report = compute_agent_competitor_scorecard(root=tmp_path)
+        code_loop = next(
+            item for item in report["dimensions"]
+            if item["id"] == "core_coding_loop"
+        )
+
+        assert code_loop["scores"]["octopus"] == 96
+        assert code_loop["octopus_evidence_readiness"] < 0.5
+        assert code_loop["octopus_missing_evidence_count"] > 0
+        assert "runtime/execution/tool_engine/executor.py" in (
+            code_loop["octopus_evidence_checklist"][0]["implementation"]["missing"]
+        )
+        assert "tests/test_react_loop.py" in (
+            code_loop["octopus_evidence_checklist"][0]["tests"]["missing"]
+        )
+        assert report["codex_gap"]["combined_score"] < 1.0
+
+
+# ═══════════════════════════════════════════════════════════
+# SubagentFitness
+# ═══════════════════════════════════════════════════════════
+
+
+class TestSubagentFitness:
+    def test_empty_review_queue_has_no_roles(self, tmp_path):
+        from runtime.safety.evolution.subagent_fitness import (
+            compute_subagent_fitness,
+        )
+
+        report = compute_subagent_fitness(
+            review_queue_path=tmp_path / "review_queue.json",
+        )
+
+        assert report["schema"] == "octopus.subagent_fitness.v1"
+        assert report["roles"] == []
+        assert report["top_risks"] == []
+
+    def test_scores_roles_from_subagent_review_items(self, tmp_path):
+        from runtime.memory.learning.review_queue import ReviewQueue
+        from runtime.safety.evolution.subagent_fitness import (
+            compute_subagent_fitness,
+        )
+
+        path = tmp_path / "review_queue.json"
+        queue = ReviewQueue(path)
+        queue.add_from_task_run_review(_subagent_review(
+            "task-1",
+            role="researcher",
+            title="strong finding",
+            output="strong reusable result",
+            files=["report.md"],
+        ))
+        queue.add_from_task_run_review(_subagent_review(
+            "task-2",
+            role="researcher",
+            title="weak finding",
+            output="weak result",
+        ))
+        queue.add_from_task_run_review(_subagent_review(
+            "task-3",
+            role="researcher",
+            title="neutral finding",
+            output="neutral result",
+        ))
+
+        items = queue.items()["items"]
+        queue.decide(items[0]["id"], action="promoted", reason="useful")
+        queue.decide(items[1]["id"], action="rejected", reason="wrong")
+
+        report = compute_subagent_fitness(review_queue_path=path)
+        role = report["roles"][0]
+
+        assert role["role"] == "researcher"
+        assert role["sample_count"] == 3
+        assert role["by_status"] == {
+            "pending": 1,
+            "promoted": 1,
+            "rejected": 1,
+        }
+        assert role["confidence"] == 0.6
+        assert role["verdict"] in {"developing", "watch"}
+        assert report["role_count"] == 1
+
+    def test_scores_deep_research_route_blocks_as_retirement_evidence(self, tmp_path):
+        from runtime.safety.evolution.subagent_fitness import (
+            compute_subagent_fitness,
+        )
+
+        job_store = tmp_path / "deep-research-jobs.jsonl"
+        _write_deep_research_route_jobs(
+            job_store,
+            role="virtual-research-competitor-analyst",
+            actions=["block", "block", "block"],
+        )
+
+        report = compute_subagent_fitness(
+            review_queue_path=tmp_path / "review_queue.json",
+            deep_research_job_store_path=job_store,
+        )
+        role = report["roles"][0]
+
+        assert role["role"] == "virtual-research-competitor-analyst"
+        assert role["sample_count"] == 3
+        assert role["routing_evidence_count"] == 3
+        assert role["by_evidence_source"] == {
+            "deep_research_route_decision": 3,
+        }
+        assert role["by_status"] == {"rejected": 3}
+        assert role["verdict"] == "retire_candidate"
+        assert all(item.startswith("route-research-") for item in role["evidence_item_ids"])
+
+    def test_scores_deep_research_warnings_without_promotion_inflation(self, tmp_path):
+        from runtime.safety.evolution.subagent_fitness import (
+            compute_subagent_fitness,
+        )
+
+        job_store = tmp_path / "deep-research-jobs.jsonl"
+        _write_deep_research_route_jobs(
+            job_store,
+            role="virtual-research-market",
+            actions=["allow_with_warning", "allow_with_warning"],
+        )
+
+        report = compute_subagent_fitness(
+            review_queue_path=tmp_path / "review_queue.json",
+            deep_research_job_store_path=job_store,
+        )
+        role = report["roles"][0]
+
+        assert role["role"] == "virtual-research-market"
+        assert role["routing_evidence_count"] == 2
+        assert role["by_status"] == {"archived": 2}
+        assert role["promoted_count"] == 0
+        assert role["score"] < 0.7
+        assert role["verdict"] == "watch"
+
+    def test_router_exposes_subagent_fitness(self, tmp_path, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from runtime.memory.learning.review_queue import ReviewQueue
+        from runtime.sensing.gateway.evolution_router import create_evolution_router
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+        ReviewQueue(data_dir / "review_queue.json").add_from_task_run_review(
+            _subagent_review(
+                "task-1",
+                role="researcher",
+                title="router finding",
+                output="router output",
+            ),
+        )
+
+        app = FastAPI()
+        app.include_router(create_evolution_router())
+        data = TestClient(app).get("/api/evolution/subagent-fitness").json()
+
+        assert data["ok"] is True
+        assert data["schema"] == "octopus.subagent_fitness.v1"
+        assert data["roles"][0]["role"] == "researcher"
+
+
+class TestSubagentRouting:
+    def test_allows_when_no_fitness_samples(self, tmp_path):
+        from runtime.safety.evolution.subagent_routing import decide_subagent_route
+
+        decision = decide_subagent_route(
+            role="researcher",
+            risk_level="critical",
+            review_queue_path=tmp_path / "review_queue.json",
+        )
+
+        assert decision.action == "allow"
+        assert decision.verdict == "unknown"
+        assert decision.risk_level == "critical"
+
+    def test_can_disable_fitness_routing(self, tmp_path):
+        from runtime.safety.evolution.subagent_routing import decide_subagent_route
+
+        decision = decide_subagent_route(
+            role="researcher",
+            risk_level="critical",
+            review_queue_path=tmp_path / "review_queue.json",
+            enabled=False,
+        )
+
+        assert decision.action == "allow"
+        assert decision.reason == "subagent fitness routing disabled"
+
+    def test_blocks_retire_candidate_for_high_risk(self, tmp_path):
+        from runtime.memory.learning.review_queue import ReviewQueue
+        from runtime.safety.evolution.subagent_routing import decide_subagent_route
+
+        path = tmp_path / "review_queue.json"
+        queue = ReviewQueue(path)
+        for i in range(3):
+            added = queue.add_from_task_run_review(_subagent_review(
+                f"task-{i}",
+                role="researcher",
+                title=f"bad {i}",
+                output=f"bad output {i}",
+            ))
+            queue.decide(added["items"][0]["id"], action="rejected", reason="bad")
+
+        decision = decide_subagent_route(
+            role="researcher",
+            risk_level="high",
+            review_queue_path=path,
+        )
+
+        assert decision.action == "block"
+        assert decision.verdict == "retire_candidate"
+        assert decision.score is not None and decision.score < 0.4
+
+    def test_operator_retirement_policy_blocks_before_fitness(self, tmp_path):
+        from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+        from runtime.safety.evolution.subagent_routing import decide_subagent_route
+
+        policy_path = tmp_path / "subagent_policy.json"
+        SubagentPolicyStore(policy_path).decide(
+            "researcher",
+            action="retire",
+            reason="bad route evidence",
+            evidence_item_ids=["route-1"],
+        )
+
+        decision = decide_subagent_route(
+            role="researcher",
+            risk_level="low",
+            review_queue_path=tmp_path / "review_queue.json",
+            subagent_policy_path=policy_path,
+        )
+
+        assert decision.action == "block"
+        assert decision.verdict == "operator_retired"
+        assert decision.evidence_item_ids == ["route-1"]
+
+    def test_operator_watch_policy_warns(self, tmp_path):
+        from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+        from runtime.safety.evolution.subagent_routing import decide_subagent_route
+
+        policy_path = tmp_path / "subagent_policy.json"
+        SubagentPolicyStore(policy_path).decide(
+            "researcher",
+            action="watch",
+            reason="monitor next run",
+        )
+
+        decision = decide_subagent_route(
+            role="researcher",
+            risk_level="low",
+            review_queue_path=tmp_path / "review_queue.json",
+            subagent_policy_path=policy_path,
+        )
+
+        assert decision.action == "allow_with_warning"
+        assert decision.verdict == "operator_watch"
+
+
+class TestSubagentPolicy:
+    def test_policy_store_decide_summary_and_clear(self, tmp_path):
+        from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+
+        store = SubagentPolicyStore(tmp_path / "subagent_policy.json")
+        retired = store.decide(
+            "researcher",
+            action="retire",
+            reason="bad evidence",
+            evidence_item_ids=["route-1"],
+            actor="tester",
+        )
+
+        assert retired["policy"]["status"] == "retired"
+        assert store.summary()["retired_count"] == 1
+        assert store.get("researcher")["reason"] == "bad evidence"
+
+        cleared = store.decide("researcher", action="clear", reason="restored")
+
+        assert cleared["policy"] is None
+        assert store.summary()["policy_count"] == 0
+
+    def test_router_exposes_subagent_policy_decisions(self, tmp_path, monkeypatch):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from runtime.sensing.gateway.evolution_router import create_evolution_router
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+
+        app = FastAPI()
+        app.include_router(create_evolution_router())
+        client = TestClient(app)
+
+        response = client.post(
+            "/api/evolution/subagent-policy/researcher/decision",
+            json={
+                "action": "retire",
+                "reason": "operator reviewed route evidence",
+                "evidence_item_ids": ["route-1"],
+            },
+        )
+        summary = client.get("/api/evolution/subagent-policy")
+
+        assert response.status_code == 200
+        assert response.json()["policy"]["status"] == "retired"
+        assert summary.json()["retired_count"] == 1
+        assert summary.json()["policies"]["researcher"]["evidence_item_ids"] == ["route-1"]
+
+
+def _subagent_review(
+    task_id: str,
+    *,
+    role: str,
+    title: str,
+    output: str,
+    files: list[str] | None = None,
+) -> dict:
+    return {
+        "status": "completed",
+        "task_id": task_id,
+        "thread_id": "thread-1",
+        "turn_id": task_id,
+        "agent_id": role,
+        "learning_candidates": [
+            {
+                "kind": "subagent_output",
+                "priority": "P1" if files else "P2",
+                "memory_bucket": "experience",
+                "title": title,
+                "text": output,
+                "subagent": {
+                    "role": role,
+                    "agent_id": role,
+                    "files_touched": files or [],
+                },
+            }
+        ],
+    }
+
+
+def _write_deep_research_route_jobs(path, *, role: str, actions: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    for index, action in enumerate(actions):
+        lines.append(json.dumps({
+            "job_id": f"research-{index}",
+            "thread_id": "thread-1",
+            "route_decisions": [
+                {
+                    "schema": "octopus.subagent_route_decision.v1",
+                    "step_id": f"step-{index}",
+                    "task_id": f"step-{index}",
+                    "role": role,
+                    "action": action,
+                    "reason": f"{role} route {action}",
+                    "risk_level": "high" if action == "block" else "low",
+                    "verdict": "retire_candidate",
+                    "score": 0.1,
+                    "confidence": 0.6,
+                    "evidence_item_ids": [f"review-{index}"],
+                    "phase": "subagent_route_blocked" if action == "block" else "completed",
+                    "created_at": f"2026-06-19T00:00:0{index}Z",
+                }
+            ],
+        }))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -218,7 +1089,7 @@ class TestProposalLedger:
         )
         ledger.mark_applied(proposal.proposal_id)
         cm = CanaryManager(canary_config)
-        state = cm.register(
+        cm.register(
             "planner__cand-1",
             metadata={
                 "recipe_id": "planner",

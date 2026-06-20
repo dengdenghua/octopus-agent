@@ -21,9 +21,7 @@ export function AgentCharacterCard({
   const bg = `hsl(${agent.hue} 55% 96%)`;
   const accent = `hsl(${agent.hue} 65% 45%)`;
   return (
-    <div
-      className={cn("flex flex-col items-center gap-4", className)}
-    >
+    <div className={cn("flex flex-col items-center gap-4", className)}>
       {/* String that the card hangs from */}
       <div className="flex flex-col items-center">
         <div className="h-6 w-px bg-foreground/70" />
@@ -54,10 +52,7 @@ export function AgentCharacterCard({
 
         {/* Role & motto */}
         <div className="px-4 pb-3 text-center">
-          <div
-            className="text-sm font-bold"
-            style={{ color: accent }}
-          >
+          <div className="text-sm font-bold" style={{ color: accent }}>
             {agent.role}
           </div>
           <div className="text-muted-foreground mt-1 text-xs italic">
@@ -83,9 +78,7 @@ export function AgentCharacterCard({
         {agent.stats && (
           <div className="border-t border-border/40 bg-white/40 px-4 py-2 text-center text-[10px] text-muted-foreground">
             战绩 {agent.stats.taskCount ?? 0}
-            {agent.stats.rating
-              ? ` · ★ ${agent.stats.rating.toFixed(1)}`
-              : ""}
+            {agent.stats.rating ? ` · ★ ${agent.stats.rating.toFixed(1)}` : ""}
             {agent.personality && agent.personality.length > 0
               ? ` · ${agent.personality.join(" / ")}`
               : ""}

@@ -164,20 +164,24 @@ export default function ObservabilityPage({
 
             <TabsContent value="overview" className="mt-4">
               <div className="space-y-4">
-              <section className="workspace-panel rounded-[1.5rem] px-5 py-4">
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-base font-semibold">先从总览开始</h2>
-                    <p className="text-sm text-muted-foreground">
-                      把当前后台的健康、事件、资源和系统状态分成四个视角，扫一眼就知道该去哪里。
-                    </p>
+                <section className="workspace-panel rounded-[1.5rem] px-5 py-4">
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold">先从总览开始</h2>
+                      <p className="text-sm text-muted-foreground">
+                        把当前后台的健康、事件、资源和系统状态分成四个视角，扫一眼就知道该去哪里。
+                      </p>
+                    </div>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="h-9 rounded-full px-4"
+                    >
+                      <Link to="/workspace/realtime/new">打开一次新任务</Link>
+                    </Button>
                   </div>
-                  <Button asChild variant="outline" className="h-9 rounded-full px-4">
-                    <Link to="/workspace/realtime/new">打开一次新任务</Link>
-                  </Button>
-                </div>
-              </section>
-              <AgentOperatorPanel />
+                </section>
+                <AgentOperatorPanel />
               </div>
             </TabsContent>
 
@@ -297,7 +301,9 @@ function SwarmPanel() {
               return [...prev, startRec].slice(-40);
             }
             // sub_tool_end · update existing record (or append closed)
-            const endStatus: "error" | "success" = p.is_error ? "error" : "success";
+            const endStatus: "error" | "success" = p.is_error
+              ? "error"
+              : "success";
             if (idx < 0) {
               const closedRec: SubToolRecord = {
                 id: callId,
@@ -344,7 +350,9 @@ function SwarmPanel() {
           ];
           return next.slice(-40);
         });
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
     };
     return () => es.close();
   }, []);
@@ -376,7 +384,9 @@ function SwarmPanel() {
               )}
             />
             <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
-              {connected ? t.observabilityPage.connected : t.observabilityPage.idle}
+              {connected
+                ? t.observabilityPage.connected
+                : t.observabilityPage.idle}
             </span>
           </div>
         </div>
@@ -427,10 +437,7 @@ function SwarmPanel() {
                     )}
                   />
                   {s.sub_agent_role && (
-                    <Badge
-                      variant="outline"
-                      className="text-[9px] font-mono"
-                    >
+                    <Badge variant="outline" className="text-[9px] font-mono">
                       {s.sub_agent_role}
                     </Badge>
                   )}
@@ -487,7 +494,9 @@ function BlackboardPanel() {
     <div className="grid grid-cols-1 gap-3 md:grid-cols-[260px_1fr]">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold">{t.observabilityPage.activeTurns}</CardTitle>
+          <CardTitle className="text-sm font-semibold">
+            {t.observabilityPage.activeTurns}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-1">
           {list.data.turns.length === 0 && (
@@ -552,18 +561,17 @@ function BlackboardPanel() {
               hint={t.observabilityPage.selectTurnHintDesc}
             />
           )}
-          {selected && snap.data && Object.keys(snap.data.entries).length === 0 && (
-            <div className="py-6 text-center text-[11px] text-muted-foreground">
-              {t.observabilityPage.emptyBlackboard}
-            </div>
-          )}
+          {selected &&
+            snap.data &&
+            Object.keys(snap.data.entries).length === 0 && (
+              <div className="py-6 text-center text-[11px] text-muted-foreground">
+                {t.observabilityPage.emptyBlackboard}
+              </div>
+            )}
           {selected && snap.data && (
             <div className="space-y-2">
               {Object.entries(snap.data.entries).map(([k, v]) => (
-                <div
-                  key={k}
-                  className="rounded-md bg-muted/30 p-2 text-[11px]"
-                >
+                <div key={k} className="rounded-md bg-muted/30 p-2 text-[11px]">
                   <div className="mb-1 font-mono font-semibold text-primary">
                     {k}
                   </div>
@@ -632,7 +640,9 @@ function JournalPanel() {
           const next = [...prev, p];
           return next.slice(-200);
         });
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
     };
     return () => es.close();
   }, [paused]);
@@ -690,128 +700,132 @@ function JournalPanel() {
           />
         )}
         <div className="max-h-[60vh] overflow-y-auto font-mono text-[11px]">
-          {events.slice().reverse().map((e, i) => (
-            <div
-              key={i}
-              className={cn(
-                "border-b border-border/40 px-2 py-1.5",
-                eventRowColor(e.event_type),
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground shrink-0">
-                  {shortTs(e.ts)}
-                </span>
-                <Badge variant="outline" className="text-[10px]">
-                  {e.event_type}
-                </Badge>
-                {e.task_id && (
-                  <span className="text-[10px] text-muted-foreground truncate">
-                    {t.observabilityPage.taskPrefix}:{e.task_id.slice(0, 12)}
-                  </span>
+          {events
+            .slice()
+            .reverse()
+            .map((e, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "border-b border-border/40 px-2 py-1.5",
+                  eventRowColor(e.event_type),
                 )}
-                {e.path && (
-                  <span className="text-[10px] text-primary truncate">
-                    {(e.action ?? t.observabilityPage.eventActionFile)}: {e.path}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {shortTs(e.ts)}
                   </span>
-                )}
-                {/* SubTool events — role + tool + status */}
-                {(e.event_type === "sub_tool_start" ||
-                  e.event_type === "sub_tool_end") && (
-                  <span className="text-[10px] truncate flex items-center gap-1.5">
-                    {e.role_id && (
-                      <Badge
-                        variant="outline"
-                        className="text-[9px] font-mono"
-                      >
-                        {e.role_id}
-                      </Badge>
-                    )}
-                    <span className="text-primary font-mono">
-                      {e.tool_name ?? "?"}
+                  <Badge variant="outline" className="text-[10px]">
+                    {e.event_type}
+                  </Badge>
+                  {e.task_id && (
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      {t.observabilityPage.taskPrefix}:{e.task_id.slice(0, 12)}
                     </span>
-                    {e.event_type === "sub_tool_end" && (
-                      <span
-                        className={cn(
-                          "text-[9px]",
-                          e.is_error
-                            ? "text-red-500"
-                            : "text-emerald-500",
-                        )}
+                  )}
+                  {e.path && (
+                    <span className="text-[10px] text-primary truncate">
+                      {e.action ?? t.observabilityPage.eventActionFile}:{" "}
+                      {e.path}
+                    </span>
+                  )}
+                  {/* SubTool events — role + tool + status */}
+                  {(e.event_type === "sub_tool_start" ||
+                    e.event_type === "sub_tool_end") && (
+                    <span className="text-[10px] truncate flex items-center gap-1.5">
+                      {e.role_id && (
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] font-mono"
+                        >
+                          {e.role_id}
+                        </Badge>
+                      )}
+                      <span className="text-primary font-mono">
+                        {e.tool_name ?? "?"}
+                      </span>
+                      {e.event_type === "sub_tool_end" && (
+                        <span
+                          className={cn(
+                            "text-[9px]",
+                            e.is_error ? "text-red-500" : "text-emerald-500",
+                          )}
+                        >
+                          {e.is_error
+                            ? t.observabilityPage.eventFailure
+                            : t.observabilityPage.eventSuccess}
+                          {e.duration_ms !== undefined &&
+                            t.observabilityPage.eventDurationSuffix(
+                              e.duration_ms,
+                            )}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                  {/* BrowserArtifact — inline thumbnail + caption */}
+                  {e.event_type === "browser_artifact" && e.url && (
+                    <span className="text-[10px] truncate flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[9px]">
+                        {e.kind ?? t.observabilityPage.eventArtifactScreenshot}
+                      </Badge>
+                      <a
+                        href={`${getBackendBaseURL()}${e.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline-offset-2 hover:underline truncate max-w-[18rem]"
+                        title={e.caption || e.filename}
                       >
-                        {e.is_error
-                          ? t.observabilityPage.eventFailure
-                          : t.observabilityPage.eventSuccess}
-                        {e.duration_ms !== undefined &&
-                          t.observabilityPage.eventDurationSuffix(e.duration_ms)}
-                      </span>
-                    )}
-                  </span>
-                )}
-                {/* BrowserArtifact — inline thumbnail + caption */}
-                {e.event_type === "browser_artifact" && e.url && (
-                  <span className="text-[10px] truncate flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[9px]">
-                      {e.kind ?? t.observabilityPage.eventArtifactScreenshot}
-                    </Badge>
-                    <a
-                      href={`${getBackendBaseURL()}${e.url}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline-offset-2 hover:underline truncate max-w-[18rem]"
-                      title={e.caption || e.filename}
-                    >
-                      {e.filename ?? t.observabilityPage.eventArtifact}
-                    </a>
-                    {e.width && e.height && (
-                      <span className="text-muted-foreground">
-                        {e.width}×{e.height}
-                      </span>
-                    )}
-                  </span>
-                )}
-              </div>
-              {/* Inline thumbnail for screenshots */}
-              {e.event_type === "browser_artifact" &&
-                e.url &&
-                e.mime_type?.startsWith("image/") && (
-                  <div className="mt-1.5 pl-4">
-                    <a
-                      href={`${getBackendBaseURL()}${e.url}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <img
-                        src={`${getBackendBaseURL()}${e.url}`}
-                        alt={
-                          e.caption ||
-                          e.filename ||
-                          t.observabilityPage.eventArtifactScreenshot
-                        }
-                        className="max-h-32 max-w-[20rem] rounded-md border border-border/40 object-contain"
-                        loading="lazy"
-                      />
-                    </a>
-                    {e.caption && (
-                      <div className="mt-1 text-[10px] text-muted-foreground italic truncate max-w-[20rem]">
-                        {e.caption}
-                      </div>
-                    )}
-                  </div>
-                )}
-              {/* Args / output preview for SubTool events */}
+                        {e.filename ?? t.observabilityPage.eventArtifact}
+                      </a>
+                      {e.width && e.height && (
+                        <span className="text-muted-foreground">
+                          {e.width}×{e.height}
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                {/* Inline thumbnail for screenshots */}
+                {e.event_type === "browser_artifact" &&
+                  e.url &&
+                  e.mime_type?.startsWith("image/") && (
+                    <div className="mt-1.5 pl-4">
+                      <a
+                        href={`${getBackendBaseURL()}${e.url}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <img
+                          src={`${getBackendBaseURL()}${e.url}`}
+                          alt={
+                            e.caption ||
+                            e.filename ||
+                            t.observabilityPage.eventArtifactScreenshot
+                          }
+                          className="max-h-32 max-w-[20rem] rounded-md border border-border/40 object-contain"
+                          loading="lazy"
+                        />
+                      </a>
+                      {e.caption && (
+                        <div className="mt-1 text-[10px] text-muted-foreground italic truncate max-w-[20rem]">
+                          {e.caption}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                {/* Args / output preview for SubTool events */}
                 {e.event_type === "sub_tool_start" && e.args_preview && (
                   <div className="mt-1 pl-4 text-[10px] text-muted-foreground truncate">
-                  → {e.args_preview}
+                    → {e.args_preview}
                   </div>
                 )}
                 {e.event_type === "sub_tool_end" && e.output_preview && (
                   <div className="mt-1 pl-4 text-[10px] text-muted-foreground truncate">
-                  ← {e.output_preview}
+                    ← {e.output_preview}
                   </div>
                 )}
-            </div>
-          ))}
+              </div>
+            ))}
         </div>
       </CardContent>
     </Card>
@@ -854,10 +868,20 @@ function RegenerationPanel() {
   );
 
   if (loading && !data) {
-    return <EmptyState icon={<RefreshCwIcon className="size-6 animate-spin" />} title={t.observabilityPage.loading} />;
+    return (
+      <EmptyState
+        icon={<RefreshCwIcon className="size-6 animate-spin" />}
+        title={t.observabilityPage.loading}
+      />
+    );
   }
   if (error) {
-    return <EmptyState icon={<BrainCircuitIcon className="size-6" />} title={`${t.observabilityPage.errorPrefix} ${error}`} />;
+    return (
+      <EmptyState
+        icon={<BrainCircuitIcon className="size-6" />}
+        title={`${t.observabilityPage.errorPrefix} ${error}`}
+      />
+    );
   }
   if (!data) return null;
 
@@ -865,42 +889,58 @@ function RegenerationPanel() {
     {
       key: "skill_forge",
       label: t.observabilityPage.regenProducers.skillForge,
-      metric: t.observabilityPage.runReviewMetricForged(data.skill_forge.forged_count),
+      metric: t.observabilityPage.runReviewMetricForged(
+        data.skill_forge.forged_count,
+      ),
       status: data.skill_forge.status,
       hint: t.observabilityPage.regenProducers.skillForgeHint,
     },
     {
       key: "rule_extractor",
       label: t.observabilityPage.regenProducers.ruleExtractor,
-      metric: t.observabilityPage.runReviewMetricRules(data.rule_extractor.rules_count),
+      metric: t.observabilityPage.runReviewMetricRules(
+        data.rule_extractor.rules_count,
+      ),
       status: data.rule_extractor.status,
-      hint: t.observabilityPage.regenProducers.ruleExtractorHint(data.rule_extractor.failure_trajectories),
+      hint: t.observabilityPage.regenProducers.ruleExtractorHint(
+        data.rule_extractor.failure_trajectories,
+      ),
     },
     {
       key: "memory_consolidator",
       label: t.observabilityPage.regenProducers.memoryConsolidator,
-      metric: t.observabilityPage.runReviewMetricMems(data.memory_consolidator.memories_count),
+      metric: t.observabilityPage.runReviewMetricMems(
+        data.memory_consolidator.memories_count,
+      ),
       status: data.memory_consolidator.status,
-      hint: t.observabilityPage.regenProducers.memoryConsolidatorHint(data.memory_consolidator.trajectories_scanned),
+      hint: t.observabilityPage.regenProducers.memoryConsolidatorHint(
+        data.memory_consolidator.trajectories_scanned,
+      ),
     },
     {
       key: "kg_updater",
       label: t.observabilityPage.regenProducers.kgUpdater,
-      metric: t.observabilityPage.runReviewMetricTriples(data.kg_updater.triple_count),
+      metric: t.observabilityPage.runReviewMetricTriples(
+        data.kg_updater.triple_count,
+      ),
       status: data.kg_updater.status,
       hint: t.observabilityPage.regenProducers.kgUpdaterHint,
     },
     {
       key: "workflow_rewriter",
       label: t.observabilityPage.regenProducers.workflowRewriter,
-      metric: t.observabilityPage.runReviewMetricTraj(data.workflow_rewriter.trajectories_scanned),
+      metric: t.observabilityPage.runReviewMetricTraj(
+        data.workflow_rewriter.trajectories_scanned,
+      ),
       status: data.workflow_rewriter.status,
       hint: t.observabilityPage.regenProducers.workflowRewriterHint,
     },
     {
       key: "recipe_evaluator",
       label: t.observabilityPage.regenProducers.recipeEvaluator,
-      metric: t.observabilityPage.runReviewMetricRecipes(data.recipe_evaluator.recipes_tracked),
+      metric: t.observabilityPage.runReviewMetricRecipes(
+        data.recipe_evaluator.recipes_tracked,
+      ),
       status: data.recipe_evaluator.status,
       hint: t.observabilityPage.regenProducers.recipeEvaluatorHint,
     },
@@ -920,12 +960,7 @@ function RegenerationPanel() {
             {k}:{n}
           </Badge>
         ))}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="ml-auto"
-          onClick={refresh}
-        >
+        <Button size="sm" variant="ghost" className="ml-auto" onClick={refresh}>
           <RefreshCwIcon className="size-3" />
         </Button>
       </div>
@@ -1004,7 +1039,8 @@ function HemolymphPanel() {
             {t.observabilityPage.latestCompose}
             {latest && (
               <span className="ml-2 text-[10px] text-muted-foreground">
-                · {t.observabilityPage.utilizationLabel} {(latest.utilization * 100).toFixed(1)}%
+                · {t.observabilityPage.utilizationLabel}{" "}
+                {(latest.utilization * 100).toFixed(1)}%
               </span>
             )}
           </CardTitle>
@@ -1020,16 +1056,20 @@ function HemolymphPanel() {
           {latest && (
             <div className="space-y-3">
               <div className="flex items-center justify-between text-[11px]">
-                <span className="text-muted-foreground">{t.observabilityPage.total}</span>
+                <span className="text-muted-foreground">
+                  {t.observabilityPage.total}
+                </span>
                 <span className="font-mono">
-                  {latest.tokens_used} / {latest.budget_tokens} {t.observabilityPage.snapshotTokensUnit}
+                  {latest.tokens_used} / {latest.budget_tokens}{" "}
+                  {t.observabilityPage.snapshotTokensUnit}
                 </span>
               </div>
               <Progress value={latest.utilization * 100} />
               <div className="mt-2 grid grid-cols-4 gap-2">
                 {buckets.map((b) => {
                   const info = latest.by_bucket[b] ?? { used: 0, alloc: 1 };
-                  const pct = info.alloc > 0 ? (info.used / info.alloc) * 100 : 0;
+                  const pct =
+                    info.alloc > 0 ? (info.used / info.alloc) * 100 : 0;
                   return (
                     <div key={b} className="rounded-md bg-muted/30 p-2">
                       <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide">
@@ -1043,7 +1083,9 @@ function HemolymphPanel() {
                       </div>
                       <div className="mt-1 text-[13px] font-mono">
                         {info.used}
-                        <span className="text-muted-foreground">/{info.alloc}</span>
+                        <span className="text-muted-foreground">
+                          /{info.alloc}
+                        </span>
                       </div>
                       <div className="mt-1 h-1 overflow-hidden rounded-full bg-background">
                         <div
@@ -1066,7 +1108,8 @@ function HemolymphPanel() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold">
-            {t.observabilityPage.historyPrefix} {data.snapshots.length} {t.observabilityPage.tabJournal}
+            {t.observabilityPage.historyPrefix} {data.snapshots.length}{" "}
+            {t.observabilityPage.tabJournal}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -1074,29 +1117,40 @@ function HemolymphPanel() {
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
-                  <th className="py-1">{t.observabilityPage.hemolymphTable.ts}</th>
-                  <th className="py-1">{t.observabilityPage.hemolymphTable.usedBudget}</th>
-                  <th className="py-1">{t.observabilityPage.hemolymphTable.util}</th>
-                  <th className="py-1">{t.observabilityPage.hemolymphTable.recipe}</th>
+                  <th className="py-1">
+                    {t.observabilityPage.hemolymphTable.ts}
+                  </th>
+                  <th className="py-1">
+                    {t.observabilityPage.hemolymphTable.usedBudget}
+                  </th>
+                  <th className="py-1">
+                    {t.observabilityPage.hemolymphTable.util}
+                  </th>
+                  <th className="py-1">
+                    {t.observabilityPage.hemolymphTable.recipe}
+                  </th>
                 </tr>
               </thead>
               <tbody className="font-mono">
-                {data.snapshots.slice().reverse().map((s, i) => (
-                  <tr key={i} className="border-b border-border/40">
-                    <td className="py-1 text-muted-foreground">
-                      {new Date(s.ts * 1000).toLocaleTimeString()}
-                    </td>
-                    <td className="py-1">
-                      {s.tokens_used} / {s.budget_tokens}
-                    </td>
-                    <td className="py-1">
-                      {(s.utilization * 100).toFixed(1)}%
-                    </td>
-                    <td className="py-1 text-muted-foreground">
-                      {s.recipe_id ?? "—"}
-                    </td>
-                  </tr>
-                ))}
+                {data.snapshots
+                  .slice()
+                  .reverse()
+                  .map((s, i) => (
+                    <tr key={i} className="border-b border-border/40">
+                      <td className="py-1 text-muted-foreground">
+                        {new Date(s.ts * 1000).toLocaleTimeString()}
+                      </td>
+                      <td className="py-1">
+                        {s.tokens_used} / {s.budget_tokens}
+                      </td>
+                      <td className="py-1">
+                        {(s.utilization * 100).toFixed(1)}%
+                      </td>
+                      <td className="py-1 text-muted-foreground">
+                        {s.recipe_id ?? "—"}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -1142,13 +1196,22 @@ function CostPanel() {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label={t.observabilityPage.cumulativeTokens} value={data.total_tokens.toLocaleString()} />
+        <StatTile
+          label={t.observabilityPage.cumulativeTokens}
+          value={data.total_tokens.toLocaleString()}
+        />
         <StatTile
           label={t.observabilityPage.cumulativeUsd}
           value={`$${data.total_usd.toFixed(4)}`}
         />
-        <StatTile label={t.observabilityPage.commitCount} value={data.commit_count.toLocaleString()} />
-        <StatTile label={t.observabilityPage.taskCount} value={data.task_count.toLocaleString()} />
+        <StatTile
+          label={t.observabilityPage.commitCount}
+          value={data.commit_count.toLocaleString()}
+        />
+        <StatTile
+          label={t.observabilityPage.taskCount}
+          value={data.task_count.toLocaleString()}
+        />
       </div>
       <Card>
         <CardHeader className="pb-2">
@@ -1174,19 +1237,26 @@ function CostPanel() {
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
-                    <th className="py-1">{t.observabilityPage.costTable.task}</th>
-                    <th className="py-1">{t.observabilityPage.costTable.tokens}</th>
-                    <th className="py-1">{t.observabilityPage.costTable.usd}</th>
-                    <th className="py-1">{t.observabilityPage.costTable.commits}</th>
-                    <th className="py-1">{t.observabilityPage.costTable.last}</th>
+                    <th className="py-1">
+                      {t.observabilityPage.costTable.task}
+                    </th>
+                    <th className="py-1">
+                      {t.observabilityPage.costTable.tokens}
+                    </th>
+                    <th className="py-1">
+                      {t.observabilityPage.costTable.usd}
+                    </th>
+                    <th className="py-1">
+                      {t.observabilityPage.costTable.commits}
+                    </th>
+                    <th className="py-1">
+                      {t.observabilityPage.costTable.last}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="font-mono">
                   {data.tasks.map((tk) => (
-                    <tr
-                      key={tk.task_id}
-                      className="border-b border-border/40"
-                    >
+                    <tr key={tk.task_id} className="border-b border-border/40">
                       <td
                         className="py-1 max-w-[12rem] truncate"
                         title={tk.task_id}

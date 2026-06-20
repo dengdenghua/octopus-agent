@@ -62,6 +62,12 @@ describe("tryLocalSlash", () => {
     expect(onModeChange).toHaveBeenCalledWith("react");
   });
 
+  test("/mode code is a valid project/code reasoning mode", () => {
+    const onModeChange = vi.fn();
+    expect(tryLocalSlash("/mode code", { onModeChange })).toBe(true);
+    expect(onModeChange).toHaveBeenCalledWith("code");
+  });
+
   test("/mode rejects unknown values rather than guessing", () => {
     const onModeChange = vi.fn();
     expect(tryLocalSlash("/mode bogus", { onModeChange })).toBe(false);

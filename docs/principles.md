@@ -139,7 +139,7 @@ Ingest → Parse → Plan → Execute → Synthesize → Store
 | ③ Self / Memory / Adaptive | `immunity/` | `mantle/`（先天）+ `ink/`（炎症）|
 | ④ Variation / Selection | `regeneration/` + `camouflage/` | `genome/journal/` |
 | ⑤ Edge + Cloud | `arms/edge/` vs `arms/cloud/` | `cerebrum/` 路由器 |
-| ⑥ Pipeline | 整条 `eyes → cerebrum → ganglia → beak → genome` | 所有器官 |
+| ⑥ Pipeline | 整条 `eyes → cerebrum → ganglia（未实装）→ beak → genome` | 所有器官 |
 
 **反向提醒**：如果哪天不用章鱼仿生，这六条原则依然成立 —— 换一套命名（比如"城市交通""工厂流水"），同样能搭出 Agent OS。**器官是 UI，原则才是 API**。
 

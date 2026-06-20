@@ -257,7 +257,9 @@ function AgentCard({
                 STATUS_COLORS[task.status],
               )}
             >
-              {(t.parallelAgents.statusLabels as Record<string, string>)[task.status] ?? task.status}
+              {(t.parallelAgents.statusLabels as Record<string, string>)[
+                task.status
+              ] ?? task.status}
             </span>
             {task.duration_seconds !== null && (
               <span className="text-muted-foreground ml-auto flex items-center gap-0.5 text-[10px]">
@@ -344,7 +346,9 @@ function AggregatedResultsView({
         >
           <ChevronLeftIcon className="size-4" />
         </button>
-        <span className="text-sm font-semibold">{t.parallelAgents.aggregatedResults}</span>
+        <span className="text-sm font-semibold">
+          {t.parallelAgents.aggregatedResults}
+        </span>
         <span className="text-muted-foreground text-xs">
           {batch.aggregation_strategy}
         </span>
@@ -359,7 +363,9 @@ function AggregatedResultsView({
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {showRaw ? t.parallelAgents.aggregated : t.parallelAgents.rawResults}
+            {showRaw
+              ? t.parallelAgents.aggregated
+              : t.parallelAgents.rawResults}
           </button>
         </div>
       </div>
@@ -417,11 +423,7 @@ function AggregatedResultsView({
 // Main Panel
 // ---------------------------------------------------------------------------
 
-export function ParallelAgentsPanel({
-  className,
-}: {
-  className?: string;
-}) {
+export function ParallelAgentsPanel({ className }: { className?: string }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<OrchestratorStatus | null>(null);
   const [activeBatch, setActiveBatch] = useState<BatchResult | null>(null);

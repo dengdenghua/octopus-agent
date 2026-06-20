@@ -8,7 +8,11 @@ interface IframeRendererProps {
   onFallbackNeeded: () => void;
 }
 
-export function IframeRenderer({ url, width, onFallbackNeeded }: IframeRendererProps) {
+export function IframeRenderer({
+  url,
+  width,
+  onFallbackNeeded,
+}: IframeRendererProps) {
   const { t } = useI18n();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [loading, setLoading] = useState(false);
@@ -84,7 +88,10 @@ export function IframeRenderer({ url, width, onFallbackNeeded }: IframeRendererP
         ref={iframeRef}
         src={url}
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-        style={{ width: typeof width === "number" ? `${width}px` : width, height: "100%" }}
+        style={{
+          width: typeof width === "number" ? `${width}px` : width,
+          height: "100%",
+        }}
         className="mx-auto border-0"
         onLoad={handleLoad}
         title="Embedded Browser"

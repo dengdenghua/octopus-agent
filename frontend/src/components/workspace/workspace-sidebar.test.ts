@@ -43,4 +43,16 @@ describe("workspace sidebar route activation", () => {
       __testing.isNavRouteActive("/workspace/agents/new", "/workspace/agents"),
     ).toBe(true);
   });
+
+  test("keeps agent library in the surface selected by the sidebar entry", () => {
+    expect(
+      __testing.isCompanySurfaceActive("/workspace/agents", "?surface=chat"),
+    ).toBe(false);
+    expect(
+      __testing.isCompanySurfaceActive("/workspace/agents", "?surface=company"),
+    ).toBe(true);
+    expect(__testing.isCompanySurfaceActive("/workspace/agents", "")).toBe(
+      true,
+    );
+  });
 });

@@ -48,9 +48,13 @@ describe("<DiagnosticsPanel /> preview diagnostics", () => {
       />,
     );
 
-    await waitFor(() => expect(screen.getByText("Workspace")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText("Workspace")).toBeInTheDocument(),
+    );
     expect(screen.getByText("Preview")).toBeInTheDocument();
     expect(screen.getByText("console")).toBeInTheDocument();
-    expect(screen.getByText("ReferenceError: app is not defined")).toBeInTheDocument();
+    expect(
+      screen.getByText("ReferenceError: app is not defined"),
+    ).toBeInTheDocument();
   });
 });

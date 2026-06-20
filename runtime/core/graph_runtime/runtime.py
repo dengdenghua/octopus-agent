@@ -4,21 +4,26 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
-import re
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TYPE_CHECKING, Any
+import re  # noqa: E402
+from collections import defaultdict  # noqa: E402
+from collections.abc import Callable  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: E402
+from typing import TYPE_CHECKING, Any  # noqa: E402
 
 if TYPE_CHECKING:
     from runtime.core.cerebrum.llm_planner import LLMPlanner
 
-from runtime.adapters.instrumentation import trace_stage
-from runtime.execution.tool_engine import ToolExecutor
-from runtime.memory.journal import Journal
-from runtime.platform.models import (
+from runtime.adapters.instrumentation import trace_stage  # noqa: E402
+from runtime.execution.tool_engine import (  # noqa: E402
+    ToolExecutor,
+    normalize_task_node_tool_call,
+)
+from runtime.memory.journal import Journal  # noqa: E402
+from runtime.platform.models import (  # noqa: E402
     ArmId,
     Budget,
     ExecutionResult,
+    SkillId,
     Step,
     TaskGraph,
     ToolCall,
@@ -29,6 +34,16 @@ from runtime.platform.models import (
 
 class TemplateResolutionError(RuntimeError):
     pass
+
+
+# Step-gap callback (网状 Arm 互通 阶段 2): invoked after each node
+# completes in the sequential path, or after each layer completes in
+# the layered path. Lets callers (e.g. Worker) poll mailboxes / react
+# to peer messages between steps without breaking the run loop.
+# Signature: (step_just_completed, node_index, total_nodes) -> None.
+# Exceptions are swallowed (log + continue) so a buggy callback can't
+# abort the graph — mirrors the nerves/hooks policy.
+OnStepCallback = Callable[[Step, int, int], None]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -184,19 +199,20 @@ class GraphRuntime:
         arm_id: ArmId,
         actor: str | None,
     ) -> Step:
+        call = normalize_task_node_tool_call(node, resolved, node_index=i)
         self.journal.write_node_started(
             task_id=graph.task_id,
             arm_id=arm_id,
             actor=actor,
             node_id=node.node_id,
-            skill_ref=str(node.skill_ref),
+            skill_ref=call.name,
             node_index=i,
         )
         step = self.executor.execute_step(
             step_id=i,
             node_id=node.node_id,
-            sucker_id=node.skill_ref,
-            args=resolved,
+            sucker_id=SkillId(call.name),
+            args=call.arguments,
             caller=caller,
             task_id=graph.task_id,
             arm_id=arm_id,
@@ -209,6 +225,25 @@ class GraphRuntime:
                 update={"args_template": dict(node.args_template)},
             )
         return step
+
+    def _fire_step_callback(
+        self,
+        callback: OnStepCallback | None,
+        step: Step,
+        node_index: int,
+        total_nodes: int,
+    ) -> None:
+        """Invoke on_step_callback with exception swallowing (log + continue).
+
+        Mirrors the nerves/hooks policy: a buggy observer must never abort
+        the graph run. None callback is a no-op (the common case).
+        """
+        if callback is None:
+            return
+        try:
+            callback(step, node_index, total_nodes)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("on_step_callback raised, continuing: %s", exc)
 
     def run(
         self,
@@ -224,6 +259,7 @@ class GraphRuntime:
         actor: str | None = None,
         planner: LLMPlanner | None = None,
         max_replans: int = 1,
+        on_step_callback: OnStepCallback | None = None,
     ) -> Trajectory:
         base_args = base_args or {}
         steps: list[Step] = []
@@ -259,7 +295,7 @@ class GraphRuntime:
                     base_args=base_args, stop_on_failure=stop_on_failure,
                     resume_from=resume_from, actor=actor,
                     planner=planner, max_replans=max_replans,
-                    span=span,
+                    span=span, on_step_callback=on_step_callback,
                 )
             else:
                 steps, outputs_by_node = self._run_sequential(
@@ -268,7 +304,7 @@ class GraphRuntime:
                     base_args=base_args, stop_on_failure=stop_on_failure,
                     resume_from=resume_from, actor=actor,
                     planner=planner, max_replans=max_replans,
-                    span=span,
+                    span=span, on_step_callback=on_step_callback,
                 )
 
             overall_ok = (
@@ -321,7 +357,9 @@ class GraphRuntime:
         planner: LLMPlanner | None,
         max_replans: int,
         span: Any,
+        on_step_callback: OnStepCallback | None = None,
     ) -> tuple[list[Step], dict[str, Any]]:
+        total_nodes = len(graph.nodes)
         for i, node in enumerate(graph.nodes):
             if i < resume_from:
                 continue
@@ -340,6 +378,7 @@ class GraphRuntime:
                     actor=actor,
                 )
                 steps.append(failed_step)
+                self._fire_step_callback(on_step_callback, failed_step, i, total_nodes)
                 break
 
             step = self._execute_node(
@@ -377,8 +416,11 @@ class GraphRuntime:
                         stop_on_failure=stop_on_failure,
                         actor=actor, planner=planner,
                         max_replans=max_replans,
+                        on_step_callback=on_step_callback,
                     )
                     break
+
+            self._fire_step_callback(on_step_callback, step, i, total_nodes)
 
             if (
                 self.checkpoint_every_n_nodes > 0
@@ -389,7 +431,7 @@ class GraphRuntime:
                     arm_id=arm_id,
                     actor=actor,
                     nodes_completed=i + 1,
-                    total_nodes=len(graph.nodes),
+                    total_nodes=total_nodes,
                     tokens_spent=budget.tokens_spent,
                     usd_spent=budget.usd_spent,
                 )
@@ -412,8 +454,10 @@ class GraphRuntime:
         planner: LLMPlanner | None,
         max_replans: int,
         span: Any,
+        on_step_callback: OnStepCallback | None = None,
     ) -> tuple[list[Step], dict[str, Any]]:
         global_idx = 0
+        total_nodes = len(graph.nodes)
         for _layer_idx, layer_indices in enumerate(layers):
             layer_nodes = []
             for idx in layer_indices:
@@ -440,6 +484,7 @@ class GraphRuntime:
                         actor=actor,
                     )
                     steps.append(failed_step)
+                    self._fire_step_callback(on_step_callback, failed_step, global_idx, total_nodes)
                     return steps, outputs_by_node
                 layer_nodes.append((global_idx, node, resolved))
                 global_idx += 1
@@ -467,8 +512,10 @@ class GraphRuntime:
                         stop_on_failure=stop_on_failure,
                         actor=actor, planner=planner,
                         max_replans=max_replans,
+                        on_step_callback=on_step_callback,
                     )
                     break
+                self._fire_step_callback(on_step_callback, step, gi, total_nodes)
             else:
                 layer_results = self._run_layer_parallel(
                     layer_nodes, graph,
@@ -501,8 +548,13 @@ class GraphRuntime:
                                 stop_on_failure=stop_on_failure,
                                 actor=actor, planner=planner,
                                 max_replans=max_replans,
+                                on_step_callback=on_step_callback,
                             )
                     break
+                # Fire callback once per layer (layer-internal parallel
+                # nodes have no inter-step gap — ThreadPoolExecutor blocks).
+                for _gi, _node, step in layer_results:
+                    self._fire_step_callback(on_step_callback, step, _gi, total_nodes)
 
             completed_count = sum(
                 1 for s in steps if s.success
@@ -517,7 +569,7 @@ class GraphRuntime:
                     arm_id=arm_id,
                     actor=actor,
                     nodes_completed=completed_count,
-                    total_nodes=len(graph.nodes),
+                    total_nodes=total_nodes,
                     tokens_spent=budget.tokens_spent,
                     usd_spent=budget.usd_spent,
                 )
@@ -586,17 +638,19 @@ class GraphRuntime:
         actor: str | None,
         planner: LLMPlanner | None,
         max_replans: int,
+        on_step_callback: OnStepCallback | None = None,
     ) -> None:
         if not resolved:
             for s in steps:
                 if s.node_id == node.node_id and s.action:
                     resolved = s.action.args or {}
                     break
+        retry_call = normalize_task_node_tool_call(node, resolved, node_index=i)
         retry_step = self.executor.execute_step(
             step_id=i,
             node_id=node.node_id,
-            sucker_id=node.skill_ref,
-            args=resolved,
+            sucker_id=SkillId(retry_call.name),
+            args=retry_call.arguments,
             caller=caller,
             task_id=graph.task_id,
             arm_id=arm_id,
@@ -619,6 +673,7 @@ class GraphRuntime:
                 stop_on_failure=stop_on_failure,
                 actor=actor, planner=planner,
                 max_replans=max_replans,
+                on_step_callback=on_step_callback,
             )
 
     def _try_replan(
@@ -638,6 +693,7 @@ class GraphRuntime:
         actor: str | None,
         planner: LLMPlanner | None,
         max_replans: int,
+        on_step_callback: OnStepCallback | None = None,
     ) -> None:
         if planner is None or max_replans <= 0:
             return
@@ -674,6 +730,7 @@ class GraphRuntime:
                     actor=actor,
                     planner=planner,
                     max_replans=max_replans - 1,
+                    on_step_callback=on_step_callback,
                 )
                 steps.extend(replan_traj.steps)
                 for s in replan_traj.steps:

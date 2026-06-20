@@ -93,6 +93,31 @@ class TestBodyContextWins:
         )
         assert sess.metadata["team_id"] == "new_team"
 
+    def test_body_agent_mode_flows_into_metadata(self):
+        sess = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t1",
+            body={"context": {"mode": "code", "agent_mode": "architect"}},
+            store=_StubStore(),
+        )
+        assert sess.metadata["mode"] == "code"
+        assert sess.metadata["agent_mode"] == "architect"
+
+    def test_body_project_signals_flow_into_metadata(self):
+        signals = {
+            "recommended_mode": "coder",
+            "signals": {"manifests": ["package.json"], "lock_files": ["pnpm-lock.yaml"]},
+        }
+        sess = build_turn_session(
+            actor="u",
+            agent=_StubAgent(),
+            thread_id="t1",
+            body={"context": {"mode": "code", "project_signals": signals}},
+            store=_StubStore(),
+        )
+        assert sess.metadata["project_signals"] == signals
+
     def test_raw_identity_flag_sets_override(self):
         """``context.raw_identity=true`` writes the
         ``identity_lock_override=False`` key that the

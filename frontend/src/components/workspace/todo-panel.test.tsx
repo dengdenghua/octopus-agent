@@ -6,7 +6,10 @@ import { renderWithProviders } from "@/test/harness";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { TodoPanel } from "./todo-panel";
 
-function todoEvent(input: Record<string, unknown>, startedAt = 1): LiveToolEvent {
+function todoEvent(
+  input: Record<string, unknown>,
+  startedAt = 1,
+): LiveToolEvent {
   return {
     id: `todo-${startedAt}`,
     name: "todo_write",
@@ -80,7 +83,11 @@ describe("TodoPanel", () => {
 
     expect(screen.getByText("Confirm task")).toBeInTheDocument();
     expect(screen.getByText("Checking constraints")).toBeInTheDocument();
-    expect(screen.getByText((content) => content.includes("1/2") && content.includes("50%"))).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (content) => content.includes("1/2") && content.includes("50%"),
+      ),
+    ).toBeInTheDocument();
   });
 
   it("marks unfinished in-progress work as interrupted once the turn is no longer live", () => {

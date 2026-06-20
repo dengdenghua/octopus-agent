@@ -133,7 +133,10 @@ export default defineConfig({
         new URL("./src/lib/motion-shim.tsx", import.meta.url),
       ),
       "mermaid-real": fileURLToPath(
-        new URL("./node_modules/mermaid/dist/mermaid.core.mjs", import.meta.url),
+        new URL(
+          "./node_modules/mermaid/dist/mermaid.core.mjs",
+          import.meta.url,
+        ),
       ),
       // ``mermaid`` is aliased to a local shim because the upstream
       // package ships a large ESM bundle with worker-based parsing
@@ -212,7 +215,14 @@ export default defineConfig({
           ) {
             return "markdown-plugins";
           }
-          if (pkg === "mermaid" || pkg?.startsWith("d3") || pkg === "cytoscape" || pkg === "dagre-d3-es" || pkg === "elkjs" || pkg === "khroma") {
+          if (
+            pkg === "mermaid" ||
+            pkg?.startsWith("d3") ||
+            pkg === "cytoscape" ||
+            pkg === "dagre-d3-es" ||
+            pkg === "elkjs" ||
+            pkg === "khroma"
+          ) {
             return "mermaid";
           }
           if (id.includes("node_modules/@xyflow/")) {
@@ -229,10 +239,6 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    exclude: [
-      "node_modules/**",
-      "dist/**",
-      "e2e/**",
-    ],
+    exclude: ["node_modules/**", "dist/**", "e2e/**"],
   },
 });

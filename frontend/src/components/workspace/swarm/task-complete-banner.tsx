@@ -37,11 +37,7 @@ export function TaskCompleteBanner({ onReplay, className }: Props) {
 
 const EMOJI = ["👍", "👎", "❤️", "😂"] as const;
 
-export function EmojiReactionRow({
-  className,
-}: {
-  className?: string;
-}) {
+export function EmojiReactionRow({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-1", className)}>
       {EMOJI.map((e) => (

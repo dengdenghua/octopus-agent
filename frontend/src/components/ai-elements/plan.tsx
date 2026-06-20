@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -139,4 +138,3 @@ export const PlanTrigger = ({ className, ...props }: PlanTriggerProps) => (
     </Button>
   </CollapsibleTrigger>
 );
-

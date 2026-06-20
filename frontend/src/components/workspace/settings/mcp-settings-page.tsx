@@ -35,14 +35,16 @@ export function McpSettingsPage() {
       const data = await loadMCPConfig();
       setRawConfig(data);
       const mcpServers = data.mcp_servers || {};
-      setServers(Object.entries(mcpServers).map(([name, cfg]: [string, any]) => ({
-        name,
-        type: cfg.type || "stdio",
-        enabled: cfg.enabled !== false,
-        command: cfg.command,
-        url: cfg.url,
-        description: cfg.description || "",
-      })));
+      setServers(
+        Object.entries(mcpServers).map(([name, cfg]: [string, any]) => ({
+          name,
+          type: cfg.type || "stdio",
+          enabled: cfg.enabled !== false,
+          command: cfg.command,
+          url: cfg.url,
+          description: cfg.description || "",
+        })),
+      );
     } catch (error) {
       console.error(error);
       toast.error(t.mcpSettings.toastLoadConfigFailed);
@@ -58,7 +60,10 @@ export function McpSettingsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchServers(); fetchTrust(); }, [fetchServers, fetchTrust]);
+  useEffect(() => {
+    fetchServers();
+    fetchTrust();
+  }, [fetchServers, fetchTrust]);
 
   const trustOf = (name: string) =>
     trustEntries.find((e) => e.server_name === name);
@@ -84,9 +89,11 @@ export function McpSettingsPage() {
   };
 
   const toggleServer = async (name: string, enabled: boolean) => {
-    setServers(prev => prev.map(s => s.name === name ? { ...s, enabled } : s));
+    setServers((prev) =>
+      prev.map((s) => (s.name === name ? { ...s, enabled } : s)),
+    );
     try {
-      const data = rawConfig ?? await loadMCPConfig();
+      const data = rawConfig ?? (await loadMCPConfig());
       const mcpServers = { ...data.mcp_servers };
       if (mcpServers[name]) {
         mcpServers[name] = { ...mcpServers[name], enabled };
@@ -101,13 +108,19 @@ export function McpSettingsPage() {
 
   return (
     <div className="space-y-6">
-      <SettingsSection title={t.mcpSettings.title} description={t.mcpSettings.description}>
+      <SettingsSection
+        title={t.mcpSettings.title}
+        description={t.mcpSettings.description}
+      >
         <div className="space-y-2">
-          {servers.map(server => {
+          {servers.map((server) => {
             const trust = trustOf(server.name);
             const trusted = !!trust?.approved;
             return (
-              <div key={server.name} className="flex items-center justify-between rounded-lg border p-3">
+              <div
+                key={server.name}
+                className="flex items-center justify-between rounded-lg border p-3"
+              >
                 <div className="flex items-center gap-3">
                   <ServerIcon className="size-4 text-muted-foreground" />
                   <div>
@@ -115,18 +128,29 @@ export function McpSettingsPage() {
                       {server.name}
                       {trusted ? (
                         <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
-                          <ShieldCheckIcon className="size-3" /> {t.mcpSettings.trustedTag}
+                          <ShieldCheckIcon className="size-3" />{" "}
+                          {t.mcpSettings.trustedTag}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                          <ShieldAlertIcon className="size-3" /> {t.mcpSettings.untrustedTag}
+                          <ShieldAlertIcon className="size-3" />{" "}
+                          {t.mcpSettings.untrustedTag}
                         </span>
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {server.type} {server.command ? `· ${server.command}` : server.url ? `· ${server.url}` : ""}
+                      {server.type}{" "}
+                      {server.command
+                        ? `· ${server.command}`
+                        : server.url
+                          ? `· ${server.url}`
+                          : ""}
                     </div>
-                    {server.description && <div className="text-xs text-muted-foreground">{server.description}</div>}
+                    {server.description && (
+                      <div className="text-xs text-muted-foreground">
+                        {server.description}
+                      </div>
+                    )}
                     {!trusted && server.enabled && (
                       <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                         {t.mcpSettings.unapprovedHint}
@@ -136,15 +160,26 @@ export function McpSettingsPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {trusted ? (
-                    <Button size="sm" variant="ghost" onClick={() => revoke(server.name)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => revoke(server.name)}
+                    >
                       {t.mcpSettings.revokeButton}
                     </Button>
                   ) : (
-                    <Button size="sm" variant="outline" onClick={() => approve(server.name)}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => approve(server.name)}
+                    >
                       {t.mcpSettings.trustButton}
                     </Button>
                   )}
-                  <Switch checked={server.enabled} onCheckedChange={(v) => toggleServer(server.name, v)} />
+                  <Switch
+                    checked={server.enabled}
+                    onCheckedChange={(v) => toggleServer(server.name, v)}
+                  />
                 </div>
               </div>
             );
@@ -159,4 +194,3 @@ export function McpSettingsPage() {
     </div>
   );
 }
-

@@ -21,9 +21,9 @@ describe("OctopusClient", () => {
     const client = new OctopusClient({ apiUrl: "http://127.0.0.1:4105/api" });
 
     expect(
-      (client as unknown as { _resolveUrl: (path: string) => string })._resolveUrl(
-        "/api/models",
-      ),
+      (
+        client as unknown as { _resolveUrl: (path: string) => string }
+      )._resolveUrl("/api/models"),
     ).toBe("http://127.0.0.1:4105/api/models");
   });
 
@@ -31,9 +31,9 @@ describe("OctopusClient", () => {
     const client = new OctopusClient({ apiUrl: "/api" });
 
     expect(
-      (client as unknown as { _resolveUrl: (path: string) => string })._resolveUrl(
-        "/api/models",
-      ),
+      (
+        client as unknown as { _resolveUrl: (path: string) => string }
+      )._resolveUrl("/api/models"),
     ).toBe("/api/models");
   });
 
@@ -126,8 +126,8 @@ describe("SSE line parsing", () => {
     }
 
     processLine("event: values");
-    processLine('data: {}');
-    processLine('data: {}');
+    processLine("data: {}");
+    processLine("data: {}");
 
     expect(events[0]).toBe("values");
     expect(events[1]).toBe("unknown");
@@ -152,7 +152,7 @@ describe("SSE line parsing", () => {
     processLine("event: values");
     processLine('data: {"messages":[]}');
     processLine("event: end");
-    processLine('data: {}');
+    processLine("data: {}");
 
     expect(events.length).toBe(3);
     expect(events[0]!.event).toBe("metadata");

@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { ButtonGroup, ButtonGroupText } from "@/components/ui/button-group";
 import {
@@ -16,7 +15,15 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
-import { Suspense, createContext, lazy, memo, useContext, useEffect, useState } from "react";
+import {
+  Suspense,
+  createContext,
+  lazy,
+  memo,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 import type { StreamdownProps } from "./streamdown-host";
 

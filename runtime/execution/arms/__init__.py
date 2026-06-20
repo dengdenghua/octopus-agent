@@ -19,17 +19,6 @@ from .safe_rm import SafeRmConfig, SafeRmProtector
 from .shell_state import ShellEnvState
 from .shell_state_manager import ShellStateManager
 from .shell_telemetry import ShellExecEvent, ShellExecTelemetry, get_shell_telemetry
-from .skill_manifest import (
-    BUILTIN_SKILLS,
-    COMPUTER_USE_SKILL,
-    FILE_EDIT_SKILL,
-    SHELL_EXEC_SKILL,
-    SkillBuilder,
-    SkillCapability,
-    SkillCategory,
-    SkillDefinition,
-    SkillInterface,
-)
 from .specialized import make_code_arm, make_file_arm, make_search_arm
 from .tool_registry import (
     ToolCallContext,
@@ -43,11 +32,7 @@ from .tool_registry import (
 Arm = Worker
 
 __all__ = [
-    "BUILTIN_SKILLS",
-    "COMPUTER_USE_SKILL",
-    "FILE_EDIT_SKILL",
     "PRESET_FACTORIES",
-    "SHELL_EXEC_SKILL",
     "Arm",
     "ArmPool",
     "ByteStreamBuffer",
@@ -70,11 +55,6 @@ __all__ = [
     "ShellExecEvent",
     "ShellExecTelemetry",
     "ShellStateManager",
-    "SkillBuilder",
-    "SkillCapability",
-    "SkillCategory",
-    "SkillDefinition",
-    "SkillInterface",
     "ToolCallContext",
     "ToolCallResult",
     "ToolDefinition",

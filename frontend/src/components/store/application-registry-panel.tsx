@@ -24,10 +24,8 @@ import {
   pluginImageUrl,
   appIconUrl,
   searchablePluginItemText,
-  normalizePluginLookupKey,
   pluginLookupKeys,
   appPluginLookupKeys,
-  searchablePluginBundleText,
 } from "./store-utils";
 
 export function ApplicationRegistryPanel() {
@@ -60,7 +58,9 @@ export function ApplicationRegistryPanel() {
     const failures = [appsResult, pluginsResult]
       .filter((result) => result.status === "rejected")
       .map((result) => result.reason)
-      .map((reason) => (reason instanceof Error ? reason.message : String(reason)));
+      .map((reason) =>
+        reason instanceof Error ? reason.message : String(reason),
+      );
     setError(failures.length === 2 ? failures.join("\n") : null);
     setLoading(false);
   };
@@ -148,7 +148,9 @@ export function ApplicationRegistryPanel() {
     });
   }, [category, registryItems, query]);
 
-  const enabledCount = registryItems.filter((item) => item.plugin?.enabled).length;
+  const enabledCount = registryItems.filter(
+    (item) => item.plugin?.enabled,
+  ).length;
   const actionCount = apps.reduce(
     (sum, app) => sum + (app.action_count ?? app.actions?.length ?? 0),
     0,
@@ -239,7 +241,9 @@ export function ApplicationRegistryPanel() {
           onClick={() => setCategory("all")}
         >
           全部
-          <span className="ml-1 text-muted-foreground">{registryItems.length}</span>
+          <span className="ml-1 text-muted-foreground">
+            {registryItems.length}
+          </span>
         </Button>
         {Object.entries(APP_CATEGORY_LABELS).map(([key, label]) => {
           if (key === "all") return null;
@@ -269,7 +273,8 @@ export function ApplicationRegistryPanel() {
               (plugin ? pluginImageUrl(plugin) : null) ||
               (primaryApp ? appIconUrl(primaryApp) : null);
             const itemActionCount = item.apps.reduce(
-              (sum, app) => sum + (app.action_count ?? app.actions?.length ?? 0),
+              (sum, app) =>
+                sum + (app.action_count ?? app.actions?.length ?? 0),
               0,
             );
             const openable = Boolean(primaryApp?.route || primaryApp?.entry);
@@ -277,7 +282,10 @@ export function ApplicationRegistryPanel() {
             const subtitle =
               plugin && plugin.id !== plugin.name
                 ? plugin.id
-                : item.author || primaryApp?.plugin || primaryApp?.source_plugin || item.id;
+                : item.author ||
+                  primaryApp?.plugin ||
+                  primaryApp?.source_plugin ||
+                  item.id;
             return (
               <div
                 key={item.id}
@@ -331,7 +339,8 @@ export function ApplicationRegistryPanel() {
                     variant="secondary"
                     className="h-5 rounded-full px-2 text-[10px]"
                   >
-                    {APP_CATEGORY_LABELS[item.localCategory] ?? item.localCategory}
+                    {APP_CATEGORY_LABELS[item.localCategory] ??
+                      item.localCategory}
                   </Badge>
                   {plugin && (
                     <Badge

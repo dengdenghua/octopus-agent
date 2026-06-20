@@ -1,4 +1,3 @@
-
 import {
   SearchIcon,
   Loader2Icon,
@@ -74,7 +73,9 @@ export function SessionSearch({
         const data = await res.json();
         setResults(data.threads || data || []);
       }
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
     setLoading(false);
   }, []);
 

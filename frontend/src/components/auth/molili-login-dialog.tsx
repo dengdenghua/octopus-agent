@@ -57,7 +57,8 @@ export function MoliliLoginDialog() {
       setOpen(true);
     };
     window.addEventListener("octopus:open-molili-login", handler);
-    return () => window.removeEventListener("octopus:open-molili-login", handler);
+    return () =>
+      window.removeEventListener("octopus:open-molili-login", handler);
   }, []);
 
   // Cooldown timer for the resend button.
@@ -107,7 +108,9 @@ export function MoliliLoginDialog() {
         toast.error(t.auth.errors.moliliNotEnabled);
         setOpen(false);
       } else {
-        toast.error(err instanceof Error ? err.message : t.auth.errors.sendFailed);
+        toast.error(
+          err instanceof Error ? err.message : t.auth.errors.sendFailed,
+        );
       }
     } finally {
       setSending(false);
@@ -136,7 +139,9 @@ export function MoliliLoginDialog() {
         queryClient.invalidateQueries({ queryKey: ["models"] });
         setOpen(false);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : t.auth.errors.loginFailed);
+        toast.error(
+          err instanceof Error ? err.message : t.auth.errors.loginFailed,
+        );
       } finally {
         setSubmitting(false);
       }
@@ -192,7 +197,11 @@ export function MoliliLoginDialog() {
                 disabled={sending || cooldown > 0}
                 className="shrink-0"
               >
-                {cooldown > 0 ? `${cooldown}s` : sending ? t.auth.sending : t.auth.sendCode}
+                {cooldown > 0
+                  ? `${cooldown}s`
+                  : sending
+                    ? t.auth.sending
+                    : t.auth.sendCode}
               </Button>
             </div>
           </div>

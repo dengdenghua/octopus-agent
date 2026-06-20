@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from "react";
 import { UserIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
@@ -81,13 +80,21 @@ export function PersonalitySelector({
       setApplying(name);
       try {
         const url = `${getBackendBaseURL()}/api/personality/templates/${name}/apply${agentName ? `?agent_name=${agentName}` : ""}`;
-        const res = await fetch(url, { method: "POST", headers: authHeaders() });
+        const res = await fetch(url, {
+          method: "POST",
+          headers: authHeaders(),
+        });
         if (res.ok) {
-          toast.success(t.personality?.applySuccess?.(name) ?? `Template "${name}" applied successfully`);
+          toast.success(
+            t.personality?.applySuccess?.(name) ??
+              `Template "${name}" applied successfully`,
+          );
         } else {
           const err = await res.json().catch(() => ({}));
           toast.error(
-            (err as { detail?: string }).detail || t.personality?.applyFailed || "Failed to apply template",
+            (err as { detail?: string }).detail ||
+              t.personality?.applyFailed ||
+              "Failed to apply template",
           );
         }
       } catch {

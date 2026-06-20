@@ -233,3 +233,83 @@ class TestAuditOnlyLearn:
         assert not any(
             "behavioural anomaly" in r.message for r in caplog.records
         )
+
+
+class TestBaselinePrediction:
+    """predict() + TrustEngine.check fallback: when the runtime doesn't
+    populate ToolCall.predicted_cost (the actual situation today — all
+    three execute_step callers omit it), the adaptive tier falls back to
+    the sucker's baseline mean. This activates the pre-execute scoring
+    path that was previously inert (cold-start 0.5 on every call)."""
+
+    def test_predict_returns_none_cold_start(self):
+        # No baseline yet → None → compute_risk stays cold-start.
+        a = AdaptiveImmunity()
+        assert a.predict("never-seen") is None
+
+    def test_predict_returns_none_below_min_samples(self):
+        # Below _MIN_SAMPLES (5) → still None (mean/variance not meaningful).
+        a = AdaptiveImmunity()
+        for _ in range(4):
+            a.learn("x", latency_ms=100.0, tokens=200.0)
+        assert a.predict("x") is None
+
+    def test_predict_returns_baseline_mean(self):
+        # Mature baseline → predict returns the mean.
+        a = AdaptiveImmunity()
+        for _ in range(30):
+            a.learn("x", latency_ms=100.0, tokens=200.0)
+        pred = a.predict("x")
+        assert pred is not None
+        assert pred.latency_ms == 100.0
+        assert pred.tokens_in == 200  # int(tok_mean)
+
+    def test_check_falls_back_to_baseline_when_predicted_cost_none(self):
+        # The real-world path: ToolCall.predicted_cost is None (callers
+        # don't populate it). With a mature baseline, check() should
+        # still score the call — a normal call sits at z≈0 and is
+        # allowed (falls through to innate allow), an outlier is
+        # quarantined.
+        engine = TrustEngine(
+            trusted_sources=["skill://public/*"],
+            adaptive=AdaptiveImmunity(quarantine_threshold=0.7),
+        )
+        # Build baseline via learn() (post-execute path, already wired).
+        for _ in range(30):
+            engine.learn(
+                ToolCall(sucker_id="run_sql", caller="outsider", args={}),
+                latency_ms=100.0,
+                tokens=200.0,
+            )
+        # ToolCall with NO predicted_cost — simulates execute_step callers.
+        normal_call = ToolCall(sucker_id="run_sql", caller="outsider", args={})
+        report = engine.check(normal_call, _sig("skill://public/run_sql"))
+        # Normal call against its own baseline mean → z≈0 → not anomalous
+        # → falls through to innate trusted → allow.
+        assert report.verdict == "allow"
+        assert report.strategy_used == "innate"
+
+    def test_check_quarantines_outlier_even_without_predicted_cost(self):
+        # Same setup, but the call's real cost would be an outlier. Since
+        # predict() returns the baseline MEAN (not the call's actual cost),
+        # pre-execute scoring can't see the outlier — it scores the mean
+        # against itself (z≈0). The outlier is still caught post-execute
+        # by score_observed() in learn(). This test pins that contract:
+        # pre-execute stays permissive (mean-vs-mean), post-execute catches.
+        engine = TrustEngine(
+            trusted_sources=["skill://public/*"],
+            adaptive=AdaptiveImmunity(quarantine_threshold=0.7),
+        )
+        for _ in range(30):
+            engine.learn(
+                ToolCall(sucker_id="run_sql", caller="outsider", args={}),
+                latency_ms=100.0,
+                tokens=200.0,
+            )
+        # No predicted_cost → predict() returns mean (100/200) → z≈0 → allow.
+        call = ToolCall(sucker_id="run_sql", caller="outsider", args={})
+        report = engine.check(call, _sig("skill://public/run_sql"))
+        assert report.verdict == "allow"  # pre-execute can't see the outlier
+        # But learn() with the real observed outlier DOES quarantine.
+        engine.learn(call, latency_ms=10000.0, tokens=200.0)
+        assert engine.adaptive.is_quarantined("run_sql")

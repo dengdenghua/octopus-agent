@@ -1,4 +1,3 @@
-
 import {
   ChevronDownIcon,
   Download,
@@ -91,15 +90,19 @@ export function RecentChatList() {
   const params = useParams();
   const threadIdFromPath = params.threadId ?? params.thread_id;
   const currentMode = pathname.startsWith("/workspace/team")
-      ? ("team" as const)
-      : undefined; // chat shows ALL threads (including those without mode tag)
+    ? ("team" as const)
+    : undefined; // chat shows ALL threads (including those without mode tag)
 
   // Scope by active agent when in chat mode · code/team have their own
   // persona routing (code picks by agentMode, team by leader), so we
   // only filter by active-agent on the chat path.
   const activeAgentId = useActiveAgentId();
   const agentFilter = currentMode === undefined ? activeAgentId : null;
-  const { data: threads = [] } = useThreads(undefined, currentMode, agentFilter);
+  const { data: threads = [] } = useThreads(
+    undefined,
+    currentMode,
+    agentFilter,
+  );
   const { data: projects = [] } = useProjects();
   const { data: threadProjectMap = {} } = useThreadMap();
   const { mutate: deleteThread } = useDeleteThread();
@@ -245,10 +248,7 @@ export function RecentChatList() {
   const renderThreadItem = (thread: AgentThread) => {
     const isActive = pathOfThread(thread.thread_id) === pathname;
     return (
-      <SidebarMenuItem
-        key={thread.thread_id}
-        className="group/side-menu-item"
-      >
+      <SidebarMenuItem key={thread.thread_id} className="group/side-menu-item">
         <SidebarMenuButton isActive={isActive} asChild>
           <Link
             to={pathOfThread(thread.thread_id)}
@@ -281,9 +281,7 @@ export function RecentChatList() {
                 <Pencil className="text-muted-foreground" />
                 <span>{t.common.rename}</span>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => handleShare(thread.thread_id)}
-              >
+              <DropdownMenuItem onSelect={() => handleShare(thread.thread_id)}>
                 <Share2 className="text-muted-foreground" />
                 <span>{t.common.share}</span>
               </DropdownMenuItem>
@@ -337,9 +335,7 @@ export function RecentChatList() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => handleDelete(thread.thread_id)}
-              >
+              <DropdownMenuItem onSelect={() => handleDelete(thread.thread_id)}>
                 <Trash2 className="text-muted-foreground" />
                 <span>{t.common.delete}</span>
               </DropdownMenuItem>
@@ -363,11 +359,7 @@ export function RecentChatList() {
           <Collapsible
             defaultOpen
             key={group.key}
-            className={
-              group.project
-                ? "group/project-group"
-                : "group/recent"
-            }
+            className={group.project ? "group/project-group" : "group/recent"}
           >
             <SidebarGroup className="pt-0">
               <SidebarGroupLabel className="flex h-6 items-center justify-between px-1.5 text-[11px]">

@@ -51,7 +51,10 @@ export function InspectOverlay({
       } else if (data.type === "octopus:inspect:state") {
         setActive(!!data.active);
       } else if (data.type === "octopus:inspect:select") {
-        dispatchInspectSelected({ ...data.payload, filepath: filepathRef.current });
+        dispatchInspectSelected({
+          ...data.payload,
+          filepath: filepathRef.current,
+        });
         setActive(false);
       }
     }
@@ -66,7 +69,9 @@ export function InspectOverlay({
   }, [filepath]);
 
   if (!enabled) {
-    return <div className={cn("relative size-full", className)}>{children}</div>;
+    return (
+      <div className={cn("relative size-full", className)}>{children}</div>
+    );
   }
 
   function toggle() {

@@ -1,9 +1,4 @@
-import {
-  ActivityIcon,
-  DnaIcon,
-  GaugeIcon,
-  SparklesIcon,
-} from "lucide-react";
+import { ActivityIcon, DnaIcon, GaugeIcon, SparklesIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -44,7 +39,12 @@ export default function EvolutionPage() {
                 </div>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2 md:justify-end">
-                <Button asChild variant="outline" size="sm" className="h-8 whitespace-nowrap">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-8 whitespace-nowrap"
+                >
                   <Link to="/workspace/reflex">
                     <ActivityIcon className="mr-2 size-4" />
                     反射规则
@@ -78,11 +78,17 @@ export default function EvolutionPage() {
               </div>
               <Tabs defaultValue="control" className="flex flex-col gap-4">
                 <TabsList className="h-9 w-fit rounded-lg">
-                  <TabsTrigger value="control" className="h-8 gap-1.5 px-3 text-xs">
+                  <TabsTrigger
+                    value="control"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
                     <GaugeIcon className="size-3.5" />
                     {t.evolutionControl.panelTitle}
                   </TabsTrigger>
-                  <TabsTrigger value="status" className="h-8 gap-1.5 px-3 text-xs">
+                  <TabsTrigger
+                    value="status"
+                    className="h-8 gap-1.5 px-3 text-xs"
+                  >
                     <SparklesIcon className="size-3.5" />
                     {t.settings.sections.evolution}
                   </TabsTrigger>

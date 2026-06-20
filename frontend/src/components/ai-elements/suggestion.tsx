@@ -1,4 +1,3 @@
-
 import type { LucideIcon } from "lucide-react";
 import { Children, type ComponentProps } from "react";
 
@@ -77,4 +76,3 @@ export const Suggestion = ({
     </Button>
   );
 };
-

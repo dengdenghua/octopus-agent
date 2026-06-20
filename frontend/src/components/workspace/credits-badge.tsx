@@ -27,7 +27,9 @@ export function CreditsBadge({ className }: { className?: string }) {
       type="button"
       onClick={() => {
         window.dispatchEvent(
-          new CustomEvent("octopus:open-settings", { detail: { tab: "account" } }),
+          new CustomEvent("octopus:open-settings", {
+            detail: { tab: "account" },
+          }),
         );
       }}
       title={

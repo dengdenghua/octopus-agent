@@ -13,6 +13,7 @@ export interface PluginInfo {
   icon_url?: string | null;
   brand_color?: string | null;
   start_time?: string;
+  smoke?: PluginSmoke;
 }
 
 export interface CapabilityInfo {
@@ -22,6 +23,115 @@ export interface CapabilityInfo {
   version: string;
   requires: string[];
   provider?: string;
+}
+
+export interface PluginSmoke {
+  schema: "octopus.codex_plugin_smoke.v1" | string;
+  ok: boolean;
+  warnings?: string[];
+  surfaces?: {
+    capabilities?: boolean;
+    skills?: boolean;
+    apps?: boolean;
+    mcp?: boolean;
+    commands?: boolean;
+  };
+}
+
+export interface PluginSmokeSummaryItem {
+  plugin_id?: string | null;
+  plugin_name?: string | null;
+  issues?: string[];
+  warnings?: string[];
+  reason?: string;
+}
+
+export interface PluginPermissionResolution {
+  plugin_id?: string | null;
+  plugin_name?: string | null;
+  schema: "octopus.codex_plugin_permission_resolution.v1" | string;
+  status: "explicit" | "review_required" | "none" | string;
+  review_required: boolean;
+  accepted_risk: boolean;
+  permissions: unknown[];
+  reason: string;
+}
+
+export interface PluginSmokeSummary {
+  schema: "octopus.codex_plugin_smoke_summary.v1" | string;
+  total: number;
+  ok_count: number;
+  failed_count: number;
+  review_required_count: number;
+  warning_count: number;
+  failed: PluginSmokeSummaryItem[];
+  review_required: PluginSmokeSummaryItem[];
+  warnings: PluginSmokeSummaryItem[];
+  permission_resolutions?: PluginPermissionResolution[];
+  compatibility?: {
+    schema: "octopus.codex_plugin_compatibility.v1" | string;
+    verdict: "pass" | "review" | "fail" | string;
+    passed: number;
+    total: number;
+    surface_totals: Record<string, number>;
+    requirements: Array<{
+      id: string;
+      passed: boolean;
+      detail: string;
+    }>;
+    next_actions: string[];
+  };
+}
+
+export interface PluginRuntimeProfile {
+  schema: "octopus.codex_plugin_runtime.v1" | string;
+  plugin_id: string;
+  plugin_name: string;
+  surfaces: {
+    capabilities: number;
+    skills: number;
+    apps: number;
+    mcp_servers: number;
+    commands: number;
+  };
+  capabilities: Array<{
+    name: string;
+    type: string;
+    description: string;
+  }>;
+  skills: Array<{
+    id: string;
+    name: string;
+    path: string;
+    description: string;
+    scope: "plugin" | string;
+  }>;
+  apps: Array<{
+    id: string;
+    name: string;
+    description: string;
+    source: string;
+  }>;
+  mcp_servers: Array<{
+    name: string;
+    type: string;
+    title: string;
+    description: string;
+    command: string;
+    args: unknown[];
+    cwd: string;
+    url: string;
+    env_keys: string[];
+    enabled: boolean;
+    scope: "plugin" | string;
+  }>;
+  commands: Array<{
+    id: string;
+    name: string;
+    path: string;
+    executable: boolean;
+  }>;
+  call_order: string[];
 }
 
 // ── PluginHub (new pluggable module architecture) ──────────

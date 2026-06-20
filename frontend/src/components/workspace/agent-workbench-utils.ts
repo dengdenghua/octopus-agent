@@ -16,6 +16,7 @@ import { deriveAgentPhases, type AgentPhaseStatus } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   normalizeEventsForSettledDisplay,
+  toWorkBlocks,
   type WorkBlock,
 } from "./work-blocks";
 
@@ -106,6 +107,26 @@ export const SUBAGENTS_TAB_LABEL = "子智能体";
 export const DIFF_TAB_LABEL = "Diff";
 export const TERMINAL_TAB_LABEL = "终端";
 export const BROWSER_TAB_LABEL = "浏览器";
+export const FINAL_OUTPUT_PATH_PATTERN = /(?:^|[\\/])output[\\/]final[\\/]/i;
+export const FINAL_DELIVERABLE_PATTERN =
+  /report|docx|pptx|pdf|xlsx|html|报告|调研|总结|交付|文档|方案/i;
+const FINAL_DELIVERABLE_WRITE_OPS = new Set([
+  "add",
+  "added",
+  "create",
+  "created",
+  "edit",
+  "edited",
+  "generate",
+  "generated",
+  "modify",
+  "modified",
+  "new",
+  "update",
+  "updated",
+  "write",
+  "written",
+]);
 
 // Mirror runtime.execution.subagents.bridge._ROLE_AVATAR so the
 // frontend can pick a per-role emoji even when the backend hasn't
@@ -485,9 +506,14 @@ export function pathsFromUnknown(value: unknown): string[] {
   if (isRecord(value)) {
     for (const key of [
       "path",
+      "artifact_path",
       "file_path",
+      "filePath",
       "filepath",
       "filename",
+      "output_path",
+      "relative_path",
+      "written_path",
       "target_path",
       "source_path",
     ]) {
@@ -498,7 +524,12 @@ export function pathsFromUnknown(value: unknown): string[] {
       for (const change of changes) {
         if (isRecord(change)) {
           addPath(change.path);
+          addPath(change.artifact_path);
           addPath(change.file_path);
+          addPath(change.filePath);
+          addPath(change.output_path);
+          addPath(change.relative_path);
+          addPath(change.written_path);
           addPath(change.target_path);
         }
       }
@@ -605,7 +636,7 @@ function isFinalOutputPath(path: string | null | undefined) {
 }
 
 function fallbackCreateOpFromEventName(name: string) {
-  return /(^|[_:-])(write_text_file|write_file|create_file|artifact)($|[_:-])/i.test(
+  return /(^|[_.:-])(write_text_file|write_file|create_file|artifact)($|[_.:-])/i.test(
     name,
   )
     ? "create"
@@ -658,7 +689,16 @@ export function diffEntriesFromBlocks(blocks: WorkBlock[]): DiffEntry[] {
           .map((change, index): DiffEntry | null => {
             const text = diffTextFromUnknown(change);
             const path =
-              stringFromKeys(change, ["path", "file_path", "target_path"]) ||
+              stringFromKeys(change, [
+                "path",
+                "artifact_path",
+                "file_path",
+                "filePath",
+                "output_path",
+                "relative_path",
+                "written_path",
+                "target_path",
+              ]) ||
               pathsForBlock(block)[index] ||
               block.subtitle;
             if (!text && !path) return null;
@@ -704,6 +744,26 @@ export function diffEntriesFromBlocks(blocks: WorkBlock[]): DiffEntry[] {
     })
     .filter((entry): entry is DiffEntry => Boolean(entry));
   return dedupeDiffEntries(entries);
+}
+
+function isFinalDeliverableEntry(entry: DiffEntry) {
+  const target = entry.path || entry.title;
+  if (!target || entry.status === "error") return false;
+  if (FINAL_OUTPUT_PATH_PATTERN.test(target)) return true;
+  if (!FINAL_DELIVERABLE_PATTERN.test(target)) return false;
+  if (entry.created) return true;
+  const op = typeof entry.op === "string" ? entry.op.trim().toLowerCase() : "";
+  return FINAL_DELIVERABLE_WRITE_OPS.has(op);
+}
+
+export function finalOutputArtifactEntries(events: LiveToolEvent[]) {
+  return diffEntriesFromBlocks(toWorkBlocks(events)).filter(
+    isFinalDeliverableEntry,
+  );
+}
+
+export function hasFinalOutputArtifact(events: LiveToolEvent[]) {
+  return finalOutputArtifactEntries(events).length > 0;
 }
 
 function diffEntryDedupeKey(entry: DiffEntry) {

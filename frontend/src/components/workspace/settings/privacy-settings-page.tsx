@@ -83,7 +83,6 @@ const defaultAiModeOptions: AiModeOption[] = [
   },
 ];
 
-
 // Pulled from the auto-generated OpenAPI types so backend changes
 // to the ``IdentityLockResponse`` pydantic model propagate here
 // without a hand-edit. See docs/adr/004-openapi-ts-codegen.md.
@@ -200,7 +199,9 @@ export default function PrivacySettingsPage() {
       toast.success(`已切换到${label}`);
     } catch (e) {
       setAiMode(prev);
-      toast.error(`切换 AI 模式失败：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        `切换 AI 模式失败：${e instanceof Error ? e.message : String(e)}`,
+      );
     } finally {
       setAiModeBusy(false);
     }
@@ -266,7 +267,11 @@ export default function PrivacySettingsPage() {
       setProfile(next);
       toast.success(t.privacySettings.toastProfileSwitched(name));
     } catch (e) {
-      toast.error(t.privacySettings.toastProfileFailed(e instanceof Error ? e.message : String(e)));
+      toast.error(
+        t.privacySettings.toastProfileFailed(
+          e instanceof Error ? e.message : String(e),
+        ),
+      );
     } finally {
       setProfileBusy(false);
     }
@@ -284,11 +289,11 @@ export default function PrivacySettingsPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const next: JudgeStatus = await res.json();
       setJudge(next);
-      toast.success(next.enabled ? "已开启 LLM 语义审查" : "已关闭 LLM 语义审查");
-    } catch (e) {
-      toast.error(
-        `切换失败:${e instanceof Error ? e.message : String(e)}`,
+      toast.success(
+        next.enabled ? "已开启 LLM 语义审查" : "已关闭 LLM 语义审查",
       );
+    } catch (e) {
+      toast.error(`切换失败:${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setJudgeBusy(false);
     }
@@ -316,7 +321,11 @@ export default function PrivacySettingsPage() {
             : t.privacySettings.toastLockOff,
       );
     } catch (e) {
-      toast.error(t.privacySettings.toastToggleFailed(e instanceof Error ? e.message : String(e)));
+      toast.error(
+        t.privacySettings.toastToggleFailed(
+          e instanceof Error ? e.message : String(e),
+        ),
+      );
     } finally {
       setBusy(false);
     }
@@ -329,14 +338,17 @@ export default function PrivacySettingsPage() {
     }
     setFactoryResetPending(true);
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/system/factory-reset`, {
-        method: "POST",
-        headers: jsonAuthHeaders(),
-        body: JSON.stringify({
-          confirm: "RESET OCTOPUS",
-          clear_user_install_state: true,
-        }),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/system/factory-reset`,
+        {
+          method: "POST",
+          headers: jsonAuthHeaders(),
+          body: JSON.stringify({
+            confirm: "RESET OCTOPUS",
+            clear_user_install_state: true,
+          }),
+        },
+      );
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(text || `Factory reset failed: ${res.status}`);
@@ -349,7 +361,11 @@ export default function PrivacySettingsPage() {
       setFactoryResetConfirmText("");
       navigate("/workspace/realtime/new", { replace: true });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t.accountSettings.factoryResetFailed);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t.accountSettings.factoryResetFailed,
+      );
     } finally {
       setFactoryResetPending(false);
     }
@@ -400,7 +416,9 @@ export default function PrivacySettingsPage() {
                 : "bg-amber-500/10 text-amber-600",
             )}
           >
-            {locked ? t.privacySettings.lockedTag : t.privacySettings.unlockedTag}
+            {locked
+              ? t.privacySettings.lockedTag
+              : t.privacySettings.unlockedTag}
           </span>
           <span className="text-muted-foreground/70">
             {t.privacySettings.sourceLabel}: <code>{source}</code>
@@ -427,8 +445,11 @@ export default function PrivacySettingsPage() {
               {(() => {
                 if (!aiMode) return "正在检测设备配置…";
                 const recLabel =
-                  aiMode.modes.find((m) => m.id === aiMode.recommended)?.label ??
-                  (aiMode.recommended === "efficiency" ? "效率模式" : "隐私模式");
+                  aiMode.modes.find((m) => m.id === aiMode.recommended)
+                    ?.label ??
+                  (aiMode.recommended === "efficiency"
+                    ? "效率模式"
+                    : "隐私模式");
                 return `根据本机设备配置，推荐使用：${recLabel}`;
               })()}
             </p>
@@ -630,7 +651,8 @@ export default function PrivacySettingsPage() {
           <div className="min-w-0">
             <div className="text-sm font-medium">LLM 语义审查 (judge)</div>
             <div className="text-[11px] text-muted-foreground leading-snug">
-              每条出口消息多一次模型调用,审查诱导钓鱼 / 越权抓取等语义违规。默认关(有成本)。
+              每条出口消息多一次模型调用,审查诱导钓鱼 /
+              越权抓取等语义违规。默认关(有成本)。
               {judge && !judge.available && " 当前无模型路由,不可开启。"}
             </div>
           </div>
@@ -649,16 +671,22 @@ export default function PrivacySettingsPage() {
         </h4>
         <ul className="space-y-1.5 text-xs text-muted-foreground/90">
           <li>
-            <strong className="text-foreground">{t.privacySettings.altEnvLabel}</strong>
-            {" "}{t.privacySettings.altEnvDesc}
+            <strong className="text-foreground">
+              {t.privacySettings.altEnvLabel}
+            </strong>{" "}
+            {t.privacySettings.altEnvDesc}
           </li>
           <li>
-            <strong className="text-foreground">{t.privacySettings.altTurnLabel}</strong>
-            {" "}{t.privacySettings.altTurnDesc}
+            <strong className="text-foreground">
+              {t.privacySettings.altTurnLabel}
+            </strong>{" "}
+            {t.privacySettings.altTurnDesc}
           </li>
           <li>
-            <strong className="text-foreground">{t.privacySettings.altApiLabel}</strong>
-            {" "}{t.privacySettings.altApiDesc}
+            <strong className="text-foreground">
+              {t.privacySettings.altApiLabel}
+            </strong>{" "}
+            {t.privacySettings.altApiDesc}
           </li>
         </ul>
       </div>
@@ -690,7 +718,8 @@ export default function PrivacySettingsPage() {
             <DialogTitle>新增不可读取文件夹</DialogTitle>
             <DialogDescription>
               输入绝对路径（例如 <code>C:\\Users\\you\\secrets</code> 或{" "}
-              <code>/home/you/.ssh</code>）。Agent 将拒绝读写该目录下的任何文件。
+              <code>/home/you/.ssh</code>）。Agent
+              将拒绝读写该目录下的任何文件。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
@@ -724,7 +753,10 @@ export default function PrivacySettingsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showFactoryResetDialog} onOpenChange={setShowFactoryResetDialog}>
+      <Dialog
+        open={showFactoryResetDialog}
+        onOpenChange={setShowFactoryResetDialog}
+      >
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
@@ -748,13 +780,19 @@ export default function PrivacySettingsPage() {
             />
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setShowFactoryResetDialog(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowFactoryResetDialog(false)}
+            >
               {t.common.cancel}
             </Button>
             <Button
               variant="destructive"
               onClick={handleFactoryReset}
-              disabled={factoryResetConfirmText !== "RESET OCTOPUS" || factoryResetPending}
+              disabled={
+                factoryResetConfirmText !== "RESET OCTOPUS" ||
+                factoryResetPending
+              }
             >
               {factoryResetPending
                 ? t.accountSettings.factoryResetPending
@@ -780,7 +818,10 @@ function clearOctopusBrowserState(): void {
     for (let i = store.length - 1; i >= 0; i -= 1) {
       const key = store.key(i);
       if (!key) continue;
-      if (exactKeys.has(key) || prefixes.some((prefix) => key.startsWith(prefix))) {
+      if (
+        exactKeys.has(key) ||
+        prefixes.some((prefix) => key.startsWith(prefix))
+      ) {
         store.removeItem(key);
       }
     }

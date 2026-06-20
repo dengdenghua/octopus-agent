@@ -43,9 +43,13 @@ class _FakeRouter:
 
 
 class TestFlagResolution:
-    def test_default_is_off(self, monkeypatch):
+    def test_default_is_on(self, monkeypatch):
+        # Default flipped on: the judge uses a lightweight cached model and
+        # fails open, so it is enabled unless explicitly disabled. With no
+        # env var and no config layer (autouse fixture isolates cwd), the
+        # final fallback returns True.
         monkeypatch.delenv("OCTOPUS_ENABLE_LLM_JUDGE", raising=False)
-        assert llm_judge_enabled() is False
+        assert llm_judge_enabled() is True
 
     def test_explicit_wins_over_env(self, monkeypatch):
         monkeypatch.setenv("OCTOPUS_ENABLE_LLM_JUDGE", "1")
@@ -72,7 +76,9 @@ class TestFlagResolution:
         monkeypatch.delenv("OCTOPUS_ENABLE_LLM_JUDGE", raising=False)
         assert llm_judge_enabled(config_value=True) is True
         assert llm_judge_enabled(config_value=False) is False
-        assert llm_judge_enabled(config_value=None) is False
+        # config_value=None means "config silent" — falls through to the
+        # default-on fallback rather than disabling.
+        assert llm_judge_enabled(config_value=None) is True
 
     def test_env_overrides_config_value(self, monkeypatch):
         # The env var stays an emergency override above the config file.

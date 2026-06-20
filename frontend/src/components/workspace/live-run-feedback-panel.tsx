@@ -46,11 +46,7 @@ interface LiveRunFeedbackPanelProps {
   className?: string;
 }
 
-const META_TOOL_NAMES = new Set([
-  "planning",
-  "team_routing",
-  "todo_write",
-]);
+const META_TOOL_NAMES = new Set(["planning", "team_routing", "todo_write"]);
 
 const CONTENT_PREVIEW_KEYS = [
   "content",
@@ -63,7 +59,8 @@ const CONTENT_PREVIEW_KEYS = [
 
 function textFromValue(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
-  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  const text =
+    typeof value === "string" ? value : JSON.stringify(value, null, 2);
   const trimmed = text.trim();
   return trimmed ? trimmed : undefined;
 }
@@ -95,7 +92,10 @@ function valueAt(record: Record<string, unknown> | undefined, keys: string[]) {
 }
 
 function eventPath(event: LiveToolEvent): string | undefined {
-  return compactInline(valueAt(event.input, ["path", "file_path", "target", "cwd"]), 80);
+  return compactInline(
+    valueAt(event.input, ["path", "file_path", "target", "cwd"]),
+    80,
+  );
 }
 
 function contentPreviewFromEvent(event: LiveToolEvent): string | undefined {
@@ -119,12 +119,27 @@ function contentPreviewFromEvent(event: LiveToolEvent): string | undefined {
 
 function latestByTime(events: LiveToolEvent[]): LiveToolEvent | null {
   if (events.length === 0) return null;
-  return [...events].sort(
-    (a, b) => (b.finishedAt ?? b.startedAt) - (a.finishedAt ?? a.startedAt),
-  )[0] ?? null;
+  return (
+    [...events].sort(
+      (a, b) => (b.finishedAt ?? b.startedAt) - (a.finishedAt ?? a.startedAt),
+    )[0] ?? null
+  );
 }
 
-function describeToolEvent(event: LiveToolEvent | null, t: { liveRunFeedback: { updatingTodos: string; writingFile: string; writeComplete: string; readingFile: string; readingContext: string; runningCommand: string; calling: string } }): string | null {
+function describeToolEvent(
+  event: LiveToolEvent | null,
+  t: {
+    liveRunFeedback: {
+      updatingTodos: string;
+      writingFile: string;
+      writeComplete: string;
+      readingFile: string;
+      readingContext: string;
+      runningCommand: string;
+      calling: string;
+    };
+  },
+): string | null {
   if (!event) return null;
   const path = eventPath(event);
   const isRunning = event.status === "running";
@@ -135,7 +150,10 @@ function describeToolEvent(event: LiveToolEvent | null, t: { liveRunFeedback: { 
     return `${t.liveRunFeedback.readingFile}${path ? ` ${path}` : ` ${t.liveRunFeedback.readingContext}`}`;
   }
   if (isShellToolName(event.name)) {
-    const command = compactInline(shellCommandFromInput(event.input, event.name), 120);
+    const command = compactInline(
+      shellCommandFromInput(event.input, event.name),
+      120,
+    );
     return `${t.liveRunFeedback.runningCommand}${command ? `: ${command}` : ""}`;
   }
   const label = event.name.replace(/_/g, " ");
@@ -146,16 +164,27 @@ function outputFeedback(event: LiveToolEvent | null): string | null {
   if (!event) return null;
   if (event.observation) return compactInline(event.observation, 220) ?? null;
   if (event.output === undefined || event.output === null) return null;
-  if (typeof event.output === "string") return compactInline(event.output, 220) ?? null;
+  if (typeof event.output === "string")
+    return compactInline(event.output, 220) ?? null;
   if (typeof event.output === "object" && !Array.isArray(event.output)) {
     const record = event.output as Record<string, unknown>;
-    const value = valueAt(record, ["error", "stderr", "stdout", "result", "message", "path"]);
+    const value = valueAt(record, [
+      "error",
+      "stderr",
+      "stdout",
+      "result",
+      "message",
+      "path",
+    ]);
     return compactInline(value, 220) ?? null;
   }
   return compactInline(event.output, 220) ?? null;
 }
 
-function appendEntry(entries: FeedbackEntry[], entry: FeedbackEntry): FeedbackEntry[] {
+function appendEntry(
+  entries: FeedbackEntry[],
+  entry: FeedbackEntry,
+): FeedbackEntry[] {
   const previous = entries[entries.length - 1];
   if (previous?.kind === entry.kind && previous.text === entry.text) {
     return entries;
@@ -171,7 +200,8 @@ export function LiveRunFeedbackPanel({
   const { t } = useI18n();
   const [entries, setEntries] = useState<FeedbackEntry[]>([]);
   const [phase, setPhase] = useState<string | null>(null);
-  const [thinkingSignal, setThinkingSignal] = useState<ThinkingSignalDetail | null>(null);
+  const [thinkingSignal, setThinkingSignal] =
+    useState<ThinkingSignalDetail | null>(null);
   const lastThinkingAtRef = useRef(0);
 
   useEffect(() => {
@@ -242,17 +272,22 @@ export function LiveRunFeedbackPanel({
   );
   const focusEvent = runningEvent ?? latestDoneEvent;
   const toolSummary = describeToolEvent(focusEvent, t);
-  const fallbackFeedback = entries.length === 0 ? outputFeedback(latestDoneEvent) : null;
+  const fallbackFeedback =
+    entries.length === 0 ? outputFeedback(latestDoneEvent) : null;
   const contentEvent = useMemo(
     () =>
       latestByTime(
         liveToolEvents.filter(
-          (event) => isFileMutationToolName(event.name) && contentPreviewFromEvent(event),
+          (event) =>
+            isFileMutationToolName(event.name) &&
+            contentPreviewFromEvent(event),
         ),
       ),
     [liveToolEvents],
   );
-  const contentPreview = contentEvent ? contentPreviewFromEvent(contentEvent) : undefined;
+  const contentPreview = contentEvent
+    ? contentPreviewFromEvent(contentEvent)
+    : undefined;
   const phaseLabels: Record<string, string> = {
     understand: t.liveRunFeedback.phaseUnderstand,
     execute: t.liveRunFeedback.phaseExecute,
@@ -298,7 +333,9 @@ export function LiveRunFeedbackPanel({
             <BrainCircuitIcon className="mt-0.5 size-3.5 shrink-0 text-primary" />
             <span>
               {thinkingLabel}
-              {thinkingSignal?.iteration ? ` · ${t.liveRunFeedback.iteration(thinkingSignal.iteration)}` : ""}
+              {thinkingSignal?.iteration
+                ? ` · ${t.liveRunFeedback.iteration(thinkingSignal.iteration)}`
+                : ""}
             </span>
           </div>
         )}
@@ -340,7 +377,8 @@ export function LiveRunFeedbackPanel({
           <div className="overflow-hidden rounded-md border border-border/50 bg-background/70">
             <div className="flex items-center gap-1.5 border-b border-border/40 px-2 py-1 text-[10px] font-medium text-muted-foreground">
               <FileTextIcon className="size-3" />
-              {t.liveRunFeedback.contentPreview}{eventPath(contentEvent!) ? ` · ${eventPath(contentEvent!)}` : ""}
+              {t.liveRunFeedback.contentPreview}
+              {eventPath(contentEvent!) ? ` · ${eventPath(contentEvent!)}` : ""}
             </div>
             <pre className="max-h-44 overflow-hidden whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
               {contentPreview}

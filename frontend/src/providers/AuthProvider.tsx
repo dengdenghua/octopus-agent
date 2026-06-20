@@ -22,7 +22,12 @@ import {
 } from "@/core/auth/api";
 
 import { swallow } from "@/core/utils/log";
-import type { AuthStatus, LoginRequest, RegisterRequest, User } from "@/core/auth/types";
+import type {
+  AuthStatus,
+  LoginRequest,
+  RegisterRequest,
+  User,
+} from "@/core/auth/types";
 import { useI18n } from "@/core/i18n/hooks";
 
 const GUEST_USER_ID = "__guest__";
@@ -46,14 +51,21 @@ function userFromJwt(token: string | null): Partial<User> | null {
     const tokenPayload = token.split(".")[1];
     if (!tokenPayload) return null;
     const rawPayload = tokenPayload.replace(/-/g, "+").replace(/_/g, "/");
-    const payload = rawPayload.padEnd(Math.ceil(rawPayload.length / 4) * 4, "=");
-    const json = JSON.parse(
-      window.atob(payload),
-    ) as { sub?: string; mobile?: string; provider?: string };
+    const payload = rawPayload.padEnd(
+      Math.ceil(rawPayload.length / 4) * 4,
+      "=",
+    );
+    const json = JSON.parse(window.atob(payload)) as {
+      sub?: string;
+      mobile?: string;
+      provider?: string;
+    };
     const actorId = json.sub;
     const mobile =
       json.mobile ||
-      (actorId?.startsWith("molili:") ? actorId.slice("molili:".length) : undefined);
+      (actorId?.startsWith("molili:")
+        ? actorId.slice("molili:".length)
+        : undefined);
     if (!actorId && !mobile) return null;
     return {
       user_id: actorId || mobile,
@@ -82,13 +94,18 @@ function normalizeUserIdentity(
   const fallbackUserId = !isPlaceholderUserId(fallback?.user_id)
     ? fallback?.user_id
     : undefined;
-  const userId = incomingUserId || actorId || fallbackUserId || mobile || ANONYMOUS_USER_ID;
+  const userId =
+    incomingUserId || actorId || fallbackUserId || mobile || ANONYMOUS_USER_ID;
   const fallbackUsername =
     fallback?.username && !isPlaceholderUsername(fallback.username)
       ? fallback.username
       : undefined;
   const username = isPlaceholderUsername(incoming.username)
-    ? mobile || incoming.email || fallbackUsername || incoming.username || userId
+    ? mobile ||
+      incoming.email ||
+      fallbackUsername ||
+      incoming.username ||
+      userId
     : incoming.username;
 
   return {
@@ -98,7 +115,9 @@ function normalizeUserIdentity(
     username,
     ...(actorId ? { actor_id: actorId } : {}),
     ...(mobile ? { mobile } : {}),
-    ...(credits && Object.keys(credits).length > 0 ? { molili_credits: credits } : {}),
+    ...(credits && Object.keys(credits).length > 0
+      ? { molili_credits: credits }
+      : {}),
   };
 }
 
@@ -133,8 +152,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const initializedRef = useRef(false);
 
-  const isAuthenticated = !!user && !isPlaceholderUserId(user.user_id) && !user.is_guest;
-  const isGuest = !!user && (user.is_guest || isPlaceholderUserId(user.user_id));
+  const isAuthenticated =
+    !!user && !isPlaceholderUserId(user.user_id) && !user.is_guest;
+  const isGuest =
+    !!user && (user.is_guest || isPlaceholderUserId(user.user_id));
 
   const bootstrapGuest = useCallback(() => {
     const guestUser: User = {
@@ -167,7 +188,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token && token !== GUEST_USER_ID) {
         try {
           const currentUser = await getMe();
-          setUser(normalizeUserIdentity(currentUser, storedUser || tokenUser, undefined, undefined));
+          setUser(
+            normalizeUserIdentity(
+              currentUser,
+              storedUser || tokenUser,
+              undefined,
+              undefined,
+            ),
+          );
         } catch (err) {
           swallow(err);
           const msg = err instanceof Error ? err.message : "";
@@ -177,7 +205,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       }
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, [bootstrapGuest]);
 
   useEffect(() => {
@@ -199,7 +229,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { moliliSmsVerify } = await import("@/core/auth/api");
     const response = await moliliSmsVerify(phone, code);
     if (response.user) {
-      const normalized = normalizeUserIdentity(response.user, null, phone, response.credits);
+      const normalized = normalizeUserIdentity(
+        response.user,
+        null,
+        phone,
+        response.credits,
+      );
       if (response.access_token) _writeToken(response.access_token, normalized);
       setUser(normalized);
     }
@@ -232,7 +267,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (response.user) {
       setUser((previous) => {
         const normalized = normalizeUserIdentity(response.user!, previous);
-        if (response.access_token) _writeToken(response.access_token, normalized);
+        if (response.access_token)
+          _writeToken(response.access_token, normalized);
         return normalized;
       });
     }
@@ -252,7 +288,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       logout,
       refresh,
     }),
-    [isLoading, authStatus, user, isAuthenticated, isGuest, login, smsLogin, guestLogin, register, logout, refresh],
+    [
+      isLoading,
+      authStatus,
+      user,
+      isAuthenticated,
+      isGuest,
+      login,
+      smsLogin,
+      guestLogin,
+      register,
+      logout,
+      refresh,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

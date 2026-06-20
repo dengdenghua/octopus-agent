@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import struct
 import time
@@ -398,7 +399,7 @@ class ScreenRelay:
                     "type": "device_disconnected",
                     "tentacle_id": tentacle_id,
                 }))
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort; fail-open
                 pass
 
         logger.info(
@@ -454,10 +455,8 @@ class ScreenRelay:
                     # 转发给订阅者
                     subscribers = self._subscribers.get(tentacle_id, [])
                     for ws in subscribers:
-                        try:
+                        with contextlib.suppress(Exception):  # best-effort; fail-open
                             await ws.send(frame)
-                        except Exception:
-                            pass
 
                     frame_idx += 1
                     await asyncio.sleep(frame_interval)

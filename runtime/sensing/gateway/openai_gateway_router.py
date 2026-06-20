@@ -129,7 +129,7 @@ def create_openai_router(
                 getattr(getattr(request, "client", None), "host", None)
                 or "anon"
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort; fail-open
             host = "anon"
         return f"anon:{host}"
 
@@ -191,7 +191,7 @@ def create_openai_router(
                     return False
                 return True
             return owner == actor
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort; fail-open
             return False
 
     def _list_openai_models() -> dict[str, Any]:

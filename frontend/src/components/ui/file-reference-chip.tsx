@@ -28,7 +28,9 @@ export interface FileReferenceChipProps {
 }
 
 function inferIcon(path: string): LucideIcon {
-  if (/\.(ts|tsx|js|jsx|py|go|rs|java|cpp|c|h|rb|php|lua|swift|kt)$/i.test(path)) {
+  if (
+    /\.(ts|tsx|js|jsx|py|go|rs|java|cpp|c|h|rb|php|lua|swift|kt)$/i.test(path)
+  ) {
     return FileCode2Icon;
   }
   return FileTextIcon;
@@ -63,7 +65,9 @@ export function FileReferenceChip({
   const content = (
     <>
       {iconNode}
-      <span className="font-mono text-[11.5px] leading-none">{displayName}</span>
+      <span className="font-mono text-[11.5px] leading-none">
+        {displayName}
+      </span>
       {lines && (
         <span className="text-muted-foreground/80 text-[10.5px] leading-none">
           ({lines.includes("-") ? `L${lines}` : `line ${lines}`})

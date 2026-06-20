@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import {
@@ -61,4 +60,3 @@ const ShimmerComponent = ({
 };
 
 export const Shimmer = memo(ShimmerComponent);
-

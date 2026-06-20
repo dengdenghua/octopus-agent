@@ -176,9 +176,8 @@ class TentaclePool:
         """
         async with self._lock:
             existing = self._locks.get(tentacle_id)
-            if existing is not None and not existing.is_expired:
-                if existing.owner != owner:
-                    return False
+            if existing is not None and not existing.is_expired and existing.owner != owner:
+                return False
             self._locks[tentacle_id] = DeviceLock(tentacle_id, owner, task_id, timeout_s)
             return True
 

@@ -8,15 +8,15 @@ prompt mutations that look good on average but fail known failure modes or
 damage previously successful flows.
 """
 
-import re
-from dataclasses import asdict, dataclass, field
-from typing import Any
+import re  # noqa: E402
+from dataclasses import asdict, dataclass, field  # noqa: E402
+from typing import Any  # noqa: E402
 
-from runtime.safety.recovery.evolution_dataset import (
+from runtime.safety.recovery.evolution_dataset import (  # noqa: E402
     EvolutionDataset,
     EvolutionExample,
 )
-from runtime.safety.recovery.native_evolution_eval import (
+from runtime.safety.recovery.native_evolution_eval import (  # noqa: E402
     NativeEvolutionScore,
     score_candidate_native,
 )

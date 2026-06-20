@@ -194,10 +194,14 @@ function SummaryDiffEntryList({
 type ObservedReferenceTabId = "files" | "plans" | "web" | "memory" | "other";
 
 interface ObservedReferenceItem {
+  faviconUrl?: string;
+  host?: string;
   id: string;
+  thumbnailUrl?: string;
   title: string;
   subtitle?: string;
   tag?: string;
+  url?: string;
 }
 
 interface ObservedReferenceTab {
@@ -369,35 +373,49 @@ function webReferenceItems(block: WorkBlock): ObservedReferenceItem[] {
   if (pages.length === 0) {
     const url = firstInputString(block.event.input, ["url"]);
     if (url) {
+      const host = hostLabel(url);
       return [
         {
+          faviconUrl: faviconUrlForUrl(url),
+          host,
           id: `${block.id}:url:${url}`,
           title: compactReference(pageTitleFromUrl(url), 120),
           subtitle: compactReference(url, 140),
-          tag: hostLabel(url),
+          tag: host,
+          url,
         },
       ];
     }
     return [];
   }
 
-  return pages.slice(0, 8).map((page, index) => ({
-    id: `${block.id}:web:${index}:${page.url || page.title}`,
-    title: compactReference(page.title || pageTitleFromUrl(page.url), 120),
-    subtitle: page.url
-      ? compactReference(page.url, 140)
-      : page.snippet
-        ? compactReference(page.snippet, 140)
-        : undefined,
-    tag: page.url ? hostLabel(page.url) : undefined,
-  }));
+  return pages.slice(0, 8).map((page, index) => {
+    const host = page.url ? hostLabel(page.url) : undefined;
+    return {
+      faviconUrl: page.url ? faviconUrlForUrl(page.url) : undefined,
+      host,
+      id: `${block.id}:web:${index}:${page.url || page.title}`,
+      thumbnailUrl: page.thumbnailUrl,
+      title: compactReference(page.title || pageTitleFromUrl(page.url), 120),
+      subtitle: page.url
+        ? compactReference(page.url, 140)
+        : page.snippet
+          ? compactReference(page.snippet, 140)
+          : undefined,
+      tag: host,
+      url: page.url || undefined,
+    };
+  });
 }
 
-function webPagesFromValue(value: unknown): Array<{
+type WebReferencePage = {
   title: string;
   url: string;
   snippet?: string;
-}> {
+  thumbnailUrl?: string;
+};
+
+function webPagesFromValue(value: unknown): WebReferencePage[] {
   if (typeof value === "string") {
     return dedupeWebPages([
       ...parsedJsonValuesFromText(value).flatMap(webPagesFromValue),
@@ -417,12 +435,24 @@ function webPagesFromValue(value: unknown): Array<{
       "summary",
       "content",
     ]);
+    const thumbnailUrl = firstInputString(record, [
+      "thumbnail",
+      "thumbnail_url",
+      "thumbnailUrl",
+      "image",
+      "image_url",
+      "imageUrl",
+      "og_image",
+      "ogImage",
+      "previewUrl",
+    ]);
     if (!url && !title) return [];
     return [
       {
         title: cleanWebText(title),
         url: cleanWebText(url),
         snippet: snippet ? cleanWebText(snippet) : undefined,
+        thumbnailUrl: thumbnailUrl ? cleanWebText(thumbnailUrl) : undefined,
       },
     ];
   });
@@ -459,12 +489,8 @@ function parsedJsonValuesFromText(text: string): unknown[] {
   return parsed;
 }
 
-function webPagesFromText(text: string): Array<{
-  title: string;
-  url: string;
-  snippet?: string;
-}> {
-  const pages: Array<{ title: string; url: string; snippet?: string }> = [];
+function webPagesFromText(text: string): WebReferencePage[] {
+  const pages: WebReferencePage[] = [];
   const patterns = [
     /"title"\s*:\s*"([^"]+)"[\s\S]{0,800}?"url"\s*:\s*"([^"\r\n}]*)/g,
     /'title'\s*:\s*'([^']+)'[\s\S]{0,800}?'url'\s*:\s*'([^'\r\n}]*)/g,
@@ -481,11 +507,9 @@ function webPagesFromText(text: string): Array<{
   return pages;
 }
 
-function dedupeWebPages(
-  pages: Array<{ title: string; url: string; snippet?: string }>,
-): Array<{ title: string; url: string; snippet?: string }> {
+function dedupeWebPages(pages: WebReferencePage[]): WebReferencePage[] {
   const seen = new Set<string>();
-  const result: Array<{ title: string; url: string; snippet?: string }> = [];
+  const result: WebReferencePage[] = [];
   for (const page of pages) {
     const key = `${page.url || page.title}`.toLowerCase();
     if (!key || seen.has(key)) continue;
@@ -621,6 +645,18 @@ function hostLabel(url: string): string | undefined {
   }
 }
 
+function faviconUrlForUrl(url: string): string | undefined {
+  try {
+    const hostname = new URL(url).hostname;
+    if (!hostname) return undefined;
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+      hostname,
+    )}&sz=64`;
+  } catch {
+    return undefined;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -640,6 +676,52 @@ function uniqueStrings(values: string[]): string[] {
 function compactReference(value: string, max: number): string {
   const clean = value.replace(/\s+/g, " ").trim();
   return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
+}
+
+function ReferenceIcon({
+  fallbackClassName,
+  Icon,
+  item,
+  tabId,
+}: {
+  fallbackClassName: string;
+  Icon: LucideIcon;
+  item: ObservedReferenceItem;
+  tabId: ObservedReferenceTabId;
+}) {
+  const [failed, setFailed] = useState(false);
+  const imageUrl = item.thumbnailUrl || item.faviconUrl;
+  const hostInitial = item.host?.charAt(0).toUpperCase();
+  const canShowImage = tabId === "web" && imageUrl && !failed;
+
+  return (
+    <span
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/45 bg-muted/45",
+        tabId === "web" && "bg-background shadow-sm",
+      )}
+    >
+      {canShowImage ? (
+        <img
+          src={imageUrl}
+          alt={item.host ? `${item.host} icon` : ""}
+          className={cn(
+            "size-full object-cover",
+            item.thumbnailUrl ? "" : "p-1.5",
+          )}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+        />
+      ) : hostInitial ? (
+        <span className="text-[10px] font-semibold text-muted-foreground">
+          {hostInitial}
+        </span>
+      ) : (
+        <Icon className={cn("size-3.5", fallbackClassName)} />
+      )}
+    </span>
+  );
 }
 
 // ============================================================================
@@ -1120,14 +1202,12 @@ export function AgentSummaryPage({
                       key={ref.id}
                       className="flex items-center gap-2 px-3 py-2"
                     >
-                      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted/55">
-                        <ActiveRefIcon
-                          className={cn(
-                            "size-3.5",
-                            activeRefMeta.iconClassName,
-                          )}
-                        />
-                      </span>
+                      <ReferenceIcon
+                        fallbackClassName={activeRefMeta.iconClassName}
+                        Icon={ActiveRefIcon}
+                        item={ref}
+                        tabId={activeRefTab}
+                      />
                       <div className="min-w-0 flex-1">
                         <span className="block truncate text-[11px] text-foreground">
                           {ref.title}

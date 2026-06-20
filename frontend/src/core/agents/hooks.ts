@@ -9,7 +9,11 @@ import {
   listAgents,
   updateAgent,
 } from "./api";
-import { type Agent, type CreateAgentRequest, type UpdateAgentRequest } from "./types";
+import {
+  type Agent,
+  type CreateAgentRequest,
+  type UpdateAgentRequest,
+} from "./types";
 
 export function useAgents() {
   const { data, isLoading, error } = useQuery({
@@ -77,14 +81,17 @@ export function useGenerateAgentVisuals() {
       name,
       provider,
       stylePrompt,
+      referenceImages,
     }: {
       name: string;
       provider?: string;
       stylePrompt?: string;
+      referenceImages?: string[];
     }) =>
       generateAgentVisuals(name, {
         provider,
         style_prompt: stylePrompt,
+        reference_images: referenceImages,
       }),
     onSuccess: (_data, { name }) => {
       void queryClient.invalidateQueries({ queryKey: ["agents"] });

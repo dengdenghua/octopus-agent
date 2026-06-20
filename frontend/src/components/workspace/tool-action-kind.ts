@@ -142,12 +142,19 @@ export function inferToolActionKindFromText(text: string): ToolActionKind {
   if (/列出|list/i.test(trimmed)) return "list";
   if (/执行|run|bash|shell/i.test(trimmed)) return "run";
   if (/调用|call|invoke/i.test(trimmed)) return "call";
-  if (/\u89c4\u5212|\u4e0b\u4e00\u6b65|\bplanning\b|\bplan next\b|\bmake a plan\b/i.test(trimmed)) return "plan";
+  if (
+    /\u89c4\u5212|\u4e0b\u4e00\u6b65|\bplanning\b|\bplan next\b|\bmake a plan\b/i.test(
+      trimmed,
+    )
+  )
+    return "plan";
   return "other";
 }
 
 export function isRunningStatus(status: ToolActionStatus | boolean): boolean {
-  return status === true || status === "running" || status === "waiting_approval";
+  return (
+    status === true || status === "running" || status === "waiting_approval"
+  );
 }
 
 export function actionStateLabel(

@@ -36,7 +36,7 @@ export function buildMockSession(): SwarmSession {
       skills: ["company-research", "competitive-landscape"],
       stats: { taskCount: 83, rating: 4.4 },
       personality: ["务实", "快嘴"],
-      task: '请研究 Harness Inc. 这家公司的商业信息',
+      task: "请研究 Harness Inc. 这家公司的商业信息",
       details: [
         "公司背景：成立时间、创始人、总部位置",
         "融资历史：各轮融资规模、估值、投资方",
@@ -83,10 +83,7 @@ export function buildMockSession(): SwarmSession {
       stats: { taskCount: 41, rating: 4.2 },
       personality: ["接地气"],
       task: '请研究 "harness" 在各行业的实际应用情况',
-      details: [
-        "金融、互联网、制造业典型案例",
-        "落地 ROI 与踩坑记录",
-      ],
+      details: ["金融、互联网、制造业典型案例", "落地 ROI 与踩坑记录"],
       status: "done",
       progress: 1,
       tokenUsed: 14100,
@@ -195,7 +192,8 @@ export function buildMockSession(): SwarmSession {
         phaseIndex: 0,
         nodeIds: ["technical"],
         status: "completed",
-        summary: "Technical research report completed with CI/CD architecture notes.",
+        summary:
+          "Technical research report completed with CI/CD architecture notes.",
         artifacts: ["/mnt/okcomputer/output/harness_technical_report.md"],
         costUsd: 0.03,
       },
@@ -215,7 +213,8 @@ export function buildMockSession(): SwarmSession {
         phaseIndex: 0,
         nodeIds: ["academic"],
         status: "running",
-        summary: "Academic sources are being screened for scheduling relevance.",
+        summary:
+          "Academic sources are being screened for scheduling relevance.",
         artifacts: [],
         costUsd: 0.01,
       },
@@ -226,7 +225,9 @@ export function buildMockSession(): SwarmSession {
         nodeIds: ["industry"],
         status: "completed",
         summary: "Industry application examples were delivered.",
-        artifacts: ["/mnt/okcomputer/output/harness_industry_application_report.md"],
+        artifacts: [
+          "/mnt/okcomputer/output/harness_industry_application_report.md",
+        ],
         costUsd: 0.02,
       },
     ],

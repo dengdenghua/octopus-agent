@@ -197,6 +197,13 @@ class ToolExecutor:
                 span.set_attribute("octopus.skill.disabled", True)
                 return step
 
+            # Auto-fill predicted_cost from adaptive immunity baseline when
+            # the caller doesn't supply one. This activates the pre-execute
+            # anomaly detection path in TrustEngine.check() — without it,
+            # compute_risk() sees zero predictions and stays in cold-start.
+            if predicted_cost is None and self.immunity.adaptive is not None:
+                predicted_cost = self.immunity.adaptive.predict(str(sucker_id))
+
             call = ToolCall(
                 caller=caller,
                 sucker_id=sucker_id,
@@ -474,25 +481,16 @@ class ToolExecutor:
                         # still applies on that path.
                         if _sess is not None:
                             from runtime.platform.process.scope import (
-                                resolve_write_scope,
+                                resolve_execution_scope,
                             )
-                            scope = resolve_write_scope(_sess)
-                            read_primary = scope.primary
-                            if scope.mode == "code":
-                                _wp = (_sess.metadata or {}).get("workspace_path")
-                                if isinstance(_wp, str) and _wp.strip():
-                                    try:
-                                        _wp_path = Path(_wp).expanduser()
-                                        if _wp_path.is_absolute():
-                                            read_primary = _wp_path.resolve()
-                                    except (OSError, ValueError):
-                                        read_primary = scope.primary
+                            scope = resolve_execution_scope(_sess)
+                            read_primary = scope.primary_read
                             _mutates_files = bool(
                                 set(skill.affinity or [])
                                 & {"write", "edit", "exec", "dangerous"}
                             )
                             arg_primary = (
-                                scope.primary if _mutates_files else read_primary
+                                scope.primary_write if _mutates_files else read_primary
                             )
                             # Read-side root injection · only fires
                             # for skills that accept a directory-base
@@ -543,7 +541,7 @@ class ToolExecutor:
                                 # Plan mode · empty roots · EVERY write
                                 # call rejected. Caller must transition
                                 # out via ``exit_plan_mode`` skill.
-                                if scope.primary is None:
+                                if scope.primary_write is None:
                                     raise PermissionError(
                                         f"write skill {sucker_id!r} blocked: "
                                         f"thread is in '{scope.mode}' mode "
@@ -554,7 +552,7 @@ class ToolExecutor:
                                     )
                                 supplied = args.get("sandbox_dir")
                                 default_sandbox = (
-                                    scope.primary if _mutates_files else read_primary
+                                    scope.primary_write if _mutates_files else read_primary
                                 )
                                 if not supplied:
                                     # Lazily create the primary root so
@@ -562,19 +560,26 @@ class ToolExecutor:
                                     # without having to mkdir itself.
                                     if _mutates_files:
                                         with contextlib.suppress(OSError):
-                                            scope.primary.mkdir(
+                                            scope.primary_write.mkdir(
                                                 parents=True, exist_ok=True,
                                             )
                                     args = {
                                         **args,
                                         "sandbox_dir": str(default_sandbox),
                                     }
-                                elif not scope.allows(supplied):
+                                elif not (
+                                    scope.allows_write(supplied)
+                                    if _mutates_files
+                                    else scope.allows_read(supplied)
+                                ):
                                     raise PermissionError(
                                         f"sandbox_dir {supplied!r} escapes "
                                         f"write scope (mode={scope.mode}, "
                                         f"requested_mode={scope.requested_mode}, "
-                                        f"roots={[str(r) for r in scope.roots]}, "
+                                        f"writable_roots="
+                                        f"{[str(r) for r in scope.writable_roots]}, "
+                                        f"readable_roots="
+                                        f"{[str(r) for r in scope.readable_roots]}, "
                                         f"workspace_path="
                                         f"{(_sess.metadata or {}).get('workspace_path', 'NOT SET')}"
                                         "). If workspace_path is NOT SET, "
@@ -804,23 +809,29 @@ class ToolExecutor:
             except (TypeError, ValueError, RuntimeError):  # noqa: BLE001
                 pass
 
-            # 8b. Post-write diagnostics · auto-trigger ruff/eslint on
-            # the affected file when the call was a successful write/edit
-            # tool. Output is appended to ``result.output`` (frozen model
-            # · re-built via ``model_copy``) so the model sees the lint
-            # feedback immediately and can fix or proceed. Best-effort ·
-            # any failure is swallowed by ``post_write_diagnostics``
-            # itself, which never raises into the executor.
+            # 8b. Post-write diagnostics · auto-trigger ruff/eslint and
+            # attach a targeted regression matrix after successful writes.
+            # Output is appended to ``result.output`` (frozen model ·
+            # re-built via ``model_copy``) so the model sees lint feedback
+            # and knows which verification commands fit the changed file.
+            # Best-effort · hook helpers never raise into the executor.
             if status == "success" and str(sucker_id) in _READ_BEFORE_WRITE_TOOLS | {
                 "append_text_file",
             }:
                 try:
                     from runtime.safety.hooks.tool_edge_hooks import (
                         post_write_diagnostics,
+                        post_write_regression_matrix,
                     )
                     workspace_path = _resolve_workspace_for_diagnostics(args)
                     if workspace_path is not None:
                         diag = post_write_diagnostics(
+                            str(sucker_id),
+                            args,
+                            output if isinstance(output, dict) else {"path": _extract_path(args, output)},
+                            workspace_path=workspace_path,
+                        )
+                        matrix = post_write_regression_matrix(
                             str(sucker_id),
                             args,
                             output if isinstance(output, dict) else {"path": _extract_path(args, output)},
@@ -838,6 +849,20 @@ class ToolExecutor:
                                     "output": new_output_text,
                                     "stderr_tags": list(result.stderr_tags)
                                     + ["post_diagnostics"],
+                                }
+                            )
+                        if matrix:
+                            new_output_text = (
+                                (result.output or "")
+                                + ("\n\n" if result.output else "")
+                                + "[regression matrix]\n"
+                                + matrix
+                            )
+                            result = result.model_copy(
+                                update={
+                                    "output": new_output_text,
+                                    "stderr_tags": list(result.stderr_tags)
+                                    + ["regression_matrix"],
                                 }
                             )
                 except (TypeError, ValueError, RuntimeError):  # noqa: BLE001

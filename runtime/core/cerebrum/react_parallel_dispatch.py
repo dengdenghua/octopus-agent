@@ -21,6 +21,10 @@ from runtime.core.cerebrum.react_execution import (
     _tool_event_extras_from_beak_step,
 )
 from runtime.core.cerebrum.react_parsing import _parse_action, _summarize_observation
+from runtime.execution.tool_engine import (
+    normalize_tool_lifecycle_event,
+    tool_lifecycle_event_to_react_event,
+)
 from runtime.platform.models import ParsedIntent
 from runtime.safety.validation.prompt_injection import (
     is_untrusted_tool,
@@ -132,14 +136,19 @@ def _dispatch_parallel_actions(
     for idx in range(len(actions)):
         name = resolved_names[idx] or "unknown"
         _input_preview = parsed_pairs[idx][1] if parsed_pairs[idx] else None
-        yield {
-            "type": "tool_start",
-            "tool_name": name,
-            "tool_call_id": call_ids[idx],
-            "iteration": iteration,
-            "input_preview": _input_preview,
-            "parallel_batch_size": len(actions),
-        }
+        yield tool_lifecycle_event_to_react_event(
+            normalize_tool_lifecycle_event(
+                "tool_start",
+                {
+                    "tool_name": name,
+                    "tool_call_id": call_ids[idx],
+                    "iteration": iteration,
+                    "input_preview": _input_preview,
+                    "parallel_batch_size": len(actions),
+                },
+                origin="react_compat",
+            )
+        )
 
     serial = has_write_tool or has_unregistered or has_risky_or_untrusted
 
@@ -246,19 +255,26 @@ def _dispatch_parallel_actions(
                         _scan.severity,
                         ",".join(_scan.labels),
                     )
-        yield {
-            "type": "tool_end",
-            "tool_name": name,
-            "tool_call_id": call_ids[idx],
-            "iteration": iteration,
-            "status": "success" if _ok else "error",
-            "output_preview": (
-                _summarize_observation(obs) if isinstance(obs, str) and obs else obs
-            ),
-            "duration_ms": _duration_ms,
-            "parallel_batch_size": n,
-            **_tool_event_extras_from_beak_step(bk, name),
-        }
+        yield tool_lifecycle_event_to_react_event(
+            normalize_tool_lifecycle_event(
+                "tool_end",
+                {
+                    "tool_name": name,
+                    "tool_call_id": call_ids[idx],
+                    "iteration": iteration,
+                    "status": "success" if _ok else "error",
+                    "output_preview": (
+                        _summarize_observation(obs)
+                        if isinstance(obs, str) and obs
+                        else obs
+                    ),
+                    "duration_ms": _duration_ms,
+                    "parallel_batch_size": n,
+                    **_tool_event_extras_from_beak_step(bk, name),
+                },
+                origin="react_compat",
+            )
+        )
         results.append(
             {
                 "tool_name": name,

@@ -70,9 +70,9 @@ async function _request<T>(
     headers: { ...authHeaders(), ...(init?.headers || {}) },
   });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as
-      | { detail?: string }
-      | null;
+    const body = (await res.json().catch(() => null)) as {
+      detail?: string;
+    } | null;
     throw new MoliliApiError(
       res.status,
       body?.detail ?? `${init?.method ?? "GET"} ${path} → ${res.status}`,

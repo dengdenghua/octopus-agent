@@ -27,7 +27,13 @@ export interface PcScreenStreamState {
 }
 
 export interface RemoteInputEvent {
-  action: "tap" | "double_tap" | "long_press" | "swipe" | "type_text" | "key_press";
+  action:
+    | "tap"
+    | "double_tap"
+    | "long_press"
+    | "swipe"
+    | "type_text"
+    | "key_press";
   x?: number;
   y?: number;
   x2?: number;
@@ -72,7 +78,9 @@ function parseFrameHeader(buf: ArrayBuffer): {
 
 export function usePcScreenStream(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
-): PcScreenStreamState & { sendInput: (event: RemoteInputEvent) => Promise<void> } {
+): PcScreenStreamState & {
+  sendInput: (event: RemoteInputEvent) => Promise<void>;
+} {
   const [isConnected, setIsConnected] = useState(false);
   const [frameCount, setFrameCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +111,10 @@ export function usePcScreenStream(
         if (canvas) {
           const ctx = canvas.getContext("2d");
           if (ctx) {
-            if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+            if (
+              canvas.width !== img.naturalWidth ||
+              canvas.height !== img.naturalHeight
+            ) {
               canvas.width = img.naturalWidth;
               canvas.height = img.naturalHeight;
             }

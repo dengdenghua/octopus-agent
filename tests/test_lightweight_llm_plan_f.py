@@ -73,7 +73,6 @@ class TestLightweightLlmClient:
             "usage": {"prompt_tokens": 100, "completion_tokens": 30, "total_tokens": 130},
             "model": "deepseek-chat",
         }])
-        skills = [ToolCall]   # placeholder
         # 实际用 SkillSpec
         from runtime.tentacle.llm import SkillSpec
         resp = client.chat(

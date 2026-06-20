@@ -4,7 +4,9 @@ import { shareSlug } from "./download";
 
 describe("shareSlug", () => {
   it("lowercases and dash-joins ascii words", () => {
-    expect(shareSlug("Refactor the Auth Module")).toBe("refactor-the-auth-module");
+    expect(shareSlug("Refactor the Auth Module")).toBe(
+      "refactor-the-auth-module",
+    );
   });
 
   it("keeps CJK characters", () => {

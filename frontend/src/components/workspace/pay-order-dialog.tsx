@@ -163,7 +163,9 @@ export function PayOrderDialog({
 
             <dl className="mt-4 space-y-3 text-sm">
               <div className="flex items-center justify-between">
-                <dt className="text-muted-foreground">{t.payOrder.planName}:</dt>
+                <dt className="text-muted-foreground">
+                  {t.payOrder.planName}:
+                </dt>
                 <dd className="font-medium">{goodsName || "—"}</dd>
               </div>
               <div className="flex items-center justify-between">

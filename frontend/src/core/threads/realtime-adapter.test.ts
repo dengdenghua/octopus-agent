@@ -38,7 +38,10 @@ function makeConv(turns: Turn[]): Conversation {
   };
 }
 
-function makeTurn(items: Turn["items"], status: Turn["status"] = "completed"): Turn {
+function makeTurn(
+  items: Turn["items"],
+  status: Turn["status"] = "completed",
+): Turn {
   return {
     id: "t1",
     threadId: "th-test",
@@ -215,7 +218,11 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       ]),
     );
     expect(state.messages).toHaveLength(2);
-    const ai = state.messages[1] as { type: string; content: string; additional_kwargs?: Record<string, unknown> };
+    const ai = state.messages[1] as {
+      type: string;
+      content: string;
+      additional_kwargs?: Record<string, unknown>;
+    };
     expect(ai.type).toBe("ai");
     expect(ai.content).toBe("answer");
     expect(ai.additional_kwargs?.reasoning_content).toBe("step 1\nstep 2");
@@ -232,7 +239,9 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
         ]),
       ]),
     );
-    const ai = state.messages[1] as { additional_kwargs?: Record<string, unknown> };
+    const ai = state.messages[1] as {
+      additional_kwargs?: Record<string, unknown>;
+    };
     expect(ai.additional_kwargs?.reasoning_content).toBe("first\n\nsecond");
   });
 
@@ -244,7 +253,9 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     const state = conversationToAgentThreadState(
       makeConv([makeTurn([userMsg("q"), r, agentMsg("done")])]),
     );
-    const ai = state.messages[1] as { additional_kwargs?: Record<string, unknown> };
+    const ai = state.messages[1] as {
+      additional_kwargs?: Record<string, unknown>;
+    };
     expect(ai.additional_kwargs?.reasoning_content).toBe("bullet 1\nbullet 2");
   });
 
@@ -259,7 +270,10 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
       makeConv([
         makeTurn([
           userMsg("做一个harness的调研"),
-          agentMsg(`Thought: 需要先澄清品类。\n\nFinal Answer:\n\n${answer}`, "a1"),
+          agentMsg(
+            `Thought: 需要先澄清品类。\n\nFinal Answer:\n\n${answer}`,
+            "a1",
+          ),
           reasoning("系统要求先创建 todo，所以补一个任务列表。", "r2"),
           agentMsg(`Final Answer:\n\n${answer}`, "a2"),
         ]),
@@ -307,7 +321,10 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
         makeTurn([
           userMsg("research a niche market"),
           reasoning("collect initial evidence", "r1"),
-          agentMsg("# Report\n\nOpportunity, competitors, risks, and next steps.", "a1"),
+          agentMsg(
+            "# Report\n\nOpportunity, competitors, risks, and next steps.",
+            "a1",
+          ),
           reasoning(
             "The todo-protocol guard keeps blocking my final answer. Let me check what happened.",
             "r2",
@@ -338,10 +355,16 @@ describe("conversationToAgentThreadState · plan", () => {
   it("attaches plan to the next agentMessage as thinking_plan", () => {
     const state = conversationToAgentThreadState(
       makeConv([
-        makeTurn([userMsg("q"), planItem("1. do X\n2. do Y"), agentMsg("doing")]),
+        makeTurn([
+          userMsg("q"),
+          planItem("1. do X\n2. do Y"),
+          agentMsg("doing"),
+        ]),
       ]),
     );
-    const ai = state.messages[1] as { additional_kwargs?: Record<string, unknown> };
+    const ai = state.messages[1] as {
+      additional_kwargs?: Record<string, unknown>;
+    };
     expect(ai.additional_kwargs?.thinking_plan).toBe("1. do X\n2. do Y");
   });
 });
@@ -357,7 +380,9 @@ describe("conversationToAgentThreadState · tool calls", () => {
         ]),
       ]),
     );
-    const ai = state.messages[1] as { tool_calls?: Array<{ name: string; args: Record<string, unknown> }> };
+    const ai = state.messages[1] as {
+      tool_calls?: Array<{ name: string; args: Record<string, unknown> }>;
+    };
     expect(ai.tool_calls).toHaveLength(1);
     expect(ai.tool_calls?.[0]?.name).toBe("list_cwd");
     expect(ai.tool_calls?.[0]?.args).toMatchObject({
@@ -389,7 +414,9 @@ describe("conversationToAgentThreadState · tool calls", () => {
         ]),
       ]),
     );
-    const ai = state.messages[1] as { tool_calls?: Array<{ id?: string; name: string }> };
+    const ai = state.messages[1] as {
+      tool_calls?: Array<{ id?: string; name: string }>;
+    };
     expect(ai.tool_calls?.map((tc) => tc.id)).toEqual(["c1", "m1", "c2"]);
   });
 });
@@ -435,7 +462,9 @@ describe("conversationToAgentThreadState · first-class control items", () => {
     expect(state.artifacts).toContain("reports/out.pdf");
     const ai = state.messages.find((message) => message.type === "ai");
     expect(ai?.tool_calls?.map((tool) => tool.name)).toContain("verification");
-    const verifyCall = ai?.tool_calls?.find((tool) => tool.name === "verification");
+    const verifyCall = ai?.tool_calls?.find(
+      (tool) => tool.name === "verification",
+    );
     expect(verifyCall?.args).toMatchObject({
       command: "pnpm test",
       exit_code: 0,
@@ -495,9 +524,14 @@ describe("conversationToAgentThreadState · error", () => {
       makeConv([makeTurn([userMsg("q"), errorItem("LLM 500")], "failed")]),
     );
     expect(state.messages).toHaveLength(2);
-    const ai = state.messages[1] as { type: string; additional_kwargs?: Record<string, unknown> };
+    const ai = state.messages[1] as {
+      type: string;
+      additional_kwargs?: Record<string, unknown>;
+    };
     expect(ai.type).toBe("ai");
-    const err = ai.additional_kwargs?.error as Record<string, unknown> | undefined;
+    const err = ai.additional_kwargs?.error as
+      | Record<string, unknown>
+      | undefined;
     expect(err?.message).toBe("LLM 500");
     expect(err?.will_retry).toBe(false);
   });
@@ -548,9 +582,13 @@ describe("conversationToAgentThreadState · interrupted turn", () => {
     // Two AI messages: the polished agent response, plus a synthetic
     // flush carrying the trailing tool_call.
     expect(aiMessages.length).toBeGreaterThanOrEqual(2);
-    expect(aiMessages.some((ai) => ai.content.includes("partial answer"))).toBe(true);
+    expect(aiMessages.some((ai) => ai.content.includes("partial answer"))).toBe(
+      true,
+    );
     expect(
-      aiMessages.some((ai) => Array.isArray(ai.tool_calls) && ai.tool_calls.length > 0),
+      aiMessages.some(
+        (ai) => Array.isArray(ai.tool_calls) && ai.tool_calls.length > 0,
+      ),
     ).toBe(true);
   });
 
@@ -589,12 +627,17 @@ describe("conversationToAgentThreadState · interrupted turn", () => {
     };
     const state = conversationToAgentThreadState(
       makeConv([
-        makeTurn([userMsg("q"), reasoning("about to run"), pendingCmd], "inProgress"),
+        makeTurn(
+          [userMsg("q"), reasoning("about to run"), pendingCmd],
+          "inProgress",
+        ),
       ]),
     );
-    const ai = state.messages.find((m) => m.type === "ai") as {
-      tool_calls?: Array<{ name?: string; args?: unknown }>;
-    } | undefined;
+    const ai = state.messages.find((m) => m.type === "ai") as
+      | {
+          tool_calls?: Array<{ name?: string; args?: unknown }>;
+        }
+      | undefined;
     expect(ai).toBeDefined();
     expect(ai!.tool_calls).toBeDefined();
     expect(ai!.tool_calls!.length).toBeGreaterThan(0);
@@ -627,9 +670,7 @@ describe("conversationToAgentThreadState · base override", () => {
 
   it("merges base.artifacts before turn-extracted ones", () => {
     const state = conversationToAgentThreadState(
-      makeConv([
-        makeTurn([fileChange(["new.ts"])]),
-      ]),
+      makeConv([makeTurn([fileChange(["new.ts"])])]),
       { artifacts: ["pre-existing.ts"] },
     );
     expect(state.artifacts).toEqual(["pre-existing.ts", "new.ts"]);
@@ -784,7 +825,7 @@ describe("splitReactTrace", () => {
   it("strips Thought/Action and surfaces Final Answer", () => {
     const trace = [
       "Thought: I need to look up the answer.",
-      "Action: web_search({\"q\":\"foo\"})",
+      'Action: web_search({"q":"foo"})',
       "Observation: results...",
       "Thought: Now I have enough.",
       "Final Answer: 42 is the answer.",
@@ -819,7 +860,8 @@ describe("splitReactTrace", () => {
   });
 
   it("preserves markdown inside Final Answer", () => {
-    const trace = "Thought: prep.\nFinal Answer: # Title\n\n- a\n- b\n\n```js\nx=1\n```";
+    const trace =
+      "Thought: prep.\nFinal Answer: # Title\n\n- a\n- b\n\n```js\nx=1\n```";
     const out = splitReactTrace(trace);
     expect(out.finalAnswer).toContain("# Title");
     expect(out.finalAnswer).toContain("```js");

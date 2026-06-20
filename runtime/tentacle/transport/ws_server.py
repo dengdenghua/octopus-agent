@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
@@ -253,8 +254,7 @@ class TentacleWebSocketServer:
         try:
             await ws.send(json.dumps(msg))
             # 等待结果（带超时）
-            result = await asyncio.wait_for(future, timeout=timeout_ms / 1000.0)
-            return result
+            return await asyncio.wait_for(future, timeout=timeout_ms / 1000.0)
         except TimeoutError:
             return ToolResult.fail(
                 call.call_id, -32012, f"Timeout after {timeout_ms}ms", timeout_ms
@@ -308,7 +308,7 @@ class TentacleWebSocketServer:
         try:
             await ws.send(json.dumps({"jsonrpc": "2.0", "method": MSG_PING, "id": f"ping-{now_ms()}"}))
             return True
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort; fail-open
             return False
 
     # ── 连接处理 ────────────────────────────────────────────
@@ -521,7 +521,7 @@ class TentacleWebSocketServer:
                     await self.on_task_execute(request, ws)
                 except Exception as e:
                     logger.warning("on_task_execute error: %s", e)
-                    try:
+                    with contextlib.suppress(Exception):  # immediate start heartbeat; failure OK
                         await ws.send(json.dumps({
                             "jsonrpc": "2.0",
                             "method": MSG_TASK_RESULT,
@@ -533,8 +533,6 @@ class TentacleWebSocketServer:
                             },
                             "id": request.task_id,
                         }))
-                    except Exception:  # noqa: BLE001 — immediate start heartbeat; failure OK
-                        pass
             asyncio.create_task(_run_and_respond())
         else:
             # 未配置回调，返回未实现
@@ -639,7 +637,7 @@ class TentacleWebSocketServer:
         """
         # 向所有已连接设备推送 PC 屏幕帧
         tasks = []
-        for tid, ws in self._connections.items():
+        for _tid, ws in self._connections.items():
             if not ws.closed:
                 tasks.append(self._safe_send(ws, frame_data))
         if tasks:
@@ -647,10 +645,8 @@ class TentacleWebSocketServer:
 
     async def _safe_send(self, ws: WebSocketServerProtocol, data: bytes) -> None:
         """安全发送二进制数据."""
-        try:
+        with contextlib.suppress(Exception):  # best-effort; fail-open
             await ws.send(data)
-        except Exception:
-            pass
 
     # ── 辅助 ────────────────────────────────────────────────
 

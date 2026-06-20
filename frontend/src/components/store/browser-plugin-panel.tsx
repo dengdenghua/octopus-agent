@@ -1,11 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  AlertCircle,
-  Loader2,
-  Package,
-  Puzzle,
-  RefreshCw,
-} from "lucide-react";
+import { AlertCircle, Loader2, Package, Puzzle, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,7 +49,9 @@ export function BrowserPluginPanel() {
       <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <Package className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">{t.unifiedStore.browserPlugins.title}</h3>
+          <h3 className="text-sm font-semibold">
+            {t.unifiedStore.browserPlugins.title}
+          </h3>
           <Badge variant="secondary">{plugins.length}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -116,18 +112,26 @@ export function BrowserPluginPanel() {
                     )}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{plugin.name}</div>
+                    <div className="truncate text-sm font-medium">
+                      {plugin.name}
+                    </div>
                     <div className="mt-1 flex items-center gap-1.5">
-                    <Badge variant={plugin.enabled ? "secondary" : "outline"} className="h-5 px-1.5 text-[10px]">
-                      {plugin.enabled
-                        ? t.unifiedStore.browserPlugins.enabled
-                        : t.unifiedStore.browserPlugins.disabled}
-                    </Badge>
-                    {plugin.version && (
-                      <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
-                        v{plugin.version}
+                      <Badge
+                        variant={plugin.enabled ? "secondary" : "outline"}
+                        className="h-5 px-1.5 text-[10px]"
+                      >
+                        {plugin.enabled
+                          ? t.unifiedStore.browserPlugins.enabled
+                          : t.unifiedStore.browserPlugins.disabled}
                       </Badge>
-                    )}
+                      {plugin.version && (
+                        <Badge
+                          variant="outline"
+                          className="h-5 px-1.5 text-[10px]"
+                        >
+                          v{plugin.version}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                 </div>

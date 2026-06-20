@@ -6,6 +6,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from contextlib import suppress as _suppress
 from pathlib import Path
 from typing import Any
 
@@ -29,7 +30,7 @@ def _resolve_roots(raw):
 def _within(path, roots):
     try:
         resolved = Path(path).resolve()
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort; fail-open
         return False
     for root in roots:
         try:
@@ -69,7 +70,7 @@ def _install_path_audit(read_roots_raw, write_roots_raw):
             continue
         try:
             p = Path(entry).resolve()
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort; fail-open
             continue
         text = str(p)
         if text.startswith(sys.base_prefix) or "site-packages" in text:
@@ -107,7 +108,7 @@ try:
     )
     result = skill.handler(**payload["args"])
     sys.stdout.write(json.dumps(result, default=str))
-except Exception as e:
+except Exception as e:  # noqa: BLE001 — sandbox entry; error reported to stderr
     sys.stderr.write(f"{type(e).__name__}: {e}\\n{traceback.format_exc()}")
     sys.exit(3)
 """
@@ -226,7 +227,9 @@ class SubprocessSandbox(Sandbox):
 
             if mem is not None:
                 byte_cap = mem * 1024 * 1024
-                resource.setrlimit(resource.RLIMIT_AS, (byte_cap, byte_cap))
+                with _suppress(ValueError, OSError):
+                    # macOS does not support RLIMIT_AS; skip silently.
+                    resource.setrlimit(resource.RLIMIT_AS, (byte_cap, byte_cap))
             if cpu is not None:
                 resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu))
 

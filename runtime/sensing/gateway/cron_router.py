@@ -38,7 +38,7 @@ def _actor_is_admin(identity_store: Any, actor: str | None) -> bool:
             return False
         roles = getattr(ident, "roles", None) or []
         return "admin" in roles or "root" in roles
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort; fail-open
         return False
 
 

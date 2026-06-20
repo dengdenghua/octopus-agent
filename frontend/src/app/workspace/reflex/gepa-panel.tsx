@@ -202,7 +202,7 @@ type RunResp = {
   elapsed_s?: number;
   front_size?: number;
   ts?: number;
-  recipe_id?: string | null;   // echoed from the run query param
+  recipe_id?: string | null; // echoed from the run query param
   best?: Candidate;
   history?: HistoryEntry[];
   winner_proposal?: WinnerProposal | null;
@@ -322,7 +322,9 @@ export function GepaPanel() {
       setApplied(r);
     } catch (e) {
       swallow(e);
-      setStatusMsg(e instanceof Error ? e.message : t.recipeForge.statusFetchFailed);
+      setStatusMsg(
+        e instanceof Error ? e.message : t.recipeForge.statusFetchFailed,
+      );
     }
   }, [t]);
 
@@ -345,7 +347,9 @@ export function GepaPanel() {
         `${getBackendBaseURL()}/api/evolution/forge/addendums`,
       ).then((r) => r.json());
       setAddendums(r.addendums ?? []);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, []);
 
   const loadCanaries = useCallback(async () => {
@@ -357,7 +361,7 @@ export function GepaPanel() {
       setCanarySummary({
         active: r.active_count ?? 0,
         rolledBack: r.rolled_back_count ?? 0,
-        total: r.total ?? (r.canaries?.length ?? 0),
+        total: r.total ?? r.canaries?.length ?? 0,
       });
     } catch (e) {
       swallow(e);
@@ -385,7 +389,9 @@ export function GepaPanel() {
         setStatusMsg(t.recipeForge.statusRunError(r.error ?? "unknown"));
       } else if ((r.iterations_run ?? 0) === 0) {
         setStatusMsg(
-          t.recipeForge.statusNoRun(r.history?.[0]?.reason ?? "insufficient data"),
+          t.recipeForge.statusNoRun(
+            r.history?.[0]?.reason ?? "insufficient data",
+          ),
         );
       } else {
         setStatusMsg(
@@ -400,7 +406,9 @@ export function GepaPanel() {
       void loadCanaries();
     } catch (e) {
       swallow(e);
-      setStatusMsg(e instanceof Error ? e.message : t.recipeForge.statusRunFailed);
+      setStatusMsg(
+        e instanceof Error ? e.message : t.recipeForge.statusRunFailed,
+      );
     } finally {
       setRunning(false);
     }
@@ -415,7 +423,9 @@ export function GepaPanel() {
         { method: "POST" },
       ).then((r) => r.json());
       if (!r.ok) {
-        setStatusMsg(t.recipeForge.statusAutoProposeError(r.error ?? "unknown"));
+        setStatusMsg(
+          t.recipeForge.statusAutoProposeError(r.error ?? "unknown"),
+        );
       } else if ((r.proposals_generated ?? 0) === 0) {
         const skip = r.results?.[0];
         setStatusMsg(
@@ -432,7 +442,11 @@ export function GepaPanel() {
       void loadCanaries();
     } catch (e) {
       swallow(e);
-      setStatusMsg(e instanceof Error ? e.message : t.recipeForge.statusDeleteFailedGeneric);
+      setStatusMsg(
+        e instanceof Error
+          ? e.message
+          : t.recipeForge.statusDeleteFailedGeneric,
+      );
     } finally {
       setAutoRunning(false);
     }
@@ -454,33 +468,36 @@ export function GepaPanel() {
         : t.recipeForge.globalScope;
       setStatusMsg(t.recipeForge.statusApplying(c.candidate_id, where));
       try {
-        const r = await fetch(`${getBackendBaseURL()}/api/evolution/forge/apply`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt: fullPrompt,
-            candidate_id: c.candidate_id,
-            avg_score: c.avg_score,
-            rationale: c.rationale,
-            run_ts: opts?.runTs,
-            target_recipe_id: target ?? undefined,
-            winner_proposal: opts?.winnerProposal ?? undefined,
-          }),
-        }).then((r) => r.json());
+        const r = await fetch(
+          `${getBackendBaseURL()}/api/evolution/forge/apply`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: fullPrompt,
+              candidate_id: c.candidate_id,
+              avg_score: c.avg_score,
+              rationale: c.rationale,
+              run_ts: opts?.runTs,
+              target_recipe_id: target ?? undefined,
+              winner_proposal: opts?.winnerProposal ?? undefined,
+            }),
+          },
+        ).then((r) => r.json());
         if (!r.ok) {
           setStatusMsg(t.recipeForge.statusApplyFailed(r.error));
           return;
         }
-        setStatusMsg(
-          t.recipeForge.statusApplied(r.scope, r.size, r.path),
-        );
+        setStatusMsg(t.recipeForge.statusApplied(r.scope, r.size, r.path));
         void loadApplied();
         void loadHistory();
         void loadAddendums();
         void loadCanaries();
       } catch (e) {
         swallow(e);
-        setStatusMsg(e instanceof Error ? e.message : t.recipeForge.statusApplyFailed(""));
+        setStatusMsg(
+          e instanceof Error ? e.message : t.recipeForge.statusApplyFailed(""),
+        );
       }
     },
     [loadApplied, loadHistory, loadAddendums, loadCanaries, t],
@@ -519,14 +536,20 @@ export function GepaPanel() {
           return;
         }
         setStatusMsg(
-          r.deleted ? t.recipeForge.statusDeleted(entry.path) : t.recipeForge.statusNothingToDelete,
+          r.deleted
+            ? t.recipeForge.statusDeleted(entry.path)
+            : t.recipeForge.statusNothingToDelete,
         );
         void loadApplied();
         void loadAddendums();
         void loadCanaries();
       } catch (e) {
         swallow(e);
-        setStatusMsg(e instanceof Error ? e.message : t.recipeForge.statusDeleteFailedGeneric);
+        setStatusMsg(
+          e instanceof Error
+            ? e.message
+            : t.recipeForge.statusDeleteFailedGeneric,
+        );
       }
     },
     [loadApplied, loadAddendums, loadCanaries, t],
@@ -534,7 +557,9 @@ export function GepaPanel() {
 
   const clearApplied = useCallback(async () => {
     setStatusMsg(
-      t.recipeForge.clearAddendumPath(applied?.path ?? "data/forge_planner_addendum.md"),
+      t.recipeForge.clearAddendumPath(
+        applied?.path ?? "data/forge_planner_addendum.md",
+      ),
     );
   }, [applied, t]);
 
@@ -553,42 +578,44 @@ export function GepaPanel() {
         {/* Currently applied */}
         <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
           <div className="flex items-center justify-between">
-              <div className="font-medium">{t.recipeForge.addendumAppliedTitle}</div>
-              {applied?.applied ? (
-                <Badge className="bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/15">
-                  <CheckCircleIcon className="mr-1 size-3" />
-                  {t.recipeForge.addendumLive}
-                </Badge>
-              ) : (
-                <Badge variant="outline">{t.recipeForge.addendumNone}</Badge>
-              )}
+            <div className="font-medium">
+              {t.recipeForge.addendumAppliedTitle}
             </div>
-            {applied?.applied && (
-              <>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  {applied.path} · {applied.size
-                    ? t.recipeForge.addendumBytes(applied.size)
-                    : "?"} ·{" "}
-                  {applied.mtime
-                    ? new Date(applied.mtime * 1000).toLocaleString()
-                    : "?"}
-                </div>
-                {applied.content_preview && (
-                  <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] text-muted-foreground">
-                    {applied.content_preview}
-                  </pre>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2 h-7 text-xs"
-                  onClick={clearApplied}
-                >
-                  <XCircleIcon className="mr-1 size-3" />
-                  {t.recipeForge.addendumClearButton}
-                </Button>
-              </>
+            {applied?.applied ? (
+              <Badge className="bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/15">
+                <CheckCircleIcon className="mr-1 size-3" />
+                {t.recipeForge.addendumLive}
+              </Badge>
+            ) : (
+              <Badge variant="outline">{t.recipeForge.addendumNone}</Badge>
             )}
+          </div>
+          {applied?.applied && (
+            <>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {applied.path} ·{" "}
+                {applied.size ? t.recipeForge.addendumBytes(applied.size) : "?"}{" "}
+                ·{" "}
+                {applied.mtime
+                  ? new Date(applied.mtime * 1000).toLocaleString()
+                  : "?"}
+              </div>
+              {applied.content_preview && (
+                <pre className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] text-muted-foreground">
+                  {applied.content_preview}
+                </pre>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 h-7 text-xs"
+                onClick={clearApplied}
+              >
+                <XCircleIcon className="mr-1 size-3" />
+                {t.recipeForge.addendumClearButton}
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Run controls */}
@@ -628,7 +655,9 @@ export function GepaPanel() {
             title={t.recipeForge.autoProposeTitle}
           >
             <Wand2Icon className="mr-2 size-4" />
-            {autoRunning ? t.recipeForge.autoProposeRunning : t.recipeForge.autoProposeButton}
+            {autoRunning
+              ? t.recipeForge.autoProposeRunning
+              : t.recipeForge.autoProposeButton}
           </Button>
           <Button
             onClick={triggerRun}
@@ -636,7 +665,9 @@ export function GepaPanel() {
             size="sm"
           >
             <PlayIcon className="mr-2 size-4" />
-            {running ? t.recipeForge.runForgeRunning : t.recipeForge.runForgeButton}
+            {running
+              ? t.recipeForge.runForgeRunning
+              : t.recipeForge.runForgeButton}
           </Button>
         </div>
 
@@ -656,7 +687,8 @@ export function GepaPanel() {
                 {t.recipeForge.paretoFrontTitle(run.front_size ?? 0)}
               </div>
               <span className="text-xs text-muted-foreground">
-                {t.recipeForge.iterCount(run.iterations_run ?? 0)} · {t.recipeForge.elapsedSeconds(run.elapsed_s ?? 0)}
+                {t.recipeForge.iterCount(run.iterations_run ?? 0)} ·{" "}
+                {t.recipeForge.elapsedSeconds(run.elapsed_s ?? 0)}
               </span>
             </div>
             <Badge className="w-fit bg-slate-500/15 text-[10px] text-slate-300 hover:bg-slate-500/15">
@@ -714,10 +746,7 @@ export function GepaPanel() {
                   asChild
                   title={t.recipeForge.addendumCsvTooltip}
                 >
-                  <a
-                    href="/api/evolution/forge/addendums.csv"
-                    download
-                  >
+                  <a href="/api/evolution/forge/addendums.csv" download>
                     <DownloadIcon className="mr-1 size-3" />
                     CSV
                   </a>
@@ -779,7 +808,9 @@ export function GepaPanel() {
                 {t.recipeForge.canaryEmpty}
               </div>
             ) : (
-              canaries.map((c) => <CanaryRow key={c.skill_name} entry={c} t={t} />)
+              canaries.map((c) => (
+                <CanaryRow key={c.skill_name} entry={c} t={t} />
+              ))
             )}
           </div>
         </div>
@@ -823,9 +854,7 @@ export function GepaPanel() {
                   canary={findRunCanary(h, canaries)}
                   onApplyGlobal={() => applyFromHistory(h, "global")}
                   onApplyRecipe={
-                    h.recipe_id
-                      ? () => applyFromHistory(h, "per_recipe")
-                      : null
+                    h.recipe_id ? () => applyFromHistory(h, "per_recipe") : null
                   }
                   t={t}
                 />
@@ -839,7 +868,13 @@ export function GepaPanel() {
 }
 
 /* Implementation note. */
-function ConvergenceChart({ history, t }: { history: HistoryEntry[]; t: Translations }) {
+function ConvergenceChart({
+  history,
+  t,
+}: {
+  history: HistoryEntry[];
+  t: Translations;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   // Project history into (iter, child_avg, improved) triples,
@@ -924,7 +959,7 @@ function ConvergenceChart({ history, t }: { history: HistoryEntry[]; t: Translat
       pad.t + innerH - Math.max(0, Math.min(1, s)) * innerH;
 
     // Best-so-far step line · monotone non-decreasing.
-    ctx.strokeStyle = "#34d399";  // emerald
+    ctx.strokeStyle = "#34d399"; // emerald
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     let bestSoFar = -Infinity;
@@ -946,9 +981,7 @@ function ConvergenceChart({ history, t }: { history: HistoryEntry[]; t: Translat
 
     // Per-iter dots · green = improved front, gray = dominated.
     for (const p of points) {
-      ctx.fillStyle = p.improved
-        ? "#34d399"
-        : "rgba(148, 163, 184, 0.5)";
+      ctx.fillStyle = p.improved ? "#34d399" : "rgba(148, 163, 184, 0.5)";
       ctx.beginPath();
       ctx.arc(xFor(p.iter), yFor(p.score), 3, 0, Math.PI * 2);
       ctx.fill();
@@ -958,11 +991,7 @@ function ConvergenceChart({ history, t }: { history: HistoryEntry[]; t: Translat
     ctx.fillStyle = "rgba(148, 163, 184, 0.7)";
     ctx.textBaseline = "top";
     ctx.textAlign = "right";
-    ctx.fillText(
-      `iter ${maxIter}`,
-      pad.l + innerW,
-      pad.t + innerH + 4,
-    );
+    ctx.fillText(`iter ${maxIter}`, pad.l + innerW, pad.t + innerH + 4);
   }, [points, t.recipeForge.noIterationsYet]);
 
   return (
@@ -1041,7 +1070,10 @@ function CanaryRow({ entry, t }: { entry: CanaryEntry; t: Translations }) {
   );
 }
 
-function findRunCanary(run: StoredRun, canaries: CanaryEntry[]): CanaryEntry | null {
+function findRunCanary(
+  run: StoredRun,
+  canaries: CanaryEntry[],
+): CanaryEntry | null {
   const recipeKey = run.recipe_id ?? null;
   const candidateKey = run.best_candidate_id ?? null;
   if (!candidateKey) return null;
@@ -1051,7 +1083,9 @@ function findRunCanary(run: StoredRun, canaries: CanaryEntry[]): CanaryEntry | n
       (c.candidate_id ?? null) === candidateKey,
   );
   if (exact) return exact;
-  return canaries.find((c) => (c.candidate_id ?? null) === candidateKey) ?? null;
+  return (
+    canaries.find((c) => (c.candidate_id ?? null) === candidateKey) ?? null
+  );
 }
 
 function PastRunRow({
@@ -1155,17 +1189,22 @@ function PastRunRow({
           {run.optimizer_backend || "native_gepa"}
         </Badge>
         {lifecyclePhase && (
-          <Badge className={cn("text-[10px]", lifecycleColor, "hover:" + lifecycleColor)}>
+          <Badge
+            className={cn(
+              "text-[10px]",
+              lifecycleColor,
+              "hover:" + lifecycleColor,
+            )}
+          >
             {t.recipeForge.canaryPhase(lifecyclePhase)}
           </Badge>
         )}
         <span className="text-muted-foreground">{dt.toLocaleString()}</span>
         <span className="text-muted-foreground">
-          · {t.recipeForge.iterCount(run.iterations_run)} · {t.recipeForge.elapsedSeconds(run.elapsed_s)}
+          · {t.recipeForge.iterCount(run.iterations_run)} ·{" "}
+          {t.recipeForge.elapsedSeconds(run.elapsed_s)}
         </span>
-        <span className="text-muted-foreground">
-          · front {run.front_size}
-        </span>
+        <span className="text-muted-foreground">· front {run.front_size}</span>
         {run.best_avg_score !== null && (
           <span className="font-mono text-emerald-400">
             {t.recipeForge.bestAvg(run.best_avg_score)}
@@ -1222,7 +1261,11 @@ function PastRunRow({
           {t.recipeForge.canaryRollbackReason(run.winner_rollback_reason)}
         </div>
       )}
-      {(nativeEvaluation || replayCandidate || sandboxReplayCandidate || turnReplayCandidate || llmReplayCandidate) && (
+      {(nativeEvaluation ||
+        replayCandidate ||
+        sandboxReplayCandidate ||
+        turnReplayCandidate ||
+        llmReplayCandidate) && (
         <div className="mt-2 rounded-md border border-border/40 bg-background/40 px-2 py-1.5 text-[10px] text-muted-foreground">
           <button
             type="button"
@@ -1239,7 +1282,9 @@ function PastRunRow({
               </Badge>
             )}
             {typeof replayCandidate?.total === "number" && (
-              <span>{t.recipeForge.nativeEvidenceReplay(replayCandidate.total)}</span>
+              <span>
+                {t.recipeForge.nativeEvidenceReplay(replayCandidate.total)}
+              </span>
             )}
             {typeof sandboxReplayCandidate?.total === "number" && (
               <span>
@@ -1280,23 +1325,52 @@ function PastRunRow({
             <div className="mt-2 space-y-1 border-t border-border/40 pt-2">
               {nativeEvaluation && (
                 <div className="flex flex-wrap gap-x-3 gap-y-1">
-                  <span>{t.recipeForge.nativeEvidenceMetric("task", nativeEvaluation.task_score)}</span>
-                  <span>{t.recipeForge.nativeEvidenceMetric("constraints", nativeEvaluation.constraint_score)}</span>
-                  <span>{t.recipeForge.nativeEvidenceMetric("failures", nativeEvaluation.failure_coverage)}</span>
-                  <span>{t.recipeForge.nativeEvidenceMetric("preservation", nativeEvaluation.positive_preservation)}</span>
-                  <span>{t.recipeForge.nativeEvidenceMetric("efficiency", nativeEvaluation.efficiency)}</span>
+                  <span>
+                    {t.recipeForge.nativeEvidenceMetric(
+                      "task",
+                      nativeEvaluation.task_score,
+                    )}
+                  </span>
+                  <span>
+                    {t.recipeForge.nativeEvidenceMetric(
+                      "constraints",
+                      nativeEvaluation.constraint_score,
+                    )}
+                  </span>
+                  <span>
+                    {t.recipeForge.nativeEvidenceMetric(
+                      "failures",
+                      nativeEvaluation.failure_coverage,
+                    )}
+                  </span>
+                  <span>
+                    {t.recipeForge.nativeEvidenceMetric(
+                      "preservation",
+                      nativeEvaluation.positive_preservation,
+                    )}
+                  </span>
+                  <span>
+                    {t.recipeForge.nativeEvidenceMetric(
+                      "efficiency",
+                      nativeEvaluation.efficiency,
+                    )}
+                  </span>
                 </div>
               )}
-              {((llmReplayCandidate?.weak_cases?.length ?? 0) > 0
-                || (turnReplayCandidate?.weak_cases?.length ?? 0) > 0
-                || (sandboxReplayCandidate?.weak_cases?.length ?? 0) > 0
-                || (replayCandidate?.weak_cases?.length ?? 0) > 0) ? (
-                (llmReplayCandidate?.weak_cases
-                  ?? turnReplayCandidate?.weak_cases
-                  ?? sandboxReplayCandidate?.weak_cases
-                  ?? replayCandidate?.weak_cases
+              {(llmReplayCandidate?.weak_cases?.length ?? 0) > 0 ||
+              (turnReplayCandidate?.weak_cases?.length ?? 0) > 0 ||
+              (sandboxReplayCandidate?.weak_cases?.length ?? 0) > 0 ||
+              (replayCandidate?.weak_cases?.length ?? 0) > 0 ? (
+                (
+                  llmReplayCandidate?.weak_cases ??
+                  turnReplayCandidate?.weak_cases ??
+                  sandboxReplayCandidate?.weak_cases ??
+                  replayCandidate?.weak_cases
                 )?.map((weakCase) => (
-                  <div key={weakCase.case_id ?? weakCase.reason} className="text-amber-300">
+                  <div
+                    key={weakCase.case_id ?? weakCase.reason}
+                    className="text-amber-300"
+                  >
                     {t.recipeForge.nativeEvidenceWeakCase(
                       weakCase.case_id ?? "case",
                       weakCase.reason ?? "weak coverage",
@@ -1327,24 +1401,41 @@ function PastRunRow({
           ) : detail.ok && detail.proposal ? (
             <div className="space-y-1">
               <div className="flex flex-wrap gap-2">
-                <span className="font-mono text-foreground">{detail.proposal.id}</span>
+                <span className="font-mono text-foreground">
+                  {detail.proposal.id}
+                </span>
                 <span>{detail.proposal.kind}</span>
-                <span>{t.recipeForge.proposalDetailsStatus(detail.proposal.status)}</span>
-                <span>{t.recipeForge.proposalDetailsCanaries(detail.canaries?.length ?? 0)}</span>
-                <span>{t.recipeForge.proposalDetailsRollbacks(detail.rollbacks?.length ?? 0)}</span>
+                <span>
+                  {t.recipeForge.proposalDetailsStatus(detail.proposal.status)}
+                </span>
+                <span>
+                  {t.recipeForge.proposalDetailsCanaries(
+                    detail.canaries?.length ?? 0,
+                  )}
+                </span>
+                <span>
+                  {t.recipeForge.proposalDetailsRollbacks(
+                    detail.rollbacks?.length ?? 0,
+                  )}
+                </span>
               </div>
               <div>{detail.proposal.description}</div>
               {detail.proposal.rejection_reason && (
-                <div className="text-rose-300">{detail.proposal.rejection_reason}</div>
+                <div className="text-rose-300">
+                  {detail.proposal.rejection_reason}
+                </div>
               )}
-              {detail.proposal.metadata && Object.keys(detail.proposal.metadata).length > 0 && (
-                <details>
-                  <summary className="cursor-pointer">{t.recipeForge.proposalDetailsMetadata}</summary>
-                  <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[10px]">
-                    {JSON.stringify(detail.proposal.metadata, null, 2)}
-                  </pre>
-                </details>
-              )}
+              {detail.proposal.metadata &&
+                Object.keys(detail.proposal.metadata).length > 0 && (
+                  <details>
+                    <summary className="cursor-pointer">
+                      {t.recipeForge.proposalDetailsMetadata}
+                    </summary>
+                    <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[10px]">
+                      {JSON.stringify(detail.proposal.metadata, null, 2)}
+                    </pre>
+                  </details>
+                )}
               {(detail.canaries?.length ?? 0) > 0 && (
                 <div className="space-y-1">
                   {detail.canaries?.map((c) => (
@@ -1536,10 +1627,10 @@ function AddendumRow({
   return (
     <div className="rounded-md border border-border/50 bg-background/40 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge
-          className={cn("text-[10px]", scopeColor, "hover:" + scopeColor)}
-        >
-          {entry.scope === "global" ? t.recipeForge.globalScope : t.recipeForge.perRecipeScope}
+        <Badge className={cn("text-[10px]", scopeColor, "hover:" + scopeColor)}>
+          {entry.scope === "global"
+            ? t.recipeForge.globalScope
+            : t.recipeForge.perRecipeScope}
         </Badge>
         {entry.recipe_id && (
           <span className="font-mono text-[11px] text-muted-foreground">
@@ -1599,7 +1690,10 @@ function HistoryRow({ entry, t }: { entry: HistoryEntry; t: Translations }) {
   if (entry.skipped) {
     return (
       <div className="text-amber-300">
-        {t.recipeForge.historySkipped(String(entry.iter ?? "0"), entry.reason ?? "")}
+        {t.recipeForge.historySkipped(
+          String(entry.iter ?? "0"),
+          entry.reason ?? "",
+        )}
       </div>
     );
   }

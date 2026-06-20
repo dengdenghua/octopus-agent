@@ -12,6 +12,9 @@ from runtime.platform.io import atomic_write_json, read_json_with_backup
 
 _SCHEMA = "octopus.experience_ledger.v1"
 _SUMMARY_SCHEMA = "octopus.experience_weekly_summary.v1"
+_QUALITY_SUMMARY_SCHEMA = "octopus.experience_memory_quality_summary.v1"
+_QUALITY_SCHEMA = "octopus.experience_memory_quality.v1"
+_CONTRADICTION_SCHEMA = "octopus.experience_contradiction.v1"
 _VALID_STATUSES = {"active", "archived", "promoted"}
 _PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2}
 
@@ -47,6 +50,7 @@ class ExperienceLedger:
             touched.append(existing)
             updated += 1
 
+        _apply_contradictions(records, touched, now_text)
         payload["records"] = sorted(records, key=_record_sort_key)
         payload["lastUpdated"] = now_text
         self._write(payload)
@@ -66,10 +70,16 @@ class ExperienceLedger:
         bucket: str | None = None,
         kind: str | None = None,
         priority: str | None = None,
+        include_contradicted: bool = False,
+        min_reliability: float = 0.0,
+        now: datetime | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
-        rows = list(self._read().get("records") or [])
+        rows = [
+            _with_memory_quality(row, now=now)
+            for row in self._read().get("records") or []
+        ]
         if status:
             rows = [row for row in rows if str(row.get("status") or "") == status]
         if bucket:
@@ -78,7 +88,20 @@ class ExperienceLedger:
             rows = [row for row in rows if str(row.get("kind") or "") == kind]
         if priority:
             rows = [row for row in rows if str(row.get("priority") or "") == priority]
-        rows = sorted(rows, key=_record_sort_key)
+        if not include_contradicted:
+            rows = [
+                row for row in rows
+                if str(row.get("memory_quality", {}).get("contradiction_status") or "")
+                != "contradicted"
+            ]
+        threshold = max(0.0, min(1.0, float(min_reliability or 0.0)))
+        if threshold > 0:
+            rows = [
+                row for row in rows
+                if float(row.get("memory_quality", {}).get("reliability") or 0.0)
+                >= threshold
+            ]
+        rows = sorted(rows, key=_record_recall_sort_key)
         total = len(rows)
         return {
             "schema": _SCHEMA,
@@ -97,11 +120,18 @@ class ExperienceLedger:
         wanted = _clean_text(task_id, limit=120)
         if not wanted:
             return []
-        rows = [
-            row for row in self._read().get("records") or []
-            if wanted in (row.get("source_task_ids") or [])
-        ]
-        return sorted(rows, key=_record_sort_key)[:limit]
+        rows: list[dict[str, Any]] = []
+        for row in self._read().get("records") or []:
+            if wanted not in (row.get("source_task_ids") or []):
+                continue
+            enriched = _with_memory_quality(row)
+            if (
+                str(enriched.get("memory_quality", {}).get("contradiction_status") or "")
+                == "contradicted"
+            ):
+                continue
+            rows.append(enriched)
+        return sorted(rows, key=_record_recall_sort_key)[:limit]
 
     def weekly_summary(
         self,
@@ -111,10 +141,17 @@ class ExperienceLedger:
     ) -> dict[str, Any]:
         start = _week_start(week_start, now=now)
         end = start + timedelta(days=7)
-        rows = [
-            row for row in self._read().get("records") or []
-            if _within_week(row.get("last_seen_at"), start, end)
-        ]
+        rows: list[dict[str, Any]] = []
+        for row in self._read().get("records") or []:
+            if not _within_week(row.get("last_seen_at"), start, end):
+                continue
+            enriched = _with_memory_quality(row, now=now)
+            if (
+                str(enriched.get("memory_quality", {}).get("contradiction_status") or "")
+                == "contradicted"
+            ):
+                continue
+            rows.append(enriched)
         by_priority = Counter(str(row.get("priority") or "P2") for row in rows)
         by_bucket = Counter(str(row.get("memory_bucket") or "experience") for row in rows)
         by_kind = Counter(str(row.get("kind") or "unknown") for row in rows)
@@ -129,6 +166,73 @@ class ExperienceLedger:
             "by_kind": dict(sorted(by_kind.items())),
             "top_records": top_records,
             "next_actions": _next_actions(top_records),
+        }
+
+    def quality_summary(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 10000,
+    ) -> dict[str, Any]:
+        rows = [
+            _with_memory_quality(row, now=now)
+            for row in self._read().get("records") or []
+        ][: max(1, int(limit))]
+        total = len(rows)
+        contradicted = [
+            row for row in rows
+            if row["memory_quality"]["contradiction_status"] == "contradicted"
+        ]
+        active_rows = [
+            row for row in rows
+            if row["memory_quality"]["contradiction_status"] != "contradicted"
+        ]
+        stale_rows = [
+            row for row in active_rows
+            if float(row["memory_quality"]["freshness"]) < 0.5
+        ]
+        low_reliability_rows = [
+            row for row in active_rows
+            if float(row["memory_quality"]["reliability"]) < 0.7
+        ]
+        avg_reliability = _avg(
+            row["memory_quality"]["reliability"] for row in active_rows
+        )
+        by_bucket = Counter(
+            str(row.get("memory_bucket") or "experience")
+            for row in active_rows
+        )
+        top_risks = sorted(
+            [*low_reliability_rows, *contradicted],
+            key=lambda row: (
+                float(row["memory_quality"]["reliability"]),
+                str(row.get("last_seen_at") or ""),
+            ),
+        )[:8]
+        return {
+            "schema": _QUALITY_SUMMARY_SCHEMA,
+            "total": total,
+            "active_count": len(active_rows),
+            "contradicted_count": len(contradicted),
+            "stale_count": len(stale_rows),
+            "low_reliability_count": len(low_reliability_rows),
+            "avg_reliability": avg_reliability,
+            "by_bucket": dict(sorted(by_bucket.items())),
+            "top_risks": [
+                {
+                    "id": row.get("id"),
+                    "title": row.get("title"),
+                    "memory_bucket": row.get("memory_bucket"),
+                    "priority": row.get("priority"),
+                    "quality": row.get("memory_quality"),
+                }
+                for row in top_risks
+            ],
+            "next_actions": _quality_next_actions(
+                stale_count=len(stale_rows),
+                contradicted_count=len(contradicted),
+                low_reliability_count=len(low_reliability_rows),
+            ),
         }
 
     def _read(self) -> dict[str, Any]:
@@ -210,6 +314,7 @@ def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str
     thread_id = _clean_text(review.get("thread_id"), limit=120)
     turn_id = _clean_text(review.get("turn_id"), limit=120)
     agent_id = _clean_text(review.get("agent_id"), limit=120)
+    evidence = _review_evidence_metadata(review)
     records: list[dict[str, Any]] = []
     for item in review.get("learning_candidates") or []:
         if not isinstance(item, dict):
@@ -231,7 +336,7 @@ def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str
             memory_bucket=bucket,
             title=title,
             text=text,
-            metadata={"candidate": item, "review_status": review.get("status")},
+            metadata={**evidence, "candidate": item},
         ))
     for item in review.get("backlog_candidates") or []:
         if not isinstance(item, dict):
@@ -252,16 +357,198 @@ def _records_from_review(review: dict[str, Any], now_text: str) -> list[dict[str
             title=title,
             text=text,
             metadata={
+                **evidence,
                 "candidate": item,
                 "minimal_implementation": _clean_text(
                     item.get("minimal_implementation"),
                     limit=1200,
                 ),
                 "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
-                "review_status": review.get("status"),
             },
         ))
     return records
+
+
+def _apply_contradictions(
+    records: list[dict[str, Any]],
+    touched: list[dict[str, Any]],
+    now_text: str,
+) -> None:
+    by_id = {str(row.get("id") or ""): row for row in records}
+    for record in touched:
+        metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+        candidate = (
+            metadata.get("candidate")
+            if isinstance(metadata.get("candidate"), dict)
+            else {}
+        )
+        target_ids = _clean_unique_list(
+            candidate.get("contradicts_record_ids")
+            or candidate.get("contradicts")
+            or [],
+            limit=80,
+        )
+        if not target_ids:
+            continue
+        reason = _clean_text(
+            candidate.get("contradiction_reason")
+            or candidate.get("reason")
+            or "newer replay-backed learning supersedes this record",
+            limit=500,
+        )
+        record_meta = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+        record_meta["contradiction"] = {
+            "schema": _CONTRADICTION_SCHEMA,
+            "status": "supersedes",
+            "contradicts_record_ids": target_ids,
+            "at": now_text,
+            "reason": reason,
+        }
+        record["metadata"] = record_meta
+        record["tags"] = _merge_unique(record.get("tags"), ["supersedes"])
+        for target_id in target_ids:
+            target = by_id.get(target_id)
+            if target is None or target is record:
+                continue
+            target_meta = (
+                target.get("metadata")
+                if isinstance(target.get("metadata"), dict)
+                else {}
+            )
+            target_meta["contradiction"] = {
+                "schema": _CONTRADICTION_SCHEMA,
+                "status": "contradicted",
+                "by_record_id": record.get("id"),
+                "at": now_text,
+                "reason": reason,
+            }
+            target["metadata"] = target_meta
+            target["tags"] = _merge_unique(target.get("tags"), ["contradicted"])
+
+
+def _with_memory_quality(
+    row: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    out = dict(row)
+    out["memory_quality"] = _memory_quality(row, now=now)
+    return out
+
+
+def _memory_quality(
+    row: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    current = now or datetime.now(UTC)
+    last_seen = _parse_dt(row.get("last_seen_at"))
+    age_days = max(0, (current - last_seen).days) if last_seen is not None else 9999
+    freshness = _freshness_score(age_days)
+    occurrences = max(1, int(row.get("occurrences") or 1))
+    occurrence_score = min(1.0, 0.55 + (occurrences - 1) * 0.15)
+    priority_score = {"P0": 1.0, "P1": 0.86, "P2": 0.72}.get(
+        _priority(row.get("priority")),
+        0.72,
+    )
+    contradiction = _contradiction(row)
+    contradiction_status = str(contradiction.get("status") or "none")
+    penalty = 0.0
+    if contradiction_status == "contradicted":
+        penalty = 0.75
+    elif contradiction_status == "supersedes":
+        penalty = -0.04
+    reliability = max(
+        0.0,
+        min(
+            1.0,
+            round((freshness * 0.5) + (occurrence_score * 0.3) + (priority_score * 0.2) - penalty, 3),
+        ),
+    )
+    return {
+        "schema": _QUALITY_SCHEMA,
+        "freshness": freshness,
+        "age_days": age_days,
+        "occurrence_score": round(occurrence_score, 3),
+        "priority_score": priority_score,
+        "reliability": reliability,
+        "contradiction_status": contradiction_status,
+        "contradiction": contradiction,
+    }
+
+
+def _freshness_score(age_days: int) -> float:
+    if age_days <= 14:
+        return 1.0
+    if age_days <= 90:
+        return round(1.0 - ((age_days - 14) / 76) * 0.45, 3)
+    if age_days <= 180:
+        return round(0.55 - ((age_days - 90) / 90) * 0.25, 3)
+    return 0.2
+
+
+def _contradiction(row: dict[str, Any]) -> dict[str, Any]:
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    contradiction = (
+        metadata.get("contradiction")
+        if isinstance(metadata.get("contradiction"), dict)
+        else {}
+    )
+    if contradiction.get("schema") == _CONTRADICTION_SCHEMA:
+        return contradiction
+    return {"schema": _CONTRADICTION_SCHEMA, "status": "none"}
+
+
+def _parse_dt(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _review_evidence_metadata(review: dict[str, Any]) -> dict[str, Any]:
+    replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
+    resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
+    latest = (
+        resume.get("latest_checkpoint")
+        if isinstance(resume.get("latest_checkpoint"), dict)
+        else {}
+    )
+    integrity = latest.get("integrity") if isinstance(latest.get("integrity"), dict) else {}
+    return {
+        "review_status": review.get("status"),
+        "citation": {
+            "schema": "octopus.experience_replay_citation.v1",
+            "task_id": _clean_text(review.get("task_id"), limit=120),
+            "thread_id": _clean_text(review.get("thread_id"), limit=120),
+            "turn_id": _clean_text(review.get("turn_id"), limit=120),
+            "agent_id": _clean_text(review.get("agent_id"), limit=120),
+            "replay_case_id": replay.get("case_id"),
+            "replay_fingerprint": replay.get("fingerprint"),
+            "replayable": bool(replay.get("replayable")),
+        },
+        "replay": {
+            "schema": replay.get("schema"),
+            "case_id": replay.get("case_id"),
+            "fingerprint": replay.get("fingerprint"),
+            "replayable": bool(replay.get("replayable")),
+            "step_count": int(replay.get("step_count") or 0),
+        },
+        "resume": {
+            "available": bool(resume.get("available")),
+            "source": resume.get("source"),
+            "latest_checkpoint_id": latest.get("id"),
+            "checkpoint_type": latest.get("type"),
+            "resume_safe": bool(integrity.get("resume_safe")),
+            "continue_from_iteration": int(integrity.get("continue_from_iteration") or 0),
+        },
+    }
 
 
 def _new_record(
@@ -349,6 +636,16 @@ def _record_sort_key(row: dict[str, Any]) -> tuple[int, str, str]:
     )
 
 
+def _record_recall_sort_key(row: dict[str, Any]) -> tuple[int, float, str, str]:
+    quality = row.get("memory_quality") if isinstance(row.get("memory_quality"), dict) else {}
+    return (
+        _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
+        -float(quality.get("reliability") or 0.0),
+        str(row.get("last_seen_at") or ""),
+        str(row.get("id") or ""),
+    )
+
+
 def _weekly_record_sort_key(row: dict[str, Any]) -> tuple[int, int, str]:
     return (
         _PRIORITY_RANK.get(str(row.get("priority") or "P2"), 2),
@@ -375,6 +672,27 @@ def _next_actions(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
             "action": action,
         })
     return actions
+
+
+def _quality_next_actions(
+    *,
+    stale_count: int,
+    contradicted_count: int,
+    low_reliability_count: int,
+) -> list[str]:
+    actions: list[str] = []
+    if contradicted_count:
+        actions.append("Archive or explain contradicted memory records before recall.")
+    if stale_count:
+        actions.append("Refresh stale memories with replay-backed evidence.")
+    if low_reliability_count:
+        actions.append("Require stronger citations before low-reliability memories influence code mode.")
+    return actions
+
+
+def _avg(values: Any) -> float:
+    nums = [float(value) for value in values]
+    return round(sum(nums) / len(nums), 3) if nums else 0.0
 
 
 def _within_week(value: Any, start: date, end: date) -> bool:

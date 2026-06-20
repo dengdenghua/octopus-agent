@@ -92,8 +92,10 @@ function imageForBlock(block: WorkBlock): string | undefined {
     if (candidate.startsWith("data:image/")) return candidate;
 
     if (isRecord(source) && source.kind === "image") {
-      const media = typeof source.media_type === "string" ? source.media_type : "";
-      const b64 = typeof source.data_base64 === "string" ? source.data_base64 : "";
+      const media =
+        typeof source.media_type === "string" ? source.media_type : "";
+      const b64 =
+        typeof source.data_base64 === "string" ? source.data_base64 : "";
       if (media.startsWith("image/") && b64 && b64.length <= MAX_IMAGE_B64) {
         return `data:${media};base64,${b64}`;
       }
@@ -105,7 +107,7 @@ function imageForBlock(block: WorkBlock): string | undefined {
 function isLifecycleBlock(block: WorkBlock): boolean {
   return Boolean(
     block.event.lifecycle ||
-      /subagent_(spawned|finished)/i.test(block.event.name),
+    /subagent_(spawned|finished)/i.test(block.event.name),
   );
 }
 

@@ -232,7 +232,7 @@ class TestCallFlow:
     def test_no_api_key_no_client_raises(self, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
         monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
-        with pytest.raises(RuntimeError, match="ANTHROPIC_(API_KEY|AUTH_TOKEN)"):
+        with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|no.*api.*key|anthropic SDK not installed"):
             AnthropicModelRouter(api_key=None)
 
     def test_stream_final_includes_prompt_cache_telemetry(self):

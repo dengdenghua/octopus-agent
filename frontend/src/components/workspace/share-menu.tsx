@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { CopyIcon, DownloadIcon, ImageIcon, Loader2Icon, Share2Icon } from "lucide-react";
+import {
+  CopyIcon,
+  DownloadIcon,
+  ImageIcon,
+  Loader2Icon,
+  Share2Icon,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -105,12 +111,18 @@ export function ShareMenu({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem disabled={busy !== null} onSelect={() => void handleSave()}>
+        <DropdownMenuItem
+          disabled={busy !== null}
+          onSelect={() => void handleSave()}
+        >
           <ImageIcon className="size-4" />
           {t.share.saveImage}
         </DropdownMenuItem>
         {canCopyImageToClipboard() && (
-          <DropdownMenuItem disabled={busy !== null} onSelect={() => void handleCopy()}>
+          <DropdownMenuItem
+            disabled={busy !== null}
+            onSelect={() => void handleCopy()}
+          >
             <CopyIcon className="size-4" />
             {t.share.copyImage}
           </DropdownMenuItem>

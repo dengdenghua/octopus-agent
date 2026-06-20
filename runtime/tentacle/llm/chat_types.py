@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 # ── 消息 ───────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ class ToolCallResult:
 # ── LLM 响应 ───────────────────────────────────────────────────
 
 
-class FinishReason(str, Enum):
+class FinishReason(StrEnum):
     """LLM 响应结束原因."""
 
     STOP = "stop"                   # 正常文本结束
@@ -238,7 +238,7 @@ class SkillSpec:
 # ── 任务结果（终止原因） ───────────────────────────────────────
 
 
-class TaskOutcome(str, Enum):
+class TaskOutcome(StrEnum):
     """任务终止原因（与 Kotlin 端 ``TaskResult`` sealed class 对应）."""
 
     DONE = "done"                   # LLM 主动 finish

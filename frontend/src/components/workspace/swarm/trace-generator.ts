@@ -20,7 +20,8 @@ const DEFAULT_LABELS: TraceGeneratorLabels = {
   resultCount: (n) => `${n} results`,
   toolCallTitle: "Tool call: fs.read_file",
   toolCallDetail: "Reading prior notes for context",
-  milestoneSave: (bucket, total) => `Save milestone note (part ${bucket}/${total})`,
+  milestoneSave: (bucket, total) =>
+    `Save milestone note (part ${bucket}/${total})`,
   thinkThoughts: [
     "Synthesize collected info",
     "Identify key differentiators",

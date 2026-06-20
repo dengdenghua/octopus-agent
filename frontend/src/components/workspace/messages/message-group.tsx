@@ -2,14 +2,11 @@ import { swallow } from "@/core/utils/log";
 import type { AIMessage, Message } from "@/core/api/types";
 import {
   BookOpenTextIcon,
-  CheckCircle2Icon,
   ChevronDownIcon,
   ChevronUp,
-  CircleIcon,
   FolderOpenIcon,
   GlobeIcon,
   ListTodoIcon,
-  Loader2Icon,
   MessageCircleQuestionMarkIcon,
   NotebookPenIcon,
   SearchIcon,
@@ -46,7 +43,6 @@ import {
   IterationDivider,
 } from "@/components/workspace/taor-indicator";
 import { useI18n } from "@/core/i18n/hooks";
-import type { Translations } from "@/core/i18n/locales";
 import {
   extractContentFromMessage,
   extractReasoningContentFromMessage,
@@ -389,7 +385,7 @@ function normalizePublicTimelineChunk(
     return null;
   }
   if (options.allowPlainThoughts) return stripped;
-  return compactReasoningSummary(stripped, 160);
+  return null;
 }
 
 function dedupeTimelineChunks(chunks: string[]): string[] {
@@ -618,7 +614,6 @@ export function MessageGroup({
         <ActionCallbackGroup
           key={item.id}
           group={item}
-          isLoading={itemIsLoading}
           open={open}
           active={isActiveGroup}
           onOpenChange={(nextOpen) =>
@@ -798,14 +793,12 @@ function ReasoningStepGroup({
 
 function ActionCallbackGroup({
   group,
-  isLoading,
   open,
   active,
   onOpenChange,
   renderIterationDivider,
 }: {
   group: ActionCallbackGroupItem;
-  isLoading: boolean;
   open: boolean;
   active: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1058,70 +1051,6 @@ function extractDescFromArgs(
   return undefined;
 }
 
-type ToolCallTodoStatus = "pending" | "in_progress" | "completed";
-
-interface ToolCallTodoItem {
-  content: string;
-  status: ToolCallTodoStatus;
-  activeForm?: string;
-}
-
-function normalizeToolCallTodoStatus(value: unknown): ToolCallTodoStatus {
-  if (value === "completed" || value === "in_progress") return value;
-  return "pending";
-}
-
-function extractToolCallTodoText(item: Record<string, unknown>): string {
-  for (const key of ["content", "text", "title", "task"]) {
-    const value = item[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-function parseToolCallTodoItems(
-  args: Record<string, unknown>,
-): ToolCallTodoItem[] {
-  const rawItems = coerceToolCallTodoItems(args.items ?? args.todos);
-  if (rawItems.length === 0) return [];
-  const items: ToolCallTodoItem[] = [];
-  for (const raw of rawItems) {
-    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) continue;
-    const record = raw as Record<string, unknown>;
-    const content = extractToolCallTodoText(record);
-    if (!content) continue;
-    const activeForm =
-      typeof record.activeForm === "string" && record.activeForm.trim()
-        ? record.activeForm.trim()
-        : typeof record.active_form === "string" && record.active_form.trim()
-          ? record.active_form.trim()
-          : undefined;
-    items.push({
-      content,
-      status: normalizeToolCallTodoStatus(record.status),
-      activeForm,
-    });
-  }
-  return items;
-}
-
-function coerceToolCallTodoItems(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string" && value.trim()) {
-    try {
-      return coerceToolCallTodoItems(JSON.parse(value));
-    } catch (e) {
-      swallow(e);
-      return [];
-    }
-  }
-  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    return coerceToolCallTodoItems(record.items ?? record.todos);
-  }
-  return [];
-}
-
 function extractTeamCallTarget(
   args: Record<string, unknown>,
 ): string | undefined {
@@ -1152,73 +1081,6 @@ function extractTeamCallTarget(
     /(Market Researcher|Coder|Vibe Selling|Ecommerce Mind)/i,
   );
   return knownAgentMatch?.[1];
-}
-
-function ToolCallTodoPreview({ items }: { items: ToolCallTodoItem[] }) {
-  const { t } = useI18n();
-  const completed = items.filter((item) => item.status === "completed").length;
-  const total = items.length;
-
-  return (
-    <div className="mt-2 border-l border-border/60 py-1 pl-3">
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs">
-        <span className="font-medium text-muted-foreground">
-          {t.todoPanel.title}
-        </span>
-        <span className="tabular-nums text-muted-foreground">
-          {completed}/{total}
-        </span>
-      </div>
-      <div className="mb-2 h-1 overflow-hidden rounded-full bg-muted/70">
-        <div
-          className="h-full bg-emerald-500 transition-all duration-300"
-          style={{
-            width: `${total > 0 ? Math.round((completed / total) * 100) : 0}%`,
-          }}
-        />
-      </div>
-      <div className="space-y-1">
-        {items.map((item, index) => {
-          const label =
-            item.status === "in_progress"
-              ? item.activeForm || item.content
-              : item.content;
-          const Icon =
-            item.status === "completed"
-              ? CheckCircle2Icon
-              : item.status === "in_progress"
-                ? Loader2Icon
-                : CircleIcon;
-          return (
-            <div
-              key={`${index}-${item.content}`}
-              className="flex items-start gap-2 text-sm"
-            >
-              <Icon
-                className={cn(
-                  "mt-0.5 size-4 shrink-0",
-                  item.status === "completed" && "text-emerald-500",
-                  item.status === "in_progress" && "animate-spin text-blue-500",
-                  item.status === "pending" && "text-muted-foreground/50",
-                )}
-              />
-              <span
-                className={cn(
-                  "leading-5",
-                  item.status === "completed" &&
-                    "text-muted-foreground line-through",
-                  item.status === "in_progress" &&
-                    "font-medium text-foreground",
-                )}
-              >
-                {label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function ToolCall({

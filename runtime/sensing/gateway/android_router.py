@@ -99,11 +99,11 @@ def create_android_router() -> APIRouter:
             result = await pool.call_tool(device_id, method, params, timeout_s=30.0)
             return {"ok": True, "result": result}
         except TimeoutError as e:
-            raise HTTPException(504, str(e))
+            raise HTTPException(504, str(e)) from e
         except ConnectionError as e:
-            raise HTTPException(503, str(e))
+            raise HTTPException(503, str(e)) from e
         except Exception as e:
-            raise HTTPException(500, str(e))
+            raise HTTPException(500, str(e)) from e
 
     # ── Preview → Execute (mirrors computer_router.py) ─
 
@@ -150,9 +150,9 @@ def create_android_router() -> APIRouter:
             result = await pool.call_tool(device_id, method, params, timeout_s=30.0)
             return {"ok": True, "result": result}
         except TimeoutError as e:
-            raise HTTPException(504, str(e))
+            raise HTTPException(504, str(e)) from e
         except Exception as e:
-            raise HTTPException(500, str(e))
+            raise HTTPException(500, str(e)) from e
 
     # ── WebSocket (device ↔ server) ────────────────────
 

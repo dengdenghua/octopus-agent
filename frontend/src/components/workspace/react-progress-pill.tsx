@@ -13,7 +13,10 @@ interface Props {
 }
 
 /* Implementation note. */
-export const ReactProgressPill = memo(function ReactProgressPill({ threadId, className }: Props) {
+export const ReactProgressPill = memo(function ReactProgressPill({
+  threadId,
+  className,
+}: Props) {
   const { t } = useI18n();
   const b = t.pausedTasksBanner;
   const tasks = useTasks("active");
@@ -31,18 +34,19 @@ export const ReactProgressPill = memo(function ReactProgressPill({ threadId, cla
         taskId: active.task_id,
         reason: "user_request",
       });
-      toast.success(`${b.pauseRequestedPrefix} ${active.task_id.slice(0, 8)}…`, {
-        description: b.pauseRequestedDesc,
-      });
+      toast.success(
+        `${b.pauseRequestedPrefix} ${active.task_id.slice(0, 8)}…`,
+        {
+          description: b.pauseRequestedDesc,
+        },
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
   }
 
   const tokenPct =
-    active.max_tokens > 0
-      ? (active.tokens_spent / active.max_tokens) * 100
-      : 0;
+    active.max_tokens > 0 ? (active.tokens_spent / active.max_tokens) * 100 : 0;
   const iterPct =
     active.max_iterations > 0
       ? (active.current_iteration / active.max_iterations) * 100
@@ -72,7 +76,8 @@ export const ReactProgressPill = memo(function ReactProgressPill({ threadId, cla
       )}
       {active.max_tokens > 0 && (
         <span className="font-mono text-muted-foreground">
-          · {(active.tokens_spent / 1000).toFixed(1)}k/{(active.max_tokens / 1000).toFixed(0)}k
+          · {(active.tokens_spent / 1000).toFixed(1)}k/
+          {(active.max_tokens / 1000).toFixed(0)}k
         </span>
       )}
       <Button

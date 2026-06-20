@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -147,4 +146,3 @@ export const ArtifactContent = ({
     {...props}
   />
 );
-

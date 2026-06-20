@@ -58,7 +58,7 @@ class DeviceLockManager:
             raise TimeoutError(
                 f"Device {device_id} lock contention{holder_info}. "
                 f"Timeout after {timeout_s}s."
-            )
+            ) from None
 
         self._locks[device_id] = _LockEntry(holder=holder)
         try:

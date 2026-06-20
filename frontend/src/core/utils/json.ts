@@ -10,4 +10,3 @@ export function tryParseJSON(json: string) {
     return undefined;
   }
 }
-

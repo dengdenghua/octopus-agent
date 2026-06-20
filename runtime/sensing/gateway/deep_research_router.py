@@ -24,6 +24,7 @@ from runtime.research.deep_research import (
     DeepResearchRequest,
     ResearchJob,
     ResearchMaterial,
+    ResearchRouteDecision,
 )
 from runtime.research.prefetch import ResearchPrefetcher
 
@@ -35,6 +36,7 @@ def create_deep_research_router(
     upload_root: Path | None = None,
     agents_root: Path | None = None,
     job_store_path: Path | None = None,
+    review_queue_path: Path | None = None,
     prefetcher: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -50,6 +52,7 @@ def create_deep_research_router(
     planner = DeepResearchPlanner()
     source_prefetcher = prefetcher or ResearchPrefetcher()
     store_path = job_store_path or _default_job_store_path()
+    route_review_queue_path = review_queue_path or app_paths().review_queue_path
     jobs: dict[str, ResearchJob] = _load_jobs(store_path)
     workspace_manager = WorkspaceManager(workspace_root) if workspace_root else None
 
@@ -131,6 +134,7 @@ def create_deep_research_router(
         if batch is None:
             return job
 
+        route_decisions_changed = _sync_route_decisions(job, batch)
         results_by_task = {result.task_id: result for result in batch.results}
         for step in job.steps:
             if step.role_id == "synthesis":
@@ -170,6 +174,8 @@ def create_deep_research_router(
             _save_job(job)
         elif batch.status == "running":
             job.status = "running"
+            if route_decisions_changed:
+                _save_job(job)
         return job
 
     @router.post("/api/research/deep/plan")
@@ -197,6 +203,9 @@ def create_deep_research_router(
                     thread_id=body.thread_id,
                     context={
                         "lead_agent_name": body.lead_agent_name,
+                        "task_risk_level": body.task_risk_level or "low",
+                        "review_queue_path": str(route_review_queue_path),
+                        "subagent_policy_path": str(app_paths().subagent_policy_path),
                         "research_job_id": job.job_id,
                         "research_ephemeral_workers": True,
                         "research_sources": [
@@ -283,6 +292,80 @@ def _append_job(path: Path, job: ResearchJob) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(job.model_dump_json() + "\n")
+
+
+def _sync_route_decisions(job: ResearchJob, batch: Any) -> bool:
+    old = [decision.model_dump() for decision in job.route_decisions]
+    decisions = _route_decisions_from_batch(batch)
+    if not decisions:
+        return False
+    job.route_decisions = decisions
+    by_step = {
+        decision.step_id: decision
+        for decision in decisions
+        if decision.step_id
+    }
+    for step in job.steps:
+        if step.id in by_step:
+            step.route_decision = by_step[step.id]
+    new = [decision.model_dump() for decision in job.route_decisions]
+    return new != old
+
+
+def _route_decisions_from_batch(batch: Any) -> list[ResearchRouteDecision]:
+    latest: dict[str, ResearchRouteDecision] = {}
+    for event in getattr(batch, "event_log", None) or []:
+        payload = getattr(event, "payload", None)
+        if not isinstance(payload, dict):
+            continue
+        raw = payload.get("subagent_route_decision")
+        if not isinstance(raw, dict):
+            continue
+        if raw.get("schema") != "octopus.subagent_route_decision.v1":
+            continue
+        step_id = _clean_route_text(getattr(event, "task_id", None))
+        role = _clean_route_text(raw.get("role"))
+        if not step_id and not role:
+            continue
+        decision = ResearchRouteDecision(
+            step_id=step_id or None,
+            task_id=step_id or None,
+            role=role,
+            action=_clean_route_text(raw.get("action")) or "allow",
+            reason=_clean_route_text(raw.get("reason"), limit=600),
+            risk_level=_clean_route_text(raw.get("risk_level")) or "low",
+            verdict=_clean_route_text(raw.get("verdict")) or "unknown",
+            score=_float_or_none(raw.get("score")),
+            confidence=_float_or_default(raw.get("confidence")),
+            evidence_item_ids=[
+                item
+                for item in (
+                    _clean_route_text(value)
+                    for value in (raw.get("evidence_item_ids") or [])
+                )
+                if item
+            ],
+            phase=_clean_route_text(getattr(event, "phase", None)) or None,
+            created_at=_clean_route_text(getattr(event, "created_at", None)) or None,
+        )
+        latest[step_id or role] = decision
+    return list(latest.values())
+
+
+def _clean_route_text(value: Any, *, limit: int = 120) -> str:
+    return " ".join(str(value or "").split()).strip()[:limit]
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_default(value: Any) -> float:
+    parsed = _float_or_none(value)
+    return parsed if parsed is not None else 0.0
 
 
 __all__ = ["create_deep_research_router"]

@@ -11,11 +11,9 @@ Covers:
 """
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -185,7 +183,6 @@ def test_multiple_items_all_processed(mock_subagent, unlimited_budget, mock_buil
 
 def test_results_in_original_order(mock_subagent, unlimited_budget, mock_builtins):
     """Results preserve original item order even with concurrent execution."""
-    import threading
     from runtime.execution.suckers.delegation_skills import _run_pipeline
 
     # Stagger so items finish in reverse order (c finishes first)
@@ -313,7 +310,6 @@ def test_stages_clamped_to_4(mock_subagent, unlimited_budget, mock_builtins):
 
 def test_register_delegation_skills_returns_5():
     """register_delegation_skills must register exactly 5 skills now."""
-    from unittest.mock import MagicMock
 
     from runtime.execution.suckers.delegation_skills import register_delegation_skills
 

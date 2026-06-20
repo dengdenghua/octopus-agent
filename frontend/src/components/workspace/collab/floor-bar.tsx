@@ -18,15 +18,15 @@ export function FloorBar() {
   const collab = useOptionalCollab();
   if (!collab) return null;
 
-  const { floor, currentUser, users, raiseHand, yieldFloor, grantFloor } = collab;
+  const { floor, currentUser, users, raiseHand, yieldFloor, grantFloor } =
+    collab;
   if (!TURN_POLICIES.has(floor.speakerPolicy)) return null;
 
   const myId = currentUser?.id ?? "";
   const isMyTurn = floor.currentSpeakerId === myId;
   const isModerator = !!floor.moderatorId && floor.moderatorId === myId;
   const inQueue = floor.floorRequests.includes(myId);
-  const nameFor = (id: string) =>
-    users.find((u) => u.id === id)?.name ?? id;
+  const nameFor = (id: string) => users.find((u) => u.id === id)?.name ?? id;
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-border/30 px-3 py-1.5 text-[11px]">
@@ -34,7 +34,9 @@ export function FloorBar() {
       <span
         className={cn(
           "font-medium",
-          isMyTurn ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+          isMyTurn
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-muted-foreground",
         )}
       >
         {isMyTurn
@@ -73,7 +75,9 @@ export function FloorBar() {
 
       {isModerator && floor.floorRequests.length > 0 && (
         <div className="flex w-full flex-wrap items-center gap-1.5 pt-1">
-          <span className="text-muted-foreground">{t.teamFloor.raisedHands}:</span>
+          <span className="text-muted-foreground">
+            {t.teamFloor.raisedHands}:
+          </span>
           {floor.floorRequests.map((id) => (
             <Button
               key={id}

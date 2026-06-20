@@ -75,11 +75,9 @@ export const LOCAL_AGENT_ORDER = [
   "vibe_selling",
   "ecommerce_mind",
   "market_researcher",
-  "financial_earnings_reviewer",
-  "desktop_operator",
-  "admin",
+  "aoi",
 ] as const;
-export const BUILTIN_LOCAL_AGENT_IDS = new Set<string>(LOCAL_AGENT_ORDER);
+export const LOCAL_AGENT_IDS = new Set<string>(LOCAL_AGENT_ORDER);
 export const LOCAL_AGENT_RANK = new Map<string, number>(
   LOCAL_AGENT_ORDER.map((id, index) => [id, index]),
 );
@@ -123,18 +121,19 @@ export const DIGITAL_TWIN_INDUSTRY_FILTERS: DigitalTwinIndustry[] = [
   "manufacturing",
   "cross-domain",
 ];
-export const DIGITAL_TWIN_INDUSTRY_LABELS: Record<DigitalTwinIndustry, string> = {
-  all: "全部",
-  operation: "经营管理",
-  electronics: "电子硬件",
-  optics: "光学影像",
-  communication: "通信射频",
-  mechanical: "机械结构",
-  reliability: "热声可靠性",
-  "software-ai": "软件 AI",
-  manufacturing: "制造供应链",
-  "cross-domain": "跨域专家",
-};
+export const DIGITAL_TWIN_INDUSTRY_LABELS: Record<DigitalTwinIndustry, string> =
+  {
+    all: "全部",
+    operation: "经营管理",
+    electronics: "电子硬件",
+    optics: "光学影像",
+    communication: "通信射频",
+    mechanical: "机械结构",
+    reliability: "热声可靠性",
+    "software-ai": "软件 AI",
+    manufacturing: "制造供应链",
+    "cross-domain": "跨域专家",
+  };
 export const DIGITAL_TWIN_PROFILES: DigitalTwinProfile[] = [
   {
     id: "founder-twin",
@@ -891,6 +890,13 @@ export function localAgentToWorldAgent(agent: Agent): AgentWorldAgent {
     icon: agent.icon || "🤖",
     avatar_url: agent.avatar_url ?? undefined,
     visual_urls: agent.visual_urls ?? undefined,
+    model: agent.model ?? null,
+    soul: agent.soul ?? null,
+    tool_groups: toolGroups,
+    private_skills: [],
+    key_skills: [],
+    available_skills: [],
+    extra_affinity: [],
     version: "1.0.0",
     downloads: 0,
     rating: 4.8,
@@ -910,7 +916,8 @@ export function worldAgentToAgent(agent: AgentWorldAgent): Agent {
     icon: agent.icon,
     avatar_url: agent.avatar_url ?? null,
     visual_urls: agent.visual_urls ?? null,
-    model: null,
-    tool_groups: agent.tags,
+    model: agent.model ?? null,
+    tool_groups: agent.tool_groups ?? agent.tags,
+    soul: agent.soul ?? null,
   };
 }

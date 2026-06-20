@@ -70,7 +70,8 @@ export type ComputerActionMetadata = {
   [key: string]: unknown;
 };
 
-export type ComputerActionPayload = Record<string, unknown> & ComputerActionMetadata;
+export type ComputerActionPayload = Record<string, unknown> &
+  ComputerActionMetadata;
 
 export type ComputerAction =
   | (ComputerActionMetadata & {
@@ -81,7 +82,11 @@ export type ComputerAction =
       clicks?: number;
       duration?: number;
     })
-  | (ComputerActionMetadata & { action: "type"; text: string; interval?: number })
+  | (ComputerActionMetadata & {
+      action: "type";
+      text: string;
+      interval?: number;
+    })
   | (ComputerActionMetadata & { action: "key"; keys: string[] | string })
   | (ComputerActionMetadata & { action: "wait"; ms: number });
 
@@ -141,7 +146,8 @@ function leaseOwnerBody(leaseOwner?: ComputerLeaseOwner | null) {
 
 export async function getComputerStatus(): Promise<ComputerStatus> {
   const res = await fetch(`${BASE()}/status`, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`Failed to load computer status: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load computer status: ${res.statusText}`);
   return (await res.json()) as ComputerStatus;
 }
 
@@ -166,7 +172,9 @@ export async function previewComputerAction(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to preview action: ${res.status}${text ? ` ${text}` : ""}`);
+    throw new Error(
+      `Failed to preview action: ${res.status}${text ? ` ${text}` : ""}`,
+    );
   }
   return (await res.json()) as ComputerPreview;
 }
@@ -186,7 +194,9 @@ export async function planComputerActions(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to plan actions: ${res.status}${text ? ` ${text}` : ""}`);
+    throw new Error(
+      `Failed to plan actions: ${res.status}${text ? ` ${text}` : ""}`,
+    );
   }
   return (await res.json()) as ComputerActionPlan;
 }
@@ -208,7 +218,9 @@ export async function groundComputerActions(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to ground vision output: ${res.status}${text ? ` ${text}` : ""}`);
+    throw new Error(
+      `Failed to ground vision output: ${res.status}${text ? ` ${text}` : ""}`,
+    );
   }
   return (await res.json()) as ComputerActionPlan;
 }
@@ -221,11 +233,17 @@ export async function askVisionModelForComputerActions(
   const res = await fetch(`${BASE()}/actions/vision`, {
     method: "POST",
     headers: jsonAuthHeaders(),
-    body: JSON.stringify({ goal, model_id: modelId, ...leaseOwnerBody(options.leaseOwner) }),
+    body: JSON.stringify({
+      goal,
+      model_id: modelId,
+      ...leaseOwnerBody(options.leaseOwner),
+    }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to ask vision model: ${res.status}${text ? ` ${text}` : ""}`);
+    throw new Error(
+      `Failed to ask vision model: ${res.status}${text ? ` ${text}` : ""}`,
+    );
   }
   return (await res.json()) as ComputerActionPlan;
 }
@@ -241,7 +259,9 @@ export async function executeComputerAction(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to execute action: ${res.status}${text ? ` ${text}` : ""}`);
+    throw new Error(
+      `Failed to execute action: ${res.status}${text ? ` ${text}` : ""}`,
+    );
   }
   return (await res.json()) as ComputerExecuteResult;
 }
@@ -256,7 +276,9 @@ export async function releaseComputerLease(
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`Failed to release computer lease: ${res.status}${text ? ` ${text}` : ""}`);
+    throw new Error(
+      `Failed to release computer lease: ${res.status}${text ? ` ${text}` : ""}`,
+    );
   }
   return (await res.json()) as ComputerLeaseReleaseResult;
 }

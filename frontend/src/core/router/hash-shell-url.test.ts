@@ -45,7 +45,11 @@ describe("hash router shell URL normalization", () => {
   });
 
   test("rewrites direct app path loads into hash routes", () => {
-    window.history.replaceState(null, "", "/workspace/realtime/new?agent=general");
+    window.history.replaceState(
+      null,
+      "",
+      "/workspace/realtime/new?agent=general",
+    );
 
     normalizeHashRouterShellUrl();
 

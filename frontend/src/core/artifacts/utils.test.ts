@@ -15,23 +15,36 @@ import {
 
 describe("urlOfArtifact", () => {
   it("builds non-mock URL", () => {
-    expect(urlOfArtifact({ filepath: "/out.pdf", threadId: "t1" }))
-      .toBe("http://localhost:8001/api/threads/t1/artifacts/out.pdf");
+    expect(urlOfArtifact({ filepath: "/out.pdf", threadId: "t1" })).toBe(
+      "http://localhost:8001/api/threads/t1/artifacts/out.pdf",
+    );
   });
 
   it("builds mock URL", () => {
-    expect(urlOfArtifact({ filepath: "/out.pdf", threadId: "t1", isMock: true }))
-      .toBe("http://localhost:8001/mock/api/threads/t1/artifacts/out.pdf");
+    expect(
+      urlOfArtifact({ filepath: "/out.pdf", threadId: "t1", isMock: true }),
+    ).toBe("http://localhost:8001/mock/api/threads/t1/artifacts/out.pdf");
   });
 
   it("appends download param", () => {
-    expect(urlOfArtifact({ filepath: "/out.pdf", threadId: "t1", download: true }))
-      .toBe("http://localhost:8001/api/threads/t1/artifacts/out.pdf?download=true");
+    expect(
+      urlOfArtifact({ filepath: "/out.pdf", threadId: "t1", download: true }),
+    ).toBe(
+      "http://localhost:8001/api/threads/t1/artifacts/out.pdf?download=true",
+    );
   });
 
   it("builds mock URL with download", () => {
-    expect(urlOfArtifact({ filepath: "/out.pdf", threadId: "t1", isMock: true, download: true }))
-      .toBe("http://localhost:8001/mock/api/threads/t1/artifacts/out.pdf?download=true");
+    expect(
+      urlOfArtifact({
+        filepath: "/out.pdf",
+        threadId: "t1",
+        isMock: true,
+        download: true,
+      }),
+    ).toBe(
+      "http://localhost:8001/mock/api/threads/t1/artifacts/out.pdf?download=true",
+    );
   });
 
   it("builds workspace output URLs", () => {
@@ -39,10 +52,14 @@ describe("urlOfArtifact", () => {
       area: "final",
       relativePath: "reports/out file.md",
     });
-    expect(urlOfArtifact({ filepath: ref, threadId: "t1" }))
-      .toBe("http://localhost:8001/api/threads/t1/outputs/reports/out%20file.md?area=final");
-    expect(urlOfArtifact({ filepath: ref, threadId: "t1", download: true }))
-      .toBe("http://localhost:8001/api/threads/t1/outputs/reports/out%20file.md?area=final&download=true");
+    expect(urlOfArtifact({ filepath: ref, threadId: "t1" })).toBe(
+      "http://localhost:8001/api/threads/t1/outputs/reports/out%20file.md?area=final",
+    );
+    expect(
+      urlOfArtifact({ filepath: ref, threadId: "t1", download: true }),
+    ).toBe(
+      "http://localhost:8001/api/threads/t1/outputs/reports/out%20file.md?area=final&download=true",
+    );
   });
 });
 
@@ -64,8 +81,9 @@ describe("workspace output refs", () => {
 
 describe("resolveArtifactURL", () => {
   it("builds absolute artifact URL", () => {
-    expect(resolveArtifactURL("/report.html", "t2"))
-      .toBe("http://localhost:8001/api/threads/t2/artifacts/report.html");
+    expect(resolveArtifactURL("/report.html", "t2")).toBe(
+      "http://localhost:8001/api/threads/t2/artifacts/report.html",
+    );
   });
 });
 

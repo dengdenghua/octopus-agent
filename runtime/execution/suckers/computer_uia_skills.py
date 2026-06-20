@@ -328,6 +328,67 @@ def _computer_uia_find(
     }
 
 
+def uia_replay_assertion_for_action(action: dict[str, Any]) -> dict[str, Any]:
+    matched = (
+        action.get("matched_control")
+        if isinstance(action.get("matched_control"), dict)
+        else {}
+    )
+    rect = matched.get("rect") if isinstance(matched.get("rect"), dict) else {}
+    center = matched.get("center") if isinstance(matched.get("center"), dict) else {}
+    failures: list[str] = []
+    try:
+        action_x = int(action.get("x"))
+        action_y = int(action.get("y"))
+        center_x = int(center.get("x"))
+        center_y = int(center.get("y"))
+    except (TypeError, ValueError):
+        failures.append("action or control center coordinates are missing")
+        action_x = action_y = center_x = center_y = 0
+    else:
+        if (action_x, action_y) != (center_x, center_y):
+            failures.append("action coordinates do not match the resolved control center")
+
+    try:
+        left = int(rect.get("left"))
+        top = int(rect.get("top"))
+        right = int(rect.get("right"))
+        bottom = int(rect.get("bottom"))
+    except (TypeError, ValueError):
+        failures.append("resolved control rectangle is missing")
+        left = top = right = bottom = 0
+    else:
+        if not (left <= center_x <= right and top <= center_y <= bottom):
+            failures.append("resolved control center is outside its rectangle")
+
+    if not str(matched.get("automation_id") or matched.get("name") or "").strip():
+        failures.append("resolved control has no stable name or automation id")
+
+    ok = not failures
+    return {
+        "schema": "octopus.computer_uia_replay_assertion.v1",
+        "ok": ok,
+        "reason": "passed" if ok else "; ".join(failures),
+        "action": {
+            "action": action.get("action"),
+            "x": action.get("x"),
+            "y": action.get("y"),
+            "source": action.get("source"),
+        },
+        "matched_control": {
+            "id": matched.get("id"),
+            "name": matched.get("name"),
+            "control_type": matched.get("control_type"),
+            "class_name": matched.get("class_name"),
+            "automation_id": matched.get("automation_id"),
+            "center": center,
+            "rect": rect,
+            "query": matched.get("query"),
+            "score": matched.get("score"),
+        },
+    }
+
+
 def register_computer_uia_skills(registry: SkillRegistry) -> int:
     items = [
         Skill(
@@ -380,4 +441,5 @@ __all__ = [
     "_computer_uia_status",
     "_computer_uia_tree",
     "register_computer_uia_skills",
+    "uia_replay_assertion_for_action",
 ]

@@ -13,11 +13,11 @@ def _deobfuscate(value: str) -> str:
     return base64.b64decode(value.encode()).decode()
 
 
-import random
-import threading
-import time
-from dataclasses import dataclass, field
-from typing import Any
+import random  # noqa: E402
+import threading  # noqa: E402
+import time  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
+from typing import Any  # noqa: E402
 
 _LOG = logging.getLogger("octopus.credentials.pool")
 

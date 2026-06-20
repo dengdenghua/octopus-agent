@@ -5,10 +5,66 @@ from typing import Any
 
 try:
     from fastapi import APIRouter, Query
+    from pydantic import BaseModel, Field
 
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
+
+
+if FASTAPI_AVAILABLE:
+    class SubagentPolicyDecisionBody(BaseModel):
+        action: str = Field(..., pattern="^(watch|retire|clear)$")
+        reason: str = ""
+        evidence_item_ids: list[str] = Field(default_factory=list)
+        actor: str = "operator_panel"
+
+
+    class ScorecardGapQueueBody(BaseModel):
+        target_score: int = Field(default=90, ge=1, le=100)
+        limit: int = Field(default=10, ge=1, le=50)
+        reason: str = "operator_scorecard_gap_review"
+        dimension_id: str = ""
+
+
+    class VerifierDriftQueueBody(BaseModel):
+        limit: int = Field(default=1000, ge=1, le=5000)
+
+
+    class RepairRoutePromotionQueueBody(BaseModel):
+        limit: int = Field(default=1000, ge=1, le=5000)
+
+
+    class BrowserDesktopRepairRecipeQueueBody(BaseModel):
+        limit: int = Field(default=1000, ge=1, le=5000)
+        min_occurrences: int = Field(default=1, ge=1, le=20)
+
+
+    class BrowserDesktopStaleArtifactRejectionBody(BaseModel):
+        limit: int = Field(default=1000, ge=1, le=5000)
+
+
+    class BrowserDesktopRepairRecipeEvidenceBody(BaseModel):
+        item_id: str
+        passed: bool = False
+        provided: list[str] = Field(default_factory=list)
+        artifacts: list[dict[str, Any]] = Field(default_factory=list)
+        notes: str = ""
+        actor: str = "operator_panel"
+
+
+    class BrowserDesktopRepairRecipeRerunBody(BaseModel):
+        item_id: str
+        api_base_url: str = "http://127.0.0.1:8000"
+        promote_source_cases: bool = False
+        actor: str = "operator_panel"
+
+
+    class BrowserDesktopRepairRecipeRerunBatchBody(BaseModel):
+        api_base_url: str = "http://127.0.0.1:8000"
+        promote_source_cases: bool = False
+        actor: str = "operator_panel"
+        limit: int = Field(default=20, ge=1, le=100)
 
 _LOG = logging.getLogger("octopus.siphon.evolution_router")
 
@@ -18,6 +74,396 @@ def create_evolution_router() -> Any:
         return APIRouter() if FASTAPI_AVAILABLE else None
 
     router = APIRouter(prefix="/api/evolution", tags=["evolution"])
+
+    @router.get("/codex-gap")
+    def get_codex_gap() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.codex_gap import compute_codex_gap_report
+
+            return {"ok": True, **compute_codex_gap_report()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/agent-scorecard")
+    def get_agent_scorecard(
+        target_score: int = Query(default=90, ge=1, le=100),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.agent_competitor_scorecard import (
+                compute_agent_competitor_scorecard,
+            )
+
+            return {
+                "ok": True,
+                **compute_agent_competitor_scorecard(target_score=target_score),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/agent-scorecard/gaps/queue")
+    def queue_agent_scorecard_gaps(
+        body: ScorecardGapQueueBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.memory.learning.review_queue import ReviewQueue
+            from runtime.platform.process.paths import app_paths
+            from runtime.safety.evolution.agent_competitor_scorecard import (
+                compute_agent_competitor_scorecard,
+            )
+
+            body = body or ScorecardGapQueueBody()
+            report = compute_agent_competitor_scorecard(
+                target_score=body.target_score,
+            )
+            queue = ReviewQueue(app_paths().review_queue_path)
+            created = 0
+            updated = 0
+            items: list[dict[str, Any]] = []
+            rows = sorted(
+                report.get("octopus_below_target") or [],
+                key=lambda row: (
+                    int(row.get("octopus_gap_to_target") or 0),
+                    int(row.get("weight") or 0),
+                ),
+                reverse=True,
+            )
+            if body.dimension_id:
+                wanted_dimension = str(body.dimension_id).strip()
+                rows = [
+                    row
+                    for row in rows
+                    if isinstance(row, dict)
+                    and str(row.get("id") or "") == wanted_dimension
+                ]
+            rows = rows[: body.limit]
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                dimension_id = str(row.get("id") or "unknown")
+                next_actions = row.get("octopus_next_actions")
+                result = queue.upsert_item(
+                    source="agent_scorecard_gap",
+                    source_kind="scorecard_gap",
+                    candidate_kind=f"scorecard_gap:{dimension_id}",
+                    priority=_scorecard_gap_priority(
+                        int(row.get("octopus_gap_to_target") or 0),
+                    ),
+                    target_bucket="scorecard_gap_backlog",
+                    title=f"Raise {row.get('title') or row.get('id') or 'scorecard gap'}",
+                    text=_scorecard_gap_text(row, reason=body.reason),
+                    metadata={
+                        "schema": "octopus.agent_scorecard_gap.v1",
+                        "dimension_id": row.get("id"),
+                        "title": row.get("title"),
+                        "target_score": body.target_score,
+                        "gap": row.get("octopus_gap_to_target"),
+                        "scores": row.get("scores"),
+                        "evidence_adjusted_scores": row.get(
+                            "evidence_adjusted_scores",
+                        ),
+                        "octopus_evidence_adjusted_score": row.get(
+                            "octopus_evidence_adjusted_score",
+                        ),
+                        "next_actions": next_actions,
+                        "remediation": {
+                            "schema": "octopus.scorecard_gap_remediation.v1",
+                            "dimension_id": dimension_id,
+                            "status": "queued",
+                            "primary_action": (
+                                str(next_actions[0])
+                                if isinstance(next_actions, list) and next_actions
+                                else ""
+                            ),
+                            "evidence_checklist": row.get(
+                                "octopus_evidence_checklist",
+                            ),
+                        },
+                        "scorecard_policy": report.get("scorecard_policy"),
+                    },
+                    tags=[
+                        "scorecard_gap",
+                        "real_baseline",
+                        dimension_id,
+                    ],
+                )
+                created += int(result.get("created") or 0)
+                updated += int(result.get("updated") or 0)
+                items.extend(result.get("items") or [])
+
+            return {
+                "ok": True,
+                "schema": "octopus.agent_scorecard_gap_queue.v1",
+                "created": created,
+                "updated": updated,
+                "total": created + updated,
+                "items": items,
+                "scorecard": {
+                    "overall": report.get("overall"),
+                    "verdict": report.get("verdict"),
+                    "evidence_adjusted_overall": report.get(
+                        "evidence_adjusted_overall",
+                    ),
+                    "below_target_count": len(report.get("octopus_below_target") or []),
+                },
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/browser-desktop-quality")
+    def get_browser_desktop_quality() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_quality import (
+                compute_browser_desktop_quality,
+            )
+
+            return {"ok": True, **compute_browser_desktop_quality()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/browser-desktop-repair-recipes")
+    def get_browser_desktop_repair_recipes(
+        limit: int = Query(default=1000, ge=1, le=5000),
+        min_occurrences: int = Query(default=1, ge=1, le=20),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_repair_recipes import (
+                compute_browser_desktop_repair_recipes,
+            )
+
+            return {
+                "ok": True,
+                **compute_browser_desktop_repair_recipes(
+                    limit=limit,
+                    min_occurrences=min_occurrences,
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/browser-desktop-repair-recipes/queue")
+    def queue_browser_desktop_repair_recipes(
+        body: BrowserDesktopRepairRecipeQueueBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_repair_recipes import (
+                queue_browser_desktop_repair_recipes,
+            )
+
+            body = body or BrowserDesktopRepairRecipeQueueBody()
+            return {
+                "ok": True,
+                **queue_browser_desktop_repair_recipes(
+                    limit=body.limit,
+                    min_occurrences=body.min_occurrences,
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/browser-desktop-repair-recipes/stale-artifacts/reject")
+    def reject_stale_browser_desktop_replay_artifacts(
+        body: BrowserDesktopStaleArtifactRejectionBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_repair_recipes import (
+                reject_stale_browser_desktop_replay_artifacts,
+            )
+
+            body = body or BrowserDesktopStaleArtifactRejectionBody()
+            return {
+                "ok": True,
+                **reject_stale_browser_desktop_replay_artifacts(limit=body.limit),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/browser-desktop-repair-recipes/verifications")
+    def get_browser_desktop_repair_recipe_verifications(
+        limit: int = Query(default=1000, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_repair_recipes import (
+                compute_browser_desktop_repair_recipe_verifications,
+            )
+
+            return {
+                "ok": True,
+                **compute_browser_desktop_repair_recipe_verifications(limit=limit),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/browser-desktop-repair-recipes/verifications/evidence")
+    def attach_browser_desktop_repair_recipe_evidence(
+        body: BrowserDesktopRepairRecipeEvidenceBody,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_repair_recipes import (
+                attach_browser_desktop_repair_recipe_evidence,
+            )
+
+            return {
+                "ok": True,
+                **attach_browser_desktop_repair_recipe_evidence(
+                    item_id=body.item_id,
+                    passed=body.passed,
+                    provided=body.provided,
+                    artifacts=body.artifacts,
+                    notes=body.notes,
+                    actor=body.actor,
+                ),
+            }
+        except KeyError as exc:
+            return {"ok": False, "error": f"recipe item not found: {exc}"}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/browser-desktop-repair-recipes/verifications/rerun")
+    def rerun_browser_desktop_repair_recipe_evidence(
+        body: BrowserDesktopRepairRecipeRerunBody,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_repair_recipes import (
+                rerun_browser_desktop_repair_recipe_evidence,
+            )
+
+            return {
+                "ok": True,
+                **rerun_browser_desktop_repair_recipe_evidence(
+                    item_id=body.item_id,
+                    api_base_url=body.api_base_url,
+                    promote_source_cases=body.promote_source_cases,
+                    actor=body.actor,
+                ),
+            }
+        except KeyError as exc:
+            return {"ok": False, "error": f"recipe item not found: {exc}"}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/browser-desktop-repair-recipes/verifications/rerun-batch")
+    def rerun_browser_desktop_repair_recipe_batch(
+        body: BrowserDesktopRepairRecipeRerunBatchBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_repair_recipes import (
+                rerun_browser_desktop_repair_recipe_batch,
+            )
+
+            body = body or BrowserDesktopRepairRecipeRerunBatchBody()
+            return {
+                "ok": True,
+                **rerun_browser_desktop_repair_recipe_batch(
+                    api_base_url=body.api_base_url,
+                    promote_source_cases=body.promote_source_cases,
+                    actor=body.actor,
+                    limit=body.limit,
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/repair-route-quality")
+    def get_repair_route_quality(
+        limit: int = Query(default=1000, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.repair_route_quality import (
+                compute_repair_route_quality,
+            )
+
+            return {"ok": True, **compute_repair_route_quality(limit=limit)}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/repair-route-quality/promotions/queue")
+    def queue_repair_route_promotions(
+        body: RepairRoutePromotionQueueBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.repair_route_quality import (
+                queue_repair_route_promotion_candidates,
+            )
+
+            body = body or RepairRoutePromotionQueueBody()
+            return {
+                "ok": True,
+                **queue_repair_route_promotion_candidates(limit=body.limit),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/auto-verifier-metrics")
+    def get_auto_verifier_metrics(
+        limit: int = Query(default=1000, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.auto_verifier_metrics import (
+                summarize_auto_verifier_metrics,
+            )
+
+            return {"ok": True, **summarize_auto_verifier_metrics(limit=limit)}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/auto-verifier-metrics/drift/queue")
+    def queue_auto_verifier_drift(
+        body: VerifierDriftQueueBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.auto_verifier_metrics import (
+                queue_verifier_drift_backlog,
+            )
+
+            body = body or VerifierDriftQueueBody()
+            return {
+                "ok": True,
+                **queue_verifier_drift_backlog(limit=body.limit),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/subagent-fitness")
+    def get_subagent_fitness(
+        role: str | None = Query(default=None),
+        limit: int = Query(default=2000, ge=1, le=5000),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.subagent_fitness import (
+                compute_subagent_fitness,
+            )
+
+            return {"ok": True, **compute_subagent_fitness(role=role, limit=limit)}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/subagent-policy")
+    def get_subagent_policy() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+
+            return {"ok": True, **SubagentPolicyStore().summary()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/subagent-policy/{role}/decision")
+    def decide_subagent_policy(
+        role: str,
+        body: SubagentPolicyDecisionBody,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+
+            result = SubagentPolicyStore().decide(
+                role,
+                action=body.action,
+                reason=body.reason,
+                evidence_item_ids=body.evidence_item_ids,
+                actor=body.actor,
+            )
+            return {"ok": True, **result}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
 
     @router.get("/fitness/{agent_id}")
     def get_fitness(agent_id: str, window: int = Query(default=20, ge=5, le=100)) -> dict[str, Any]:
@@ -40,6 +486,19 @@ def create_evolution_router() -> Any:
                     "action": report.l2.action,
                     "confidence": report.l2.confidence,
                 } if report.l2 else None,
+                "governance": {
+                    "score": report.governance.score,
+                    "penalty": report.governance.penalty,
+                    "audit_total": report.governance.audit_total,
+                    "recent_total": report.governance.recent_total,
+                    "override_count": report.governance.override_count,
+                    "gate_failed_count": report.governance.gate_failed_count,
+                    "gate_blocked_override_count": (
+                        report.governance.gate_blocked_override_count
+                    ),
+                    "failed_apply_count": report.governance.failed_apply_count,
+                    "reasons": report.governance.reasons,
+                } if report.governance else None,
                 "combined": report.combined,
                 "verdict": report.verdict,
             }
@@ -229,3 +688,43 @@ def create_evolution_router() -> Any:
             return {"ok": False, "error": str(exc)}
 
     return router
+
+
+def _scorecard_gap_priority(gap: int) -> str:
+    if gap >= 10:
+        return "P0"
+    if gap >= 5:
+        return "P1"
+    return "P2"
+
+
+def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:
+    scores = row.get("scores") if isinstance(row.get("scores"), dict) else {}
+    adjusted = (
+        row.get("evidence_adjusted_scores")
+        if isinstance(row.get("evidence_adjusted_scores"), dict)
+        else {}
+    )
+    actions = [
+        str(action)
+        for action in row.get("octopus_next_actions") or []
+        if action
+    ]
+    lines = [
+        f"Real baseline gap for `{row.get('title') or row.get('id')}`.",
+        (
+            f"Octopus baseline: {scores.get('octopus', 0)}; "
+            f"target gap: {row.get('octopus_gap_to_target', 0)}."
+        ),
+    ]
+    if adjusted:
+        lines.append(
+            "Internal evidence-adjusted score: "
+            f"{adjusted.get('octopus', row.get('octopus_evidence_adjusted_score', 0))}."
+        )
+    if actions:
+        lines.append("Next actions:")
+        lines.extend(f"- {action}" for action in actions[:3])
+    if reason:
+        lines.append(f"Reason: {reason[:500]}")
+    return "\n".join(lines)

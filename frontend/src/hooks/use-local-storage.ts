@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 
 export function useLocalStorage<T>(
   key: string,
-  initialValue: T
+  initialValue: T,
 ): [T, (value: T | ((val: T) => T)) => void] {
   // Implementation note.
   const readValue = useCallback((): T => {
@@ -37,7 +37,7 @@ export function useLocalStorage<T>(
         console.warn(`Error setting localStorage key "${key}":`, error);
       }
     },
-    [key, storedValue]
+    [key, storedValue],
   );
 
   // Implementation note.

@@ -68,6 +68,7 @@ import { getAPIClient } from "@/core/api";
 import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales/types";
 import { useDeleteThread, useThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
 import { useTeamTasks } from "@/core/team-tasks";
@@ -131,30 +132,30 @@ const COMPANY_CAPABILITY_ROUTES: NavRoute[] = [
   },
 ];
 
-const NAS_LIBRARY_ROUTES: NavRoute[] = [
+const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
   {
-    to: "/workspace/nas?surface=company&library=apps",
-    label: "应用",
+    to: "/workspace/storage?surface=company&library=apps",
+    labelKey: "libraryApps",
     icon: AppWindowIcon,
   },
   {
-    to: "/workspace/nas?surface=company&library=docs",
-    label: "文档",
+    to: "/workspace/storage?surface=company&library=docs",
+    labelKey: "libraryDocs",
     icon: FileTextIcon,
   },
   {
-    to: "/workspace/nas?surface=company&library=images",
-    label: "图片",
+    to: "/workspace/storage?surface=company&library=images",
+    labelKey: "libraryImages",
     icon: FileImageIcon,
   },
   {
-    to: "/workspace/nas?surface=company&library=computer",
-    label: "本机",
+    to: "/workspace/storage?surface=company&library=computer",
+    labelKey: "libraryComputer",
     icon: HardDriveIcon,
   },
   {
-    to: "/workspace/nas?surface=company&library=sources",
-    label: "授权目录",
+    to: "/workspace/storage?surface=company&library=sources",
+    labelKey: "libraryAuthorizedDirs",
     icon: FolderPlusIcon,
   },
 ];
@@ -203,10 +204,12 @@ function buildOngoingWorkItems({
   activeTeamThreadId,
   activeTeamTasks,
   teamTaskThreads,
+  sidebar,
 }: {
   activeTeamThreadId: string | null;
   activeTeamTasks: TeamTask[];
   teamTaskThreads: ThreadSummary[];
+  sidebar: Translations["sidebar"];
 }): OngoingWorkItem[] {
   const items: OngoingWorkItem[] = [];
   const activeStatuses = new Set(["running", "failed", "pending"]);
@@ -214,13 +217,13 @@ function buildOngoingWorkItems({
     if (!activeStatuses.has(task.status)) continue;
     items.push({
       id: `task:${task.id}`,
-      title: task.title || "未命名任务",
+      title: task.title || sidebar.unnamedTask,
       subtitle:
         task.status === "running"
-          ? "运行中"
+          ? sidebar.taskStatusRunning
           : task.status === "failed"
-            ? "异常待处理"
-            : "待启动",
+            ? sidebar.taskStatusFailed
+            : sidebar.taskStatusPending,
       href: `/workspace/team/${encodeURIComponent(task.room_id)}`,
       status: task.status as OngoingWorkItem["status"],
     });
@@ -233,7 +236,7 @@ function buildOngoingWorkItems({
     items.push({
       id: `thread:${activeThread.id}`,
       title: activeThread.title,
-      subtitle: "当前任务会话",
+      subtitle: sidebar.currentTaskSession,
       href: activeThread.href,
       status: "current",
     });
@@ -480,7 +483,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     [resolveRoutes],
   );
   const nasLibraryItems = useMemo(
-    () => resolveRoutes(NAS_LIBRARY_ROUTES),
+    () => resolveRoutes(STORAGE_LIBRARY_ROUTES),
     [resolveRoutes],
   );
 
@@ -519,8 +522,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   useEffect(() => {
     const handler = (event: Event) => {
       const tab =
-        event instanceof CustomEvent &&
-        typeof event.detail?.tab === "string"
+        event instanceof CustomEvent && typeof event.detail?.tab === "string"
           ? event.detail.tab
           : undefined;
       openSettingsSection(tab);
@@ -772,8 +774,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         activeTeamThreadId,
         activeTeamTasks,
         teamTaskThreads,
+        sidebar: t.sidebar,
       }),
-    [activeTeamThreadId, activeTeamTasks, teamTaskThreads],
+    [activeTeamThreadId, activeTeamTasks, teamTaskThreads, t.sidebar],
   );
 
   const byProject: Record<string, ThreadSummary[]> = {};
@@ -878,7 +881,11 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader className="relative h-11 shrink-0 items-center justify-center border-b border-border/45 bg-sidebar/65 px-2.5 py-0 group-data-[collapsible=icon]:h-20 group-data-[collapsible=icon]:justify-end group-data-[collapsible=icon]:pb-2 group-data-[collapsible=icon]:pt-2">
         <WorkspaceSurfaceSwitch
           active={
-            browserSurfaceActive ? "browser" : companySurfaceActive ? "work" : "agent"
+            browserSurfaceActive
+              ? "browser"
+              : companySurfaceActive
+                ? "work"
+                : "agent"
           }
         />
         <div className="absolute right-0.5 top-1/2 -translate-y-1/2 group-data-[collapsible=icon]:left-1/2 group-data-[collapsible=icon]:right-auto group-data-[collapsible=icon]:top-2 group-data-[collapsible=icon]:-translate-x-[calc(50%+4px)] group-data-[collapsible=icon]:translate-y-0">
@@ -922,8 +929,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
             <ChatsSection
               threads={teamTaskThreads}
               pathname={pathname}
-              label="历史任务"
-              emptyLabel="暂无历史任务"
+              label={t.sidebar.sectionTaskHistory}
+              emptyLabel={t.sidebar.noTaskHistory}
               newActionLabel={t.sidebar.actionNewTask}
               newPath="/workspace/team/new"
             />
@@ -967,11 +974,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border/40 p-1.5">
-        {companySurfaceActive ? (
-          <TeamFooter />
-        ) : (
-          <AgentFooter />
-        )}
+        {companySurfaceActive ? <TeamFooter /> : <AgentFooter />}
       </SidebarFooter>
       <SidebarRail />
       <SettingsDialog
@@ -1021,8 +1024,9 @@ function LocalDatabaseSection({
   pathname: string;
   search: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(true);
-  const active = isNasRouteActive(pathname);
+  const active = isStorageRouteActive(pathname);
 
   return (
     <SidebarGroup className="p-0 px-1 group-data-[collapsible=icon]:px-0">
@@ -1042,7 +1046,7 @@ function LocalDatabaseSection({
             )}
           >
             <Link
-              to="/workspace/nas?surface=company"
+              to="/workspace/storage?surface=company"
               aria-current={active ? "page" : undefined}
               className="flex w-full items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
             >
@@ -1061,7 +1065,11 @@ function LocalDatabaseSection({
               </span>
               <button
                 type="button"
-                aria-label={open ? "收起本地数据库" : "展开本地数据库"}
+                aria-label={
+                  open
+                    ? t.sidebar.ariaCollapseLocalDatabase
+                    : t.sidebar.ariaExpandLocalDatabase
+                }
                 aria-expanded={open}
                 onClick={(event) => {
                   event.preventDefault();
@@ -1085,7 +1093,7 @@ function LocalDatabaseSection({
         {open && (
           <div className="space-y-0.5 pl-4 group-data-[collapsible=icon]:hidden">
             {items.map((item) => (
-              <NasLibraryRow
+              <StorageLibraryRow
                 key={item.to}
                 item={item}
                 pathname={pathname}
@@ -1099,7 +1107,7 @@ function LocalDatabaseSection({
   );
 }
 
-function NasLibraryRow({
+function StorageLibraryRow({
   item,
   pathname,
   search,
@@ -1108,7 +1116,7 @@ function NasLibraryRow({
   pathname: string;
   search: string;
 }) {
-  const active = isNasLibraryRouteActive(pathname, search, item.to);
+  const active = isStorageLibraryRouteActive(pathname, search, item.to);
   const Icon = item.icon;
   return (
     <SidebarMenuItem className="justify-center">
@@ -1157,8 +1165,10 @@ function libraryFromSearch(search: string): string {
   return new URLSearchParams(search).get("library") || "overview";
 }
 
-function isNasRouteActive(pathname: string) {
+function isStorageRouteActive(pathname: string) {
   return (
+    pathname === "/workspace/storage" ||
+    pathname.startsWith("/workspace/storage/") ||
     pathname === "/workspace/nas" ||
     pathname.startsWith("/workspace/nas/") ||
     pathname === "/workspace/database" ||
@@ -1166,8 +1176,12 @@ function isNasRouteActive(pathname: string) {
   );
 }
 
-function isNasLibraryRouteActive(pathname: string, search: string, to: string) {
-  if (!isNasRouteActive(pathname)) return false;
+function isStorageLibraryRouteActive(
+  pathname: string,
+  search: string,
+  to: string,
+) {
+  if (!isStorageRouteActive(pathname)) return false;
   const targetLibrary = libraryFromSearch(routeSearch(to));
   return libraryFromSearch(search) === targetLibrary;
 }
@@ -1221,6 +1235,8 @@ function isCompanySurfaceRoute(pathname: string) {
     pathname.startsWith("/workspace/agents/") ||
     pathname === "/workspace/intelligence" ||
     pathname.startsWith("/workspace/intelligence/") ||
+    pathname === "/workspace/storage" ||
+    pathname.startsWith("/workspace/storage/") ||
     pathname === "/workspace/nas" ||
     pathname.startsWith("/workspace/nas/") ||
     pathname === "/workspace/database" ||
@@ -1237,6 +1253,7 @@ function isCompanySurfaceRoute(pathname: string) {
 }
 
 function isCompanySurfaceActive(pathname: string, search = "") {
+  if (isAgentSurfaceActive(pathname, search)) return false;
   const surfaceParam = new URLSearchParams(search).get("surface");
   return (
     surfaceParam === "company" ||
@@ -1244,9 +1261,24 @@ function isCompanySurfaceActive(pathname: string, search = "") {
   );
 }
 
+function isAgentSurfaceActive(pathname: string, search = "") {
+  const params = new URLSearchParams(search);
+  return (
+    (pathname === "/workspace/agents" &&
+      (params.get("surface") === "chat" ||
+        params.get("hud") === "1" ||
+        params.get("return") === "hud")) ||
+    (pathname.startsWith("/workspace/agents/") &&
+      (params.get("surface") === "chat" ||
+        params.get("hud") === "1" ||
+        params.get("return") === "hud"))
+  );
+}
+
 export const __testing = {
   isNavRouteActive,
   isCompanySurfaceActive,
+  isAgentSurfaceActive,
 };
 
 type WorkspaceSurfaceMode = "agent" | "work" | "browser";
@@ -1275,8 +1307,8 @@ export function WorkspaceSurfaceSwitch({
       kind: "brand" as const,
     },
     {
-      to: "/workspace/browser",
-      label: "浏览器",
+      to: "/browser",
+      label: t.sidebar.navBrowserSurface,
       icon: GlobeIcon,
       active: active === "browser",
       kind: "icon" as const,
@@ -1957,12 +1989,13 @@ function OngoingTasksSection({
   items: OngoingWorkItem[];
   pathname: string;
 }) {
+  const { t } = useI18n();
   return (
     <div className="mt-2 group-data-[collapsible=icon]:hidden">
       <SidebarGroup className="p-0 px-2 pb-0">
-        <SectionHeader label="进行中" />
+        <SectionHeader label={t.sidebar.sectionOngoing} />
         {items.length === 0 ? (
-          <EmptyHint>暂无运行中的任务</EmptyHint>
+          <EmptyHint>{t.sidebar.noOngoingTasks}</EmptyHint>
         ) : (
           <ul className="mt-0.5 space-y-px">
             {items.map((item) => {
@@ -2001,7 +2034,9 @@ function OngoingTasksSection({
 
 function OngoingStatusDot({ status }: { status: OngoingWorkItem["status"] }) {
   if (status === "running") {
-    return <Loader2Icon className="size-3.5 shrink-0 animate-spin text-blue-600" />;
+    return (
+      <Loader2Icon className="size-3.5 shrink-0 animate-spin text-blue-600" />
+    );
   }
   return (
     <span
@@ -2105,8 +2140,24 @@ function ChatsSection({
   }, [navigate, newPath]);
   const sectionLabel = label ?? tr.sidebar.sectionChats;
   const actionLabel = newActionLabel ?? tr.sidebar.actionNewChat;
+  const visibleLimit = 8;
+  const displayedThreads = useMemo(() => {
+    const current = threads.find((thread) => pathname.includes(thread.id));
+    const recent = threads.slice(0, visibleLimit);
+    if (!current || recent.some((thread) => thread.id === current.id)) {
+      return recent;
+    }
+    return [
+      current,
+      ...recent.filter((thread) => thread.id !== current.id),
+    ].slice(0, visibleLimit);
+  }, [pathname, threads]);
+  const hiddenThreadCount = Math.max(
+    0,
+    threads.length - displayedThreads.length,
+  );
   return (
-    <div className="mt-4 group-data-[collapsible=icon]:hidden">
+    <div className="mt-2 group-data-[collapsible=icon]:hidden">
       <SidebarGroup className="p-0 px-2 pb-1">
         <SectionHeader
           label={sectionLabel}
@@ -2131,7 +2182,7 @@ function ChatsSection({
             <EmptyHint>{emptyLabel ?? tr.sidebar.noChatsYet}</EmptyHint>
           ) : (
             <ul className="mt-0.5 space-y-px">
-              {threads.slice(0, 20).map((t) => {
+              {displayedThreads.map((t) => {
                 const active = pathname.includes(t.id);
                 return (
                   <li key={t.id} className="group/thread relative">
@@ -2168,6 +2219,12 @@ function ChatsSection({
                   </li>
                 );
               })}
+              {hiddenThreadCount > 0 && (
+                <li className="px-2 pt-1 text-[10px] leading-4 text-muted-foreground/55">
+                  最近 {displayedThreads.length} 条 · 其余 {hiddenThreadCount}{" "}
+                  条在历史抽屉
+                </li>
+              )}
             </ul>
           ))}
       </SidebarGroup>
@@ -2224,9 +2281,4 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-}
-
-/** Compact robot mark tuned for the small sidebar tile. */
-function OctopusMark({ className }: { className?: string }) {
-  return <BotIcon className={className} aria-hidden="true" />;
 }

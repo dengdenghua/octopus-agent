@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """Unified dataset builder for regeneration and prompt evolution.
 
 This module centralizes the few small dataset sources Octopus already has
 into one place so callers do not need to know whether examples came from
 Journal failures, ProposalLedger turn failures, or synthetic augmentation.
 """
+
+from __future__ import annotations
 
 import json
 import re
@@ -277,11 +277,7 @@ class EvolutionDatasetBuilder:
             goal = str(failure.get("goal") or "").strip()
             if not goal:
                 continue
-            category = str(
-                failure.get("failure_source")
-                or failure.get("category")
-                or "unclassified"
-            ).strip().lower()
+            category = _failure_repair_category(failure)
             error = str(failure.get("last_error") or failure.get("error") or "").strip()
             error_key = _normalize_cluster_text(error)[:120] or "no_error"
             key = f"{category}:{error_key}"
@@ -316,11 +312,7 @@ class EvolutionDatasetBuilder:
         counts = Counter(cluster.key for cluster in clusters for _ in range(cluster.count))
         annotated: list[dict[str, Any]] = []
         for failure in failures:
-            category = str(
-                failure.get("failure_source")
-                or failure.get("category")
-                or "unclassified"
-            ).strip().lower()
+            category = _failure_repair_category(failure)
             error = str(failure.get("last_error") or failure.get("error") or "").strip()
             key = f"{category}:{_normalize_cluster_text(error)[:120] or 'no_error'}"
             annotated.append({
@@ -342,19 +334,16 @@ class EvolutionDatasetBuilder:
         error = str(failure.get("last_error") or failure.get("error") or "").strip()
         step_count = int(failure.get("step_count") or 0 or 0)
         source = str(failure.get("source") or source_name or "failure").strip() or "failure"
-        category = (
-            str(
-                failure.get("failure_source")
-                or failure.get("category")
-                or source
-            ).strip()
-            or "general"
-        )
+        category = _failure_repair_category(failure) or source or "general"
         difficulty = "hard" if step_count >= 5 or error else "medium"
         expected = error or "Preserve the original intent and address the observed failure."
+        repair_route = str(failure.get("primary_repair_route") or "").strip()
+        repair_hint = (
+            f" Use repair route `{repair_route}`." if repair_route else ""
+        )
         expected_behavior = (
             "Produce a corrected plan/prompt that directly addresses the failure. "
-            f"Observed issue: {expected}"
+            f"Observed issue: {expected}.{repair_hint}"
         )
         metadata = {
             "goal": goal,
@@ -369,6 +358,8 @@ class EvolutionDatasetBuilder:
             "thread_id": failure.get("thread_id"),
             "proposal_id": failure.get("proposal_id"),
             "code_change_paths": failure.get("code_change_paths") or [],
+            "primary_repair_route": failure.get("primary_repair_route") or "",
+            "repair_routes": failure.get("repair_routes") or [],
         }
         return EvolutionExample(
             task_input=goal,
@@ -415,6 +406,15 @@ def _normalize_cluster_text(text: str) -> str:
     normalized = re.sub(r"\b\d+\b", "<n>", normalized)
     normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()
+
+
+def _failure_repair_category(failure: dict[str, Any]) -> str:
+    route = str(failure.get("primary_repair_route") or "").strip().lower()
+    source = str(failure.get("failure_source") or "").strip().lower()
+    if route and source in {"verification_failed", "verification_required", ""}:
+        return route
+    category = str(failure.get("category") or "").strip().lower()
+    return source or category or "unclassified"
 
 
 __all__ = [

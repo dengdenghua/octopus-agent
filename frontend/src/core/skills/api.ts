@@ -36,7 +36,11 @@ export async function updateSkill(
 ): Promise<SkillInfo> {
   const res = await fetch(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(name)}`,
-    { method: "PUT", headers: jsonAuthHeaders(), body: JSON.stringify(request) },
+    {
+      method: "PUT",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(request),
+    },
   );
   if (!res.ok) throw new Error(`Failed to update skill: ${res.statusText}`);
   return (await res.json()) as SkillInfo;
@@ -51,7 +55,10 @@ export async function enableSkill(
     `${getBackendBaseURL()}/api/skills/${encodeURIComponent(skillName)}/${endpoint}`,
     { method: "POST", headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Failed to ${enabled ? "enable" : "disable"} skill: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(
+      `Failed to ${enabled ? "enable" : "disable"} skill: ${res.statusText}`,
+    );
 }
 
 export async function loadSkills(): Promise<SkillInfo[]> {
@@ -90,8 +97,7 @@ export async function getCustomSkill(
     `${getBackendBaseURL()}/api/skills/custom/${encodeURIComponent(name)}`,
     { headers: authHeaders() },
   );
-  if (!res.ok)
-    throw new Error(`Failed to get custom skill: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to get custom skill: ${res.statusText}`);
   return (await res.json()) as CustomSkillContent;
 }
 
@@ -101,7 +107,11 @@ export async function updateCustomSkill(
 ): Promise<CustomSkillContent> {
   const res = await fetch(
     `${getBackendBaseURL()}/api/skills/custom/${encodeURIComponent(name)}`,
-    { method: "PUT", headers: jsonAuthHeaders(), body: JSON.stringify(request) },
+    {
+      method: "PUT",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(request),
+    },
   );
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -130,28 +140,29 @@ export async function rollbackCustomSkill(
 ): Promise<CustomSkillContent> {
   const res = await fetch(
     `${getBackendBaseURL()}/api/skills/custom/${encodeURIComponent(name)}/rollback`,
-    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(request) },
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(request),
+    },
   );
-  if (!res.ok)
-    throw new Error(`Failed to rollback skill: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to rollback skill: ${res.statusText}`);
   return (await res.json()) as CustomSkillContent;
 }
 
 export async function getSkillPerformance(): Promise<SkillPerformance[]> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/skills/performance`,
-    { headers: authHeaders() },
-  );
+  const res = await fetch(`${getBackendBaseURL()}/api/skills/performance`, {
+    headers: authHeaders(),
+  });
   if (!res.ok)
     throw new Error(`Failed to get skill performance: ${res.statusText}`);
   return (await res.json()) as SkillPerformance[];
 }
 
 export async function getDecliningSkills(): Promise<SkillPerformance[]> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/skills/declining`,
-    { headers: authHeaders() },
-  );
+  const res = await fetch(`${getBackendBaseURL()}/api/skills/declining`, {
+    headers: authHeaders(),
+  });
   if (!res.ok)
     throw new Error(`Failed to get declining skills: ${res.statusText}`);
   return (await res.json()) as SkillPerformance[];

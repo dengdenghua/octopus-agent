@@ -186,10 +186,9 @@ class MobileDevice:
 
         self._status = TentacleStatus.BUSY
         try:
-            result = await self._ws_server.send_tool_execute(
+            return await self._ws_server.send_tool_execute(
                 self.tentacle_id, call, timeout_ms=call.timeout_ms
             )
-            return result
         except Exception as e:
             return ToolResult.fail(
                 call.call_id, -32015, f"Execute error: {e}", int((time.time() - start) * 1000)

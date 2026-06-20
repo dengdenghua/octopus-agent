@@ -1,0 +1,145 @@
+# Agent Visual Kit 能力包 / Meta-Skill
+# HUD 角色立绘资产流水线：角色档案 → prompt → Agnes 三视图 + 单独头像 → 透明背景后处理 → 头像归一化 → 质量检查。
+#
+# 配套底层 Skill:
+#   - agent-visual-kit       (立绘生成工作流约束 / metaskill instructions)
+#   - agnes-image-generate   (Agnes 图片生成)
+
+name: agent-visual-kit
+kind: skill_cluster
+version: 0.1.0
+description: Agent 角色立绘生成包 — 从 HUD 档案生成高清透明背景三视图与头像
+when_to_use: 生成 Agent 立绘 / 三视图 / 透明背景 / 头像裁切 / Agnes 角色图 / HUD character visual
+affinity: [agent, visual, image, agnes, character, hud]
+
+budget:
+  tokens: 22000
+  usd: 1.5
+  latency_ms: 300000
+
+steps:
+  - node_id: profile
+    skill: agent-visual-kit
+    args:
+      task: read_character_profile
+      agent_id: "{user_input.agent_id}"
+      fields:
+        - display_name
+        - role
+        - background
+        - personality
+        - temperament
+        - apparent_age
+        - visual_keywords
+        - user_prompt_additions
+    timeout_ms: 30000
+
+  - node_id: prompt
+    skill: agent-visual-kit
+    args:
+      task: assemble_prompt
+      profile: "{profile.output}"
+      required_constraints:
+        - full_body
+        - safe_headroom
+        - same_identity_across_views
+        - transparent_or_chroma_key_background
+        - separate_square_close_up_avatar
+        - no_text_no_ui_no_infographic
+    depends_on: [profile]
+    timeout_ms: 30000
+
+  - node_id: front
+    skill: agnes-image-generate
+    args:
+      prompt: "{prompt.output.front_prompt}"
+      size: "{user_input.size}"
+      view: front
+    depends_on: [prompt]
+    failure_retry: 1
+    timeout_ms: 180000
+
+  - node_id: side
+    skill: agnes-image-generate
+    args:
+      prompt: "{prompt.output.side_prompt}"
+      size: "{user_input.size}"
+      view: side
+    depends_on: [prompt]
+    failure_retry: 1
+    timeout_ms: 180000
+
+  - node_id: back
+    skill: agnes-image-generate
+    args:
+      prompt: "{prompt.output.back_prompt}"
+      size: "{user_input.size}"
+      view: back
+    depends_on: [prompt]
+    failure_retry: 1
+    timeout_ms: 180000
+
+  - node_id: avatar_generate
+    skill: agnes-image-generate
+    args:
+      prompt: "{prompt.output.avatar_prompt}"
+      size: 512x512
+      view: avatar
+    depends_on: [prompt]
+    failure_retry: 1
+    timeout_ms: 180000
+
+  - node_id: postprocess
+    skill: agent-visual-kit
+    args:
+      task: postprocess_assets
+      front: "{front.output}"
+      side: "{side.output}"
+      back: "{back.output}"
+      operations:
+        - remove_flat_background
+        - keep_primary_character_component
+        - add_transparent_padding
+        - save_png_views
+    depends_on: [front, side, back]
+    timeout_ms: 60000
+
+  - node_id: avatar
+    skill: agent-visual-kit
+    args:
+      task: normalize_avatar
+      source: "{avatar_generate.output}"
+      fallback_source: "{postprocess.output.front_png}"
+      output_size: 512
+      crop: close_up_large_headshot_from_front_view
+      replace_agent_avatar: true
+    depends_on: [postprocess, avatar_generate]
+    timeout_ms: 30000
+
+  - node_id: qa
+    skill: agent-visual-kit
+    args:
+      task: quality_gate
+      assets: "{postprocess.output}"
+      avatar: "{avatar.output}"
+      reject_if:
+        - cropped_head_or_feet
+        - non_transparent_busy_background
+        - low_resolution_or_blurry_face
+        - half_body_instead_of_full_body
+        - identity_mismatch_across_views
+        - text_labels_watermark_or_ui_card
+        - extra_limbs_or_detached_artifacts
+    depends_on: [postprocess, avatar]
+    timeout_ms: 30000
+
+  - node_id: publish
+    skill: agent-visual-kit
+    args:
+      task: write_back_agent_visuals
+      agent_id: "{user_input.agent_id}"
+      visual_urls: "{qa.output.visual_urls}"
+      avatar_url: "{qa.output.avatar_url}"
+      avatar_path: avatar.png
+    depends_on: [qa]
+    timeout_ms: 30000

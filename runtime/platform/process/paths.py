@@ -57,12 +57,32 @@ class AppPaths:
         return self.data_dir / "review_queue.json"
 
     @property
+    def subagent_policy_path(self) -> Path:
+        return self.data_dir / "subagent_policy.json"
+
+    @property
     def promotion_audit_path(self) -> Path:
         return self.data_dir / "promotion_audit.json"
 
     @property
+    def governance_audit_chain_path(self) -> Path:
+        return self.data_dir / "governance_audit_chain.jsonl"
+
+    @property
+    def governance_audit_secret_path(self) -> Path:
+        return self.data_dir / "governance_audit_chain.secret"
+
+    @property
     def proposal_ledger_path(self) -> Path:
         return self.data_dir / "proposal_ledger.jsonl"
+
+    @property
+    def auto_verifier_metrics_path(self) -> Path:
+        return self.data_dir / "auto_verifier_metrics.jsonl"
+
+    @property
+    def auto_verifier_decisions_path(self) -> Path:
+        return self.data_dir / "auto_verifier_decisions.jsonl"
 
     @property
     def cron_jobs_path(self) -> Path:

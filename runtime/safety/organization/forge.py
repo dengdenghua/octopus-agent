@@ -21,6 +21,7 @@ from typing import Any
 
 from runtime.platform.io import atomic_write_json
 from runtime.platform.process.paths import app_paths
+from runtime.safety.evolution.subagent_policy import evaluate_agent_policy
 
 from .builtin_topologies import seed_builtin_topologies
 from .evolver import Proposal
@@ -130,7 +131,13 @@ def _apply_swap_agent(
         task_bucket=base.task_bucket,
         quality_threshold=base.quality_threshold,
         max_iterations=base.max_iterations,
-        metadata={**base.metadata, "derived_from": base.fingerprint, "mutation": "swap_agent"},
+        metadata={
+            **base.metadata,
+            "derived_from": base.fingerprint,
+            "mutation": "swap_agent",
+            "promotion_source": str(detail.get("source") or "topology_proposal"),
+            "promotion_detail": dict(detail),
+        },
     )
 
 
@@ -179,6 +186,7 @@ _APPLIERS = {
 def _shadow_validate(
     candidate: TeamTopology,
     agent_registry: Any | None,
+    subagent_policy_path: Path | str | None = None,
 ) -> tuple[bool, str]:
     """Static checks that don't run any LLM.
 
@@ -206,6 +214,22 @@ def _shadow_validate(
         if missing:
             return False, f"missing agents in registry: {', '.join(missing)}"
 
+    policy_report = evaluate_agent_policy(
+        {str(role): spec.agent_id for role, spec in candidate.agents.items()},
+        path=subagent_policy_path,
+    )
+    retired = policy_report.get("retired") or []
+    if retired:
+        blocked = [
+            f"{item.get('role')}:{item.get('agent_id')}"
+            for item in retired
+            if isinstance(item, dict)
+        ]
+        return False, (
+            "retired agents in operator policy: "
+            + ", ".join(blocked)
+        )
+
     return True, ""
 
 
@@ -219,9 +243,13 @@ class TopologyForge:
         *,
         registry_path: Path | str | None = None,
         agent_registry: Any | None = None,
+        subagent_policy_path: Path | str | None = None,
     ) -> None:
         self._registry_path = Path(registry_path) if registry_path else None
         self._agent_registry = agent_registry
+        self._subagent_policy_path = (
+            Path(subagent_policy_path) if subagent_policy_path else None
+        )
 
     def promote(
         self,
@@ -262,7 +290,11 @@ class TopologyForge:
                 reason=f"applier failed: {exc}",
             )
 
-        ok, reason = _shadow_validate(candidate, self._agent_registry)
+        ok, reason = _shadow_validate(
+            candidate,
+            self._agent_registry,
+            self._subagent_policy_path,
+        )
         if not ok:
             return PromoteResult(
                 proposal_kind=proposal.kind,

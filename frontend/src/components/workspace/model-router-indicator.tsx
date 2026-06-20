@@ -159,7 +159,8 @@ export function ModelRouterIndicator({
     icon: MessageSquareIcon,
     color: "text-muted-foreground",
   };
-  const taskLabel = TASK_TYPE_LABELS[routingDecision.task_type] ?? routingDecision.task_type;
+  const taskLabel =
+    TASK_TYPE_LABELS[routingDecision.task_type] ?? routingDecision.task_type;
   const TaskIcon = taskIconCfg.icon;
 
   const displayModel = shortModelName(routingDecision.selected_model);
@@ -226,26 +227,40 @@ export function ModelRouterIndicator({
           {/* Decision summary */}
           <div className="mb-2 space-y-1 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{t.modelRouter.taskType}</span>
-              <span className={cn("flex items-center gap-1 font-medium", taskIconCfg.color)}>
+              <span className="text-muted-foreground">
+                {t.modelRouter.taskType}
+              </span>
+              <span
+                className={cn(
+                  "flex items-center gap-1 font-medium",
+                  taskIconCfg.color,
+                )}
+              >
                 <TaskIcon size={12} />
                 {taskLabel}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{t.modelRouter.selectedModel}</span>
+              <span className="text-muted-foreground">
+                {t.modelRouter.selectedModel}
+              </span>
               <span className="font-medium">{displayModel}</span>
             </div>
-            {routingDecision.original_model !== routingDecision.selected_model && (
+            {routingDecision.original_model !==
+              routingDecision.selected_model && (
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">{t.modelRouter.originalModel}</span>
+                <span className="text-muted-foreground">
+                  {t.modelRouter.originalModel}
+                </span>
                 <span className="text-muted-foreground line-through">
                   {shortModelName(routingDecision.original_model)}
                 </span>
               </div>
             )}
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{t.modelRouter.score}</span>
+              <span className="text-muted-foreground">
+                {t.modelRouter.score}
+              </span>
               <span className="font-mono font-medium">
                 {formatScore(routingDecision.score)}
               </span>
@@ -260,7 +275,10 @@ export function ModelRouterIndicator({
               </h5>
               <div className="space-y-0.5">
                 {sortedScores.map(([model, score]) => (
-                  <div key={model} className="flex items-center gap-2 text-[11px]">
+                  <div
+                    key={model}
+                    className="flex items-center gap-2 text-[11px]"
+                  >
                     <span
                       className={cn(
                         "flex-1 truncate",

@@ -20,10 +20,9 @@ export interface RestartBackendResponse {
 }
 
 export async function getCapabilities(): Promise<Capabilities> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/settings/capabilities`,
-    { headers: authHeaders() },
-  );
+  const res = await fetch(`${getBackendBaseURL()}/api/settings/capabilities`, {
+    headers: authHeaders(),
+  });
   if (!res.ok)
     throw new Error(`Failed to load capabilities: ${res.statusText}`);
   return (await res.json()) as Capabilities;
@@ -32,14 +31,11 @@ export async function getCapabilities(): Promise<Capabilities> {
 export async function saveCapabilities(
   body: Capabilities,
 ): Promise<SaveCapabilitiesResponse> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/settings/capabilities`,
-    {
-      method: "PUT",
-      headers: jsonAuthHeaders(),
-      body: JSON.stringify(body),
-    },
-  );
+  const res = await fetch(`${getBackendBaseURL()}/api/settings/capabilities`, {
+    method: "PUT",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(

@@ -19,42 +19,81 @@ interface EditorTabsProps {
 function langIcon(path: string) {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   const map: Record<string, string> = {
-    ts: "TS", tsx: "TX", js: "JS", jsx: "JX",
-    py: "PY", rs: "RS", go: "GO", java: "JA",
-    json: "{}", md: "MD", css: "CS", html: "<>",
-    sql: "SQ", sh: "SH", yml: "YM", yaml: "YM",
-    toml: "TM", xml: "XM", vue: "VU", svelte: "SV",
+    ts: "TS",
+    tsx: "TX",
+    js: "JS",
+    jsx: "JX",
+    py: "PY",
+    rs: "RS",
+    go: "GO",
+    java: "JA",
+    json: "{}",
+    md: "MD",
+    css: "CS",
+    html: "<>",
+    sql: "SQ",
+    sh: "SH",
+    yml: "YM",
+    yaml: "YM",
+    toml: "TM",
+    xml: "XM",
+    vue: "VU",
+    svelte: "SV",
   };
   return map[ext] ?? null;
 }
 
-export function EditorTabs({ tabs, activeTab, onSelect, onClose, className }: EditorTabsProps) {
+export function EditorTabs({
+  tabs,
+  activeTab,
+  onSelect,
+  onClose,
+  className,
+}: EditorTabsProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (activeRef.current) {
-      activeRef.current.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      activeRef.current.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "smooth",
+      });
     }
   }, [activeTab]);
 
-  const handleClose = useCallback((e: React.MouseEvent, path: string) => {
-    e.stopPropagation();
-    onClose(path);
-  }, [onClose]);
-
-  const handleMiddleClick = useCallback((e: React.MouseEvent, path: string) => {
-    if (e.button === 1) {
-      e.preventDefault();
+  const handleClose = useCallback(
+    (e: React.MouseEvent, path: string) => {
+      e.stopPropagation();
       onClose(path);
-    }
-  }, [onClose]);
+    },
+    [onClose],
+  );
+
+  const handleMiddleClick = useCallback(
+    (e: React.MouseEvent, path: string) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        onClose(path);
+      }
+    },
+    [onClose],
+  );
 
   if (tabs.length === 0) return null;
 
   return (
-    <div className={cn("flex items-center border-b border-border/50 bg-muted/20 overflow-hidden", className)}>
-      <div ref={scrollRef} className="flex items-center overflow-x-auto scrollbar-none flex-1 min-w-0">
+    <div
+      className={cn(
+        "flex items-center border-b border-border/50 bg-muted/20 overflow-hidden",
+        className,
+      )}
+    >
+      <div
+        ref={scrollRef}
+        className="flex items-center overflow-x-auto scrollbar-none flex-1 min-w-0"
+      >
         {tabs.map((tab) => {
           const isActive = tab.path === activeTab;
           const icon = langIcon(tab.path);
@@ -77,10 +116,12 @@ export function EditorTabs({ tabs, activeTab, onSelect, onClose, className }: Ed
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary" />
               )}
               {icon ? (
-                <span className={cn(
-                  "text-[9px] font-bold rounded px-0.5 shrink-0",
-                  isActive ? "text-primary" : "text-muted-foreground/60",
-                )}>
+                <span
+                  className={cn(
+                    "text-[9px] font-bold rounded px-0.5 shrink-0",
+                    isActive ? "text-primary" : "text-muted-foreground/60",
+                  )}
+                >
                   {icon}
                 </span>
               ) : (

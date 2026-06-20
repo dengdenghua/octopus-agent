@@ -103,7 +103,10 @@ export async function pollBackgroundTaskOutput(
   since = 0,
   limit = 200,
 ): Promise<BackgroundTaskOutput[]> {
-  const res = await fetch(`${BASE()}/tasks/${taskId}/output/poll?since=${since}&limit=${limit}`, { headers: authHeaders() });
+  const res = await fetch(
+    `${BASE()}/tasks/${taskId}/output/poll?since=${since}&limit=${limit}`,
+    { headers: authHeaders() },
+  );
   if (!res.ok) throw new Error(`Failed to poll output: ${res.statusText}`);
   return res.json() as Promise<BackgroundTaskOutput[]>;
 }
@@ -127,7 +130,11 @@ export async function getActiveBackgroundTaskCount(): Promise<number> {
 
 export interface OutputStreamCallbacks {
   onMessage: (msg: BackgroundTaskOutput) => void;
-  onDone: (data: { task_id: string; status: string; error: string | null }) => void;
+  onDone: (data: {
+    task_id: string;
+    status: string;
+    error: string | null;
+  }) => void;
   onError?: (err: Error) => void;
 }
 
@@ -154,7 +161,9 @@ export function connectOutputSSE(
       try {
         const msg = JSON.parse(event.data) as BackgroundTaskOutput;
         callbacks.onMessage(msg);
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
     });
 
     eventSource.addEventListener("done", (event: MessageEvent) => {
@@ -165,7 +174,9 @@ export function connectOutputSSE(
           error: string | null;
         };
         callbacks.onDone(data);
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
       eventSource.close();
     });
 

@@ -1,0 +1,13 @@
+# Dependencies & build output
+node_modules
+dist
+
+# Generated test / debug artifacts
+test-results
+output
+
+# Pre-built / generated CSS
+src/styles/tailwind-prebuilt.css
+
+# Lock file (kept as-is for deterministic installs)
+pnpm-lock.yaml

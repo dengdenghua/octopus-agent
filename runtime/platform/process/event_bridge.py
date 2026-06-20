@@ -75,7 +75,7 @@ def bridge_hook_registry_to_eventbus(hook_registry: Any) -> None:
 
     from runtime.platform.plugins.plugins import HookPoint
 
-    _HOOK_MAP = {
+    _HOOK_MAP = {  # noqa: N806
         HookPoint.ON_INIT: "hook.on_init",
         HookPoint.ON_PLAN: "hook.on_plan",
         HookPoint.ON_EXECUTE: "hook.on_execute",

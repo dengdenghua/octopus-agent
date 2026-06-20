@@ -41,8 +41,12 @@ export function DeliverablesCard({
         <table className="w-full text-xs">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr>
-              <th className="w-28 px-3 py-2 text-left font-medium">{t.deliverablesCard.colReport}</th>
-              <th className="px-3 py-2 text-left font-medium">{t.deliverablesCard.colPath}</th>
+              <th className="w-28 px-3 py-2 text-left font-medium">
+                {t.deliverablesCard.colReport}
+              </th>
+              <th className="px-3 py-2 text-left font-medium">
+                {t.deliverablesCard.colPath}
+              </th>
               <th className="w-20 px-3 py-2 text-right font-medium">
                 {t.deliverablesCard.colActions}
               </th>
@@ -74,8 +78,9 @@ export function DeliverablesCard({
                         title={t.deliverablesCard.copyPath}
                         className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                         onClick={() =>
-                          void copyTextToClipboard(f.path)
-                            .catch(() => toast.error(t.clipboard.failedToCopyToClipboard))
+                          void copyTextToClipboard(f.path).catch(() =>
+                            toast.error(t.clipboard.failedToCopyToClipboard),
+                          )
                         }
                       >
                         <CopyIcon className="size-3.5" />
@@ -105,7 +110,9 @@ export function DeliverablesCard({
           <FolderIcon className="size-5 text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium">{t.deliverablesCard.allFiles}</div>
+          <div className="text-sm font-medium">
+            {t.deliverablesCard.allFiles}
+          </div>
           <div className="text-muted-foreground text-xs">
             {t.deliverablesCard.previewOrDownload}
           </div>

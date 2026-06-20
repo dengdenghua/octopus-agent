@@ -130,7 +130,7 @@ function SmsLoginForm() {
       <div className="space-y-2">
         <Label htmlFor="phone">{t.auth.phoneNumber}</Label>
         <div className="relative">
-          <SmartphoneIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <SmartphoneIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
           <Input
             id="phone"
             type="tel"
@@ -147,7 +147,7 @@ function SmsLoginForm() {
         <Label htmlFor="code">{t.auth.verificationCode}</Label>
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <KeyRoundIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <KeyRoundIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
             <Input
               id="code"
               type="text"
@@ -177,19 +177,19 @@ function SmsLoginForm() {
         {submitting ? t.auth.loggingIn : t.auth.login}
         {!submitting && <ArrowRightIcon className="size-4" />}
       </Button>
-      <p className="px-2 text-center text-[11px] leading-5 text-slate-500">
+      <p className="px-2 text-center text-[11px] leading-5 text-muted-foreground">
         {t.auth.terms.autoRegister}
         {t.auth.terms.agreeTo}{" "}
         <Link
           to="/terms"
-          className="text-slate-700 underline-offset-2 hover:text-blue-700 hover:underline"
+          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
         >
           {t.auth.terms.userAgreement}
         </Link>{" "}
         {t.common.other}{" "}
         <Link
           to="/privacy"
-          className="text-slate-700 underline-offset-2 hover:text-blue-700 hover:underline"
+          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
         >
           {t.auth.terms.privacyPolicy}
         </Link>
@@ -224,11 +224,11 @@ function GuestLoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-sm font-medium text-slate-900">
+      <div className="rounded-xl border border-border bg-muted p-4">
+        <p className="text-sm font-medium text-foreground">
           {t.auth.guestMode.title}
         </p>
-        <ul className="mt-2 space-y-1.5 text-xs text-slate-600">
+        <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground">
           {t.auth.guestMode.features.map((feature, index) => (
             <li key={index} className="flex items-start gap-2">
               <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
@@ -294,8 +294,8 @@ export default function LoginPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="animate-pulse text-sm text-slate-500">
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-pulse text-sm text-muted-foreground">
           {t.common.loading}
         </div>
       </div>
@@ -314,30 +314,35 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 text-slate-900">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.10),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(6,182,212,0.08),transparent_50%)]" />
-      <div className="pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-1/2 rounded-full bg-blue-200/25 blur-3xl" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background text-foreground">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(ellipse at top, color-mix(in oklch, var(--primary) 10%, transparent), transparent 55%), radial-gradient(ellipse at bottom right, color-mix(in oklch, var(--primary) 8%, transparent), transparent 50%)`,
+        }}
+      />
+      <div className="pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
 
       <div className="relative z-10 grid w-full max-w-6xl items-center gap-12 px-6 py-12 md:grid-cols-2 lg:gap-16">
         <div className="hidden flex-col justify-center space-y-8 md:flex">
           <div className="inline-flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-slate-900 text-white shadow-sm">
+            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
               <img src={octopusLogoUrl} alt="" className="size-6" />
             </div>
-            <span className="text-base font-semibold tracking-tight text-slate-900">
+            <span className="text-base font-semibold tracking-tight text-foreground">
               Octopus Agent OS
             </span>
           </div>
 
           <div className="space-y-4">
-            <div className="inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
               <SparklesIcon className="size-3" />
               {t.workspace.landing.badge}
             </div>
-            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-slate-950 lg:text-[2.75rem]">
+            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-foreground lg:text-[2.75rem]">
               {t.workspace.landing.headline}
             </h1>
-            <p className="max-w-md text-base leading-relaxed text-slate-600">
+            <p className="max-w-md text-base leading-relaxed text-muted-foreground">
               {t.workspace.landing.description}
             </p>
           </div>
@@ -347,10 +352,10 @@ export default function LoginPage() {
               const Icon = loopIcons[index] ?? SparklesIcon;
               return (
                 <li key={step} className="flex items-center gap-3">
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-foreground shadow-sm">
                     <Icon className="size-3.5" />
                   </span>
-                  <span className="text-sm font-medium text-slate-800">
+                  <span className="text-sm font-medium text-foreground/90">
                     {step}
                   </span>
                 </li>
@@ -361,26 +366,24 @@ export default function LoginPage() {
 
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-6 flex items-center justify-center gap-2 md:hidden">
-            <div className="flex size-9 items-center justify-center rounded-lg bg-slate-900 text-white shadow-sm">
+            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
               <img src={octopusLogoUrl} alt="" className="size-6" />
             </div>
-            <span className="text-sm font-semibold tracking-tight text-slate-900">
+            <span className="text-sm font-semibold tracking-tight text-foreground">
               Octopus Agent OS
             </span>
           </div>
 
-          <Card className="border-slate-200/80 bg-white shadow-sm">
+          <Card>
             <CardHeader className="space-y-1.5 pb-4 text-center">
-              <CardTitle className="text-xl font-semibold tracking-tight text-slate-950">
+              <CardTitle className="text-xl font-semibold tracking-tight text-foreground">
                 {t.auth.page.title}
               </CardTitle>
-              <CardDescription className="text-sm leading-relaxed text-slate-500">
-                {t.auth.page.cardDescription}
-              </CardDescription>
+              <CardDescription>{t.auth.page.cardDescription}</CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
               {!providersReady ? (
-                <div className="flex min-h-40 items-center justify-center text-sm text-slate-500">
+                <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
                   {t.common.loading}
                 </div>
               ) : hasMolili ? (
@@ -407,7 +410,7 @@ export default function LoginPage() {
                   {t.auth.terms.autoRegister}
                   <Link
                     to="/register"
-                    className="text-blue-700 hover:text-blue-800"
+                    className="text-primary hover:text-primary/80"
                   >
                     {t.auth.login}
                   </Link>

@@ -126,6 +126,19 @@ def _default_role_caller(
     )
 
 
+def _context_risk_level(context: dict[str, Any]) -> str:
+    for key in (
+        "task_risk_level",
+        "risk_level",
+        "approval_risk_level",
+        "quality_risk_level",
+    ):
+        value = context.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "low"
+
+
 # ── Score parser ──────────────────────────────────────────────
 
 
@@ -339,6 +352,28 @@ class TeamRunner:
             merged_ctx["model"] = spec.model
         if spec.temperature is not None:
             merged_ctx["temperature"] = spec.temperature
+        route_decision = self._route_decision(spec.agent_id, context)
+        merged_ctx["subagent_route_decision"] = route_decision
+        if route_decision.get("action") == "block":
+            duration = (time.monotonic() - start) * 1000.0
+            error = str(route_decision.get("reason") or "subagent blocked by routing policy")
+            self._emit({
+                "type": "team_role_blocked",
+                "topology": topology.name,
+                "role": str(role),
+                "agent_id": spec.agent_id,
+                "duration_ms": duration,
+                "route_decision": route_decision,
+                "error": error,
+            })
+            return RoleOutput(
+                role=role,
+                agent_id=spec.agent_id,
+                output="",
+                error=error,
+                duration_ms=duration,
+                metadata={"subagent_route_decision": route_decision},
+            )
         # Cheap-model routing: roles outside the primary set (planner /
         # generator / synthesizer) run on the cheap subagent model unless
         # the spec pinned an explicit ``model`` override above. The
@@ -355,6 +390,7 @@ class TeamRunner:
             "role": str(role),
             "agent_id": spec.agent_id,
             "use_cheap_model": cheap_for_role,
+            "route_decision": route_decision,
         })
         # Forward subagent lifecycle (spawn / sub_tool_start / sub_tool_end /
         # subagent_finished) to the caller's emitter. Older role callers
@@ -452,6 +488,7 @@ class TeamRunner:
             "duration_ms": duration,
             "output": output,
             "error": error,
+            "route_decision": route_decision,
         })
         return RoleOutput(
             role=role,
@@ -459,7 +496,43 @@ class TeamRunner:
             output=output,
             error=error,
             duration_ms=duration,
+            metadata={"subagent_route_decision": route_decision},
         )
+
+    def _route_decision(
+        self,
+        agent_id: str,
+        context: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.subagent_routing import (
+                decide_subagent_route,
+            )
+            decision = decide_subagent_route(
+                role=agent_id,
+                risk_level=_context_risk_level(context),
+                review_queue_path=context.get("review_queue_path"),
+                subagent_policy_path=context.get("subagent_policy_path"),
+                enabled=bool(context.get("enable_subagent_fitness_routing", True)),
+            )
+            return decision.to_dict()
+        except Exception as exc:  # noqa: BLE001
+            _logger.debug(
+                "subagent fitness routing skipped · agent_id=%s error=%s",
+                agent_id,
+                exc,
+            )
+            return {
+                "schema": "octopus.subagent_route_decision.v1",
+                "role": agent_id,
+                "action": "allow",
+                "reason": "subagent fitness routing unavailable",
+                "risk_level": _context_risk_level(context),
+                "verdict": "unknown",
+                "score": None,
+                "confidence": 0.0,
+                "evidence_item_ids": [],
+            }
 
     def _compose_prompt(
         self,

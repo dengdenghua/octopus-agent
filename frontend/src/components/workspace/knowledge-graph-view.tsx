@@ -20,8 +20,18 @@ import { getBackendBaseURL } from "@/core/config";
 import { authHeaders } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 
-interface ApiNode { id: string; label: string; entity_type?: string }
-interface ApiEdge { id: string; source: string; target: string; label: string; confidence: number }
+interface ApiNode {
+  id: string;
+  label: string;
+  entity_type?: string;
+}
+interface ApiEdge {
+  id: string;
+  source: string;
+  target: string;
+  label: string;
+  confidence: number;
+}
 type GraphLayout = "ring" | "star" | "layers" | "clusters";
 
 const NODE_COLORS: Record<string, string> = {
@@ -31,9 +41,13 @@ const NODE_COLORS: Record<string, string> = {
 };
 
 function circularLayout(count: number, cx: number, cy: number, radius: number) {
+  if (count === 1) return [{ x: cx, y: cy }];
   return Array.from({ length: count }, (_, i) => {
     const angle = (2 * Math.PI * i) / count - Math.PI / 2;
-    return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
+    return {
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+    };
   });
 }
 
@@ -71,7 +85,7 @@ function applyGraphLayout(
       inputNodes.length,
       cx,
       cy,
-      Math.max(180, inputNodes.length * 13),
+      Math.min(360, Math.max(170, Math.sqrt(inputNodes.length) * 28)),
     );
     return inputNodes.map((node, index) => ({
       ...node,
@@ -101,7 +115,7 @@ function applyGraphLayout(
       outerNodes.length,
       cx,
       cy,
-      Math.max(310, outerNodes.length * 12),
+      Math.min(420, Math.max(250, Math.sqrt(outerNodes.length) * 34)),
     );
     const pos = new Map<string, { x: number; y: number }>();
     if (centerId) pos.set(centerId, { x: cx, y: cy });
@@ -191,10 +205,10 @@ export function KnowledgeGraphView() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [layout, setLayout] = useState<GraphLayout>("ring");
+  const [layout, setLayout] = useState<GraphLayout>("clusters");
   const [selectedEntity, setSelectedEntity] = useState<string | null>(null);
   const expandedRef = useRef<Set<string>>(new Set());
-  const layoutRef = useRef<GraphLayout>("ring");
+  const layoutRef = useRef<GraphLayout>("clusters");
   const selectedEntityRef = useRef<string | null>(null);
   const layoutOptions = useMemo(
     () =>
@@ -210,27 +224,38 @@ export function KnowledgeGraphView() {
   const loadGraph = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`${getBackendBaseURL()}/api/knowledge/graph?limit=200`, {
-        headers: authHeaders(),
-      });
+      const r = await fetch(
+        `${getBackendBaseURL()}/api/knowledge/graph?limit=200`,
+        {
+          headers: authHeaders(),
+        },
+      );
       if (!r.ok) return;
       const data = await r.json();
-      const entities: Array<{ id: string; name: string; entity_type: string }> = data.entities ?? [];
-      const rels: Array<{ id: string; source_name: string; target_name: string; relationship_type: string; confidence: number }> = data.relationships ?? [];
+      const entities: Array<{ id: string; name: string; entity_type: string }> =
+        (data.entities ?? []).slice(0, 120);
+      const rels: Array<{
+        id: string;
+        source_name: string;
+        target_name: string;
+        relationship_type: string;
+        confidence: number;
+      }> = data.relationships ?? [];
 
-      const newNodes: Node[] = entities.map((e, i) => ({
+      const newNodes: Node[] = entities.map((e) => ({
         id: e.id,
         position: { x: 400, y: 300 },
         data: { label: e.name, entityType: e.entity_type },
         style: {
-          background: NODE_COLORS[e.entity_type] ?? "#6b7280",
+          background: NODE_COLORS[e.entity_type] ?? "#64748b",
           color: "#fff",
           borderRadius: "9999px",
           padding: "6px 14px",
           fontSize: "11px",
           fontWeight: 500,
-          border: "2px solid rgba(255,255,255,0.15)",
+          border: "2px solid rgba(255,255,255,0.35)",
           cursor: "pointer",
+          boxShadow: "0 10px 24px rgba(15,23,42,0.12)",
         },
       }));
       const newEdges: Edge[] = rels.map((r) => ({
@@ -238,8 +263,16 @@ export function KnowledgeGraphView() {
         source: r.source_name,
         target: r.target_name,
         label: r.relationship_type,
-        style: { stroke: "#6b7280", strokeWidth: Math.max(1, (r.confidence ?? 0.5) * 3) },
-        markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "#6b7280" },
+        style: {
+          stroke: "#6b7280",
+          strokeWidth: Math.max(1, (r.confidence ?? 0.5) * 3),
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 12,
+          height: 12,
+          color: "#6b7280",
+        },
         labelStyle: { fontSize: 9, fill: "#9ca3af" },
       }));
       setNodes(
@@ -252,103 +285,141 @@ export function KnowledgeGraphView() {
       );
       setEdges(newEdges);
       expandedRef.current.clear();
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
     setLoading(false);
   }, [setNodes, setEdges]);
 
-  useEffect(() => { void loadGraph(); }, [loadGraph]);
+  useEffect(() => {
+    void loadGraph();
+  }, [loadGraph]);
 
-  const onNodeClick: NodeMouseHandler = useCallback(async (_event, node) => {
-    setSelectedEntity(node.id);
-    selectedEntityRef.current = node.id;
-    if (expandedRef.current.has(node.id)) return;
-    expandedRef.current.add(node.id);
+  const onNodeClick: NodeMouseHandler = useCallback(
+    async (_event, node) => {
+      setSelectedEntity(node.id);
+      selectedEntityRef.current = node.id;
+      if (expandedRef.current.has(node.id)) return;
+      expandedRef.current.add(node.id);
 
-    try {
-      const r = await fetch(
-        `${getBackendBaseURL()}/api/knowledge/neighbors?entity=${encodeURIComponent(node.id)}&hops=1&limit=30`,
-        { headers: authHeaders() },
-      );
-      if (!r.ok) return;
-      const data: { nodes: ApiNode[]; edges: ApiEdge[] } = await r.json();
+      try {
+        const r = await fetch(
+          `${getBackendBaseURL()}/api/knowledge/neighbors?entity=${encodeURIComponent(node.id)}&hops=1&limit=30`,
+          { headers: authHeaders() },
+        );
+        if (!r.ok) return;
+        const data: { nodes: ApiNode[]; edges: ApiEdge[] } = await r.json();
 
-      setNodes((prev) => {
-        const existing = new Set(prev.map((n) => n.id));
-        const newOnes = data.nodes
-          .filter((n) => !existing.has(n.id))
-          .map((n, i) => {
-            const angle = (2 * Math.PI * i) / Math.max(data.nodes.length, 1);
-            const r = 120;
-            return {
-              id: n.id,
-              position: {
-                x: (node.position?.x ?? 400) + r * Math.cos(angle),
-                y: (node.position?.y ?? 300) + r * Math.sin(angle),
-              },
-              data: { label: n.label, entityType: n.entity_type ?? "neighbor" },
-              style: {
-                background: "#6366f1",
-                color: "#fff",
-                borderRadius: "9999px",
-                padding: "6px 14px",
-                fontSize: "11px",
-                fontWeight: 500,
-                border: "2px solid rgba(255,255,255,0.15)",
-                cursor: "pointer",
-              },
-            } satisfies Node;
-          });
-        return applyGraphLayout(layout, [...prev, ...newOnes], edges, node.id);
-      });
-      setEdges((prev) => {
-        const existing = new Set(prev.map((e) => e.id));
-        const newOnes = data.edges
-          .filter((e) => !existing.has(e.id))
-          .map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            label: e.label,
-            style: { stroke: "#8b5cf6", strokeWidth: Math.max(1, (e.confidence ?? 0.5) * 3) },
-            markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: "#8b5cf6" },
-            labelStyle: { fontSize: 9, fill: "#a78bfa" },
-          } satisfies Edge));
-        const nextEdges = [...prev, ...newOnes];
-        setNodes((current) => applyGraphLayout(layout, current, nextEdges, node.id));
-        return nextEdges;
-      });
-    } catch (e) { swallow(e); }
-  }, [edges, layout, setNodes, setEdges]);
+        setNodes((prev) => {
+          const existing = new Set(prev.map((n) => n.id));
+          const newOnes = data.nodes
+            .filter((n) => !existing.has(n.id))
+            .map((n, i) => {
+              const angle = (2 * Math.PI * i) / Math.max(data.nodes.length, 1);
+              const r = 120;
+              return {
+                id: n.id,
+                position: {
+                  x: (node.position?.x ?? 400) + r * Math.cos(angle),
+                  y: (node.position?.y ?? 300) + r * Math.sin(angle),
+                },
+                data: {
+                  label: n.label,
+                  entityType: n.entity_type ?? "neighbor",
+                },
+                style: {
+                  background: "#6366f1",
+                  color: "#fff",
+                  borderRadius: "9999px",
+                  padding: "6px 14px",
+                  fontSize: "11px",
+                  fontWeight: 500,
+                  border: "2px solid rgba(255,255,255,0.15)",
+                  cursor: "pointer",
+                },
+              } satisfies Node;
+            });
+          return applyGraphLayout(
+            layout,
+            [...prev, ...newOnes],
+            edges,
+            node.id,
+          );
+        });
+        setEdges((prev) => {
+          const existing = new Set(prev.map((e) => e.id));
+          const newOnes = data.edges
+            .filter((e) => !existing.has(e.id))
+            .map(
+              (e) =>
+                ({
+                  id: e.id,
+                  source: e.source,
+                  target: e.target,
+                  label: e.label,
+                  style: {
+                    stroke: "#8b5cf6",
+                    strokeWidth: Math.max(1, (e.confidence ?? 0.5) * 3),
+                  },
+                  markerEnd: {
+                    type: MarkerType.ArrowClosed,
+                    width: 12,
+                    height: 12,
+                    color: "#8b5cf6",
+                  },
+                  labelStyle: { fontSize: 9, fill: "#a78bfa" },
+                }) satisfies Edge,
+            );
+          const nextEdges = [...prev, ...newOnes];
+          setNodes((current) =>
+            applyGraphLayout(layout, current, nextEdges, node.id),
+          );
+          return nextEdges;
+        });
+      } catch (e) {
+        swallow(e);
+      }
+    },
+    [edges, layout, setNodes, setEdges],
+  );
 
   const changeLayout = useCallback(
     (nextLayout: GraphLayout) => {
       layoutRef.current = nextLayout;
       setLayout(nextLayout);
-      setNodes((prev) => applyGraphLayout(nextLayout, prev, edges, selectedEntity));
+      setNodes((prev) =>
+        applyGraphLayout(nextLayout, prev, edges, selectedEntity),
+      );
     },
     [edges, selectedEntity, setNodes],
   );
 
   useEffect(() => {
     if (!search) {
-      setNodes((prev) => prev.map((n) => ({
-        ...n,
-        style: { ...n.style, opacity: 1, boxShadow: undefined },
-      })));
+      setNodes((prev) =>
+        prev.map((n) => ({
+          ...n,
+          style: { ...n.style, opacity: 1, boxShadow: undefined },
+        })),
+      );
       return;
     }
     const q = search.toLowerCase();
-    setNodes((prev) => prev.map((n) => {
-      const match = String(n.data?.label ?? "").toLowerCase().includes(q);
-      return {
-        ...n,
-        style: {
-          ...n.style,
-          opacity: match ? 1 : 0.25,
-          boxShadow: match ? "0 0 12px rgba(139,92,246,0.6)" : undefined,
-        },
-      };
-    }));
+    setNodes((prev) =>
+      prev.map((n) => {
+        const match = String(n.data?.label ?? "")
+          .toLowerCase()
+          .includes(q);
+        return {
+          ...n,
+          style: {
+            ...n.style,
+            opacity: match ? 1 : 0.25,
+            boxShadow: match ? "0 0 12px rgba(139,92,246,0.6)" : undefined,
+          },
+        };
+      }),
+    );
   }, [search, setNodes]);
 
   if (loading) {
@@ -396,7 +467,7 @@ export function KnowledgeGraphView() {
           {selectedEntity && ` · ${selectedEntity.slice(0, 20)}`}
         </div>
       </div>
-      <div className="h-[500px] rounded-xl border border-border/40 bg-background/30 overflow-hidden">
+      <div className="h-[500px] overflow-hidden rounded-xl border border-border/50 bg-[color:color-mix(in_oklch,var(--muted)_28%,var(--background))] shadow-inner">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -404,16 +475,28 @@ export function KnowledgeGraphView() {
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           fitView
+          fitViewOptions={{ padding: 0.18, maxZoom: 1.2 }}
           minZoom={0.1}
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
         >
-          <Background gap={20} size={1} color="rgba(255,255,255,0.03)" />
+          <Background gap={22} size={1} color="hsl(var(--border))" />
           <Controls position="bottom-right" />
           <MiniMap
-            nodeColor={(n) => (n.style as Record<string, string>)?.background ?? "#6b7280"}
-            maskColor="rgba(0,0,0,0.7)"
-            style={{ borderRadius: 8 }}
+            nodeColor={(n) =>
+              (n.style as Record<string, string>)?.background ?? "#6b7280"
+            }
+            maskColor="rgba(148,163,184,0.18)"
+            pannable
+            zoomable
+            style={{
+              width: 150,
+              height: 96,
+              borderRadius: 10,
+              border: "1px solid hsl(var(--border))",
+              background: "hsl(var(--background))",
+              boxShadow: "0 10px 28px rgba(15,23,42,0.12)",
+            }}
           />
         </ReactFlow>
       </div>

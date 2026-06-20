@@ -8,6 +8,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
+import { useI18n } from "@/core/i18n/hooks";
 
 // Resized drawer width is persisted so it survives reloads / remounts.
 const SIDEBAR_WIDTH_KEY = "octopus:chatSidebarWidth";
@@ -67,6 +68,7 @@ export function ChatPageLayout({
   showSidebar = false,
   sidebarWidth = "min(300px, 36vw)",
 }: ChatPageLayoutProps) {
+  const { t } = useI18n();
   // Backwards compat: old callers pass Tailwind classes like "lg:w-72" or
   // "lg:w-[44rem]". Extract the pixel/rem value so we can drive inline
   // width (which animates) instead of fighting breakpoint classes.
@@ -183,7 +185,7 @@ export function ChatPageLayout({
                 {messageList}
               </div>
             </div>
-            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center px-3 pb-3">
+            <div className="absolute right-0 bottom-0 left-0 z-30 flex justify-center bg-gradient-to-t from-background via-background/92 to-transparent px-3 pb-3 pt-8">
               {inputArea}
             </div>
           </main>
@@ -210,7 +212,7 @@ export function ChatPageLayout({
             <div
               onMouseDown={handleMouseDown}
               className="absolute top-0 left-0 bottom-0 z-30 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
-              aria-label="拖拽调整宽度"
+              aria-label={t.sidebar.ariaResizeSidebar}
             />
             {sidebar}
           </aside>

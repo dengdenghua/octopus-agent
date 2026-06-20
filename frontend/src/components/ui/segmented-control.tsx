@@ -65,7 +65,9 @@ export function SegmentedControl<T extends string | number>({
             onClick={() => onChange(opt.value)}
             className={cn(
               "relative inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all",
-              size === "sm" ? "min-w-[64px] px-2.5 py-1 text-xs" : "min-w-[92px] px-3 py-1.5 text-xs",
+              size === "sm"
+                ? "min-w-[64px] px-2.5 py-1 text-xs"
+                : "min-w-[92px] px-3 py-1.5 text-xs",
               fullWidth && "flex-1",
               active
                 ? "bg-background text-foreground shadow-sm"

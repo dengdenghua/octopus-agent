@@ -1,14 +1,9 @@
-
 import { useEffect, useState } from "react";
 
 import { useI18nContext } from "./context";
 import { getLocaleFromCookie, setLocaleInCookie } from "./cookies";
 
-import {
-  detectLocale,
-  normalizeLocale,
-  type Locale,
-} from "./index";
+import { detectLocale, normalizeLocale, type Locale } from "./index";
 
 export function useI18n() {
   const { locale, setLocale, t } = useI18nContext();
@@ -44,4 +39,3 @@ export function useI18n() {
     isClient,
   };
 }
-

@@ -25,6 +25,7 @@ make frontend-build
 ## Docker
 
 `Dockerfile` 是三阶段 · 自动：
+
 1. `node:20-alpine` build frontend → /webui/dist
 2. `python:3.12-slim` pip install
 3. runtime · COPY --from=webui-builder → /app/webui
@@ -41,30 +42,30 @@ make frontend-build
 - `/workspace/code*` 保留为旧链接兼容入口，并重定向到 realtime；coding 是 thread/runtime 内的工作模式，不是独立页面产品面。
 - `/workspace/team*` 是团队模式，独立于单人 realtime 对话。
 
-| 页面 | 路径 | 后端 API |
-|---|---|---|
-| Landing | `/` | — |
-| Login / Register | `/login`, `/register` | `/api/auth/*` |
-| Realtime conversation | `/workspace/realtime/:threadId` | `/api/realtime` WebSocket |
-| Legacy chat link | `/workspace/chats/:threadId` | 同 `Realtime conversation` |
-| Legacy code link | `/workspace/code*` | 重定向到 `/workspace/realtime/*` |
-| Team | `/workspace/team*` | `/api/teams/*` |
-| Agents | `/workspace/agents` | `/api/agents` |
-| Skills | `/workspace/skills` | `/api/skills` |
-| Channels | `/workspace/channels` | `/api/channels` |
-| MCP | `/workspace/mcp` | `/api/mcp/*` |
-| Browser | `/workspace/browser` | `/api/browser/*` |
-| Computer | `/workspace/computer` | `/api/computer/*` |
-| Observability | `/workspace/observability` | `/api/stream` `/api/journal` `/api/kg` `/api/reflect` |
-| Workflows | `/workspace/workflows` | `/api/workflows/*` |
-| Intelligence | `/workspace/intelligence` | `/api/intel/*` |
-| Swarm | `/workspace/swarm` | `/api/swarm/*` |
-| Knowledge | `/workspace/knowledge` | `/api/kg/*` |
-| Evolution | `/workspace/evolution` | `/api/evolution/*` |
-| Reflex | `/workspace/reflex` | `/api/reflex/*` |
-| Architecture | `/workspace/architecture` | — (纯前端可视化) |
-| Realtime dev index | `/realtime` | `/api/realtime` WebSocket |
-| Desktop | `/desktop` | — (Electron 专用) |
+| 页面                  | 路径                            | 后端 API                                              |
+| --------------------- | ------------------------------- | ----------------------------------------------------- |
+| Landing               | `/`                             | —                                                     |
+| Login / Register      | `/login`, `/register`           | `/api/auth/*`                                         |
+| Realtime conversation | `/workspace/realtime/:threadId` | `/api/realtime` WebSocket                             |
+| Legacy chat link      | `/workspace/chats/:threadId`    | 同 `Realtime conversation`                            |
+| Legacy code link      | `/workspace/code*`              | 重定向到 `/workspace/realtime/*`                      |
+| Team                  | `/workspace/team*`              | `/api/teams/*`                                        |
+| Agents                | `/workspace/agents`             | `/api/agents`                                         |
+| Skills                | `/workspace/skills`             | `/api/skills`                                         |
+| Channels              | `/workspace/channels`           | `/api/channels`                                       |
+| MCP                   | `/workspace/mcp`                | `/api/mcp/*`                                          |
+| Browser               | `/workspace/browser`            | `/api/browser/*`                                      |
+| Computer              | `/workspace/computer`           | `/api/computer/*`                                     |
+| Observability         | `/workspace/observability`      | `/api/stream` `/api/journal` `/api/kg` `/api/reflect` |
+| Workflows             | `/workspace/workflows`          | `/api/workflows/*`                                    |
+| Intelligence          | `/workspace/intelligence`       | `/api/intel/*`                                        |
+| Swarm                 | `/workspace/swarm`              | `/api/swarm/*`                                        |
+| Knowledge             | `/workspace/knowledge`          | `/api/kg/*`                                           |
+| Evolution             | `/workspace/evolution`          | `/api/evolution/*`                                    |
+| Reflex                | `/workspace/reflex`             | `/api/reflex/*`                                       |
+| Architecture          | `/workspace/architecture`       | — (纯前端可视化)                                      |
+| Realtime dev index    | `/realtime`                     | `/api/realtime` WebSocket                             |
+| Desktop               | `/desktop`                      | — (Electron 专用)                                     |
 
 ## 设计
 

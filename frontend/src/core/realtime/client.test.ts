@@ -51,7 +51,8 @@ class FakeWebSocket {
     this.onopen?.({} as Event);
   }
   receive(payload: object | string): void {
-    const text = typeof payload === "string" ? payload : JSON.stringify(payload);
+    const text =
+      typeof payload === "string" ? payload : JSON.stringify(payload);
     this.onmessage?.({ data: text } as MessageEvent);
   }
   serverClose(code = 1006, reason = "abnormal"): void {
@@ -68,7 +69,8 @@ const ORIG_WS = (globalThis as { WebSocket?: unknown }).WebSocket;
 beforeEach(() => {
   FakeWebSocket.lastInstance = null;
   FakeWebSocket.instances = [];
-  (globalThis as unknown as { WebSocket: typeof FakeWebSocket }).WebSocket = FakeWebSocket;
+  (globalThis as unknown as { WebSocket: typeof FakeWebSocket }).WebSocket =
+    FakeWebSocket;
 });
 
 afterEach(() => {
@@ -104,7 +106,9 @@ describe("RealtimeClient", () => {
     const ws = FakeWebSocket.lastInstance!;
     ws.open();
 
-    const promise = client.request<{ ok: true }>("turn/start", { threadId: "t" });
+    const promise = client.request<{ ok: true }>("turn/start", {
+      threadId: "t",
+    });
     const sent = ws.parseSent(0);
     expect("id" in sent && sent.id).toBe(1);
 
@@ -173,10 +177,12 @@ describe("RealtimeClient", () => {
     // Delta notifications are batched through requestAnimationFrame to
     // keep React re-renders capped at ~60fps during high-rate streaming.
     // Wait a frame so the buffered notification lands on the callback.
-    await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
     expect(onNotification).toHaveBeenCalledTimes(1);
-    expect(onNotification.mock.calls[0]![0].method).toBe("item/agentMessage/delta");
+    expect(onNotification.mock.calls[0]![0].method).toBe(
+      "item/agentMessage/delta",
+    );
     client.close();
   });
 
@@ -203,7 +209,7 @@ describe("RealtimeClient", () => {
       params: { threadId: "t", turnId: "turn", itemId: "b", delta: "other" },
     });
 
-    await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
     expect(onNotification).toHaveBeenCalledTimes(2);
     expect(onNotification.mock.calls[0]![0]).toMatchObject({
@@ -264,12 +270,12 @@ describe("RealtimeClient", () => {
       },
     });
 
-    await new Promise(resolve => requestAnimationFrame(() => resolve(null)));
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
     // Two adjacent same-item deltas coalesce; started + completed
     // ride alongside without merging. Total 3 callbacks.
     expect(onNotification).toHaveBeenCalledTimes(3);
-    const methods = onNotification.mock.calls.map(c => c[0].method);
+    const methods = onNotification.mock.calls.map((c) => c[0].method);
     expect(methods).toEqual([
       "item/started",
       "item/agentMessage/delta",
@@ -362,7 +368,7 @@ describe("RealtimeClient", () => {
     expect(onOpen).toHaveBeenCalledTimes(1);
     // onOpen fires again after a reconnect.
     FakeWebSocket.lastInstance!.serverClose(1006, "abnormal");
-    await new Promise(r => setTimeout(r, 60));
+    await new Promise((r) => setTimeout(r, 60));
     FakeWebSocket.lastInstance!.open();
     expect(onOpen).toHaveBeenCalledTimes(2);
     client.close();

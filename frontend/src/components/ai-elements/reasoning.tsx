@@ -8,7 +8,15 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { Suspense, createContext, lazy, memo, useContext, useEffect, useState } from "react";
+import {
+  Suspense,
+  createContext,
+  lazy,
+  memo,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 import { Shimmer } from "./shimmer";
 
@@ -165,7 +173,8 @@ export const ReasoningContent = memo(
           "mt-2 text-sm relative overflow-hidden",
           "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground data-[state=closed]:animate-out data-[state=open]:animate-in outline-none",
           "rounded-lg border border-border/40 bg-muted/20 p-3 pl-4",
-          isStreaming && "border-l-primary/50 shadow-[inset_2px_0_0_0_var(--primary)]",
+          isStreaming &&
+            "border-l-primary/50 shadow-[inset_2px_0_0_0_var(--primary)]",
           className,
         )}
         {...props}

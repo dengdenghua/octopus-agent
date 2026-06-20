@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { swallow } from "@/core/utils/log";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -144,10 +143,14 @@ export const CodeBlock = ({
     if (isStreaming) {
       highlightTimerRef.current = setTimeout(() => {
         highlightTimerRef.current = null;
-        void highlightCode(code, language, showLineNumbers, shikiTheme).then(applyHighlight);
+        void highlightCode(code, language, showLineNumbers, shikiTheme).then(
+          applyHighlight,
+        );
       }, 150);
     } else {
-      void highlightCode(code, language, showLineNumbers, shikiTheme).then(applyHighlight);
+      void highlightCode(code, language, showLineNumbers, shikiTheme).then(
+        applyHighlight,
+      );
     }
 
     return () => {

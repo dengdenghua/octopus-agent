@@ -132,7 +132,8 @@ export function AgentWorldCard({
   const [installing, setInstalling] = useState(false);
   const [installed, setInstalled] = useState(agent.is_installed);
   const catStyle = CATEGORY_STYLES[agent.category] ?? CATEGORY_STYLES.assistant;
-  const categoryLabel = t.agentWorld.categories[agent.category] ?? agent.category;
+  const categoryLabel =
+    t.agentWorld.categories[agent.category] ?? agent.category;
   const keySkillCount = agent.key_skills?.length ?? 0;
   const hasCapabilityPack = keySkillCount > 0;
   const iconFallback = (
@@ -153,7 +154,9 @@ export function AgentWorldCard({
         const result = await installAgent(agent.id);
         setInstalled(true);
         const assembledSkillCount =
-          result.key_skills?.length ?? result.registered_skills ?? keySkillCount;
+          result.key_skills?.length ??
+          result.registered_skills ??
+          keySkillCount;
         toast.success(
           assembledSkillCount > 0
             ? t.agentWorld.toastCapabilityPackInstalled(
@@ -292,4 +295,3 @@ export function AgentWorldCard({
 }
 
 export { StarRating, formatDownloads };
-

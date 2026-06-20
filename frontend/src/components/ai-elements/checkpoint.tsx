@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -68,4 +67,3 @@ export const CheckpointTrigger = ({
       {children}
     </Button>
   );
-

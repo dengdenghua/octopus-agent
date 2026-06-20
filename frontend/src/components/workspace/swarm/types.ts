@@ -33,22 +33,22 @@ export interface SwarmAgent {
   role: string;
   motto: string;
   avatarEmoji: string;
-  hue: number;              // 0-360, drives theme color
-  skills: string[];          // equipped skill names
+  hue: number; // 0-360, drives theme color
+  skills: string[]; // equipped skill names
   stats?: {
     taskCount?: number;
-    rating?: number;         // 0-5
+    rating?: number; // 0-5
   };
-  personality?: string[];    // Implementation note.
-  task: string;              // this dispatch's assigned task (short)
-  details?: string[];        // Implementation note.
+  personality?: string[]; // Implementation note.
+  task: string; // this dispatch's assigned task (short)
+  details?: string[]; // Implementation note.
   status: AgentStatus;
-  progress: number;          // 0..1
+  progress: number; // 0..1
   tokenUsed?: number;
   tokenBudget?: number;
-  result?: string;           // full LLM output after agent completes
-  error?: string;            // error message if agent failed
-  durationSeconds?: number;  // elapsed wallclock time
+  result?: string; // full LLM output after agent completes
+  error?: string; // error message if agent failed
+  durationSeconds?: number; // elapsed wallclock time
 }
 
 export interface WorkContract {

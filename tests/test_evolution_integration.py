@@ -253,11 +253,11 @@ class TestDriftFitnessStrategyIntegration:
 
     def test_no_drift_and_healthy_fitness_hold(self):
         monitor = DriftMonitor("healthy_agent")
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch.object(monitor, "_check_score_drift", return_value=None):
-                    drift_report = monitor.check()
-                    assert drift_report.has_drift is False
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch.object(monitor, "_check_score_drift", return_value=None):
+                drift_report = monitor.check()
+                assert drift_report.has_drift is False
 
         engine = StrategyEngine()
         report = FitnessReport(

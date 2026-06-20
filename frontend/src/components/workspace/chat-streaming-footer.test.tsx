@@ -105,7 +105,9 @@ describe("ChatStreamingFooter", () => {
     );
 
     expect(screen.getByText("Reading context")).toBeInTheDocument();
-    expect(screen.getAllByText("frontend/src/app.tsx").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("frontend/src/app.tsx").length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText("2 Agent")).toBeInTheDocument();
 
     expect(screen.getAllByText(/Team Lead/).length).toBeGreaterThan(0);
@@ -133,7 +135,9 @@ describe("ChatStreamingFooter", () => {
     );
 
     expect(screen.getByText("Reading context")).toBeInTheDocument();
-    expect(screen.getAllByText("frontend/src/app.tsx").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("frontend/src/app.tsx").length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText("Processing...")).toBeInTheDocument();
   });
 
@@ -191,7 +195,9 @@ describe("ChatStreamingFooter", () => {
     ]);
 
     expect(screen.queryByText("Heavy Task Pipeline")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/AI chip market size 2025/).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/AI chip market size 2025/).length,
+    ).toBeGreaterThan(0);
     expect(screen.getAllByText(/chapter_01\.md/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/3 Agent/).length).toBeGreaterThan(0);
   });
@@ -263,12 +269,8 @@ describe("ChatStreamingFooter", () => {
     );
 
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Thinking process"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Task Plan"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Thinking process")).not.toBeInTheDocument();
+    expect(screen.queryByText("Task Plan")).not.toBeInTheDocument();
   });
 
   test("plain chat does not show realtime work log before backend tool events arrive", () => {
@@ -283,18 +285,10 @@ describe("ChatStreamingFooter", () => {
     );
 
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Thinking process"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Understanding Task"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Connecting Runtime"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("AI is thinking"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Thinking process")).not.toBeInTheDocument();
+    expect(screen.queryByText("Understanding Task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connecting Runtime")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI is thinking")).not.toBeInTheDocument();
   });
 
   test("react mode stays minimal before semantic work events arrive", () => {
@@ -309,18 +303,10 @@ describe("ChatStreamingFooter", () => {
     );
 
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Thinking process"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Understanding Task"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Connecting Runtime"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("AI is thinking"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Thinking process")).not.toBeInTheDocument();
+    expect(screen.queryByText("Understanding Task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connecting Runtime")).not.toBeInTheDocument();
+    expect(screen.queryByText("AI is thinking")).not.toBeInTheDocument();
   });
 
   test("react mode hides the fallback footer once the assistant message is streaming", () => {
@@ -409,12 +395,8 @@ describe("ChatStreamingFooter", () => {
     );
 
     expect(screen.getByText("Thinking...")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Connecting Model"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByText("Thinking process"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Connecting Model")).not.toBeInTheDocument();
+    expect(screen.queryByText("Thinking process")).not.toBeInTheDocument();
   });
 
   test("shows thought, observation, and skill calls in the live trace", () => {
@@ -459,7 +441,9 @@ describe("ChatStreamingFooter", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/Observation:/)).toBeInTheDocument();
-    expect(screen.getByText(/Applying skill browser-use:browser/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Applying skill browser-use:browser/),
+    ).toBeInTheDocument();
     expect(screen.getByText("Run local UI regression")).toBeInTheDocument();
   });
 });

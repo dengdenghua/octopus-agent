@@ -2,17 +2,21 @@ import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
   CalendarClockIcon,
+  Code2Icon,
   FileTextIcon,
   FolderOpenIcon,
+  GitBranchIcon,
   ImageIcon,
   LinkIcon,
   LightbulbIcon,
+  LockIcon,
   ZapIcon,
   PaperclipIcon,
   PlusIcon,
   PresentationIcon,
   SearchIcon,
   SlidersHorizontalIcon,
+  SparklesIcon,
   SquareIcon,
   TableIcon,
   Trash2Icon,
@@ -57,6 +61,11 @@ import type {
 } from "@/core/research/api";
 import type { ReasoningEffort } from "@/core/threads";
 import { WorkDirSelector } from "./workdir-selector";
+import {
+  type DetectResponse,
+  ModeSelector,
+  type AgentModeName,
+} from "./mode-selector";
 
 /**
  * Simplified chat composer for the /workspace/chats route. Same visual
@@ -92,8 +101,13 @@ export interface ChatInputBoxProps {
   allowAgentModes?: boolean;
   showInspirationToggle?: boolean;
   permissionMode?: PermissionMode;
+  codeModeUnlocked?: boolean;
+  projectAgentMode?: AgentModeName;
+  projectDetection?: DetectResponse | null;
   reasoningEffort?: ReasoningEffort;
   onPermissionModeChange?: (mode: PermissionMode) => void;
+  onProjectAgentModeChange?: (mode: AgentModeName) => void;
+  onProjectDetectionChange?: (detection: DetectResponse | null) => void;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
   onModelChange?: (modelName: string) => void;
   onModeChange?: (mode: ReasoningMode, draft?: string) => void;
@@ -178,8 +192,13 @@ export function ChatInputBox({
   allowAgentModes = false,
   showInspirationToggle = false,
   permissionMode,
+  codeModeUnlocked = false,
+  projectAgentMode = "coder",
+  projectDetection,
   reasoningEffort,
   onPermissionModeChange,
+  onProjectAgentModeChange,
+  onProjectDetectionChange,
   onReasoningEffortChange,
   onModelChange,
   onModeChange,
@@ -259,16 +278,53 @@ export function ChatInputBox({
   const canUseDeepResearch =
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
+  const isProjectMode = mode === "code" && !!workDir?.trim();
   const isBusy = disabled || uploadingMaterials;
   const sendLabel = locale === "zh-CN" ? "发送" : "Send";
   const stopLabel = locale === "zh-CN" ? "停止" : "Stop";
+  const projectModeLabel = locale === "zh-CN" ? "项目代码模式" : "Project code";
+  const projectModeHint =
+    locale === "zh-CN"
+      ? "已绑定本地目录，当前 Agent 会读取项目上下文并按代码任务执行。"
+      : "A local folder is bound; this agent will use project context for code tasks.";
+  const projectStatusTitle =
+    locale === "zh-CN" ? "项目上下文已绑定" : "Project context bound";
+  const projectStatusDesc = codeModeUnlocked
+    ? locale === "zh-CN"
+      ? "当前 Agent 已解锁代码能力，会按理解、修改、验证的闭环执行。"
+      : "This agent can use code mode and will work through inspect, edit, and verify."
+    : locale === "zh-CN"
+      ? "当前 Agent 未声明代码写入能力，后端会降级为只读/对话范围。建议切换 Coder 或给该角色开启 code_mode_unlock。"
+      : "This agent has not declared code write access; the backend will downgrade the write scope. Switch to Coder or enable code_mode_unlock.";
+  const projectSignalBadges = projectDetection
+    ? [
+        ...(projectDetection.signals.manifests ?? []).slice(0, 3),
+        ...(projectDetection.signals.lock_files ?? []).slice(0, 2),
+        ...(projectDetection.signals.has_readme
+          ? [locale === "zh-CN" ? "README" : "README"]
+          : []),
+      ]
+    : [];
+  const projectVerificationCommands =
+    projectDetection?.signals.commands?.slice(0, 4) ?? [];
+  const projectVerificationLabel = locale === "zh-CN" ? "验证命令" : "Verify";
+  const permissionLabel =
+    resolvedPermissionMode === "bypassPermissions"
+      ? locale === "zh-CN"
+        ? "完全访问"
+        : "Full access"
+      : resolvedPermissionMode === "acceptEdits"
+        ? locale === "zh-CN"
+          ? "自动接受编辑"
+          : "Accept edits"
+        : locale === "zh-CN"
+          ? "确认后执行"
+          : "Confirm";
   const parsedResearchUrls = useMemo(
     () => parseComposerUrls(researchUrlText),
     [researchUrlText],
   );
-  const showContextCompressor =
-    maxContextTokens > 0 &&
-    (isCompressingContext || contextTokens / maxContextTokens >= 0.05);
+  const showContextCompressor = maxContextTokens > 0;
 
   useEffect(() => {
     if (!canUseDeepResearch) setResearchConfigOpen(false);
@@ -1107,12 +1163,107 @@ export function ChatInputBox({
         </div>
       </div>
       {showWorkDirSelector && (
-        <div className="flex items-center px-2 pt-1">
+        <div className="flex flex-wrap items-center gap-2 px-2 pt-1">
           <WorkDirSelector
             workDir={workDir ?? ""}
             onWorkDirChange={onWorkDirChange}
             variant="muted"
           />
+          {isProjectMode && (
+            <span
+              className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+              title={projectModeHint}
+            >
+              <Code2Icon className="size-3" />
+              <span className="truncate">{projectModeLabel}</span>
+            </span>
+          )}
+        </div>
+      )}
+      {isProjectMode && (
+        <div
+          className={cn(
+            "mx-2 mt-2 rounded-lg border px-3 py-2 text-xs",
+            codeModeUnlocked
+              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+              : "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-200",
+          )}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-md",
+                  codeModeUnlocked
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
+                    : "bg-amber-500/15 text-amber-700 dark:text-amber-200",
+                )}
+              >
+                {codeModeUnlocked ? (
+                  <Code2Icon className="size-3.5" />
+                ) : (
+                  <LockIcon className="size-3.5" />
+                )}
+              </span>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
+                  <span className="truncate">{projectStatusTitle}</span>
+                  <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    {permissionLabel}
+                  </span>
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                  {workDir}
+                </div>
+              </div>
+            </div>
+            <ModeSelector
+              workDir={workDir ?? ""}
+              sessionId={threadId ?? "new"}
+              mode={projectAgentMode}
+              onModeChange={onProjectAgentModeChange ?? (() => undefined)}
+              onDetectionChange={onProjectDetectionChange}
+            />
+          </div>
+          {projectSignalBadges.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {projectSignalBadges.map((badge) => (
+                <span
+                  key={badge}
+                  className="rounded-md bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {badge}
+                </span>
+              ))}
+            </div>
+          )}
+          {projectVerificationCommands.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-medium text-muted-foreground">
+                {projectVerificationLabel}
+              </span>
+              {projectVerificationCommands.map((item) => (
+                <span
+                  key={`${item.kind}:${item.command}`}
+                  className="inline-flex max-w-full items-center gap-1 rounded-md bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                  title={item.source}
+                >
+                  <span className="font-sans uppercase text-foreground/60">
+                    {item.kind}
+                  </span>
+                  <span className="truncate">{item.command}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
+            {codeModeUnlocked ? (
+              <GitBranchIcon className="mt-0.5 size-3.5 shrink-0" />
+            ) : (
+              <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
+            )}
+            <span>{projectStatusDesc}</span>
+          </div>
         </div>
       )}
     </>

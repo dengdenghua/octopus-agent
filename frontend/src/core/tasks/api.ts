@@ -94,7 +94,9 @@ export async function pauseTask(
   );
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(`Failed to pause: ${res.status} ${detail || res.statusText}`);
+    throw new Error(
+      `Failed to pause: ${res.status} ${detail || res.statusText}`,
+    );
   }
   return (await res.json()) as { ok: boolean; request: PauseRequest };
 }
@@ -117,7 +119,9 @@ export async function resumeTask(
   );
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(`Failed to resume: ${res.status} ${detail || res.statusText}`);
+    throw new Error(
+      `Failed to resume: ${res.status} ${detail || res.statusText}`,
+    );
   }
   return (await res.json()) as ResumeTaskResponse;
 }
@@ -129,6 +133,8 @@ export async function deleteTask(taskId: string): Promise<void> {
   );
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(`Failed to delete: ${res.status} ${detail || res.statusText}`);
+    throw new Error(
+      `Failed to delete: ${res.status} ${detail || res.statusText}`,
+    );
   }
 }

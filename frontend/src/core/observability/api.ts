@@ -22,14 +22,18 @@ export async function getMetricsSummary(): Promise<MetricsSummary> {
   const res = await fetch(`${getBackendBaseURL()}/api/metrics/summary`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to get metrics summary: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to get metrics summary: ${res.statusText}`);
   return (await res.json()) as MetricsSummary;
 }
 
 export async function getTraces(limit = 100): Promise<TraceSummary[]> {
-  const res = await fetch(`${getBackendBaseURL()}/api/trace/recent?limit=${limit}`, {
-    headers: authHeaders(),
-  });
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/trace/recent?limit=${limit}`,
+    {
+      headers: authHeaders(),
+    },
+  );
   if (!res.ok) throw new Error(`Failed to get traces: ${res.statusText}`);
   return (await res.json()) as TraceSummary[];
 }
@@ -66,17 +70,22 @@ export async function createAlertRule(rule: AlertRule): Promise<AlertRule> {
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Failed to create alert rule: ${res.statusText}`);
+    throw new Error(
+      err.detail ?? `Failed to create alert rule: ${res.statusText}`,
+    );
   }
   return (await res.json()) as AlertRule;
 }
 
-export async function deleteAlertRule(name: string): Promise<{ success: boolean; name: string }> {
+export async function deleteAlertRule(
+  name: string,
+): Promise<{ success: boolean; name: string }> {
   const res = await fetch(`${getBackendBaseURL()}/api/alerts/rules/${name}`, {
     method: "DELETE",
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to delete alert rule: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to delete alert rule: ${res.statusText}`);
   return (await res.json()) as { success: boolean; name: string };
 }
 
@@ -84,15 +93,19 @@ export async function getTelemetryStats(): Promise<TelemetryStats> {
   const res = await fetch(`${getBackendBaseURL()}/api/telemetry/stats`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to get telemetry stats: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to get telemetry stats: ${res.statusText}`);
   return (await res.json()) as TelemetryStats;
 }
 
-export async function getObservabilityHealth(): Promise<Record<string, unknown>> {
+export async function getObservabilityHealth(): Promise<
+  Record<string, unknown>
+> {
   const res = await fetch(`${getBackendBaseURL()}/api/observability/health`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to get observability health: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to get observability health: ${res.statusText}`);
   return (await res.json()) as Record<string, unknown>;
 }
 

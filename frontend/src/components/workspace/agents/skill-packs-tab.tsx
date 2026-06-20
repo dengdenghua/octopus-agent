@@ -189,7 +189,9 @@ function PackCard({
             >
               <BoxesIcon className={compact ? "size-4" : "size-3.5"} />
             </div>
-            <div className={cn("text-sm font-semibold", !compact && "font-mono")}>
+            <div
+              className={cn("text-sm font-semibold", !compact && "font-mono")}
+            >
               {pack.name}
             </div>
             <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
@@ -229,12 +231,12 @@ function PackCard({
           ) : null}
           {!compact && (
             <div className="flex flex-wrap gap-x-4 gap-y-1 pt-1 text-[11px] text-muted-foreground">
-            <span>
-              <span className="font-medium">{t.metaSkills.budget}:</span>{" "}
-              {t.metaSkills.budgetTokens(pack.budget_tokens ?? 0)} ·{" "}
-              {t.metaSkills.budgetUsd(pack.budget_usd ?? 0)} ·{" "}
-              {t.metaSkills.budgetLatency(pack.budget_latency_ms ?? 0)}
-            </span>
+              <span>
+                <span className="font-medium">{t.metaSkills.budget}:</span>{" "}
+                {t.metaSkills.budgetTokens(pack.budget_tokens ?? 0)} ·{" "}
+                {t.metaSkills.budgetUsd(pack.budget_usd ?? 0)} ·{" "}
+                {t.metaSkills.budgetLatency(pack.budget_latency_ms ?? 0)}
+              </span>
             </div>
           )}
         </div>
@@ -252,7 +254,9 @@ function PackCard({
           {expanded ? (
             <>
               <ChevronUpIcon className="mr-1 size-3.5" />
-              {compact ? t.metaSkills.collapseDiagram : t.metaSkills.hideDiagram}
+              {compact
+                ? t.metaSkills.collapseDiagram
+                : t.metaSkills.hideDiagram}
             </>
           ) : (
             <>
@@ -313,9 +317,7 @@ function PackCard({
                 {t.metaSkills.diagramFailed(err)}
               </div>
             )}
-            {!loading && !err && mermaid && (
-              <MermaidBlock code={mermaid} />
-            )}
+            {!loading && !err && mermaid && <MermaidBlock code={mermaid} />}
           </div>
         </div>
       )}

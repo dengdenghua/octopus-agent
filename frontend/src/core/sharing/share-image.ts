@@ -35,7 +35,10 @@ export async function svgToPngBlob(svg: string, scale = 2): Promise<Blob> {
 
     return await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error("share image: toBlob returned null"))),
+        (blob) =>
+          blob
+            ? resolve(blob)
+            : reject(new Error("share image: toBlob returned null")),
         "image/png",
       );
     });
@@ -45,7 +48,9 @@ export async function svgToPngBlob(svg: string, scale = 2): Promise<Blob> {
 }
 
 /** Build the PNG for a task/result from caller-supplied strings. */
-export async function buildTaskShareImage(opts: ShareCardOptions): Promise<Blob> {
+export async function buildTaskShareImage(
+  opts: ShareCardOptions,
+): Promise<Blob> {
   return svgToPngBlob(renderShareCardSvg(buildShareCard(opts)));
 }
 

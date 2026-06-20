@@ -9,6 +9,7 @@ events, approvals, checkpoints, and token usage.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -766,6 +767,8 @@ class AgentTraceStore:
             thread_id=thread_id,
             turn_id=turn_id,
             agent_id=agent_id,
+            limit=limit if status is None else None,
+            offset=offset if status is None else 0,
         )
         runs: list[dict[str, Any]] = []
         for row in rows:
@@ -776,6 +779,8 @@ class AgentTraceStore:
                 continue
             run.pop("events", None)
             runs.append(run)
+        if status is None:
+            return runs
         start = max(0, int(offset or 0))
         end = start + max(0, int(limit or 0))
         return runs[start:end]
@@ -786,6 +791,150 @@ class AgentTraceStore:
             return None
         approvals = self._approvals_for_task(str(run["task_id"]))
         return _task_run_review_from_run(run, approvals)
+
+    def task_run_replay_case(self, task_id: str) -> dict[str, Any] | None:
+        review = self.task_run_review(task_id)
+        if review is None:
+            return None
+        return _task_run_replay_case_from_review(review)
+
+    def evaluate_task_run_replay_case(self, task_id: str) -> dict[str, Any] | None:
+        replay_case = self.task_run_replay_case(task_id)
+        if replay_case is None:
+            return None
+        return _evaluate_task_run_replay_case(replay_case)
+
+    def task_run_replay_cases(
+        self,
+        *,
+        thread_id: str | None = None,
+        turn_id: str | None = None,
+        agent_id: str | None = None,
+        status: TaskRunStatus | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        if status is None:
+            rows = self._task_run_ids(
+                thread_id=thread_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                limit=limit,
+                offset=offset,
+            )
+            task_ids = [str(row["task_id"]) for row in rows]
+        else:
+            runs = self.task_runs(
+                thread_id=thread_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                status=status,
+                limit=limit,
+                offset=offset,
+            )
+            task_ids = [str(run.get("task_id") or "") for run in runs]
+        cases = [
+            case
+            for task_id in task_ids
+            if (case := self.task_run_replay_case(task_id)) is not None
+        ]
+        return {
+            "schema": "octopus.task_run_replay_case_corpus.v1",
+            "cases": cases,
+            "total": len(cases),
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def evaluate_task_run_replay_cases(
+        self,
+        *,
+        thread_id: str | None = None,
+        turn_id: str | None = None,
+        agent_id: str | None = None,
+        status: TaskRunStatus | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        corpus = self.task_run_replay_cases(
+            thread_id=thread_id,
+            turn_id=turn_id,
+            agent_id=agent_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        evaluations = [
+            _evaluate_task_run_replay_case(case)
+            for case in corpus.get("cases", [])
+            if isinstance(case, dict)
+        ]
+        passed = sum(1 for item in evaluations if item.get("passed") is True)
+        failed = sum(1 for item in evaluations if item.get("passed") is False)
+        return {
+            "schema": "octopus.task_run_replay_evaluation_corpus.v1",
+            "passed": passed,
+            "failed": failed,
+            "total": len(evaluations),
+            "limit": limit,
+            "offset": offset,
+            "evaluations": evaluations,
+        }
+
+    def replay_gate(
+        self,
+        *,
+        thread_id: str | None = None,
+        turn_id: str | None = None,
+        agent_id: str | None = None,
+        status: TaskRunStatus | None = None,
+        min_cases: int = 1,
+        min_score: float = 1.0,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        corpus = self.evaluate_task_run_replay_cases(
+            thread_id=thread_id,
+            turn_id=turn_id,
+            agent_id=agent_id,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+        evaluations = [item for item in corpus.get("evaluations", []) if isinstance(item, dict)]
+        return _replay_gate_from_evaluations(
+            evaluations,
+            min_cases=min_cases,
+            min_score=min_score,
+            filters={
+                "thread_id": thread_id,
+                "turn_id": turn_id,
+                "agent_id": agent_id,
+                "status": status,
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+
+    def replay_gate_for_task_ids(
+        self,
+        task_ids: list[str],
+        *,
+        min_cases: int = 1,
+        min_score: float = 1.0,
+    ) -> dict[str, Any]:
+        clean_task_ids = [task_id for task_id in dict.fromkeys(task_ids) if task_id]
+        evaluations = [
+            evaluation
+            for task_id in clean_task_ids
+            if (evaluation := self.evaluate_task_run_replay_case(task_id)) is not None
+        ]
+        return _replay_gate_from_evaluations(
+            evaluations,
+            min_cases=min_cases,
+            min_score=min_score,
+            filters={"task_ids": clean_task_ids},
+        )
 
     def stats(
         self,
@@ -913,6 +1062,8 @@ class AgentTraceStore:
         thread_id: str | None = None,
         turn_id: str | None = None,
         agent_id: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[sqlite3.Row]:
         parts: list[str] = []
         params: list[Any] = []
@@ -935,6 +1086,9 @@ class AgentTraceStore:
             + " UNION ALL ".join(parts)
             + ") GROUP BY task_id ORDER BY updated_at DESC, task_id ASC"
         )
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([max(0, int(limit or 0)), max(0, int(offset or 0))])
         with self._lock:
             return list(self._conn.execute(sql, params).fetchall())
 
@@ -956,6 +1110,54 @@ class AgentTraceStore:
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         self.close()
+
+
+def _replay_gate_from_evaluations(
+    evaluations: list[dict[str, Any]],
+    *,
+    min_cases: int,
+    min_score: float,
+    filters: dict[str, Any],
+) -> dict[str, Any]:
+    threshold_cases = max(0, int(min_cases or 0))
+    threshold_score = max(0.0, min(1.0, float(min_score or 0.0)))
+    failing = [
+        item
+        for item in evaluations
+        if item.get("passed") is not True
+        or float(item.get("score") or 0.0) < threshold_score
+    ]
+    total = len(evaluations)
+    enough_cases = total >= threshold_cases
+    passed = enough_cases and not failing
+    reasons: list[str] = []
+    if not enough_cases:
+        reasons.append(f"insufficient_cases:{total}<{threshold_cases}")
+    if failing:
+        reasons.append(f"failing_cases:{len(failing)}")
+    if passed:
+        reasons.append("all_replay_evaluations_passed")
+    return {
+        "schema": "octopus.replay_gate.v1",
+        "passed": passed,
+        "reason": ";".join(reasons),
+        "thresholds": {
+            "min_cases": threshold_cases,
+            "min_score": threshold_score,
+        },
+        "summary": {
+            "total": total,
+            "passed": sum(1 for item in evaluations if item.get("passed") is True),
+            "failed": sum(1 for item in evaluations if item.get("passed") is False),
+            "below_min_score": sum(
+                1
+                for item in evaluations
+                if float(item.get("score") or 0.0) < threshold_score
+            ),
+        },
+        "failing_cases": failing[:20],
+        "filters": filters,
+    }
 
 
 def _optional_str(value: Any) -> str | None:
@@ -1013,12 +1215,50 @@ def _tool_name_from_payload(payload: Any) -> str:
     return ""
 
 
+def _tool_call_id_from_payload(
+    payload: Any,
+    event: dict[str, Any] | None = None,
+) -> str:
+    raw = payload if isinstance(payload, dict) else {}
+    for key in ("tool_call_id", "id", "tool_use_id", "call_id"):
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    item_id = event.get("item_id") if isinstance(event, dict) else None
+    return item_id.strip() if isinstance(item_id, str) and item_id.strip() else ""
+
+
 def _tool_event_failed(payload: Any) -> bool:
     raw = payload if isinstance(payload, dict) else {}
     if raw.get("is_error") is True:
         return True
     status = str(raw.get("status") or raw.get("decision") or "").lower()
     return status in {"error", "failed", "failure", "rejected", "cancelled"}
+
+
+def _preview_from_payload(
+    payload: Any,
+    *,
+    value_key: str,
+    preview_key: str,
+    limit: int,
+) -> str:
+    raw = payload if isinstance(payload, dict) else {}
+    value = raw.get(preview_key)
+    if value is None:
+        value = raw.get(value_key)
+    return _truncate(_render_preview(value), limit)
+
+
+def _render_preview(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        return repr(value)
 
 
 def _task_run_from_rows(
@@ -1126,6 +1366,7 @@ def _task_run_from_rows(
             in {"rejected", "timeout", "connection_lost", "error"}
         ),
         "checkpoint_count": len(checkpoints),
+        "latest_checkpoint": _latest_checkpoint_review_summary(checkpoints),
         "token_usage_count": len(token_rows),
         "token_totals": token_totals,
     }
@@ -1172,6 +1413,7 @@ def _task_run_review_from_run(
         "score_reasons": score_reasons,
         "findings": findings,
         "replay": _task_run_replay(events, approvals),
+        "resume": _task_run_resume_summary(run),
         "learning_candidates": _task_run_learning_candidates(run, findings),
         "backlog_candidates": _task_run_backlog_candidates(run, findings),
         "summary": {
@@ -1186,6 +1428,147 @@ def _task_run_review_from_run(
             "checkpoint_count": run.get("checkpoint_count") or 0,
             "token_totals": run.get("token_totals") or {},
         },
+    }
+
+
+def _task_run_replay_case_from_review(review: dict[str, Any]) -> dict[str, Any]:
+    replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
+    resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
+    latest_checkpoint = (
+        resume.get("latest_checkpoint")
+        if isinstance(resume.get("latest_checkpoint"), dict)
+        else {}
+    )
+    findings = [
+        finding
+        for finding in (review.get("findings") if isinstance(review.get("findings"), list) else [])
+        if isinstance(finding, dict)
+    ]
+    return {
+        "schema": "octopus.task_run_replay_case.v1",
+        "case_id": replay.get("case_id") or "",
+        "fingerprint": replay.get("fingerprint") or "",
+        "source": {
+            "task_id": review.get("task_id"),
+            "thread_id": review.get("thread_id"),
+            "turn_id": review.get("turn_id"),
+            "agent_id": review.get("agent_id"),
+            "status": review.get("status"),
+        },
+        "replay": replay,
+        "expectations": {
+            "status": review.get("status"),
+            "score": review.get("score"),
+            "finding_types": [
+                str(finding.get("type") or "")
+                for finding in findings
+                if finding.get("type")
+            ],
+            "tool_error_count": sum(
+                1 for finding in findings if finding.get("type") == "tool_error"
+            ),
+        },
+        "resume": {
+            "available": bool(resume.get("available")) if isinstance(resume, dict) else False,
+            "source": resume.get("source") if isinstance(resume, dict) else None,
+            "latest_checkpoint_id": latest_checkpoint.get("id"),
+        },
+        "safety": {
+            "raw_messages_included": False,
+            "raw_checkpoint_state_included": False,
+            "tool_outputs_truncated": True,
+        },
+    }
+
+
+def _evaluate_task_run_replay_case(replay_case: dict[str, Any]) -> dict[str, Any]:
+    replay = replay_case.get("replay") if isinstance(replay_case.get("replay"), dict) else {}
+    expectations = (
+        replay_case.get("expectations")
+        if isinstance(replay_case.get("expectations"), dict)
+        else {}
+    )
+    source = replay_case.get("source") if isinstance(replay_case.get("source"), dict) else {}
+    safety = replay_case.get("safety") if isinstance(replay_case.get("safety"), dict) else {}
+    steps = replay.get("steps") if isinstance(replay.get("steps"), list) else []
+    checks = [
+        _replay_check(
+            "schema",
+            replay_case.get("schema") == "octopus.task_run_replay_case.v1",
+            "Replay case schema is recognized.",
+        ),
+        _replay_check(
+            "case_id",
+            bool(str(replay_case.get("case_id") or "").startswith("task-run:")),
+            "Replay case has a stable task-run case id.",
+        ),
+        _replay_check(
+            "fingerprint",
+            len(str(replay_case.get("fingerprint") or "")) == 16
+            and replay_case.get("fingerprint") == replay.get("fingerprint"),
+            "Replay fingerprint is present and matches the embedded replay.",
+        ),
+        _replay_check(
+            "replayable",
+            replay.get("replayable") is True and bool(steps),
+            "Replay contains at least one step.",
+        ),
+        _replay_check(
+            "step_count",
+            int(replay.get("step_count") or 0) == len(steps),
+            "Replay step_count matches the embedded steps.",
+        ),
+        _replay_check(
+            "status_expectation",
+            expectations.get("status") == source.get("status"),
+            "Expected status matches the source task status.",
+        ),
+        _replay_check(
+            "tool_error_count",
+            int(expectations.get("tool_error_count") or 0)
+            == sum(
+                1
+                for step in steps
+                if isinstance(step, dict)
+                and step.get("kind") == "tool_end"
+                and step.get("is_error") is True
+            ),
+            "Expected tool error count matches replay tool_end errors.",
+        ),
+        _replay_check(
+            "task_boundary",
+            any(isinstance(step, dict) and step.get("kind") == "task_start" for step in steps)
+            and any(isinstance(step, dict) and step.get("kind") == "task_event" for step in steps),
+            "Replay contains task start and terminal/task event boundaries.",
+        ),
+        _replay_check(
+            "safety",
+            safety.get("raw_messages_included") is False
+            and safety.get("raw_checkpoint_state_included") is False
+            and safety.get("tool_outputs_truncated") is True,
+            "Replay case does not include raw messages or checkpoint state.",
+        ),
+    ]
+    passed = all(check["passed"] for check in checks)
+    return {
+        "schema": "octopus.task_run_replay_evaluation.v1",
+        "case_id": replay_case.get("case_id") or "",
+        "fingerprint": replay_case.get("fingerprint") or "",
+        "passed": passed,
+        "score": round(
+            sum(1 for check in checks if check["passed"]) / max(1, len(checks)),
+            3,
+        ),
+        "checks": checks,
+        "source": source,
+    }
+
+
+def _replay_check(name: str, passed: bool, description: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "passed": bool(passed),
+        "description": description,
     }
 
 
@@ -1222,10 +1605,16 @@ def _task_run_findings(
             "title": f"Tool failed: {_tool_name_from_payload(payload) or 'unknown'}",
             "evidence": {
                 "event_id": event.get("id"),
+                "tool_call_id": _tool_call_id_from_payload(payload, event),
                 "tool": _tool_name_from_payload(payload),
                 "status": payload.get("status"),
                 "is_error": payload.get("is_error"),
-                "output_preview": _truncate(payload.get("output") or payload.get("output_preview"), 280),
+                "output_preview": _preview_from_payload(
+                    payload,
+                    value_key="output",
+                    preview_key="output_preview",
+                    limit=280,
+                ),
             },
             "recommendation": "Capture this tool input/output pair as a replay fixture or add a preflight validation rule.",
         })
@@ -1348,29 +1737,36 @@ def _task_run_replay(
                 "mode": payload.get("mode") or "",
             })
         elif event_type in _TOOL_START_EVENTS:
-            tool_call_id = str(
-                payload.get("tool_call_id")
-                or payload.get("id")
-                or event.get("item_id")
-                or ""
-            )
+            tool_call_id = _tool_call_id_from_payload(payload, event)
             approval = approval_by_call.get(tool_call_id)
             steps.append({
                 "kind": "tool_start",
                 "ts": event.get("ts"),
                 "tool": _tool_name_from_payload(payload),
                 "tool_call_id": tool_call_id,
-                "input_preview": _truncate(payload.get("input") or payload.get("input_preview"), 500),
+                "input_preview": _preview_from_payload(
+                    payload,
+                    value_key="input",
+                    preview_key="input_preview",
+                    limit=500,
+                ),
                 "approval": _approval_replay_fragment(approval),
             })
         elif event_type in _TOOL_END_EVENTS:
+            tool_call_id = _tool_call_id_from_payload(payload, event)
             steps.append({
                 "kind": "tool_end",
                 "ts": event.get("ts"),
                 "tool": _tool_name_from_payload(payload),
+                "tool_call_id": tool_call_id,
                 "status": payload.get("status") or ("error" if payload.get("is_error") else "success"),
                 "is_error": bool(_tool_event_failed(payload)),
-                "output_preview": _truncate(payload.get("output") or payload.get("output_preview"), 500),
+                "output_preview": _preview_from_payload(
+                    payload,
+                    value_key="output",
+                    preview_key="output_preview",
+                    limit=500,
+                ),
             })
         elif event_type in _TASK_RUN_TERMINAL_EVENTS or event_type.startswith("REACT_"):
             steps.append({
@@ -1380,7 +1776,11 @@ def _task_run_replay(
                 "status": payload.get("status"),
                 "reason": payload.get("reason") or payload.get("message") or "",
             })
+    fingerprint = _task_run_replay_fingerprint(steps)
     return {
+        "schema": "octopus.task_run_replay.v1",
+        "fingerprint": fingerprint,
+        "case_id": f"task-run:{fingerprint}",
         "replayable": bool(steps),
         "step_count": len(steps),
         "steps": steps,
@@ -1388,6 +1788,95 @@ def _task_run_replay(
             "raw_messages_included": False,
             "tool_outputs_truncated": True,
             "approval_args_are_previews": True,
+        },
+    }
+
+
+def _task_run_replay_fingerprint(steps: list[dict[str, Any]]) -> str:
+    normalized: list[dict[str, Any]] = []
+    for step in steps:
+        kind = str(step.get("kind") or "")
+        item: dict[str, Any] = {"kind": kind}
+        if kind in {"tool_start", "tool_end"}:
+            item.update({
+                "tool": str(step.get("tool") or ""),
+                "status": str(step.get("status") or ""),
+                "is_error": bool(step.get("is_error")),
+                "input_preview": str(step.get("input_preview") or ""),
+                "output_preview": str(step.get("output_preview") or ""),
+            })
+            approval = step.get("approval") if isinstance(step.get("approval"), dict) else {}
+            item["approval"] = {
+                "decision": str(approval.get("decision") or ""),
+                "risk_level": str(approval.get("risk_level") or ""),
+            }
+        elif kind == "task_start":
+            item.update({
+                "goal": str(step.get("goal") or ""),
+                "mode": str(step.get("mode") or ""),
+            })
+        elif kind == "task_event":
+            item.update({
+                "event_type": str(step.get("event_type") or ""),
+                "status": str(step.get("status") or ""),
+                "reason": str(step.get("reason") or ""),
+            })
+        normalized.append(item)
+    payload = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _latest_checkpoint_review_summary(
+    checkpoints: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not checkpoints:
+        return None
+    latest = max(
+        checkpoints,
+        key=lambda row: (int(row.get("iteration") or 0), int(row.get("id") or 0)),
+    )
+    return _checkpoint_review_summary(latest)
+
+
+def _checkpoint_review_summary(checkpoint: dict[str, Any]) -> dict[str, Any]:
+    from runtime.core.cerebrum.checkpoint_integrity import validate_trace_checkpoint
+
+    hints = _recovery_hints(checkpoint)
+    return {
+        "id": checkpoint.get("id"),
+        "task_id": checkpoint.get("task_id"),
+        "thread_id": checkpoint.get("thread_id"),
+        "agent_id": checkpoint.get("agent_id"),
+        "type": checkpoint.get("checkpoint_type"),
+        "iteration": int(checkpoint.get("iteration") or 0),
+        "timestamp": checkpoint.get("ts"),
+        "summary": str(checkpoint.get("summary") or ""),
+        "recovery_hints": {
+            "phase": hints["phase"] or None,
+            "progress": hints["progress"] or None,
+            "message_count": hints["messages"],
+            "step_count": hints["steps"],
+            "working_set": hints["working_set"],
+            "recent_tool_calls": hints["recent_tool_calls"],
+        },
+        "integrity": validate_trace_checkpoint(checkpoint).to_dict(),
+        "safety": {
+            "raw_state_included": False,
+            "raw_message_snapshots_included": False,
+        },
+    }
+
+
+def _task_run_resume_summary(run: dict[str, Any]) -> dict[str, Any]:
+    latest = run.get("latest_checkpoint") if isinstance(run.get("latest_checkpoint"), dict) else None
+    integrity = latest.get("integrity") if isinstance(latest, dict) else {}
+    return {
+        "available": bool(isinstance(integrity, dict) and integrity.get("resume_safe") is True),
+        "source": "trace_store" if latest else None,
+        "latest_checkpoint": latest,
+        "safety": {
+            "raw_state_included": False,
+            "raw_message_snapshots_included": False,
         },
     }
 
@@ -1503,6 +1992,54 @@ def _state_len(state: dict[str, Any], key: str) -> int:
     return len(value) if isinstance(value, list) else 0
 
 
+def _recent_tool_calls_from_state(state: dict[str, Any]) -> list[dict[str, Any]]:
+    steps = state.get("steps_snapshot")
+    if not isinstance(steps, list):
+        return []
+    try:
+        from runtime.core.cerebrum.react_parsing import _parse_action
+    except Exception:  # noqa: BLE001
+        _parse_action = None
+    out: list[dict[str, Any]] = []
+    for step in steps[-8:]:
+        if not isinstance(step, dict):
+            continue
+        action = step.get("action")
+        if not isinstance(action, str) or not action.strip():
+            continue
+        parsed = _parse_action(action) if _parse_action is not None else None
+        if parsed is None:
+            continue
+        tool, args = parsed
+        out.append({
+            "iteration": int(step.get("iteration") or 0),
+            "tool": str(tool or ""),
+            "input_preview": _truncate(_render_preview(args), 240),
+            "observation_preview": _truncate(_render_preview(step.get("observation")), 280),
+        })
+    return out[-5:]
+
+
+def _sanitize_recent_tool_calls(value: Any) -> list[dict[str, Any]]:
+    items = value if isinstance(value, list) else []
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        tool = _clean_str(item.get("tool"))
+        if not tool:
+            continue
+        out.append({
+            "iteration": int(item.get("iteration") or 0),
+            "tool": tool,
+            "input_preview": _truncate(item.get("input_preview"), 240),
+            "observation_preview": _truncate(item.get("observation_preview"), 280),
+        })
+        if len(out) >= 8:
+            break
+    return out
+
+
 def _recovery_hints(checkpoint: dict[str, Any]) -> dict[str, Any]:
     state = checkpoint.get("state")
     state = state if isinstance(state, dict) else {}
@@ -1526,6 +2063,7 @@ def _recovery_hints(checkpoint: dict[str, Any]) -> dict[str, Any]:
         "messages": _state_len(state, "messages_snapshot"),
         "steps": _state_len(state, "steps_snapshot"),
         "working_set": paths,
+        "recent_tool_calls": _recent_tool_calls_from_state(state),
     }
 
 
@@ -1573,6 +2111,7 @@ def _resume_proposal_from_checkpoint(checkpoint: dict[str, Any]) -> dict[str, An
             "message_count": hints["messages"],
             "step_count": hints["steps"],
             "working_set": hints["working_set"],
+            "recent_tool_calls": hints["recent_tool_calls"],
         },
         "resume_plan": {
             "title": title,
@@ -1605,6 +2144,7 @@ def _sanitize_resume_intent(intent: Any) -> dict[str, Any]:
             for path in (raw.get("working_set") if isinstance(raw.get("working_set"), list) else [])
             if isinstance(path, str) and path.strip()
         ][:32],
+        "recent_tool_calls": _sanitize_recent_tool_calls(raw.get("recent_tool_calls")),
         "safety": {
             "raw_state_included": bool(safety.get("raw_state_included") is True),
             "raw_message_snapshots_included": bool(

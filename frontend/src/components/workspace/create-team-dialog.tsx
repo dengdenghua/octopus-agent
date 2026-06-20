@@ -1,4 +1,3 @@
-
 import { CheckIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -88,9 +87,14 @@ export function CreateTeamDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-0 overflow-hidden" style={{ maxWidth: "900px", width: "900px" }}>
+      <DialogContent
+        className="p-0 overflow-hidden"
+        style={{ maxWidth: "900px", width: "900px" }}
+      >
         <DialogHeader className="px-6 pt-5 pb-3">
-          <DialogTitle className="text-lg font-semibold">{t.createTeamDialog.title}</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">
+            {t.createTeamDialog.title}
+          </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
             {t.createTeamDialog.description}
           </DialogDescription>
@@ -123,13 +127,16 @@ export function CreateTeamDialog({
                   <button
                     key={agent.name}
                     type="button"
-                    disabled={isSelected || (!isSelected && selected.length >= MAX_MEMBERS)}
+                    disabled={
+                      isSelected ||
+                      (!isSelected && selected.length >= MAX_MEMBERS)
+                    }
                     onClick={() => addAgent(agent)}
                     className={cn(
                       "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-all group",
                       isSelected
                         ? "bg-primary/5 opacity-60"
-                        : "hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent"
+                        : "hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent",
                     )}
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-muted text-[15px] leading-none">
@@ -140,7 +147,9 @@ export function CreateTeamDialog({
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{displayName}</p>
+                      <p className="truncate text-sm font-medium">
+                        {displayName}
+                      </p>
                       <p className="text-muted-foreground truncate text-[11px] leading-tight">
                         {agent.description}
                       </p>
@@ -170,7 +179,9 @@ export function CreateTeamDialog({
             {selected.length === 0 ? (
               <div className="flex-1 flex items-center justify-center px-4">
                 <p className="text-muted-foreground text-center text-xs leading-relaxed">
-                  {t.createTeamDialog.emptyHintL1}<br />{t.createTeamDialog.emptyHintL2}
+                  {t.createTeamDialog.emptyHintL1}
+                  <br />
+                  {t.createTeamDialog.emptyHintL2}
                 </p>
               </div>
             ) : (
@@ -183,10 +194,12 @@ export function CreateTeamDialog({
                       key={agent.name}
                       className={cn(
                         "flex items-center gap-2 rounded-lg bg-background px-2.5 py-1.5 border",
-                        isLeader && "border-primary/30 bg-primary/5"
+                        isLeader && "border-primary/30 bg-primary/5",
                       )}
                     >
-                      <span className="text-muted-foreground text-[10px] w-3 text-center">{idx + 1}</span>
+                      <span className="text-muted-foreground text-[10px] w-3 text-center">
+                        {idx + 1}
+                      </span>
                       <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-muted text-[13px] leading-none">
                         {agent.icon?.trim() || (
                           <span className="text-[10px] font-semibold text-muted-foreground">
@@ -203,10 +216,14 @@ export function CreateTeamDialog({
                           "shrink-0 text-[10px] px-1.5 py-0.5 rounded-lg transition-colors",
                           isLeader
                             ? "bg-primary text-primary-foreground font-medium"
-                            : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            : "text-muted-foreground hover:text-primary hover:bg-primary/10",
                         )}
                         onClick={() => setLeaderId(agent.name)}
-                        title={isLeader ? t.createTeamDialog.currentTl : t.createTeamDialog.setAsTl}
+                        title={
+                          isLeader
+                            ? t.createTeamDialog.currentTl
+                            : t.createTeamDialog.setAsTl
+                        }
                       >
                         TL
                       </button>
@@ -237,7 +254,11 @@ export function CreateTeamDialog({
         </div>
 
         <DialogFooter className="px-6 py-3 border-t gap-2">
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+          >
             {t.createTeamDialog.cancel}
           </Button>
           <Button

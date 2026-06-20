@@ -95,6 +95,36 @@ def test_custom_deep_research_roles_are_virtualized():
     assert tasks[0]["subagent_name"] == "virtual-research-competitor-analyst"
 
 
+def _seed_subagent_reviews(path, *, role: str, statuses: list[str]) -> None:
+    from runtime.memory.learning.review_queue import ReviewQueue
+
+    queue = ReviewQueue(path)
+    for idx, status in enumerate(statuses):
+        added = queue.add_from_task_run_review({
+            "status": "completed",
+            "task_id": f"task-{idx}",
+            "thread_id": "thread-1",
+            "turn_id": f"turn-{idx}",
+            "agent_id": role,
+            "learning_candidates": [
+                {
+                    "kind": "subagent_output",
+                    "priority": "P2",
+                    "memory_bucket": "experience",
+                    "title": f"{role} sample {idx}",
+                    "text": f"{role} output {idx}",
+                    "subagent": {
+                        "role": role,
+                        "agent_id": role,
+                        "files_touched": [],
+                    },
+                }
+            ],
+        })
+        if status != "pending":
+            queue.decide(added["items"][0]["id"], action=status, reason="test")
+
+
 def test_research_prefetcher_records_search_logs():
     def search_handler(**kwargs):
         return {
@@ -325,6 +355,149 @@ def test_start_endpoint_dispatches_parallel_research_tasks(tmp_path):
         assert "## 不确定性与缺口" in refreshed_job["final_report"]
         synthesis = [step for step in refreshed_job["steps"] if step["role_id"] == "synthesis"][0]
         assert synthesis["status"] == "completed"
+    finally:
+        orchestrator.shutdown(wait=False)
+
+
+def test_deep_research_blocks_retired_subagent_for_high_risk(tmp_path):
+    role = "virtual-research-competitor-analyst"
+    review_queue_path = tmp_path / "review_queue.json"
+    _seed_subagent_reviews(
+        review_queue_path,
+        role=role,
+        statuses=["rejected", "rejected", "rejected"],
+    )
+    calls: list[str] = []
+
+    def runner(description, *, subagent_name, context=None, cancel_event=None):
+        calls.append(subagent_name)
+        return f"{subagent_name}: {description[:20]}"
+
+    orchestrator = ParallelAgentOrchestrator(max_concurrency=1, task_runner=runner)
+    try:
+        app = FastAPI()
+        app.include_router(create_deep_research_router(
+            orchestrator=orchestrator,
+            agents_root=tmp_path / "agents",
+            job_store_path=tmp_path / "jobs.jsonl",
+            review_queue_path=review_queue_path,
+        ))
+        client = TestClient(app)
+
+        response = client.post("/api/research/deep/start", json={
+            "topic": "NAS market research",
+            "task_risk_level": "high",
+            "max_subagents": 1,
+            "roles": [
+                {
+                    "id": "competitor analyst",
+                    "name": "Competitor Analyst",
+                    "subagent_name": "researcher",
+                    "focus": "Competitor positioning",
+                    "deliverable": "Competitor findings",
+                    "search_angles": ["vendor comparison"],
+                }
+            ],
+        })
+
+        assert response.status_code == 200
+        job = response.json()
+        for _ in range(100):
+            batch = orchestrator.get_batch(job["dispatch_batch_id"])
+            assert batch is not None
+            if batch.status == "failed":
+                break
+            time.sleep(0.02)
+
+        batch = orchestrator.get_batch(job["dispatch_batch_id"])
+        assert batch is not None
+        assert batch.failed_tasks == 1
+        assert batch.results[0].error
+        assert batch.results[0].error.startswith("subagent_route_blocked:")
+        assert calls == []
+        route_events = [
+            event for event in batch.event_log
+            if event.payload.get("subagent_route_decision")
+        ]
+        assert route_events
+        assert route_events[-1].payload["subagent_route_decision"]["action"] == "block"
+
+        refreshed = client.get(f"/api/research/deep/jobs/{job['job_id']}")
+        assert refreshed.status_code == 200
+        refreshed_job = refreshed.json()
+        assert refreshed_job["status"] == "failed"
+        assert refreshed_job["route_decisions"][0]["action"] == "block"
+        assert refreshed_job["route_decisions"][0]["step_id"] == "step_competitor-analyst"
+        assert refreshed_job["steps"][0]["route_decision"]["action"] == "block"
+    finally:
+        orchestrator.shutdown(wait=False)
+
+
+def test_deep_research_warns_retired_subagent_for_low_risk(tmp_path):
+    role = "virtual-research-competitor-analyst"
+    review_queue_path = tmp_path / "review_queue.json"
+    _seed_subagent_reviews(
+        review_queue_path,
+        role=role,
+        statuses=["rejected", "rejected", "rejected"],
+    )
+    seen_contexts: list[dict] = []
+
+    def runner(description, *, subagent_name, context=None, cancel_event=None):
+        seen_contexts.append(context or {})
+        return f"{subagent_name}: {description[:20]}"
+
+    orchestrator = ParallelAgentOrchestrator(max_concurrency=1, task_runner=runner)
+    try:
+        app = FastAPI()
+        app.include_router(create_deep_research_router(
+            orchestrator=orchestrator,
+            agents_root=tmp_path / "agents",
+            job_store_path=tmp_path / "jobs.jsonl",
+            review_queue_path=review_queue_path,
+        ))
+        client = TestClient(app)
+
+        response = client.post("/api/research/deep/start", json={
+            "topic": "NAS market research",
+            "task_risk_level": "low",
+            "max_subagents": 1,
+            "roles": [
+                {
+                    "id": "competitor analyst",
+                    "name": "Competitor Analyst",
+                    "subagent_name": "researcher",
+                    "focus": "Competitor positioning",
+                    "deliverable": "Competitor findings",
+                    "search_angles": ["vendor comparison"],
+                }
+            ],
+        })
+
+        assert response.status_code == 200
+        job = response.json()
+        for _ in range(100):
+            batch = orchestrator.get_batch(job["dispatch_batch_id"])
+            assert batch is not None
+            if batch.status == "completed":
+                break
+            time.sleep(0.02)
+
+        batch = orchestrator.get_batch(job["dispatch_batch_id"])
+        assert batch is not None
+        assert batch.completed_tasks == 1
+        assert seen_contexts
+        decision = seen_contexts[0]["subagent_route_decision"]
+        assert decision["action"] == "allow_with_warning"
+        assert decision["verdict"] == "retire_candidate"
+
+        refreshed = client.get(f"/api/research/deep/jobs/{job['job_id']}")
+        assert refreshed.status_code == 200
+        refreshed_job = refreshed.json()
+        assert refreshed_job["route_decisions"][0]["action"] == "allow_with_warning"
+        assert refreshed_job["steps"][0]["route_decision"]["verdict"] == "retire_candidate"
+        assert "## 治理与路由审计" in refreshed_job["final_report"]
+        assert "allow_with_warning" in refreshed_job["final_report"]
     finally:
         orchestrator.shutdown(wait=False)
 

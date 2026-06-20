@@ -1,11 +1,5 @@
 import { CheckIcon, CopyIcon, TriangleAlertIcon } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -61,7 +55,9 @@ export function MermaidBlock({
 
     void (async () => {
       try {
-        const mod = (await import("mermaid-real")) as { default: MermaidRuntime };
+        const mod = (await import("mermaid-real")) as {
+          default: MermaidRuntime;
+        };
         if (cancelled) return;
         const mermaid = mod.default;
         mermaid.initialize?.({
@@ -167,9 +163,7 @@ function MermaidSourceBlock({
           <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary/60 align-middle" />
         )}
       </pre>
-      {isStreaming && (
-        <span className="sr-only">{t.streaming.generating}</span>
-      )}
+      {isStreaming && <span className="sr-only">{t.streaming.generating}</span>}
     </div>
   );
 }

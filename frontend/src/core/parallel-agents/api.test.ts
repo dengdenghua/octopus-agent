@@ -27,7 +27,8 @@ describe("parallel agents backend URLs", () => {
 describe("SSE streamBatch: event parsing", () => {
   test("parses task_update event correctly", () => {
     const line1 = "event: task_update";
-    const line2 = 'data: {"type":"task_update","batch_id":"b1","task_id":"t1","status":"running"}';
+    const line2 =
+      'data: {"type":"task_update","batch_id":"b1","task_id":"t1","status":"running"}';
     const line3 = "";
 
     let eventType = "";

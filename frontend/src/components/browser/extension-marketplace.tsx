@@ -165,12 +165,12 @@ export function ExtensionMarketplace({
 
   const categoryLabels = useMemo<Record<ExtensionCategory, string>>(
     () => ({
-      "精选": em.categoryFeatured,
-      "效率": em.categoryEfficiency,
-      "研究": em.categoryResearch,
-      "安全": em.categorySecurity,
-      "开发": em.categoryDevelopment,
-      "即将推出": em.categoryComingSoon,
+      精选: em.categoryFeatured,
+      效率: em.categoryEfficiency,
+      研究: em.categoryResearch,
+      安全: em.categorySecurity,
+      开发: em.categoryDevelopment,
+      即将推出: em.categoryComingSoon,
     }),
     [em],
   );
@@ -204,7 +204,9 @@ export function ExtensionMarketplace({
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<ExtensionCategory>("精选");
   const [selectedId, setSelectedId] = useState(featuredListing.id);
-  const [installed, setInstalled] = useState<Set<string>>(() => readInstalled());
+  const [installed, setInstalled] = useState<Set<string>>(() =>
+    readInstalled(),
+  );
   const [browserExtensions, setBrowserExtensions] = useState<
     BrowserExtensionInfo[]
   >([]);
@@ -336,7 +338,9 @@ export function ExtensionMarketplace({
             <Store className="size-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-foreground">{em.title}</h2>
+            <h2 className="text-base font-semibold text-foreground">
+              {em.title}
+            </h2>
             <p className="text-xs text-muted-foreground">{em.subtitle}</p>
           </div>
           <Button
@@ -354,7 +358,9 @@ export function ExtensionMarketplace({
             variant="ghost"
             onClick={refreshBrowserExtensions}
           >
-            <RefreshCw className={cn("size-4", extensionBusy && "animate-spin")} />
+            <RefreshCw
+              className={cn("size-4", extensionBusy && "animate-spin")}
+            />
           </Button>
           <Button
             aria-label={em.closeAriaLabel}
@@ -456,9 +462,7 @@ export function ExtensionMarketplace({
                     {em.installedExtensions}
                   </h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {isElectron
-                      ? em.electronSupported
-                      : em.webPreviewOnly}
+                    {isElectron ? em.electronSupported : em.webPreviewOnly}
                   </p>
                 </div>
                 <Badge variant={isElectron ? "secondary" : "outline"}>
@@ -519,9 +523,7 @@ export function ExtensionMarketplace({
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border/80 bg-muted/14 p-5 text-sm text-muted-foreground">
-                  {isElectron
-                    ? em.noExtensionsElectron
-                    : em.noExtensionsWeb}
+                  {isElectron ? em.noExtensionsElectron : em.noExtensionsWeb}
                 </div>
               )}
             </section>
@@ -545,7 +547,9 @@ export function ExtensionMarketplace({
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">{categoryLabels[selected.category as ExtensionCategory]}</Badge>
+                      <Badge variant="secondary">
+                        {categoryLabels[selected.category as ExtensionCategory]}
+                      </Badge>
                       {selected.status === "coming-soon" ? (
                         <Badge variant="outline">{em.comingSoonBadge}</Badge>
                       ) : isInstalled ? (
@@ -584,18 +588,26 @@ export function ExtensionMarketplace({
             <section className="grid gap-5 px-5 py-6 md:px-8">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="rounded-2xl border border-border/70 bg-muted/24 p-4">
-                  <div className="text-xs text-muted-foreground">{em.rating}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {em.rating}
+                  </div>
                   <div className="mt-2 flex items-center gap-2 text-xl font-semibold">
                     <Star className="size-4 fill-current text-amber-500" />
                     {selected.rating}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-muted/24 p-4">
-                  <div className="text-xs text-muted-foreground">{em.installs}</div>
-                  <div className="mt-2 text-xl font-semibold">{selected.installs}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {em.installs}
+                  </div>
+                  <div className="mt-2 text-xl font-semibold">
+                    {selected.installs}
+                  </div>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-muted/24 p-4">
-                  <div className="text-xs text-muted-foreground">{em.status}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {em.status}
+                  </div>
                   <div className="mt-2 text-xl font-semibold">
                     {selected.status === "coming-soon"
                       ? em.comingSoonBadge
@@ -607,7 +619,9 @@ export function ExtensionMarketplace({
               </div>
 
               <div className="rounded-2xl border border-border/70 bg-muted/18 p-5">
-                <h4 className="text-sm font-semibold text-foreground">{em.capabilityTags}</h4>
+                <h4 className="text-sm font-semibold text-foreground">
+                  {em.capabilityTags}
+                </h4>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedTags.map((tag) => (
                     <Badge key={tag} variant="outline">

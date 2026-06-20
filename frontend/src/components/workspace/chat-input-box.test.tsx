@@ -264,7 +264,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(onReasoningEffortChange).toHaveBeenCalledWith("xhigh");
   });
 
-  it("keeps the context compressor hidden until context usage is meaningful", () => {
+  it("shows the context compressor as a persistent input control", () => {
     const { rerender } = renderWithProviders(
       <ChatInputBox
         mode="react"
@@ -274,9 +274,7 @@ describe("<ChatInputBox /> cowork materials", () => {
       />,
     );
 
-    expect(
-      screen.queryByLabelText(/Context Usage: 0%/),
-    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Context Usage: 0%/)).toBeInTheDocument();
 
     rerender(
       <ChatInputBox
@@ -418,9 +416,7 @@ describe("<ChatInputBox /> send-failure draft restore", () => {
     text?: string | null;
   }) {
     act(() => {
-      window.dispatchEvent(
-        new CustomEvent("octopus:send-failed", { detail }),
-      );
+      window.dispatchEvent(new CustomEvent("octopus:send-failed", { detail }));
     });
   }
 

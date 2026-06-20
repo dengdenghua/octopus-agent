@@ -212,7 +212,9 @@ describe("MessageList scroll-to-latest affordance", () => {
     expect(shortTurn.querySelector("span[aria-hidden='true']")).toHaveClass(
       "size-2.5",
     );
-    expect(shortTurn.querySelector("[data-turn-marker-avatar='true']")).toBeTruthy();
+    expect(
+      shortTurn.querySelector("[data-turn-marker-avatar='true']"),
+    ).toBeTruthy();
   });
 
   test("shows a workbench status light only on the running latest turn avatar", () => {

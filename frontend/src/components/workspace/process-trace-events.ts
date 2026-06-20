@@ -1,7 +1,9 @@
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { toWorkBlocks } from "./work-blocks";
 
-export function getProcessTraceEvents(events: LiveToolEvent[]): LiveToolEvent[] {
+export function getProcessTraceEvents(
+  events: LiveToolEvent[],
+): LiveToolEvent[] {
   return toWorkBlocks(events)
     .map((block) => block.event)
     .filter((event) => !isCompletedAutoVerificationEvent(event));

@@ -7,9 +7,10 @@ import { STUB_RESPONSE_EVENT } from "@/core/api/client";
 import WorkspaceLayout from "./layout";
 
 vi.mock("react-router-dom", async () => {
-  const actual = await vi.importActual<typeof import("react-router-dom")>(
-    "react-router-dom",
-  );
+  const actual =
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     Outlet: () => <div>workspace content</div>,

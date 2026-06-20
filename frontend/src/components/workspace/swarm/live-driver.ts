@@ -147,7 +147,9 @@ function mapPhaseReports(batch: BatchResult): SwarmPhaseReport[] {
     const phaseTasks = batch.results.filter((task) =>
       phase.task_ids.includes(task.task_id),
     );
-    const succeeded = phaseTasks.filter((task) => task.status === "completed").length;
+    const succeeded = phaseTasks.filter(
+      (task) => task.status === "completed",
+    ).length;
     const failed = phaseTasks.filter((task) => task.status === "failed").length;
     const status =
       phaseTasks.length === 0
@@ -166,7 +168,7 @@ function mapPhaseReports(batch: BatchResult): SwarmPhaseReport[] {
       failed,
       status,
       wallMs: phaseTasks.reduce(
-        (total, task) => total + ((task.duration_seconds ?? 0) * 1000),
+        (total, task) => total + (task.duration_seconds ?? 0) * 1000,
         0,
       ),
       costUsd: 0,
@@ -221,8 +223,9 @@ function eventToTrace(event: BatchStreamEvent, index: number): TraceEntry {
       kind: "tool",
       title: event.tool_name
         ? `Tool: ${event.tool_name}`
-        : event.message ?? "Tool call",
-      detail: event.tool_output_preview ?? event.tool_input_preview ?? event.message,
+        : (event.message ?? "Tool call"),
+      detail:
+        event.tool_output_preview ?? event.tool_input_preview ?? event.message,
       sequence,
       toolName: event.tool_name,
       inputPreview: event.tool_input_preview,
@@ -242,8 +245,12 @@ function eventToTrace(event: BatchStreamEvent, index: number): TraceEntry {
       kind: terminal ? "write" : event.phase === "started" ? "think" : "tool",
       title: event.subagent_name
         ? `${event.subagent_name}: ${event.status ?? event.phase ?? "update"}`
-        : event.message ?? "Agent update",
-      detail: event.result_preview ?? event.error ?? event.description ?? event.message,
+        : (event.message ?? "Agent update"),
+      detail:
+        event.result_preview ??
+        event.error ??
+        event.description ??
+        event.message,
       sequence,
       status: event.status,
     };
@@ -284,10 +291,13 @@ export function batchToSession(
     workflow: {
       stage: batch.completed_at ? "final_report" : undefined,
       status: batch.status,
-      progress: batch.total_tasks > 0
-        ? (batch.completed_tasks + batch.failed_tasks + batch.cancelled_tasks) /
-          batch.total_tasks
-        : undefined,
+      progress:
+        batch.total_tasks > 0
+          ? (batch.completed_tasks +
+              batch.failed_tasks +
+              batch.cancelled_tasks) /
+            batch.total_tasks
+          : undefined,
       totalTasks: batch.total_tasks,
       completedTasks: batch.completed_tasks,
       failedTasks: batch.failed_tasks,
@@ -296,7 +306,10 @@ export function batchToSession(
     },
     plan: mapPlan(batch),
     summary: batch.aggregated_content ?? undefined,
-    sourcePrompt: batch.results.map((task) => task.description).filter(Boolean).join("\n\n"),
+    sourcePrompt: batch.results
+      .map((task) => task.description)
+      .filter(Boolean)
+      .join("\n\n"),
   };
 }
 

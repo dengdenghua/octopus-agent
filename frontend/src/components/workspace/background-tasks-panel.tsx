@@ -131,7 +131,8 @@ function formatDuration(startIso: string, endIso?: string | null): string {
   const end = endIso ? new Date(endIso).getTime() : Date.now();
   const diff = end - start;
   if (diff < 60_000) return `${Math.floor(diff / 1000)}s`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ${Math.floor((diff % 60_000) / 1000)}s`;
+  if (diff < 3_600_000)
+    return `${Math.floor(diff / 60_000)}m ${Math.floor((diff % 60_000) / 1000)}s`;
   return `${Math.floor(diff / 3_600_000)}h ${Math.floor((diff % 3_600_000) / 60_000)}m`;
 }
 
@@ -172,7 +173,9 @@ function TaskListItem({
             </span>
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {task.prompt.length > 80 ? task.prompt.slice(0, 80) + "..." : task.prompt}
+            {task.prompt.length > 80
+              ? task.prompt.slice(0, 80) + "..."
+              : task.prompt}
           </p>
           <div className="mt-1.5 flex items-center gap-2">
             <StatusBadge status={task.status} />
@@ -318,12 +321,24 @@ function TaskDetailView({
       {/* Task info */}
       <div className="border-b px-4 py-2 text-xs">
         <div className="flex items-center gap-4 text-muted-foreground">
-          <span>Agent: <span className="text-foreground">{task.assistant_id}</span></span>
+          <span>
+            Agent: <span className="text-foreground">{task.assistant_id}</span>
+          </span>
           {task.thread_id && (
-            <span>Thread: <span className="font-mono text-foreground">{task.thread_id.slice(0, 8)}</span></span>
+            <span>
+              Thread:{" "}
+              <span className="font-mono text-foreground">
+                {task.thread_id.slice(0, 8)}
+              </span>
+            </span>
           )}
           {task.started_at && (
-            <span>Duration: <span className="text-foreground">{formatDuration(task.started_at, task.finished_at)}</span></span>
+            <span>
+              Duration:{" "}
+              <span className="text-foreground">
+                {formatDuration(task.started_at, task.finished_at)}
+              </span>
+            </span>
           )}
         </div>
         {task.error && (
@@ -334,13 +349,18 @@ function TaskDetailView({
       </div>
 
       {/* Output stream */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-4 py-3 space-y-2"
+      >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
             {isActiveStatus(task.status) ? (
               <>
                 <Loader2Icon className="size-6 animate-spin mb-2" />
-                <span className="text-sm">{t.backgroundTasks.waitingOutput}</span>
+                <span className="text-sm">
+                  {t.backgroundTasks.waitingOutput}
+                </span>
               </>
             ) : (
               <span className="text-sm">{t.backgroundTasks.noOutput}</span>
@@ -457,8 +477,17 @@ function NewTaskForm({
 
 function BackgroundTasksPanelContent() {
   const { t } = useI18n();
-  const { tasks, loading, error, refresh, submit, pause, resume, cancel, remove } =
-    useBackgroundTasks();
+  const {
+    tasks,
+    loading,
+    error,
+    refresh,
+    submit,
+    pause,
+    resume,
+    cancel,
+    remove,
+  } = useBackgroundTasks();
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showNewForm, setShowNewForm] = useState(false);
 
@@ -470,7 +499,9 @@ function BackgroundTasksPanelContent() {
         const task = await submit({ prompt, name });
         setShowNewForm(false);
         setSelectedTaskId(task.task_id);
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
     },
     [submit],
   );

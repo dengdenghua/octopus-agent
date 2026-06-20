@@ -448,6 +448,82 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
     assert sub_items[0]["status"] == "completed"
 
 
+def test_blocked_topology_id_falls_back_to_react(
+    gateway: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+    from runtime.safety.organization import (
+        AgentSpec,
+        CoordinationProtocol,
+        Role,
+        TeamTopology,
+    )
+
+    client, _ = gateway
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(exist_ok=True)
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+    SubagentPolicyStore(data_dir / "subagent_policy.json").decide(
+        "planner_a",
+        action="retire",
+        reason="operator retired planner_a",
+        actor="operator-test",
+    )
+    topology = TeamTopology(
+        name="test_topology",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.PLANNER: AgentSpec(agent_id="planner_a")},
+    )
+    called = {"team_runner": False}
+
+    class FakeTeamRunner:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def run(self, *args: Any, **kwargs: Any) -> Any:
+            called["team_runner"] = True
+            raise AssertionError("blocked topology should not enter TeamRunner")
+
+    monkeypatch.setattr(
+        "runtime.safety.organization.forge.load_registry",
+        lambda: {"test_topology": topology},
+    )
+    monkeypatch.setattr(
+        "runtime.safety.organization.team_runner.TeamRunner",
+        FakeTeamRunner,
+    )
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "fallback react"},
+            {"type": "react_completed"},
+        ]
+    )
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-blocked-topology",
+                "input": [{"type": "text", "text": "run blocked topology"}],
+                "approvalPolicy": "never",
+                "topologyId": "test_topology",
+            },
+        )
+
+    assert called["team_runner"] is False
+    turn = out["response"].result["turn"]
+    agent_items = [it for it in turn["items"] if it["type"] == "agentMessage"]
+    assert agent_items[-1]["text"] == "fallback react"
+    audit = json.loads((data_dir / "promotion_audit.json").read_text(encoding="utf-8"))
+    assert audit["records"][0]["event_type"] == "topology_policy_block"
+    assert audit["records"][0]["target"] == "topology_policy"
+    assert audit["records"][0]["status"] == "blocked"
+    assert audit["records"][0]["artifact"]["topology_id"] == "test_topology"
+    assert audit["records"][0]["decision_context"]["turn_id"] == turn["id"]
+
+
 def test_background_tool_item_completes_after_turn_response(gateway: Any) -> None:
     import sys
     import time
@@ -936,6 +1012,46 @@ def test_react_mode_simple_question_still_uses_reflection_fast_path(
     assert runtime._should_use_reflection_fast_path("2+2等于几？", params) is True
 
 
+def test_react_mode_explicit_no_tool_reply_uses_reflection_fast_path(
+    tmp_path: Path,
+) -> None:
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+
+    class FakePlanner:
+        router = object()
+
+    class FakeStack:
+        planner = FakePlanner()
+
+    runtime = CerebrumRuntime(
+        stack=FakeStack(),
+        agent=None,
+        logs_root=str(tmp_path / "threads"),
+    )
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-react-no-tools",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "普通模式回归：请只用一句话回复收到，不要调用工具。",
+                    "metadata": {"context": {"mode": "react"}},
+                },
+            ],
+            "approvalPolicy": "never",
+        }
+    )
+
+    assert (
+        runtime._should_use_reflection_fast_path(
+            "普通模式回归：请只用一句话回复收到，不要调用工具。",
+            params,
+        )
+        is True
+    )
+
+
 def test_input_metadata_capability_mode_reaches_react_intent() -> None:
     from runtime.protocol.items import TurnParams
     from runtime.sensing.gateway.realtime_cerebrum import _build_intent
@@ -1131,6 +1247,56 @@ Resume this agent run from the selected durable checkpoint.
     assert "message body" not in str(resume_intent)
 
 
+def test_resume_proposal_block_preserves_sanitized_tool_context() -> None:
+    from runtime.protocol import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    resume_text = """
+Resume this agent run from the selected durable checkpoint.
+
+<octopus_resume_proposal>
+{
+  "schema": "octopus.resume_proposal.v1",
+  "checkpoint_id": 8,
+  "task_id": "task-tools",
+  "checkpoint_type": "react",
+  "iteration": 4,
+  "phase": "verify",
+  "recent_tool_calls": [
+    {
+      "iteration": 3,
+      "tool": "exec_shell",
+      "input_preview": "pytest tests/test_x.py -q",
+      "observation_preview": "failed: assertion message body"
+    }
+  ],
+  "raw_state_included": false,
+  "raw_message_snapshots_included": false
+}
+</octopus_resume_proposal>
+""".strip()
+    intent = _build_intent(
+        resume_text,
+        TurnParams(
+            threadId="th-resume-tool-context",
+            input=[{"type": "text", "text": resume_text}],
+            approvalPolicy="on-request",
+        ),
+    )
+
+    resume_intent = intent.user_context["resume_intent"]
+    assert resume_intent["recent_tool_calls"] == [
+        {
+            "iteration": 3,
+            "tool": "exec_shell",
+            "input_preview": "pytest tests/test_x.py -q",
+            "observation_preview": "failed: assertion message body",
+        }
+    ]
+    assert resume_intent["safety"]["raw_state_included"] is False
+    assert "messages_snapshot" not in str(resume_intent)
+
+
 def test_resume_proposal_block_prepares_confirmation_without_running_react(
     gateway: Any,
 ) -> None:
@@ -1197,6 +1363,14 @@ Resume this agent run from the selected durable checkpoint.
   "progress": "private message body must not leak",
   "working_set": ["runtime/sensing/siphon/realtime_cerebrum.py"],
   "resume_plan": ["Continue from iteration 3."],
+  "recent_tool_calls": [
+    {
+      "iteration": 2,
+      "tool": "read_file",
+      "input_preview": "{\\"path\\": \\"runtime/sensing/siphon/realtime_cerebrum.py\\"}",
+      "observation_preview": "read file"
+    }
+  ],
   "raw_state_included": false,
   "raw_message_snapshots_included": false,
   "messages_snapshot": ["message body"]
@@ -1231,6 +1405,7 @@ Resume this agent run from the selected durable checkpoint.
         assert resume_intent["checkpoint_id"] == 12
         assert resume_intent["requires_confirmation"] is False
         assert resume_intent["confirmed"] is True
+        assert resume_intent["recent_tool_calls"][0]["tool"] == "read_file"
         assert "message body" not in str(resume_intent)
 
         _set_script([{"type": "react_completed"}])
@@ -1847,6 +2022,8 @@ def test_code_file_change_without_verification_fails_turn(gateway: Any) -> None:
     assert verification_items[0]["kind"] == "manual"
     assert verification_items[0]["status"] == "failed"
     assert verification_items[0]["relatedFiles"] == ["src/foo.py"]
+    assert "Recommended verification commands:" in verification_items[0]["stdoutTail"]
+    assert "python -m ruff check src/foo.py" in verification_items[0]["stdoutTail"]
 
     ledger_path = logs_root.parent / "proposal_ledger.jsonl"
     lines = ledger_path.read_text(encoding="utf-8").splitlines()
@@ -1857,6 +2034,72 @@ def test_code_file_change_without_verification_fails_turn(gateway: Any) -> None:
     assert entry["metadata"]["failure_source"] == "verification_required"
     assert entry["metadata"]["code_change_paths"] == ["src/foo.py"]
     assert entry["metadata"]["turn_id"] == turn["id"]
+    assert entry["metadata"]["verification_plan"]["schema"] == "octopus.verification_plan.v1"
+    assert entry["metadata"]["verification_plan"]["commands"][0]["command"] == (
+        "python -m ruff check src/foo.py"
+    )
+
+
+def test_code_file_change_auto_runs_safe_verification(
+    gateway: Any,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+    client, _logs_root = gateway
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "foo.py").write_text("value = 1\n", encoding="utf-8")
+    diff = "--- a/src/foo.py\n+++ b/src/foo.py\n@@ -1,1 +1,1 @@\n-value = 0\n+value = 1\n"
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+                "iteration": 1,
+                "status": "success",
+                "output_preview": "ok",
+                "duration_ms": 1,
+                "diff": diff,
+            },
+            {"type": "react_completed"},
+        ]
+    )
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th_auto_verified_code_change",
+                "cwd": str(tmp_path),
+                "input": [{"type": "text", "text": "edit"}],
+                "approvalPolicy": "never",
+                "sandboxPolicy": {"type": "workspaceWrite", "networkAccess": False},
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "completed"
+    verification_items = [it for it in turn["items"] if it["type"] == "verification"]
+    assert len(verification_items) == 1
+    assert verification_items[0]["command"] == "python -m ruff check src/foo.py"
+    assert verification_items[0]["kind"] == "lint"
+    assert verification_items[0]["status"] == "completed"
+    assert verification_items[0]["relatedFiles"] == ["src/foo.py"]
+
+    metrics = (data_dir / "auto_verifier_metrics.jsonl").read_text(encoding="utf-8")
+    assert '"family": "ruff"' in metrics
+    assert '"ok": true' in metrics
+    decisions = (data_dir / "auto_verifier_decisions.jsonl").read_text(encoding="utf-8")
+    assert '"selected_command": "python -m ruff check src/foo.py"' in decisions
+    assert "no history for ruff" in decisions
 
 
 def test_code_file_change_with_successful_verification_can_complete(gateway: Any) -> None:
@@ -1964,6 +2207,18 @@ def test_code_file_change_with_failed_verification_fails_turn(gateway: Any) -> N
     assert failures[-1]["metadata"]["failed_verifications"][0]["command"] == (
         "pytest tests/test_foo.py"
     )
+    assert (
+        failures[-1]["metadata"]["failed_verifications"][0]["diagnosis"]["category"]
+        == "test_failure"
+    )
+    assert (
+        failures[-1]["metadata"]["failed_verifications"][0]["diagnosis"]["action"]
+        == "fix_code_or_test_expectation"
+    )
+    route = failures[-1]["metadata"]["failed_verifications"][0]["diagnosis"]["repair_route"]
+    assert route["route"] == "test_driven_repair"
+    assert route["strategy"] == "reproduce_and_patch_behavior"
+    assert failures[-1]["metadata"]["primary_repair_route"] == "test_driven_repair"
 
 
 def test_non_code_file_change_without_verification_can_complete(gateway: Any) -> None:
@@ -2156,6 +2411,64 @@ def test_tool_end_verification_without_success_uses_event_failure(gateway: Any) 
     assert verification_items[0]["kind"] == "typecheck"
     assert verification_items[0]["status"] == "failed"
     assert turn["status"] == "failed"
+
+
+def test_failed_verification_metadata_classifies_missing_tool(
+    gateway: Any,
+) -> None:
+    client, logs_root = gateway
+    diff = "--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1,2 +1,2 @@\n-old\n+new\n"
+    _set_script(
+        [
+            {
+                "type": "tool_start",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+            },
+            {
+                "type": "tool_end",
+                "tool_name": "edit_file",
+                "tool_call_id": "call-edit",
+                "iteration": 1,
+                "status": "success",
+                "output_preview": "typecheck failed",
+                "duration_ms": 1,
+                "diff": diff,
+                "verification": {
+                    "command": "npx --no-install tsc --noEmit",
+                    "kind": "typecheck",
+                    "exit_code": 1,
+                    "success": False,
+                    "stderr_tail": "[WinError 2] file not found",
+                },
+            },
+            {"type": "react_completed"},
+        ]
+    )
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th_failed_missing_tool",
+                "input": [{"type": "text", "text": "edit"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    ledger_path = logs_root.parent / "proposal_ledger.jsonl"
+    failures = [
+        json.loads(line)
+        for line in ledger_path.read_text(encoding="utf-8").splitlines()
+        if json.loads(line)["kind"] == "turn_failure"
+    ]
+    diagnosis = failures[-1]["metadata"]["failed_verifications"][0]["diagnosis"]
+    assert diagnosis["category"] == "environment_missing_tool"
+    assert diagnosis["action"] == "install_or_select_available_verifier"
+    assert diagnosis["retryable"] is True
+    assert diagnosis["repair_route"]["route"] == "environment_repair"
+    assert failures[-1]["metadata"]["primary_repair_route"] == "environment_repair"
 
 
 def test_hunk_decide_rejected_reverts_file(gateway: Any, tmp_path: Path) -> None:

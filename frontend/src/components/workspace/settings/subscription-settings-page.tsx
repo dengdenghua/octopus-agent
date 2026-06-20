@@ -5,7 +5,6 @@ import {
   TrendingUpIcon,
   CalendarIcon,
   UserIcon,
-  LinkIcon,
   CoinsIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,19 +31,22 @@ import { PayOrderDialog } from "@/components/workspace/pay-order-dialog";
 
 export default function SubscriptionSettingsPage() {
   const { t } = useI18n();
-  const { data: subscription, isLoading: subscriptionLoading } = useSubscription();
-  const { data: profile } = useProfile();
+  const { data: subscription, isLoading: subscriptionLoading } =
+    useSubscription();
   const cancelSubscription = useCancelSubscription();
 
   const isInitialLoading = subscriptionLoading && !subscription;
-  const isLoggedIn = Boolean(profile?.username);
 
   // Current-plan label is sourced from the local subscription record;
   // we no longer cross-reference octopus's `plans` JSON since the
   // purchase flow itself is now driven by the official account service.
   const effectiveTier = subscription?.tier ?? "free";
   const currentPlan = subscription
-    ? { name: effectiveTier ? String(effectiveTier).toUpperCase() : t.settings.subscription.free }
+    ? {
+        name: effectiveTier
+          ? String(effectiveTier).toUpperCase()
+          : t.settings.subscription.free,
+      }
     : { name: t.settings.subscription.free };
 
   if (isInitialLoading) {
@@ -66,27 +68,36 @@ export default function SubscriptionSettingsPage() {
       <div className="rounded-xl border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className={cn(
-              "flex size-10 items-center justify-center rounded-lg",
-              subscription?.tier && ["pro", "max"].includes(subscription.tier)
-                ? "bg-gradient-to-br from-violet-500 to-blue-500 text-white"
-                : "bg-muted text-muted-foreground",
-            )}>
+            <div
+              className={cn(
+                "flex size-10 items-center justify-center rounded-lg",
+                subscription?.tier && ["pro", "max"].includes(subscription.tier)
+                  ? "bg-gradient-to-br from-violet-500 to-blue-500 text-white"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
               <SparklesIcon className="size-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold">{currentPlan?.name || t.settings.subscription.free}</span>
-                <Badge variant={effectiveTier === "free" ? "secondary" : "default"} className="text-[10px]">
+                <span className="font-semibold">
+                  {currentPlan?.name || t.settings.subscription.free}
+                </span>
+                <Badge
+                  variant={effectiveTier === "free" ? "secondary" : "default"}
+                  className="text-[10px]"
+                >
                   {effectiveTier.toUpperCase()}
                 </Badge>
               </div>
               <p className="text-muted-foreground text-xs mt-0.5">
-                {effectiveTier === "free" ? t.settings.subscription.freeTierDesc : t.settings.subscription.paidTierDesc}
+                {effectiveTier === "free"
+                  ? t.settings.subscription.freeTierDesc
+                  : t.settings.subscription.paidTierDesc}
               </p>
             </div>
           </div>
-          
+
           {effectiveTier !== "free" ? (
             <Button
               variant="outline"
@@ -95,7 +106,9 @@ export default function SubscriptionSettingsPage() {
               disabled={cancelSubscription.isPending}
               className="h-8 text-xs"
             >
-              {cancelSubscription.isPending && <Loader2Icon className="mr-1 size-3 animate-spin" />}
+              {cancelSubscription.isPending && (
+                <Loader2Icon className="mr-1 size-3 animate-spin" />
+              )}
               {t.settings.subscription.cancel}
             </Button>
           ) : (
@@ -104,7 +117,9 @@ export default function SubscriptionSettingsPage() {
               variant="default"
               className="h-8 text-xs"
               onClick={() => {
-                const el = document.querySelector('[data-slot="dialog-content"] [data-subscription-pricing]');
+                const el = document.querySelector(
+                  '[data-slot="dialog-content"] [data-subscription-pricing]',
+                );
                 el?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
             >
@@ -117,7 +132,11 @@ export default function SubscriptionSettingsPage() {
         {subscription?.expires_at && (
           <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
             <CalendarIcon className="size-3.5" />
-            <span>{t.settings.subscription.expiresOn(formatDate(subscription.expires_at))}</span>
+            <span>
+              {t.settings.subscription.expiresOn(
+                formatDate(subscription.expires_at),
+              )}
+            </span>
             {subscription?.auto_renew && (
               <Badge variant="outline" className="text-[10px] ml-2">
                 {t.settings.subscription.autoRenewal}
@@ -125,7 +144,6 @@ export default function SubscriptionSettingsPage() {
             )}
           </div>
         )}
-
       </div>
 
       {/* Pricing plans sourced live from the account service. */}
@@ -135,7 +153,10 @@ export default function SubscriptionSettingsPage() {
 }
 
 /* Implementation note. */
-function formatCreditsSummary(creditsInfo: string | undefined, t: ReturnType<typeof useI18n>["t"]): string {
+function formatCreditsSummary(
+  creditsInfo: string | undefined,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   if (!creditsInfo) return "";
   try {
     const parsed = JSON.parse(creditsInfo) as Record<string, unknown>;
@@ -143,20 +164,30 @@ function formatCreditsSummary(creditsInfo: string | undefined, t: ReturnType<typ
     if (typeof total === "number") {
       return t.subscriptionSettings.totalCredits(total.toLocaleString());
     }
-  } catch (e) { swallow(e); }
+  } catch (e) {
+    swallow(e);
+  }
   return creditsInfo;
 }
 
-function goodsUnit(goods: MoliliGoods, t: ReturnType<typeof useI18n>["t"]): string {
+function goodsUnit(
+  goods: MoliliGoods,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   if (goods.type === 1) return t.payOrder.perMonth;
   if (goods.type === 2) return t.payOrder.perYear;
   return t.payOrder.oneTime;
 }
 
-function formatCredits(n: number | undefined | null, t: { numberFormat: { yi: string; wan: string } }): string {
+function formatCredits(
+  n: number | undefined | null,
+  t: { numberFormat: { yi: string; wan: string } },
+): string {
   if (n === undefined || n === null || Number.isNaN(n)) return "—";
-  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}${t.numberFormat.yi}`;
-  if (n >= 10_000) return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}${t.numberFormat.wan}`;
+  if (n >= 100_000_000)
+    return `${(n / 100_000_000).toFixed(1)}${t.numberFormat.yi}`;
+  if (n >= 10_000)
+    return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}${t.numberFormat.wan}`;
   if (n >= 1_000) return n.toLocaleString();
   return String(n);
 }
@@ -190,10 +221,7 @@ function OfficialPricingSection() {
       const resp = await createLink.mutateAsync(g.id);
       const data = resp?.data;
       if (!data?.paymentLink || !data?.orderNo) {
-        const msg =
-          resp?.errMessage ||
-          resp?.errCode ||
-          t.payOrder.goodsFailed;
+        const msg = resp?.errMessage || resp?.errCode || t.payOrder.goodsFailed;
         toast.error(msg);
         return;
       }
@@ -205,9 +233,7 @@ function OfficialPricingSection() {
         amountYuan: (g.price / 100).toFixed(g.price % 100 === 0 ? 0 : 2),
       });
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : t.payOrder.goodsFailed,
-      );
+      toast.error(err instanceof Error ? err.message : t.payOrder.goodsFailed);
     } finally {
       setPendingId(null);
     }
@@ -227,12 +253,14 @@ function OfficialPricingSection() {
           <>
             <div className="flex items-center justify-center gap-2 text-sm">
               <UserIcon className="size-4 text-muted-foreground" />
-              <span className="font-medium">{profile?.display_name || profile?.username}</span>
+              <span className="font-medium">
+                {profile?.display_name || profile?.username}
+              </span>
               <Badge variant="secondary" className="text-[10px]">
                 {t.auth.currentAccount}
               </Badge>
             </div>
-            {typeof surplusCredits === 'number' && (
+            {typeof surplusCredits === "number" && (
               <div className="flex items-center justify-center gap-2 pt-3 border-t">
                 <CoinsIcon className="size-4 text-amber-500" />
                 <span className="text-lg font-semibold tabular-nums">
@@ -257,8 +285,12 @@ function OfficialPricingSection() {
     return (
       <div className="space-y-4" data-subscription-pricing>
         <div className="text-center">
-          <h2 className="text-lg font-semibold">{t.subscriptionSettings.upgradeTitle}</h2>
-          <p className="text-muted-foreground mt-1 text-sm">{t.payOrder.loadingGoods}</p>
+          <h2 className="text-lg font-semibold">
+            {t.subscriptionSettings.upgradeTitle}
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm">
+            {t.payOrder.loadingGoods}
+          </p>
         </div>
         <div className="grid gap-4 md:grid-cols-3">
           {[0, 1, 2].map((i) => (
@@ -275,7 +307,9 @@ function OfficialPricingSection() {
         className="rounded-xl border border-dashed bg-muted/30 p-8 text-center"
         data-subscription-pricing
       >
-        <p className="text-sm text-muted-foreground">{t.payOrder.goodsFailed}</p>
+        <p className="text-sm text-muted-foreground">
+          {t.payOrder.goodsFailed}
+        </p>
       </div>
     );
   }
@@ -294,7 +328,9 @@ function OfficialPricingSection() {
   return (
     <div className="space-y-6" data-subscription-pricing>
       <div className="text-center">
-        <h2 className="text-lg font-semibold">{t.subscriptionSettings.upgradeTitle}</h2>
+        <h2 className="text-lg font-semibold">
+          {t.subscriptionSettings.upgradeTitle}
+        </h2>
         <p className="text-muted-foreground mt-1 text-sm">
           {t.subscriptionSettings.upgradeDesc}
         </p>
@@ -335,7 +371,9 @@ function OfficialPricingSection() {
               <h3 className="text-sm font-bold text-center">{g.name}</h3>
 
               <div className="mt-3 text-center">
-                <span className="text-2xl font-bold tracking-tight">¥{yuan}</span>
+                <span className="text-2xl font-bold tracking-tight">
+                  ¥{yuan}
+                </span>
                 <span className="text-muted-foreground text-xs">
                   /{goodsUnit(g, t)}
                 </span>
@@ -361,7 +399,9 @@ function OfficialPricingSection() {
                 disabled={isPending}
                 onClick={() => onBuy(g)}
               >
-                {isPending && <Loader2Icon className="mr-1 size-3 animate-spin" />}
+                {isPending && (
+                  <Loader2Icon className="mr-1 size-3 animate-spin" />
+                )}
                 {t.payOrder.subscribeNow}
               </Button>
             </div>
@@ -371,7 +411,9 @@ function OfficialPricingSection() {
 
       <p className="text-muted-foreground text-center text-xs">
         {t.subscriptionSettings.contactUs}
-        <span className="text-foreground font-medium">support@octopus.local</span>
+        <span className="text-foreground font-medium">
+          support@octopus.local
+        </span>
         ，{t.subscriptionSettings.invoiceHint}
       </p>
 

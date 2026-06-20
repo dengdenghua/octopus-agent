@@ -28,6 +28,7 @@ Naming convention
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from abc import ABC
 from dataclasses import dataclass, field
@@ -90,25 +91,21 @@ class ModuleContext:
         """Unregister all skills and channels registered via this context."""
         if self.skill_registry is not None:
             for skill_name in self._registered_skill_names:
-                try:
+                with contextlib.suppress(Exception):  # best-effort plugin teardown; one bad skill shouldn't block the rest
                     self.skill_registry.unregister(skill_name)
-                except Exception:  # noqa: BLE001 — best-effort plugin teardown; one bad skill shouldn't block the rest
-                    pass
             self._registered_skill_names.clear()
 
         if self.channel_manager is not None:
             for ch_id in self._registered_channel_ids:
-                try:
+                with contextlib.suppress(Exception):  # best-effort channel removal during teardown
                     self.channel_manager._channels.pop(ch_id, None)
-                except Exception:  # noqa: BLE001 — best-effort channel removal during teardown
-                    pass
             self._registered_channel_ids.clear()
 
 
 # ── Plugin base class ──────────────────────────────────────────
 
 
-class ModulePlugin(ABC):
+class ModulePlugin(ABC):  # noqa: B024
     """Base class for a pluggable module plugin.
 
     Subclasses **must** provide ``name`` and override ``register_skills()``.
@@ -147,19 +144,19 @@ class ModulePlugin(ABC):
         self.register_channels()
         self.register_routes()
 
-    def on_start(self, ctx: ModuleContext) -> None:
+    def on_start(self, ctx: ModuleContext) -> None:  # noqa: B027
         """Called when the plugin is started (after all loading).
 
         Suitable for establishing connections, starting background tasks.
         """
 
-    def on_stop(self, ctx: ModuleContext) -> None:
+    def on_stop(self, ctx: ModuleContext) -> None:  # noqa: B027
         """Called when the plugin is stopped.
 
         Suitable for closing connections, stopping background tasks.
         """
 
-    def on_unload(self, ctx: ModuleContext) -> None:
+    def on_unload(self, ctx: ModuleContext) -> None:  # noqa: B027
         """Called when the plugin is unloaded.
 
         Suitable for final cleanup.
@@ -167,21 +164,21 @@ class ModulePlugin(ABC):
 
     # ── Registration hooks (subclasses override) ────────────────
 
-    def register_skills(self) -> None:
+    def register_skills(self) -> None:  # noqa: B027
         """Register the skills this plugin provides.
 
         Use ``self.ctx.register_skill(skill)`` to register each skill.
         Skill names should follow the ``<plugin_name>.<name>`` convention.
         """
 
-    def register_channels(self) -> None:
+    def register_channels(self) -> None:  # noqa: B027
         """Register the channels this plugin provides.
 
         Use ``self.ctx.register_channel(channel)`` to register each channel.
         Channel IDs should follow the ``<plugin_name>_<name>`` convention.
         """
 
-    def register_routes(self) -> None:
+    def register_routes(self) -> None:  # noqa: B027
         """Register FastAPI routes for this plugin.
 
         Access the FastAPI app via ``self.ctx.fastapi_app``.

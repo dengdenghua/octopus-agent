@@ -42,8 +42,10 @@ export function AmbientSuggestionsPanel({
   baseUrl,
 }: AmbientSuggestionsPanelProps) {
   const { t } = useI18n();
-  const { bucket, loading, error, generate, setStatus } =
-    useAmbientSuggestions(project, { baseUrl });
+  const { bucket, loading, error, generate, setStatus } = useAmbientSuggestions(
+    project,
+    { baseUrl },
+  );
   const [generating, setGenerating] = useState(false);
 
   const suggestions = bucket?.suggestions ?? [];
@@ -101,15 +103,12 @@ export function AmbientSuggestionsPanel({
         )}
         {!loading && !error && !featureDisabled && (
           <>
-            {pending.length === 0 && accepted.length === 0 && dismissed.length === 0 ? (
-                <div className="text-muted-foreground text-sm">
-                  {t.ambientSuggestionsPanel.empty}
-                  {agentId && (
-                    <>
-                      {" "}
-                    {t.ambientSuggestionsPanel.emptyGenerateHint}
-                  </>
-                )}
+            {pending.length === 0 &&
+            accepted.length === 0 &&
+            dismissed.length === 0 ? (
+              <div className="text-muted-foreground text-sm">
+                {t.ambientSuggestionsPanel.empty}
+                {agentId && <> {t.ambientSuggestionsPanel.emptyGenerateHint}</>}
               </div>
             ) : (
               <div className="flex flex-col gap-4">
@@ -216,9 +215,7 @@ function SuggestionCard({
             variant="ghost"
             size="sm"
             onClick={onDismiss}
-            aria-label={t.ambientSuggestionsPanel.dismissAria(
-              suggestion.title,
-            )}
+            aria-label={t.ambientSuggestionsPanel.dismissAria(suggestion.title)}
           >
             {t.ambientSuggestionsPanel.dismiss}
           </Button>

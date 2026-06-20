@@ -49,16 +49,33 @@ interface TimelineResponse {
 /* ── event icon/color mapping ──────────────────────── */
 
 const EVENT_STYLE: Record<string, { icon: React.ReactNode; color: string }> = {
-  step:             { icon: <WrenchIcon className="size-3.5" />,        color: "bg-blue-500" },
-  trajectory:       { icon: <BrainCircuitIcon className="size-3.5" />,  color: "bg-violet-500" },
-  react_checkpoint: { icon: <CpuIcon className="size-3.5" />,          color: "bg-amber-500" },
-  immune:           { icon: <ZapIcon className="size-3.5" />,           color: "bg-rose-500" },
-  budget_squirt:    { icon: <ClockIcon className="size-3.5" />,         color: "bg-orange-500" },
-  reflex_hit:       { icon: <ZapIcon className="size-3.5" />,           color: "bg-emerald-500" },
+  step: { icon: <WrenchIcon className="size-3.5" />, color: "bg-blue-500" },
+  trajectory: {
+    icon: <BrainCircuitIcon className="size-3.5" />,
+    color: "bg-violet-500",
+  },
+  react_checkpoint: {
+    icon: <CpuIcon className="size-3.5" />,
+    color: "bg-amber-500",
+  },
+  immune: { icon: <ZapIcon className="size-3.5" />, color: "bg-rose-500" },
+  budget_squirt: {
+    icon: <ClockIcon className="size-3.5" />,
+    color: "bg-orange-500",
+  },
+  reflex_hit: {
+    icon: <ZapIcon className="size-3.5" />,
+    color: "bg-emerald-500",
+  },
 };
 
 function eventStyle(type: string) {
-  return EVENT_STYLE[type] ?? { icon: <CircleDotIcon className="size-3.5" />, color: "bg-gray-500" };
+  return (
+    EVENT_STYLE[type] ?? {
+      icon: <CircleDotIcon className="size-3.5" />,
+      color: "bg-gray-500",
+    }
+  );
 }
 
 /* ── main component ────────────────────────────────── */
@@ -72,15 +89,22 @@ export function ExecutionTimeline() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch(`${getBackendBaseURL()}/api/journal/timeline?limit=30`, {
-        headers: authHeaders(),
-      });
+      const r = await fetch(
+        `${getBackendBaseURL()}/api/journal/timeline?limit=30`,
+        {
+          headers: authHeaders(),
+        },
+      );
       if (r.ok) setData(await r.json());
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
     setLoading(false);
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const toggle = (tid: string) => {
     setExpanded((prev) => {
@@ -99,10 +123,18 @@ export function ExecutionTimeline() {
   );
 
   if (loading) {
-    return <div className="py-8 text-center text-sm text-muted-foreground">{t.executionTimeline.loading}</div>;
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        {t.executionTimeline.loading}
+      </div>
+    );
   }
   if (!data || taskIds.length === 0) {
-    return <div className="py-8 text-center text-sm text-muted-foreground">{t.executionTimeline.empty}</div>;
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">
+        {t.executionTimeline.empty}
+      </div>
+    );
   }
 
   return (
@@ -116,7 +148,10 @@ export function ExecutionTimeline() {
           onChange={(e) => setFilter(e.target.value)}
         />
         <button
-          onClick={() => { setLoading(true); void load(); }}
+          onClick={() => {
+            setLoading(true);
+            void load();
+          }}
           className="rounded-lg border border-border/60 px-3 py-1.5 text-xs hover:bg-muted"
         >
           {t.executionTimeline.refresh}
@@ -129,22 +164,32 @@ export function ExecutionTimeline() {
         const first = events[0];
         const last = events[events.length - 1];
         const strategy = events.find((e) => e.strategy)?.strategy;
-        const totalTokens = events.reduce((s, e) => s + (e.tokens_in ?? 0) + (e.tokens_out ?? 0), 0);
+        const totalTokens = events.reduce(
+          (s, e) => s + (e.tokens_in ?? 0) + (e.tokens_out ?? 0),
+          0,
+        );
         const totalUsd = events.reduce((s, e) => s + (e.usd ?? 0), 0);
 
         return (
-          <div key={tid} className="rounded-xl border border-border/60 bg-background/60 overflow-hidden">
+          <div
+            key={tid}
+            className="rounded-xl border border-border/60 bg-background/60 overflow-hidden"
+          >
             <button
               className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/30"
               onClick={() => toggle(tid)}
             >
-              {isOpen
-                ? <ChevronDownIcon className="size-4 text-muted-foreground" />
-                : <ChevronRightIcon className="size-4 text-muted-foreground" />}
+              {isOpen ? (
+                <ChevronDownIcon className="size-4 text-muted-foreground" />
+              ) : (
+                <ChevronRightIcon className="size-4 text-muted-foreground" />
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="truncate text-sm font-medium font-mono">
-                    {tid === "_no_task" ? t.executionTimeline.noTask : tid.slice(0, 12)}
+                    {tid === "_no_task"
+                      ? t.executionTimeline.noTask
+                      : tid.slice(0, 12)}
                   </span>
                   {strategy && (
                     <span className="rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[10px] text-violet-400">
@@ -154,10 +199,14 @@ export function ExecutionTimeline() {
                 </div>
                 <div className="mt-0.5 text-[11px] text-muted-foreground">
                   {events.length} {t.executionTimeline.events}
-                  {totalTokens > 0 && ` · ${totalTokens.toLocaleString()} tokens`}
+                  {totalTokens > 0 &&
+                    ` · ${totalTokens.toLocaleString()} tokens`}
                   {totalUsd > 0 && ` · $${totalUsd.toFixed(4)}`}
                   {first && ` · ${new Date(first.ts).toLocaleTimeString()}`}
-                  {last && first && last.ts !== first.ts && ` → ${new Date(last.ts).toLocaleTimeString()}`}
+                  {last &&
+                    first &&
+                    last.ts !== first.ts &&
+                    ` → ${new Date(last.ts).toLocaleTimeString()}`}
                 </div>
               </div>
             </button>
@@ -169,7 +218,9 @@ export function ExecutionTimeline() {
                     const style = eventStyle(ev.event_type);
                     return (
                       <div key={i} className="relative">
-                        <div className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full text-white ${style.color}`}>
+                        <div
+                          className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full text-white ${style.color}`}
+                        >
                           {style.icon}
                         </div>
                         <div className="text-xs">
@@ -191,7 +242,10 @@ export function ExecutionTimeline() {
                           </div>
                           {ev.thought && (
                             <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-                              {stripTraceLabelPrefixes(ev.thought).slice(0, 200)}
+                              {stripTraceLabelPrefixes(ev.thought).slice(
+                                0,
+                                200,
+                              )}
                             </div>
                           )}
                           {ev.action && (
@@ -201,12 +255,18 @@ export function ExecutionTimeline() {
                           )}
                           {ev.observation && (
                             <div className="mt-1 max-h-24 overflow-y-auto rounded-lg bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-                              {stripTraceLabelPrefixes(ev.observation).slice(0, 300)}
+                              {stripTraceLabelPrefixes(ev.observation).slice(
+                                0,
+                                300,
+                              )}
                             </div>
                           )}
                           {ev.final_answer && (
                             <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-400">
-                              {stripTraceLabelPrefixes(ev.final_answer).slice(0, 200)}
+                              {stripTraceLabelPrefixes(ev.final_answer).slice(
+                                0,
+                                200,
+                              )}
                             </div>
                           )}
                           {ev.error && (
@@ -216,10 +276,20 @@ export function ExecutionTimeline() {
                           )}
                           {(ev.tokens_in || ev.tokens_out || ev.model) && (
                             <div className="mt-1 flex gap-3 text-[10px] text-muted-foreground">
-                              {ev.model && <span>{ev.provider}/{ev.model}</span>}
-                              {ev.tokens_in != null && <span>{ev.tokens_in} in</span>}
-                              {ev.tokens_out != null && <span>{ev.tokens_out} out</span>}
-                              {ev.latency_ms != null && <span>{ev.latency_ms.toFixed(0)}ms</span>}
+                              {ev.model && (
+                                <span>
+                                  {ev.provider}/{ev.model}
+                                </span>
+                              )}
+                              {ev.tokens_in != null && (
+                                <span>{ev.tokens_in} in</span>
+                              )}
+                              {ev.tokens_out != null && (
+                                <span>{ev.tokens_out} out</span>
+                              )}
+                              {ev.latency_ms != null && (
+                                <span>{ev.latency_ms.toFixed(0)}ms</span>
+                              )}
                             </div>
                           )}
                         </div>

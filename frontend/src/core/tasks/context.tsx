@@ -1,4 +1,10 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 
 import type { Subtask } from "./types";
 
@@ -14,7 +20,9 @@ export interface SubtaskContextValue {
 const NOOP_CONTEXT: SubtaskContextValue = {
   tasks: {},
   setTasks: () => {
-    throw new Error("useSubtaskContext must be used within a SubtaskContext.Provider");
+    throw new Error(
+      "useSubtaskContext must be used within a SubtaskContext.Provider",
+    );
   },
 };
 
@@ -24,9 +32,7 @@ export function SubtasksProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Record<string, Subtask>>({});
   const value = useMemo(() => ({ tasks, setTasks }), [tasks, setTasks]);
   return (
-    <SubtaskContext.Provider value={value}>
-      {children}
-    </SubtaskContext.Provider>
+    <SubtaskContext.Provider value={value}>{children}</SubtaskContext.Provider>
   );
 }
 

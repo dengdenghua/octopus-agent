@@ -26,7 +26,7 @@
 | `agents_models.py` | Pydantic wire models for ``agents_router``. |
 | `agents_router.py` | — |
 | `ambient_suggestions_router.py` | Ambient Suggestions router · ``/api/ambient-suggestions/*``. |
-| `android_router.py` | — |
+| `android_router.py` | Android device HTTP API — server-side counterpart to Octopus Mobile. |
 | `anthropic_compat/event_adapter.py` | Map internal ReAct loop events to Anthropic Managed Agents event shapes. |
 | `anthropic_compat/models.py` | Pydantic models for the Anthropic Managed Agents compat layer. |
 | `anthropic_compat/router.py` | Anthropic Managed Agents REST + SSE router. |
@@ -41,6 +41,7 @@
 | `debug_router.py` | Debug diagnostics router · ``/api/debug/session-info``. |
 | `deep_research_router.py` | Deep research API router. |
 | `deployments_router.py` | — |
+| `enterprise_assets_router.py` | Agent 消费企业版角色资产库(数字分身归并 C · 消费侧,只读)。 |
 | `evolution_ops/budget.py` | Budget subsystem for evolution operators. |
 | `evolution_ops/curriculum.py` | Curriculum subsystem for evolution operators. |
 | `evolution_ops/framework_benchmarks.py` | Framework benchmarks subsystem for evolution operators. |
@@ -65,7 +66,6 @@
 | `observability_router.py` | Observability router · journal / reflect / kg / progress / stream / run. |
 | `openai_formatting.py` | Pure-function formatters for the OpenAI-compat gateway. |
 | `openai_gateway/context_manager.py` | — |
-| `openai_gateway/models.py` | — |
 | `openai_gateway/request_parser.py` | — |
 | `openai_gateway/response_formatter.py` | — |
 | `openai_gateway/stream_handler.py` | — |
@@ -76,10 +76,20 @@
 | `plugin_hub_router.py` | PluginHub management REST API. |
 | `plugins_router.py` | — |
 | `prompts_router.py` | Prompts router · ``/api/prompts/*``. |
+| `realtime_approval.py` | Approval bridge between the blocking react loop and the async gateway. |
 | `realtime_cerebrum.py` | Cerebrum-backed realtime runtime. |
 | `realtime_echo.py` | Echo runtime — reference :class:`RealtimeRuntime` implementation. |
+| `realtime_event_bridge.py` | React-event → ``item/*`` bridge state for the realtime runtime. |
 | `realtime_gateway.py` | Realtime gateway — JSON-RPC 2.0 over WebSocket. |
+| `realtime_react_stream.py` | Single-agent stream drivers for the realtime runtime. |
+| `realtime_team_stream.py` | Multi-agent team-topology stream driver for the realtime runtime. |
+| `realtime_thread_history.py` | Realtime turn ↔ legacy conversation history adapters. |
+| `realtime_thread_ops.py` | Thread maintenance operations for the realtime runtime. |
+| `realtime_turn_input.py` | Turn-input shaping for the realtime runtime. |
+| `realtime_turn_lifecycle.py` | Turn lifecycle orchestration for the realtime runtime. |
+| `realtime_turn_outcome.py` | Turn outcome inspection for the realtime runtime. |
 | `realtime_turn_routing.py` | Turn-routing helpers for the realtime runtime. |
+| `realtime_workbench.py` | Workbench snapshot + workspace-focus helpers for the realtime runtime. |
 | `remote_backends_router.py` | Remote backends router · ``/api/remote-backends/*``. |
 | `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over SSH-tunneled HTTP. |
 | `skill_market_router.py` | — |
@@ -89,6 +99,8 @@
 | `subagents_router.py` | Subagent FastAPI router. |
 | `system_router.py` | System-level local maintenance endpoints. |
 | `team_rooms_router.py` | Persistent team rooms API. |
+| `team_rooms_ws.py` | Realtime Team Room WebSocket handler. |
+| `team_speaker_policy.py` | Pure team-room governance helpers. |
 | `team_tasks_router.py` | Persistent team tasks API. |
 | `terminal_router.py` | terminal_router · WebSocket-based persistent shell sessions. |
 | `thread_state_router.py` | Thread state HTTP router used by the realtime UI. |
@@ -102,23 +114,10 @@
 
 ## Who imports this
 
-**14** file(s) reference this package:
+**4** file(s) reference this package:
 
-- **`runtime/adapters/`** · 4 file(s)
-  - `runtime/adapters/channels/manager.py`
-  - `runtime/adapters/integrations/local_auth/router.py`
-  - `runtime/adapters/integrations/molili/router_account.py`
-  - `runtime/adapters/integrations/molili/router_proxy.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
-- **`runtime/core/`** · 2 file(s)
-  - `runtime/core/cerebrum/react_loop.py`
-  - `runtime/core/nerves/reflex/workflow_delegate.py`
-- **`runtime/execution/`** · 4 file(s)
-  - `runtime/execution/suckers/browser_act_skills.py`
-  - `runtime/execution/suckers/capability_skills.py`
-  - `runtime/execution/suckers/cron_skills.py`
-  - `runtime/execution/suckers/ephemeral_runner.py`
 - **`runtime/platform/`** · 3 file(s)
   - `runtime/platform/ui/app.py`
   - `runtime/platform/ui/state.py`

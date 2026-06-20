@@ -37,7 +37,10 @@ interface PairingsPayload {
 }
 
 export function ChannelPairingsSheet({
-  open, onOpenChange, channelId, displayName,
+  open,
+  onOpenChange,
+  channelId,
+  displayName,
 }: Props) {
   const { t } = useI18n();
   const [data, setData] = useState<PairingsPayload | null>(null);
@@ -60,7 +63,9 @@ export function ChannelPairingsSheet({
       } catch (e) {
         swallow(e);
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : t.channelPairings.loadFailed);
+          setError(
+            e instanceof Error ? e.message : t.channelPairings.loadFailed,
+          );
         }
       } finally {
         if (!cancelled) setLoading(false);

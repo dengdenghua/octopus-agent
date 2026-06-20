@@ -21,6 +21,7 @@ import {
   BookOpenIcon,
   BotIcon,
   BracesIcon,
+  DatabaseIcon,
   FileIcon,
   FolderIcon,
   GitBranchIcon,
@@ -81,6 +82,7 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   plugin: PuzzleIcon,
   skill: ZapIcon,
   pack: PackageIcon,
+  database: DatabaseIcon,
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -95,7 +97,43 @@ const CATEGORY_COLORS: Record<string, string> = {
   plugin: "text-fuchsia-500",
   skill: "text-yellow-500",
   pack: "text-pink-500",
+  database: "text-emerald-600",
 };
+
+const LOCAL_FILE_AGENT_MENTION: MentionItem = {
+  type: "agent",
+  label: "本地数据库",
+  value: "本地数据库",
+  description: "只在本机索引和检索授权资料，确认后再带入任务上下文",
+  icon: "database",
+};
+
+function withLocalFileAgentMention(
+  query: string,
+  results: MentionItem[],
+): MentionItem[] {
+  const normalized = query.trim().toLowerCase();
+  const shouldShow =
+    normalized === "" ||
+    "本地数据库".includes(normalized) ||
+    "私域资料库".includes(normalized) ||
+    "本地资料官".includes(normalized) ||
+    "local database".includes(normalized) ||
+    "private storage".includes(normalized) ||
+    "local file agent".includes(normalized) ||
+    "nas".includes(normalized) ||
+    "storage".includes(normalized) ||
+    normalized === "agent:" ||
+    normalized.startsWith("agent:本地数据库") ||
+    normalized.startsWith("agent:私域") ||
+    normalized.startsWith("agent:本地") ||
+    normalized.startsWith("agent:local");
+  if (!shouldShow) return results;
+  if (results.some((item) => item.value === LOCAL_FILE_AGENT_MENTION.value)) {
+    return results;
+  }
+  return [LOCAL_FILE_AGENT_MENTION, ...results];
+}
 
 // ============================================================================
 // API
@@ -118,10 +156,9 @@ async function fetchMentionAutocomplete(
   if (threadId) params.set("thread_id", threadId);
   if (actor) params.set("actor", actor);
   try {
-    const res = await fetch(
-      `${BASE_URL}/api/mentions/autocomplete?${params}`,
-      { signal },
-    );
+    const res = await fetch(`${BASE_URL}/api/mentions/autocomplete?${params}`, {
+      signal,
+    });
     if (!res.ok) return [];
     const data = await res.json();
     return data.items ?? [];
@@ -214,7 +251,10 @@ export function useMentionAutocomplete({
       ];
       if (validTypes.includes(typeStr.toLowerCase())) {
         // For @web: allow spaces in the query
-        if (typeStr.toLowerCase() === "web" || typeStr.toLowerCase() === "docs") {
+        if (
+          typeStr.toLowerCase() === "web" ||
+          typeStr.toLowerCase() === "docs"
+        ) {
           setMentionQuery(afterAt);
         } else {
           // For other types, stop at first space after colon
@@ -278,7 +318,7 @@ export function useMentionAutocomplete({
       )
         .then((results) => {
           if (!controller.signal.aborted) {
-            setItems(results);
+            setItems(withLocalFileAgentMention(mentionQuery, results));
             setSelectedIndex(0);
             setIsLoading(false);
           }
@@ -330,7 +370,8 @@ export function useMentionAutocomplete({
         } else {
           const afterColon = afterAt.slice(colonIdx + 1);
           const spaceIdx = afterColon.indexOf(" ");
-          endOffset = spaceIdx !== -1 ? colonIdx + 1 + spaceIdx : afterAt.length;
+          endOffset =
+            spaceIdx !== -1 ? colonIdx + 1 + spaceIdx : afterAt.length;
         }
       } else {
         const spaceIdx = afterAt.indexOf(" ");
@@ -354,8 +395,7 @@ export function useMentionAutocomplete({
       if (!isOpen) {
         if (e.key === "@" && !e.ctrlKey && !e.metaKey) {
           const pos = e.currentTarget.selectionStart;
-          const charBefore =
-            pos > 0 ? value[pos - 1] : undefined;
+          const charBefore = pos > 0 ? value[pos - 1] : undefined;
           // Only trigger if @ is at start or after whitespace
           if (
             charBefore === undefined ||
@@ -395,9 +435,7 @@ export function useMentionAutocomplete({
         case "ArrowUp":
           e.preventDefault();
           setSelectedIndex((i) =>
-            items.length > 0
-              ? (i - 1 + items.length) % items.length
-              : 0,
+            items.length > 0 ? (i - 1 + items.length) % items.length : 0,
           );
           break;
 
@@ -561,8 +599,11 @@ export function MentionAutocompletePopup({
         ) : (
           items.map((item, index) => {
             const IconComponent =
-              CATEGORY_ICONS[item.icon] || CATEGORY_ICONS[item.type] || FileIcon;
-            const colorClass = CATEGORY_COLORS[item.type] || "text-muted-foreground";
+              CATEGORY_ICONS[item.icon] ||
+              CATEGORY_ICONS[item.type] ||
+              FileIcon;
+            const colorClass =
+              CATEGORY_COLORS[item.type] || "text-muted-foreground";
             const isSelected = index === selectedIndex;
 
             return (
@@ -614,15 +655,21 @@ export function MentionAutocompletePopup({
       <div className="border-t px-3 py-1">
         <div className="text-muted-foreground/60 flex items-center gap-3 text-[10px]">
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">&uarr;&darr;</kbd>{" "}
+            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">
+              &uarr;&darr;
+            </kbd>{" "}
             {t.mentions.navigate}
           </span>
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">Tab</kbd>{" "}
+            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">
+              Tab
+            </kbd>{" "}
             {t.mentions.select}
           </span>
           <span>
-            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">Esc</kbd>{" "}
+            <kbd className="bg-muted rounded px-1 font-mono text-[9px]">
+              Esc
+            </kbd>{" "}
             {t.mentions.close}
           </span>
         </div>
@@ -641,7 +688,11 @@ interface MentionBadgeProps {
   className?: string;
 }
 
-export function MentionBadge({ type, reference, className }: MentionBadgeProps) {
+export function MentionBadge({
+  type,
+  reference,
+  className,
+}: MentionBadgeProps) {
   const IconComponent =
     CATEGORY_ICONS[type] || CATEGORY_ICONS[type] || FileIcon;
   const colorClass = CATEGORY_COLORS[type] || "text-muted-foreground";
@@ -677,13 +728,8 @@ export function useFileMention({
   onChange: (value: string) => void;
   workDir?: string;
 }) {
-  const {
-    isOpen,
-    items,
-    selectedIndex,
-    isLoading,
-    handleKeyDown,
-  } = useMentionAutocomplete({ value, onChange, workDir });
+  const { isOpen, items, selectedIndex, isLoading, handleKeyDown } =
+    useMentionAutocomplete({ value, onChange, workDir });
 
   // Map items to the old FileEntry shape for the popup
   const filteredFiles = useMemo(

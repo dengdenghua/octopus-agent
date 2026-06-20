@@ -82,6 +82,36 @@ def _fail(error: str, error_type: str | None = None) -> dict[str, Any]:
     return r
 
 
+def _seed_subagent_reviews(path, *, role: str, statuses: list[str]) -> None:
+    from runtime.memory.learning.review_queue import ReviewQueue
+
+    queue = ReviewQueue(path)
+    for idx, status in enumerate(statuses):
+        added = queue.add_from_task_run_review({
+            "status": "completed",
+            "task_id": f"task-{idx}",
+            "thread_id": "thread-1",
+            "turn_id": f"turn-{idx}",
+            "agent_id": role,
+            "learning_candidates": [
+                {
+                    "kind": "subagent_output",
+                    "priority": "P2",
+                    "memory_bucket": "experience",
+                    "title": f"{role} sample {idx}",
+                    "text": f"{role} output {idx}",
+                    "subagent": {
+                        "role": role,
+                        "agent_id": role,
+                        "files_touched": [],
+                    },
+                }
+            ],
+        })
+        if status != "pending":
+            queue.decide(added["items"][0]["id"], action=status, reason="test")
+
+
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -232,6 +262,80 @@ def test_agent_name_task_shape_is_accepted(monkeypatch):
     assert {agent_id for agent_id, _prompt in seen} == {"explorer"}
     assert any("Agent A" in prompt and "Task A" in prompt for _agent_id, prompt in seen)
     assert any("Agent B" in prompt and "Task B" in prompt for _agent_id, prompt in seen)
+
+
+def test_parallel_blocks_retired_subagent_for_high_risk(monkeypatch, tmp_path):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    path = tmp_path / "review_queue.json"
+    _seed_subagent_reviews(
+        path,
+        role="researcher",
+        statuses=["rejected", "rejected", "rejected"],
+    )
+    called = {"hit": False}
+
+    def _fake_call_subagent(agent_id="", prompt="", **_kw):
+        called["hit"] = True
+        return _ok("should not run")
+
+    monkeypatch.setattr(
+        "runtime.execution.subagents.call_subagent",
+        _fake_call_subagent,
+    )
+
+    r = _call_agent_parallel(
+        specs=_specs("danger"),
+        context={
+            "task_risk_level": "high",
+            "review_queue_path": str(path),
+        },
+    )
+
+    assert called["hit"] is False
+    assert r["ok"] is False
+    assert r["failed"] == 1
+    failure = r["failures"][0]
+    assert failure["error_type"] == "subagent_route_blocked"
+    assert failure["subagent_route_decision"]["action"] == "block"
+
+
+def test_parallel_allows_retired_subagent_for_low_risk_with_warning(
+    monkeypatch,
+    tmp_path,
+):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    path = tmp_path / "review_queue.json"
+    _seed_subagent_reviews(
+        path,
+        role="researcher",
+        statuses=["rejected", "rejected", "rejected"],
+    )
+    captured: list[dict[str, Any] | None] = []
+
+    def _fake_call_subagent(agent_id="", prompt="", **kw):
+        captured.append(kw.get("context"))
+        return _ok("low risk result")
+
+    monkeypatch.setattr(
+        "runtime.execution.subagents.call_subagent",
+        _fake_call_subagent,
+    )
+
+    r = _call_agent_parallel(
+        specs=_specs("low"),
+        context={
+            "task_risk_level": "low",
+            "review_queue_path": str(path),
+        },
+    )
+
+    assert r["ok"] is True
+    decision = r["successes"][0]["subagent_route_decision"]
+    assert decision["action"] == "allow_with_warning"
+    assert decision["verdict"] == "retire_candidate"
+    assert captured[0]["subagent_route_decision"] == decision
 
 
 def test_prompt_only_spec_defaults_to_researcher(monkeypatch):

@@ -11,19 +11,27 @@ export function Welcome({
   mode,
 }: {
   className?: string;
-  mode?: "chat" | "deep" | "thinking" | "flash" | "react";
+  mode?: "chat" | "code" | "deep" | "thinking" | "flash" | "react";
 }) {
   const { t } = useI18n();
   const [searchParams] = useSearchParams();
   const isDeep = useMemo(() => mode === "deep", [mode]);
+  const isCode = useMemo(() => mode === "code", [mode]);
   const isSkillSeed = searchParams.get("mode") === "skill";
   const colors = useMemo(() => {
     if (isDeep) {
       return ["#efefbb", "#e9c665", "#e3a812"];
     }
+    if (isCode) {
+      return ["#d1fae5", "#34d399", "#0f766e"];
+    }
     return ["var(--color-foreground)"];
-  }, [isDeep]);
-  const modeLabel = isDeep ? "Deep Research" : "Agent Mode";
+  }, [isCode, isDeep]);
+  const modeLabel = isDeep
+    ? "Deep Research"
+    : isCode
+      ? "Project Mode"
+      : "Agent Mode";
 
   return (
     <div

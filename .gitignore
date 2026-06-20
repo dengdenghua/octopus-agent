@@ -74,6 +74,12 @@ config.local.yaml
 /tmp/
 scratch/
 
+# Local Codex app runtime state.
+.codex-run/
+
+# Leaked credential files — never commit. Use OCTOPUS_CREDENTIAL_KEY env var instead.
+appliance-auth.json
+
 # Local Octopus state / reversible cleanup archives.
 # Do not ignore .octopus/plugins wholesale: bundled release plugins may live there.
 .octopus/*.json

@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 import logging
 import time
@@ -103,10 +104,8 @@ class PcScreenCapture:
         self._running = False
         if self._task is not None:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info("PC screen capture stopped: frames=%d errors=%d",
                      self._frame_count, self._errors)
@@ -237,7 +236,7 @@ class PcScreenCapture:
                 from PIL import ImageGrab
                 img = ImageGrab.grab()
                 return self._encode_jpeg(img)
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort; fail-open
                 pass
         return None
 
@@ -577,8 +576,8 @@ class RemoteInputHandler:
             )
         else:
             # 组合键：按下所有修饰键 → 按最后一个键 → 释放修饰键
-            modifiers = keys[:-1]
-            final_key = keys[-1]
+            keys[:-1]
+            keys[-1]
             await asyncio.get_event_loop().run_in_executor(
                 None, lambda: self._pyautogui.hotkey(*keys, _pause=False)
             )

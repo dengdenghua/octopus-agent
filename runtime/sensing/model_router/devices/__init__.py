@@ -23,21 +23,21 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any
 
 from runtime.core.nerves.bus import NervesEvent, TypedEventBus
 
 # ── Device State ────────────────────────────────────────
 
 
-class DeviceState(str, Enum):
+class DeviceState(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"
     BUSY = "busy"
 
 
-class DeviceKind(str, Enum):
+class DeviceKind(StrEnum):
     ANDROID = "android"
     ROBOT = "robot"
     CAR = "car"
@@ -322,7 +322,7 @@ class DevicePool:
             await dev.ws.send_json(request)
             return await asyncio.wait_for(fut, timeout=timeout_s)
         except TimeoutError:
-            raise TimeoutError(f"Tool call {method} timed out after {timeout_s}s")
+            raise TimeoutError(f"Tool call {method} timed out after {timeout_s}s") from None
         finally:
             dev.pending_calls.pop(call_id, None)
 

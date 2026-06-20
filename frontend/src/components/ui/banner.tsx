@@ -75,10 +75,7 @@ export function Banner({
         )}
         {children && (
           <div
-            className={cn(
-              "text-xs text-muted-foreground",
-              title && "mt-0.5",
-            )}
+            className={cn("text-xs text-muted-foreground", title && "mt-0.5")}
           >
             {children}
           </div>

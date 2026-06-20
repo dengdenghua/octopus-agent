@@ -161,6 +161,13 @@ class SandboxRunner:
     def __init__(self, policy: SandboxPolicy, *, backend: Backend | None = None) -> None:
         self.policy = policy
         self.backend = backend or DirectBackend()
+        if isinstance(self.backend, DirectBackend):
+            _logger.warning(
+                "SandboxRunner is using DirectBackend — no kernel-level isolation "
+                "is applied. A misbehaving process can still damage the host "
+                "(e.g. rm -rf, exfiltration). Install bwrap (Linux), sandbox-exec "
+                "(macOS), or configure ContainerSandbox for real isolation."
+            )
 
     def run(
         self,

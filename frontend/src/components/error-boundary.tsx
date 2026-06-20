@@ -52,12 +52,15 @@ export class ErrorBoundary extends Component<Props, State> {
             <CardHeader className="pb-2">
               <div className="flex items-center gap-2">
                 <AlertTriangleIcon className="h-5 w-5 text-destructive" />
-                <CardTitle className="text-base">{t?.errorBoundary.title ?? "Something went wrong"}</CardTitle>
+                <CardTitle className="text-base">
+                  {t?.errorBoundary.title ?? "Something went wrong"}
+                </CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                {t?.errorBoundary.description ?? "An error occurred while loading this component."}
+                {t?.errorBoundary.description ??
+                  "An error occurred while loading this component."}
               </p>
               {this.state.error && (
                 <pre className="max-h-32 overflow-auto rounded bg-muted p-2 text-xs">
@@ -95,7 +98,7 @@ export class ErrorBoundary extends Component<Props, State> {
 /* Implementation note. */
 export function withErrorBoundary<P extends object>(
   Component: React.ComponentType<P>,
-  options?: Omit<Props, "children">
+  options?: Omit<Props, "children">,
 ) {
   return function WithErrorBoundaryWrapper(props: P) {
     return (

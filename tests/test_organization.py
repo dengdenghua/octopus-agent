@@ -122,6 +122,34 @@ def _stub_caller(scripts: dict[str, dict[str, Any]]):
     return caller
 
 
+def _seed_subagent_reviews(queue: Any, *, role: str, statuses: list[str]) -> None:
+    for idx, status in enumerate(statuses):
+        added = queue.add_from_task_run_review({
+            "status": "completed",
+            "task_id": f"task-{idx}",
+            "thread_id": "thread-1",
+            "turn_id": f"turn-{idx}",
+            "agent_id": role,
+            "learning_candidates": [
+                {
+                    "kind": "subagent_output",
+                    "priority": "P2",
+                    "memory_bucket": "experience",
+                    "title": f"{role} sample {idx}",
+                    "text": f"{role} output {idx}",
+                    "subagent": {
+                        "role": role,
+                        "agent_id": role,
+                        "files_touched": [],
+                    },
+                }
+            ],
+        })
+        item_id = added["items"][0]["id"]
+        if status != "pending":
+            queue.decide(item_id, action=status, reason="test")
+
+
 def test_team_runner_sequential_chains_outputs() -> None:
     topology = TeamTopology(
         name="chain",
@@ -162,6 +190,316 @@ def test_team_runner_sequential_bails_on_role_error() -> None:
     result = runner.run(topology, "x")
     assert result.success is False
     assert len(result.role_outputs) == 1
+
+
+def test_team_runner_blocks_retired_subagent_for_high_risk_task(tmp_path: Path) -> None:
+    from runtime.memory.learning.review_queue import ReviewQueue
+
+    path = tmp_path / "review_queue.json"
+    _seed_subagent_reviews(
+        ReviewQueue(path),
+        role="weak_delegate",
+        statuses=["rejected", "rejected", "rejected"],
+    )
+    called = {"hit": False}
+    events: list[dict[str, Any]] = []
+
+    def caller(**kwargs):
+        called["hit"] = True
+        return {"output": "should not run", "success": True}
+
+    topology = TeamTopology(
+        name="fitness-block",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.PLANNER: AgentSpec(agent_id="weak_delegate")},
+    )
+    runner = TeamRunner(role_caller=caller, event_emitter=events.append)
+    result = runner.run(
+        topology,
+        "change production policy",
+        context={
+            "task_risk_level": "high",
+            "review_queue_path": str(path),
+        },
+    )
+
+    assert called["hit"] is False
+    assert result.success is False
+    assert result.role_outputs[0].error
+    assert result.role_outputs[0].metadata["subagent_route_decision"]["action"] == "block"
+    assert events[0]["type"] == "team_role_blocked"
+
+
+def test_strong_subagent_generates_team_promotion_proposal(tmp_path: Path) -> None:
+    from runtime.memory.learning.review_queue import ReviewQueue
+    from runtime.safety.evolution.subagent_team_promotion import (
+        build_subagent_team_promotion_proposals,
+    )
+
+    base = TeamTopology(
+        name="base-code-team",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.GENERATOR: AgentSpec(agent_id="legacy-generator")},
+        task_bucket="code",
+    )
+    review_queue_path = tmp_path / "review_queue.json"
+    _seed_subagent_reviews(
+        ReviewQueue(review_queue_path),
+        role="generator",
+        statuses=["promoted", "promoted", "promoted"],
+    )
+
+    report = build_subagent_team_promotion_proposals(
+        registry={base.fingerprint: base},
+        review_queue_path=review_queue_path,
+        subagent_policy_path=tmp_path / "subagent_policy.json",
+    )
+
+    assert report["schema"] == "octopus.subagent_team_promotion.v1"
+    assert report["proposal_count"] == 1
+    proposal = report["proposals"][0]
+    assert proposal["kind"] == "swap_agent"
+    assert proposal["base_topology"] == base.fingerprint
+    assert proposal["detail"]["role"] == "generator"
+    assert proposal["detail"]["old_agent"] == "legacy-generator"
+    assert proposal["detail"]["new_agent"] == "generator"
+    assert proposal["detail"]["source"] == "subagent_fitness"
+
+
+def test_retired_strong_subagent_is_not_promoted_to_team(tmp_path: Path) -> None:
+    from runtime.memory.learning.review_queue import ReviewQueue
+    from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+    from runtime.safety.evolution.subagent_team_promotion import (
+        build_subagent_team_promotion_proposals,
+    )
+
+    base = TeamTopology(
+        name="base-code-team",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.GENERATOR: AgentSpec(agent_id="legacy-generator")},
+        task_bucket="code",
+    )
+    review_queue_path = tmp_path / "review_queue.json"
+    policy_path = tmp_path / "subagent_policy.json"
+    _seed_subagent_reviews(
+        ReviewQueue(review_queue_path),
+        role="generator",
+        statuses=["promoted", "promoted", "promoted"],
+    )
+    SubagentPolicyStore(policy_path).decide(
+        "generator",
+        action="retire",
+        reason="operator retired generator",
+    )
+
+    report = build_subagent_team_promotion_proposals(
+        registry={base.fingerprint: base},
+        review_queue_path=review_queue_path,
+        subagent_policy_path=policy_path,
+    )
+
+    assert report["proposal_count"] == 0
+    assert report["skipped"][0]["reason"] == "operator policy retired this subagent"
+
+
+def test_topology_promotion_lift_tracks_after_vs_baseline(tmp_path: Path) -> None:
+    import json
+
+    from runtime.safety.organization.promotion_lift import (
+        compute_topology_promotion_lift,
+    )
+
+    base = TeamTopology(
+        name="base-code-team",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.GENERATOR: AgentSpec(agent_id="legacy-generator")},
+        task_bucket="code",
+    )
+    promoted = TeamTopology(
+        name="base-code-team+swap(generator:generator)",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.GENERATOR: AgentSpec(agent_id="generator")},
+        task_bucket="code",
+        metadata={
+            "derived_from": base.fingerprint,
+            "mutation": "swap_agent",
+            "promotion_source": "subagent_fitness",
+            "promotion_detail": {"role": "generator"},
+        },
+    )
+    perf_path = tmp_path / "topology_performance.jsonl"
+    rows = [
+        {
+            "fingerprint": base.fingerprint,
+            "success": False,
+            "quality_score": 0.4,
+            "total_duration_ms": 1000,
+        },
+        {
+            "fingerprint": base.fingerprint,
+            "success": True,
+            "quality_score": 0.6,
+            "total_duration_ms": 1200,
+        },
+        {
+            "fingerprint": promoted.fingerprint,
+            "success": True,
+            "quality_score": 0.9,
+            "total_duration_ms": 900,
+        },
+        {
+            "fingerprint": promoted.fingerprint,
+            "success": True,
+            "quality_score": 0.8,
+            "total_duration_ms": 850,
+        },
+    ]
+    perf_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    report = compute_topology_promotion_lift(
+        registry={
+            base.fingerprint: base,
+            promoted.fingerprint: promoted,
+        },
+        performance_path=perf_path,
+    )
+
+    assert report["schema"] == "octopus.topology_promotion_lift.v1"
+    assert report["count"] == 1
+    lift = report["reports"][0]
+    assert lift["promotion_source"] == "subagent_fitness"
+    assert lift["before"]["success_rate"] == 0.5
+    assert lift["after"]["success_rate"] == 1.0
+    assert lift["lift"]["success_rate_delta"] == 0.5
+    assert lift["verdict"] == "improved"
+
+
+def test_merged_topology_proposals_rank_by_historical_lift() -> None:
+    from runtime.safety.evolution.subagent_team_promotion import (
+        merged_topology_proposals,
+    )
+
+    proposals = [
+        {
+            "kind": "swap_agent",
+            "base_topology": "base-a",
+            "bucket": "code",
+            "detail": {"role": "generator", "new_agent": "slow-agent"},
+            "confidence": 0.8,
+            "rationale": "slow has high local fitness",
+        },
+        {
+            "kind": "swap_agent",
+            "base_topology": "base-b",
+            "bucket": "code",
+            "detail": {"role": "generator", "new_agent": "fast-agent"},
+            "confidence": 0.74,
+            "rationale": "fast has lower local fitness",
+        },
+    ]
+    lift_report = {
+        "schema": "octopus.topology_promotion_lift.v1",
+        "reports": [
+            {
+                "promotion_detail": {"role": "generator", "new_agent": "fast-agent"},
+                "lift": {"success_rate_delta": 0.4, "quality_score_delta": 0.2},
+                "verdict": "improved",
+            },
+            {
+                "promotion_detail": {"role": "generator", "new_agent": "slow-agent"},
+                "lift": {"success_rate_delta": -0.3, "quality_score_delta": -0.1},
+                "verdict": "regressed",
+            },
+        ],
+    }
+
+    merged = merged_topology_proposals(
+        proposals,
+        registry={},
+        promotion_lift_report=lift_report,
+    )
+
+    assert merged["proposals"][0]["detail"]["new_agent"] == "fast-agent"
+    assert merged["proposals"][0]["detail"]["historical_lift"]["improved_count"] == 1
+    assert merged["proposals"][0]["rank_score"] > merged["proposals"][1]["rank_score"]
+
+
+def test_team_runner_allows_retired_subagent_for_low_risk_with_warning(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.learning.review_queue import ReviewQueue
+
+    path = tmp_path / "review_queue.json"
+    _seed_subagent_reviews(
+        ReviewQueue(path),
+        role="weak_delegate",
+        statuses=["rejected", "rejected", "rejected"],
+    )
+    captured: dict[str, Any] = {}
+
+    def caller(**kwargs):
+        captured.update(kwargs)
+        return {"output": "low risk ok", "success": True}
+
+    topology = TeamTopology(
+        name="fitness-warn",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.PLANNER: AgentSpec(agent_id="weak_delegate")},
+    )
+    result = TeamRunner(role_caller=caller).run(
+        topology,
+        "summarize a note",
+        context={
+            "task_risk_level": "low",
+            "review_queue_path": str(path),
+        },
+    )
+
+    decision = captured["context"]["subagent_route_decision"]
+    assert result.success is True
+    assert decision["action"] == "allow_with_warning"
+    assert decision["verdict"] == "retire_candidate"
+
+
+def test_team_runner_blocks_operator_retired_subagent(tmp_path: Path) -> None:
+    from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+
+    policy_path = tmp_path / "subagent_policy.json"
+    SubagentPolicyStore(policy_path).decide(
+        "manually_retired",
+        action="retire",
+        reason="operator retired this subagent",
+        evidence_item_ids=["route-1"],
+        actor="operator-test",
+    )
+    called = {"hit": False}
+
+    def caller(**kwargs):
+        called["hit"] = True
+        return {"output": "should not run", "success": True}
+
+    topology = TeamTopology(
+        name="operator-policy-block",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.PLANNER: AgentSpec(agent_id="manually_retired")},
+    )
+    result = TeamRunner(role_caller=caller).run(
+        topology,
+        "summarize a note",
+        context={
+            "task_risk_level": "low",
+            "subagent_policy_path": str(policy_path),
+        },
+    )
+
+    assert called["hit"] is False
+    assert result.success is False
+    decision = result.role_outputs[0].metadata["subagent_route_decision"]
+    assert decision["action"] == "block"
+    assert decision["verdict"] == "operator_retired"
 
 
 # ── TeamRunner: evaluator_optimizer ──────────────────────────
@@ -487,6 +825,44 @@ def test_forge_rejects_missing_base(tmp_path: Path) -> None:
     ))
     assert result.accepted is False
     assert "base topology not found" in result.reason
+
+
+def test_forge_rejects_operator_retired_agent(tmp_path: Path) -> None:
+    from runtime.safety.evolution.subagent_policy import SubagentPolicyStore
+    from runtime.safety.organization.evolver import Proposal
+
+    base = TeamTopology(
+        name="orig",
+        protocol=CoordinationProtocol.SEQUENTIAL,
+        agents={Role.GENERATOR: AgentSpec(agent_id="alice")},
+        task_bucket="b",
+    )
+    reg_path = tmp_path / "registry.json"
+    policy_path = tmp_path / "subagent_policy.json"
+    save_registry({base.fingerprint: base}, path=reg_path)
+    SubagentPolicyStore(policy_path).decide(
+        "bob",
+        action="retire",
+        reason="operator retired bob",
+        actor="operator-test",
+    )
+
+    forge = TopologyForge(
+        registry_path=reg_path,
+        subagent_policy_path=policy_path,
+    )
+    result = forge.promote(Proposal(
+        kind="swap_agent",
+        base_topology=base.fingerprint,
+        bucket="b",
+        detail={"role": "generator", "old_agent": "alice", "new_agent": "bob"},
+        confidence=0.8,
+        rationale="test",
+    ))
+
+    assert result.accepted is False
+    assert "retired agents in operator policy" in result.reason
+    assert "generator:bob" in result.reason
 
 
 # ── gene_locks integration ───────────────────────────────────

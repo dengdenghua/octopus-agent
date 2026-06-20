@@ -10,17 +10,23 @@ import {
   Loader2Icon,
   SquareMousePointerIcon,
 } from "lucide-react";
-import { lazy, Suspense, useState, useRef, useEffect, useCallback } from "react";
+import {
+  lazy,
+  Suspense,
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+} from "react";
 import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { PreviewConsole } from "./preview-console";
 
-const CodeEditor = lazy(
-  () =>
-    import("./code-editor").then((module) => ({
-      default: module.CodeEditor,
-    })),
+const CodeEditor = lazy(() =>
+  import("./code-editor").then((module) => ({
+    default: module.CodeEditor,
+  })),
 );
 
 type PreviewDevice = "desktop" | "tablet" | "mobile";
@@ -103,9 +109,8 @@ export function LivePreviewPanel({
     </html>
   `);
 
-  const shouldUseInstrumentedHtml = Boolean(htmlContent) && (
-    !previewUrl || previewUrl.startsWith("blob:")
-  );
+  const shouldUseInstrumentedHtml =
+    Boolean(htmlContent) && (!previewUrl || previewUrl.startsWith("blob:"));
   const iframeSrcDoc = shouldUseInstrumentedHtml
     ? previewUrl?.startsWith("blob:")
       ? injectPreviewDiagnostics(htmlContent || "")
@@ -187,7 +192,9 @@ export function LivePreviewPanel({
       if (!doc?.body) return;
       const text = doc.body.innerText?.trim() ?? "";
       const hasVisualNode = Boolean(
-        doc.body.querySelector("canvas,img,svg,video,iframe,object,embed,input,button,textarea,select"),
+        doc.body.querySelector(
+          "canvas,img,svg,video,iframe,object,embed,input,button,textarea,select",
+        ),
       );
       const bodyHeight = doc.body.getBoundingClientRect().height;
       if (!text && !hasVisualNode && bodyHeight < 32) {
@@ -270,7 +277,7 @@ ${jsContent || "// No JavaScript"}
                 "p-1.5 rounded-md transition-all",
                 device === "desktop"
                   ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
               title={t.livePreview.desktop}
             >
@@ -282,7 +289,7 @@ ${jsContent || "// No JavaScript"}
                 "p-1.5 rounded-md transition-all",
                 device === "tablet"
                   ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
               title={t.livePreview.tablet}
             >
@@ -294,7 +301,7 @@ ${jsContent || "// No JavaScript"}
                 "p-1.5 rounded-md transition-all",
                 device === "mobile"
                   ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
               title={t.livePreview.mobile}
             >
@@ -324,7 +331,9 @@ ${jsContent || "// No JavaScript"}
               <span
                 className={cn(
                   "absolute right-1 top-1 size-1.5 rounded-full",
-                  browserRegressionEnabled ? "bg-emerald-500" : "bg-muted-foreground/35",
+                  browserRegressionEnabled
+                    ? "bg-emerald-500"
+                    : "bg-muted-foreground/35",
                 )}
               />
             </button>
@@ -335,11 +344,15 @@ ${jsContent || "// No JavaScript"}
               "p-1.5 rounded-md transition-all",
               showCode
                 ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted",
             )}
             title={showCode ? t.livePreview.hideCode : t.livePreview.showCode}
           >
-            {showCode ? <EyeIcon className="size-3.5" /> : <CodeIcon className="size-3.5" />}
+            {showCode ? (
+              <EyeIcon className="size-3.5" />
+            ) : (
+              <CodeIcon className="size-3.5" />
+            )}
           </button>
           <button
             onClick={handleRefresh}
@@ -400,7 +413,7 @@ ${jsContent || "// No JavaScript"}
                 className={cn(
                   "flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm transition-all duration-300",
                   device === "mobile" && "max-w-[375px]",
-                  device === "tablet" && "max-w-[768px]"
+                  device === "tablet" && "max-w-[768px]",
                 )}
                 style={{ width: deviceWidths[device] }}
               >
@@ -436,7 +449,9 @@ ${jsContent || "// No JavaScript"}
                   <div className="flex h-full min-h-[400px] flex-col items-center justify-center text-muted-foreground/50">
                     <MonitorIcon className="size-12 mb-3 opacity-30" />
                     <span className="text-sm">{t.livePreview.empty}</span>
-                    <span className="text-xs mt-1 opacity-60">{t.livePreview.emptyHint}</span>
+                    <span className="text-xs mt-1 opacity-60">
+                      {t.livePreview.emptyHint}
+                    </span>
                   </div>
                 )}
               </div>
@@ -517,7 +532,10 @@ function injectPreviewDiagnostics(html: string): string {
     return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}\n${bridge}`);
   }
   if (/<html(\s[^>]*)?>/i.test(html)) {
-    return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}\n<head>${bridge}</head>`);
+    return html.replace(
+      /<html(\s[^>]*)?>/i,
+      (match) => `${match}\n<head>${bridge}</head>`,
+    );
   }
   return `${bridge}\n${html}`;
 }

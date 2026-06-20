@@ -27,10 +27,13 @@
 | `planner.py` | — |
 | `plugin_auto_load.py` | Auto-activate pinned plugins/skill-packs from user mentions. |
 | `prompt_persistence.py` | — |
+| `react_checkpointing.py` | Periodic auto-checkpoint + distributed mirror for the ReAct loop. |
 | `react_context.py` | — |
 | `react_execution.py` | — |
 | `react_guards.py` | ReAct trajectory guards: post-step / pre-Final-Answer quality gates. |
 | `react_loop.py` | — |
+| `react_loop_controls.py` | Operator controls + run-budget knobs for the ReAct loop. |
+| `react_parallel_dispatch.py` | Concurrent multi-action dispatcher for the ReAct loop (口子 2). |
 | `react_parsing.py` | ReAct trajectory parsing + post-step quality checks. |
 | `react_security_detectors.py` | Security + quality detectors for ReAct trajectory steps. |
 | `react_security_guards.py` | Security + quality guards (post-step / pre-Final-Answer gates). |
@@ -41,13 +44,14 @@
 | `stable_prompt.py` | Cache-stable prompt builder. |
 | `thinking_mode.py` | Structured thinking-mode helpers. |
 | `todo_protocol.py` | Shared rules for the user-visible task checklist protocol. |
+| `token_juicer.py` | Token compression for tool observations before they enter the LLM message stream. |
 | `tool_output_sink.py` | Optional side-channel for streaming tool stdout/stderr. |
 | `turn_complexity.py` | Three-tier smart model routing. |
 | `verification_policy.py` | — |
 
 ## Who imports this
 
-**33** file(s) reference this package:
+**36** file(s) reference this package:
 
 - **`runtime/cli_code.py/`** · 1 file(s)
   - `runtime/cli_code.py`
@@ -61,11 +65,12 @@
   - `runtime/cli_serve.py`
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 4 file(s)
+- **`runtime/execution/`** · 5 file(s)
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/parallel_agents/orchestrator.py`
   - `runtime/execution/parallel_agents/stack_runner.py`
   - `runtime/execution/swarm/runtime.py`
+  - `runtime/execution/tool_spec_builder.py`
 - **`runtime/memory/`** · 1 file(s)
   - `runtime/memory/diagnostics/trace_store.py`
 - **`runtime/platform/`** · 5 file(s)
@@ -79,13 +84,13 @@
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 10 file(s)
+- **`runtime/sensing/`** · 12 file(s)
   - `runtime/sensing/gateway/agents_router.py`
   - `runtime/sensing/gateway/config_router.py`
   - `runtime/sensing/gateway/evolution_ops/recipe_forge.py`
   - `runtime/sensing/gateway/observability_router.py`
   - `runtime/sensing/gateway/openai_gateway/context_manager.py`
-  - _… and 5 more_
+  - _… and 7 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`

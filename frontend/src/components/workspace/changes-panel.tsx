@@ -54,7 +54,9 @@ export function ChangesPanel({ className, onFileClick }: ChangesPanelProps) {
           <div className="flex h-full flex-col items-center justify-center px-4 text-muted-foreground/50">
             <FileIcon className="mb-2 size-8 opacity-30" />
             <span className="text-xs">{t.changesPanel.empty}</span>
-            <span className="mt-1 text-[10px] opacity-60">{t.changesPanel.emptyHint}</span>
+            <span className="mt-1 text-[10px] opacity-60">
+              {t.changesPanel.emptyHint}
+            </span>
           </div>
         ) : (
           <ul className="divide-y divide-border/30">
@@ -80,7 +82,7 @@ function ChangeRow({
 }: {
   event: FileOpEvent;
   onFileClick?: (path: string) => void;
-  t: ReturnType<typeof useI18n>['t'];
+  t: ReturnType<typeof useI18n>["t"];
 }) {
   const [expanded, setExpanded] = useState(false);
   const [accepted, setAccepted] = useState<Record<string, boolean | null>>({});
@@ -116,7 +118,9 @@ function ChangeRow({
       notifyWorkspaceChanged();
       toast.success(t.codeMode.fileReverted);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.codeMode.failedToRevertFile);
+      toast.error(
+        error instanceof Error ? error.message : t.codeMode.failedToRevertFile,
+      );
     } finally {
       setReverting(false);
     }
@@ -147,7 +151,9 @@ function ChangeRow({
       notifyWorkspaceChanged();
       toast.success(t.codeMode.hunkReverted);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.codeMode.failedToRevertHunk);
+      toast.error(
+        error instanceof Error ? error.message : t.codeMode.failedToRevertHunk,
+      );
     } finally {
       setBusyHunks((prev) => ({ ...prev, [hunk.id]: false }));
     }
@@ -160,7 +166,10 @@ function ChangeRow({
           type="button"
           onClick={() => hasDiff && setExpanded((v) => !v)}
           disabled={!hasDiff}
-          className={cn("shrink-0", hasDiff ? "cursor-pointer" : "cursor-default")}
+          className={cn(
+            "shrink-0",
+            hasDiff ? "cursor-pointer" : "cursor-default",
+          )}
         >
           {hasDiff ? (
             expanded ? (
@@ -182,7 +191,9 @@ function ChangeRow({
             {fileName}
           </div>
           {dirPath && (
-            <div className="truncate text-[10px] text-muted-foreground/60">{dirPath}</div>
+            <div className="truncate text-[10px] text-muted-foreground/60">
+              {dirPath}
+            </div>
           )}
         </button>
         {hunks.length > 0 && (
@@ -195,12 +206,17 @@ function ChangeRow({
         </span>
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); void handleRevert(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleRevert();
+          }}
           disabled={reverting}
           className="shrink-0 rounded p-0.5 text-muted-foreground/50 transition-colors hover:bg-rose-500/10 hover:text-rose-500"
           title={t.codeMode.revertToLastCommit}
         >
-          <RotateCcwIcon className={cn("size-3", reverting && "animate-spin")} />
+          <RotateCcwIcon
+            className={cn("size-3", reverting && "animate-spin")}
+          />
         </button>
       </div>
       {expanded && event.diff && (
@@ -280,12 +296,18 @@ function HunkBlock({
                 <td
                   className={cn(
                     "px-2 py-0.5 whitespace-pre",
-                    line.type === "add" && "text-emerald-700 dark:text-emerald-400",
-                    line.type === "remove" && "text-rose-700 dark:text-rose-400",
+                    line.type === "add" &&
+                      "text-emerald-700 dark:text-emerald-400",
+                    line.type === "remove" &&
+                      "text-rose-700 dark:text-rose-400",
                   )}
                 >
                   <span className="mr-2 inline-block w-2 text-muted-foreground/60">
-                    {line.type === "add" ? "+" : line.type === "remove" ? "-" : " "}
+                    {line.type === "add"
+                      ? "+"
+                      : line.type === "remove"
+                        ? "-"
+                        : " "}
                   </span>
                   {line.content || "​"}
                 </td>
@@ -322,7 +344,9 @@ async function responseErrorMessage(response: Response): Promise<string> {
     const payload = await response.json();
     if (typeof payload?.detail === "string") return payload.detail;
     if (payload?.detail?.error) return String(payload.detail.error);
-  } catch (e) { swallow(e); }
+  } catch (e) {
+    swallow(e);
+  }
   return response.statusText || `Request failed (${response.status})`;
 }
 

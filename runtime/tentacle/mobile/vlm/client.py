@@ -453,7 +453,7 @@ class VlmClient:
                     choice = payload["choices"][0]
                 except (KeyError, IndexError):
                     logger.error("VLM 响应缺少 choices: %s", payload)
-                    raise ValueError("VLM 响应格式异常：缺少 choices")
+                    raise ValueError("VLM 响应格式异常：缺少 choices") from None
 
                 content = choice.get("message", {}).get("content", "")
 
@@ -478,7 +478,7 @@ class VlmClient:
                 # 尝试解析错误体
                 try:
                     err = json.loads(e.read().decode("utf-8"))
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort; fail-open
                     err = {"error": {"message": str(e)}}
                 logger.error(
                     "VLM HTTP %s (attempt %d/%d): %s",

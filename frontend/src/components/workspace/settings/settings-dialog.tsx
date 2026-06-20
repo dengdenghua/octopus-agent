@@ -1,4 +1,3 @@
-
 import {
   ActivityIcon,
   BellIcon,
@@ -35,15 +34,24 @@ import { Suspense, lazy } from "react";
 // that hasn't been visited in this session triggered a fresh chunk
 // download + Suspense fallback, which users correctly perceived as "every
 // tab reloads".
-const importAbout = () => import("@/components/workspace/settings/about-settings-page");
-const importAccount = () => import("@/components/workspace/settings/account-settings-page");
-const importAppearance = () => import("@/components/workspace/settings/appearance-settings-page");
-const importMemory = () => import("@/components/workspace/settings/memory-settings-page");
-const importNotification = () => import("@/components/workspace/settings/notification-settings-page");
-const importModel = () => import("@/components/workspace/settings/model-settings-page");
-const importSubscription = () => import("@/components/workspace/settings/subscription-settings-page");
-const importPrivacy = () => import("@/components/workspace/settings/privacy-settings-page");
-const importAutomation = () => import("@/components/workspace/settings/automation-settings-page");
+const importAbout = () =>
+  import("@/components/workspace/settings/about-settings-page");
+const importAccount = () =>
+  import("@/components/workspace/settings/account-settings-page");
+const importAppearance = () =>
+  import("@/components/workspace/settings/appearance-settings-page");
+const importMemory = () =>
+  import("@/components/workspace/settings/memory-settings-page");
+const importNotification = () =>
+  import("@/components/workspace/settings/notification-settings-page");
+const importModel = () =>
+  import("@/components/workspace/settings/model-settings-page");
+const importSubscription = () =>
+  import("@/components/workspace/settings/subscription-settings-page");
+const importPrivacy = () =>
+  import("@/components/workspace/settings/privacy-settings-page");
+const importAutomation = () =>
+  import("@/components/workspace/settings/automation-settings-page");
 const importMcp = () =>
   import("@/components/workspace/settings/mcp-settings-page").then((mod) => ({
     default: mod.McpSettingsPage,
@@ -70,10 +78,21 @@ function preloadSettingsPages(): void {
   if (preloadStarted) return;
   preloadStarted = true;
   [
-    importAbout, importAccount, importAppearance,
-    importMemory, importNotification, importModel, importSubscription,
-    importPrivacy, importAutomation, importMcp,
-  ].forEach((fn) => { fn().catch((e) => { swallow(e); }); });
+    importAbout,
+    importAccount,
+    importAppearance,
+    importMemory,
+    importNotification,
+    importModel,
+    importSubscription,
+    importPrivacy,
+    importAutomation,
+    importMcp,
+  ].forEach((fn) => {
+    fn().catch((e) => {
+      swallow(e);
+    });
+  });
 }
 
 import { swallow } from "@/core/utils/log";
@@ -115,7 +134,9 @@ function readSavedSize(): { w: number; h: number } | null {
     if (typeof parsed.w === "number" && typeof parsed.h === "number") {
       return { w: parsed.w, h: parsed.h };
     }
-  } catch (e) { swallow(e); }
+  } catch (e) {
+    swallow(e);
+  }
   return null;
 }
 
@@ -124,12 +145,14 @@ function isPlaceholderUsername(username?: string | null): boolean {
   return !value || value === "anonymous" || value === "__anonymous__";
 }
 
-function getAccountDisplayName(user: {
-  mobile?: string;
-  email?: string;
-  username?: string;
-  actor_id?: string;
-} | null): string | null {
+function getAccountDisplayName(
+  user: {
+    mobile?: string;
+    email?: string;
+    username?: string;
+    actor_id?: string;
+  } | null,
+): string | null {
   if (!user) return null;
   return (
     user.mobile ||
@@ -203,7 +226,9 @@ export function SettingsDialog(props: SettingsDialogProps) {
               DIALOG_SIZE_KEY,
               JSON.stringify(latest),
             );
-          } catch (e) { swallow(e, "storage"); }
+          } catch (e) {
+            swallow(e, "storage");
+          }
         }
         return latest;
       });
@@ -244,81 +269,86 @@ export function SettingsDialog(props: SettingsDialogProps) {
     }
   };
 
-  const sections = useMemo(
-    () => {
-      // Stable order across login states · account/subscription
-      // are greyed out for guests instead of being reordered, so
-      // users don't lose muscle memory of where each tab lives.
-      type Section = {
-        id: SettingsSection;
-        label: string;
-        icon: React.ComponentType<{ className?: string }>;
-        disabled?: boolean;
-        disabledReason?: string;
-      };
+  const sections = useMemo(() => {
+    // Stable order across login states · account/subscription
+    // are greyed out for guests instead of being reordered, so
+    // users don't lose muscle memory of where each tab lives.
+    type Section = {
+      id: SettingsSection;
+      label: string;
+      icon: React.ComponentType<{ className?: string }>;
+      disabled?: boolean;
+      disabledReason?: string;
+    };
 
-      const all: Section[] = [
-        {
-          id: "account",
-          label: t.settings.sections.account,
-          icon: SettingsIcon,
-          disabled: isGuest,
-          disabledReason: t.auth.guestMode.title,
-        },
-        {
-          id: "subscription",
-          label: t.settings.sections.subscription,
-          icon: CreditCardIcon,
-          disabled: isGuest,
-          disabledReason: t.auth.guestMode.title,
-        },
-        {
-          id: "appearance",
-          label: t.settings.sections.appearance,
-          icon: PaletteIcon,
-        },
-        {
-          id: "models",
-          label: t.modelSettings.title,
-          icon: CpuIcon,
-        },
-        {
-          id: "notification",
-          label: t.settings.sections.notification,
-          icon: BellIcon,
-        },
-        {
-          id: "memory",
-          label: t.settings.sections.memory,
-          icon: BrainIcon,
-        },
-        { id: "automation", label: t.settings.sections.automation, icon: ZapIcon },
-        { id: "mcp", label: t.mcpSettings.title, icon: ServerIcon },
-        {
-          id: "privacy",
-          label: t.settings.sections.privacy,
-          icon: ShieldIcon,
-        },
-        { id: "observability", label: t.settings.sections.observability, icon: ActivityIcon },
-        { id: "about", label: t.settings.sections.about, icon: InfoIcon },
-      ];
+    const all: Section[] = [
+      {
+        id: "account",
+        label: t.settings.sections.account,
+        icon: SettingsIcon,
+        disabled: isGuest,
+        disabledReason: t.auth.guestMode.title,
+      },
+      {
+        id: "subscription",
+        label: t.settings.sections.subscription,
+        icon: CreditCardIcon,
+        disabled: isGuest,
+        disabledReason: t.auth.guestMode.title,
+      },
+      {
+        id: "appearance",
+        label: t.settings.sections.appearance,
+        icon: PaletteIcon,
+      },
+      {
+        id: "models",
+        label: t.modelSettings.title,
+        icon: CpuIcon,
+      },
+      {
+        id: "notification",
+        label: t.settings.sections.notification,
+        icon: BellIcon,
+      },
+      {
+        id: "memory",
+        label: t.settings.sections.memory,
+        icon: BrainIcon,
+      },
+      {
+        id: "automation",
+        label: t.settings.sections.automation,
+        icon: ZapIcon,
+      },
+      { id: "mcp", label: t.mcpSettings.title, icon: ServerIcon },
+      {
+        id: "privacy",
+        label: t.settings.sections.privacy,
+        icon: ShieldIcon,
+      },
+      {
+        id: "observability",
+        label: t.settings.sections.observability,
+        icon: ActivityIcon,
+      },
+      { id: "about", label: t.settings.sections.about, icon: InfoIcon },
+    ];
 
-      return all;
-    },
-    [
-      isGuest,
-      t.auth.guestMode.title,
-      t.settings.sections.account,
-      t.settings.sections.subscription,
-      t.settings.sections.appearance,
-      t.modelSettings.title,
-      t.settings.sections.memory,
-      t.settings.sections.automation,
-      t.mcpSettings.title,
-      t.settings.sections.notification,
-      t.settings.sections.about,
-    ],
-  );
+    return all;
+  }, [
+    isGuest,
+    t.auth.guestMode.title,
+    t.settings.sections.account,
+    t.settings.sections.subscription,
+    t.settings.sections.appearance,
+    t.modelSettings.title,
+    t.settings.sections.memory,
+    t.settings.sections.automation,
+    t.mcpSettings.title,
+    t.settings.sections.notification,
+    t.settings.sections.about,
+  ]);
   return (
     <Dialog
       {...dialogProps}
@@ -343,7 +373,9 @@ export function SettingsDialog(props: SettingsDialogProps) {
               of two. The description is redundant context once the dialog is
               open — we keep a muted copy for screen readers / first-time users. */}
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-            <DialogTitle className="leading-none">{t.settings.title}</DialogTitle>
+            <DialogTitle className="leading-none">
+              {t.settings.title}
+            </DialogTitle>
             <p className="text-muted-foreground text-xs leading-none">
               {t.settings.description}
             </p>
@@ -360,7 +392,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
                     {accountName ?? t.auth.notLoggedIn}
                   </p>
                   <p className="text-muted-foreground truncate text-[11px]">
-                    {isGuest ? t.auth.guestMode.title : (user?.email && user.email !== accountName ? user.email : t.auth.currentAccount)}
+                    {isGuest
+                      ? t.auth.guestMode.title
+                      : user?.email && user.email !== accountName
+                        ? user.email
+                        : t.auth.currentAccount}
                   </p>
                 </div>
               </div>
@@ -396,41 +432,45 @@ export function SettingsDialog(props: SettingsDialogProps) {
         <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[220px_1fr]">
           <nav className="bg-sidebar min-h-0 overflow-y-auto rounded-lg border p-2">
             <ul className="space-y-1 pr-1">
-              {sections.map(({ id, label, icon: Icon, disabled, disabledReason }) => {
-                const active = activeSection === id;
-                return (
-                  <li key={id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (disabled) return;
-                        setActiveSection(id as SettingsSection);
-                      }}
-                      disabled={disabled}
-                      title={disabled ? disabledReason : undefined}
-                      aria-disabled={disabled || undefined}
-                      className={cn(
-                        // Match sidebar NavRow: opacity + leading 2px
-                        // accent bar instead of a full primary fill.
-                        "group/sec relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] duration-150",
-                        disabled
-                          ? "cursor-not-allowed opacity-40"
-                          : "opacity-75 hover:opacity-100 hover:bg-muted/50",
-                        active &&
-                          "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_70%,transparent)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r before:bg-primary/70",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                      <span className="flex-1 truncate text-left">{label}</span>
-                      {disabled && (
-                        <span className="rounded border border-border/60 px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground">
-                          {t.common.guest}
+              {sections.map(
+                ({ id, label, icon: Icon, disabled, disabledReason }) => {
+                  const active = activeSection === id;
+                  return (
+                    <li key={id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (disabled) return;
+                          setActiveSection(id as SettingsSection);
+                        }}
+                        disabled={disabled}
+                        title={disabled ? disabledReason : undefined}
+                        aria-disabled={disabled || undefined}
+                        className={cn(
+                          // Match sidebar NavRow: opacity + leading 2px
+                          // accent bar instead of a full primary fill.
+                          "group/sec relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] duration-150",
+                          disabled
+                            ? "cursor-not-allowed opacity-40"
+                            : "opacity-75 hover:opacity-100 hover:bg-muted/50",
+                          active &&
+                            "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_70%,transparent)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r before:bg-primary/70",
+                        )}
+                      >
+                        <Icon className="size-4" />
+                        <span className="flex-1 truncate text-left">
+                          {label}
                         </span>
-                      )}
-                    </button>
-                  </li>
-                );
-              })}
+                        {disabled && (
+                          <span className="rounded border border-border/60 px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground">
+                            {t.common.guest}
+                          </span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                },
+              )}
             </ul>
           </nav>
           <ScrollArea className="h-full min-h-0 rounded-lg border">
@@ -441,43 +481,70 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   effectively removes the "every tab reloads" flicker
                   users were seeing. */}
               {activeSection === "account" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><AccountSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <AccountSettingsPage />
+                </Suspense>
               )}
               {activeSection === "subscription" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><SubscriptionSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <SubscriptionSettingsPage />
+                </Suspense>
               )}
               {activeSection === "appearance" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><AppearanceSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <AppearanceSettingsPage />
+                </Suspense>
               )}
               {activeSection === "models" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><ModelSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <ModelSettingsPage />
+                </Suspense>
               )}
               {activeSection === "memory" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><MemorySettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <MemorySettingsPage />
+                </Suspense>
               )}
               {activeSection === "automation" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><AutomationSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <AutomationSettingsPage />
+                </Suspense>
               )}
               {activeSection === "mcp" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><McpSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <McpSettingsPage />
+                </Suspense>
               )}
               {activeSection === "privacy" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><PrivacySettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <PrivacySettingsPage />
+                </Suspense>
               )}
               {activeSection === "notification" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><NotificationSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <NotificationSettingsPage />
+                </Suspense>
               )}
               {activeSection === "observability" && (
                 <div className="flex flex-col items-center gap-4 py-12 text-center">
                   <ActivityIcon className="size-10 text-muted-foreground/50" />
-                  <p className="text-sm text-muted-foreground">{t.settings.sections.observability}</p>
-                  <Button onClick={() => { dialogProps.onOpenChange?.(false); navigate("/workspace/observability"); }}>
+                  <p className="text-sm text-muted-foreground">
+                    {t.settings.sections.observability}
+                  </p>
+                  <Button
+                    onClick={() => {
+                      dialogProps.onOpenChange?.(false);
+                      navigate("/workspace/observability");
+                    }}
+                  >
                     {t.settings.sections.observability}
                   </Button>
                 </div>
               )}
               {activeSection === "about" && (
-                <Suspense fallback={<SettingsPageSkeleton />}><AboutSettingsPage /></Suspense>
+                <Suspense fallback={<SettingsPageSkeleton />}>
+                  <AboutSettingsPage />
+                </Suspense>
               )}
             </div>
           </ScrollArea>
@@ -532,14 +599,18 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 DIALOG_SIZE_KEY,
                 JSON.stringify(next),
               );
-            } catch (err) { swallow(err, "storage"); }
+            } catch (err) {
+              swallow(err, "storage");
+            }
           }}
           role="separator"
           aria-orientation="vertical"
           aria-label={t.settingsDialog.dragToResize}
           aria-valuenow={size ? Math.round(size.w) : undefined}
           aria-valuemin={MIN_W}
-          aria-valuemax={typeof window !== "undefined" ? window.innerWidth - 32 : undefined}
+          aria-valuemax={
+            typeof window !== "undefined" ? window.innerWidth - 32 : undefined
+          }
           title={t.settingsDialog.dragToResize}
           tabIndex={0}
           className="absolute bottom-0 right-0 z-50 flex size-5 cursor-nwse-resize items-end justify-end rounded-sm p-1 text-muted-foreground/40 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"

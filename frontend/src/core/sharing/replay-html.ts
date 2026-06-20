@@ -53,7 +53,9 @@ export interface ReplayData {
  * open a comment early.
  */
 function embedJson(value: unknown): string {
-  return JSON.stringify(value).replace(/<\//g, "<\\/").replace(/<!--/g, "<\\!--");
+  return JSON.stringify(value)
+    .replace(/<\//g, "<\\/")
+    .replace(/<!--/g, "<\\!--");
 }
 
 function cleanStep(step: ReplayStep): ReplayStep {
@@ -71,7 +73,9 @@ export function buildReplayHtml(replay: ReplayData): string {
   const title = (replay.title || "Octopus replay").trim();
   const brand = (replay.brand || "Octopus Agent").trim();
   const footer = (replay.footer || "").trim();
-  const frameMs = Number.isFinite(replay.frameMs) ? Math.max(200, replay.frameMs as number) : 1400;
+  const frameMs = Number.isFinite(replay.frameMs)
+    ? Math.max(200, replay.frameMs as number)
+    : 1400;
   const steps = (replay.steps || [])
     .filter((s) => s && (s.title || s.body || s.image))
     .map(cleanStep);
@@ -128,9 +132,9 @@ footer { margin-top:20px; color:#475569; font-size:12px; }
 <div class="brand">${escapeXml(brand)} · replay</div>
 <h1>${escapeXml(title)}</h1>
 ${
-    empty
-      ? `<div class="detail"><div class="empty">No steps in this replay.</div></div>`
-      : `<div class="layout">
+  empty
+    ? `<div class="detail"><div class="empty">No steps in this replay.</div></div>`
+    : `<div class="layout">
 <div class="steps" id="steps"></div>
 <div>
 <div class="detail">
@@ -151,13 +155,13 @@ ${
 <div class="hint">← → 切换 · 空格 播放/暂停 · Home/End 首尾</div>
 </div>
 </div>`
-  }
+}
 <footer>${escapeXml(footer)}</footer>
 </div>
 ${
-    empty
-      ? ""
-      : `<script>
+  empty
+    ? ""
+    : `<script>
 (function(){
   var STEPS = ${stepData};
   var MS = ${frameMs};
@@ -230,7 +234,7 @@ ${
   render();
 })();
 </script>`
-  }
+}
 </body>
 </html>`;
 }

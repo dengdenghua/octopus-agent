@@ -60,6 +60,30 @@ function pluginImageUrl(plugin: PluginInfo | HubPluginInfo): string | null {
   return `${getBackendBaseURL()}${raw}`;
 }
 
+function pluginSurfaceBadges(entry: PluginEntry): string[] {
+  if (entry.source === "hub") {
+    const labels = entry.plugin.capabilities
+      .map((capability) => capability.type)
+      .filter(Boolean)
+      .map((type) => {
+        if (type === "skill") return "技能";
+        if (type === "channel") return "通道";
+        if (type === "api") return "API";
+        if (type === "config_ui") return "配置";
+        return type;
+      });
+    return Array.from(new Set(labels)).slice(0, 4);
+  }
+  const surfaces = entry.plugin.smoke?.surfaces;
+  const badges: string[] = [];
+  if (surfaces?.mcp) badges.push("MCP");
+  if (surfaces?.apps) badges.push("App");
+  if (surfaces?.skills) badges.push("技能");
+  if (surfaces?.commands) badges.push("命令");
+  if (surfaces?.capabilities && !badges.includes("API")) badges.push("能力");
+  return badges.slice(0, 5);
+}
+
 // ── Config dialog for PluginHub plugins ───────────────────────
 
 function HubPluginConfigDialog({
@@ -95,7 +119,17 @@ function HubPluginConfigDialog({
   };
 
   const schema = plugin.config_schema as
-    | { properties?: Record<string, { type?: string; title?: string; description?: string; format?: string }> }
+    | {
+        properties?: Record<
+          string,
+          {
+            type?: string;
+            title?: string;
+            description?: string;
+            format?: string;
+          }
+        >;
+      }
     | undefined;
   const properties = schema?.properties;
 
@@ -104,27 +138,38 @@ function HubPluginConfigDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{plugin.name} 配置</DialogTitle>
-          <DialogDescription>配置 {plugin.name} 插件的运行参数</DialogDescription>
+          <DialogDescription>
+            配置 {plugin.name} 插件的运行参数
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           {properties && Object.keys(properties).length > 0 ? (
             Object.entries(properties).map(([key, prop]) => (
               <div key={key} className="space-y-1">
-                <Label htmlFor={`cfg-${key}`}>
-                  {prop.title || key}
-                </Label>
+                <Label htmlFor={`cfg-${key}`}>{prop.title || key}</Label>
                 {prop.description && (
-                  <p className="text-xs text-muted-foreground">{prop.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {prop.description}
+                  </p>
                 )}
                 <Input
                   id={`cfg-${key}`}
-                  type={prop.format === "password" ? "password" : prop.type === "integer" ? "number" : "text"}
+                  type={
+                    prop.format === "password"
+                      ? "password"
+                      : prop.type === "integer"
+                        ? "number"
+                        : "text"
+                  }
                   value={String(config[key] ?? "")}
                   onChange={(e) =>
                     setConfig((prev) => ({
                       ...prev,
-                      [key]: prop.type === "integer" ? parseInt(e.target.value) || 0 : e.target.value,
+                      [key]:
+                        prop.type === "integer"
+                          ? parseInt(e.target.value) || 0
+                          : e.target.value,
                     }))
                   }
                 />
@@ -170,12 +215,13 @@ function PluginListItem({
     : plugin.enabled
       ? "已启用"
       : "未启用";
+  const surfaceBadges = pluginSurfaceBadges(entry);
 
   return (
-    <div className="group flex min-w-0 items-center gap-4 rounded-xl px-3 py-3 transition-colors hover:bg-muted/35">
+    <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border/45 bg-card/55 px-3 py-3 shadow-sm transition-colors hover:border-primary/20 hover:bg-card">
       <div
         className={cn(
-          "flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border/50 bg-background shadow-sm",
+          "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm",
           !plugin.enabled && "bg-muted/40",
         )}
       >
@@ -204,14 +250,26 @@ function PluginListItem({
         <p className="mt-1 line-clamp-1 text-sm leading-5 text-muted-foreground">
           {plugin.description}
         </p>
+        {surfaceBadges.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {surfaceBadges.map((badge) => (
+              <span
+                key={badge}
+                className="rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground"
+              >
+                {badge}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         {hasConfig && hubPlugin && (
           <button
             type="button"
             aria-label={`配置 ${plugin.name}`}
             onClick={() => onConfigure(hubPlugin)}
-            className="flex size-9 items-center justify-center rounded-xl bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex size-8 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Settings2 className="size-4" />
           </button>
@@ -219,11 +277,11 @@ function PluginListItem({
         <span
           title={statusTitle}
           className={cn(
-            "flex size-9 items-center justify-center rounded-xl bg-muted/55 transition-colors",
+            "flex size-8 items-center justify-center rounded-lg bg-muted/55 transition-colors",
             plugin.error
               ? "text-rose-500"
               : plugin.enabled
-                ? "bg-transparent text-muted-foreground/70"
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
                 : "text-foreground hover:bg-muted",
           )}
         >
@@ -273,8 +331,7 @@ export default function PluginsPage() {
     }
     const hash = window.location.hash;
     const base = hash.split("?")[0] ?? "";
-    window.location.hash =
-      tab === "plugins" ? base : `${base}?tab=packs`;
+    window.location.hash = tab === "plugins" ? base : `${base}?tab=packs`;
   }, []);
 
   const switchSkillView = useCallback((view: SkillView) => {
@@ -328,7 +385,10 @@ export default function PluginsPage() {
   const filteredPluginEntries = useMemo(() => {
     const needle = pluginQuery.trim().toLowerCase();
     return pluginEntries.filter(({ plugin }) => {
-      if (pluginAuthorFilter !== "all" && plugin.author !== pluginAuthorFilter) {
+      if (
+        pluginAuthorFilter !== "all" &&
+        plugin.author !== pluginAuthorFilter
+      ) {
         return false;
       }
       if (pluginStatusFilter === "enabled" && !plugin.enabled) return false;
@@ -353,7 +413,9 @@ export default function PluginsPage() {
       <div className="workspace-panel mx-auto flex min-h-[40vh] max-w-6xl items-center justify-center rounded-lg">
         <div className="flex flex-col items-center gap-3">
           <Puzzle className="size-8 animate-pulse text-purple-500" />
-          <p className="text-sm text-muted-foreground">{t.plugins.pageLoading}</p>
+          <p className="text-sm text-muted-foreground">
+            {t.plugins.pageLoading}
+          </p>
         </div>
       </div>
     );
@@ -438,7 +500,9 @@ export default function PluginsPage() {
                 className="h-11 shrink-0 rounded-2xl border border-transparent bg-muted/60 px-4 text-sm font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
                 value={pluginStatusFilter}
                 onChange={(event) =>
-                  setPluginStatusFilter(event.target.value as PluginStatusFilter)
+                  setPluginStatusFilter(
+                    event.target.value as PluginStatusFilter,
+                  )
                 }
               >
                 <option value="all">全部</option>
@@ -449,7 +513,7 @@ export default function PluginsPage() {
           </div>
 
           {filteredPluginEntries.length > 0 ? (
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-x-12 gap-y-5">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
               {filteredPluginEntries.map((entry) => (
                 <PluginListItem
                   key={`${entry.source}-${entry.plugin.id}`}

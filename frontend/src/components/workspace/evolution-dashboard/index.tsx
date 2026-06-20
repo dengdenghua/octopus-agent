@@ -1,6 +1,5 @@
-import React, { useMemo } from "react";
+import React from "react";
 import {
-  AlertTriangleIcon,
   BrainCircuitIcon,
   TrendingUpIcon,
   ActivityIcon,
@@ -8,8 +7,6 @@ import {
   Loader2Icon,
   BookOpenIcon,
   LightbulbIcon,
-  ZapIcon,
-  InfoIcon,
 } from "lucide-react";
 
 import {
@@ -43,12 +40,6 @@ function numberOrZero(value: unknown): number {
 
 function fixed(value: unknown, digits: number): string {
   return numberOrZero(value).toFixed(digits);
-}
-
-function countColor(value: number, good: number, moderate: number): string {
-  if (value >= good) return "text-emerald-500";
-  if (value >= moderate) return "text-amber-500";
-  return "text-red-500";
 }
 
 function successRateClass(rate: number): string {
@@ -161,7 +152,10 @@ function GrowthStoryHero({
   const totalMemories = numberOrZero(memory?.total_facts);
   const ruleCount = numberOrZero(memory?.categories?.rules);
   const hasEvidence =
-    totalSkills > 0 || totalMemories > 0 || learningEvents > 0 || recommendationCount > 0;
+    totalSkills > 0 ||
+    totalMemories > 0 ||
+    learningEvents > 0 ||
+    recommendationCount > 0;
   const stages = [
     {
       icon: ActivityIcon,
@@ -214,7 +208,12 @@ function GrowthStoryHero({
           </div>
           <div className="shrink-0 rounded-lg border border-primary/20 bg-background/80 px-4 py-3 text-right shadow-sm">
             <div className="text-[11px] text-muted-foreground">综合提升感</div>
-            <div className={cn("mt-1 text-3xl font-bold tabular-nums", scoreColor(improvementScore))}>
+            <div
+              className={cn(
+                "mt-1 text-3xl font-bold tabular-nums",
+                scoreColor(improvementScore),
+              )}
+            >
               {improvementPct}
             </div>
             <div className="text-[11px] text-muted-foreground">/ 100</div>
@@ -235,20 +234,32 @@ function GrowthStoryHero({
           icon={BookOpenIcon}
           title="自动形成的技能"
           value={autoSkills}
-          detail={totalSkills > 0 ? `占全部技能 ${formatPercent(autoSkills / Math.max(totalSkills, 1))}` : "等待技能沉淀"}
+          detail={
+            totalSkills > 0
+              ? `占全部技能 ${formatPercent(autoSkills / Math.max(totalSkills, 1))}`
+              : "等待技能沉淀"
+          }
         />
         <StoryMetric
           icon={DatabaseIcon}
           title="可复用经验库"
           value={totalMemories}
-          detail={ruleCount > 0 ? `${ruleCount} 条是规则/避坑经验` : "记住事实、偏好和执行经验"}
+          detail={
+            ruleCount > 0
+              ? `${ruleCount} 条是规则/避坑经验`
+              : "记住事实、偏好和执行经验"
+          }
           sparkline={memorySparkline.length >= 2 ? memorySparkline : undefined}
         />
         <StoryMetric
           icon={LightbulbIcon}
           title="下一步建议"
           value={recommendationCount}
-          detail={recommendationCount > 0 ? "可以继续点开查看" : "暂时没有需要你处理的建议"}
+          detail={
+            recommendationCount > 0
+              ? "可以继续点开查看"
+              : "暂时没有需要你处理的建议"
+          }
         />
       </div>
     </section>
@@ -284,7 +295,9 @@ function EvolutionStage({
           <span
             className={cn(
               "flex size-6 items-center justify-center rounded-full text-[11px] font-semibold",
-              stage.done ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+              stage.done
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground",
             )}
           >
             {index}
@@ -292,7 +305,8 @@ function EvolutionStage({
           <Icon className={cn("size-3.5", stage.done && "text-primary")} />
         </div>
         <span className="text-[11px] tabular-nums">
-          {stage.value}{stage.unit}
+          {stage.value}
+          {stage.unit}
         </span>
       </div>
       <div className="mt-3 text-sm font-semibold">{stage.title}</div>
@@ -329,7 +343,14 @@ function StoryMetric({
             {detail}
           </div>
         </div>
-        {sparkline && <SparklineChart data={sparkline} color="#3b82f6" width={64} height={24} />}
+        {sparkline && (
+          <SparklineChart
+            data={sparkline}
+            color="#3b82f6"
+            width={64}
+            height={24}
+          />
+        )}
       </div>
     </div>
   );
@@ -352,8 +373,10 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   const lastRate = numberOrZero(last?.success_rate);
   const delta = lastRate - firstRate;
   const avgDuration =
-    compact.reduce((sum, point) => sum + numberOrZero(point.avg_duration_ms), 0) /
-    compact.length;
+    compact.reduce(
+      (sum, point) => sum + numberOrZero(point.avg_duration_ms),
+      0,
+    ) / compact.length;
 
   return (
     <section className="rounded-xl border border-border/60 bg-card p-4">
@@ -363,7 +386,9 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
           <div
             className={cn(
               "text-sm font-semibold tabular-nums",
-              delta >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400",
+              delta >= 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400",
             )}
           >
             {delta >= 0 ? "+" : ""}
@@ -377,11 +402,20 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
         <MiniStat label="当前成功率" value={formatPercent(lastRate, 0)} />
         <MiniStat
           label="平均耗时"
-          value={avgDuration >= 1000 ? `${fixed(avgDuration / 1000, 1)}s` : `${Math.round(avgDuration)}ms`}
+          value={
+            avgDuration >= 1000
+              ? `${fixed(avgDuration / 1000, 1)}s`
+              : `${Math.round(avgDuration)}ms`
+          }
         />
         <MiniStat
           label="最近技能调用"
-          value={String(compact.reduce((sum, point) => sum + numberOrZero(point.skills_used), 0))}
+          value={String(
+            compact.reduce(
+              (sum, point) => sum + numberOrZero(point.skills_used),
+              0,
+            ),
+          )}
         />
       </div>
 
@@ -389,7 +423,10 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
         {compact.map((point) => {
           const rate = numberOrZero(point.success_rate);
           return (
-            <div key={point.week} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+            <div
+              key={point.week}
+              className="flex min-w-0 flex-1 flex-col items-center gap-2"
+            >
               <div className="flex h-20 w-full items-end justify-center">
                 <div
                   className={cn(
@@ -403,7 +440,9 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
                   style={{ height: `${Math.max(rate * 100, 6)}%` }}
                 />
               </div>
-              <div className="truncate text-[10px] text-muted-foreground">{point.week}</div>
+              <div className="truncate text-[10px] text-muted-foreground">
+                {point.week}
+              </div>
             </div>
           );
         })}
@@ -431,8 +470,15 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
           return (
             <div key={skill.name} className="space-y-1.5">
               <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="min-w-0 truncate font-medium">{skill.name}</span>
-                <span className={cn("shrink-0 tabular-nums", successRateClass(rate))}>
+                <span className="min-w-0 truncate font-medium">
+                  {skill.name}
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 tabular-nums",
+                    successRateClass(rate),
+                  )}
+                >
                   {formatPercent(rate)}
                 </span>
               </div>
@@ -484,7 +530,9 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
                 {index + 1}
               </span>
-              <span className="min-w-0 truncate text-sm font-semibold">{rec.title}</span>
+              <span className="min-w-0 truncate text-sm font-semibold">
+                {rec.title}
+              </span>
             </div>
             <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
               {rec.description}
@@ -496,7 +544,13 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   );
 }
 
-function SectionTitle({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
+function SectionTitle({
+  icon: Icon,
+  title,
+}: {
+  icon: React.ElementType;
+  title: string;
+}) {
   return (
     <div className="flex items-center gap-2 text-sm font-semibold">
       <Icon className="size-4 text-primary" />
@@ -513,436 +567,11 @@ function EmptyStory({ text }: { text: string }) {
   );
 }
 
-function OverviewTab({
-  overview,
-  memorySparkline,
-}: {
-  overview: EvolutionOverview | null;
-  memorySparkline: number[];
-}) {
-  const { t } = useI18n();
-
-  if (!overview) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border text-xs text-muted-foreground">
-        {t.evolutionDashboard.connectionFailed}
-      </div>
-    );
-  }
-
-  const { skills, memory, learning_events, improvement_score } = overview;
-  const safeImprovementScore = numberOrZero(improvement_score);
-  const improvementPct = Math.round(safeImprovementScore * 100);
-
-  return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <StatCard
-        icon={BookOpenIcon}
-        label={t.evolutionDashboard.skills}
-        value={skills.total}
-        colorClass={countColor(skills.total, 10, 1)}
-      />
-      <StatCard
-        icon={DatabaseIcon}
-        label={t.evolutionDashboard.memories}
-        value={memory.total_facts}
-        colorClass={countColor(memory.total_facts, 50, 1)}
-        sparkline={
-          memorySparkline.length >= 2 ? memorySparkline : undefined
-        }
-      />
-      <StatCard
-        icon={ActivityIcon}
-        label={t.evolutionDashboard.learningEvents}
-        value={learning_events}
-        colorClass={countColor(learning_events, 100, 1)}
-      />
-      <div className="rounded-lg border bg-card p-4 transition-shadow hover:shadow-md">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <TrendingUpIcon className="size-4" />
-          <span className="text-xs font-medium">
-            {t.evolutionDashboard.improvementScore}
-          </span>
-        </div>
-        <div className="mt-2 flex items-baseline gap-1">
-          <span
-            className={cn(
-              "text-2xl font-bold tabular-nums",
-              scoreColor(safeImprovementScore),
-            )}
-          >
-            {improvementPct}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {t.evolutionDashboard.of100}
-          </span>
-        </div>
-        <svg
-          width="100%"
-          height={6}
-          viewBox="0 0 100 6"
-          className="mt-2"
-          aria-hidden="true"
-        >
-          <rect x={0} y={0} width={100} height={6} rx={3} fill="currentColor" className="text-muted" />
-          <rect
-            x={0}
-            y={0}
-            width={improvementPct}
-            height={6}
-            rx={3}
-            className={
-              improvementPct >= 70
-                ? "text-emerald-500"
-                : improvementPct >= 40
-                  ? "text-amber-500"
-                  : "text-red-500"
-            }
-            fill="currentColor"
-          />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  colorClass,
-  sparkline,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: number;
-  colorClass: string;
-  sparkline?: number[];
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-4 transition-shadow hover:shadow-md">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Icon className="size-4" />
-          <span className="text-xs font-medium">{label}</span>
-        </div>
-        {sparkline && (
-          <SparklineChart
-            data={sparkline}
-            color="#3b82f6"
-            width={56}
-            height={20}
-          />
-        )}
-      </div>
-      <div className="mt-2">
-        <span className={cn("text-2xl font-bold tabular-nums", colorClass)}>
-          {value}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function LearningCurveTab({
-  data,
-}: {
-  data: LearningCurvePoint[] | null;
-}) {
-  const { t } = useI18n();
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border text-xs text-muted-foreground">
-        {t.evolutionDashboard.noLearningData}
-      </div>
-    );
-  }
-
-  const padL = 45;
-  const padR = 15;
-  const padT = 15;
-  const padB = 35;
-  const svgW = 600;
-  const svgH = 280;
-  const chartW = svgW - padL - padR;
-  const chartH = svgH - padT - padB;
-
-  const yTicks = [0, 25, 50, 75, 100];
-
-  const xStep = data.length > 1 ? chartW / (data.length - 1) : 0;
-
-  const pts = data.map((d, i) => ({
-    x: padL + (data.length > 1 ? i * xStep : chartW / 2),
-    y: padT + chartH - numberOrZero(d.success_rate) * chartH,
-  }));
-
-  const polylineStr = pts
-    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
-    .join(" ");
-
-  const avgSuccess =
-    data.reduce((s, d) => s + numberOrZero(d.success_rate), 0) / data.length;
-  const avgDuration =
-    data.reduce((s, d) => s + numberOrZero(d.avg_duration_ms), 0) / data.length;
-  const totalSkills = data.reduce((s, d) => s + numberOrZero(d.skills_used), 0);
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border bg-card p-4">
-        <svg
-          viewBox={`0 0 ${svgW} ${svgH}`}
-          className="w-full text-muted-foreground"
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {yTicks.map((v) => {
-            const y = padT + chartH - (v / 100) * chartH;
-            return (
-              <g key={v}>
-                <line
-                  x1={padL}
-                  y1={y}
-                  x2={svgW - padR}
-                  y2={y}
-                  stroke="currentColor"
-                  strokeOpacity={0.1}
-                />
-                <text
-                  x={padL - 6}
-                  y={y + 3}
-                  textAnchor="end"
-                  fill="currentColor"
-                  fontSize={10}
-                >
-                  {v}%
-                </text>
-              </g>
-            );
-          })}
-
-          <line
-            x1={padL}
-            y1={padT + chartH}
-            x2={svgW - padR}
-            y2={padT + chartH}
-            stroke="currentColor"
-            strokeOpacity={0.15}
-          />
-
-          {data.map((d, i) => {
-            const x = padL + (data.length > 1 ? i * xStep : chartW / 2);
-            const showLabel = data.length <= 8 || i % 2 === 0;
-            return (
-              <text
-                key={d.week}
-                x={x}
-                y={svgH - 6}
-                textAnchor="middle"
-                fill="currentColor"
-                fontSize={10}
-                opacity={showLabel ? 1 : 0}
-              >
-                {d.week}
-              </text>
-            );
-          })}
-
-          {data.length > 1 && (
-            <polyline
-              points={polylineStr}
-              fill="none"
-              stroke="#10b981"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-
-          {pts.map((p, i) => (
-            <circle
-              key={i}
-              cx={p.x}
-              cy={p.y}
-              r={3.5}
-              fill="#10b981"
-              stroke="white"
-              strokeWidth={1.5}
-            />
-          ))}
-        </svg>
-      </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <MiniStat label="Avg Success Rate" value={`${fixed(avgSuccess * 100, 1)}%`} />
-        <MiniStat
-          label="Avg Duration"
-          value={
-            avgDuration >= 1000
-              ? `${fixed(avgDuration / 1000, 1)}s`
-              : `${Math.round(avgDuration)}ms`
-          }
-        />
-        <MiniStat label="Total Skills Used" value={String(totalSkills)} />
-      </div>
-    </div>
-  );
-}
-
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border bg-card px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="text-sm font-semibold tabular-nums">{value}</div>
-    </div>
-  );
-}
-
-function SkillsPerformanceTab({
-  data,
-}: {
-  data: SkillPerformance[] | null;
-}) {
-  const { t } = useI18n();
-
-  const sorted = useMemo(() => {
-    if (!data) return [];
-    return [...data].sort((a, b) => numberOrZero(b.usage_count) - numberOrZero(a.usage_count));
-  }, [data]);
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border text-xs text-muted-foreground">
-        {t.evolutionDashboard.noSkillData}
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-md border border-border/40 overflow-hidden">
-      <table className="w-full text-[11px]">
-        <thead className="bg-muted/50 text-muted-foreground">
-          <tr>
-            <th className="text-left px-2 py-1">
-              {t.evolutionDashboard.skillName}
-            </th>
-            <th className="text-right px-2 py-1">
-              {t.evolutionDashboard.usageCount}
-            </th>
-            <th className="text-right px-2 py-1">
-              {t.evolutionDashboard.successRate}
-            </th>
-            <th className="text-right px-2 py-1">Avg Cost</th>
-            <th className="text-left px-2 py-1">Source</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((s) => (
-            <tr key={s.name} className="border-t border-border/30">
-              <td className="px-2 py-1 font-medium">{s.name}</td>
-              <td className="px-2 py-1 text-right tabular-nums">
-                {numberOrZero(s.usage_count)}
-              </td>
-              <td
-                className={cn(
-                  "px-2 py-1 text-right tabular-nums",
-                  successRateClass(numberOrZero(s.success_rate)),
-                )}
-              >
-                {fixed(numberOrZero(s.success_rate) * 100, 0)}%
-              </td>
-              <td className="px-2 py-1 text-right tabular-nums text-muted-foreground">
-                ${fixed(s.avg_cost_usd, 4)}
-              </td>
-              <td className="px-2 py-1 text-muted-foreground">{s.source}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function RecommendationsTab({
-  data,
-}: {
-  data: Recommendation[] | null;
-}) {
-  const { t } = useI18n();
-
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex h-48 items-center justify-center rounded-lg border text-xs text-muted-foreground">
-        <div className="text-center">
-          <LightbulbIcon className="mx-auto mb-2 size-6 text-emerald-500" />
-          {t.evolutionDashboard.noRecommendations}
-        </div>
-      </div>
-    );
-  }
-
-  const severityIcon: Record<string, React.ElementType> = {
-    info: InfoIcon,
-    warning: AlertTriangleIcon,
-    critical: AlertTriangleIcon,
-  };
-
-  const severityColor: Record<string, string> = {
-    info: "text-blue-500",
-    warning: "text-amber-500",
-    critical: "text-red-500",
-  };
-
-  const severityBorder: Record<string, string> = {
-    info: "border-l-blue-500",
-    warning: "border-l-amber-500",
-    critical: "border-l-red-500",
-  };
-
-  const severityBg: Record<string, string> = {
-    info: "bg-blue-50/50 dark:bg-blue-950/20",
-    warning: "bg-amber-50/50 dark:bg-amber-950/20",
-    critical: "bg-red-50/50 dark:bg-red-950/20",
-  };
-
-  return (
-    <div className="space-y-3">
-      {data.map((rec, i) => {
-        const Icon = severityIcon[rec.severity] ?? InfoIcon;
-        return (
-          <div
-            key={i}
-            className={cn(
-              "rounded-lg border border-l-4 p-4",
-              severityBorder[rec.severity] ?? severityBorder.info,
-              severityBg[rec.severity] ?? severityBg.info,
-            )}
-          >
-            <div className="flex items-start gap-3">
-              <Icon
-                className={cn(
-                  "mt-0.5 size-4 shrink-0",
-                  severityColor[rec.severity] ?? severityColor.info,
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium">{rec.title}</div>
-                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                  {rec.description}
-                </p>
-                {rec.action_label && (
-                  <button
-                    type="button"
-                    className="mt-2 inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-                  >
-                    <ZapIcon className="size-3" />
-                    {rec.action_label}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

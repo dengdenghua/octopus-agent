@@ -1,4 +1,3 @@
-
 import { useMemo } from "react";
 import type { AnchorHTMLAttributes, HTMLAttributes, ReactElement } from "react";
 import type { BundledLanguage } from "shiki";
@@ -7,7 +6,10 @@ import {
   MessageResponse,
   type MessageResponseProps,
 } from "@/components/ai-elements/message";
-import { CodeBlock, CodeBlockCopyButton } from "@/components/ai-elements/code-block";
+import {
+  CodeBlock,
+  CodeBlockCopyButton,
+} from "@/components/ai-elements/code-block";
 import { FileReferenceChip } from "@/components/ui/file-reference-chip";
 import { useLocalSettings } from "@/core/settings";
 import { useStreamdownPlugins } from "@/core/streamdown";
@@ -63,7 +65,8 @@ export function MarkdownContent({
   const streamdownPlugins = useStreamdownPlugins();
   const resolvedRemarkPlugins =
     remarkPlugins ?? streamdownPlugins.remarkPlugins;
-  const proseSizeClass = CHAT_PROSE_SIZE[chatFontSizeProp ?? settings.display.chat_font_size];
+  const proseSizeClass =
+    CHAT_PROSE_SIZE[chatFontSizeProp ?? settings.display.chat_font_size];
   const components = useMemo(() => {
     return {
       a: (props: AnchorHTMLAttributes<HTMLAnchorElement>) => {
@@ -88,10 +91,21 @@ export function MarkdownContent({
           />
         );
       },
-      pre: (props: HTMLAttributes<HTMLPreElement> & { children?: React.ReactNode }) => {
+      pre: (
+        props: HTMLAttributes<HTMLPreElement> & { children?: React.ReactNode },
+      ) => {
         const codeChild = Array.isArray(props.children)
-          ? props.children.find((c): c is ReactElement<{ className?: string; children?: React.ReactNode }> => c?.props?.className?.includes("language-"))
-          : (props.children as ReactElement<{ className?: string; children?: React.ReactNode }> | undefined);
+          ? props.children.find(
+              (
+                c,
+              ): c is ReactElement<{
+                className?: string;
+                children?: React.ReactNode;
+              }> => c?.props?.className?.includes("language-"),
+            )
+          : (props.children as
+              | ReactElement<{ className?: string; children?: React.ReactNode }>
+              | undefined);
 
         if (codeChild?.props) {
           const className = codeChild.props.className || "";

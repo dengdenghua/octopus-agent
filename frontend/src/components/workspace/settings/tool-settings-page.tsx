@@ -1,4 +1,3 @@
-
 import {
   Item,
   ItemActions,
@@ -67,4 +66,3 @@ function MCPServerList({
     </div>
   );
 }
-

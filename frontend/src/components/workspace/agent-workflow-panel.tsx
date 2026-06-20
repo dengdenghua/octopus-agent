@@ -83,7 +83,7 @@ function StepItem({
               step.status === "error" &&
                 "border-rose-500 bg-rose-500/10 text-rose-600",
               step.status === "pending" &&
-                "border-muted-foreground/30 text-muted-foreground/50"
+                "border-muted-foreground/30 text-muted-foreground/50",
             )}
           >
             {step.status === "completed" ? (
@@ -102,7 +102,7 @@ function StepItem({
                 "mt-1 h-full min-h-[20px] w-px transition-colors duration-300",
                 step.status === "completed"
                   ? "bg-emerald-500/30"
-                  : "bg-border/50"
+                  : "bg-border/50",
               )}
             />
           )}
@@ -118,16 +118,19 @@ function StepItem({
                     step.status === "running" && "text-violet-500",
                     step.status === "completed" && "text-emerald-500",
                     step.status === "error" && "text-rose-500",
-                    step.status === "pending" && "text-muted-foreground/50"
+                    step.status === "pending" && "text-muted-foreground/50",
                   )}
                 />
                 <span
                   className={cn(
                     "truncate text-sm font-medium",
-                    step.status === "running" && "text-violet-700 dark:text-violet-400",
-                    step.status === "completed" && "text-emerald-700 dark:text-emerald-400",
-                    step.status === "error" && "text-rose-700 dark:text-rose-400",
-                    step.status === "pending" && "text-muted-foreground"
+                    step.status === "running" &&
+                      "text-violet-700 dark:text-violet-400",
+                    step.status === "completed" &&
+                      "text-emerald-700 dark:text-emerald-400",
+                    step.status === "error" &&
+                      "text-rose-700 dark:text-rose-400",
+                    step.status === "pending" && "text-muted-foreground",
                   )}
                 >
                   {step.name}
@@ -161,7 +164,9 @@ function StepItem({
                   <ChevronRightIcon className="size-3" />
                 )}
                 <span>
-                  {expanded ? t.agentWorkflow.hideDetails : t.agentWorkflow.showDetails}
+                  {expanded
+                    ? t.agentWorkflow.hideDetails
+                    : t.agentWorkflow.showDetails}
                 </span>
               </button>
             )}
@@ -237,7 +242,9 @@ export function AgentWorkflowPanel({
 
       <div className="px-3 py-2">
         <div className="mb-1.5 flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">{t.agentWorkflow.progress}</span>
+          <span className="text-muted-foreground">
+            {t.agentWorkflow.progress}
+          </span>
           <span className="text-muted-foreground">
             {completedCount}/{steps.length}
           </span>
@@ -246,7 +253,7 @@ export function AgentWorkflowPanel({
           <div
             className={cn(
               "h-full rounded-full transition-all duration-500",
-              isRunning ? "bg-violet-500" : "bg-emerald-500"
+              isRunning ? "bg-violet-500" : "bg-emerald-500",
             )}
             style={{ width: `${progress}%` }}
           />

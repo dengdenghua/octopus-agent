@@ -11,10 +11,13 @@ interface Props {
 }
 
 function getTerminalBadge(status: string) {
-  if (status === "done") return <CheckIcon className="size-2" strokeWidth={3} />;
+  if (status === "done")
+    return <CheckIcon className="size-2" strokeWidth={3} />;
   if (status === "failed") return <XIcon className="size-2" strokeWidth={3} />;
-  if (status === "cancelled") return <XIcon className="size-2" strokeWidth={3} />;
-  if (status === "timed_out") return <ClockIcon className="size-2" strokeWidth={3} />;
+  if (status === "cancelled")
+    return <XIcon className="size-2" strokeWidth={3} />;
+  if (status === "timed_out")
+    return <ClockIcon className="size-2" strokeWidth={3} />;
   return null;
 }
 
@@ -38,7 +41,11 @@ export function AgentStatusPills({ agents, selectedId, onSelect }: Props) {
   return (
     <div className="flex items-center gap-2 overflow-x-auto px-3 py-2">
       {agents.map((agent) => {
-        const isTerminal = agent.status === "done" || agent.status === "failed" || agent.status === "cancelled" || agent.status === "timed_out";
+        const isTerminal =
+          agent.status === "done" ||
+          agent.status === "failed" ||
+          agent.status === "cancelled" ||
+          agent.status === "timed_out";
         const isSelected = agent.id === selectedId;
         const badge = getTerminalBadge(agent.status);
         return (
@@ -61,7 +68,12 @@ export function AgentStatusPills({ agents, selectedId, onSelect }: Props) {
               >
                 <span>{agent.avatarEmoji}</span>
                 {isTerminal && badge && (
-                  <span className={cn("absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-lg text-white", getTerminalBadgeColor(agent.status))}>
+                  <span
+                    className={cn(
+                      "absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-lg text-white",
+                      getTerminalBadgeColor(agent.status),
+                    )}
+                  >
                     {badge}
                   </span>
                 )}
@@ -72,7 +84,9 @@ export function AgentStatusPills({ agents, selectedId, onSelect }: Props) {
               <span
                 className={cn(
                   "text-[11px]",
-                  isTerminal ? getTerminalTextColor(agent.status) : "text-foreground",
+                  isTerminal
+                    ? getTerminalTextColor(agent.status)
+                    : "text-foreground",
                 )}
               >
                 {STATUS_LABELS[agent.status]}

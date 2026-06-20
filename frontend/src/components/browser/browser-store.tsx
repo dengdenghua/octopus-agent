@@ -18,6 +18,7 @@ const STORAGE_KEY = "octopus:browser-state";
 const HISTORY_KEY = "octopus:browser-history";
 const BOOKMARKS_KEY = "octopus:browser-bookmarks";
 const SETTINGS_KEY = "octopus:browser-settings";
+export const BROWSER_OPEN_URL_REQUEST_KEY = "octopus:browser-open-url-request";
 export const BROWSER_HOME_URL = "octopus://home";
 const LEGACY_DEFAULT_HOMEPAGE = "https://www.google.com";
 const DEFAULT_HOMEPAGE = BROWSER_HOME_URL;
@@ -32,7 +33,10 @@ const DEFAULT_SETTINGS: BrowserSettings = {
   searchEngine: "google",
 };
 
-export const SEARCH_ENGINE_URLS: Record<BrowserSettings["searchEngine"], string> = {
+export const SEARCH_ENGINE_URLS: Record<
+  BrowserSettings["searchEngine"],
+  string
+> = {
   google: "https://www.google.com/search?q=",
   bing: "https://www.bing.com/search?q=",
   baidu: "https://www.baidu.com/s?wd=",
@@ -60,7 +64,9 @@ function saveSettings(s: BrowserSettings): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch (e) { swallow(e, "storage"); }
+  } catch (e) {
+    swallow(e, "storage");
+  }
 }
 const MAX_HISTORY = 500;
 const MAX_BOOKMARKS = 200;
@@ -95,8 +101,13 @@ function loadHistory(): HistoryEntry[] {
 function saveHistory(items: HistoryEntry[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY)));
-  } catch (e) { swallow(e, "storage"); }
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify(items.slice(0, MAX_HISTORY)),
+    );
+  } catch (e) {
+    swallow(e, "storage");
+  }
 }
 
 function loadBookmarks(): Bookmark[] {
@@ -115,8 +126,13 @@ function loadBookmarks(): Bookmark[] {
 function saveBookmarks(items: Bookmark[]): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(items.slice(0, MAX_BOOKMARKS)));
-  } catch (e) { swallow(e, "storage"); }
+    localStorage.setItem(
+      BOOKMARKS_KEY,
+      JSON.stringify(items.slice(0, MAX_BOOKMARKS)),
+    );
+  } catch (e) {
+    swallow(e, "storage");
+  }
 }
 
 export interface BrowserTab {
@@ -128,6 +144,14 @@ export interface BrowserTab {
   device: DevicePreset;
 }
 
+export interface BrowserOpenUrlRequest {
+  url: string;
+  title?: string;
+  device?: DevicePreset;
+  source?: string;
+  sessionId?: string;
+}
+
 interface BrowserState {
   tabs: BrowserTab[];
   activeId: string | null;
@@ -137,7 +161,7 @@ interface BrowserState {
 }
 
 type Action =
-  | { type: "OPEN_TAB"; url?: string }
+  | { type: "OPEN_TAB"; url?: string; patch?: Partial<BrowserTab> }
   | { type: "CLOSE_TAB"; id: string }
   | { type: "ACTIVATE_TAB"; id: string }
   | { type: "REORDER_TAB"; from: number; to: number }
@@ -167,7 +191,7 @@ function reducer(state: BrowserState, action: Action): BrowserState {
       // Implementation note.
       // Implementation note.
       // Implementation note.
-      const tab = freshTab(action.url);
+      const tab = { ...freshTab(action.url), ...action.patch };
       return { ...state, tabs: [...state.tabs, tab], activeId: tab.id };
     }
     case "CLOSE_TAB": {
@@ -208,7 +232,10 @@ function reducer(state: BrowserState, action: Action): BrowserState {
     case "SET_COPILOT_OPEN":
       return { ...state, copilotOpen: action.open };
     case "SET_COPILOT_WIDTH":
-      return { ...state, copilotWidth: Math.max(280, Math.min(720, action.width)) };
+      return {
+        ...state,
+        copilotWidth: Math.max(280, Math.min(720, action.width)),
+      };
     default:
       return state;
   }
@@ -216,7 +243,13 @@ function reducer(state: BrowserState, action: Action): BrowserState {
 
 function loadInitial(): BrowserState {
   if (typeof window === "undefined") {
-    return { tabs: [], activeId: null, copilotOpen: false, copilotWidth: 380, homeSeeded: true };
+    return {
+      tabs: [],
+      activeId: null,
+      copilotOpen: false,
+      copilotWidth: 380,
+      homeSeeded: true,
+    };
   }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -234,8 +267,11 @@ function loadInitial(): BrowserState {
         typeof parsed.activeId === "string" &&
         tabs.some((t) => t.id === parsed.activeId)
           ? parsed.activeId
-          : tabs[0]?.id ?? null;
-      if (parsed.homeSeeded !== true && !tabs.some((t) => t.url === BROWSER_HOME_URL)) {
+          : (tabs[0]?.id ?? null);
+      if (
+        parsed.homeSeeded !== true &&
+        !tabs.some((t) => t.url === BROWSER_HOME_URL)
+      ) {
         const home = freshTab(BROWSER_HOME_URL);
         return {
           tabs: [home, ...tabs],
@@ -255,7 +291,9 @@ function loadInitial(): BrowserState {
         homeSeeded: true,
       };
     }
-  } catch (e) { swallow(e); }
+  } catch (e) {
+    swallow(e);
+  }
   const tab = freshTab();
   return {
     tabs: [tab],
@@ -269,7 +307,7 @@ function loadInitial(): BrowserState {
 interface BrowserStoreContextType {
   state: BrowserState;
   activeTab: BrowserTab | null;
-  openTab: (url?: string) => void;
+  openTab: (url?: string, patch?: Partial<BrowserTab>) => void;
   closeTab: (id: string) => void;
   activateTab: (id: string) => void;
   reorderTab: (from: number, to: number) => void;
@@ -297,18 +335,17 @@ export function BrowserStoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadInitial);
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
   const [bookmarks, setBookmarks] = useState<Bookmark[]>(() => loadBookmarks());
-  const [settings, setSettings] = useState<BrowserSettings>(() => loadSettings());
-
-  const updateSettings = useCallback(
-    (patch: Partial<BrowserSettings>) => {
-      setSettings((prev) => {
-        const next = { ...prev, ...patch };
-        saveSettings(next);
-        return next;
-      });
-    },
-    [],
+  const [settings, setSettings] = useState<BrowserSettings>(() =>
+    loadSettings(),
   );
+
+  const updateSettings = useCallback((patch: Partial<BrowserSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
   // Implementation note.
   const [, setReady] = useState(false);
   useEffect(() => {
@@ -321,35 +358,34 @@ export function BrowserStoreProvider({ children }: { children: ReactNode }) {
     const t = setTimeout(() => {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (e) { swallow(e, "storage"); }
+      } catch (e) {
+        swallow(e, "storage");
+      }
     }, 200);
     return () => clearTimeout(t);
   }, [state]);
 
-  const recordVisit = useCallback(
-    (entry: Omit<HistoryEntry, "visitedAt">) => {
-      if (!entry.url || entry.url.startsWith("about:")) return;
-      setHistory((prev) => {
-        // Implementation note.
-        const next: HistoryEntry[] = [
-          { ...entry, visitedAt: Date.now() },
-          ...prev.filter((h) => h.url !== entry.url),
-        ].slice(0, MAX_HISTORY);
-        saveHistory(next);
-        return next;
-      });
-    },
-    [],
-  );
+  const recordVisit = useCallback((entry: Omit<HistoryEntry, "visitedAt">) => {
+    if (!entry.url || entry.url.startsWith("about:")) return;
+    setHistory((prev) => {
+      // Implementation note.
+      const next: HistoryEntry[] = [
+        { ...entry, visitedAt: Date.now() },
+        ...prev.filter((h) => h.url !== entry.url),
+      ].slice(0, MAX_HISTORY);
+      saveHistory(next);
+      return next;
+    });
+  }, []);
 
   const addBookmark = useCallback((b: Omit<Bookmark, "addedAt">) => {
     if (!b.url) return;
     setBookmarks((prev) => {
       if (prev.some((x) => x.url === b.url)) return prev;
-      const next: Bookmark[] = [
-        { ...b, addedAt: Date.now() },
-        ...prev,
-      ].slice(0, MAX_BOOKMARKS);
+      const next: Bookmark[] = [{ ...b, addedAt: Date.now() }, ...prev].slice(
+        0,
+        MAX_BOOKMARKS,
+      );
       saveBookmarks(next);
       return next;
     });
@@ -382,8 +418,8 @@ export function BrowserStoreProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       activeTab,
-      openTab: (url?: string) =>
-        dispatch({ type: "OPEN_TAB", url: url ?? settings.homepage }),
+      openTab: (url?: string, patch?: Partial<BrowserTab>) =>
+        dispatch({ type: "OPEN_TAB", url: url ?? settings.homepage, patch }),
       closeTab: (id: string) => dispatch({ type: "CLOSE_TAB", id }),
       activateTab: (id: string) => dispatch({ type: "ACTIVATE_TAB", id }),
       reorderTab: (from: number, to: number) =>

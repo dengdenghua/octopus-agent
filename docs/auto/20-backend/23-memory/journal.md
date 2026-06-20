@@ -56,7 +56,7 @@
 
 ## Who imports this
 
-**37** file(s) reference this package:
+**38** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/channels/manager.py`
@@ -90,13 +90,13 @@
   - `runtime/safety/recovery/recipe_evaluator.py`
   - `runtime/safety/recovery/rule_extractor.py`
   - _… and 3 more_
-- **`runtime/sensing/`** · 12 file(s)
+- **`runtime/sensing/`** · 13 file(s)
   - `runtime/sensing/gateway/dag_debugger_router.py`
   - `runtime/sensing/gateway/evolution_ops/budget.py`
   - `runtime/sensing/gateway/evolution_ops/curriculum.py`
   - `runtime/sensing/gateway/evolution_ops/mcp_ops.py`
   - `runtime/sensing/gateway/evolution_ops/protocol_drift.py`
-  - _… and 7 more_
+  - _… and 8 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

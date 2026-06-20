@@ -75,11 +75,14 @@ interface TeamMembersDialogProps {
   onTeamChange: (team: Team) => void;
 }
 
-const ROLE_META: Record<TeamParticipantRole, {
-  label: string;
-  descriptionKey: "ownerDesc" | "memberDesc" | "viewerDesc";
-  icon: typeof CrownIcon;
-}> = {
+const ROLE_META: Record<
+  TeamParticipantRole,
+  {
+    label: string;
+    descriptionKey: "ownerDesc" | "memberDesc" | "viewerDesc";
+    icon: typeof CrownIcon;
+  }
+> = {
   owner: {
     label: "Owner",
     descriptionKey: "ownerDesc",
@@ -132,7 +135,9 @@ export function TeamMembersDialog({
       toast.success(t.teamMembers.policyUpdated);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t.teamMembers.updatePolicyFailed,
+        error instanceof Error
+          ? error.message
+          : t.teamMembers.updatePolicyFailed,
       );
     } finally {
       setPolicyBusy(false);
@@ -150,7 +155,9 @@ export function TeamMembersDialog({
       toast.success(t.teamMembers.permissionsUpdated);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t.teamMembers.updatePermissionsFailed,
+        error instanceof Error
+          ? error.message
+          : t.teamMembers.updatePermissionsFailed,
       );
     } finally {
       setBusyId(null);
@@ -177,7 +184,9 @@ export function TeamMembersDialog({
       toast.success(t.teamMembers.delegationUpdated);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t.teamMembers.updateDelegationFailed,
+        error instanceof Error
+          ? error.message
+          : t.teamMembers.updateDelegationFailed,
       );
     } finally {
       setBusyId(null);
@@ -191,11 +200,17 @@ export function TeamMembersDialog({
     if (!team || role === participant.role) return;
     setBusyId(participant.id);
     try {
-      const result = await updateTeamParticipant(team.id, participant.id, { role });
+      const result = await updateTeamParticipant(team.id, participant.id, {
+        role,
+      });
       onTeamChange(result.team);
       toast.success(t.teamMembers.permissionsUpdated);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.teamMembers.updatePermissionsFailed);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t.teamMembers.updatePermissionsFailed,
+      );
     } finally {
       setBusyId(null);
     }
@@ -209,7 +224,11 @@ export function TeamMembersDialog({
       onTeamChange(result.team);
       toast.success(t.teamMembers.memberRemoved);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.teamMembers.removeMemberFailed);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t.teamMembers.removeMemberFailed,
+      );
     } finally {
       setBusyId(null);
     }
@@ -223,15 +242,15 @@ export function TeamMembersDialog({
             <UserCogIcon className="size-5" />
             {t.teamMembers.title}
           </DialogTitle>
-          <DialogDescription>
-            {t.teamMembers.description}
-          </DialogDescription>
+          <DialogDescription>{t.teamMembers.description}</DialogDescription>
         </DialogHeader>
 
         {isOwner && (
           <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/15 px-3 py-2">
             <div className="min-w-0">
-              <div className="text-sm font-medium">{t.teamMembers.speakerPolicy}</div>
+              <div className="text-sm font-medium">
+                {t.teamMembers.speakerPolicy}
+              </div>
               <div className="truncate text-xs text-muted-foreground">
                 {t.teamMembers.speakerPolicyHint}
               </div>
@@ -239,7 +258,9 @@ export function TeamMembersDialog({
             <Select
               value={speakerPolicy}
               disabled={policyBusy}
-              onValueChange={(value) => void handlePolicyChange(value as SpeakerPolicy)}
+              onValueChange={(value) =>
+                void handlePolicyChange(value as SpeakerPolicy)
+              }
             >
               <SelectTrigger size="sm" className="w-36">
                 <SelectValue />
@@ -261,10 +282,13 @@ export function TeamMembersDialog({
               const meta = ROLE_META[participant.role] ?? ROLE_META.viewer;
               const Icon = meta.icon;
               const isSelf = participant.id === currentParticipantId;
-              const isLastOwner = participant.role === "owner" && ownerCount <= 1;
+              const isLastOwner =
+                participant.role === "owner" && ownerCount <= 1;
               const isBusy = busyId === participant.id;
               const speakMode: SpeakMode = participant.speak_mode ?? "manual";
-              const otherParticipants = participants.filter((p) => p.id !== participant.id);
+              const otherParticipants = participants.filter(
+                (p) => p.id !== participant.id,
+              );
               return (
                 <div
                   key={participant.id}
@@ -351,9 +375,13 @@ export function TeamMembersDialog({
                                   participant.twin_agent_id === agent.name
                                 }
                                 onCheckedChange={() =>
-                                  void handleDelegationChange(participant, "twin", {
-                                    twin_agent_id: agent.name,
-                                  })
+                                  void handleDelegationChange(
+                                    participant,
+                                    "twin",
+                                    {
+                                      twin_agent_id: agent.name,
+                                    },
+                                  )
                                 }
                               >
                                 {agent.display_name ?? agent.name}
@@ -371,12 +399,17 @@ export function TeamMembersDialog({
                               <DropdownMenuCheckboxItem
                                 key={p.id}
                                 checked={
-                                  speakMode === "hosted" && participant.host_id === p.id
+                                  speakMode === "hosted" &&
+                                  participant.host_id === p.id
                                 }
                                 onCheckedChange={() =>
-                                  void handleDelegationChange(participant, "hosted", {
-                                    host_id: p.id,
-                                  })
+                                  void handleDelegationChange(
+                                    participant,
+                                    "hosted",
+                                    {
+                                      host_id: p.id,
+                                    },
+                                  )
                                 }
                               >
                                 {p.display_name}
@@ -422,7 +455,11 @@ export function TeamMembersDialog({
                       )}
                       disabled={isBusy}
                       onClick={() => void handleToggleMute(participant)}
-                      title={participant.muted ? t.teamMembers.unmute : t.teamMembers.mute}
+                      title={
+                        participant.muted
+                          ? t.teamMembers.unmute
+                          : t.teamMembers.mute
+                      }
                     >
                       {participant.muted ? (
                         <MicOffIcon className="size-4" />

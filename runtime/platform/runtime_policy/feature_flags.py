@@ -348,9 +348,9 @@ _BUILTIN: list[FlagSpec] = [
     # ─── Camouflage · prompt evolution ─────────────────────
     FlagSpec(
         name="camouflage.enabled",
-        default=False,
+        default=True,
         legacy_env=("OCTOPUS_CAMOUFLAGE_ENABLED",),
-        description="LLM-driven prompt optimizer loop. Off by default.",
+        description="LLM-driven prompt optimizer loop (A/B variants + pareto retirement).",
         experimental=True,
     ),
     FlagSpec(

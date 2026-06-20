@@ -12,8 +12,8 @@ export async function loadModels(): Promise<Model[]> {
   const res = await fetch(`${getBackendBaseURL()}/api/llm-models`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to load models: ${res.status} ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load models: ${res.status} ${res.statusText}`);
   const { models } = (await res.json()) as { models: Model[] };
   return models ?? [];
 }
-

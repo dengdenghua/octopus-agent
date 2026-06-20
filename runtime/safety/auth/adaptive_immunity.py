@@ -29,7 +29,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 
-from runtime.platform.models import RiskScore
+from runtime.platform.models import CostEntry, RiskScore
 
 # Defaults mirror protocols/immunity.md §config adaptive.*
 _DEFAULT_WINDOW = 200
@@ -127,6 +127,30 @@ class AdaptiveImmunity:
             self._baselines[sucker_id] = bl
         return bl
 
+    def predict(self, sucker_id: str) -> CostEntry | None:
+        """Return a baseline-mean ``CostEntry`` for pre-execute risk scoring.
+
+        When ``ToolCall.predicted_cost`` is None (the common case), the
+        executor auto-fills it via this method so that ``compute_risk``
+        can score the upcoming call against the sucker's own baseline.
+        A normal call sits at z≈0 (composite≈0.05, well below
+        quarantine); only a real deviation flags.
+
+        Returns ``None`` when the baseline is immature (< ``_MIN_SAMPLES``
+        samples), so ``compute_risk`` stays in its conservative cold-start
+        branch (I4) instead of scoring against a too-thin sample.
+        """
+        with self._lock:
+            bl = self._baselines.get(sucker_id)
+            if bl is None or len(bl.latency) < _MIN_SAMPLES:
+                return None
+            lat_mean, _ = _mean_std(bl.latency)
+            tok_mean, _ = _mean_std(bl.tokens)
+        return CostEntry(
+            latency_ms=lat_mean,
+            tokens_in=int(tok_mean),
+        )
+
     def compute_risk(
         self,
         sucker_id: str,
@@ -136,14 +160,10 @@ class AdaptiveImmunity:
     ) -> RiskScore:
         """Risk in [0, 1] for an about-to-run call. Cold start ⇒
         ``cold_start_score`` (I4)."""
-        # No prediction supplied (the runtime doesn't populate
-        # ToolCall.predicted_cost today, so both arrive 0). A zero
-        # prediction means "unknown", NOT "an instant free call" — and
-        # 0 sits many sigma below any real baseline, which would flag
-        # EVERY normal call as a 6σ anomaly and quarantine all traffic.
-        # Treat absent prediction as cold-start (non-anomalous). The
-        # tier stays inert until a real predicted cost is wired; until
-        # then learn() still accumulates baselines for that future.
+        # No prediction supplied. When the executor auto-fills via
+        # predict(), this branch is only reached for immature baselines
+        # (< _MIN_SAMPLES). Treat as cold-start (non-anomalous) so
+        # warm-up never false-flags.
         if predicted_latency_ms <= 0.0 and predicted_tokens <= 0.0:
             return RiskScore(
                 sucker_id=sucker_id,

@@ -46,10 +46,7 @@ function StatusIcon({
 }: {
   status: LiveToolEvent["status"] | "pending";
 }) {
-  if (
-    status === "running" ||
-    status === "waiting_approval"
-  ) {
+  if (status === "running" || status === "waiting_approval") {
     return (
       <Loader2Icon className="size-4 shrink-0 animate-spin text-primary" />
     );
@@ -129,7 +126,13 @@ export function AgentProgressPill({
     [events, hasAnswer, runFailed, runSettled, paused],
   );
   const { blocks, phases, currentPhase } = useMemo(
-    () => deriveAgentPhases(displayEvents, { hasAnswer, runSettled, runFailed, paused }),
+    () =>
+      deriveAgentPhases(displayEvents, {
+        hasAnswer,
+        runSettled,
+        runFailed,
+        paused,
+      }),
     [displayEvents, hasAnswer, runSettled, runFailed, paused],
   );
   const autoMinimizedRunRef = useRef<string | null>(null);
@@ -254,9 +257,7 @@ export function AgentProgressPill({
                   )}
                 >
                   <StatusIcon status={phase.status} />
-                  <span className="min-w-0 flex-1 truncate">
-                    {phase.title}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate">{phase.title}</span>
                   {active ? (
                     <span className="shrink-0 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
                       {progress.current}/{progress.total}

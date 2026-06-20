@@ -48,13 +48,7 @@ export interface LocalSettings {
     | "reasoning_effort"
   > & {
     model_name?: string | undefined;
-    mode:
-      | "chat"
-      | "react"
-      | "deep"
-      | "flash"
-      | "thinking"
-      | undefined;
+    mode: "chat" | "react" | "deep" | "flash" | "thinking" | undefined;
     reasoning_effort?: ReasoningEffort;
   };
   layout: {

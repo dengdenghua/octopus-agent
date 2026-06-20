@@ -1,4 +1,3 @@
-import { swallow } from "@/core/utils/log";
 export const INSPECT_INJECTED_SCRIPT = `
 (function() {
   if (window.__octopusInspectInstalled) return;

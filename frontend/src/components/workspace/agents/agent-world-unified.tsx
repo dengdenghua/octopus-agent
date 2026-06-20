@@ -7,19 +7,11 @@ import {
   BotIcon,
   Building2Icon,
   ChevronDownIcon,
-  Code2Icon,
   ImportIcon,
-  LandmarkIcon,
-  Layers3Icon,
   Loader2Icon,
-  PaletteIcon,
   PlusIcon,
-  SearchCheckIcon,
   SearchIcon,
   StoreIcon,
-  TargetIcon,
-  WorkflowIcon,
-  type LucideIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -43,6 +35,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EnterpriseAssetsTab } from "@/components/workspace/agents/enterprise-assets-tab";
+import { ACTIVE_AGENT_KEY } from "@/core/agents/active";
+import { emitAgentChanged } from "@/core/events";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -54,11 +48,7 @@ import {
   type AgentPackImportResult,
   type AgentPackPreview,
 } from "@/core/agents/agent-world-api";
-import type {
-  Agent,
-  AgentWorldAgent,
-  AgentWorldCategory,
-} from "@/core/agents/types";
+import type { AgentWorldAgent } from "@/core/agents/types";
 
 import { AgentCard } from "./agent-card";
 import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
@@ -72,10 +62,9 @@ import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
 // Types + data + helpers extracted to agent-world-data.ts
 import {
   AGENT_CATEGORY_FILTERS,
-  BUILTIN_LOCAL_AGENT_IDS,
   CATEGORY_ICONS,
+  LOCAL_AGENT_IDS,
   LOCAL_AGENT_RANK,
-  LOCAL_AGENT_ORDER,
   localAgentToWorldAgent as _localAgentToWorldAgent,
   worldAgentToAgent,
   type AgentCategoryFilter,
@@ -93,7 +82,7 @@ function normalizeAgentDisplayKey(agent: AgentWorldAgent): string {
 function scoreAgentForDisplay(agent: AgentWorldAgent): number {
   let score = 0;
   if (agent.is_installed) score += 1_000_000_000;
-  if (BUILTIN_LOCAL_AGENT_IDS.has(agent.id)) score += 100_000_000;
+  if (LOCAL_AGENT_IDS.has(agent.id)) score += 100_000_000;
   if (agent.is_official) score += 10_000_000;
   if (agent.is_featured) score += 1_000_000;
   score += Math.max(0, agent.downloads ?? 0);
@@ -456,9 +445,7 @@ function AgentsTab({
               <AgentCard
                 key={agent.id}
                 agent={worldAgentToAgent(agent)}
-                isDefault={
-                  agent.is_official || BUILTIN_LOCAL_AGENT_IDS.has(agent.id)
-                }
+                isDefault={agent.is_official || LOCAL_AGENT_IDS.has(agent.id)}
                 onSelect={() => onSelectAgent(agent)}
               />
             ) : (
@@ -496,9 +483,9 @@ const SHOW_LOCAL_AGENT_LIBRARY = true;
 // 企业版资产 tab 暂不在消费侧展示;现在 agents 页只展示本地角色库。
 // 置 true 可恢复企业版 tab。
 const SHOW_ENTERPRISE_ASSETS = false;
-// 角色库只列本地已安装的角色(9 个);捆绑的市场模板(286 角色 + financial 等)
-// 已搬企业版、消费走后续 SDK,不在此页展示。置 false 可恢复市场浏览。
+// 角色库只展示本地已加入的角色；市场模板保持在安装入口里，不混入本地列表。
 const LOCAL_LIBRARY_INSTALLED_ONLY = true;
+const HIDDEN_LOCAL_AGENT_IDS = new Set(["admin", "desktop_operator"]);
 
 export function AgentWorldUnified() {
   const { t } = useI18n();
@@ -519,6 +506,7 @@ export function AgentWorldUnified() {
   const [selectedAgent, setSelectedAgent] = useState<AgentWorldAgent | null>(
     null,
   );
+  const hudOnly = new URLSearchParams(location.search).get("hud") === "1";
 
   // Data
   const [agents, setAgents] = useState<AgentWorldAgent[]>([]);
@@ -559,11 +547,28 @@ export function AgentWorldUnified() {
 
   // Filter agents
   const dedupedAgents = useMemo(() => {
-    const deduped = dedupeAgentWorldAgents(agents);
+    const deduped = dedupeAgentWorldAgents(agents).filter(
+      (agent) => !HIDDEN_LOCAL_AGENT_IDS.has(agent.id),
+    );
     return LOCAL_LIBRARY_INSTALLED_ONLY
       ? deduped.filter((a) => a.is_installed)
       : deduped;
   }, [agents]);
+
+  useEffect(() => {
+    if (!hudOnly || selectedAgent || dedupedAgents.length === 0) return;
+    let activeName = "";
+    try {
+      activeName = window.localStorage.getItem(ACTIVE_AGENT_KEY) ?? "";
+    } catch (e) {
+      swallow(e, "storage");
+    }
+    const nextAgent =
+      dedupedAgents.find((agent) => agent.name === activeName) ??
+      dedupedAgents[0] ??
+      null;
+    setSelectedAgent(nextAgent);
+  }, [dedupedAgents, hudOnly, selectedAgent]);
 
   const filteredAgents = useMemo(() => {
     let nextAgents = dedupedAgents;
@@ -596,110 +601,132 @@ export function AgentWorldUnified() {
   const handleSelectAgent = useCallback((agent: AgentWorldAgent) => {
     setSelectedAgent(agent);
   }, []);
+  const handleSwitchAgent = useCallback((agent: AgentWorldAgent) => {
+    setSelectedAgent(agent);
+    emitAgentChanged(agent.name);
+  }, []);
 
   const handleInstallChange = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["agents"] });
     void fetchAgents();
   }, [fetchAgents, queryClient]);
 
+  const chatRouteForAgent = useCallback((agent: AgentWorldAgent | null) => {
+    const name = agent?.name?.trim();
+    return name
+      ? `/workspace/agents/${encodeURIComponent(name)}/chats/new`
+      : "/workspace/realtime/new";
+  }, []);
+
   return (
     <div className="relative flex size-full flex-col gap-2 px-2 pb-2 pt-2 md:px-3">
-      <div className="relative flex flex-col gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 className="truncate text-sm font-semibold">
-            {t.agentWorld.title}
-          </h1>
-        </div>
-
-        <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end">
-          <div className="relative w-full md:max-w-[280px]">
-            <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-            <Input
-              data-testid="agents-search-input"
-              placeholder={t.agentWorld.searchPlaceholder}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-8 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
-            />
+      {!hudOnly && (
+        <div className="relative flex flex-col gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-sm font-semibold">
+              {t.agentWorld.title}
+            </h1>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" className="h-8 rounded-lg shadow-none">
-                <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-                {t.agentWorld.addAgent}
-                <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem
-                onSelect={() => navigate("/workspace/agents/new")}
-              >
-                <PlusIcon className="h-4 w-4" />
-                {t.agentWorld.newAgent}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setImportOpen(true)}>
-                <ImportIcon className="h-4 w-4" />
-                {t.agentWorld.importAgentPack}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
-                <BotIcon className="h-4 w-4" />
-                接入本地伙伴
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+
+          <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end">
+            <div className="relative w-full md:max-w-[280px]">
+              <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+              <Input
+                data-testid="agents-search-input"
+                placeholder={t.agentWorld.searchPlaceholder}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
+              />
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="h-8 rounded-lg shadow-none">
+                  <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                  {t.agentWorld.addAgent}
+                  <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem
+                  onSelect={() => navigate("/workspace/agents/new")}
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  {t.agentWorld.newAgent}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                  <ImportIcon className="h-4 w-4" />
+                  {t.agentWorld.importAgentPack}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
+                  <BotIcon className="h-4 w-4" />
+                  接入本地伙伴
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
-      <div className="workspace-panel relative flex-1 overflow-y-auto rounded-lg border border-border/60 bg-background/58 px-3 py-3 shadow-sm shadow-black/[0.02]">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="relative mb-3 h-auto gap-1.5 rounded-none bg-transparent p-0">
-            {SHOW_LOCAL_AGENT_LIBRARY && (
-              <TabsTrigger
-                value="agents"
-                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-              >
-                <BotIcon className="h-3.5 w-3.5" />
-                角色库
-              </TabsTrigger>
-            )}
-            {SHOW_ENTERPRISE_ASSETS && (
-              <TabsTrigger
-                value="enterprise"
-                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-              >
-                <Building2Icon className="h-3.5 w-3.5" />
-                企业版
-              </TabsTrigger>
-            )}
-          </TabsList>
+      {!hudOnly && (
+        <div className="workspace-panel relative flex-1 overflow-y-auto rounded-lg border border-border/60 bg-background/58 px-3 py-3 shadow-sm shadow-black/[0.02]">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="relative mb-3 h-auto gap-1.5 rounded-none bg-transparent p-0">
+              {SHOW_LOCAL_AGENT_LIBRARY && (
+                <TabsTrigger
+                  value="agents"
+                  className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+                >
+                  <BotIcon className="h-3.5 w-3.5" />
+                  角色库
+                </TabsTrigger>
+              )}
+              {SHOW_ENTERPRISE_ASSETS && (
+                <TabsTrigger
+                  value="enterprise"
+                  className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+                >
+                  <Building2Icon className="h-3.5 w-3.5" />
+                  企业版
+                </TabsTrigger>
+              )}
+            </TabsList>
 
-          <TabsContent value="agents" className="mt-0">
-            <AgentsTab
-              agents={dedupedAgents}
-              filteredAgents={filteredAgents}
-              loading={loading}
-              activeCategory={activeCategory}
-              categoryCounts={categoryCounts}
-              onCategoryChange={setActiveCategory}
-              onSelectAgent={handleSelectAgent}
-              onInstallChange={handleInstallChange}
-            />
-          </TabsContent>
+            <TabsContent value="agents" className="mt-0">
+              <AgentsTab
+                agents={dedupedAgents}
+                filteredAgents={filteredAgents}
+                loading={loading}
+                activeCategory={activeCategory}
+                categoryCounts={categoryCounts}
+                onCategoryChange={setActiveCategory}
+                onSelectAgent={handleSelectAgent}
+                onInstallChange={handleInstallChange}
+              />
+            </TabsContent>
 
-          <TabsContent value="enterprise" className="mt-0">
-            <EnterpriseAssetsTab query={searchQuery} />
-          </TabsContent>
-        </Tabs>
-      </div>
+            <TabsContent value="enterprise" className="mt-0">
+              <EnterpriseAssetsTab query={searchQuery} />
+            </TabsContent>
+          </Tabs>
+        </div>
+      )}
 
       <AgentRoleProfileDialog
         agent={selectedAgent}
+        agents={dedupedAgents}
         open={Boolean(selectedAgent)}
         onInstallChange={handleInstallChange}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen) setSelectedAgent(null);
+          if (!nextOpen) {
+            const returnRoute = hudOnly ? chatRouteForAgent(selectedAgent) : "";
+            setSelectedAgent(null);
+            if (hudOnly) navigate(returnRoute);
+          }
         }}
+        onSelectAgent={handleSwitchAgent}
+        onCreateAgent={() => navigate("/workspace/agents/new?return=hud")}
       />
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>

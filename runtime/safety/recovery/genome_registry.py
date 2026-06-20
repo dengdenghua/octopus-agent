@@ -1,3 +1,15 @@
+"""Genome Registry — versioned JSON snapshot store for system configuration.
+
+This module implements a simple versioned key-value store backed by git commits.
+Each "genome" is a JSON dict representing a system configuration snapshot;
+the registry tracks versions, supports rollback, and trims old entries.
+
+NOTE — this module does NOT contain mutation / crossover / selection logic.
+The actual evolution algorithms (mutation, crossover, pareto frontier) live in
+``runtime.safety.experiments.prompt_evolver`` and operate on prompt variants.
+The genome registry stores the configuration that evolution may modify, but the
+evolution engine itself is a separate module.
+"""
 from __future__ import annotations
 
 import json

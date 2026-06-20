@@ -146,7 +146,7 @@ def _registry_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any
 def _codex_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any]]:
     try:
         from runtime.platform.plugins.codex_discovery import discover_codex_plugins
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort; fail-open
         return {}
     registered = set(registry.all_names())
     out: dict[str, dict[str, Any]] = {}
@@ -185,7 +185,7 @@ def _codex_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any]]:
 def _meta_skill_entries() -> dict[str, dict[str, Any]]:
     try:
         from runtime.memory.skills_lib.meta_skill import list_meta_skills
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort; fail-open
         return {}
     out: dict[str, dict[str, Any]] = {}
     for pack in list_meta_skills():

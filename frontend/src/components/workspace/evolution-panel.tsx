@@ -194,7 +194,10 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
               icon={CheckCircle2Icon}
               label={t.evolutionPanel.statReactLabel}
               onClick={() => setActiveView("react")}
-              tooltip={t.evolutionPanel.statReactTooltip(reactTrajs, reactFails)}
+              tooltip={t.evolutionPanel.statReactTooltip(
+                reactTrajs,
+                reactFails,
+              )}
               value={t.evolutionPanel.statReactValue(reactTrajs, reactFails)}
               highlight={reactFails > 0}
             />
@@ -262,21 +265,21 @@ export function EvolutionPanel({ status, trigger }: EvolutionPanelProps) {
           )}
           {(activeView === "history" || activeView === "react") &&
             variants.length > 0 && (
-            <details className="group rounded-lg border border-border/50 bg-muted/15">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
-                <span className="inline-flex items-center gap-2">
-                  <SlidersHorizontalIcon className="size-4 text-muted-foreground" />
-                  {t.evolutionPanel.advancedTitle}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {t.evolutionPanel.linesSuffix(variants.length)}
-                </span>
-              </summary>
-              <div className="border-t border-border/40 p-4">
-                <ReActVariantsTable variants={variants} />
-              </div>
-            </details>
-          )}
+              <details className="group rounded-lg border border-border/50 bg-muted/15">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
+                  <span className="inline-flex items-center gap-2">
+                    <SlidersHorizontalIcon className="size-4 text-muted-foreground" />
+                    {t.evolutionPanel.advancedTitle}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t.evolutionPanel.linesSuffix(variants.length)}
+                  </span>
+                </summary>
+                <div className="border-t border-border/40 p-4">
+                  <ReActVariantsTable variants={variants} />
+                </div>
+              </details>
+            )}
         </div>
       </DialogContent>
     </Dialog>
@@ -446,9 +449,7 @@ function LearningList({
                 <div className="break-words text-sm leading-6">
                   {friendlyLearningLine(line, learningCopy)}
                 </div>
-                <div className="sr-only">
-                  {t.evolutionPanel.nextRunImpact}
-                </div>
+                <div className="sr-only">{t.evolutionPanel.nextRunImpact}</div>
               </div>
               <button
                 type="button"

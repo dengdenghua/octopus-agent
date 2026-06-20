@@ -101,7 +101,9 @@ export function buildHeaderSummary(
 
 function StatusIcon({ status }: { status?: ActivityItem["status"] }) {
   if (status === "running")
-    return <Loader2Icon className="size-3.5 animate-spin text-muted-foreground" />;
+    return (
+      <Loader2Icon className="size-3.5 animate-spin text-muted-foreground" />
+    );
   if (status === "error")
     return <XCircleIcon className="size-3.5 text-red-500" />;
   if (status === "done")
@@ -182,7 +184,9 @@ export function CollapsibleActivityGroup({
                 <span
                   className={cn(
                     "truncate",
-                    item.status === "error" ? "text-red-500" : "text-foreground",
+                    item.status === "error"
+                      ? "text-red-500"
+                      : "text-foreground",
                   )}
                 >
                   {item.label}

@@ -39,6 +39,31 @@ _KNOWLEDGE_QA_RE = re.compile(
     re.IGNORECASE,
 )
 
+_NO_TOOL_DIRECTIVE_RE = re.compile(
+    r"("
+    r"(?:不要|不需要|无需|不用|别).{0,16}"
+    r"(?:调用|使用|执行|打开|启动).{0,16}"
+    r"(?:工具|外部工具|浏览器|桌面|搜索|联网|截图)|"
+    r"(?:不要|不需要|无需|不用|别).{0,16}"
+    r"(?:工具|外部工具|浏览器|桌面|搜索|联网|截图)|"
+    r"\b(?:do\s+not|don't|dont|without|no)\s+"
+    r"(?:(?:call|use|run|open)\s+)?"
+    r"(?:tools?|external\s+tools?|browser|desktop|search|web|screenshot)\b"
+    r")",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_DIRECT_REPLY_RE = re.compile(
+    r"("
+    r"只(?:用|需|要)?(?:一句话|回复|返回|回答)|"
+    r"仅(?:用|需|要)?(?:一句话|回复|返回|回答)|"
+    r"一句话(?:回复|回答|说明)?|"
+    r"直接(?:回复|回答|返回)|"
+    r"\b(?:only\s+reply|reply\s+only|answer\s+only|one\s+sentence)\b"
+    r")",
+    re.IGNORECASE,
+)
+
 _TOOL_INTENT_RE = re.compile(
     r"("
     r"搜索|搜一下|查一下|找一下|找到|调研|研究报告|市场研究|行业报告|竞品分析|"
@@ -95,11 +120,19 @@ def _is_short_chitchat(text: str) -> bool:
     return bool(s) and len(s) <= 3 and all(c in _AFFIRM_CHARS for c in s)
 
 
+def _has_explicit_non_tool_directive(text: str) -> bool:
+    return bool(_NO_TOOL_DIRECTIVE_RE.search(text or ""))
+
+
 def looks_like_plain_chat(goal: str) -> bool:
     """Return true for turns that are safe to answer without tools."""
     g = (goal or "").strip()
     if not g:
         return False
+    if _has_explicit_non_tool_directive(g):
+        return True
+    if _DIRECT_REPLY_RE.search(g) and not _FILE_SIGNAL_RE.search(g):
+        return True
     if _CHITCHAT_RE.match(g) or _is_short_chitchat(g):
         return True
     return bool(_KNOWLEDGE_QA_RE.match(g) and not _FILE_SIGNAL_RE.search(g))

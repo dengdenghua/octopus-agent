@@ -1,4 +1,3 @@
-
 import {
   ActivityIcon,
   CoinsIcon,
@@ -30,7 +29,12 @@ interface ToolEvent {
 }
 
 interface MonitorStats {
-  sessionTokens: { input: number; output: number; cacheRead: number; total: number };
+  sessionTokens: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    total: number;
+  };
   sessionCost: number;
   turnCount: number;
   toolCalls: ToolEvent[];
@@ -69,9 +73,8 @@ function extractMonitorStats(messages: Message[]): MonitorStats {
       if (u) stats.turnCount++;
 
       // Track tool calls
-      const toolCalls = (msg as unknown as Record<string, unknown>).tool_calls as
-        | Array<{ name?: string }>
-        | undefined;
+      const toolCalls = (msg as unknown as Record<string, unknown>)
+        .tool_calls as Array<{ name?: string }> | undefined;
       if (toolCalls && Array.isArray(toolCalls)) {
         for (const tc of toolCalls) {
           stats.toolCalls.push({
@@ -114,19 +117,34 @@ function StatCard({
 }) {
   return (
     <div className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-card p-2.5 transition-shadow hover:shadow-sm">
-      <div className={cn("mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/50", color)}>
+      <div
+        className={cn(
+          "mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted/50",
+          color,
+        )}
+      >
         <Icon className="size-3.5" />
       </div>
       <div className="min-w-0">
         <div className="text-muted-foreground text-[10px]">{label}</div>
-        <div className="text-foreground text-sm font-semibold leading-tight">{value}</div>
-        {sub && <div className="text-muted-foreground/70 text-[10px]">{sub}</div>}
+        <div className="text-foreground text-sm font-semibold leading-tight">
+          {value}
+        </div>
+        {sub && (
+          <div className="text-muted-foreground/70 text-[10px]">{sub}</div>
+        )}
       </div>
     </div>
   );
 }
 
-function ToolCallList({ tools, noToolCallsLabel }: { tools: ToolEvent[]; noToolCallsLabel: string }) {
+function ToolCallList({
+  tools,
+  noToolCallsLabel,
+}: {
+  tools: ToolEvent[];
+  noToolCallsLabel: string;
+}) {
   // Aggregate by tool name
   const aggregated = useMemo(() => {
     const map: Record<string, { count: number; name: string }> = {};
@@ -150,9 +168,16 @@ function ToolCallList({ tools, noToolCallsLabel }: { tools: ToolEvent[]; noToolC
   return (
     <div className="space-y-0.5">
       {aggregated.slice(0, 10).map((t) => (
-        <div key={t.name} className="flex items-center justify-between px-1 py-0.5 text-[11px]">
-          <span className="text-foreground/80 truncate font-mono">{t.name}</span>
-          <span className="text-muted-foreground ml-2 shrink-0 tabular-nums">{t.count}x</span>
+        <div
+          key={t.name}
+          className="flex items-center justify-between px-1 py-0.5 text-[11px]"
+        >
+          <span className="text-foreground/80 truncate font-mono">
+            {t.name}
+          </span>
+          <span className="text-muted-foreground ml-2 shrink-0 tabular-nums">
+            {t.count}x
+          </span>
         </div>
       ))}
     </div>
@@ -171,7 +196,10 @@ export function MonitorPanel({
   className?: string;
 }) {
   const { t } = useI18n();
-  const [telemetryConfig, setTelemetryConfig] = useState<Record<string, unknown> | null>(null);
+  const [telemetryConfig, setTelemetryConfig] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const [loading, setLoading] = useState(false);
 
   const stats = useMemo(() => extractMonitorStats(messages), [messages]);
@@ -179,7 +207,9 @@ export function MonitorPanel({
   const fetchTelemetryConfig = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/telemetry/stats`, { headers: authHeaders() });
+      const res = await fetch(`${getBackendBaseURL()}/api/telemetry/stats`, {
+        headers: authHeaders(),
+      });
       if (res.ok) {
         setTelemetryConfig(await res.json());
       }
@@ -256,7 +286,10 @@ export function MonitorPanel({
           {t.monitor.toolUsage}
         </div>
         <div className="rounded-lg border">
-          <ToolCallList tools={stats.toolCalls} noToolCallsLabel={t.monitor.noToolCalls} />
+          <ToolCallList
+            tools={stats.toolCalls}
+            noToolCallsLabel={t.monitor.noToolCalls}
+          />
         </div>
       </div>
 
@@ -271,20 +304,28 @@ export function MonitorPanel({
               <div
                 className={cn(
                   "size-1.5 rounded-lg",
-                  telemetryConfig.enabled ? "bg-green-500" : "bg-muted-foreground/30",
+                  telemetryConfig.enabled
+                    ? "bg-green-500"
+                    : "bg-muted-foreground/30",
                 )}
               />
               <span className="text-muted-foreground">
-                {telemetryConfig.enabled ? t.monitor.otelEnabled : t.monitor.otelDisabled}
+                {telemetryConfig.enabled
+                  ? t.monitor.otelEnabled
+                  : t.monitor.otelDisabled}
               </span>
             </div>
             {!!telemetryConfig.enabled && (
               <>
                 <div className="text-muted-foreground/70 pl-3">
-                  {t.monitor.metrics}: {String(telemetryConfig.metrics_exporter)}
+                  {t.monitor.metrics}:{" "}
+                  {String(telemetryConfig.metrics_exporter)}
                 </div>
                 <div className="text-muted-foreground/70 pl-3">
-                  {t.monitor.privacy}: {telemetryConfig.redact_prompts ? t.monitor.promptsRedacted : t.monitor.promptsLogged}
+                  {t.monitor.privacy}:{" "}
+                  {telemetryConfig.redact_prompts
+                    ? t.monitor.promptsRedacted
+                    : t.monitor.promptsLogged}
                 </div>
               </>
             )}
@@ -325,14 +366,17 @@ export function MonitorPanel({
           </div>
           <div className="text-muted-foreground/60 mt-0.5 flex gap-3 text-[9px]">
             <span className="flex items-center gap-0.5">
-              <span className="inline-block size-1.5 rounded-lg bg-blue-500" /> {t.monitor.inputLabel}
+              <span className="inline-block size-1.5 rounded-lg bg-blue-500" />{" "}
+              {t.monitor.inputLabel}
             </span>
             <span className="flex items-center gap-0.5">
-              <span className="inline-block size-1.5 rounded-lg bg-amber-500" /> {t.monitor.outputLabel}
+              <span className="inline-block size-1.5 rounded-lg bg-amber-500" />{" "}
+              {t.monitor.outputLabel}
             </span>
             {stats.sessionTokens.cacheRead > 0 && (
               <span className="flex items-center gap-0.5">
-                <span className="inline-block size-1.5 rounded-lg bg-purple-400" /> {t.monitor.cacheLabel}
+                <span className="inline-block size-1.5 rounded-lg bg-purple-400" />{" "}
+                {t.monitor.cacheLabel}
               </span>
             )}
           </div>

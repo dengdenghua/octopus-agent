@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import { Controls as ControlsPrimitive } from "@xyflow/react";
 import type { ComponentProps } from "react";
@@ -15,4 +14,3 @@ export const Controls = ({ className, ...props }: ControlsProps) => (
     {...props}
   />
 );
-

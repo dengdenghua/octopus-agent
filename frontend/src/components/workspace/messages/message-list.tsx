@@ -38,10 +38,7 @@ import { AgentAvatar } from "./agent-message-header";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { MarkdownContent } from "./markdown-content";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
-import {
-  hasVisibleMessageGroupContent,
-  MessageGroup,
-} from "./message-group";
+import { hasVisibleMessageGroupContent, MessageGroup } from "./message-group";
 import { MessageListItem } from "./message-list-item";
 import {
   hasMessageOutputSummary,
@@ -83,9 +80,10 @@ export function nearestTurnKeyByViewportCenter(
     if (!rect) continue;
     const top = rect.top;
     const bottom = Math.max(rect.bottom, top);
-    const center = top <= viewportCenter && bottom >= viewportCenter
-      ? viewportCenter
-      : (top + bottom) / 2;
+    const center =
+      top <= viewportCenter && bottom >= viewportCenter
+        ? viewportCenter
+        : (top + bottom) / 2;
     const distance = Math.abs(center - viewportCenter);
     if (!best || distance < best.distance) {
       best = { distance, key: marker.key };
@@ -194,13 +192,15 @@ export function MessageList({
   compact = false,
   lastTurnToolEvents,
   liveToolEvents,
-  mode = "react",
   currentAgent,
+  completedAgentOutput = false,
 }: {
   className?: string;
   threadId: string;
   thread: BaseStream<AgentThreadState>;
   paddingBottom?: number;
+  /** Legacy compatibility prop — no longer consumed by MessageList. */
+  mode?: string;
   compact?: boolean;
   /** Rendered above the first message — e.g. a "load older turns"
    * banner when the thread resumed with a paginated window. */
@@ -208,7 +208,7 @@ export function MessageList({
   footer?: ReactNode;
   lastTurnToolEvents?: LiveToolEvent[];
   liveToolEvents?: LiveToolEvent[];
-  mode?: "chat" | "flash" | "thinking" | "react" | "deep" | "team" | "code";
+  completedAgentOutput?: boolean;
   currentAgent?: {
     name: string;
     display_name?: string | null;
@@ -297,6 +297,7 @@ export function MessageList({
   );
   const turnLocatorRunState = useMemo<TurnLocatorRunState>(() => {
     const events = [...(liveToolEvents ?? []), ...(lastTurnToolEvents ?? [])];
+    if (completedAgentOutput && !thread.isLoading) return "done";
     if (thread.error && !thread.isLoading) return "error";
     if (events.some((event) => event.status === "waiting_approval")) {
       return "pending";
@@ -313,6 +314,7 @@ export function MessageList({
   }, [
     lastTurnToolEvents,
     liveToolEvents,
+    completedAgentOutput,
     thread.error,
     thread.isLoading,
     thread.streamingMessage,
@@ -358,7 +360,10 @@ export function MessageList({
     if (!verificationAuditNotice) return null;
     for (let index = groupedMessages.length - 1; index >= 0; index -= 1) {
       const group = groupedMessages[index]!;
-      if (group.type === "assistant" && hasMessageOutputSummary(group.messages)) {
+      if (
+        group.type === "assistant" &&
+        hasMessageOutputSummary(group.messages)
+      ) {
         return `${group.type}:${group.id ?? `idx-${index}`}`;
       }
       if (group.type === "human") break;
@@ -446,13 +451,11 @@ export function MessageList({
         scrollElement instanceof Window
           ? { top: 0, height: window.innerHeight }
           : scrollElement.getBoundingClientRect();
-      const rects: Record<
-        string,
-        Pick<DOMRect, "bottom" | "top"> | undefined
-      > = {};
+      const rects: Record<string, Pick<DOMRect, "bottom" | "top"> | undefined> =
+        {};
       for (const marker of turnMarkers) {
-        rects[marker.key] = groupRefs.current[marker.key]
-          ?.getBoundingClientRect();
+        rects[marker.key] =
+          groupRefs.current[marker.key]?.getBoundingClientRect();
       }
       const nextKey = nearestTurnKeyByViewportCenter(
         turnMarkers,
@@ -461,7 +464,9 @@ export function MessageList({
         rootRect.height,
       );
       if (nextKey) {
-        setActiveTurnKey((current) => (current === nextKey ? current : nextKey));
+        setActiveTurnKey((current) =>
+          current === nextKey ? current : nextKey,
+        );
       }
     };
 
@@ -911,15 +916,16 @@ export function MessageList({
 
         {footer}
 
-        {errorBannerText && !(verificationAuditNotice && auditNoticeGroupKey) && (
-          <div
-            role="alert"
-            className="flex items-start gap-3 rounded-lg border border-amber-200/70 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-800/50 dark:bg-amber-950/75 dark:text-amber-100"
-          >
-            <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-300" />
-            <span className="min-w-0 leading-6">{errorBannerText}</span>
-          </div>
-        )}
+        {errorBannerText &&
+          !(verificationAuditNotice && auditNoticeGroupKey) && (
+            <div
+              role="alert"
+              className="flex items-start gap-3 rounded-lg border border-amber-200/70 bg-amber-50/90 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-800/50 dark:bg-amber-950/75 dark:text-amber-100"
+            >
+              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-300" />
+              <span className="min-w-0 leading-6">{errorBannerText}</span>
+            </div>
+          )}
 
         <div style={{ height: `${paddingBottom}px` }} />
       </ConversationContent>
@@ -1028,7 +1034,9 @@ function TurnLocatorRail({
           );
         })}
         <TurnLocatorLimitButton
-          active={visibleMarkers[visibleMarkers.length - 1]?.key === lastMarker.key}
+          active={
+            visibleMarkers[visibleMarkers.length - 1]?.key === lastMarker.key
+          }
           direction="down"
           label={"\u8df3\u5230\u6700\u540e\u4e00\u8f6e\u5bf9\u8bdd"}
           onClick={() => onSelect(lastMarker.key)}
@@ -1064,8 +1072,7 @@ function TurnMarkerAvatar({
       data-turn-marker-avatar="true"
       className={cn(
         "pointer-events-none absolute flex size-5 items-center justify-center rounded-full bg-transparent drop-shadow-[0_1px_1px_rgba(0,0,0,0.18)]",
-        runState === "running" &&
-          "animate-[breathing_2s_ease-in-out_infinite]",
+        runState === "running" && "animate-[breathing_2s_ease-in-out_infinite]",
         runState === "pending" && "animate-pulse",
       )}
     >
@@ -1221,10 +1228,7 @@ function TurnLocatorLimitButton({
       title={label}
       type="button"
     >
-      <Icon
-        aria-hidden="true"
-        className="size-4"
-      />
+      <Icon aria-hidden="true" className="size-4" />
     </button>
   );
 }

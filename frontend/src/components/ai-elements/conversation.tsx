@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowDownIcon } from "lucide-react";
@@ -10,7 +9,10 @@ export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
 export const Conversation = ({ className, ...props }: ConversationProps) => (
   <StickToBottom
-    className={cn("relative flex-1 overflow-x-hidden overflow-y-hidden", className)}
+    className={cn(
+      "relative flex-1 overflow-x-hidden overflow-y-hidden",
+      className,
+    )}
     initial="smooth"
     resize="smooth"
     role="log"
@@ -63,7 +65,9 @@ export const ConversationEmptyState = ({
         <div className="space-y-1.5 max-w-xs">
           <h3 className="text-sm font-medium">{title}</h3>
           {description && (
-            <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              {description}
+            </p>
           )}
         </div>
       </>

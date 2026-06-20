@@ -33,9 +33,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   // The default model name is loaded from a /api/config call on mount.
-  fetchMock.mockResolvedValue(
-    jsonOk({ default: "", models: [] }),
-  );
+  fetchMock.mockResolvedValue(jsonOk({ default: "", models: [] }));
 });
 
 afterEach(() => {
@@ -131,9 +129,7 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
 
     // Label and hint are both visible, anchoring the new shape.
     expect(screen.getByText("模型列表")).toBeInTheDocument();
-    expect(
-      screen.getByText(/首项作为选择器默认值/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/首项作为选择器默认值/)).toBeInTheDocument();
 
     // The initial row + the "add model id" button are present.
     expect(
@@ -142,9 +138,7 @@ describe("ModelSettingsPage · add-model form · open-ended list", () => {
 
     // Clicking "+ Add model ID" appends a new input row. Each new row
     // exposes a remove control with the documented tooltip.
-    await user.click(
-      screen.getByRole("button", { name: /添加模型 ID/ }),
-    );
+    await user.click(screen.getByRole("button", { name: /添加模型 ID/ }));
     const removeButtons = screen.getAllByRole("button", {
       name: "删除该模型 ID",
     });
@@ -197,9 +191,7 @@ describe("ModelSettingsPage · local-model one-click import", () => {
     // The scan response surfaces the base_url and the model-count
     // subtitle for the discovered service.
     await waitFor(() => {
-      expect(
-        screen.getByText("http://127.0.0.1:11434/v1"),
-      ).toBeInTheDocument();
+      expect(screen.getByText("http://127.0.0.1:11434/v1")).toBeInTheDocument();
     });
     // Import button is present for the discovered service.
     const importButtons = screen.getAllByRole("button", { name: "一键导入" });
@@ -222,9 +214,7 @@ describe("ModelSettingsPage · local-model one-click import", () => {
       expect(screen.getByText("本地模型")).toBeInTheDocument();
     });
 
-    await user.click(
-      screen.getByRole("button", { name: /扫描本地服务/ }),
-    );
+    await user.click(screen.getByRole("button", { name: /扫描本地服务/ }));
 
     // Empty-state hint guides the operator toward starting a service.
     await waitFor(() => {

@@ -30,6 +30,8 @@ function effortLabel(effort: ReasoningEffort, locale: string): string {
       return zh ? "高" : "High";
     case "xhigh":
       return zh ? "超高" : "Ultra";
+    default:
+      return effort;
   }
 }
 

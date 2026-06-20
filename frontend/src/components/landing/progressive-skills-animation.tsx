@@ -1,4 +1,3 @@
-
 import {
   Folder,
   FileText,
@@ -698,4 +697,3 @@ export default function ProgressiveSkillsAnimation() {
     </div>
   );
 }
-

@@ -1,4 +1,3 @@
-
 import { Coins, LogOut, RefreshCw, User } from "lucide-react";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +15,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useMoliliLink,
+import {
+  useMoliliLink,
   useRefreshMoliliCredits,
   type MoliliCredits,
 } from "@/core/molili";
@@ -25,10 +25,15 @@ import { toast } from "sonner";
 import { useI18n } from "@/core/i18n/hooks";
 
 /* Implementation note. */
-function formatCredits(n: number | undefined | null, t: { numberFormat: { yi: string; wan: string } }): string {
+function formatCredits(
+  n: number | undefined | null,
+  t: { numberFormat: { yi: string; wan: string } },
+): string {
   if (n === undefined || n === null || Number.isNaN(n)) return "—";
-  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}${t.numberFormat.yi}`;
-  if (n >= 10_000) return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}${t.numberFormat.wan}`;
+  if (n >= 100_000_000)
+    return `${(n / 100_000_000).toFixed(1)}${t.numberFormat.yi}`;
+  if (n >= 10_000)
+    return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}${t.numberFormat.wan}`;
   if (n >= 1_000) return n.toLocaleString();
   return String(n);
 }
@@ -168,7 +173,9 @@ export function UserMenu() {
                 <DropdownMenuSeparator />
                 <div className="px-2 pb-2 pt-1.5 text-xs">
                   <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-muted-foreground">{t.credits.credits}</span>
+                    <span className="text-muted-foreground">
+                      {t.credits.credits}
+                    </span>
                     <button
                       type="button"
                       onClick={handleRefresh}
@@ -180,7 +187,9 @@ export function UserMenu() {
                           "size-3 " + (refresh.isPending ? "animate-spin" : "")
                         }
                       />
-                      {refresh.isPending ? t.accountSettings.refreshing : t.accountSettings.refresh}
+                      {refresh.isPending
+                        ? t.accountSettings.refreshing
+                        : t.accountSettings.refresh}
                     </button>
                   </div>
                   <div className="mb-2 flex items-baseline justify-between">

@@ -26,6 +26,13 @@ function LegacyCodeRedirect() {
   return <HashRedirect to={target} />;
 }
 
+function StorageRedirect() {
+  const search = window.location.hash.includes("?")
+    ? window.location.hash.slice(window.location.hash.indexOf("?"))
+    : "?surface=company";
+  return <Navigate to={`/workspace/storage${search}`} replace />;
+}
+
 function HashRedirect({ to }: { to: string }) {
   useEffect(() => {
     window.location.replace(`${window.location.pathname}#${to}`);
@@ -80,6 +87,7 @@ const IntelligencePage = lazy(
   () => import("./app/workspace/intelligence/page"),
 );
 const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
+const StoragePage = lazy(() => import("./app/workspace/storage/page"));
 const EvolutionPage = lazy(() => import("./app/workspace/evolution/page"));
 const WorkflowsPage = lazy(() => import("./app/workspace/workflows/page"));
 // Reflex monitor + YAML editor · ports the inline-HTML
@@ -191,6 +199,9 @@ export function AppRouter() {
                 element={<HashRedirect to="/workspace/realtime/new" />}
               />
               <Route path="knowledge" element={<KnowledgePage />} />
+              <Route path="storage" element={<StoragePage />} />
+              <Route path="nas" element={<StorageRedirect />} />
+              <Route path="database" element={<StorageRedirect />} />
               <Route path="evolution" element={<EvolutionPage />} />
               <Route path="workflows" element={<WorkflowsPage />} />
               <Route path="reflex" element={<ReflexMonitorPage />} />

@@ -59,6 +59,76 @@ class ReviewQueue:
             "total": len(payload["items"]),
         }
 
+    def upsert_item(
+        self,
+        *,
+        source: str,
+        source_kind: str,
+        candidate_kind: str,
+        priority: str,
+        target_bucket: str,
+        title: str,
+        text: str,
+        metadata: dict[str, Any] | None = None,
+        source_task_ids: list[str] | None = None,
+        thread_ids: list[str] | None = None,
+        turn_ids: list[str] | None = None,
+        agent_ids: list[str] | None = None,
+        tags: list[str] | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        payload = self._read()
+        items = list(payload.get("items") or [])
+        now_text = _iso(now)
+        clean_title = _clean_text(title, limit=180)
+        clean_text = _clean_text(text, limit=1200)
+        if not clean_title or not clean_text:
+            raise ValueError("title and text are required")
+        candidate = _new_item(
+            now_text=now_text,
+            source_task_id="",
+            thread_id="",
+            turn_id="",
+            agent_id="",
+            source_kind=_clean_text(source_kind, limit=80) or "policy_review",
+            candidate_kind=_clean_text(candidate_kind, limit=80) or "policy_review",
+            priority=_priority(priority),
+            target_bucket=_clean_text(target_bucket, limit=80) or "policy_review",
+            title=clean_title,
+            text=clean_text,
+            metadata=metadata if isinstance(metadata, dict) else {},
+        )
+        candidate["source"] = _clean_text(source, limit=80) or "manual"
+        candidate["source_task_ids"] = _clean_unique_list(source_task_ids, limit=80)
+        candidate["thread_ids"] = _clean_unique_list(thread_ids, limit=80)
+        candidate["turn_ids"] = _clean_unique_list(turn_ids, limit=80)
+        candidate["agent_ids"] = _clean_unique_list(agent_ids, limit=80)
+        candidate["tags"] = _merge_unique(candidate["tags"], tags or [])
+
+        existing = _find_item(items, candidate["id"])
+        created = 0
+        updated = 0
+        if existing is None:
+            items.append(candidate)
+            item = candidate
+            created = 1
+        else:
+            _merge_existing_item(existing, candidate, now_text)
+            item = existing
+            updated = 1
+
+        payload["items"] = sorted(items, key=_item_sort_key)
+        payload["lastUpdated"] = now_text
+        self._write(payload)
+        return {
+            "schema": _SCHEMA,
+            "source": {"source": candidate["source"]},
+            "created": created,
+            "updated": updated,
+            "items": [item],
+            "total": len(payload["items"]),
+        }
+
     def items(
         self,
         *,
@@ -130,6 +200,35 @@ class ReviewQueue:
             else "none"
         )
 
+        payload["items"] = sorted(rows, key=_item_sort_key)
+        payload["lastUpdated"] = now_text
+        self._write(payload)
+        return {"schema": _SCHEMA, "item": item}
+
+    def update_metadata(
+        self,
+        item_id: str,
+        *,
+        metadata_patch: dict[str, Any],
+        tags: list[str] | None = None,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        normalized_id = _clean_text(item_id, limit=80)
+        payload = self._read()
+        rows = list(payload.get("items") or [])
+        item = _find_item(rows, normalized_id)
+        if item is None:
+            raise KeyError(normalized_id)
+        if not isinstance(metadata_patch, dict):
+            raise ValueError("metadata_patch must be an object")
+
+        now_text = _iso(now)
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        metadata.update(metadata_patch)
+        item["metadata"] = metadata
+        item["tags"] = _merge_unique(item.get("tags"), tags or [])
+        item["updated_at"] = now_text
+        item["last_seen_at"] = now_text
         payload["items"] = sorted(rows, key=_item_sort_key)
         payload["lastUpdated"] = now_text
         self._write(payload)
@@ -231,6 +330,7 @@ def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, 
     thread_id = _clean_text(review.get("thread_id"), limit=120)
     turn_id = _clean_text(review.get("turn_id"), limit=120)
     agent_id = _clean_text(review.get("agent_id"), limit=120)
+    evidence = _review_evidence_metadata(review)
     rows: list[dict[str, Any]] = []
     for item in review.get("learning_candidates") or []:
         if not isinstance(item, dict):
@@ -253,7 +353,7 @@ def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, 
             target_bucket=target_bucket,
             title=title,
             text=text,
-            metadata={"candidate": item, "review_status": review.get("status")},
+            metadata={**evidence, "candidate": item},
         ))
     for item in review.get("backlog_candidates") or []:
         if not isinstance(item, dict):
@@ -275,16 +375,45 @@ def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, 
             title=title,
             text=text,
             metadata={
+                **evidence,
                 "candidate": item,
                 "minimal_implementation": _clean_text(
                     item.get("minimal_implementation"),
                     limit=1200,
                 ),
                 "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
-                "review_status": review.get("status"),
             },
         ))
     return rows
+
+
+def _review_evidence_metadata(review: dict[str, Any]) -> dict[str, Any]:
+    replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
+    resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
+    latest = (
+        resume.get("latest_checkpoint")
+        if isinstance(resume.get("latest_checkpoint"), dict)
+        else {}
+    )
+    integrity = latest.get("integrity") if isinstance(latest.get("integrity"), dict) else {}
+    return {
+        "review_status": review.get("status"),
+        "replay": {
+            "schema": replay.get("schema"),
+            "case_id": replay.get("case_id"),
+            "fingerprint": replay.get("fingerprint"),
+            "replayable": bool(replay.get("replayable")),
+            "step_count": int(replay.get("step_count") or 0),
+        },
+        "resume": {
+            "available": bool(resume.get("available")),
+            "source": resume.get("source"),
+            "latest_checkpoint_id": latest.get("id"),
+            "checkpoint_type": latest.get("type"),
+            "resume_safe": bool(integrity.get("resume_safe")),
+            "continue_from_iteration": int(integrity.get("continue_from_iteration") or 0),
+        },
+    }
 
 
 def _new_item(

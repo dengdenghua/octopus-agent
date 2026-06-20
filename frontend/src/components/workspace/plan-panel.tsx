@@ -1,4 +1,3 @@
-
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -41,7 +40,9 @@ function extractPlanFromMessages(messages: Message[]): PlanStep[] {
         ? msg.content
         : Array.isArray(msg.content)
           ? msg.content
-              .map((p: string | { type?: string; text?: string }) => (typeof p === "string" ? p : p?.text ?? ""))
+              .map((p: string | { type?: string; text?: string }) =>
+                typeof p === "string" ? p : (p?.text ?? ""),
+              )
               .join("")
           : "";
 
@@ -103,7 +104,9 @@ function extractPlanFromMessages(messages: Message[]): PlanStep[] {
 }
 
 function extractTodosAsSteps(
-  todos: Array<{ content: string; status: string; activeForm?: string }> | undefined,
+  todos:
+    | Array<{ content: string; status: string; activeForm?: string }>
+    | undefined,
   labels?: { completed: string; inProgress: string; pending: string },
 ): PlanStep[] {
   if (!todos || todos.length === 0) return [];
@@ -113,7 +116,11 @@ function extractTodosAsSteps(
   // suppresses the expand chevron for minimal {content, status} todos
   // (which is what the backend write_todos middleware emits today).
   const statusLabel = (s: string) =>
-    s === "completed" ? (labels?.completed ?? "completed") : s === "in_progress" ? (labels?.inProgress ?? "in_progress") : (labels?.pending ?? "pending");
+    s === "completed"
+      ? (labels?.completed ?? "completed")
+      : s === "in_progress"
+        ? (labels?.inProgress ?? "in_progress")
+        : (labels?.pending ?? "pending");
   return todos.map((todo, i) => ({
     id: `todo-${i}`,
     description: todo.content,
@@ -161,10 +168,14 @@ function PlanStepItem({
     <div
       className={cn(
         "rounded-lg border px-3 py-2 transition-colors duration-200",
-        step.status === "completed" && "border-green-200/60 bg-green-50/50 dark:border-green-900/30 dark:bg-green-950/20",
-        step.status === "in_progress" && "border-primary/30 bg-primary/5 shadow-sm shadow-primary/5",
-        step.status === "failed" && "border-red-200/60 bg-red-50/50 dark:border-red-900/30 dark:bg-red-950/20",
-        step.status === "pending" && "border-border/60 bg-muted/20 hover:bg-muted/30",
+        step.status === "completed" &&
+          "border-green-200/60 bg-green-50/50 dark:border-green-900/30 dark:bg-green-950/20",
+        step.status === "in_progress" &&
+          "border-primary/30 bg-primary/5 shadow-sm shadow-primary/5",
+        step.status === "failed" &&
+          "border-red-200/60 bg-red-50/50 dark:border-red-900/30 dark:bg-red-950/20",
+        step.status === "pending" &&
+          "border-border/60 bg-muted/20 hover:bg-muted/30",
       )}
     >
       <button
@@ -193,7 +204,8 @@ function PlanStepItem({
             <span
               className={cn(
                 "text-xs",
-                step.status === "completed" && "text-muted-foreground line-through",
+                step.status === "completed" &&
+                  "text-muted-foreground line-through",
                 step.status === "in_progress" && "text-foreground font-medium",
                 step.status === "pending" && "text-muted-foreground",
               )}
@@ -204,13 +216,12 @@ function PlanStepItem({
         </div>
 
         {/* Expand arrow */}
-        {(step.detail || step.toolCalls) && (
-          expanded ? (
+        {(step.detail || step.toolCalls) &&
+          (expanded ? (
             <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground" />
           ) : (
             <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground" />
-          )
-        )}
+          ))}
       </button>
 
       {/* Detail */}
@@ -252,7 +263,6 @@ export function PlanButton({
   isActive: boolean;
   className?: string;
 }) {
-
   return (
     <button
       onClick={onClick}
@@ -291,7 +301,11 @@ export function PlanPanel({
   const { t } = useI18n();
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
 
-  const planLabels = { completed: t.planPanel.completed, inProgress: t.planPanel.inProgress, pending: t.planPanel.pending };
+  const planLabels = {
+    completed: t.planPanel.completed,
+    inProgress: t.planPanel.inProgress,
+    pending: t.planPanel.pending,
+  };
 
   // Extract plan steps from messages and/or todos
   const steps = useMemo(
@@ -300,7 +314,8 @@ export function PlanPanel({
   );
 
   const completedCount = steps.filter((s) => s.status === "completed").length;
-  const progressPct = steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
+  const progressPct =
+    steps.length > 0 ? (completedCount / steps.length) * 100 : 0;
 
   const toggleStep = (id: string) => {
     setExpandedSteps((prev) => {

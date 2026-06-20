@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import pytest
 
+from runtime.core.cerebrum.react_checkpointing import _DEFAULT_CHECKPOINT_INTERVAL
 from runtime.core.cerebrum.react_loop import (
     _checkpoint_interval,
     _should_auto_checkpoint,
@@ -26,25 +27,25 @@ from runtime.core.cerebrum.react_loop import (
 
 
 class TestCheckpointInterval:
-    def test_unset_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_unset_returns_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N", raising=False)
-        assert _checkpoint_interval() == 0
+        assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
-    def test_blank_returns_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_blank_returns_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "   ")
-        assert _checkpoint_interval() == 0
+        assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
-    def test_explicit_zero_returns_zero(
+    def test_explicit_zero_disables(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "0")
         assert _checkpoint_interval() == 0
 
-    def test_negative_treated_as_off(
+    def test_negative_returns_default(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "-3")
-        assert _checkpoint_interval() == 0
+        assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
     def test_positive_int_returned(
         self, monkeypatch: pytest.MonkeyPatch,
@@ -52,11 +53,11 @@ class TestCheckpointInterval:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "5")
         assert _checkpoint_interval() == 5
 
-    def test_garbage_returns_zero(
+    def test_garbage_returns_default(
         self, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "not-a-number")
-        assert _checkpoint_interval() == 0
+        assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
     def test_re_read_each_call(
         self, monkeypatch: pytest.MonkeyPatch,
@@ -67,7 +68,7 @@ class TestCheckpointInterval:
         monkeypatch.setenv("OCTOPUS_CHECKPOINT_EVERY_N", "7")
         assert _checkpoint_interval() == 7
         monkeypatch.delenv("OCTOPUS_CHECKPOINT_EVERY_N")
-        assert _checkpoint_interval() == 0
+        assert _checkpoint_interval() == _DEFAULT_CHECKPOINT_INTERVAL
 
 
 # ══════════════════════════════════════════════════════════════════

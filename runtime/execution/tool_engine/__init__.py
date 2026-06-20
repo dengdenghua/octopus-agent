@@ -1,4 +1,37 @@
 
 from .executor import StepExecutionError, ToolExecutor
+from .tool_protocol import (
+    NormalizedToolCall,
+    NormalizedToolLifecycleEvent,
+    NormalizedToolResult,
+    ToolCallOrigin,
+    ToolLifecycleKind,
+    normalize_step_tool_result,
+    normalize_task_node_tool_call,
+    normalize_tool_call,
+    normalize_tool_lifecycle_event,
+    normalize_tool_result,
+    output_signals_error,
+    render_tool_output,
+    tool_lifecycle_event_to_react_event,
+    tool_lifecycle_event_to_trace_payload,
+)
 
-__all__ = ["StepExecutionError", "ToolExecutor"]
+__all__ = [
+    "NormalizedToolCall",
+    "NormalizedToolLifecycleEvent",
+    "NormalizedToolResult",
+    "StepExecutionError",
+    "ToolCallOrigin",
+    "ToolLifecycleKind",
+    "ToolExecutor",
+    "normalize_tool_lifecycle_event",
+    "normalize_step_tool_result",
+    "normalize_tool_result",
+    "normalize_task_node_tool_call",
+    "normalize_tool_call",
+    "output_signals_error",
+    "render_tool_output",
+    "tool_lifecycle_event_to_react_event",
+    "tool_lifecycle_event_to_trace_payload",
+]

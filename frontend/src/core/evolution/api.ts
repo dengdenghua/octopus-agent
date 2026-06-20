@@ -69,8 +69,18 @@ export interface FitnessReport {
   ok: boolean;
   agent_id: string;
   ts: string;
-  l1: { score: number; trend: string; success_rate: number; avg_rounds: number } | null;
-  l2: { score: number; dominant_failure: string; action: string; confidence: number } | null;
+  l1: {
+    score: number;
+    trend: string;
+    success_rate: number;
+    avg_rounds: number;
+  } | null;
+  l2: {
+    score: number;
+    dominant_failure: string;
+    action: string;
+    confidence: number;
+  } | null;
   combined: number;
   verdict: string;
 }
@@ -108,53 +118,72 @@ export async function getEvolutionOverview(): Promise<EvolutionOverview> {
   const res = await fetch(`${getBackendBaseURL()}/api/evolution/overview`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to load evolution overview: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load evolution overview: ${res.statusText}`);
   return (await res.json()) as EvolutionOverview;
 }
 
-export async function getLearningCurve(weeks?: number): Promise<LearningCurvePoint[]> {
+export async function getLearningCurve(
+  weeks?: number,
+): Promise<LearningCurvePoint[]> {
   const params = new URLSearchParams();
   if (weeks !== undefined) params.set("weeks", String(weeks));
   const qs = params.toString();
   const url = `${getBackendBaseURL()}/api/evolution/learning-curve${qs ? `?${qs}` : ""}`;
   const res = await fetch(url, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`Failed to load learning curve: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load learning curve: ${res.statusText}`);
   return (await res.json()) as LearningCurvePoint[];
 }
 
 export async function getSkillPerformance(): Promise<SkillPerformance[]> {
-  const res = await fetch(`${getBackendBaseURL()}/api/evolution/skills/performance`, {
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error(`Failed to load skill performance: ${res.statusText}`);
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/evolution/skills/performance`,
+    {
+      headers: authHeaders(),
+    },
+  );
+  if (!res.ok)
+    throw new Error(`Failed to load skill performance: ${res.statusText}`);
   return (await res.json()) as SkillPerformance[];
 }
 
-export async function getMemoryGrowth(days?: number): Promise<MemoryGrowthPoint[]> {
+export async function getMemoryGrowth(
+  days?: number,
+): Promise<MemoryGrowthPoint[]> {
   const params = new URLSearchParams();
   if (days !== undefined) params.set("days", String(days));
   const qs = params.toString();
   const url = `${getBackendBaseURL()}/api/evolution/memory/growth${qs ? `?${qs}` : ""}`;
   const res = await fetch(url, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`Failed to load memory growth: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load memory growth: ${res.statusText}`);
   return (await res.json()) as MemoryGrowthPoint[];
 }
 
 export async function getRecommendations(): Promise<Recommendation[]> {
-  const res = await fetch(`${getBackendBaseURL()}/api/evolution/recommendations`, {
-    headers: authHeaders(),
-  });
-  if (!res.ok) throw new Error(`Failed to load recommendations: ${res.statusText}`);
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/evolution/recommendations`,
+    {
+      headers: authHeaders(),
+    },
+  );
+  if (!res.ok)
+    throw new Error(`Failed to load recommendations: ${res.statusText}`);
   return (await res.json()) as Recommendation[];
 }
 
-export async function getFitness(agentId: string, window?: number): Promise<FitnessReport> {
+export async function getFitness(
+  agentId: string,
+  window?: number,
+): Promise<FitnessReport> {
   const params = new URLSearchParams();
   if (window !== undefined) params.set("window", String(window));
   const qs = params.toString();
   const url = `${getBackendBaseURL()}/api/evolution/fitness/${encodeURIComponent(agentId)}${qs ? `?${qs}` : ""}`;
   const res = await fetch(url, { headers: authHeaders() });
-  if (!res.ok) throw new Error(`Failed to load fitness report: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load fitness report: ${res.statusText}`);
   return (await res.json()) as FitnessReport;
 }
 
@@ -163,7 +192,8 @@ export async function getDrift(agentId: string): Promise<DriftReport> {
     `${getBackendBaseURL()}/api/evolution/drift/${encodeURIComponent(agentId)}`,
     { headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Failed to load drift report: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load drift report: ${res.statusText}`);
   return (await res.json()) as DriftReport;
 }
 
@@ -171,7 +201,11 @@ export async function getLedger(opts?: {
   status?: string;
   kind?: string;
   limit?: number;
-}): Promise<{ total: number; records: LedgerRecord[]; stats: Record<string, unknown> }> {
+}): Promise<{
+  total: number;
+  records: LedgerRecord[];
+  stats: Record<string, unknown>;
+}> {
   const params = new URLSearchParams();
   if (opts?.status) params.set("status", opts.status);
   if (opts?.kind) params.set("kind", opts.kind);
@@ -187,12 +221,19 @@ export async function getLedger(opts?: {
   };
 }
 
-export async function getCanary(): Promise<{ active_count: number; canaries: CanaryState[] }> {
+export async function getCanary(): Promise<{
+  active_count: number;
+  canaries: CanaryState[];
+}> {
   const res = await fetch(`${getBackendBaseURL()}/api/evolution/canary`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to load canary state: ${res.statusText}`);
-  return (await res.json()) as { active_count: number; canaries: CanaryState[] };
+  if (!res.ok)
+    throw new Error(`Failed to load canary state: ${res.statusText}`);
+  return (await res.json()) as {
+    active_count: number;
+    canaries: CanaryState[];
+  };
 }
 
 export async function rollbackCanary(
@@ -206,5 +247,9 @@ export async function rollbackCanary(
     },
   );
   if (!res.ok) throw new Error(`Failed to rollback canary: ${res.statusText}`);
-  return (await res.json()) as { ok: boolean; skill_name: string; phase: string };
+  return (await res.json()) as {
+    ok: boolean;
+    skill_name: string;
+    phase: string;
+  };
 }

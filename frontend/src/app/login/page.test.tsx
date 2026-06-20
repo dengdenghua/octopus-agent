@@ -11,11 +11,9 @@ const smsLoginMock = vi.fn();
 const getAuthProvidersMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
-  const actual =
-    await vi.importActual<typeof import("react-router-dom") // eslint-disable-line @typescript-eslint/consistent-type-imports
-    >(
-      "react-router-dom",
-    );
+  const actual = await vi.importActual<
+    typeof import("react-router-dom") // eslint-disable-line @typescript-eslint/consistent-type-imports
+  >("react-router-dom");
   return {
     ...actual,
     useNavigate: () => navigateMock,
@@ -121,14 +119,19 @@ describe("LoginPage", () => {
     smsSendMock.mockResolvedValue({ sent: true });
     const user = await renderPageAtLoginForm();
 
-    await user.type(screen.getByRole("textbox", { name: "手机号" }), "13800001111");
+    await user.type(
+      screen.getByRole("textbox", { name: "手机号" }),
+      "13800001111",
+    );
 
     const sendBtn = screen.getByRole("button", { name: "获取验证码" });
     expect(sendBtn).not.toBeDisabled();
     await user.click(sendBtn);
 
     // API hit with the trimmed phone.
-    await waitFor(() => expect(smsSendMock).toHaveBeenCalledWith("13800001111"));
+    await waitFor(() =>
+      expect(smsSendMock).toHaveBeenCalledWith("13800001111"),
+    );
 
     // Implementation note.
     // · assert the original label is gone.
@@ -143,7 +146,10 @@ describe("LoginPage", () => {
     smsLoginMock.mockResolvedValue(undefined);
     const user = await renderPageAtLoginForm();
 
-    await user.type(screen.getByRole("textbox", { name: "手机号" }), "13800001111");
+    await user.type(
+      screen.getByRole("textbox", { name: "手机号" }),
+      "13800001111",
+    );
     await user.type(screen.getByRole("textbox", { name: "验证码" }), "123456");
 
     // Implementation note.
@@ -163,7 +169,10 @@ describe("LoginPage", () => {
     smsLoginMock.mockRejectedValue(new Error("验证码已过期"));
     const user = await renderPageAtLoginForm();
 
-    await user.type(screen.getByRole("textbox", { name: "手机号" }), "13800001111");
+    await user.type(
+      screen.getByRole("textbox", { name: "手机号" }),
+      "13800001111",
+    );
     await user.type(screen.getByRole("textbox", { name: "验证码" }), "000000");
     await user.click(screen.getByRole("button", { name: "登录" }));
 

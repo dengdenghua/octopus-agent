@@ -1,6 +1,7 @@
 
 from __future__ import annotations
 
+import queue
 from typing import Any
 
 from runtime.adapters.instrumentation import trace_stage
@@ -14,6 +15,7 @@ from runtime.platform.models import (
     CostEntry,
     SkillId,
 )
+from runtime.safety.chromatophores import SignalBus, SignalEvent
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
@@ -32,6 +34,7 @@ class Worker:
         description: str = "",
         soul: str = "",
         icon: str = "",
+        signal_bus: SignalBus | None = None,
     ) -> None:
         self.arm_id: ArmId = arm_id
         self.affinity: list[str] = list(affinity)
@@ -41,6 +44,74 @@ class Worker:
         self.description: str = description
         self.soul: str = soul
         self.icon: str = icon
+        # ─── Mesh communication (网状 Arm 互通 阶段 1) ──────
+        # When a signal_bus is injected, the Arm subscribes to its own
+        # mailbox topic (``arm.mailbox.<arm_id>``) and can both receive
+        # peer messages and send them via ``send_to_arm``. Without a
+        # bus the Arm stays isolated (back-compat with existing callers
+        # that don't pass signal_bus).
+        self._signal_bus: SignalBus | None = signal_bus
+        self._mailbox: queue.Queue[SignalEvent] = queue.Queue()
+        self._mailbox_sid: int | None = None
+        if signal_bus is not None:
+            self._mailbox_sid = signal_bus.subscribe(
+                f"arm.mailbox.{arm_id}", self._on_mailbox_message
+            )
+
+    # ─── Mesh communication ────────────────────────────────
+
+    def _on_mailbox_message(self, event: SignalEvent) -> None:
+        """SignalBus handler: enqueue peer message for later retrieval.
+
+        Runs in the publisher's thread (SignalBus dispatches handlers
+        synchronously), so it must stay non-blocking — just put on the
+        queue. ``drain_mailbox`` is called by the Arm's own execution
+        thread to process them.
+        """
+        self._mailbox.put_nowait(event)
+
+    def drain_mailbox(self) -> list[SignalEvent]:
+        """Pop all pending peer messages from the mailbox.
+
+        Called by the Arm's execution thread (e.g. at the start of
+        ``handle`` or between GraphRuntime steps) to process messages
+        received from other Arms via ``send_to_arm``. Returns messages
+        in arrival order; returns an empty list if none pending.
+        """
+        messages: list[SignalEvent] = []
+        while True:
+            try:
+                messages.append(self._mailbox.get_nowait())
+            except queue.Empty:
+                break
+        return messages
+
+    def send_to_arm(self, target_arm_id: str, body: dict) -> Any:
+        """Send a point-to-point message to a peer Arm's mailbox.
+
+        No-op (returns None) when this Arm has no signal_bus injected
+        — keeps callers simple in tests/presets that don't wire the bus.
+        """
+        if self._signal_bus is None:
+            return None
+        return self._signal_bus.send_to_arm(
+            target_arm_id, body, from_arm_id=str(self.arm_id)
+        )
+
+    def _on_step(self, step: Any, node_index: int, total_nodes: int) -> None:
+        """GraphRuntime on_step_callback: drain mailbox between steps.
+
+        Called by GraphRuntime after each node (sequential path) or
+        after each layer (layered path) completes. Lets the Arm react
+        to peer messages mid-run without breaking the graph loop.
+
+        Only wired when a signal_bus is present — without a bus the
+        mailbox is always empty, so we skip the drain to avoid the
+        queue-empty exception churn on every step.
+        """
+        if self._signal_bus is None:
+            return
+        self.drain_mailbox()
 
 
     def can_use(self, skill_ref: Any) -> bool:
@@ -88,6 +159,7 @@ class Worker:
                     budget=budget,
                     caller=f"arms/{self.arm_id}",
                     arm_id=self.arm_id,
+                    on_step_callback=self._on_step,
                 )
             except Exception as e:  # noqa: BLE001
                 span.record_exception(e)

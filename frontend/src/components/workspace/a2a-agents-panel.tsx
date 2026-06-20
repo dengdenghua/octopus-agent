@@ -80,7 +80,9 @@ interface TaskResult {
 
 const api = {
   async listAgents(): Promise<{ agents: RemoteAgent[]; count: number }> {
-    const res = await fetch(`${getBackendBaseURL()}/api/a2a/agents`, { headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/a2a/agents`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error(`Failed to list agents: ${res.statusText}`);
     return res.json();
   },
@@ -117,10 +119,7 @@ const api = {
     return res.json();
   },
 
-  async sendTask(
-    agentId: string,
-    text: string,
-  ): Promise<TaskResult> {
+  async sendTask(agentId: string, text: string): Promise<TaskResult> {
     const res = await fetch(
       `${getBackendBaseURL()}/api/a2a/agents/${agentId}/send`,
       {
@@ -323,9 +322,7 @@ function RegisterForm({
           {t.a2a.connect}
         </button>
       </div>
-      {error && (
-        <p className="mt-1.5 text-[11px] text-red-500">{error}</p>
-      )}
+      {error && <p className="mt-1.5 text-[11px] text-red-500">{error}</p>}
     </form>
   );
 }
@@ -390,9 +387,7 @@ function AgentCard({
           {/* Info */}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-sm font-medium">
-                {agent.name}
-              </span>
+              <span className="truncate text-sm font-medium">{agent.name}</span>
               <span className="text-muted-foreground text-[10px]">
                 v{agent.version}
               </span>
@@ -585,10 +580,7 @@ function AgentDetailView({
           </span>
           <div className="mt-2 space-y-2">
             {agent.skills.map((skill) => (
-              <div
-                key={skill.id}
-                className="rounded-lg bg-muted/30 px-3 py-2"
-              >
+              <div key={skill.id} className="rounded-lg bg-muted/30 px-3 py-2">
                 <p className="text-xs font-medium">{skill.name}</p>
                 {skill.description && (
                   <p className="text-muted-foreground mt-0.5 text-[11px]">
@@ -727,10 +719,7 @@ function AgentDetailView({
             {taskResult.messages
               .filter((m) => m.role === "agent")
               .map((msg, i) => (
-                <div
-                  key={i}
-                  className="mt-2 rounded-lg bg-muted/30 px-3 py-2"
-                >
+                <div key={i} className="mt-2 rounded-lg bg-muted/30 px-3 py-2">
                   {msg.parts.map((part, j) => (
                     <p key={j} className="text-xs leading-relaxed">
                       {part.text || t.a2a.nonTextContent}

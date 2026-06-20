@@ -32,13 +32,7 @@ import {
   XCircleIcon,
   XIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -126,7 +120,11 @@ interface QuestState {
 // Phase definitions
 // ---------------------------------------------------------------------------
 
-const PHASES: { key: QuestPhase; labelKey: "analyze" | "plan" | "execute" | "verify" | "report"; icon: React.ElementType }[] = [
+const PHASES: {
+  key: QuestPhase;
+  labelKey: "analyze" | "plan" | "execute" | "verify" | "report";
+  icon: React.ElementType;
+}[] = [
   { key: "analyzing", labelKey: "analyze", icon: SearchIcon },
   { key: "planning", labelKey: "plan", icon: ClipboardCheckIcon },
   { key: "executing", labelKey: "execute", icon: PlayIcon },
@@ -261,14 +259,20 @@ function useQuestStream(questId: string | null): QuestState {
         return;
       }
       setState((s) => {
-        const updated = { ...s, currentStepIndex: data.step_index ?? s.currentStepIndex };
+        const updated = {
+          ...s,
+          currentStepIndex: data.step_index ?? s.currentStepIndex,
+        };
         if (data.result) {
           // Avoid duplicates by step_id
           const existing = s.stepResults.find(
             (r) => r.step_id === (data.result as QuestStepResult).step_id,
           );
           if (!existing) {
-            updated.stepResults = [...s.stepResults, data.result as QuestStepResult];
+            updated.stepResults = [
+              ...s.stepResults,
+              data.result as QuestStepResult,
+            ];
           }
         }
         return updated;
@@ -351,8 +355,7 @@ function PhaseStepper({ currentPhase }: { currentPhase: QuestPhase }) {
             <div
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-300",
-                isActive &&
-                  "bg-primary/10 text-primary ring-1 ring-primary/30",
+                isActive && "bg-primary/10 text-primary ring-1 ring-primary/30",
                 isComplete && "text-emerald-600 dark:text-emerald-400",
                 isFuture && "text-muted-foreground/40",
               )}
@@ -582,13 +585,14 @@ function ExecutionProgress({
                   >
                     {step.title}
                   </span>
-                  {result?.duration_ms !== undefined && result.duration_ms > 0 && (
-                    <span className="text-muted-foreground shrink-0 text-[10px]">
-                      {result.duration_ms < 1000
-                        ? `${result.duration_ms}ms`
-                        : `${(result.duration_ms / 1000).toFixed(1)}s`}
-                    </span>
-                  )}
+                  {result?.duration_ms !== undefined &&
+                    result.duration_ms > 0 && (
+                      <span className="text-muted-foreground shrink-0 text-[10px]">
+                        {result.duration_ms < 1000
+                          ? `${result.duration_ms}ms`
+                          : `${(result.duration_ms / 1000).toFixed(1)}s`}
+                      </span>
+                    )}
                 </div>
                 {result?.output && (
                   <p className="text-muted-foreground mt-0.5 truncate">
@@ -596,9 +600,7 @@ function ExecutionProgress({
                   </p>
                 )}
                 {result?.error && (
-                  <p className="mt-0.5 truncate text-red-500">
-                    {result.error}
-                  </p>
+                  <p className="mt-0.5 truncate text-red-500">{result.error}</p>
                 )}
               </div>
             </div>
@@ -628,7 +630,9 @@ function VerificationResults({
           <AlertTriangleIcon className="size-4 text-amber-500" />
         )}
         <h4 className="text-sm font-semibold">
-          {verification.passed ? t.questMode.verificationPassed : t.questMode.verificationIssues}
+          {verification.passed
+            ? t.questMode.verificationPassed
+            : t.questMode.verificationIssues}
         </h4>
         {verification.fix_attempts > 0 && (
           <span className="text-muted-foreground text-[10px]">
@@ -643,7 +647,9 @@ function VerificationResults({
             <div className="text-sm font-bold">
               {verification.tests_passed}/{verification.tests_run}
             </div>
-            <div className="text-muted-foreground text-[10px]">{t.questMode.tests}</div>
+            <div className="text-muted-foreground text-[10px]">
+              {t.questMode.tests}
+            </div>
           </div>
         )}
         {verification.lint_errors > 0 && (
@@ -674,10 +680,7 @@ function VerificationResults({
             {t.questMode.requirementChecks}
           </div>
           {verification.requirement_checks.map((check, i) => (
-            <div
-              key={i}
-              className="flex items-start gap-1.5 text-xs"
-            >
+            <div key={i} className="flex items-start gap-1.5 text-xs">
               {check.passed ? (
                 <CheckCircle2Icon className="mt-0.5 size-3 text-emerald-500" />
               ) : (
@@ -742,11 +745,15 @@ function ReportCard({ report }: { report: QuestReport }) {
           <div className="font-bold">
             {report.steps_completed}/{report.steps_total}
           </div>
-          <div className="text-muted-foreground">{t.questMode.stepsCompleted}</div>
+          <div className="text-muted-foreground">
+            {t.questMode.stepsCompleted}
+          </div>
         </div>
         <div className="rounded-lg border border-border/60 bg-card p-2">
           <div className="font-bold">{report.files_changed.length}</div>
-          <div className="text-muted-foreground">{t.questMode.filesChanged}</div>
+          <div className="text-muted-foreground">
+            {t.questMode.filesChanged}
+          </div>
         </div>
       </div>
 
@@ -1099,7 +1106,11 @@ interface QuestButtonProps {
   className?: string;
 }
 
-export function QuestButton({ onClick, isActive, className }: QuestButtonProps) {
+export function QuestButton({
+  onClick,
+  isActive,
+  className,
+}: QuestButtonProps) {
   const { t } = useI18n();
   return (
     <button

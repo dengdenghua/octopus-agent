@@ -14,7 +14,7 @@
 | 器官 | 状态 |
 |---|---|
 | **Cerebrum** · LLMPlanner + StaticPlanner · 2 层 Agent（persona 包 ArmPool） | ✅ |
-| **Ganglia** · GraphRuntime + resume · 断点续跑 | ✅ |
+| **Ganglia** · GraphRuntime + resume · 断点续跑 | ✅（注：GraphRuntime 已实装，独立 Ganglion 自治层 / 断联自治未实装）|
 | **Arms** · 6 preset agent（含 desktop_operator）· 细粒度 arm 7 种 | ✅ |
 | **Suckers** · 30+ skill：file/web/browser(×8)/git(×6)/computer(×6)/exec · 原子/子集两层权限 | ✅ |
 | **Hemolymph** · ContextComposer · 四桶配额 · 渐进披露 | ✅ |
@@ -107,7 +107,7 @@
 **对应生物**：幼体长出第一条腕
 
 - [ ] `cerebrum/` MVP：把目标拆成 ArmTask 序列
-- [ ] `ganglia/` MVP：单 Ganglion 驱动 Arm 跑完整个 DAG
+- [ ] `ganglia/` MVP：单 Ganglion 驱动 Arm 跑完整个 DAG（未实装）
 - [ ] `arms/code_arm.py`：第一条腕（代码腕），带 5–10 个 Suckers
 - [ ] `genome/checkpoint/` 接入，断点续跑
 - [ ] `hemolymph/` v1：context packet 打包器
@@ -287,7 +287,7 @@
 | 风险 | 对应器官 | 护栏 |
 |---|---|---|
 | 腕失控疯狂烧钱 | Ink | per-task 预算硬顶，超限即停 |
-| 单点中枢挂掉 | Hearts | 3 心脏 HA + Ganglion 断联自治 |
+| 单点中枢挂掉 | Hearts | 3 心脏 HA + Ganglion 断联自治（未实装）|
 | 反思反而贵 | Regeneration | 全走 Batch API，夜间跑 |
 | 腕之间抢资源 | Chromatophores | 状态广播 + Cerebrum 仲裁 |
 | 技能爆炸污染上下文 | Suckers | Progressive disclosure，按 affinity 只挂相关子集 |

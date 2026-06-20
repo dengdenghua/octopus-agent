@@ -446,6 +446,73 @@ class TestExecutorEnforcement:
         assert step.success
         assert (allowed / "ok.txt").read_text(encoding="utf-8") == "within-scope"
 
+    def test_code_sandbox_defaults_writes_to_octopus_work(
+        self, tmp_path: Path, mk_session,
+    ):
+        from runtime.platform.process.session import session_scope
+
+        executor = self._setup(tmp_path)
+        tid, budget = self._budget()
+
+        wp = tmp_path / "project"
+        wp.mkdir()
+        sess = mk_session(
+            mode="code",
+            caps={"code_mode_unlock": True},
+            thread_id="t-code-sandbox",
+        )
+        sess.metadata["workspace_path"] = str(wp)
+        sess.metadata["sandbox_mode"] = "sandbox"
+
+        with session_scope(sess):
+            step = self._run(
+                executor,
+                {
+                    "path": "generated.py",
+                    "content": "print('sandbox')",
+                },
+                tid,
+                budget,
+            )
+
+        expected = wp / ".octopus-work" / "t-code-sandbox" / "generated.py"
+        assert step.success
+        assert expected.read_text(encoding="utf-8") == "print('sandbox')"
+        assert not (wp / "generated.py").exists()
+
+    def test_code_sandbox_rejects_parent_workspace_write_root(
+        self, tmp_path: Path, mk_session,
+    ):
+        from runtime.platform.process.session import session_scope
+
+        executor = self._setup(tmp_path)
+        tid, budget = self._budget()
+
+        wp = tmp_path / "project"
+        wp.mkdir()
+        sess = mk_session(
+            mode="code",
+            caps={"code_mode_unlock": True},
+            thread_id="t-code-sandbox-deny",
+        )
+        sess.metadata["workspace_path"] = str(wp)
+        sess.metadata["sandbox_mode"] = "sandbox"
+
+        with session_scope(sess):
+            step = self._run(
+                executor,
+                {
+                    "path": "should_not_land.py",
+                    "content": "x",
+                    "sandbox_dir": str(wp),
+                },
+                tid,
+                budget,
+            )
+
+        assert not step.success
+        assert not (wp / "should_not_land.py").exists()
+
 
 # ═══════════════════════════════════════════════════════════
 # 6. sandbox mode — .octopus-work isolation
@@ -535,6 +602,93 @@ class TestSandboxMode:
         scope = resolve_write_scope(sess)
 
         assert scope.primary == wp
+
+
+class TestExecutionScope:
+    def test_sandbox_execution_scope_splits_read_and_write_roots(
+        self, mk_session, tmp_path: Path,
+    ):
+        from runtime.platform.process.scope import resolve_execution_scope
+
+        wp = tmp_path / "project"
+        wp.mkdir()
+        (wp / "src").mkdir()
+
+        sess = mk_session(
+            mode="code",
+            caps={"code_mode_unlock": True},
+            extra_workspaces=[str(wp)],
+            thread_id="t-exec-sandbox",
+        )
+        sess.metadata["workspace_path"] = str(wp)
+        sess.metadata["sandbox_mode"] = "sandbox"
+        sess.metadata["permission_mode"] = "default"
+        scope = resolve_execution_scope(sess)
+
+        sandboxed = wp / ".octopus-work" / "t-exec-sandbox"
+        assert scope.mode == "code"
+        assert scope.primary_read == wp
+        assert scope.primary_write == sandboxed
+        assert scope.allows_write(sandboxed / "scratch.py")
+        assert not scope.allows_write(wp / "src" / "main.py")
+        assert scope.allows_read(wp / "src" / "main.py")
+
+    def test_full_execution_scope_allows_workspace_writes(
+        self, mk_session, tmp_path: Path,
+    ):
+        from runtime.platform.process.scope import resolve_execution_scope
+
+        wp = tmp_path / "project"
+        wp.mkdir()
+
+        sess = mk_session(
+            mode="code",
+            caps={"code_mode_unlock": True},
+            thread_id="t-exec-full",
+        )
+        sess.metadata["workspace_path"] = str(wp)
+        sess.metadata["sandbox_mode"] = "full"
+        scope = resolve_execution_scope(sess)
+
+        assert scope.primary_write == wp
+        assert scope.allows_write(wp / "src" / "main.py")
+        assert scope.allows_read(wp / "src" / "main.py")
+
+    def test_plan_execution_scope_has_no_write_roots(self, mk_session):
+        from runtime.platform.process.scope import resolve_execution_scope
+
+        sess = mk_session(mode="plan")
+        scope = resolve_execution_scope(sess)
+
+        assert scope.mode == "plan"
+        assert scope.primary_write is None
+        assert not scope.allows_write("/tmp/anything.txt")
+        assert scope.shell_policy == "deny"
+        assert scope.network_policy == "deny"
+        assert scope.browser_policy == "deny"
+
+    def test_bypass_permission_scope_maps_to_local_allow_policies(
+        self, mk_session, tmp_path: Path,
+    ):
+        from runtime.platform.process.scope import resolve_execution_scope
+
+        wp = tmp_path / "project"
+        wp.mkdir()
+
+        sess = mk_session(
+            mode="code",
+            caps={"code_mode_unlock": True},
+        )
+        sess.metadata["workspace_path"] = str(wp)
+        sess.metadata["permission_mode"] = "bypassPermissions"
+        scope = resolve_execution_scope(sess)
+
+        assert scope.permission_mode == "bypassPermissions"
+        assert scope.approval_policy == "never"
+        assert scope.execution_environment == "local"
+        assert scope.shell_policy == "allow"
+        assert scope.network_policy == "allow"
+        assert scope.browser_policy == "allow"
 
 
 # ═══════════════════════════════════════════════════════════

@@ -54,7 +54,10 @@ export function AuthenticatedImage({
   const normalizedSrc = useMemo(() => {
     const normalized = normalizeImageSrc(src);
 
-    if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+    if (
+      !normalized.startsWith("http://") &&
+      !normalized.startsWith("https://")
+    ) {
       return normalized;
     }
 
@@ -64,7 +67,9 @@ export function AuthenticatedImage({
       if (url.origin === backend.origin && url.pathname.startsWith("/api/")) {
         return `${url.pathname}${url.search}`;
       }
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
 
     return normalized;
   }, [src]);

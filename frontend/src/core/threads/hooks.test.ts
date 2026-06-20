@@ -105,12 +105,9 @@ describe("LiveToolEvent normalization", () => {
   });
 
   test("adds lifecycle events to saved stopped history", () => {
-    const finalized = finalizeTurnHistory(
-      [],
-      Date.now() - 2000,
-      "error",
-      { reason: "stopped_by_user" },
-    );
+    const finalized = finalizeTurnHistory([], Date.now() - 2000, "error", {
+      reason: "stopped_by_user",
+    });
 
     expect(finalized.map((event) => event.name)).toEqual([
       "turn_request",
@@ -137,7 +134,9 @@ describe("LiveToolEvent normalization", () => {
       { reason: "stream_finished" },
     );
 
-    expect(finalized.filter((event) => event.name === "model_gateway")).toHaveLength(1);
+    expect(
+      finalized.filter((event) => event.name === "model_gateway"),
+    ).toHaveLength(1);
   });
 
   test("marks the latest active todo complete when the turn finishes", () => {
@@ -349,7 +348,11 @@ describe("onCustomEvent: task_completed", () => {
 
 describe("onCustomEvent: task_failed/cancelled/timed_out", () => {
   test("sets status to failed and progress to 1", () => {
-    for (const eventType of ["task_failed", "task_cancelled", "task_timed_out"]) {
+    for (const eventType of [
+      "task_failed",
+      "task_cancelled",
+      "task_timed_out",
+    ]) {
       const e = {
         type: eventType,
         task_id: "task-6",

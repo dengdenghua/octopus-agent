@@ -15,9 +15,7 @@ export function useThreadChat() {
     return isNewPath ? uuid() : (threadIdFromPath ?? uuid());
   });
 
-  const [isNewThread, setIsNewThread] = useState(
-    () => isNewPath,
-  );
+  const [isNewThread, setIsNewThread] = useState(() => isNewPath);
 
   useEffect(() => {
     if (pathname.endsWith("/new")) {
@@ -29,7 +27,6 @@ export function useThreadChat() {
     }
   }, [pathname, threadIdFromPath]);
 
-  const isMock =
-    env.STATIC_WEBSITE_ONLY && searchParams.get("mock") === "true";
+  const isMock = env.STATIC_WEBSITE_ONLY && searchParams.get("mock") === "true";
   return { threadId, isNewThread, setIsNewThread, isMock };
 }

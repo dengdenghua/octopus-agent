@@ -433,7 +433,7 @@ def _browser_state(
             p.wait_for_timeout(wait_ms)
         try:
             text = p.inner_text("body")
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort; fail-open
             text = ""
         try:
             from runtime.execution.suckers.browser_dom_js import (

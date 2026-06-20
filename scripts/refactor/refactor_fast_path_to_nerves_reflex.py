@@ -1,5 +1,6 @@
 """Move fast_path → nerves.reflex: rewrite imports."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 

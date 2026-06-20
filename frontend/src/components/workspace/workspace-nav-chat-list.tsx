@@ -1,6 +1,4 @@
-
 import {
-  BotIcon,
   ChevronDownIcon,
   FolderIcon,
   MoreHorizontal,
@@ -36,12 +34,12 @@ import { useFeatureSeen } from "@/hooks/use-feature-seen";
 
 import { CreateProjectDialog } from "./create-project-dialog";
 
-function ProjectCollapsible({ 
-  projects, 
+function ProjectCollapsible({
+  projects,
   onCreateClick,
   onDeleteProject,
-  t 
-}: { 
+  t,
+}: {
   projects: Array<{ id: string; name: string; icon?: string }>;
   onCreateClick: () => void;
   onDeleteProject: (id: string) => void;
@@ -66,7 +64,10 @@ function ProjectCollapsible({
         <CollapsibleContent>
           <SidebarMenu>
             {projects.map((project) => (
-              <SidebarMenuItem key={project.id} className="group-data-[collapsible=icon]:px-0 px-1.5">
+              <SidebarMenuItem
+                key={project.id}
+                className="group-data-[collapsible=icon]:px-0 px-1.5"
+              >
                 <SidebarMenuButton asChild>
                   <Link
                     className="text-muted-foreground text-[13px]"
@@ -116,6 +117,10 @@ export function WorkspaceNavChatList({
   const { mutate: deleteProject } = useDeleteProject();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const skillsSeen = useFeatureSeen(
+    "skills",
+    pathname.startsWith("/workspace/skills"),
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -145,23 +150,6 @@ export function WorkspaceNavChatList({
     <>
       <SidebarGroup className="pt-0">
         <SidebarMenu>
-          <SidebarMenuItem className="group-data-[collapsible=icon]:px-0 px-1.5 mt-0">
-            <SidebarMenuButton
-              isActive={pathname.startsWith("/workspace/agents")}
-              asChild
-              className="text-muted-foreground rounded-lg py-1 text-[13px] transition-all duration-150 hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium"
-            >
-              <Link to="/workspace/agents">
-                <BotIcon className="size-[15px]" />
-                <span className="flex items-center gap-1.5">
-                  {t.sidebar.agents}
-                  <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium leading-none text-primary">
-                    NEW
-                  </span>
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
           <SidebarMenuItem className="group-data-[collapsible=icon]:px-0 px-1.5 mt-0">
             <SidebarMenuButton
               isActive={pathname.startsWith("/workspace/skills")}

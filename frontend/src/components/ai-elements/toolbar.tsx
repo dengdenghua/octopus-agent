@@ -14,4 +14,3 @@ export const Toolbar = ({ className, ...props }: ToolbarProps) => (
     {...props}
   />
 );
-

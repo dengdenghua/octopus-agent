@@ -312,12 +312,12 @@ export const enUS: Translations = {
     modeTeam: "Team",
     modeTeamDesc: "Collaborate with multiple agents",
     createTeam: "Create Team",
-    chat: "Host",
+    chat: "Solo Task",
     chatDescription:
-      "TL-coordinated chat — the team leader replies first and routes each question to the right members",
-    cowork: "Collab",
+      "Start with one role and add members later without losing the task thread",
+    cowork: "Group Task",
     coworkDescription:
-      "TL decomposes first, members contribute from their own memory, then TL synthesizes the final agent result",
+      "TL decomposes first, members contribute from their own memory, then TL synthesizes the final result",
     comingSoon: "Coming soon",
   },
 
@@ -1048,6 +1048,7 @@ export const enUS: Translations = {
     navSwarm: "Collab",
     navCompany: "Cowork",
     navTeam: "Team",
+    navDatabase: "Local File Agent",
     navKnowledgeGraph: "Knowledge Base",
     navReflex: "Reflex Rules",
     navIntelligence: "Automation",
@@ -1101,6 +1102,27 @@ export const enUS: Translations = {
     collapseSidebar: "Collapse sidebar (⌘B)",
     expandSidebar: "Expand sidebar (⌘B)",
     projectNamePlaceholder: "Project name",
+    // Surface switch + task statuses
+    navBrowserSurface: "Browser",
+    sectionOngoing: "Ongoing",
+    noOngoingTasks: "No running tasks",
+    sectionTaskHistory: "Task history",
+    noTaskHistory: "No historical tasks",
+    unnamedTask: "Untitled task",
+    currentTaskSession: "Current task session",
+    taskStatusRunning: "Running",
+    taskStatusFailed: "Failed",
+    taskStatusPending: "Pending",
+    // Aria labels
+    ariaCollapseLocalDatabase: "Collapse local database",
+    ariaExpandLocalDatabase: "Expand local database",
+    ariaResizeSidebar: "Drag to resize width",
+    // Storage library labels
+    libraryApps: "Apps",
+    libraryDocs: "Docs",
+    libraryImages: "Images",
+    libraryComputer: "Computer",
+    libraryAuthorizedDirs: "Authorized dirs",
   },
 
   // Browser settings
@@ -1509,10 +1531,11 @@ export const enUS: Translations = {
     visualWatermark: "CHARACTER",
     visualLoadoutLabel: "FOR YOUR LOADOUT",
     visualSystemOnline: "SYSTEM ONLINE",
-    visualGenerateAction: "Generate Agnes character card",
+    visualGenerateAction: "Generate Agnes HD character views",
     visualGenerating: "Generating",
-    visualGenerateSuccess: "Agnes character card generated",
-    visualGenerateFailed: (msg) => `Failed to generate Agnes character card: ${msg}`,
+    visualGenerateSuccess: "Agnes HD character views generated",
+    visualGenerateFailed: (msg) =>
+      `Failed to generate Agnes character views: ${msg}`,
     visualMissing: "No views yet",
     viewFront: "Front",
     viewSide: "Side",
@@ -1539,6 +1562,8 @@ export const enUS: Translations = {
     characterAgeLabel: "Age cue",
     characterTemperamentLabel: "Temperament",
     characterPersonalityLabel: "Personality color",
+    characterBestForLabel: "Best commissions",
+    characterBoundaryLabel: "Operating boundaries",
     characterVisualKeywordsLabel: "Artwork keywords",
     characterProfileReady: "Character profile ready",
     characterPromptHint: "Used for artwork",
@@ -1547,7 +1572,15 @@ export const enUS: Translations = {
     capabilityPackLabel: "Capability pack",
     characterBackground: (name, role, type, faction, description) =>
       `${name} is a ${type} from ${faction}, shaped around ${role}. ${description || "Background can be refined in the basic profile."} The artwork should express their role, experience, and trustworthy presence.`,
-    characterIntro: (name, role, type, faction, origin, personality, temperament) =>
+    characterIntro: (
+      name,
+      role,
+      type,
+      faction,
+      origin,
+      personality,
+      temperament,
+    ) =>
       `${name} is a ${type} deployed by ${faction}, usually placed in a ${role} position. ${origin} When entering a mission, ${name} reads the field first, then turns scattered signals into a clear next move. Their personality leans ${personality}, with a ${temperament} presence that should read at a glance.`,
     characterDefaultOrigin:
       "The archive does not yet contain a full origin, but the role already suggests someone who keeps rhythm inside complex situations.",
@@ -1579,13 +1612,17 @@ export const enUS: Translations = {
       financial: "mature advisor",
     },
     characterPersonalities: {
-      assistant: "warm, reliable, quick to respond, and good at making complexity clear.",
+      assistant:
+        "warm, reliable, quick to respond, and good at making complexity clear.",
       automation: "calm, disciplined, direct, like an on-site task lead.",
-      coder: "focused, sharp, quietly confident, with a lightweight engineer feel.",
+      coder:
+        "focused, sharp, quietly confident, with a lightweight engineer feel.",
       creative: "curious, expressive, visually sensitive, and lively.",
-      researcher: "careful, patient, observant, with a lab-and-notebook presence.",
+      researcher:
+        "careful, patient, observant, with a lab-and-notebook presence.",
       specialist: "composed, professional, bounded, and deeply competent.",
-      financial: "rational, restrained, steady in judgment, with an analyst-advisor tone.",
+      financial:
+        "rational, restrained, steady in judgment, with an analyst-advisor tone.",
     },
     characterTemperaments: {
       assistant: "approachable, clean",
@@ -1597,13 +1634,38 @@ export const enUS: Translations = {
       financial: "restrained, professional",
     },
     characterVisualKeywords: {
-      assistant: ["clean silhouette", "soft expression", "light gear", "blue-white accents"],
-      automation: ["tactical jacket", "tool belt", "clear stance", "industrial details"],
+      assistant: [
+        "clean silhouette",
+        "soft expression",
+        "light gear",
+        "blue-white accents",
+      ],
+      automation: [
+        "tactical jacket",
+        "tool belt",
+        "clear stance",
+        "industrial details",
+      ],
       coder: ["dark hoodie", "neon blue lines", "pixel badge", "focused eyes"],
-      creative: ["asymmetric cut", "bright accents", "art tools", "lively pose"],
+      creative: [
+        "asymmetric cut",
+        "bright accents",
+        "art tools",
+        "lively pose",
+      ],
       researcher: ["long coat", "folder", "calm eyes", "lab elements"],
-      specialist: ["premium uniform", "precise accessories", "steady pose", "domain insignia"],
-      financial: ["tailored suit", "muted palette", "metal watch", "advisor presence"],
+      specialist: [
+        "premium uniform",
+        "precise accessories",
+        "steady pose",
+        "domain insignia",
+      ],
+      financial: [
+        "tailored suit",
+        "muted palette",
+        "metal watch",
+        "advisor presence",
+      ],
     },
     keySkillsLabel: "Key skills",
     browseSkillWhitelist: "Browse skill whitelist",
@@ -1633,10 +1695,15 @@ export const enUS: Translations = {
     checkNoExecutableSkills:
       "Executable Skill is 0; this agent is effectively unavailable",
     checkUnsavedChanges: "Unsaved changes exist; save before they take effect",
+    configDockTitle: "Config shortcuts",
     configureProfileAction: "Edit profile & prompt",
+    configureProfileHint: "Description, model, and Soul Prompt",
     configureArmAction: "Configure ARM",
+    configureArmHint: "Capability module access",
     configureSkillsAction: "Open Skill market",
+    configureSkillsHint: "Private Skill whitelist",
     configurePermissionsAction: "Adjust permissions",
+    configurePermissionsHint: "High-risk capability limits",
     routingConfig: "Routing & budget",
     saveTitle: "SAVE",
     saveSubtitle: "Apply changes",
@@ -2865,7 +2932,7 @@ export const enUS: Translations = {
     featured: "Featured",
     popular: "Popular",
     discover: "Square",
-    searchPlaceholder: "Search agents...",
+    searchPlaceholder: "Search roles...",
     categories: {
       all: "All",
       assistant: "Assistant",
@@ -2876,24 +2943,24 @@ export const enUS: Translations = {
       specialist: "Specialist",
       financial: "Financial",
     },
-    searchAgents: "Search agents...",
-    noAgentsFound: "No agents found",
+    searchAgents: "Search roles...",
+    noAgentsFound: "No roles found",
     noFeatured: "No featured agents",
     noPopular: "No popular agents",
     title: "Agent",
-    description: "Browse, configure, and install agents",
+    description: "Browse, configure, and summon collaborative roles",
     pageOf: (page: number, total: number) => `Page ${page} of ${total}`,
     by: "by",
-    agentInstalled: "installed",
+    agentInstalled: "joined",
     agentUninstalled: "uninstalled",
-    installThisAgent: "Install this agent",
+    installThisAgent: "Add to roles",
     assembleCapabilityPack: "Assemble pack",
-    keySkillCount: (count) => `${count} key skills`,
-    emptyState: "No agents yet. Be the first creator!",
-    createAgentCardTitle: "Create agent",
-    createAgentCardDesc: "Build a custom agent",
+    keySkillCount: (count) => `${count} callable abilities`,
+    emptyState: "No roles yet. Be the first creator!",
+    createAgentCardTitle: "Create role",
+    createAgentCardDesc: "Build a custom role",
     addAgent: "Add",
-    newAgent: "New agent",
+    newAgent: "New role",
     importAgentPack: "Import Agent Pack",
     importAgentPackDesc:
       "Preview and import agents from a local Claude / Codex plugin pack.",
@@ -2904,8 +2971,8 @@ export const enUS: Translations = {
     noImportableAgents:
       "No importable agents or Markdown agents were found in this pack.",
     importedAgent: (name: string, path: string) => `Imported ${name} · ${path}`,
-    discoverTagline: "Browse, configure, and install agents",
-    toastInstalled: (name: string) => `"${name}" installed`,
+    discoverTagline: "Browse, configure, and summon collaborative roles",
+    toastInstalled: (name: string) => `"${name}" joined the role library`,
     toastCapabilityPackInstalled: (name: string, count: number) =>
       `"${name}" installed with ${count} key skills`,
     toastUninstalled: (name: string) => `"${name}" uninstalled`,
@@ -2953,7 +3020,7 @@ export const enUS: Translations = {
     toggleDevice: "Toggle device",
     deviceDesktop: "Desktop view",
     deviceTablet: "Tablet view · 768×1024",
-    deviceMobile: "Mobile view · 375×812",
+    deviceMobile: "Mobile view · 390×844",
     viewportHint: (label, w, h) =>
       `${label} · viewport ${w}×${h} · responsive CSS active; use Playwright mode for UA-sniffing sites`,
     startBrowsingHint: "Enter a URL to start browsing",
@@ -4353,7 +4420,15 @@ export const enUS: Translations = {
   // Team Input
   teamInput: {
     placeholder:
-      "Describe your task, the team will collaborate to complete it...",
+      "Describe the task, or @Local File Agent to search local materials...",
+    assigneeAll: "All",
+    assigneeCount: (count: number) => `${count} members`,
+    assigneeHint: "Choose who starts this task; members can be added later",
+    assigneeMenuTitle: "Who should start this task",
+    clearAssignee: "Clear selection and let the full team decide",
+    localFileAgent: "Local File Agent",
+    localFileAgentHint:
+      "Summon the local file agent: search authorized local files before adding confirmed context",
   },
 
   fileTree: {
@@ -5349,7 +5424,7 @@ export const enUS: Translations = {
       reviewCount > 0 ? `${reviewCount} to review` : "Stable",
     statReactTooltip: (attempts: number, reviewCount: number) =>
       `${attempts} deep tasks entered multi-step execution; ${reviewCount} are marked for review.`,
-    statReactValue: (attempts: number, reviewCount: number) => `${attempts}`,
+    statReactValue: (attempts: number, _reviewCount: number) => `${attempts}`,
     statReactDesc:
       "Deep tasks are runs that entered multi-step reasoning, tool use, or longer execution chains. This metric tracks stability in complex work.",
     statReactPoints: (attempts: number, failures: number) => [
@@ -5826,6 +5901,23 @@ export const enUS: Translations = {
       `${rules} rules · ${memories} memories`,
     deltaRules: (count) => `+${count} rules`,
     deltaMemories: (count) => `+${count} memories`,
+  },
+
+  evolutionExplain: {
+    fitnessTitle: "Fitness",
+    noAgentSelected: "Select an agent to view fitness",
+    loading: "Loading...",
+    noFitnessData: "No fitness data",
+    driftTitle: "Drift Detection",
+    noDriftData: "No drift data",
+    noDriftDetected: "No drift detected",
+    driftDetected: (maxSeverity: string) => `Drift detected: ${maxSeverity}`,
+    variantTitle: "Variant Performance",
+    noVariantData: "No variant data",
+    colName: "Name",
+    colUsage: "Usage",
+    colSuccessRate: "Success Rate",
+    colStatus: "Status",
   },
 
   armsEditor: {

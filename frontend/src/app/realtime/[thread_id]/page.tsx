@@ -4,7 +4,9 @@ export default function RealtimeThreadPage() {
   const { threadId } = useParams<{ threadId: string }>();
   return (
     <Navigate
-      to={threadId ? `/workspace/realtime/${threadId}` : "/workspace/realtime/new"}
+      to={
+        threadId ? `/workspace/realtime/${threadId}` : "/workspace/realtime/new"
+      }
       replace
     />
   );

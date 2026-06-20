@@ -1,5 +1,4 @@
 import { swallow } from "@/core/utils/log";
-import type { Message } from "@/core/api/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -25,10 +24,6 @@ export type ThreadStreamOptions = {
   onStart?: (threadId: string) => void;
   onFinish?: (state: AgentThreadState) => void;
   onToolEnd?: (event: ToolEndEvent) => void;
-};
-
-type SendMessageOptions = {
-  additionalKwargs?: Record<string, unknown>;
 };
 
 export function upsertLiveToolEvent(
@@ -66,7 +61,11 @@ function stringValue(value: unknown): string | undefined {
 
 function numberValue(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
+  if (
+    typeof value === "string" &&
+    value.trim() &&
+    !Number.isNaN(Number(value))
+  ) {
     return Number(value);
   }
   return undefined;
@@ -124,15 +123,14 @@ export function normalizeCustomToolEvent(
     event.input_preview ?? event.input ?? event.args ?? event.arguments,
   );
   const output =
-    event.output_preview ??
-    event.output ??
-    event.result ??
-    event.observation;
+    event.output_preview ?? event.output ?? event.result ?? event.observation;
 
   return {
     id: rawId,
     name,
-    status: isStart ? "running" : terminalToolStatus(event.status ?? event.is_error),
+    status: isStart
+      ? "running"
+      : terminalToolStatus(event.status ?? event.is_error),
     startedAt,
     finishedAt,
     durationMs: isStart
@@ -157,98 +155,6 @@ export function normalizeCustomToolEvent(
   };
 }
 
-function recoveryToolEventId(runId?: string): string {
-  return `stream-recovery:${runId || "current"}`;
-}
-
-function upsertStreamRecoveryEvent(
-  events: LiveToolEvent[],
-  next: {
-    runId?: string;
-    status: LiveToolEvent["status"];
-    input?: Record<string, unknown>;
-    output?: unknown;
-  },
-): LiveToolEvent[] {
-  const id = recoveryToolEventId(next.runId);
-  const existing = events.find((event) => event.id === id);
-  const startedAt = existing?.startedAt ?? Date.now();
-  const finishedAt =
-    next.status === "running" || next.status === "waiting_approval"
-      ? undefined
-      : Date.now();
-  return upsertLiveToolEvent(events, {
-    id,
-    name: "stream_recovery",
-    status: next.status,
-    startedAt,
-    finishedAt,
-    durationMs:
-      finishedAt !== undefined ? Math.max(0, finishedAt - startedAt) : undefined,
-    iteration: existing?.iteration ?? 0,
-    input: next.input ?? existing?.input,
-    output: next.output,
-  });
-}
-
-function upsertModelReasoningEvent(
-  events: LiveToolEvent[],
-  next: {
-    delta?: string;
-    status?: LiveToolEvent["status"];
-    iteration?: number;
-  },
-): LiveToolEvent[] {
-  const id = "model-reasoning:current";
-  const existing = events.find((event) => event.id === id);
-  const startedAt = existing?.startedAt ?? Date.now();
-  const previousOutput = isRecord(existing?.output) ? existing.output : {};
-  const previousContent =
-    typeof previousOutput.content === "string" ? previousOutput.content : "";
-  const content = `${previousContent}${next.delta ?? ""}`;
-  const status = next.status ?? "running";
-  const finishedAt =
-    status === "running" || status === "waiting_approval" ? undefined : Date.now();
-
-  return upsertLiveToolEvent(events, {
-    id,
-    name: "model_reasoning",
-    status,
-    startedAt,
-    finishedAt,
-    durationMs:
-      finishedAt !== undefined ? Math.max(0, finishedAt - startedAt) : undefined,
-    iteration: next.iteration ?? existing?.iteration ?? 0,
-    output: { content },
-  });
-}
-
-function upsertAgentThoughtEvent(
-  events: LiveToolEvent[],
-  next: {
-    thought?: string;
-    observation?: string;
-    iteration?: number;
-  },
-): LiveToolEvent[] {
-  const iteration = next.iteration ?? 0;
-  const id = `agent-thought:${iteration}`;
-  const existing = events.find((event) => event.id === id);
-  const startedAt = existing?.startedAt ?? Date.now();
-  const finishedAt = Date.now();
-  return upsertLiveToolEvent(events, {
-    id,
-    name: "agent_thought",
-    status: "done",
-    startedAt,
-    finishedAt,
-    durationMs: Math.max(0, finishedAt - startedAt),
-    iteration,
-    thought: next.thought ?? existing?.thought,
-    observation: next.observation ?? existing?.observation,
-  });
-}
-
 export function finalizeLiveToolEvents(
   events: LiveToolEvent[],
   nextStatus: Extract<LiveToolEvent["status"], "done" | "error">,
@@ -269,7 +175,9 @@ export function finalizeLiveToolEvents(
   });
 }
 
-function completeActiveTodoItems(input: LiveToolEvent["input"]): LiveToolEvent["input"] {
+function completeActiveTodoItems(
+  input: LiveToolEvent["input"],
+): LiveToolEvent["input"] {
   if (!input) return input;
   const nextInput = { ...input };
   const normalizeItems = (value: unknown): unknown => {
@@ -381,7 +289,11 @@ export function finalizeTurnHistory(
   nextStatus: Extract<LiveToolEvent["status"], "done" | "error">,
   output: unknown,
 ): LiveToolEvent[] {
-  const lifecycleEvents = buildRunLifecycleEvents(runStartedAt, nextStatus, output);
+  const lifecycleEvents = buildRunLifecycleEvents(
+    runStartedAt,
+    nextStatus,
+    output,
+  );
   const finalizedEvents = completeLatestTodoWriteOnSuccess(
     finalizeLiveToolEvents(events, nextStatus, output),
     nextStatus,
@@ -420,7 +332,6 @@ export function useThreadStream({
     context,
   });
 }
-
 
 export function useThreads(
   params: Record<string, unknown> = {

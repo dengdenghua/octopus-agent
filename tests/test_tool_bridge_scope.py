@@ -6,6 +6,7 @@ from runtime.execution.suckers.agent_meta_skills import _todo_write
 from runtime.execution.suckers.builtins import _list_cwd
 from runtime.execution.suckers.registry import Skill, SkillRegistry
 from runtime.execution.tool_engine.executor import ToolExecutor
+from runtime.execution.tool_engine.tool_protocol import NormalizedToolCall
 from runtime.platform.models import ParsedIntent
 from runtime.platform.process.session import Session, session_scope
 from runtime.safety.auth import TrustEngine
@@ -184,6 +185,65 @@ def test_tool_result_allows_medium_outputs_without_truncating():
 
     assert is_error is False
     assert rendered == "x" * 5000
+
+
+def test_execute_tool_call_accepts_normalized_call():
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="echo_args",
+            description="Echo the provided args.",
+            trusted_source="skill://public/echo_args",
+            handler=lambda **kwargs: kwargs,
+        ),
+        verify_tests=False,
+    )
+    stack = SimpleNamespace(
+        executor=SimpleNamespace(registry=registry),
+        planner=SimpleNamespace(router=None, planner_model="mock"),
+    )
+
+    rendered, is_error = _execute_tool_call(
+        stack,
+        NormalizedToolCall(
+            id="n-1",
+            name="echo_args",
+            arguments={"value": 7},
+            origin="native",
+        ),
+    )
+
+    assert not is_error
+    assert json.loads(rendered) == {"value": 7}
+
+
+def test_execute_tool_call_accepts_dict_call_shape():
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="echo_args",
+            description="Echo the provided args.",
+            trusted_source="skill://public/echo_args",
+            handler=lambda **kwargs: kwargs,
+        ),
+        verify_tests=False,
+    )
+    stack = SimpleNamespace(
+        executor=SimpleNamespace(registry=registry),
+        planner=SimpleNamespace(router=None, planner_model="mock"),
+    )
+
+    rendered, is_error = _execute_tool_call(
+        stack,
+        {
+            "tool_use_id": "dict-1",
+            "tool": "echo_args",
+            "arguments": {"value": 9},
+        },
+    )
+
+    assert not is_error
+    assert json.loads(rendered) == {"value": 9}
 
 
 def test_reflection_checkpoint_is_structured_and_todo_limited():

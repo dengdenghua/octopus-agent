@@ -503,9 +503,12 @@ export function ChannelCredentialDialog({
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(`${getBackendBaseURL()}/api/channels/credentials`, {
-          headers: authHeaders(),
-        });
+        const r = await fetch(
+          `${getBackendBaseURL()}/api/channels/credentials`,
+          {
+            headers: authHeaders(),
+          },
+        );
         if (!r.ok) throw new Error(r.statusText);
         const data = (await r.json()) as {
           credentials: Record<string, Record<string, string>>;
@@ -531,11 +534,14 @@ export function ChannelCredentialDialog({
     }
     setSubmitting(true);
     try {
-      const r = await fetch(`${getBackendBaseURL()}/api/channels/credentials/${platform}`, {
-        method: "POST",
-        headers: jsonAuthHeaders(),
-        body: JSON.stringify(values),
-      });
+      const r = await fetch(
+        `${getBackendBaseURL()}/api/channels/credentials/${platform}`,
+        {
+          method: "POST",
+          headers: jsonAuthHeaders(),
+          body: JSON.stringify(values),
+        },
+      );
       if (!r.ok) {
         const detail = await r.text();
         throw new Error(detail || r.statusText);
@@ -544,7 +550,9 @@ export function ChannelCredentialDialog({
       onSaved();
       onOpenChange(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t.channelCredential.saveFailed);
+      toast.error(
+        e instanceof Error ? e.message : t.channelCredential.saveFailed,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -553,16 +561,21 @@ export function ChannelCredentialDialog({
   async function handleDelete() {
     if (!confirm(t.channelCredential.confirmDisconnect(displayName))) return;
     try {
-      const r = await fetch(`${getBackendBaseURL()}/api/channels/credentials/${platform}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
+      const r = await fetch(
+        `${getBackendBaseURL()}/api/channels/credentials/${platform}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        },
+      );
       if (!r.ok) throw new Error(r.statusText);
       toast.success(`${displayName} ${t.channelCredential.disconnected}`);
       onDeleted();
       onOpenChange(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t.channelCredential.deleteFailed);
+      toast.error(
+        e instanceof Error ? e.message : t.channelCredential.deleteFailed,
+      );
     }
   }
 
@@ -571,7 +584,10 @@ export function ChannelCredentialDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base">
-            {hasExisting ? t.channelCredential.editCredential : t.channelCredential.setCredential} {displayName} {t.channelCredential.botSuffix}
+            {hasExisting
+              ? t.channelCredential.editCredential
+              : t.channelCredential.setCredential}{" "}
+            {displayName} {t.channelCredential.botSuffix}
           </DialogTitle>
           <DialogDescription className="text-[12px]">
             {t.channelCredential.credentialLocalHint}
@@ -593,7 +609,9 @@ export function ChannelCredentialDialog({
 
         {!supported ? (
           <div className="rounded-lg border border-dashed border-border/60 px-4 py-8 text-center text-[12px] text-muted-foreground">
-            <div className="mb-2 font-medium">{t.channelCredential.comingSoon}</div>
+            <div className="mb-2 font-medium">
+              {t.channelCredential.comingSoon}
+            </div>
             <div>
               {displayName} {t.channelCredential.unsupportedPlatformDesc1}
               <code className="mx-1 rounded bg-muted/60 px-1 py-0.5 text-[11px]">
@@ -671,7 +689,11 @@ export function ChannelCredentialDialog({
                             }))
                           }
                           className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                          title={shown ? t.channelCredential.hide : t.channelCredential.show}
+                          title={
+                            shown
+                              ? t.channelCredential.hide
+                              : t.channelCredential.show
+                          }
                         >
                           {shown ? (
                             <EyeOffIcon className="size-3.5" />
@@ -726,7 +748,9 @@ export function ChannelCredentialDialog({
                 disabled={submitting}
                 className="h-8 text-[12px]"
               >
-                {submitting ? t.channelCredential.saving : t.channelCredential.saveAndConnect}
+                {submitting
+                  ? t.channelCredential.saving
+                  : t.channelCredential.saveAndConnect}
               </Button>
             )}
           </div>
@@ -736,9 +760,9 @@ export function ChannelCredentialDialog({
   );
 }
 
-
 function WeChatQRForm({
-  displayName, onConfirmed,
+  displayName,
+  onConfirmed,
 }: {
   displayName: string;
   onConfirmed: () => void;
@@ -747,7 +771,13 @@ function WeChatQRForm({
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [qrImg, setQrImg] = useState<string | null>(null);
   const [status, setStatus] = useState<
-    "idle" | "pending" | "scanned" | "confirmed" | "expired" | "rejected" | "error"
+    | "idle"
+    | "pending"
+    | "scanned"
+    | "confirmed"
+    | "expired"
+    | "rejected"
+    | "error"
   >("idle");
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -756,10 +786,13 @@ function WeChatQRForm({
     setStarting(true);
     setErrMsg(null);
     try {
-      const r = await fetch(`${getBackendBaseURL()}/api/channels/wechat/qr/start`, {
-        method: "POST",
-        headers: jsonAuthHeaders(),
-      });
+      const r = await fetch(
+        `${getBackendBaseURL()}/api/channels/wechat/qr/start`,
+        {
+          method: "POST",
+          headers: jsonAuthHeaders(),
+        },
+      );
       if (!r.ok) throw new Error(await r.text());
       const data = (await r.json()) as {
         qrcode: string;
@@ -770,7 +803,9 @@ function WeChatQRForm({
       setStatus("pending");
     } catch (e) {
       swallow(e);
-      setErrMsg(e instanceof Error ? e.message : t.channelCredential.qrCodeFailed);
+      setErrMsg(
+        e instanceof Error ? e.message : t.channelCredential.qrCodeFailed,
+      );
       setStatus("error");
     } finally {
       setStarting(false);
@@ -785,14 +820,18 @@ function WeChatQRForm({
     let errorCount = 0;
     const tick = async () => {
       try {
-        const r = await fetch(`${getBackendBaseURL()}/api/channels/wechat/qr/poll`, {
-          method: "POST",
-          headers: jsonAuthHeaders(),
-          body: JSON.stringify({ qrcode: qrCode }),
-        });
+        const r = await fetch(
+          `${getBackendBaseURL()}/api/channels/wechat/qr/poll`,
+          {
+            method: "POST",
+            headers: jsonAuthHeaders(),
+            body: JSON.stringify({ qrcode: qrCode }),
+          },
+        );
         if (!r.ok) throw new Error(await r.text());
         const data = (await r.json()) as {
-          status: string; confirmed: boolean;
+          status: string;
+          confirmed: boolean;
         };
         if (cancelled) return;
         errorCount = 0;
@@ -807,7 +846,9 @@ function WeChatQRForm({
         if (cancelled) return;
         errorCount++;
         if (errorCount >= 3) {
-          setErrMsg(e instanceof Error ? e.message : t.channelCredential.pollFailed);
+          setErrMsg(
+            e instanceof Error ? e.message : t.channelCredential.pollFailed,
+          );
           setStatus("error");
         }
       }
@@ -833,11 +874,11 @@ function WeChatQRForm({
           disabled={starting}
           className="h-8 text-[12px]"
         >
-          {starting ? t.channelCredential.requesting : t.channelCredential.getQrCode}
+          {starting
+            ? t.channelCredential.requesting
+            : t.channelCredential.getQrCode}
         </Button>
-        {errMsg && (
-          <p className="mt-3 text-[11px] text-rose-600">{errMsg}</p>
-        )}
+        {errMsg && <p className="mt-3 text-[11px] text-rose-600">{errMsg}</p>}
       </div>
     );
   }
@@ -857,12 +898,7 @@ function WeChatQRForm({
       {qrImg && (
         <div className="rounded-lg border border-border/40 bg-background p-2">
           {qrImg.startsWith("http") ? (
-            <QRCodeSVG
-              value={qrImg}
-              size={192}
-              level="M"
-              marginSize={2}
-            />
+            <QRCodeSVG value={qrImg} size={192} level="M" marginSize={2} />
           ) : (
             <img
               src={
@@ -876,15 +912,21 @@ function WeChatQRForm({
           )}
         </div>
       )}
-      <div className={cn(
-        "mt-3 text-[12px] tabular-nums",
-        status === "confirmed" && "text-emerald-600",
-        (status === "expired" || status === "rejected" || status === "error")
-          && "text-rose-600",
-      )}>
+      <div
+        className={cn(
+          "mt-3 text-[12px] tabular-nums",
+          status === "confirmed" && "text-emerald-600",
+          (status === "expired" ||
+            status === "rejected" ||
+            status === "error") &&
+            "text-rose-600",
+        )}
+      >
         {statusLabel[status]}
       </div>
-      {(status === "expired" || status === "rejected" || status === "error") && (
+      {(status === "expired" ||
+        status === "rejected" ||
+        status === "error") && (
         <Button
           type="button"
           variant="outline"
@@ -900,9 +942,7 @@ function WeChatQRForm({
           {t.channelCredential.refreshQr}
         </Button>
       )}
-      {errMsg && (
-        <p className="mt-2 text-[11px] text-rose-600">{errMsg}</p>
-      )}
+      {errMsg && <p className="mt-2 text-[11px] text-rose-600">{errMsg}</p>}
     </div>
   );
 }

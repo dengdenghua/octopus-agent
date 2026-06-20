@@ -75,7 +75,11 @@ export default function EvolutionSettingsPage() {
     );
   }
   if (err) {
-    return <div className="py-6 text-sm text-destructive">{e.loadFailed}: {err}</div>;
+    return (
+      <div className="py-6 text-sm text-destructive">
+        {e.loadFailed}: {err}
+      </div>
+    );
   }
   if (!data) return null;
 
@@ -90,9 +94,7 @@ export default function EvolutionSettingsPage() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">{e.title}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {e.description}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{e.description}</p>
         </div>
         <Button size="sm" variant="outline" onClick={() => void load()}>
           <RefreshCwIcon className="mr-1.5 h-3.5 w-3.5" />
@@ -125,7 +127,10 @@ export default function EvolutionSettingsPage() {
           </div>
           <div>
             <div className="text-muted-foreground">{e.tickedLabel}</div>
-            <div className="mt-0.5 font-mono">{sched.tick_count}{e.tickedUnit ? ` ${e.tickedUnit}` : ""}</div>
+            <div className="mt-0.5 font-mono">
+              {sched.tick_count}
+              {e.tickedUnit ? ` ${e.tickedUnit}` : ""}
+            </div>
           </div>
         </div>
         {sched.last_summary && Object.keys(sched.last_summary).length > 0 && (
@@ -154,9 +159,10 @@ export default function EvolutionSettingsPage() {
         {rules ? (
           <>
             <div className="mt-2 text-xs text-muted-foreground">
-              {e.scanned} {rules.trajectories_scanned} {e.trajectoryUnit} {rules.failure_count} ·
-              {" "}{e.clusters} {rules.clusters_formed} · {e.produced} {rules.rules.length} {e.ruleUnit}
-              · {e.lastTick} {formatTs(rules.ts)}
+              {e.scanned} {rules.trajectories_scanned} {e.trajectoryUnit}{" "}
+              {rules.failure_count} · {e.clusters} {rules.clusters_formed} ·{" "}
+              {e.produced} {rules.rules.length} {e.ruleUnit}· {e.lastTick}{" "}
+              {formatTs(rules.ts)}
             </div>
             <div className="mt-3 space-y-2">
               {rules.rules.length === 0 ? (
@@ -184,11 +190,15 @@ export default function EvolutionSettingsPage() {
                       </span>
                     </div>
                     <div className="mt-1.5 text-xs">
-                      <span className="text-muted-foreground">{e.ruleTrigger}</span>{" "}
+                      <span className="text-muted-foreground">
+                        {e.ruleTrigger}
+                      </span>{" "}
                       {r.pattern}
                     </div>
                     <div className="mt-0.5 text-xs">
-                      <span className="text-muted-foreground">{e.ruleMitigation}</span>{" "}
+                      <span className="text-muted-foreground">
+                        {e.ruleMitigation}
+                      </span>{" "}
                       {r.mitigation}
                     </div>
                   </div>
@@ -197,7 +207,9 @@ export default function EvolutionSettingsPage() {
             </div>
           </>
         ) : (
-          <div className="mt-2 text-xs text-muted-foreground">{e.notGenerated}</div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            {e.notGenerated}
+          </div>
         )}
       </div>
 
@@ -225,14 +237,14 @@ export default function EvolutionSettingsPage() {
               <tbody>
                 {recipes.scores.map((s) => (
                   <tr key={s.recipe_id} className="border-b border-border/30">
-                    <td className="px-2 py-1.5 font-mono">
-                      {s.recipe_id}
-                    </td>
+                    <td className="px-2 py-1.5 font-mono">{s.recipe_id}</td>
                     <td className="px-2 py-1.5">{s.uses}</td>
                     <td className="px-2 py-1.5">
                       {fixed(numberOrZero(s.success_rate) * 100, 1)}%
                     </td>
-                    <td className="px-2 py-1.5">{fixed(s.avg_step_count, 1)}</td>
+                    <td className="px-2 py-1.5">
+                      {fixed(s.avg_step_count, 1)}
+                    </td>
                     <td className="px-2 py-1.5">
                       <Badge variant="outline" className="text-[10px]">
                         {s.verdict}
@@ -276,7 +288,9 @@ export default function EvolutionSettingsPage() {
                 >
                   <div className="font-mono">{r.recipe_id}</div>
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
-                    {r.skipped ? `${e.gepaSkippedPrefix} ${r.reason}` : r.rationale ?? "ok"}
+                    {r.skipped
+                      ? `${e.gepaSkippedPrefix} ${r.reason}`
+                      : (r.rationale ?? "ok")}
                   </div>
                 </div>
               ))}
@@ -307,7 +321,9 @@ export default function EvolutionSettingsPage() {
                 : "ml-2 text-[10px] text-muted-foreground"
             }
           >
-            {camouflage?.enabled ? e.camouflageEnabledBadge : e.camouflageDisabledBadge}
+            {camouflage?.enabled
+              ? e.camouflageEnabledBadge
+              : e.camouflageDisabledBadge}
           </Badge>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -326,25 +342,33 @@ export default function EvolutionSettingsPage() {
           <>
             <div className="mt-3 grid grid-cols-4 gap-3 text-xs">
               <div>
-                <div className="text-muted-foreground">{e.camouflageVariantsLabel}</div>
+                <div className="text-muted-foreground">
+                  {e.camouflageVariantsLabel}
+                </div>
                 <div className="mt-0.5 font-mono">
                   {camouflage.variants?.length ?? 0}
                 </div>
               </div>
               <div>
-                <div className="text-muted-foreground">{e.camouflageStepsLabel}</div>
+                <div className="text-muted-foreground">
+                  {e.camouflageStepsLabel}
+                </div>
                 <div className="mt-0.5 font-mono">
                   {camouflage.auto_retire?.total_steps ?? 0}
                 </div>
               </div>
               <div>
-                <div className="text-muted-foreground">{e.camouflageRetiredLabel}</div>
+                <div className="text-muted-foreground">
+                  {e.camouflageRetiredLabel}
+                </div>
                 <div className="mt-0.5 font-mono">
                   {camouflage.auto_retire?.total_retired ?? 0}
                 </div>
               </div>
               <div>
-                <div className="text-muted-foreground">{e.camouflageBoostedLabel}</div>
+                <div className="text-muted-foreground">
+                  {e.camouflageBoostedLabel}
+                </div>
                 <div className="mt-0.5 font-mono">
                   {camouflage.auto_retire?.total_boosted ?? 0}
                 </div>
@@ -352,7 +376,8 @@ export default function EvolutionSettingsPage() {
             </div>
             {camouflage.auto_retire?.last_step_at ? (
               <div className="mt-2 text-[11px] text-muted-foreground">
-                {e.camouflageLastStepLabel} {formatTs(camouflage.auto_retire.last_step_at)}
+                {e.camouflageLastStepLabel}{" "}
+                {formatTs(camouflage.auto_retire.last_step_at)}
                 {camouflage.auto_retire.last_step_summary
                   ? ` · ${camouflage.auto_retire.last_step_summary}`
                   : ""}
@@ -379,11 +404,14 @@ export default function EvolutionSettingsPage() {
                     >
                       <span className="font-mono">{v.name}</span>
                       <Badge variant="outline" className="gap-1 text-[10px]">
-                        {OriginIcon ? <OriginIcon className="h-3 w-3" aria-hidden /> : null}
+                        {OriginIcon ? (
+                          <OriginIcon className="h-3 w-3" aria-hidden />
+                        ) : null}
                         {originLabel}
                       </Badge>
                       <span className="text-[10px] text-muted-foreground">
-                        gen={v.generation} · w={fixed(v.weight, 2)} · {v.suffix_chars}ch
+                        gen={v.generation} · w={fixed(v.weight, 2)} ·{" "}
+                        {v.suffix_chars}ch
                       </span>
                       {v.parents.length > 0 ? (
                         <span className="ml-auto font-mono text-[10px] text-muted-foreground">

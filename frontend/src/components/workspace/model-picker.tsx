@@ -15,7 +15,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
-import { useProvider } from "@/core/models/providers";
 import { useMoliliLink } from "@/core/molili";
 import type { ReasoningEffort } from "@/core/threads";
 import { cn } from "@/lib/utils";
@@ -88,6 +87,7 @@ const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
   "medium",
   "high",
   "xhigh",
+  "max",
 ];
 
 function reasoningEffortLabel(effort: ReasoningEffort, locale: string): string {
@@ -103,7 +103,17 @@ function reasoningEffortLabel(effort: ReasoningEffort, locale: string): string {
       return zh ? "高" : "High";
     case "xhigh":
       return zh ? "超高" : "Ultra";
+    case "max":
+      return zh ? "最高" : "Max";
   }
+}
+
+function currentReasoningEffortLabel(
+  effort: ReasoningEffort,
+  locale: string,
+): string {
+  const label = reasoningEffortLabel(effort, locale);
+  return locale === "zh-CN" ? `当前 ${label}` : `Current ${label}`;
 }
 
 function ReasoningEffortSetting({
@@ -127,7 +137,7 @@ function ReasoningEffortSetting({
           {title}
         </span>
         <span className="text-[10px] text-muted-foreground">
-          {reasoningEffortLabel(current, locale)}
+          {currentReasoningEffortLabel(current, locale)}
         </span>
       </div>
       <div
@@ -679,40 +689,5 @@ export function ModelPicker({
         </Tabs>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/**
- * Capability badges shown under the selected model in the picker.
- * Reads `GET /api/providers` (cached for 5 min via react-query) and
- * renders ⚡ / 🖼 / 🔧 / ⚠ tags so the user sees at a glance what the
- * provider can do BEFORE they send a message. Silent no-op if the
- * provider isn't found (e.g. non-mapped custom id) — picker still
- * works, just no badges.
- */
-function SelectedProviderBadges({ providerName }: { providerName?: string }) {
-  const caps = useProvider(providerName ?? null);
-  if (!caps) return null;
-  const chips: Array<{ icon: string; label: string; good: boolean }> = [
-    { icon: "🖼", label: "vision", good: caps.supports_vision },
-    { icon: "🔧", label: "tools", good: caps.supports_tool_use },
-    { icon: "⚡", label: "cache", good: caps.supports_prompt_cache },
-    { icon: "📦", label: "structured", good: caps.supports_structured_output },
-  ];
-  const supported = chips.filter((c) => c.good);
-  if (supported.length === 0) return null;
-  return (
-    <div className="mt-1 flex flex-wrap gap-1 px-1 text-[10px] text-muted-foreground/70">
-      {supported.map((c) => (
-        <span
-          key={c.label}
-          className="inline-flex items-center gap-0.5 rounded-sm bg-muted/40 px-1 py-0 leading-4"
-          title={`${caps.name} · supports ${c.label}`}
-        >
-          <span>{c.icon}</span>
-          <span className="tracking-tight">{c.label}</span>
-        </span>
-      ))}
-    </div>
   );
 }

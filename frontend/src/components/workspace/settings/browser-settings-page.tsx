@@ -3,7 +3,10 @@
 // Previously this file hosted a trimmed 158-line re-implementation; keeping
 // two parallel views led to drift, so they were consolidated.
 
-import { BrowserPanel, BrowserProvider } from "@/components/workspace/embedded-browser";
+import {
+  BrowserPanel,
+  BrowserProvider,
+} from "@/components/workspace/embedded-browser";
 import { useI18n } from "@/core/i18n/hooks";
 
 export default function BrowserSettingsPage() {

@@ -116,6 +116,33 @@ class ResearchRole(BaseModel):
     search_angles: list[str] = Field(default_factory=list)
 
 
+class ResearchRouteDecision(BaseModel):
+    """Persisted subagent routing decision for a research lane."""
+
+    model_config = ConfigDict(
+        extra="ignore",
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+    schema_: str = Field(
+        default="octopus.subagent_route_decision.v1",
+        alias="schema",
+    )
+    step_id: str | None = None
+    task_id: str | None = None
+    role: str = ""
+    action: str = "allow"
+    reason: str = ""
+    risk_level: str = "low"
+    verdict: str = "unknown"
+    score: float | None = None
+    confidence: float = 0.0
+    evidence_item_ids: list[str] = Field(default_factory=list)
+    phase: str | None = None
+    created_at: str | None = None
+
+
 class ResearchStep(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -126,6 +153,7 @@ class ResearchStep(BaseModel):
     source_ids: list[str] = Field(default_factory=list)
     expected_searches: int = 0
     prompt: str = ""
+    route_decision: ResearchRouteDecision | None = None
 
 
 class ResearchPrefetchLog(BaseModel):
@@ -178,6 +206,7 @@ class DeepResearchRequest(BaseModel):
     max_searches: int = Field(default=120, ge=1, le=1000)
     include_thread_uploads: bool = True
     prefetch_sources: bool = False
+    task_risk_level: Literal["low", "medium", "high", "critical"] | None = None
     final_report_format: Literal["markdown", "brief", "slides_outline"] = "markdown"
 
     @field_validator("topic")
@@ -204,6 +233,7 @@ class ResearchJob(BaseModel):
     sources: list[ResearchSource]
     evidence: list[ResearchEvidence] = Field(default_factory=list)
     prefetch_logs: list[ResearchPrefetchLog] = Field(default_factory=list)
+    route_decisions: list[ResearchRouteDecision] = Field(default_factory=list)
     roles: list[ResearchRole]
     steps: list[ResearchStep]
     max_searches: int
@@ -337,6 +367,7 @@ class DeepResearchPlanner:
         source_lines = _source_instruction_lines(job.sources)
         material_lines = _material_lines(job.materials)
         evidence_lines = _evidence_table(job.evidence)
+        route_lines = _route_decision_audit_lines(job.route_decisions)
         lead = job.lead_agent_name or "current lead agent"
         return f"""# {job.topic} 深度研究报告
 
@@ -353,6 +384,9 @@ class DeepResearchPlanner:
 1. 围绕「{job.topic}」拆分市场、用户、产品价格、渠道销售、反方验证等角度。
 2. 按来源类型分流搜索和材料读取，优先使用用户材料、官方资料、第三方报告、社区/评论等可复核来源。
 3. 将各角色输出统一合并为结论、证据、缺口和建议，供后续二次验证或正式发布。
+
+## 治理与路由审计
+{route_lines}
 
 ## 研究来源
 {source_lines}
@@ -1098,6 +1132,21 @@ def _evidence_table(evidence: list[ResearchEvidence]) -> str:
             source = f"[{source}]({ev.url})"
         lines.append(
             f"| {claim} | {source} | {ev.stance} | {ev.confidence:.2f} |"
+        )
+    return "\n".join(lines)
+
+
+def _route_decision_audit_lines(decisions: list[ResearchRouteDecision]) -> str:
+    if not decisions:
+        return "- 未记录子代理路由拦截或警告；本次研究未发现需要单独审计的路由风险。"
+    lines: list[str] = []
+    for decision in decisions:
+        step = decision.step_id or decision.task_id or "unknown-step"
+        role = decision.role or "unknown-role"
+        reason = decision.reason or "no reason recorded"
+        lines.append(
+            f"- {step} · {role} · {decision.action} "
+            f"({decision.verdict}, risk={decision.risk_level}): {reason}"
         )
     return "\n".join(lines)
 

@@ -1,7 +1,12 @@
 import { getBackendBaseURL } from "../config";
 import type { AgentThread } from "../threads";
 
-export type WorkspaceOutputArea = "output" | "stages" | "final" | "deploy" | "upload";
+export type WorkspaceOutputArea =
+  | "output"
+  | "stages"
+  | "final"
+  | "deploy"
+  | "upload";
 
 const WORKSPACE_OUTPUT_PREFIX = "workspace-output:";
 
@@ -15,9 +20,9 @@ export function workspaceOutputRef({
   return `${WORKSPACE_OUTPUT_PREFIX}${area}:${relativePath.replace(/^\/+/, "")}`;
 }
 
-export function parseWorkspaceOutputRef(filepath: string):
-  | { area: WorkspaceOutputArea; relativePath: string }
-  | null {
+export function parseWorkspaceOutputRef(
+  filepath: string,
+): { area: WorkspaceOutputArea; relativePath: string } | null {
   if (!filepath.startsWith(WORKSPACE_OUTPUT_PREFIX)) return null;
   const rest = filepath.slice(WORKSPACE_OUTPUT_PREFIX.length);
   const separator = rest.indexOf(":");
@@ -73,4 +78,3 @@ export function extractArtifactsFromThread(thread: AgentThread) {
 export function resolveArtifactURL(absolutePath: string, threadId: string) {
   return `${getBackendBaseURL()}/api/threads/${threadId}/artifacts${absolutePath}`;
 }
-

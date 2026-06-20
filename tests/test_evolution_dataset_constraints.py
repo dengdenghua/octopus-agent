@@ -86,6 +86,39 @@ def test_evolution_dataset_clusters_repeated_failure_modes() -> None:
     assert annotated[2]["failure_cluster_count"] == 1
 
 
+def test_evolution_dataset_clusters_verification_by_repair_route() -> None:
+    builder = EvolutionDatasetBuilder()
+
+    annotated = builder.annotate_failure_clusters([
+        {
+            "goal": "fix failing test",
+            "last_error": "verification failed",
+            "failure_source": "verification_failed",
+            "primary_repair_route": "test_driven_repair",
+        },
+        {
+            "goal": "restore tsc",
+            "last_error": "verification failed",
+            "failure_source": "verification_failed",
+            "primary_repair_route": "environment_repair",
+        },
+    ])
+    dataset = builder.build_from_failure_samples(annotated)
+    categories = {example.category for example in dataset.all_examples}
+
+    assert annotated[0]["failure_cluster"].startswith("test_driven_repair:")
+    assert annotated[1]["failure_cluster"].startswith("environment_repair:")
+    assert categories == {"test_driven_repair", "environment_repair"}
+    primary_examples = [
+        example for example in dataset.all_examples
+        if not example.source.endswith(":synthetic")
+    ]
+    assert all(
+        "Use repair route" in example.expected_behavior
+        for example in primary_examples
+    )
+
+
 def test_evolution_dataset_mines_unique_success_tool_chains() -> None:
     trajectory = SimpleNamespace(
         trajectory_id="trajectory-1",

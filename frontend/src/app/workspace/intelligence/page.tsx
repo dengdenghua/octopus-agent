@@ -26,11 +26,17 @@ export default function IntelligencePage() {
         <div className="ui-density-stack mx-auto flex w-full max-w-6xl flex-col py-2">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid h-auto w-full max-w-md grid-cols-2 rounded-lg p-1">
-              <TabsTrigger value="subscriptions" className="h-8 gap-1.5 px-3 text-xs">
+              <TabsTrigger
+                value="subscriptions"
+                className="h-8 gap-1.5 px-3 text-xs"
+              >
                 <RadarIcon className="size-3.5" />
                 {t.intelligence.subscriptionsHeader}
               </TabsTrigger>
-              <TabsTrigger value="schedules" className="h-8 gap-1.5 px-3 text-xs">
+              <TabsTrigger
+                value="schedules"
+                className="h-8 gap-1.5 px-3 text-xs"
+              >
                 <CalendarClockIcon className="size-3.5" />
                 {t.taskBoard.schedules}
               </TabsTrigger>

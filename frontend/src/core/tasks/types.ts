@@ -41,7 +41,12 @@ export function isSubtaskActive(status: SubtaskStatus): boolean {
 }
 
 export function isSubtaskTerminal(status: SubtaskStatus): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled" || status === "timed_out";
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "timed_out"
+  );
 }
 
 export interface Subtask {

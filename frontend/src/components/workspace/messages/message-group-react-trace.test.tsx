@@ -1,6 +1,5 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import type { AIMessage } from "@/core/api/types";
 import { renderWithProviders } from "@/test/harness";
@@ -54,7 +53,7 @@ describe("MessageGroup labelled ReAct trace rendering", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText(new RegExp(hiddenTail))).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Replay 3 previous steps"));
+    fireEvent.click(screen.getByText("Replay 2 previous steps"));
 
     expect(
       screen.getAllByText("Search sources: silver economy market").length,

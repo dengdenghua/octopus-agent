@@ -156,8 +156,13 @@ export function usePlans(includeInactive = false) {
 export function useSubscribe() {
   const queryClient = useQueryClient();
 
-  return useMutation<UserSubscription, Error, { planId: string; autoRenew?: boolean }>({
-    mutationFn: ({ planId, autoRenew }) => accountApi.subscribe(planId, autoRenew),
+  return useMutation<
+    UserSubscription,
+    Error,
+    { planId: string; autoRenew?: boolean }
+  >({
+    mutationFn: ({ planId, autoRenew }) =>
+      accountApi.subscribe(planId, autoRenew),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.subscription() });
       queryClient.invalidateQueries({ queryKey: queryKeys.usage() });
@@ -195,7 +200,10 @@ export function useUsage() {
   });
 }
 
-export function useUsageEvents(params?: { limit?: number; event_type?: string }) {
+export function useUsageEvents(params?: {
+  limit?: number;
+  event_type?: string;
+}) {
   return useQuery<UsageEvent[], Error>({
     queryKey: queryKeys.usageEvents(params),
     queryFn: async () => {

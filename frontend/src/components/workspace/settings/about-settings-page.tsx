@@ -1,4 +1,3 @@
-
 import { Suspense, lazy } from "react";
 
 import { aboutMarkdown } from "./about-content";

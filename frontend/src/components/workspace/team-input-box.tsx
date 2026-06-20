@@ -2,9 +2,9 @@ import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
   ChevronDownIcon,
+  DatabaseIcon,
   SquareIcon,
   MessageCircleIcon,
-  SparklesIcon,
   UserCircleIcon,
   UsersIcon,
 } from "lucide-react";
@@ -126,6 +126,16 @@ export function TeamInputBox({
   const handleSubmit = useCallback(() => {
     const text = input.trim();
     if (!text || status === "streaming") return;
+    const compactText = text.replace(/\s+/g, "");
+    if (
+      compactText === "@本地数据库" ||
+      compactText === "@本地资料官" ||
+      compactText === "@私域资料库"
+    ) {
+      setInput("@本地数据库 帮我查找：");
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+      return;
+    }
     collab?.sendRoomMessage(text);
     if (submitBehavior === "run") {
       onSubmit?.({ text });
@@ -185,7 +195,19 @@ export function TeamInputBox({
     [selectedAgentIds],
   );
   const selectedAgentLabel =
-    selectedAgentIds.length > 0 ? `成员 ${selectedAgentIds.length}` : "成员";
+    selectedAgentIds.length > 0
+      ? t.teamInput.assigneeCount(selectedAgentIds.length)
+      : t.teamInput.assigneeAll;
+
+  const summonLocalFileAgent = useCallback(() => {
+    const mention = "@本地数据库 ";
+    setInput((value) => {
+      if (value.includes(mention.trim())) return value;
+      const prefix = value.trim().length > 0 ? `${value.trimEnd()}\n` : "";
+      return `${prefix}${mention}`;
+    });
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
 
   const toggleSelectedAgent = useCallback(
     (agentId: string, checked: boolean) => {
@@ -227,8 +249,8 @@ export function TeamInputBox({
         disabled={disabled || status === "streaming"}
       />
 
-      <div className="composer-footer flex items-center justify-between gap-2 border-t border-border/30 px-2 py-1">
-        <div className="flex items-center gap-2">
+      <div className="composer-footer flex flex-wrap items-center justify-between gap-2 border-t border-border/30 px-2 py-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {showWorkDirSelector && (
             <WorkDirSelector
               workDir={workDir}
@@ -241,8 +263,9 @@ export function TeamInputBox({
                 <button
                   type="button"
                   data-testid="team-assignee-trigger"
+                  title={t.teamInput.assigneeHint}
                   className={cn(
-                    "flex h-7 items-center gap-1.5 rounded-full bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors",
+                    "flex h-7 items-center gap-1.5 rounded-md bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors",
                     selectedAgentIds.length > 0 && "bg-primary/10 text-primary",
                     "hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                   )}
@@ -254,7 +277,7 @@ export function TeamInputBox({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64">
                 <DropdownMenuLabel className="text-xs">
-                  本次任务交给谁先动手
+                  {t.teamInput.assigneeMenuTitle}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {teamMembers.map((agent) => {
@@ -291,7 +314,7 @@ export function TeamInputBox({
                       className="w-full rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/60"
                       onClick={() => onSelectedAgentIdsChange?.([])}
                     >
-                      清空选择，交给全员判断
+                      {t.teamInput.clearAssignee}
                     </button>
                   </>
                 )}
@@ -304,7 +327,7 @@ export function TeamInputBox({
                 type="button"
                 data-testid="team-mode-trigger"
                 className={cn(
-                  "flex h-7 items-center gap-1.5 rounded-full bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors",
+                  "flex h-7 items-center gap-1.5 rounded-md bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors",
                   "hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                 )}
               >
@@ -339,9 +362,19 @@ export function TeamInputBox({
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          <button
+            type="button"
+            className="flex h-7 items-center gap-1.5 rounded-md bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            aria-label={t.teamInput.localFileAgentHint}
+            title={t.teamInput.localFileAgentHint}
+            onClick={summonLocalFileAgent}
+          >
+            <DatabaseIcon className="size-3.5 text-muted-foreground" />
+            <span>{t.teamInput.localFileAgent}</span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
           <ModelPicker
             models={pickerModels}
             value={selectedModel?.name}

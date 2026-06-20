@@ -1,4 +1,3 @@
-
 import { Download, FileJson, FileText } from "lucide-react";
 import { useCallback } from "react";
 import { toast } from "sonner";
@@ -78,4 +77,3 @@ export function ExportTrigger({ threadId }: { threadId: string }) {
     </DropdownMenu>
   );
 }
-

@@ -1,11 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  AlertCircle,
-  RefreshCw,
-} from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { listApps, type OctopusApp } from "@/core/apps/api";
+import { type OctopusApp } from "@/core/apps/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import type { PluginInfo } from "@/core/plugins/types";
@@ -22,6 +18,9 @@ export type LocalSkill = SkillInfo & {
   has_tests?: boolean;
   kind?: "system" | "automation" | "domain";
   trusted_source?: string | null;
+  market_visibility?: string;
+  market_reason?: string | null;
+  canonical_skill?: string | null;
 };
 
 export type PluginRegistryItem = {
@@ -45,91 +44,113 @@ export interface SkillCategory {
 export const LOCAL_SKILL_CATEGORIES: SkillCategory[] = [
   {
     key: "browser-search",
-    pattern: /browse|browser|search|scraper|scraping|crawler|playwright|devtools|web\s*research|fast-browser|rust-browser/i,
+    pattern:
+      /browse|browser|search|scraper|scraping|crawler|playwright|devtools|web\s*research|fast-browser|rust-browser/i,
   },
   {
     key: "agent-tools",
-    pattern: /memory|kg|recall|blackboard|computer|notebook|verify|approval|find-skills|skill-creator|skill-finder|skill-vetter|skill-writer|kimi-find-skills|kimi-skills-finder|mcp-tools|mcporter/i,
+    pattern:
+      /memory|kg|recall|blackboard|computer|notebook|verify|approval|find-skills|skill-creator|skill-finder|skill-vetter|skill-writer|kimi-find-skills|kimi-skills-finder|mcp-tools|mcporter/i,
   },
   {
     key: "webapp-frontend",
-    pattern: /webapp|website|landing|frontend|uiux|ui-|ui_|interface|design-system|theme|html|react|component|scaffold|prototype|proto/i,
+    pattern:
+      /webapp|website|landing|frontend|uiux|ui-|ui_|interface|design-system|theme|html|react|component|scaffold|prototype|proto/i,
   },
   {
     key: "backend-api",
-    pattern: /backend|api-|api_|api\s|graphql|database|sql|openapi|route|gemini|vertex|http-load|load-tester|load-profiler/i,
+    pattern:
+      /backend|api-|api_|api\s|graphql|database|sql|openapi|route|gemini|vertex|http-load|load-tester|load-profiler/i,
   },
   {
     key: "code-quality",
-    pattern: /code-review|quality|refactor|repo-audit|git-repo|secure-code|code-safety|code-vuln|architecture|best-practices|tdd|test-driven|test-suite|software-testing|smart-commit|conventional-commit|debug|perf-analyzer|optimization/i,
+    pattern:
+      /code-review|quality|refactor|repo-audit|git-repo|secure-code|code-safety|code-vuln|architecture|best-practices|tdd|test-driven|test-suite|software-testing|smart-commit|conventional-commit|debug|perf-analyzer|optimization/i,
   },
   {
     key: "devops-cloud",
-    pattern: /k8s|kubectl|terraform|deploy|devops|cluster|pipeline|log-|log_|incident|ops|r2-upload|gitlab-cli/i,
+    pattern:
+      /k8s|kubectl|terraform|deploy|devops|cluster|pipeline|log-|log_|incident|ops|r2-upload|gitlab-cli/i,
   },
   {
     key: "office-docs",
-    pattern: /docx|pdf|xlsx|spreadsheet|table|document|process-doc|sop|markdown|file|batch-download/i,
+    pattern:
+      /docx|pdf|xlsx|spreadsheet|table|document|process-doc|sop|markdown|file|batch-download/i,
   },
   {
     key: "slides-report",
-    pattern: /pptx|slides?|keynote|deck|report|work-report|work-recap|business-plan-ppt|geo-magazine|photo-magazine/i,
+    pattern:
+      /pptx|slides?|keynote|deck|report|work-report|work-recap|business-plan-ppt|geo-magazine|photo-magazine/i,
   },
   {
     key: "chart-viz",
-    pattern: /chart|diagram|visualization|viz|infographic|timeline|gantt|heatmap|story-map/i,
+    pattern:
+      /chart|diagram|visualization|viz|infographic|timeline|gantt|heatmap|story-map/i,
   },
   {
     key: "writing-editing",
-    pattern: /general-writing|writing|writer|copy-edit|copy-editor|humanizer|longread|rhetoric|speech|article|story|journalistic|portrait|audience-adapter|translation|translator|localization|xindaya/i,
+    pattern:
+      /general-writing|writing|writer|copy-edit|copy-editor|humanizer|longread|rhetoric|speech|article|story|journalistic|portrait|audience-adapter|translation|translator|localization|xindaya/i,
   },
   {
     key: "marketing-copy",
-    pattern: /marketing-writer|copywriting|copywriter|ad-copy|ad-creative|campaign|ecom-copy|listing-copy|product-description|newsletter|content-research|wechat-post|xhs|zhihu|x-thread|social|short-video-script/i,
+    pattern:
+      /marketing-writer|copywriting|copywriter|ad-copy|ad-creative|campaign|ecom-copy|listing-copy|product-description|newsletter|content-research|wechat-post|xhs|zhihu|x-thread|social|short-video-script/i,
   },
   {
     key: "seo-growth",
-    pattern: /seo|cro|split-test|ab-test|growth|retention|churn|pricing|customer-reply|support-response/i,
+    pattern:
+      /seo|cro|split-test|ab-test|growth|retention|churn|pricing|customer-reply|support-response/i,
   },
   {
     key: "ecommerce",
-    pattern: /ecom|ecommerce|shopify|amazon|amz|alibaba|1688|etsy|dropshipping|sourcing|supplier|selection|listing|tariff/i,
+    pattern:
+      /ecom|ecommerce|shopify|amazon|amz|alibaba|1688|etsy|dropshipping|sourcing|supplier|selection|listing|tariff/i,
   },
   {
     key: "market-product",
-    pattern: /market|competitor|competitive|product|prd|user-story|customer|saas|business|brand|naming|strategy|vc-industry|primary-market|idea-to-prd/i,
+    pattern:
+      /market|competitor|competitive|product|prd|user-story|customer|saas|business|brand|naming|strategy|vc-industry|primary-market|idea-to-prd/i,
   },
   {
     key: "project-goal",
-    pattern: /project|planner|planning|plan-builder|iteration|sprint|okr|goal|todo|workload|sizing|chrono|daily-planner/i,
+    pattern:
+      /project|planner|planning|plan-builder|iteration|sprint|okr|goal|todo|workload|sizing|chrono|daily-planner/i,
   },
   {
     key: "finance-stock",
-    pattern: /stock|equity|earnings|investor|investment|value-invest|signal|tech-analysis|finance-profiler|cn-finance/i,
+    pattern:
+      /stock|equity|earnings|investor|investment|value-invest|signal|tech-analysis|finance-profiler|cn-finance/i,
   },
   {
     key: "finance-model",
-    pattern: /financial|cashflow|dcf|valuation|discounted|ratio|statement|fund|risk|commodity|commodities|etf|backtest|trading/i,
+    pattern:
+      /financial|cashflow|dcf|valuation|discounted|ratio|statement|fund|risk|commodity|commodities|etf|backtest|trading/i,
   },
   {
     key: "data-stats",
-    pattern: /stat|regression|correlation|hypothesis|outlier|dataset|data-quality|data-health|weighted|scoring|scorecard|modeler/i,
+    pattern:
+      /stat|regression|correlation|hypothesis|outlier|dataset|data-quality|data-health|weighted|scoring|scorecard|modeler/i,
   },
   {
     key: "data-insight",
-    pattern: /data|analytics|analysis|insight|metric|dashboard|forecast|scan|audit|research-brief/i,
+    pattern:
+      /data|analytics|analysis|insight|metric|dashboard|forecast|scan|audit|research-brief/i,
   },
   {
     key: "academic-paper",
-    pattern: /academic|paper|sci-paper|scholarly|citation|cite-style|ref-style|literature|research-paper|paper-review|paper-writing|scientific|experiment/i,
+    pattern:
+      /academic|paper|sci-paper|scholarly|citation|cite-style|ref-style|literature|research-paper|paper-review|paper-writing|scientific|experiment/i,
   },
   {
     key: "deep-research",
-    pattern: /deep-research|research-advisor|research-writer|market-research|company-research|equity-research|commodity-research|auto-hypothesis/i,
+    pattern:
+      /deep-research|research-advisor|research-writer|market-research|company-research|equity-research|commodity-research|auto-hypothesis/i,
   },
   {
     key: "education-coach",
-    pattern: /teach|tutor|mentor|learning|lesson|quiz|anki|flashcard|course|study|exam|coach|interview-simulator|mock-interview|programming-tutor/i,
+    pattern:
+      /teach|tutor|mentor|learning|lesson|quiz|anki|flashcard|course|study|exam|coach|interview-simulator|mock-interview|programming-tutor/i,
   },
   {
     key: "hr-career",
@@ -137,11 +158,13 @@ export const LOCAL_SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     key: "email-comms",
-    pattern: /email|gmail|imap|smtp|mailer|mail|reply|calendar|meeting|minutes|recap|lark|whatsapp|communication|comms/i,
+    pattern:
+      /email|gmail|imap|smtp|mailer|mail|reply|calendar|meeting|minutes|recap|lark|whatsapp|communication|comms/i,
   },
   {
     key: "legal-compliance",
-    pattern: /legal|contract|tos|clause|compliance|regulatory|iso-27001|policy|risk-assessment|evidence/i,
+    pattern:
+      /legal|contract|tos|clause|compliance|regulatory|iso-27001|policy|risk-assessment|evidence/i,
   },
   {
     key: "security-audit",
@@ -149,15 +172,18 @@ export const LOCAL_SKILL_CATEGORIES: SkillCategory[] = [
   },
   {
     key: "design-creative",
-    pattern: /design|creative|image|prompt|fashion|sketch|illustration|retro-tech|visual|logo|color|theme-factory|theme-kit|awesome-design/i,
+    pattern:
+      /design|creative|image|prompt|fashion|sketch|illustration|retro-tech|visual|logo|color|theme-factory|theme-kit|awesome-design/i,
   },
   {
     key: "media-audio-video",
-    pattern: /video|audio|tts|speech-synthesis|edge-tts|podcast|remotion|quality-diff|outline-planner/i,
+    pattern:
+      /video|audio|tts|speech-synthesis|edge-tts|podcast|remotion|quality-diff|outline-planner/i,
   },
   {
     key: "personal-productivity",
-    pattern: /adhd|daily|brainstorming|chrono-flow|personal|assistant|work-recap/i,
+    pattern:
+      /adhd|daily|brainstorming|chrono-flow|personal|assistant|work-recap/i,
   },
 ];
 
@@ -275,7 +301,9 @@ export function searchableAppText(app: OctopusApp): string {
 }
 
 export function normalizePluginLookupKey(value?: string | null): string | null {
-  const key = String(value ?? "").trim().toLowerCase();
+  const key = String(value ?? "")
+    .trim()
+    .toLowerCase();
   return key || null;
 }
 
@@ -378,7 +406,9 @@ export function StoreErrorState({
           variant="outline"
           onClick={onRetry}
         >
-          <RefreshCw className={cn("mr-1 size-3.5", retrying && "animate-spin")} />
+          <RefreshCw
+            className={cn("mr-1 size-3.5", retrying && "animate-spin")}
+          />
           {retryLabel}
         </Button>
       </div>

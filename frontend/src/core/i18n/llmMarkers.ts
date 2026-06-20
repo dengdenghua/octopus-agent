@@ -170,7 +170,10 @@ function escapeAlternation(values: ReadonlyArray<string>): string {
   return values.map(escapeRegex).join("|");
 }
 
-const MENTIONS_DELIVERED_RE = new RegExp(`(?:${escapeAlternation(DELIVERED_KEYWORDS)})`, "i");
+const MENTIONS_DELIVERED_RE = new RegExp(
+  `(?:${escapeAlternation(DELIVERED_KEYWORDS)})`,
+  "i",
+);
 const MENTIONS_COMPLETION_RE = new RegExp(
   `(?:${escapeAlternation(COMPLETION_KEYWORDS)})`,
   "i",

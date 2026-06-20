@@ -1,23 +1,21 @@
 """
-agents.presets · backward-compat shim.
+agents.presets · directory-backed agent loaders.
 
 As of the `agents/<id>/` directory layout migration, agent persona
 files (SOUL / IDENTITY / USER / MEMORY / AGENTS / BOOTSTRAP / TOOLS)
 live on disk under ``agents/<id>/agent-core/``. The source of truth
 moved from Python strings in this file to user-editable markdown.
 
-This module is kept for backward compatibility so existing callers
-(demo_server, tests, downstream code) keep working:
+This module keeps small convenience loaders for callers that explicitly
+ask for one agent, but roster creation is directory-driven:
 
     from runtime.execution.agents import make_all_agent_presets
     agents = make_all_agent_presets(runtime)
 
 Internally, ``make_all_agent_presets`` delegates to
-``loader.load_all_agents``. The per-agent factory helpers
-(``make_coder_agent`` etc.) are also retained — each one just loads
-its own ``agents/<id>/`` subtree. Add a new agent = drop a folder
-under ``agents/`` with a ``profile.jsonc`` + ``agent-core/`` tree;
-no Python change needed.
+``loader.load_all_agents``. Add a new agent = drop a folder under
+``agents/`` with a ``profile.jsonc`` + ``agent-core/`` tree; no Python
+roster change needed.
 """
 
 from __future__ import annotations
@@ -52,11 +50,10 @@ def make_ecommerce_mind_agent(runtime: GraphRuntime) -> Agent:
 def make_desktop_operator_agent(runtime: GraphRuntime) -> Agent:
     """Construct the legacy standalone desktop-operator agent.
 
-    Not registered in ``AGENT_PRESET_FACTORIES`` — desktop capability is
-    primarily exposed as the ``desktop_operator`` arm inside the
-    ``general`` agent. This factory remains for tests and tools that
-    explicitly request a persona-bound desktop agent; the folder lives
-    at ``agents/desktop_operator/`` alongside the first-class agents.
+    Not auto-registered — desktop capability is primarily exposed as the
+    ``desktop_operator`` arm inside the ``general`` agent. This factory
+    remains for tests and tools that explicitly request a persona-bound
+    desktop agent; the folder lives at ``agents/desktop_operator/``.
     """
     return _load_one("desktop_operator", runtime)
 
@@ -71,26 +68,15 @@ def make_admin_agent(runtime: GraphRuntime) -> Agent:
     return _load_one("admin", runtime)
 
 
-AGENT_PRESET_FACTORIES = [
-    make_general_agent,
-    make_coder_agent,
-    make_vibe_selling_agent,
-    make_ecommerce_mind_agent,
-]
-
-
 def make_all_agent_presets(runtime: GraphRuntime) -> list[Agent]:
-    """Load the user-facing preset agents.
+    """Load the user-facing local agents from ``agents/``.
 
     ``admin`` is a dedicated system persona for code-mode / privileged
     operations and is intentionally excluded from the default preset
     roster so normal registry routing is not skewed toward admin.
     Call ``make_admin_agent()`` explicitly when that persona is needed.
     """
-    loaded = [
+    return [
         agent for agent in load_all_agents(runtime)
         if getattr(agent, "agent_id", None) != "admin"
     ]
-    if loaded:
-        return loaded
-    return [factory(runtime) for factory in AGENT_PRESET_FACTORIES]

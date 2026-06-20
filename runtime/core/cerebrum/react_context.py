@@ -743,6 +743,125 @@ def _build_code_context_prelude(workspace_path: str) -> str:
     return "\n\n".join(parts)
 
 
+def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:
+    """Mode-specific operating contract for Agent page project/code turns."""
+    mode = (agent_mode or "coder").strip().lower()
+    aliases = {
+        "build": "builder",
+        "builder": "builder",
+        "new": "builder",
+        "code": "coder",
+        "coder": "coder",
+        "debugger": "coder",
+        "architect": "architect",
+        "architecture": "architect",
+    }
+    canonical = aliases.get(mode, "coder")
+    if canonical == "builder":
+        body = (
+            "当前项目子模式: builder / 构建者。\n"
+            "- 适合从零搭建项目、补脚手架、初始化配置、生成可运行最小闭环。\n"
+            "- 先确认目标产物、运行入口和验收命令;优先创建最小可运行版本。\n"
+            "- 不要过早引入大型框架或复杂抽象;每完成一个可运行切片就验证。"
+        )
+    elif canonical == "architect":
+        body = (
+            "当前项目子模式: architect / 架构师。\n"
+            "- 适合跨模块设计、迁移方案、安全边界、接口契约和技术债治理。\n"
+            "- 默认先读现有结构与约束,给出设计取舍;涉及大范围修改前先分阶段执行。\n"
+            "- 优先保持兼容性和可回滚性;避免一次性重写核心路径。"
+        )
+    else:
+        body = (
+            "当前项目子模式: coder / 编码者。\n"
+            "- 适合修 bug、加功能、写测试、重构局部代码。\n"
+            "- 优先定位最小相关文件,做小步修改,每个修改点配套验证。\n"
+            "- 交付时说明改了哪里、跑了什么验证、还有什么残余风险。"
+        )
+    return f"<code-agent-mode>\n{body}\n</code-agent-mode>"
+
+
+def _build_project_signals_prompt(project_signals: Any) -> str:
+    if not isinstance(project_signals, dict):
+        return ""
+    signals = project_signals.get("signals")
+    if not isinstance(signals, dict):
+        signals = project_signals
+
+    def _list(key: str, limit: int = 8) -> list[str]:
+        value = signals.get(key)
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value[:limit] if isinstance(item, str) and item.strip()]
+
+    def _commands(limit: int = 8) -> list[str]:
+        value = signals.get("commands")
+        if not isinstance(value, list):
+            return []
+        formatted: list[str] = []
+        for item in value[:limit]:
+            if not isinstance(item, dict):
+                continue
+            kind = str(item.get("kind") or "").strip()
+            command = str(item.get("command") or "").strip()
+            source = str(item.get("source") or "").strip()
+            if not kind or not command:
+                continue
+            suffix = f" ({source[:80]})" if source else ""
+            formatted.append(f"[{kind}] {command}{suffix}")
+        return formatted
+
+    lines: list[str] = []
+    recommended = project_signals.get("recommended_mode")
+    if isinstance(recommended, str) and recommended.strip():
+        confidence = project_signals.get("confidence")
+        suffix = (
+            f" ({round(float(confidence) * 100)}%)"
+            if isinstance(confidence, (int, float))
+            else ""
+        )
+        lines.append(f"- 推荐子模式: {recommended.strip()}{suffix}")
+    reason = project_signals.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        lines.append(f"- 检测依据: {reason.strip()[:240]}")
+
+    file_count = signals.get("file_count")
+    if isinstance(file_count, int):
+        lines.append(f"- 文件数量: {file_count}")
+    git_commits = signals.get("git_commits")
+    if isinstance(git_commits, int) and git_commits > 0:
+        lines.append(f"- Git 提交数: {git_commits}")
+    if signals.get("has_readme") is True:
+        lines.append("- README: 已发现")
+
+    manifests = _list("manifests")
+    if manifests:
+        lines.append("- 项目清单/技术栈信号: " + ", ".join(manifests))
+    lock_files = _list("lock_files")
+    if lock_files:
+        lines.append("- 锁文件/包管理器信号: " + ", ".join(lock_files))
+    structure_dirs = _list("structure_dirs", limit=12)
+    if structure_dirs:
+        lines.append("- 关键目录: " + ", ".join(structure_dirs))
+    commands = _commands()
+    if commands:
+        lines.append("- 候选验证命令: " + "; ".join(commands))
+
+    if not lines:
+        return ""
+    if commands:
+        lines.append(
+            "- 验证建议: 修改后优先从候选命令里选择最相关的一条执行;"
+            "如果候选命令不适用,说明原因并选择更窄的验证。"
+        )
+    else:
+        lines.append(
+            "- 验证建议: 优先根据上述清单和锁文件选择项目自带 lint/typecheck/test/build 命令;"
+            "不确定时先读取 package/pyproject/README 等清单文件再执行。"
+        )
+    return "<project-signals>\n" + "\n".join(lines) + "\n</project-signals>"
+
+
 def _find_code_context_readme(root: Path) -> Path | None:
     for name in _CODE_CONTEXT_README_NAMES:
         candidate = root / name
@@ -860,9 +979,8 @@ def _image_blocks_from_attachments(attachments: Any) -> list[dict[str, Any]]:
             url = candidate
         else:
             raw_url = item.get("url") or item.get("artifact_url")
-            if isinstance(raw_url, str) and raw_url.strip():
-                if raw_url.startswith("data:image/") or _looks_like_image_attachment(item):
-                    url = raw_url
+            if isinstance(raw_url, str) and raw_url.strip() and (raw_url.startswith("data:image/") or _looks_like_image_attachment(item)):
+                url = raw_url
         if not url:
             continue
         blocks.append({"type": "image_url", "image_url": {"url": url}})

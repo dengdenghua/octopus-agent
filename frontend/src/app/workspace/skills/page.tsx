@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -37,6 +38,9 @@ type Skill = {
   group?: string | null;
   /* Implementation note. */
   kind?: "system" | "automation" | "domain";
+  market_visibility?: string;
+  market_reason?: string | null;
+  canonical_skill?: string | null;
 };
 
 // Keep in sync with backend SKILL_CATEGORIES · if a new category is added
@@ -68,6 +72,7 @@ function InstalledSkillsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [showInternalSkills, setShowInternalSkills] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,16 +135,21 @@ function InstalledSkillsPanel() {
   );
 
   // Implementation note.
+  const marketSkills = useMemo(() => {
+    if (showInternalSkills) return skills;
+    return skills.filter((s) => (s.market_visibility ?? "market") === "market");
+  }, [showInternalSkills, skills]);
+
   const grouped = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = q
-      ? skills.filter((s) => {
+      ? marketSkills.filter((s) => {
           const name = (s.name || "").toLowerCase();
           const desc = (s.description || "").toLowerCase();
           const aff = (s.affinity || []).join(" ").toLowerCase();
           return name.includes(q) || desc.includes(q) || aff.includes(q);
         })
-      : skills;
+      : marketSkills;
 
     const byCat: Record<string, Skill[]> = {};
     for (const s of filtered) {
@@ -150,12 +160,13 @@ function InstalledSkillsPanel() {
       byCat[cat]!.sort((a, b) => a.name.localeCompare(b.name));
     }
     return byCat;
-  }, [skills, query]);
+  }, [marketSkills, query]);
 
   const totalFiltered = useMemo(
     () => Object.values(grouped).reduce((sum, arr) => sum + arr.length, 0),
     [grouped],
   );
+  const hiddenSkillCount = Math.max(0, skills.length - marketSkills.length);
 
   if (loading) {
     return (
@@ -210,9 +221,22 @@ function InstalledSkillsPanel() {
         </div>
         <div className="text-xs text-muted-foreground tabular-nums">
           {query
-            ? t.skillsPage.matchCount(totalFiltered, skills.length)
-            : t.skillsPage.totalCount(skills.length)}
+            ? t.skillsPage.matchCount(totalFiltered, marketSkills.length)
+            : t.skillsPage.totalCount(marketSkills.length)}
         </div>
+        {hiddenSkillCount > 0 && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 rounded-full px-3 text-xs"
+            onClick={() => setShowInternalSkills((value) => !value)}
+          >
+            {showInternalSkills
+              ? "隐藏内部技能"
+              : `显示内部 ${hiddenSkillCount}`}
+          </Button>
+        )}
       </div>
 
       {/* Implementation note. */}
@@ -294,6 +318,7 @@ function SkillCard({
         (skill.affinity || []).length > 0 &&
           t.skillsPage.tooltipTags((skill.affinity || []).join(", ")),
         tested ? t.skillsPage.tooltipTested : t.skillsPage.tooltipUntested,
+        skill.market_reason,
       ]
         .filter(Boolean)
         .join("\n")}
@@ -314,6 +339,17 @@ function SkillCard({
           {tested && (
             <span title={t.skillsPage.testedDotTitle}>
               <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
+            </span>
+          )}
+          {(skill.market_visibility ?? "market") !== "market" && (
+            <span className="rounded border border-border/50 bg-muted/35 px-1 py-0.5 text-[10px] leading-none text-muted-foreground">
+              {skill.market_visibility === "duplicate"
+                ? "重复"
+                : skill.market_visibility === "provider"
+                  ? "后端"
+                  : skill.market_visibility === "deprecated"
+                    ? "弃用"
+                    : "内部"}
             </span>
           )}
         </div>
@@ -372,6 +408,7 @@ export default function SkillsPage() {
       <WorkspaceHeader />
       <WorkspaceBody className="p-0">
         <div className="flex flex-col gap-4 p-4 w-full min-h-full">
+          <CapabilityQualityStrip surface="skills" />
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">

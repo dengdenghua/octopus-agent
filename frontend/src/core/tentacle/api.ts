@@ -140,9 +140,7 @@ export async function analyzeDevice(
   );
 }
 
-export async function getDeviceScreenshot(
-  tentacleId: string,
-): Promise<Blob> {
+export async function getDeviceScreenshot(tentacleId: string): Promise<Blob> {
   const url = `${TENTACLE_BASE}/devices/${encodeURIComponent(tentacleId)}/screenshot`;
   const res = await fetch(url);
   if (!res.ok) {
@@ -168,9 +166,11 @@ export interface PcScreenStats {
   };
 }
 
-export async function startPcScreenCapture(
-  opts?: { fps?: number; scale?: number; quality?: number },
-): Promise<{ status: string; stats: PcScreenStats }> {
+export async function startPcScreenCapture(opts?: {
+  fps?: number;
+  scale?: number;
+  quality?: number;
+}): Promise<{ status: string; stats: PcScreenStats }> {
   return request("/pc-screen/start", {
     method: "POST",
     body: JSON.stringify(opts || {}),
@@ -197,10 +197,24 @@ export async function listSkills(): Promise<SkillInfo[]> {
 // ── Remote Input ───────────────────────────────────────
 
 export interface RemoteInputEvent {
-  action: "tap" | "double_tap" | "long_press" | "swipe" | "type_text" | "key_press"
-    | "click" | "double_click" | "right_click" | "middle_click"
-    | "mouse_move" | "drag_start" | "drag_move" | "drag_end"
-    | "scroll" | "zoom" | "key_combo";
+  action:
+    | "tap"
+    | "double_tap"
+    | "long_press"
+    | "swipe"
+    | "type_text"
+    | "key_press"
+    | "click"
+    | "double_click"
+    | "right_click"
+    | "middle_click"
+    | "mouse_move"
+    | "drag_start"
+    | "drag_move"
+    | "drag_end"
+    | "scroll"
+    | "zoom"
+    | "key_combo";
   x?: number;
   y?: number;
   x2?: number;

@@ -39,7 +39,9 @@ describe("LiveRunFeedbackPanel", () => {
     });
 
     expect(screen.queryByText("Live Feedback")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Generating action draft/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Generating action draft/),
+    ).not.toBeInTheDocument();
   });
 
   it("ignores meta-only todo events because TodoPanel owns that UI", () => {
@@ -88,8 +90,9 @@ describe("LiveRunFeedbackPanel", () => {
     expect(screen.getByText("Live Feedback")).toBeInTheDocument();
     expect(screen.getByText(/Generating action draft/)).toBeInTheDocument();
     expect(
-      screen.getByText((content) =>
-        content.includes("Reading") && content.includes("README.md"),
+      screen.getByText(
+        (content) =>
+          content.includes("Reading") && content.includes("README.md"),
       ),
     ).toBeInTheDocument();
   });
@@ -111,7 +114,9 @@ describe("LiveRunFeedbackPanel", () => {
       />,
     );
 
-    expect(screen.getByText(/Running command: npm run typecheck/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Running command: npm run typecheck/),
+    ).toBeInTheDocument();
   });
 
   it("shows real-time progress from react step events", () => {

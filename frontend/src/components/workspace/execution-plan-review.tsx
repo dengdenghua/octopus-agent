@@ -65,12 +65,14 @@ interface ExecutionPlanReviewProps {
 
 const RISK_CONFIG = {
   low: {
-    color: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+    color:
+      "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
     icon: ShieldCheckIcon,
     label: "Low Risk",
   },
   medium: {
-    color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
+    color:
+      "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
     icon: AlertTriangleIcon,
     label: "Medium Risk",
   },
@@ -90,7 +92,10 @@ const DURATION_CONFIG = {
 const STATUS_CONFIG = {
   pending: { color: "text-muted-foreground", bgColor: "bg-muted/30" },
   in_progress: { color: "text-primary", bgColor: "bg-primary/5" },
-  completed: { color: "text-green-600 dark:text-green-400", bgColor: "bg-green-500/5" },
+  completed: {
+    color: "text-green-600 dark:text-green-400",
+    bgColor: "bg-green-500/5",
+  },
   skipped: { color: "text-muted-foreground/50", bgColor: "bg-muted/10" },
 } as const;
 
@@ -127,7 +132,11 @@ function StepEditor({
         <div className="flex flex-wrap items-center gap-1.5">
           <select
             value={step.risk}
-            onChange={(e) => onUpdate(index, { risk: e.target.value as ExecutionPlanStep["risk"] })}
+            onChange={(e) =>
+              onUpdate(index, {
+                risk: e.target.value as ExecutionPlanStep["risk"],
+              })
+            }
             className="h-5 rounded border border-border/50 bg-muted/30 px-1 text-[10px] outline-none"
           >
             <option value="low">{t.executionPlan.lowRisk}</option>
@@ -138,7 +147,8 @@ function StepEditor({
             value={step.estimated_duration}
             onChange={(e) =>
               onUpdate(index, {
-                estimated_duration: e.target.value as ExecutionPlanStep["estimated_duration"],
+                estimated_duration: e.target
+                  .value as ExecutionPlanStep["estimated_duration"],
               })
             }
             className="h-5 rounded border border-border/50 bg-muted/30 px-1 text-[10px] outline-none"
@@ -190,7 +200,8 @@ function PlanStepRow({
     medium: t.executionPlan.mediumRisk,
     high: t.executionPlan.highRisk,
   };
-  const durationCfg = DURATION_CONFIG[step.estimated_duration] ?? DURATION_CONFIG.medium;
+  const durationCfg =
+    DURATION_CONFIG[step.estimated_duration] ?? DURATION_CONFIG.medium;
   const durationLabels: Record<string, string> = {
     fast: t.executionPlan.fast,
     medium: t.executionPlan.medium,
@@ -204,7 +215,8 @@ function PlanStepRow({
       className={cn(
         "rounded-lg border px-3 py-2 transition-all duration-200",
         statusCfg.bgColor,
-        step.status === "in_progress" && "border-primary/30 shadow-sm shadow-primary/5",
+        step.status === "in_progress" &&
+          "border-primary/30 shadow-sm shadow-primary/5",
         step.status === "completed" && "border-green-500/20",
         step.status === "skipped" && "border-border/30 opacity-60",
         step.status === "pending" && "border-border/40",
@@ -236,9 +248,11 @@ function PlanStepRow({
             <span
               className={cn(
                 "text-xs leading-relaxed",
-                step.status === "completed" && "text-muted-foreground line-through",
+                step.status === "completed" &&
+                  "text-muted-foreground line-through",
                 step.status === "in_progress" && "text-foreground font-medium",
-                step.status === "skipped" && "text-muted-foreground/50 line-through",
+                step.status === "skipped" &&
+                  "text-muted-foreground/50 line-through",
                 step.status === "pending" && "text-foreground/80",
               )}
             >
@@ -404,11 +418,12 @@ export function ExecutionPlanReview({
       window.dispatchEvent(
         new CustomEvent("octopus:plan-action", {
           detail: {
-            text: action === "execution_plan_approve"
-              ? "Approve plan"
-              : action === "execution_plan_reject"
-                ? "Reject plan"
-                : "Modify plan",
+            text:
+              action === "execution_plan_approve"
+                ? "Approve plan"
+                : action === "execution_plan_reject"
+                  ? "Reject plan"
+                  : "Modify plan",
             additionalKwargs: {
               plan_action: action,
               plan_payload: { plan_id: plan.plan_id, ...payload },
@@ -441,7 +456,14 @@ export function ExecutionPlanReview({
     } finally {
       setActionInFlight(null);
     }
-  }, [plan.plan_id, threadId, onAction, _dispatchPlanMessage, t.executionPlan.toastApproved, t.executionPlan.toastApproveFailed]);
+  }, [
+    plan.plan_id,
+    threadId,
+    onAction,
+    _dispatchPlanMessage,
+    t.executionPlan.toastApproved,
+    t.executionPlan.toastApproveFailed,
+  ]);
 
   const handleSaveEdits = useCallback(async () => {
     const validSteps = editableSteps.filter((s) => s.description.trim());
@@ -483,7 +505,16 @@ export function ExecutionPlanReview({
     } finally {
       setActionInFlight(null);
     }
-  }, [editableSteps, plan.plan_id, threadId, onAction, _dispatchPlanMessage, t.executionPlan.toastMustHaveStep, t.executionPlan.toastUpdated, t.executionPlan.toastModifyFailed]);
+  }, [
+    editableSteps,
+    plan.plan_id,
+    threadId,
+    onAction,
+    _dispatchPlanMessage,
+    t.executionPlan.toastMustHaveStep,
+    t.executionPlan.toastUpdated,
+    t.executionPlan.toastModifyFailed,
+  ]);
 
   const handleReject = useCallback(async () => {
     setActionInFlight("reject");
@@ -506,16 +537,45 @@ export function ExecutionPlanReview({
     } finally {
       setActionInFlight(null);
     }
-  }, [plan.plan_id, threadId, rejectReason, onAction, _dispatchPlanMessage, t.executionPlan.toastRejected, t.executionPlan.toastRejectFailed]);
+  }, [
+    plan.plan_id,
+    threadId,
+    rejectReason,
+    onAction,
+    _dispatchPlanMessage,
+    t.executionPlan.toastRejected,
+    t.executionPlan.toastRejectFailed,
+  ]);
 
   // Determine header status text and color
   const headerStatus = useMemo(() => {
-    if (isReviewable) return { text: t.executionPlan.awaitingReview, color: "text-yellow-600 dark:text-yellow-400" };
-    if (isApproved || isExecuting) return { text: t.executionPlan.executing, color: "text-primary" };
-    if (isCompleted) return { text: t.executionPlan.completed, color: "text-green-600 dark:text-green-400" };
-    if (isRejected) return { text: t.executionPlan.rejected, color: "text-red-600 dark:text-red-400" };
+    if (isReviewable)
+      return {
+        text: t.executionPlan.awaitingReview,
+        color: "text-yellow-600 dark:text-yellow-400",
+      };
+    if (isApproved || isExecuting)
+      return { text: t.executionPlan.executing, color: "text-primary" };
+    if (isCompleted)
+      return {
+        text: t.executionPlan.completed,
+        color: "text-green-600 dark:text-green-400",
+      };
+    if (isRejected)
+      return {
+        text: t.executionPlan.rejected,
+        color: "text-red-600 dark:text-red-400",
+      };
     return { text: plan.status, color: "text-muted-foreground" };
-  }, [isReviewable, isApproved, isExecuting, isCompleted, isRejected, plan.status, t]);
+  }, [
+    isReviewable,
+    isApproved,
+    isExecuting,
+    isCompleted,
+    isRejected,
+    plan.status,
+    t,
+  ]);
 
   return (
     <div
@@ -557,7 +617,13 @@ export function ExecutionPlanReview({
             )}
           >
             <RiskIcon className="size-2.5" />
-            {({low: t.executionPlan.lowRisk, medium: t.executionPlan.mediumRisk, high: t.executionPlan.highRisk} as Record<string, string>)[plan.risk_level] ?? riskCfg.label}
+            {(
+              {
+                low: t.executionPlan.lowRisk,
+                medium: t.executionPlan.mediumRisk,
+                high: t.executionPlan.highRisk,
+              } as Record<string, string>
+            )[plan.risk_level] ?? riskCfg.label}
           </span>
           {/* Expand/collapse */}
           {shouldCollapse ? (
@@ -589,8 +655,8 @@ export function ExecutionPlanReview({
           {/* Meta info */}
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
-              <WrenchIcon className="size-2.5" />
-              ~{plan.estimated_actions} actions
+              <WrenchIcon className="size-2.5" />~{plan.estimated_actions}{" "}
+              actions
             </span>
             <span className="inline-flex items-center gap-1">
               <ClipboardCheckIcon className="size-2.5" />

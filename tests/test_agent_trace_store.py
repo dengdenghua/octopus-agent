@@ -141,7 +141,18 @@ def test_resume_proposal_is_sanitized(store: AgentTraceStore) -> None:
             "current_phase": "implementation",
             "progress_summary": "trace store wired",
             "messages_snapshot": [{"role": "user", "content": "secret message body"}],
-            "steps_snapshot": [{"iteration": 1}, {"iteration": 2}],
+            "steps_snapshot": [
+                {
+                    "iteration": 1,
+                    "action": 'read_file({"path": "runtime/memory/trace_store.py"})',
+                    "observation": "read 120 lines",
+                },
+                {
+                    "iteration": 2,
+                    "action": 'exec_shell({"command": "pytest tests/test_agent_trace_store.py -q"})',
+                    "observation": "36 passed",
+                },
+            ],
             "working_set_snapshot": [
                 {"path": "runtime/memory/trace_store.py"},
                 {"path": "runtime/sensing/siphon/agent_trace_router.py"},
@@ -157,6 +168,20 @@ def test_resume_proposal_is_sanitized(store: AgentTraceStore) -> None:
     assert proposal["recovery_hints"]["phase"] == "implementation"
     assert proposal["recovery_hints"]["message_count"] == 1
     assert proposal["recovery_hints"]["step_count"] == 2
+    assert proposal["recovery_hints"]["recent_tool_calls"] == [
+        {
+            "iteration": 1,
+            "tool": "read_file",
+            "input_preview": '{"path": "runtime/memory/trace_store.py"}',
+            "observation_preview": "read 120 lines",
+        },
+        {
+            "iteration": 2,
+            "tool": "exec_shell",
+            "input_preview": '{"command": "pytest tests/test_agent_trace_store.py -q"}',
+            "observation_preview": "36 passed",
+        },
+    ]
     assert proposal["resume_plan"]["steps"][1] == "Continue from iteration 4."
     assert proposal["safety"]["raw_state_included"] is False
     assert proposal["safety"]["raw_message_snapshots_included"] is False
@@ -349,10 +374,127 @@ def test_task_run_read_model_aggregates_events_tools_tokens_and_approvals(
     assert run["approval_count"] == 1
     assert run["approval_rejections"] == 1
     assert run["checkpoint_count"] == 1
+    assert run["latest_checkpoint"]["id"] is not None
+    assert run["latest_checkpoint"]["type"] == "react"
+    assert run["latest_checkpoint"]["integrity"]["resume_safe"] is True
+    assert run["latest_checkpoint"]["safety"]["raw_state_included"] is False
     assert run["token_totals"]["input_tokens"] == 100
     assert run["token_totals"]["output_tokens"] == 50
     assert run["token_totals"]["cost_usd"] == 0.25
     assert len(run["events"]) == 5
+
+
+def test_task_run_replay_accepts_normalized_tool_trace_payload(
+    store: AgentTraceStore,
+) -> None:
+    store.record_task_run_started(
+        task_id="turn-normalized",
+        thread_id="thread-1",
+        turn_id="turn-normalized",
+        title="Inspect file",
+        mode="code",
+        ts="2026-06-07T00:00:00+00:00",
+    )
+    store.record_event(
+        thread_id="thread-1",
+        turn_id="turn-normalized",
+        task_id="turn-normalized",
+        event_type="TOOL_CALL_START",
+        item_id="call-read",
+        payload={
+            "id": "call-read",
+            "name": "read_file",
+            "input": {"path": "README.md"},
+            "origin": "react_compat",
+        },
+        ts="2026-06-07T00:00:01+00:00",
+    )
+    store.record_event(
+        thread_id="thread-1",
+        turn_id="turn-normalized",
+        task_id="turn-normalized",
+        event_type="TOOL_CALL_END",
+        item_id="call-read",
+        payload={
+            "id": "call-read",
+            "name": "read_file",
+            "status": "success",
+            "is_error": False,
+            "output": {"ok": True, "chars": 42},
+            "origin": "react_compat",
+        },
+        ts="2026-06-07T00:00:02+00:00",
+    )
+    store.record_task_run_finished(
+        task_id="turn-normalized",
+        thread_id="thread-1",
+        turn_id="turn-normalized",
+        status="completed",
+        summary="done",
+        ts="2026-06-07T00:00:03+00:00",
+    )
+
+    run = store.task_run("turn-normalized")
+    review = store.task_run_review("turn-normalized")
+    replay_case = store.task_run_replay_case("turn-normalized")
+    replay_evaluation = store.evaluate_task_run_replay_case("turn-normalized")
+    corpus = store.task_run_replay_cases(thread_id="thread-1", status="completed")
+    evaluation_corpus = store.evaluate_task_run_replay_cases(
+        thread_id="thread-1",
+        status="completed",
+    )
+    replay_gate = store.replay_gate(thread_id="thread-1", status="completed")
+    strict_replay_gate = store.replay_gate(
+        thread_id="thread-1",
+        status="completed",
+        min_cases=2,
+    )
+
+    assert run is not None
+    assert run["tool_names"] == ["read_file"]
+    assert run["tool_errors"] == 0
+    assert review is not None
+    assert review["replay"]["schema"] == "octopus.task_run_replay.v1"
+    assert len(review["replay"]["fingerprint"]) == 16
+    assert review["replay"]["case_id"] == f"task-run:{review['replay']['fingerprint']}"
+    steps = review["replay"]["steps"]
+    assert steps[1]["tool_call_id"] == "call-read"
+    assert steps[1]["tool"] == "read_file"
+    assert steps[1]["input_preview"] == '{"path": "README.md"}'
+    assert steps[2]["tool_call_id"] == "call-read"
+    assert steps[2]["output_preview"] == '{"chars": 42, "ok": true}'
+    assert replay_case is not None
+    assert replay_case["schema"] == "octopus.task_run_replay_case.v1"
+    assert replay_case["case_id"] == review["replay"]["case_id"]
+    assert replay_case["replay"]["steps"] == review["replay"]["steps"]
+    assert replay_case["expectations"]["status"] == "completed"
+    assert replay_case["safety"]["raw_messages_included"] is False
+    assert corpus["schema"] == "octopus.task_run_replay_case_corpus.v1"
+    assert corpus["total"] == 1
+    assert corpus["cases"][0]["case_id"] == replay_case["case_id"]
+    assert replay_evaluation is not None
+    assert replay_evaluation["schema"] == "octopus.task_run_replay_evaluation.v1"
+    assert replay_evaluation["case_id"] == replay_case["case_id"]
+    assert replay_evaluation["passed"] is True
+    assert replay_evaluation["score"] == 1.0
+    assert {check["name"] for check in replay_evaluation["checks"]} >= {
+        "fingerprint",
+        "step_count",
+        "status_expectation",
+        "tool_error_count",
+        "task_boundary",
+        "safety",
+    }
+    assert evaluation_corpus["schema"] == "octopus.task_run_replay_evaluation_corpus.v1"
+    assert evaluation_corpus["passed"] == 1
+    assert evaluation_corpus["failed"] == 0
+    assert evaluation_corpus["evaluations"][0]["case_id"] == replay_case["case_id"]
+    assert replay_gate["schema"] == "octopus.replay_gate.v1"
+    assert replay_gate["passed"] is True
+    assert replay_gate["summary"]["total"] == 1
+    assert replay_gate["reason"] == "all_replay_evaluations_passed"
+    assert strict_replay_gate["passed"] is False
+    assert strict_replay_gate["reason"] == "insufficient_cases:1<2"
 
 
 def test_connection_lost_approval_counts_as_rejection(store: AgentTraceStore) -> None:
@@ -413,6 +555,48 @@ def test_task_runs_lists_latest_runs_and_filters_status(store: AgentTraceStore) 
 
     assert [run["task_id"] for run in runs] == ["task-new", "task-old"]
     assert [run["task_id"] for run in completed] == ["task-new"]
+
+
+def test_task_runs_limit_bounds_task_run_materialization(
+    store: AgentTraceStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for i in range(80):
+        task_id = f"task-{i:03d}"
+        hour = i // 60
+        minute = i % 60
+        store.record_task_run_started(
+            task_id=task_id,
+            thread_id="thread-1",
+            ts=f"2026-06-07T{hour:02d}:{minute:02d}:00+00:00",
+        )
+        store.record_task_run_finished(
+            task_id=task_id,
+            thread_id="thread-1",
+            status="completed",
+            ts=f"2026-06-07T{hour:02d}:{minute:02d}:01+00:00",
+        )
+
+    original_task_run = store.task_run
+    calls: list[str] = []
+
+    def counted_task_run(task_id: str):
+        calls.append(task_id)
+        return original_task_run(task_id)
+
+    monkeypatch.setattr(store, "task_run", counted_task_run)
+
+    runs = store.task_runs(thread_id="thread-1", limit=5, offset=10)
+
+    assert len(runs) == 5
+    assert len(calls) == 5
+    assert [run["task_id"] for run in runs] == [
+        "task-069",
+        "task-068",
+        "task-067",
+        "task-066",
+        "task-065",
+    ]
 
 
 def test_task_run_review_extracts_findings_replay_and_learning_candidates(
@@ -491,12 +675,73 @@ def test_task_run_review_extracts_findings_replay_and_learning_candidates(
     assert "tool_error" in finding_types
     assert "high_risk_approval" in finding_types
     assert review["replay"]["replayable"] is True
+    assert len(review["replay"]["fingerprint"]) == 16
     assert review["replay"]["steps"][1]["approval"]["risk_level"] == "high"
+    assert review["resume"]["available"] is False
     assert any(
         item["kind"] == "failure_pattern"
         for item in review["learning_candidates"]
     )
     assert review["backlog_candidates"][0]["priority"] == "P0"
+
+
+def test_task_run_review_exposes_resume_readiness_without_raw_checkpoint_state(
+    store: AgentTraceStore,
+) -> None:
+    store.record_task_run_started(
+        task_id="turn-resume",
+        thread_id="thread-1",
+        turn_id="turn-resume",
+        mode="code",
+        ts="2026-06-07T00:00:00+00:00",
+    )
+    checkpoint_id = store.record_checkpoint(
+        task_id="turn-resume",
+        thread_id="thread-1",
+        turn_id="turn-resume",
+        agent_id="agent-a",
+        checkpoint_type="react",
+        iteration=3,
+        summary="ready to verify",
+        state={
+            "current_phase": "verification",
+            "progress_summary": "ran focused tests",
+            "messages_snapshot": [
+                {"role": "user", "content": "private user text"},
+                {"role": "assistant", "content": "private assistant text"},
+            ],
+            "steps_snapshot": [
+                {
+                    "iteration": 3,
+                    "thought": "verify",
+                    "action": "shell(command='pytest tests/test_x.py')",
+                    "observation": "2 passed",
+                }
+            ],
+            "working_set_snapshot": [{"path": "tests/test_x.py"}],
+        },
+    )
+    store.record_task_run_finished(
+        task_id="turn-resume",
+        thread_id="thread-1",
+        turn_id="turn-resume",
+        status="interrupted",
+        ts="2026-06-07T00:00:02+00:00",
+    )
+
+    review = store.task_run_review("turn-resume")
+
+    assert review is not None
+    resume = review["resume"]
+    assert resume["available"] is True
+    assert resume["source"] == "trace_store"
+    assert resume["latest_checkpoint"]["id"] == checkpoint_id
+    assert resume["latest_checkpoint"]["integrity"]["continue_from_iteration"] == 4
+    assert resume["latest_checkpoint"]["recovery_hints"]["phase"] == "verification"
+    rendered = repr(resume)
+    assert "private user text" not in rendered
+    assert "messages_snapshot" not in rendered
+    assert resume["safety"]["raw_message_snapshots_included"] is False
 
 
 def test_stats_can_be_scoped_to_thread_task_and_agent(store: AgentTraceStore) -> None:

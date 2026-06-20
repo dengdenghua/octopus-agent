@@ -112,13 +112,17 @@ interface Agent {
 
 const apiClient = {
   async listPublished(): Promise<PublishedAPI[]> {
-    const res = await fetch(`${getBackendBaseURL()}/api/publish`, { headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/publish`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
     return res.json();
   },
 
   async getPublished(apiId: string): Promise<PublishedAPI> {
-    const res = await fetch(`${getBackendBaseURL()}/api/publish/${apiId}`, { headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/publish/${apiId}`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
     return res.json();
   },
@@ -167,10 +171,7 @@ const apiClient = {
     if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`);
   },
 
-  async createKey(
-    apiId: string,
-    name: string,
-  ): Promise<APIKeyCreated> {
+  async createKey(apiId: string, name: string): Promise<APIKeyCreated> {
     const res = await fetch(
       `${getBackendBaseURL()}/api/publish/${apiId}/keys`,
       {
@@ -219,7 +220,9 @@ const apiClient = {
   },
 
   async listAgents(): Promise<{ agents: Agent[] }> {
-    const res = await fetch(`${getBackendBaseURL()}/api/agents`, { headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/agents`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
     return res.json();
   },
@@ -321,14 +324,16 @@ function PublishForm({
 
   return (
     <div className="space-y-3 border-b p-4">
-      <div className="text-sm font-medium">{t.apiPublish.publishAgentAsApi}</div>
+      <div className="text-sm font-medium">
+        {t.apiPublish.publishAgentAsApi}
+      </div>
 
-      {error && (
-        <div className="text-xs text-red-500">{error}</div>
-      )}
+      {error && <div className="text-xs text-red-500">{error}</div>}
 
       <div className="space-y-2">
-        <label className="block text-xs font-medium">{t.apiPublish.apiName}</label>
+        <label className="block text-xs font-medium">
+          {t.apiPublish.apiName}
+        </label>
         <input
           className="bg-muted/50 border-border w-full rounded border px-2 py-1.5 text-xs"
           placeholder="My Agent API"
@@ -338,7 +343,9 @@ function PublishForm({
       </div>
 
       <div className="space-y-2">
-        <label className="block text-xs font-medium">{t.apiPublish.agent}</label>
+        <label className="block text-xs font-medium">
+          {t.apiPublish.agent}
+        </label>
         <select
           className="bg-muted/50 border-border w-full rounded border px-2 py-1.5 text-xs"
           value={agentName}
@@ -376,7 +383,9 @@ function PublishForm({
       </div>
 
       <div className="space-y-2">
-        <label className="block text-xs font-medium">{t.skillsMarket.description}</label>
+        <label className="block text-xs font-medium">
+          {t.skillsMarket.description}
+        </label>
         <textarea
           className="bg-muted/50 border-border w-full rounded border px-2 py-1.5 text-xs"
           rows={2}
@@ -388,7 +397,9 @@ function PublishForm({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
-          <label className="block text-xs font-medium">{t.apiPublish.rpmLimit}</label>
+          <label className="block text-xs font-medium">
+            {t.apiPublish.rpmLimit}
+          </label>
           <input
             type="number"
             className="bg-muted/50 border-border w-full rounded border px-2 py-1.5 text-xs"
@@ -399,7 +410,9 @@ function PublishForm({
           />
         </div>
         <div className="space-y-1">
-          <label className="block text-xs font-medium">{t.apiPublish.dailyLimit}</label>
+          <label className="block text-xs font-medium">
+            {t.apiPublish.dailyLimit}
+          </label>
           <input
             type="number"
             className="bg-muted/50 border-border w-full rounded border px-2 py-1.5 text-xs"
@@ -474,21 +487,27 @@ function APIDetailView({
     try {
       const data = await apiClient.listKeys(api.api_id);
       setKeys(data);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, [api.api_id]);
 
   const fetchLogs = useCallback(async () => {
     try {
       const data = await apiClient.getLogs(api.api_id);
       setLogs(data);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, [api.api_id]);
 
   const fetchStats = useCallback(async () => {
     try {
       const data = await apiClient.getStats(api.api_id);
       setStats(data);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, [api.api_id]);
 
   useEffect(() => {
@@ -507,7 +526,9 @@ function APIDetailView({
       setCreatedKey(created);
       setShowRawKey(true);
       fetchKeys();
-    } catch (e) { swallow(e); } finally {
+    } catch (e) {
+      swallow(e);
+    } finally {
       setLoading(false);
     }
   };
@@ -516,14 +537,18 @@ function APIDetailView({
     try {
       await apiClient.revokeKey(api.api_id, keyId);
       fetchKeys();
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   };
 
   const handleToggle = async () => {
     try {
       await apiClient.update(api.api_id, { enabled: !api.enabled });
       onRefresh();
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   };
 
   const handleTest = async () => {
@@ -648,9 +673,7 @@ while (true) {
           {t.apiPublish.endpoint}
         </div>
         <div className="bg-muted/50 flex items-center gap-1.5 rounded px-2 py-1.5">
-          <code className="flex-1 truncate text-[11px]">
-            {endpointUrl}/run
-          </code>
+          <code className="flex-1 truncate text-[11px]">{endpointUrl}/run</code>
           <CopyButton text={`${endpointUrl}/run`} />
         </div>
       </div>
@@ -780,7 +803,9 @@ while (true) {
                           <Trash2Icon className="size-3" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="left">{t.apiPublish.revoke}</TooltipContent>
+                      <TooltipContent side="left">
+                        {t.apiPublish.revoke}
+                      </TooltipContent>
                     </Tooltip>
                   </div>
                 ))}
@@ -835,7 +860,9 @@ while (true) {
         {tab === "test" && (
           <div className="space-y-3 p-3">
             <div className="space-y-2">
-              <label className="block text-xs font-medium">{t.apiPublish.apiKey}</label>
+              <label className="block text-xs font-medium">
+                {t.apiPublish.apiKey}
+              </label>
               <input
                 type="password"
                 className="bg-muted/50 border-border w-full rounded border px-2 py-1.5 text-xs"
@@ -845,7 +872,9 @@ while (true) {
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-xs font-medium">{t.apiPublish.inputLabel}</label>
+              <label className="block text-xs font-medium">
+                {t.apiPublish.inputLabel}
+              </label>
               <textarea
                 className="bg-muted/50 border-border w-full rounded border px-2 py-1.5 text-xs"
                 rows={3}
@@ -1142,7 +1171,9 @@ export function APIPublishPanel({ className }: { className?: string }) {
     try {
       const data = await apiClient.listAgents();
       setAgents(data.agents);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, []);
 
   useEffect(() => {
@@ -1160,7 +1191,9 @@ export function APIPublishPanel({ className }: { className?: string }) {
       await apiClient.unpublish(apiId);
       setApis((prev) => prev.filter((a) => a.api_id !== apiId));
       if (selectedId === apiId) setSelectedId(null);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   };
 
   // Detail view
@@ -1198,7 +1231,9 @@ export function APIPublishPanel({ className }: { className?: string }) {
                 />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">{t.apiPublish.refreshTooltip}</TooltipContent>
+            <TooltipContent side="bottom">
+              {t.apiPublish.refreshTooltip}
+            </TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1215,7 +1250,9 @@ export function APIPublishPanel({ className }: { className?: string }) {
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {showPublish ? t.apiPublish.cancel : t.apiPublish.publishAgentAsApi}
+              {showPublish
+                ? t.apiPublish.cancel
+                : t.apiPublish.publishAgentAsApi}
             </TooltipContent>
           </Tooltip>
         </div>

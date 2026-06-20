@@ -32,6 +32,10 @@ except ImportError:  # pragma: no cover
     Request = object  # type: ignore[assignment, misc]
 
 from runtime.platform.process.paths import app_paths
+from runtime.safety.evolution.subagent_policy import evaluate_agent_policy
+from runtime.safety.evolution.subagent_team_promotion import (
+    merged_topology_proposals,
+)
 from runtime.safety.organization import TeamTopology
 from runtime.safety.organization.evolver import Proposal
 from runtime.safety.organization.forge import (
@@ -40,6 +44,9 @@ from runtime.safety.organization.forge import (
     save_registry,
 )
 from runtime.safety.organization.performance_log import read_runs
+from runtime.safety.organization.promotion_lift import (
+    compute_topology_promotion_lift,
+)
 
 _logger = logging.getLogger("octopus.sensing.organizations_router")
 
@@ -61,6 +68,15 @@ def _load_proposals() -> list[dict[str, Any]]:
         return []
     raw = body.get("proposals") if isinstance(body, dict) else None
     return raw if isinstance(raw, list) else []
+
+
+def _topology_payload(topology: TeamTopology) -> dict[str, Any]:
+    payload = topology.to_dict()
+    payload["subagent_policy"] = evaluate_agent_policy({
+        str(role): spec.agent_id
+        for role, spec in topology.agents.items()
+    })
+    return payload
 
 
 def create_organizations_router(
@@ -105,7 +121,7 @@ def create_organizations_router(
         registry = load_registry()
         return {
             "count": len(registry),
-            "topologies": [t.to_dict() for t in registry.values()],
+            "topologies": [_topology_payload(t) for t in registry.values()],
         }
 
     @router.get("/api/organizations/topologies/{fingerprint}")
@@ -115,7 +131,7 @@ def create_organizations_router(
         t = registry.get(fingerprint)
         if t is None:
             raise HTTPException(404, "topology not found")
-        return t.to_dict()
+        return _topology_payload(t)
 
     # ── GET /api/organizations/topology-proposals ─────────
 
@@ -123,7 +139,12 @@ def create_organizations_router(
     def list_proposals(request: Request) -> dict[str, Any]:
         _auth(request)  # AUTH-OK: actor-agnostic — proposals are global
         proposals = _load_proposals()
-        return {"count": len(proposals), "proposals": proposals}
+        return merged_topology_proposals(
+            proposals,
+            registry=load_registry(),
+            review_queue_path=app_paths().review_queue_path,
+            subagent_policy_path=app_paths().subagent_policy_path,
+        )
 
     # ── POST .../proposals/{idx}/promote ──────────────────
 
@@ -133,7 +154,12 @@ def create_organizations_router(
     ) -> dict[str, Any]:
         # Mutation: force-auth regardless of global require_auth.
         actor = _auth(request, force=True)
-        proposals = _load_proposals()
+        proposals = merged_topology_proposals(
+            _load_proposals(),
+            registry=load_registry(),
+            review_queue_path=app_paths().review_queue_path,
+            subagent_policy_path=app_paths().subagent_policy_path,
+        )["proposals"]
         if idx < 0 or idx >= len(proposals):
             raise HTTPException(404, f"proposal index out of range: {idx}")
         raw = proposals[idx]
@@ -148,7 +174,10 @@ def create_organizations_router(
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise HTTPException(400, f"malformed proposal: {exc}") from exc
-        forge = TopologyForge(agent_registry=agent_registry)
+        forge = TopologyForge(
+            agent_registry=agent_registry,
+            subagent_policy_path=app_paths().subagent_policy_path,
+        )
         # The actor's identity becomes the approver — promoting via
         # an authenticated UI counts as human-signed (HATCHLING).
         result = forge.promote(proposal, approver=actor)
@@ -156,7 +185,7 @@ def create_organizations_router(
             "accepted": result.accepted,
             "reason": result.reason,
             "new_topology": (
-                result.new_topology.to_dict()
+                _topology_payload(result.new_topology)
                 if result.new_topology is not None else None
             ),
         }
@@ -171,6 +200,14 @@ def create_organizations_router(
         _auth(request)  # AUTH-OK: actor-agnostic — performance stats are global
         rows = read_runs(limit=limit)
         return {"count": len(rows), "runs": rows}
+
+    @router.get("/api/organizations/topology-promotion-lift")
+    def list_promotion_lift(
+        request: Request,
+        limit: int = Query(default=2000, ge=1, le=10000),
+    ) -> dict[str, Any]:
+        _auth(request)  # AUTH-OK: actor-agnostic — promotion lift is global
+        return compute_topology_promotion_lift(limit=limit)
 
     # ── POST .../topologies/{fp}/retire ───────────────────
 
@@ -205,7 +242,7 @@ def create_organizations_router(
         return {
             "retired": fingerprint,
             "remaining": len(registry),
-            "topology": target.to_dict(),
+            "topology": _topology_payload(target),
         }
 
     return router

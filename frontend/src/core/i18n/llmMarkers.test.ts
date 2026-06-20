@@ -24,7 +24,9 @@ describe("LLM_TRACE_MARKERS", () => {
       const spellings = LLM_TRACE_MARKERS[kind];
       // English form
       expect(spellings).toContain(
-        kind === "finalAnswer" ? "Final Answer" : kind.charAt(0).toUpperCase() + kind.slice(1),
+        kind === "finalAnswer"
+          ? "Final Answer"
+          : kind.charAt(0).toUpperCase() + kind.slice(1),
       );
       // Chinese (CJK)
       const cjk = spellings.find((s) => /[\u4e00-\u9fff]/.test(s));

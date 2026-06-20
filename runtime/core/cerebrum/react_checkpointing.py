@@ -25,19 +25,22 @@ _logger = logging.getLogger(__name__)
 # loop writes the same shape of checkpoint that pause writes, so a
 # resume request can pick up at the last completed iteration.
 #
-# Opt-in via OCTOPUS_CHECKPOINT_EVERY_N env var (e.g. "5"). 0 / unset
-# means off — preserves legacy behaviour exactly. Errors during
-# checkpoint write are swallowed; turn proceeds normally.
+# On by default (every 10 iterations). Override via
+# ``OCTOPUS_CHECKPOINT_EVERY_N`` env var (e.g. "5" for more frequent,
+# "0" to disable). Errors during checkpoint write are swallowed; turn
+# proceeds normally.
 
-_DEFAULT_CHECKPOINT_INTERVAL = 0  # off by default
+_DEFAULT_CHECKPOINT_INTERVAL = 10  # every 10 iterations by default
 
 
 def _checkpoint_interval() -> int:
     """How often (in iterations) to write an auto-checkpoint.
 
     Reads ``OCTOPUS_CHECKPOINT_EVERY_N`` fresh on each call so an
-    operator can flip the knob without a restart. Returns ``0`` when
-    the value is missing, blank, or unparseable — i.e. feature off.
+    operator can flip the knob without a restart. On by default
+    (every ``_DEFAULT_CHECKPOINT_INTERVAL`` iterations); an explicit
+    ``"0"`` disables it. Missing, blank, negative, or unparseable
+    values fall back to the default rather than silently disabling.
     """
     import os
 
@@ -48,7 +51,9 @@ def _checkpoint_interval() -> int:
         n = int(raw)
     except ValueError:
         return _DEFAULT_CHECKPOINT_INTERVAL
-    return n if n > 0 else _DEFAULT_CHECKPOINT_INTERVAL
+    if n < 0:
+        return _DEFAULT_CHECKPOINT_INTERVAL
+    return n  # n == 0 explicitly disables; n > 0 sets the interval
 
 
 def _should_auto_checkpoint(iteration: int, interval: int) -> bool:

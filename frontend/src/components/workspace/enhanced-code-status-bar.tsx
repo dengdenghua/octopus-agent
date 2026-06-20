@@ -35,7 +35,10 @@ interface EnhancedCodeStatusBarProps {
   className?: string;
 }
 
-const modeConfig: Record<AgentMode, { icon: React.ReactNode; label: string; color: string }> = {
+const modeConfig: Record<
+  AgentMode,
+  { icon: React.ReactNode; label: string; color: string }
+> = {
   fast: {
     icon: <ZapIcon className="size-3" />,
     label: "Fast",
@@ -68,12 +71,19 @@ export const EnhancedCodeStatusBar = memo(function EnhancedCodeStatusBar({
   const { t } = useI18n();
   const mode = modeConfig[agentMode];
 
-  const completedSteps = agentSteps.filter((s) => s.status === "completed").length;
+  const completedSteps = agentSteps.filter(
+    (s) => s.status === "completed",
+  ).length;
   const runningStep = agentSteps.find((s) => s.status === "running");
   const hasError = agentSteps.some((s) => s.status === "error");
 
   return (
-    <div className={cn("flex items-center justify-between w-full text-xs", className)}>
+    <div
+      className={cn(
+        "flex items-center justify-between w-full text-xs",
+        className,
+      )}
+    >
       {/* Left section */}
       <div className="flex items-center gap-3">
         {/* Work directory */}
@@ -89,7 +99,7 @@ export const EnhancedCodeStatusBar = memo(function EnhancedCodeStatusBar({
         <div
           className={cn(
             "flex items-center gap-1.5 px-2 py-0.5 rounded-full",
-            mode.color
+            mode.color,
           )}
         >
           {mode.icon}
@@ -127,7 +137,7 @@ export const EnhancedCodeStatusBar = memo(function EnhancedCodeStatusBar({
                   step.status === "completed" && "bg-emerald-500",
                   step.status === "running" && "bg-violet-500",
                   step.status === "error" && "bg-rose-500",
-                  step.status === "pending" && "bg-muted-foreground/20"
+                  step.status === "pending" && "bg-muted-foreground/20",
                 )}
               />
             ))}
@@ -146,8 +156,9 @@ export const EnhancedCodeStatusBar = memo(function EnhancedCodeStatusBar({
             className={cn(
               "flex items-center gap-1.5 px-2 py-0.5 rounded-full",
               deployStatus === "deploying" && "text-amber-500 bg-amber-500/10",
-              deployStatus === "deployed" && "text-emerald-500 bg-emerald-500/10",
-              deployStatus === "error" && "text-rose-500 bg-rose-500/10"
+              deployStatus === "deployed" &&
+                "text-emerald-500 bg-emerald-500/10",
+              deployStatus === "error" && "text-rose-500 bg-rose-500/10",
             )}
           >
             {deployStatus === "deploying" ? (

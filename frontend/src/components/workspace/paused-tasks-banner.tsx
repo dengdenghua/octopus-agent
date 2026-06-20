@@ -74,7 +74,7 @@ export function PausedTasksBanner({ className }: Props) {
   const pending = tasks.data?.pending ?? [];
   const paused = tasks.data?.paused ?? [];
   const active = tasks.data?.active ?? [];
-  const byId = new Map<string, typeof pending[0] & { confirmed: boolean }>();
+  const byId = new Map<string, (typeof pending)[0] & { confirmed: boolean }>();
   for (const p of pending) byId.set(p.task_id, { ...p, confirmed: false });
   for (const p of paused) byId.set(p.task_id, { ...p, confirmed: true });
   // Implementation note.
@@ -99,7 +99,9 @@ export function PausedTasksBanner({ className }: Props) {
   if (entries.length === 0 && activeVisible.length === 0) return null;
 
   async function handlePauseActive(
-    taskId: string, _threadId: string, _agentId: string,
+    taskId: string,
+    _threadId: string,
+    _agentId: string,
   ) {
     try {
       await pause.mutateAsync({ taskId, reason: "user_request" });
@@ -203,8 +205,8 @@ export function PausedTasksBanner({ className }: Props) {
                   <span>
                     {b.tokensLabel}{" "}
                     <span className="font-mono">
-                      {(t.tokens_spent / 1000).toFixed(1)}k
-                      /{(t.max_tokens / 1000).toFixed(0)}k
+                      {(t.tokens_spent / 1000).toFixed(1)}k /
+                      {(t.max_tokens / 1000).toFixed(0)}k
                     </span>
                     {t.tokens_spent / t.max_tokens >= 0.7 ? " ⚠" : ""}
                   </span>
@@ -352,9 +354,7 @@ export function PausedTasksBanner({ className }: Props) {
                   <span>{b.extraIterationsLabel}</span>
                   <Input
                     value={extraIterations}
-                    onChange={(event) =>
-                      setExtraIterations(event.target.value)
-                    }
+                    onChange={(event) => setExtraIterations(event.target.value)}
                     inputMode="numeric"
                     className="h-8"
                   />

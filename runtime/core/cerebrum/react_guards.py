@@ -2316,7 +2316,7 @@ def _long_function_guard(
 # The following guards have been extracted to react_security_guards.py
 # to reduce this file's size. Re-exported here for backward compatibility.
 
-from .react_security_guards import (  # noqa: F401 — re-exported for backward compatibility
+from .react_security_guards import (  # noqa: E402, F401 — re-exported for backward compatibility
     _dynamic_exec_guard,
     _magic_number_guard,
     _network_in_loop_guard,

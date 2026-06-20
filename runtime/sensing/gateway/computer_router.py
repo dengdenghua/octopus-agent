@@ -18,6 +18,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 
 from runtime.execution.suckers import computer_skills, computer_uia_skills
+from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.platform.process.paths import app_paths
+from runtime.safety.replay.browser_desktop_replay import computer_activity_replay_identity
 
 try:
     import httpx  # type: ignore[import-untyped]
@@ -39,6 +42,7 @@ def create_computer_router() -> APIRouter:
     router = APIRouter(prefix="/api/computer", tags=["computer"])
     pending: dict[str, dict[str, Any]] = {}
     lease: dict[str, Any] = {}
+    activity: list[dict[str, Any]] = []
     screenshot_root = Path("data/computer_automation/screenshots").resolve()
 
     def _cleanup_pending() -> None:
@@ -50,6 +54,143 @@ def create_computer_router() -> APIRouter:
         ]
         for token in expired:
             pending.pop(token, None)
+
+    def _record_activity(
+        event: str,
+        *,
+        ok: bool = True,
+        action: dict[str, Any] | None = None,
+        token: str = "",
+        risk: dict[str, str] | None = None,
+        lease_state: dict[str, Any] | None = None,
+        error: str = "",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        activity.append({
+            "id": uuid.uuid4().hex,
+            "event": event,
+            "ok": ok,
+            "action": action or {},
+            "token": token,
+            "risk": risk or {},
+            "lease": lease_state or _public_lease(),
+            "error": error,
+            "detail": detail or {},
+            "created_at": time.time(),
+        })
+        if len(activity) > 500:
+            del activity[:-500]
+
+    def _queue_activity_replay_case(
+        replay_case: dict[str, Any],
+        *,
+        reason: str = "",
+        priority: str = "",
+    ) -> dict[str, Any]:
+        items = replay_case.get("items") if isinstance(replay_case.get("items"), list) else []
+        last_activity = replay_case.get("last_activity")
+        last_activity = last_activity if isinstance(last_activity, dict) else {}
+        has_failure = any(
+            isinstance(item, dict) and item.get("ok") is False
+            for item in items
+        )
+        chosen_priority = priority or ("P0" if has_failure else "P1")
+        last_event = str(last_activity.get("event") or "no activity")
+        last_action = last_activity.get("action")
+        last_action = last_action if isinstance(last_action, dict) else {}
+        case_id = str(replay_case.get("case_id") or "")
+        fingerprint = str(replay_case.get("fingerprint") or "")
+        text = (
+            f"Computer automation replay case `{case_id}` captured for operator review.\n"
+            f"Last event: {last_event}; action: {last_action.get('action', 'none')}.\n"
+            f"Activity count: {replay_case.get('activity_count', 0)}; "
+            f"pending previews: {replay_case.get('pending_count', 0)}."
+        )
+        if reason:
+            text += f"\nReason: {reason[:500]}"
+        queue = ReviewQueue(app_paths().review_queue_path)
+        return queue.upsert_item(
+            source="computer_activity_replay",
+            source_kind="browser_desktop_replay",
+            candidate_kind="computer_activity_replay_case",
+            priority=chosen_priority,
+            target_bucket="browser_desktop_replay",
+            title="Review computer automation replay case",
+            text=text,
+            metadata={
+                "schema": replay_case.get("schema"),
+                "case_id": case_id,
+                "fingerprint": fingerprint,
+                "replay_ready": bool(replay_case.get("replay_ready")),
+                "activity_count": replay_case.get("activity_count"),
+                "pending_count": replay_case.get("pending_count"),
+                "lease": replay_case.get("lease"),
+                "last_activity": last_activity,
+            },
+            tags=[
+                "computer",
+                "desktop",
+                "replay_case",
+                "review_queue",
+                "operator_review",
+            ],
+        )
+
+    def _queue_uia_replay_assertion(
+        action: dict[str, Any],
+        assertion: dict[str, Any],
+    ) -> dict[str, Any]:
+        matched = (
+            assertion.get("matched_control")
+            if isinstance(assertion.get("matched_control"), dict)
+            else action.get("matched_control")
+            if isinstance(action.get("matched_control"), dict)
+            else {}
+        )
+        label = str(matched.get("name") or matched.get("automation_id") or "desktop control")
+        reason = str(assertion.get("reason") or assertion.get("error") or "UIA replay assertion failed")
+        queue = ReviewQueue(app_paths().review_queue_path)
+        return queue.upsert_item(
+            source="computer_uia_replay_assertion",
+            source_kind="browser_desktop_replay",
+            candidate_kind="computer_uia_replay_assertion",
+            priority="P0",
+            target_bucket="browser_desktop_replay",
+            title=f"Review desktop UIA replay assertion: {label}",
+            text=(
+                f"Desktop UIA replay assertion failed for `{label}`.\n"
+                f"Reason: {reason[:500]}."
+            ),
+            metadata={
+                "schema": "octopus.computer_uia_replay_assertion_queue.v1",
+                "action": action,
+                "replay_assertion": assertion,
+                "matched_control": matched,
+            },
+            tags=[
+                "computer",
+                "desktop",
+                "uia",
+                "replay_assertion",
+                "review_queue",
+            ],
+        )
+
+    def _computer_replay_evidence(*, limit: int = 100) -> dict[str, Any]:
+        items = [item for item in activity[-limit:] if isinstance(item, dict)]
+        identity = computer_activity_replay_identity(
+            items=items,
+            pending_count=len(pending),
+        )
+        return {
+            "schema": "octopus.computer_replay_evidence_hint.v1",
+            "case_id": identity["case_id"],
+            "fingerprint": identity["fingerprint"],
+            "replay_ready": bool(items),
+            "replay_case_url": "/api/computer/activity/replay-case",
+            "queue_url": "/api/computer/activity/replay-case/queue",
+            "queue_body": {"limit": limit},
+        }
 
     def _cleanup_lease(now: float | None = None) -> None:
         if not lease:
@@ -107,6 +248,7 @@ def create_computer_router() -> APIRouter:
                 detail={
                     "error": "computer lease is held by another operator",
                     "lease": _public_lease(now),
+                    "replay_evidence": _computer_replay_evidence(),
                 },
             )
         acquired_at = float(lease.get("acquired_at") or now) if lease else now
@@ -128,6 +270,7 @@ def create_computer_router() -> APIRouter:
                 detail={
                     "error": "computer lease is held by another operator",
                     "lease": _public_lease(now),
+                    "replay_evidence": _computer_replay_evidence(),
                 },
             )
         lease.clear()
@@ -139,7 +282,7 @@ def create_computer_router() -> APIRouter:
             raise HTTPException(400, f"unsupported action: {action or '<empty>'}")
 
         if action in {"click", "move"}:
-            return {
+            normalized = {
                 "action": action,
                 "x": int(body.get("x", -1)),
                 "y": int(body.get("y", -1)),
@@ -147,6 +290,11 @@ def create_computer_router() -> APIRouter:
                 "clicks": int(body.get("clicks") or 1),
                 "duration": float(body.get("duration") or 0.0),
             }
+            for key in ("source", "matched_control", "replay_assertion"):
+                value = body.get(key)
+                if isinstance(value, (str, dict)):
+                    normalized[key] = value
+            return normalized
         if action == "type":
             return {
                 "action": "type",
@@ -290,7 +438,7 @@ def create_computer_router() -> APIRouter:
                 except (KeyError, TypeError, ValueError):
                     continue
                 score = _uia_match_score(match, query)
-                candidates.append((score, query, {
+                action = {
                     "action": "click",
                     "x": x,
                     "y": y,
@@ -309,7 +457,11 @@ def create_computer_router() -> APIRouter:
                         "query": query,
                         "score": score,
                     },
-                }))
+                }
+                action["replay_assertion"] = computer_uia_skills.uia_replay_assertion_for_action(
+                    action,
+                )
+                candidates.append((score, query, action))
         if not candidates:
             return []
         candidates.sort(key=lambda item: item[0], reverse=True)
@@ -574,6 +726,8 @@ def create_computer_router() -> APIRouter:
             "uia": uia_status,
             "lease": lease_state,
             "screen": info,
+            "activity_count": len(activity),
+            "recent_activity": activity[-10:],
             "skills": [
                 "screen_capture",
                 "screen_info",
@@ -591,6 +745,61 @@ def create_computer_router() -> APIRouter:
                 "computer_uia_find",
             ],
             "mode": "preview-confirm-execute-with-lease",
+        }
+
+    @router.get("/activity")
+    def computer_activity(
+        limit: int = Query(default=50, ge=1, le=500),
+    ) -> dict[str, Any]:
+        _cleanup_pending()
+        return {
+            "schema": "octopus.computer_activity.v1",
+            "count": len(activity),
+            "pending_count": len(pending),
+            "lease": _public_lease(),
+            "items": activity[-limit:],
+        }
+
+    @router.get("/activity/replay-case")
+    def computer_activity_replay_case(
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> dict[str, Any]:
+        _cleanup_pending()
+        items = activity[-limit:]
+        identity = computer_activity_replay_identity(
+            items=[item for item in items if isinstance(item, dict)],
+            pending_count=len(pending),
+        )
+        return {
+            "schema": "octopus.computer_activity_replay_case.v1",
+            "case_id": identity["case_id"],
+            "fingerprint": identity["fingerprint"],
+            "replay_ready": bool(items),
+            "activity_count": len(items),
+            "pending_count": len(pending),
+            "lease": _public_lease(),
+            "items": items,
+            "last_activity": items[-1] if items else None,
+        }
+
+    @router.post("/activity/replay-case/queue")
+    def computer_activity_replay_case_queue(body: dict[str, Any] | None = None) -> dict[str, Any]:
+        body = body or {}
+        limit = int(body.get("limit") or 100)
+        limit = max(1, min(500, limit))
+        replay_case = computer_activity_replay_case(limit=limit)
+        if not replay_case.get("replay_ready"):
+            raise HTTPException(409, "computer activity replay case has no actions to review")
+        queued = _queue_activity_replay_case(
+            replay_case,
+            reason=str(body.get("reason") or ""),
+            priority=str(body.get("priority") or ""),
+        )
+        return {
+            "ok": True,
+            "schema": "octopus.computer_activity_replay_case_queue.v1",
+            "replay_case": replay_case,
+            "queue": queued,
         }
 
     @router.post("/screenshot")
@@ -662,6 +871,13 @@ def create_computer_router() -> APIRouter:
         owner = _lease_from_body(body)
         action = _normalize_action(body)
         preview = _queue_preview(action, owner)
+        _record_activity(
+            "preview_queued",
+            action=action,
+            token=str(preview["token"]),
+            risk=preview["risk"],
+            detail={"lease_owner": owner},
+        )
         return {
             "ok": True,
             "lease": _public_lease(),
@@ -687,6 +903,14 @@ def create_computer_router() -> APIRouter:
                 "rationale": "Heuristic next action based on the task text and current screen observation.",
                 **preview,
             })
+        _record_activity(
+            "plan_created",
+            detail={
+                "goal": goal,
+                "suggestion_count": len(suggestions),
+                "capture": capture,
+            },
+        )
 
         return {
             "ok": True,
@@ -745,6 +969,10 @@ def create_computer_router() -> APIRouter:
                 "rationale": "Validated action parsed from vision model output.",
                 **preview,
             })
+        _record_activity(
+            "grounded_actions_created",
+            detail={"goal": goal, "suggestion_count": len(suggestions)},
+        )
 
         return {
             "ok": True,
@@ -803,6 +1031,14 @@ def create_computer_router() -> APIRouter:
                 "rationale": "Grounded action returned by the configured vision model.",
                 **preview,
             })
+        _record_activity(
+            "vision_actions_created",
+            detail={
+                "goal": goal,
+                "model_id": str(config.get("id") or model_id),
+                "suggestion_count": len(suggestions),
+            },
+        )
         return {
             "ok": True,
             "goal": goal,
@@ -824,7 +1060,19 @@ def create_computer_router() -> APIRouter:
         token = str(body.get("token") or "")
         item = pending.pop(token, None)
         if not item:
-            raise HTTPException(404, "preview token not found or expired")
+            _record_activity(
+                "execute_rejected",
+                ok=False,
+                token=token,
+                error="preview token not found or expired",
+            )
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "preview token not found or expired",
+                    "replay_evidence": _computer_replay_evidence(),
+                },
+            )
         body_owner = _lease_from_body(body)
         item_owner = item.get("lease_owner")
         if isinstance(item_owner, dict):
@@ -833,11 +1081,21 @@ def create_computer_router() -> APIRouter:
                 "owner_label": str(item_owner.get("owner_label") or body_owner["owner_label"]),
             }
             if body.get("lease_owner_id") and body_owner["owner_id"] != owner["owner_id"]:
+                _record_activity(
+                    "execute_rejected",
+                    ok=False,
+                    action=item.get("action") if isinstance(item.get("action"), dict) else {},
+                    token=token,
+                    risk=item.get("risk") if isinstance(item.get("risk"), dict) else {},
+                    error="preview token belongs to another operator",
+                    detail={"lease_owner": owner, "requested_owner": body_owner},
+                )
                 raise HTTPException(
                     status_code=409,
                     detail={
                         "error": "preview token belongs to another operator",
                         "lease_owner": owner,
+                        "replay_evidence": _computer_replay_evidence(),
                     },
                 )
         else:
@@ -845,22 +1103,49 @@ def create_computer_router() -> APIRouter:
         lease_state = _claim_lease(owner)
         action = item["action"]
         result = _execute(action)
+        ok = "error" not in result
+        _record_activity(
+            "action_executed",
+            ok=ok,
+            action=action,
+            token=token,
+            risk=item["risk"],
+            lease_state=lease_state,
+            error=str(result.get("error") or ""),
+            detail={"result": result},
+        )
+        replay_assertion = (
+            action.get("replay_assertion")
+            if isinstance(action.get("replay_assertion"), dict)
+            else {}
+        )
+        assertion_queue = None
+        if replay_assertion.get("ok") is False:
+            assertion_queue = _queue_uia_replay_assertion(action, replay_assertion)
         return {
-            "ok": "error" not in result,
+            "ok": ok,
             "action": action,
             "risk": item["risk"],
             "result": result,
             "lease": lease_state,
             "executed_at": time.time(),
+            **({"replay_assertion_queue": assertion_queue} if assertion_queue else {}),
+            **({"replay_evidence": _computer_replay_evidence()} if not ok else {}),
         }
 
     @router.post("/lease/release")
     def release_lease(body: dict[str, Any] | None = None) -> dict[str, Any]:
         owner = _lease_from_body(body)
         force = bool((body or {}).get("force", False))
+        lease_state = _release_lease(owner, force=force)
+        _record_activity(
+            "lease_released",
+            lease_state=lease_state,
+            detail={"owner": owner, "force": force},
+        )
         return {
             "ok": True,
-            "lease": _release_lease(owner, force=force),
+            "lease": lease_state,
         }
 
     return router

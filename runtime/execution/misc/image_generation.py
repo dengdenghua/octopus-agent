@@ -6,12 +6,43 @@ import os
 import subprocess
 import urllib.error
 import urllib.request
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 from typing import Any
 
 AGENT_VISUAL_VIEWS = ("front", "side", "back")
+AGENT_VISUAL_METASKILL_ID = "agent-visual-kit"
+
+AGENT_VISUAL_METASKILL_CONSTRAINTS = (
+    f"Use the {AGENT_VISUAL_METASKILL_ID} metaskill workflow. "
+    "Create an Octopus Agent visual asset pack for HUD use: front.png, "
+    "side.png, back.png, and a separate replacement avatar.png generated "
+    "as a fixed-size close-up headshot. "
+    "Assemble the character from identity, role, background, personality, "
+    "temperament, apparent age, visual keywords, and user custom additions. "
+    "Generate a single full-body character standee with a clear, centered "
+    "face suitable for matching the separate large headshot avatar, not an infographic, "
+    "profile card, UI panel, poster, or character stat sheet. "
+    "Keep the full head, hair, hands, and feet inside the canvas with "
+    "generous transparent headroom and footroom. Maintain the same face, "
+    "hairstyle, outfit, palette, proportions, and role-readable design "
+    "language across front, side, and back views. Prefer true alpha "
+    "transparency; if unavailable, use one perfectly flat #00ff00 chroma-key "
+    "background for deterministic background removal."
+)
+
+AGENT_VISUAL_NEGATIVE_CONSTRAINTS = (
+    "No text, no typography, no UI frame, no stat panels, no labels, no logo, "
+    "no name card, no poster, no border, no watermark, no duplicated "
+    "character, no cropped head, no cropped hair, no cropped hands, no "
+    "cropped feet, no half-body crop, no rough sketch, no 3D render, no "
+    "busy scenery, no gradient background, no floor, no props outside the "
+    "character, no floating particles, no floating code glyphs, no detached "
+    "symbols. Any circuitry, terminal, tool, or domain motif must be "
+    "integrated into clothing or equipment only."
+)
 
 
 @dataclass(frozen=True)
@@ -29,17 +60,18 @@ def build_agent_visual_prompt(
     style_prompt: str = "",
 ) -> str:
     base = (
-        "Generate a reusable 2D game/HUD agent character information card, "
-        "dark sci-fi interface mood, neon yellow accents, clean full body "
-        "character silhouette, premium RPG character profile style, with "
-        "compact readable stat-card panels inspired by the agent identity. "
-        "Avoid 3D render, avoid wireframe, avoid rough sketch, avoid cropped body."
+        f"{AGENT_VISUAL_METASKILL_CONSTRAINTS} "
+        "Generate high-resolution 2D game character artwork with anime concept "
+        "art / premium RPG character sheet quality, clean readable silhouette, "
+        "crisp linework, detailed clothing, polished lighting, sharp eyes, "
+        "and no blur. "
+        f"{AGENT_VISUAL_NEGATIVE_CONSTRAINTS}"
     )
     identity = f"Agent id: {agent_id}. Agent name: {display_name}."
     if description:
         identity += f" Description: {description[:500]}."
     if style_prompt:
-        identity += f" Extra style: {style_prompt[:500]}."
+        identity += f" Character/style reference notes and user additions: {style_prompt[:1400]}."
     return f"{base} {identity}"
 
 
@@ -50,6 +82,7 @@ def generate_agent_visuals(
     description: str,
     output_dir: Path,
     style_prompt: str = "",
+    reference_images: list[str] | None = None,
     provider: str | None = None,
 ) -> AgentVisualResult:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -76,6 +109,7 @@ def generate_agent_visuals(
             agent_id=agent_id,
             display_name=display_name,
             output_dir=output_dir,
+            reference_images=reference_images,
         )
     if resolved_provider in {"opencli-jimeng", "jimeng-cli", "custom-command"}:
         return _generate_with_command(
@@ -95,6 +129,7 @@ def _generate_with_agnes(
     agent_id: str,
     display_name: str,
     output_dir: Path,
+    reference_images: list[str] | None = None,
 ) -> AgentVisualResult:
     agnes_config = _resolve_agnes_config()
     api_key = agnes_config["api_key"]
@@ -102,8 +137,17 @@ def _generate_with_agnes(
         raise ValueError("AGNES_API_KEY not found")
 
     base_url = agnes_config["base_url"].rstrip("/")
-    model = agnes_config["model"]
+    clean_reference_images = [
+        image.strip() for image in (reference_images or []) if image and image.strip()
+    ][:3]
+    model = (
+        os.getenv("AGNES_IMAGE_REFERENCE_MODEL", "").strip()
+        or "agnes-image-2.0-flash"
+        if clean_reference_images
+        else agnes_config["model"]
+    )
     size = os.getenv("AGNES_IMAGE_SIZE", "").strip() or "1024x1536"
+    avatar_size = os.getenv("AGNES_AVATAR_IMAGE_SIZE", "").strip() or "512x512"
     timeout = int(os.getenv("OCTOPUS_IMAGE_GEN_TIMEOUT_SECONDS") or "180")
 
     files: dict[str, Path] = {}
@@ -121,10 +165,36 @@ def _generate_with_agnes(
             prompt=view_prompt,
             size=size,
             timeout=timeout,
+            reference_images=clean_reference_images,
         )
         out = output_dir / f"{view}.png"
         _write_agnes_image_result(data, out, timeout=timeout)
+        _postprocess_agent_visual(out)
         files[view] = out
+
+    avatar_path = output_dir.parent / "avatar.png"
+    avatar_prompt = _agent_visual_avatar_prompt(
+        base_prompt=prompt,
+        agent_id=agent_id,
+        display_name=display_name,
+    )
+    try:
+        avatar_data = _post_agnes_image_generation(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            prompt=avatar_prompt,
+            size=avatar_size,
+            timeout=timeout,
+            reference_images=clean_reference_images,
+        )
+        _write_agnes_image_result(avatar_data, avatar_path, timeout=timeout)
+        _postprocess_avatar_image(avatar_path)
+        avatar = avatar_path
+    except (OSError, RuntimeError, ValueError):
+        avatar = _make_avatar_from_front(output_dir / "front.png", avatar_path)
+    if avatar is not None:
+        files["avatar"] = avatar
 
     return AgentVisualResult(provider=provider, prompt=prompt, files=files)
 
@@ -211,11 +281,39 @@ def _agent_visual_view_prompt(
     }.get(view, view)
     return (
         f"{base_prompt} Generate ONLY the {view_label}. "
-        f"Use a single full-body character centered on one vertical info card. "
-        f"Include concise UI labels for name '{display_name}', id '{agent_id}', "
-        f"view '{view.upper()}', role, core skills, and loadout. "
-        "Keep the background transparent or very dark neutral so the web UI can "
-        "composite it. Do not create multiple separate characters in this image."
+        f"Follow {AGENT_VISUAL_METASKILL_ID} view-specific constraints. "
+        "Use a single full-body character centered in the frame with generous "
+        "transparent padding above the head, around the hair, and below the feet. "
+        f"Maintain the same identity, outfit language, palette, and art style as "
+        f"the other views of '{display_name}'. "
+        "Transparent background is preferred; if unavailable, use one perfectly "
+        "flat #00ff00 chroma-key background with no floor, no shadow, no gradient, "
+        "no environment, and no props outside the character. "
+        "Do not include any text, UI labels, skill panels, name cards, borders, "
+        "decorative HUD, diagram lines, infographic elements, floating icons, "
+        "floating particles, or detached code glyphs."
+    )
+
+
+def _agent_visual_avatar_prompt(
+    *,
+    base_prompt: str,
+    agent_id: str,
+    display_name: str,
+) -> str:
+    return (
+        f"{base_prompt} Generate ONLY a square close-up avatar portrait for "
+        f"'{display_name}' ({agent_id}). Follow {AGENT_VISUAL_METASKILL_ID} "
+        "avatar constraints. Use the same face, hairstyle, outfit collar, "
+        "palette, temperament, and art style as the front/side/back views. "
+        "Composition: large head and face fill most of the frame, front-facing "
+        "or slight three-quarter front view, eyes sharp and centered, include "
+        "hair and only slight shoulder/collar context, no full body, no half "
+        "body. Output a clean square 1:1 avatar suitable for small list icons. "
+        "Transparent background is preferred; if unavailable, use one perfectly "
+        "flat #00ff00 chroma-key background. Do not include any text, labels, "
+        "UI frame, border, watermark, badge, poster, infographic, floating "
+        "icons, particles, or detached decorative elements."
     )
 
 
@@ -227,15 +325,24 @@ def _post_agnes_image_generation(
     prompt: str,
     size: str,
     timeout: int,
+    reference_images: list[str] | None = None,
 ) -> dict[str, Any]:
-    payload = json.dumps(
-        {
-            "model": model,
-            "prompt": prompt,
-            "size": size,
-            "n": 1,
+    body: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
+        "size": size,
+        "n": 1,
+    }
+    clean_reference_images = [
+        image.strip() for image in (reference_images or []) if image and image.strip()
+    ][:3]
+    if clean_reference_images:
+        body["extra_body"] = {
+            "image": clean_reference_images[0]
+            if len(clean_reference_images) == 1
+            else clean_reference_images
         }
-    ).encode("utf-8")
+    payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         f"{base_url}/images/generations",
         data=payload,
@@ -283,6 +390,278 @@ def _write_agnes_image_result(data: dict[str, Any], output: Path, *, timeout: in
         raise RuntimeError(
             f"agnes image download failed: {type(exc).__name__}: {exc}"
         ) from exc
+
+
+def _postprocess_agent_visual(path: Path) -> None:
+    """Remove flat generated backgrounds, crop to subject, and add safe padding."""
+    try:
+        from PIL import Image  # noqa: F401 — ImageFilter, ImageOps kept for availability check
+    except ImportError:
+        return
+
+    try:
+        image = Image.open(path).convert("RGBA")
+    except OSError:
+        return
+
+    alpha = image.getchannel("A")
+    has_existing_alpha = alpha.getextrema()[0] < 250
+    matte = alpha if has_existing_alpha else _connected_flat_background_alpha(image)
+
+    image.putalpha(matte)
+    image = _keep_primary_alpha_component(image)
+    matte = image.getchannel("A")
+    bbox = matte.getbbox()
+    if not bbox:
+        image.save(path)
+        return
+
+    width, height = image.size
+    x0, y0, x1, y1 = bbox
+    pad_x = max(48, int((x1 - x0) * 0.14))
+    pad_top = max(96, int((y1 - y0) * 0.14))
+    pad_bottom = max(72, int((y1 - y0) * 0.08))
+    crop_box = (
+        max(0, x0 - pad_x),
+        max(0, y0 - pad_top),
+        min(width, x1 + pad_x),
+        min(height, y1 + pad_bottom),
+    )
+    image = image.crop(crop_box)
+    # Add a little extra transparent safety space even if the crop hit an edge.
+    safety = Image.new(
+        "RGBA",
+        (
+            image.width + max(32, image.width // 16) * 2,
+            image.height + max(48, image.height // 12) + max(32, image.height // 20),
+        ),
+        (0, 0, 0, 0),
+    )
+    safety.alpha_composite(image, (max(32, image.width // 16), max(48, image.height // 12)))
+    safety.save(path)
+
+
+def _postprocess_avatar_image(path: Path) -> None:
+    """Normalize a generated avatar to a clean transparent 512x512 headshot."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return
+
+    try:
+        image = Image.open(path).convert("RGBA")
+    except OSError:
+        return
+
+    alpha = image.getchannel("A")
+    has_existing_alpha = alpha.getextrema()[0] < 250
+    image.putalpha(alpha if has_existing_alpha else _connected_flat_background_alpha(image))
+    image = _keep_primary_alpha_component(image)
+
+    bbox = image.getchannel("A").getbbox()
+    if bbox:
+        x0, y0, x1, y1 = bbox
+        width = x1 - x0
+        height = y1 - y0
+        pad_x = max(8, int(width * 0.04))
+        pad_top = max(8, int(height * 0.04))
+        pad_bottom = max(8, int(height * 0.06))
+        image = image.crop(
+            (
+                max(0, x0 - pad_x),
+                max(0, y0 - pad_top),
+                min(image.width, x1 + pad_x),
+                min(image.height, y1 + pad_bottom),
+            )
+        )
+
+    canvas_size = max(image.width, image.height)
+    canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+    canvas.alpha_composite(
+        image,
+        ((canvas_size - image.width) // 2, (canvas_size - image.height) // 2),
+    )
+    avatar = canvas.resize((512, 512), Image.Resampling.LANCZOS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    avatar.save(path)
+
+
+def _keep_primary_alpha_component(image: Any) -> Any:
+    try:
+        from PIL import Image, ImageFilter
+    except ImportError:
+        return image
+
+    alpha = image.getchannel("A")
+    width, height = alpha.size
+    px = alpha.load()
+    visited = bytearray(width * height)
+    components: list[tuple[int, int, int, int, int, int, int]] = []
+
+    for start_y in range(height):
+        for start_x in range(width):
+            start_idx = start_y * width + start_x
+            if visited[start_idx] or px[start_x, start_y] <= 24:
+                continue
+            queue: deque[tuple[int, int]] = deque([(start_x, start_y)])
+            visited[start_idx] = 1
+            count = 0
+            x0 = x1 = start_x
+            y0 = y1 = start_y
+            while queue:
+                x, y = queue.popleft()
+                count += 1
+                x0 = min(x0, x)
+                x1 = max(x1, x)
+                y0 = min(y0, y)
+                y1 = max(y1, y)
+                for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                    if nx < 0 or ny < 0 or nx >= width or ny >= height:
+                        continue
+                    idx = ny * width + nx
+                    if visited[idx] or px[nx, ny] <= 24:
+                        continue
+                    visited[idx] = 1
+                    queue.append((nx, ny))
+            components.append((count, x0, y0, x1, y1, start_x, start_y))
+
+    if not components:
+        return image
+
+    # Keep the largest component plus near-touching antialiasing. This removes
+    # floating prompt artifacts while preserving the actual character silhouette.
+    count, _x0, _y0, _x1, _y1, seed_x, seed_y = max(
+        components,
+        key=lambda item: item[0],
+    )
+    if count < width * height * 0.01:
+        return image
+
+    keep = Image.new("L", (width, height), 0)
+    keep_px = keep.load()
+    alpha_px = alpha.load()
+    visited = bytearray(width * height)
+    queue: deque[tuple[int, int]] = deque([(seed_x, seed_y)])
+    visited[seed_y * width + seed_x] = 1
+    while queue:
+        x, y = queue.popleft()
+        keep_px[x, y] = alpha_px[x, y]
+        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if nx < 0 or ny < 0 or nx >= width or ny >= height:
+                continue
+            idx = ny * width + nx
+            if visited[idx] or alpha_px[nx, ny] <= 24:
+                continue
+            visited[idx] = 1
+            queue.append((nx, ny))
+    keep = keep.filter(ImageFilter.MaxFilter(3))
+    out = image.copy()
+    out.putalpha(keep)
+    return out
+
+
+def _connected_flat_background_alpha(image: Any) -> Any:
+    from PIL import Image, ImageFilter
+
+    rgb = image.convert("RGB")
+    width, height = rgb.size
+    px = rgb.load()
+    samples: list[tuple[int, int, int]] = []
+    sample_points = [
+        (0, 0),
+        (width - 1, 0),
+        (0, height - 1),
+        (width - 1, height - 1),
+        (width // 2, 0),
+        (width // 2, height - 1),
+        (0, height // 2),
+        (width - 1, height // 2),
+    ]
+    for point in sample_points:
+        samples.append(px[point])
+
+    def is_background(x: int, y: int) -> bool:
+        r, g, b = px[x, y]
+        # Strong chroma key requested in the prompt.
+        if g > 150 and r < 110 and b < 130:
+            return True
+        return any(abs(r - sr) + abs(g - sg) + abs(b - sb) <= 74 for sr, sg, sb in samples)
+
+    visited = bytearray(width * height)
+    background = bytearray(width * height)
+    queue: deque[tuple[int, int]] = deque()
+
+    def add(x: int, y: int) -> None:
+        if x < 0 or y < 0 or x >= width or y >= height:
+            return
+        idx = y * width + x
+        if visited[idx] or not is_background(x, y):
+            return
+        visited[idx] = 1
+        background[idx] = 1
+        queue.append((x, y))
+
+    for x in range(width):
+        add(x, 0)
+        add(x, height - 1)
+    for y in range(height):
+        add(0, y)
+        add(width - 1, y)
+
+    while queue:
+        x, y = queue.popleft()
+        add(x - 1, y)
+        add(x + 1, y)
+        add(x, y - 1)
+        add(x, y + 1)
+
+    matte = Image.new("L", (width, height), 255)
+    matte_px = matte.load()
+    for y in range(height):
+        row = y * width
+        for x in range(width):
+            if background[row + x]:
+                matte_px[x, y] = 0
+    return matte.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(0.45))
+
+
+def _make_avatar_from_front(front_path: Path, avatar_path: Path) -> Path | None:
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+
+    try:
+        image = Image.open(front_path).convert("RGBA")
+    except OSError:
+        return None
+
+    alpha = image.getchannel("A")
+    bbox = alpha.getbbox()
+    if not bbox:
+        return None
+
+    x0, y0, x1, y1 = bbox
+    subject_w = x1 - x0
+    subject_h = y1 - y0
+    cx = (x0 + x1) // 2
+    # List avatars need a close-up head read. Use the top of the extracted
+    # standee as the head anchor and keep only a little shoulder context.
+    top = max(0, y0 - int(subject_h * 0.03))
+    bottom = min(image.height, y0 + int(subject_h * 0.22))
+    face_window_h = bottom - top
+    side = max(int(subject_w * 0.46), int(face_window_h * 0.92))
+    left = max(0, cx - side // 2)
+    right = min(image.width, left + side)
+    left = max(0, right - side)
+    crop = image.crop((left, top, right, bottom))
+    canvas_size = max(crop.width, crop.height)
+    canvas = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+    canvas.alpha_composite(crop, ((canvas_size - crop.width) // 2, (canvas_size - crop.height) // 2))
+    avatar = canvas.resize((512, 512), Image.Resampling.LANCZOS)
+    avatar_path.parent.mkdir(parents=True, exist_ok=True)
+    avatar.save(avatar_path)
+    return avatar_path
 
 
 def _generate_with_command(
@@ -350,7 +729,29 @@ def _generate_mock_visuals(
             encoding="utf-8",
         )
         files[view] = out
+    avatar = output_dir.parent / "avatar.svg"
+    avatar.write_text(
+        _mock_avatar_svg(agent_id=agent_id, display_name=display_name),
+        encoding="utf-8",
+    )
+    files["avatar"] = avatar
     return AgentVisualResult(provider=provider, prompt=prompt, files=files)
+
+
+def _mock_avatar_svg(*, agent_id: str, display_name: str) -> str:
+    seed = sum(ord(c) for c in agent_id) % 360
+    hue_a = (seed + 42) % 360
+    hue_b = (seed + 290) % 360
+    safe_name = _escape_xml((display_name[:2] or agent_id[:2] or "AG").upper())
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="hsl({hue_b}, 72%, 18%)"/>
+  <circle cx="256" cy="202" r="126" fill="hsl({hue_a}, 92%, 70%)"/>
+  <path d="M94 520c12-118 78-182 162-182s150 64 162 182" fill="hsl({hue_b}, 82%, 56%)"/>
+  <circle cx="212" cy="190" r="17" fill="#171b23"/>
+  <circle cx="300" cy="190" r="17" fill="#171b23"/>
+  <path d="M214 254c28 28 56 28 84 0" fill="none" stroke="#171b23" stroke-width="18" stroke-linecap="round"/>
+  <text x="256" y="454" text-anchor="middle" font-family="Arial, sans-serif" font-size="54" font-weight="800" fill="#ffffff">{safe_name}</text>
+</svg>"""
 
 
 def _mock_visual_svg(*, agent_id: str, display_name: str, view: str) -> str:

@@ -31,4 +31,3 @@ export function ArtifactLink(props: AnchorHTMLAttributes<HTMLAnchorElement>) {
     />
   );
 }
-

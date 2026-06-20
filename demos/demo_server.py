@@ -9,16 +9,6 @@ from pathlib import Path
 
 import uvicorn
 
-from runtime.execution.agents import AgentRegistry, make_all_agent_presets
-from runtime.execution.tool_engine import ToolExecutor
-from runtime.core.cerebrum import LLMPlanner
-from runtime.platform.config.builder import BuiltStack
-from runtime.platform.config.schema import AgentConfig
-from runtime.sensing.model_router import MockModelRouter, MoliliModelRouter
-from runtime.core.graph_runtime import GraphRuntime
-from runtime.memory.journal import JSONLJournal
-from runtime.memory.hemolymph import ContextComposer
-from runtime.safety.auth import IdentityStore, TrustEngine
 from runtime.adapters.integrations.local_auth import LocalAuthConfig
 from runtime.adapters.integrations.local_auth.config import hash_password
 from runtime.adapters.integrations.molili import (
@@ -26,11 +16,20 @@ from runtime.adapters.integrations.molili import (
     MoliliConfig,
     MoliliLinkStore,
 )
-from runtime.platform.models import BudgetSpec
+from runtime.core.cerebrum import LLMPlanner
+from runtime.core.graph_runtime import GraphRuntime
+from runtime.execution.agents import AgentRegistry, make_all_agent_presets
 from runtime.execution.all_skills import register_all as register_all_skills
 from runtime.execution.suckers import SkillRegistry
+from runtime.execution.tool_engine import ToolExecutor
+from runtime.memory.hemolymph import ContextComposer
+from runtime.memory.journal import JSONLJournal
+from runtime.platform.config.builder import BuiltStack
+from runtime.platform.config.schema import AgentConfig
+from runtime.platform.models import BudgetSpec
 from runtime.platform.ui import create_app
-
+from runtime.safety.auth import IdentityStore, TrustEngine
+from runtime.sensing.model_router import MoliliModelRouter
 
 # Implementation note.
 MOLILI_ROOTS = {
@@ -158,7 +157,8 @@ def build_app(*, real: bool = False, prod: bool = False) -> object:
         )
         # Implementation note.
         from runtime.execution.suckers.computer_use_loop import (
-            ModelRouterVisionPlanner, register_computer_use_loop,
+            ModelRouterVisionPlanner,
+            register_computer_use_loop,
         )
         vision_router_for_desktop = MoliliModelRouter(
             link_store=link_store,

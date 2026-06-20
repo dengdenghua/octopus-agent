@@ -107,7 +107,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
 
     @router.get("/devices")
     async def list_devices() -> list[dict[str, Any]]:
-        devices = coordinator.pool.all_online()
+        coordinator.pool.all_online()
         all_devices = list(coordinator.pool._tentacles.values())
         result = []
         for d in all_devices:
@@ -178,7 +178,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
                 "duration_ms": int((time.time() - start) * 1000),
                 "timestamp": time.time(),
             })
-            raise HTTPException(500, f"Decision engine error: {e}")
+            raise HTTPException(500, f"Decision engine error: {e}") from e
 
         results = []
         for call in tool_calls:
@@ -322,7 +322,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
             raise
         except Exception as e:
             logger.exception("VLM analysis failed")
-            raise HTTPException(500, f"VLM analysis failed: {e}")
+            raise HTTPException(500, f"VLM analysis failed: {e}") from e
 
     # ── 屏幕流：获取设备最新截图 ────────────────────────
 
@@ -490,7 +490,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
             # 持续保持连接，等待客户端断开
             while True:
                 # 接收客户端消息（心跳/控制）
-                raw = await ws.receive_text()
+                await ws.receive_text()
                 # 忽略客户端消息，只用于保持连接
         except WebSocketDisconnect:
             logger.info("PC screen stream client disconnected: %s", ws.client)
@@ -524,7 +524,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
             await coordinator.pc_screen_capture.start()
             return {"status": "started", "stats": coordinator.pc_screen_capture.stats}
         except Exception as e:
-            raise HTTPException(500, f"Failed to start PC screen capture: {e}")
+            raise HTTPException(500, f"Failed to start PC screen capture: {e}") from e
 
     @router.post("/pc-screen/stop")
     async def pc_screen_stop() -> dict[str, Any]:
@@ -567,8 +567,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
         if handler is None:
             raise HTTPException(400, "Remote input not enabled. Start coordinator with remote_input=True")
 
-        result = await handler.handle_input(body)
-        return result
+        return await handler.handle_input(body)
 
     # ── MCP SSE Transport ────────────────────────────────────
 
@@ -637,7 +636,7 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
         try:
             body = await request.json()
         except json.JSONDecodeError as e:
-            raise HTTPException(400, f"Invalid JSON: {e}")
+            raise HTTPException(400, f"Invalid JSON: {e}") from e
 
         # 异步处理请求并通过 SSE 推送响应
         asyncio.create_task(session.handle_message(body))

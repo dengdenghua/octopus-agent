@@ -9,6 +9,12 @@ from runtime.core.cerebrum.completion_receipt import build_completion_receipt
 from runtime.core.cerebrum.react_context import _estimate_tokens
 from runtime.core.cerebrum.react_parsing import _parse_action
 from runtime.core.cerebrum.react_types import ReActStep
+from runtime.execution.tool_engine import (
+    NormalizedToolCall,
+    normalize_step_tool_result,
+    normalize_tool_call,
+    normalize_tool_result,
+)
 from runtime.platform.models import ParsedIntent, Step
 
 _logger = logging.getLogger(__name__)
@@ -83,10 +89,14 @@ def _execute_action_via_beak(
     if executor is None:
         return None, None
 
-    parsed = _parse_action(action_text)
-    if parsed is None:
+    call = _normalized_tool_call_from_react_action(
+        action_text,
+        react_step_counter=react_step_counter,
+    )
+    if call is None:
         return None, None
-    skill_name, args = parsed
+    skill_name = call.name
+    args = call.arguments
 
     blocked_in_react = {"call_agent", "exit_plan_mode"}
     if skill_name in blocked_in_react:
@@ -131,6 +141,13 @@ def _execute_action_via_beak(
                 "workspace_path",
                 "mode",
                 "capability_mode",
+                "code_mode",
+                "agent_mode",
+                "project_signals",
+                "sandbox_mode",
+                "permission_mode",
+                "approval_policy",
+                "execution_environment",
                 "team_id",
                 "agent_name",
             ):
@@ -168,51 +185,59 @@ def _execute_action_via_beak(
         _logger.warning("react_loop tool exec failed (%s): %s", skill_name, exc)
         return f"(工具执行异常) {type(exc).__name__}: {exc}", None
 
-    result = step.result
-    status = getattr(result, "status", "unknown")
-    output = getattr(result, "output", None)
+    normalized_result = normalize_step_tool_result(
+        step,
+        origin="react_compat",
+        max_chars=TOOL_OBSERVATION_MAX_CHARS,
+        fallback_call=call,
+    )
+    status = normalized_result.status
+    output = normalized_result.output
     if status != "success":
-        err = getattr(result, "error_type", None) or status
+        err = normalized_result.error_type or status
         return (
             f"(工具失败) status={status} error={err}\n"
             "请在下一轮 Thought 中分析失败原因，然后换一种方式重试 · "
             "例如：换不同参数、换另一个工具、或直接用已有信息给出 Final Answer。"
         ), step
     if skill_name in _VERIFY_SKILLS and _output_indicates_command_failure(output):
-        try:
-            rendered = (
-                output
-                if isinstance(output, str)
-                else json.dumps(
-                    output,
-                    ensure_ascii=False,
-                    default=str,
-                )
-            )
-        except (TypeError, ValueError):
-            rendered = repr(output)
-        if len(rendered) > TOOL_OBSERVATION_MAX_CHARS:
-            rendered = rendered[:TOOL_OBSERVATION_MAX_CHARS] + "...(truncated)"
+        command_result = normalize_tool_result(
+            call,
+            output,
+            is_error=True,
+            status="command_failed",
+            error_type="non_zero_exit",
+            origin="react_compat",
+            max_chars=TOOL_OBSERVATION_MAX_CHARS,
+        )
         return (
             "(tool failed) status=command_failed error=non_zero_exit\n"
-            f"{rendered}\n"
+            f"{command_result.rendered}\n"
             "Analyze the failure next, then fix it, change commands, or report the verification blocker."
         ), step
-    try:
-        rendered = (
-            output
-            if isinstance(output, str)
-            else json.dumps(
-                output,
-                ensure_ascii=False,
-                default=str,
-            )
-        )
-    except (TypeError, ValueError):
-        rendered = repr(output)
-    if len(rendered) > TOOL_OBSERVATION_MAX_CHARS:
-        rendered = rendered[:TOOL_OBSERVATION_MAX_CHARS] + "...(截断)"
-    return (f"(real tool execution succeeded) {skill_name}\n{rendered}"), step
+    return (
+        f"(real tool execution succeeded) {skill_name}\n"
+        f"{normalized_result.rendered}"
+    ), step
+
+
+def _normalized_tool_call_from_react_action(
+    action_text: str,
+    *,
+    react_step_counter: int,
+) -> NormalizedToolCall | None:
+    parsed = _parse_action(action_text)
+    if parsed is None:
+        return None
+    skill_name, args = parsed
+    return normalize_tool_call(
+        {
+            "id": f"react:{react_step_counter}",
+            "name": skill_name,
+            "arguments": args,
+        },
+        origin="react_compat",
+    )
 
 
 def _run_auto_diagnostics(stack: Any, workspace_path: str | None = None) -> str | None:

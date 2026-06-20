@@ -109,15 +109,18 @@ function basenameFromPath(path: string): string {
   return parts.at(-1) ?? path;
 }
 
-export function createOctopusBrowserSessionIdentity(options: {
-  threadId?: string | null;
-  workspacePath?: string | null;
-  scope?: "browser" | "thread" | "workspace";
-} = {}): OctopusBrowserSessionIdentity {
+export function createOctopusBrowserSessionIdentity(
+  options: {
+    threadId?: string | null;
+    workspacePath?: string | null;
+    scope?: "browser" | "thread" | "workspace";
+  } = {},
+): OctopusBrowserSessionIdentity {
   const workspacePath = options.workspacePath?.trim();
   const threadId = options.threadId?.trim();
   const scope: OctopusBrowserSessionIdentity["scope"] =
-    options.scope ?? (workspacePath ? "workspace" : threadId ? "thread" : "browser");
+    options.scope ??
+    (workspacePath ? "workspace" : threadId ? "thread" : "browser");
   const basis =
     scope === "workspace" && workspacePath
       ? workspacePath
@@ -157,16 +160,19 @@ export async function getBrowserConfig(): Promise<BrowserConfig> {
   const res = await fetch(`${getBackendBaseURL()}/api/browser/config`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to get browser config: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to get browser config: ${res.statusText}`);
   return (await res.json()) as BrowserConfig;
 }
 
-export async function ensureBrowserSession(options: {
-  sessionId?: string;
-  projectId?: string;
-  profileId?: string;
-  headless?: boolean;
-} = {}): Promise<BrowserSessionResponse> {
+export async function ensureBrowserSession(
+  options: {
+    sessionId?: string;
+    projectId?: string;
+    profileId?: string;
+    headless?: boolean;
+  } = {},
+): Promise<BrowserSessionResponse> {
   const sessionId = options.sessionId || "default";
   const res = await fetch(`${getBackendBaseURL()}/api/browser/session/ensure`, {
     method: "POST",
@@ -178,7 +184,8 @@ export async function ensureBrowserSession(options: {
       ...(options.headless === undefined ? {} : { headless: options.headless }),
     }),
   });
-  if (!res.ok) throw new Error(`Failed to ensure browser session: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to ensure browser session: ${res.statusText}`);
   return (await res.json()) as BrowserSessionResponse;
 }
 
@@ -186,17 +193,21 @@ export async function getBrowserSessions(): Promise<BrowserSessionsResponse> {
   const res = await fetch(`${getBackendBaseURL()}/api/browser/sessions`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to get browser sessions: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to get browser sessions: ${res.statusText}`);
   return (await res.json()) as BrowserSessionsResponse;
 }
 
-export async function updateBrowserConfig(config: Partial<BrowserConfig>): Promise<BrowserConfig> {
+export async function updateBrowserConfig(
+  config: Partial<BrowserConfig>,
+): Promise<BrowserConfig> {
   const res = await fetch(`${getBackendBaseURL()}/api/browser/config`, {
     method: "PUT",
     headers: jsonAuthHeaders(),
     body: JSON.stringify(config),
   });
-  if (!res.ok) throw new Error(`Failed to update browser config: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to update browser config: ${res.statusText}`);
   return (await res.json()) as BrowserConfig;
 }
 
@@ -208,19 +219,30 @@ export async function getRelayStatus(): Promise<RelayStatus> {
   return (await res.json()) as RelayStatus;
 }
 
-export async function openExtensionFolder(): Promise<{ opened: boolean; path: string }> {
-  const res = await fetch(`${getBackendBaseURL()}/api/browser/open-extension-folder`, {
-    method: "POST",
-    headers: jsonAuthHeaders(),
-  });
-  if (!res.ok) throw new Error(`Failed to open extension folder: ${res.statusText}`);
+export async function openExtensionFolder(): Promise<{
+  opened: boolean;
+  path: string;
+}> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/browser/open-extension-folder`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+    },
+  );
+  if (!res.ok)
+    throw new Error(`Failed to open extension folder: ${res.statusText}`);
   return (await res.json()) as { opened: boolean; path: string };
 }
 
-export async function getExtensionPath(): Promise<{ path: string; exists: boolean }> {
+export async function getExtensionPath(): Promise<{
+  path: string;
+  exists: boolean;
+}> {
   const res = await fetch(`${getBackendBaseURL()}/api/browser/extension-path`, {
     headers: authHeaders(),
   });
-  if (!res.ok) throw new Error(`Failed to get extension path: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to get extension path: ${res.statusText}`);
   return (await res.json()) as { path: string; exists: boolean };
 }

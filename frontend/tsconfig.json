@@ -27,26 +27,19 @@
     }
   },
   "include": [
-    "src/main.tsx",
-    "src/router.tsx",
-    "src/app/page.tsx",
-    "src/app/login/page.tsx",
-    "src/app/register/page.tsx",
-    "src/app/about/page.tsx",
-    "src/app/workspace/layout.tsx",
-    "src/app/workspace/chats/[thread_id]/page.tsx",
-    "src/app/workspace/team/page.tsx",
-    "src/app/workspace/team/new/page.tsx",
-    "src/app/workspace/team/[thread_id]/page.tsx",
-    "src/app/workspace/browser/page.tsx",
-    "src/app/browser/page.tsx",
-    "src/app/workspace/mcp/page.tsx",
-    "src/app/workspace/agents/page.tsx",
-    "src/app/workspace/skills/page.tsx",
-    "src/app/workspace/meta-skills/page.tsx",
-    "src/app/workspace/channels/page.tsx",
-    "src/types/electron.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+    "src/**/*.jsx",
+    "src/**/*.d.ts",
     "vite-env.d.ts"
   ],
-  "exclude": ["node_modules", "dist", "src/app/api", "src/app/mock"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/pages",
+    "src/test/setup.ts",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ]
 }

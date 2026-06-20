@@ -39,7 +39,9 @@ export const StreamingIndicator = memo(function StreamingIndicator({
             isSm ? "size-4" : "size-5",
           )}
         >
-          <SparklesIcon className={cn("text-primary", isSm ? "size-2.5" : "size-3")} />
+          <SparklesIcon
+            className={cn("text-primary", isSm ? "size-2.5" : "size-3")}
+          />
         </div>
       </div>
       {showLabel && (

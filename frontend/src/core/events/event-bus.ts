@@ -154,7 +154,7 @@ export const eventBus = new EventBus();
 export function useEvent<T extends EventName>(
   event: T,
   listener: Listener<T>,
-  deps: React.DependencyList = []
+  deps: React.DependencyList = [],
 ): void {
   useEffect(() => {
     return eventBus.on(event, listener);
@@ -165,7 +165,7 @@ export function useEvent<T extends EventName>(
 // React Hook: 订阅事件（带记忆化回调）
 export function useEventCallback<T extends EventName>(
   event: T,
-  listener: Listener<T>
+  listener: Listener<T>,
 ): void {
   const callback = useCallback(listener, [listener]);
   useEffect(() => {
@@ -179,7 +179,9 @@ export function emitAgentChanged(name: string): void {
   // 同时更新 localStorage 保持兼容性
   try {
     window.localStorage.setItem("octopus.active-agent", name);
-  } catch (e) { swallow(e, "storage"); }
+  } catch (e) {
+    swallow(e, "storage");
+  }
 }
 
 // 便捷函数：触发设置变更事件

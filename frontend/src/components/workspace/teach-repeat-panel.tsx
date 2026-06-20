@@ -55,12 +55,15 @@ import { cn } from "@/lib/utils";
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    adapted: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    completed:
+      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    adapted:
+      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
     failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
     running: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
     pending: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
-    success: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    success:
+      "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
     skipped: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
   };
 
@@ -184,9 +187,7 @@ function StartRecordingDialog({
           className="border-input bg-background w-full rounded-lg border px-3 py-1.5 text-sm"
         />
       </div>
-      {error && (
-        <p className="text-destructive text-xs">{error}</p>
-      )}
+      {error && <p className="text-destructive text-xs">{error}</p>}
       <div className="flex gap-2">
         <button
           onClick={() => void handleStart()}
@@ -261,9 +262,7 @@ function ReplayDialog({
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold">
-        Replay: {template.name}
-      </h3>
+      <h3 className="text-sm font-semibold">Replay: {template.name}</h3>
       <p className="text-muted-foreground text-xs">
         {template.description || t.teachRepeat.noDescription}
       </p>
@@ -274,7 +273,9 @@ function ReplayDialog({
             <div key={p.name} className="space-y-0.5">
               <label className="text-muted-foreground text-xs">
                 {p.name}
-                {p.required && <span className="text-destructive ml-0.5">*</span>}
+                {p.required && (
+                  <span className="text-destructive ml-0.5">*</span>
+                )}
                 {p.description && (
                   <span className="ml-1 opacity-60">({p.description})</span>
                 )}
@@ -358,7 +359,9 @@ function ReplayResultsView({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">{t.teachRepeat.replayResults}</h3>
+          <h3 className="text-sm font-semibold">
+            {t.teachRepeat.replayResults}
+          </h3>
           <StatusBadge status={result.status} />
         </div>
         <button
@@ -402,9 +405,7 @@ function ReplayResultsView({
                     {sr.output.slice(0, 500)}
                   </p>
                 )}
-                {sr.error && (
-                  <p className="text-destructive">{sr.error}</p>
-                )}
+                {sr.error && <p className="text-destructive">{sr.error}</p>}
                 {sr.adaptation_note && (
                   <p className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
                     <AlertTriangleIcon className="size-3" />
@@ -589,7 +590,9 @@ export function TeachRepeatPanel({
     try {
       const data = await listTemplates({ limit: 100 });
       setTemplates(data.templates);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
     setLoading(false);
   }, []);
 
@@ -598,7 +601,9 @@ export function TeachRepeatPanel({
     try {
       const status = await getRecordingStatus(threadId);
       setRecordingStatus(status);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, [threadId]);
 
   useEffect(() => {
@@ -620,7 +625,9 @@ export function TeachRepeatPanel({
       await stopRecording({ thread_id: threadId, use_llm: true });
       await refreshRecordingStatus();
       await refreshTemplates();
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   };
 
   const handleReplay = async (
@@ -655,14 +662,18 @@ export function TeachRepeatPanel({
     try {
       await duplicateTemplate(id);
       await refreshTemplates();
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteTemplate(id);
       setTemplates((prev) => prev.filter((t) => t.id !== id));
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   };
 
   // -- Render ---------------------------------------------------------------

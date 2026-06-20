@@ -935,6 +935,27 @@ export interface Translations {
     collapseSidebar: string;
     expandSidebar: string;
     projectNamePlaceholder: string;
+    // Surface switch + task statuses
+    navBrowserSurface: string;
+    sectionOngoing: string;
+    noOngoingTasks: string;
+    sectionTaskHistory: string;
+    noTaskHistory: string;
+    unnamedTask: string;
+    currentTaskSession: string;
+    taskStatusRunning: string;
+    taskStatusFailed: string;
+    taskStatusPending: string;
+    // Aria labels
+    ariaCollapseLocalDatabase: string;
+    ariaExpandLocalDatabase: string;
+    ariaResizeSidebar: string;
+    // Storage library labels
+    libraryApps: string;
+    libraryDocs: string;
+    libraryImages: string;
+    libraryComputer: string;
+    libraryAuthorizedDirs: string;
   };
 
   // Browser settings page
@@ -3879,6 +3900,13 @@ export interface Translations {
   // Team Input
   teamInput: {
     placeholder: string;
+    assigneeAll: string;
+    assigneeCount: (count: number) => string;
+    assigneeHint: string;
+    assigneeMenuTitle: string;
+    clearAssignee: string;
+    localFileAgent: string;
+    localFileAgentHint: string;
   };
 
   fileTree: {
@@ -4852,6 +4880,24 @@ export interface Translations {
     toastForgetRuleSuccess: string;
     toastForgetMemorySuccess: string;
     toastDeleteFailed: (msg: string) => string;
+  };
+
+  // Evolution explain cards
+  evolutionExplain: {
+    fitnessTitle: string;
+    noAgentSelected: string;
+    loading: string;
+    noFitnessData: string;
+    driftTitle: string;
+    noDriftData: string;
+    noDriftDetected: string;
+    driftDetected: (maxSeverity: string) => string;
+    variantTitle: string;
+    noVariantData: string;
+    colName: string;
+    colUsage: string;
+    colSuccessRate: string;
+    colStatus: string;
   };
 
   // Privacy settings page

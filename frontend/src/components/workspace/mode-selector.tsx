@@ -27,7 +27,13 @@ import { cn } from "@/lib/utils";
 
 export type AgentModeName = "builder" | "coder" | "architect";
 
-interface DetectionSignals {
+export interface VerificationCommand {
+  kind: string;
+  command: string;
+  source: string;
+}
+
+export interface DetectionSignals {
   workspace_path?: string | null;
   exists?: boolean | null;
   file_count?: number | null;
@@ -36,10 +42,11 @@ interface DetectionSignals {
   git_commits?: number | null;
   has_readme?: boolean | null;
   lock_files?: string[] | null;
+  commands?: VerificationCommand[] | null;
   raw_score?: number | null;
 }
 
-interface DetectResponse {
+export interface DetectResponse {
   recommended_mode: AgentModeName;
   confidence: number;
   reason: string;
@@ -103,6 +110,7 @@ interface ModeSelectorProps {
   sessionId: string;
   mode: AgentModeName;
   onModeChange: (mode: AgentModeName) => void;
+  onDetectionChange?: (detection: DetectResponse | null) => void;
   className?: string;
 }
 
@@ -111,6 +119,7 @@ export function ModeSelector({
   sessionId,
   mode,
   onModeChange,
+  onDetectionChange,
   className,
 }: ModeSelectorProps) {
   const { t } = useI18n();
@@ -132,6 +141,7 @@ export function ModeSelector({
         const result = await fetchDetection(workDir);
         if (cancelled) return;
         setDetection(result);
+        onDetectionChange?.(result);
 
         // Only auto-switch on initial load or workspace change
         if (prevWorkDir.current !== workDir) {
@@ -140,6 +150,7 @@ export function ModeSelector({
         }
       } catch (e) {
         swallow(e);
+        if (!cancelled) onDetectionChange?.(null);
         // Silently fall back — keep current mode
       } finally {
         if (!cancelled) setDetecting(false);
@@ -147,8 +158,10 @@ export function ModeSelector({
     };
 
     doDetect();
-    return () => { cancelled = true; };
-  }, [workDir]);
+    return () => {
+      cancelled = true;
+    };
+  }, [onDetectionChange, onModeChange, workDir]);
 
   // Fetch available modes (templates etc.)
   useEffect(() => {
@@ -157,8 +170,12 @@ export function ModeSelector({
       .then((m) => {
         if (!cancelled) setModes(m);
       })
-      .catch(() => { /* ignore */ });
-    return () => { cancelled = true; };
+      .catch(() => {
+        /* ignore */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Close panel on outside click
@@ -185,7 +202,8 @@ export function ModeSelector({
   const isBuilder = mode === "builder";
   const isArchitect = mode === "architect";
   const modeInfo = modes.find((m) => m.name === mode);
-  const builderTemplates = modes.find((m) => m.name === "builder")?.templates ?? [];
+  const builderTemplates =
+    modes.find((m) => m.name === "builder")?.templates ?? [];
 
   const modeColorClass = isArchitect
     ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:bg-amber-900/30 dark:text-amber-400"
@@ -200,13 +218,13 @@ export function ModeSelector({
         className={cn(
           "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all duration-200 ring-1",
           modeColorClass,
-          isArchitect ? "ring-amber-500/20" : isBuilder ? "ring-violet-500/20" : "ring-sky-500/20",
+          isArchitect
+            ? "ring-amber-500/20"
+            : isBuilder
+              ? "ring-violet-500/20"
+              : "ring-sky-500/20",
         )}
-        title={
-          isBuilder
-            ? t.modes.builderTooltip
-            : t.modes.coderTooltip
-        }
+        title={isBuilder ? t.modes.builderTooltip : t.modes.coderTooltip}
       >
         {detecting ? (
           <LoaderIcon className="size-3 animate-spin" />
@@ -217,7 +235,11 @@ export function ModeSelector({
         ) : (
           <CodeIcon className="size-3" />
         )}
-        {isArchitect ? (t.modes.architect ?? "Architect") : isBuilder ? t.modes.builder : t.modes.coder}
+        {isArchitect
+          ? (t.modes.architect ?? "Architect")
+          : isBuilder
+            ? t.modes.builder
+            : t.modes.coder}
         {detection && (
           <span className="text-[9px] opacity-50">
             {detection.recommended_mode === mode ? "" : "(override)"}
@@ -241,7 +263,9 @@ export function ModeSelector({
               <HammerIcon className="size-4 shrink-0" />
               <div className="text-left">
                 <div className="font-semibold">{t.modes.builder}</div>
-                <div className="text-[10px] opacity-70">{t.modes.builderDesc}</div>
+                <div className="text-[10px] opacity-70">
+                  {t.modes.builderDesc}
+                </div>
               </div>
             </button>
 
@@ -257,7 +281,9 @@ export function ModeSelector({
               <CodeIcon className="size-4 shrink-0" />
               <div className="text-left">
                 <div className="font-semibold">{t.modes.coder}</div>
-                <div className="text-[10px] opacity-70">{t.modes.coderDesc}</div>
+                <div className="text-[10px] opacity-70">
+                  {t.modes.coderDesc}
+                </div>
               </div>
             </button>
 
@@ -272,8 +298,12 @@ export function ModeSelector({
             >
               <BuildingIcon className="size-4 shrink-0" />
               <div className="text-left">
-                <div className="font-semibold">{t.modes.architect ?? "Architect"}</div>
-                <div className="text-[10px] opacity-70">{t.modes.architectDesc ?? "Safe system integration"}</div>
+                <div className="font-semibold">
+                  {t.modes.architect ?? "Architect"}
+                </div>
+                <div className="text-[10px] opacity-70">
+                  {t.modes.architectDesc ?? "Safe system integration"}
+                </div>
               </div>
             </button>
           </div>
@@ -283,12 +313,20 @@ export function ModeSelector({
             <div className="border-b px-3 py-2">
               <div className="flex items-center gap-1.5 text-[10px]">
                 <SparklesIcon className="size-3 text-amber-500" />
-                <span className="font-medium text-muted-foreground">{t.modes.autoDetected}:</span>
-                <span className={cn(
-                  "font-semibold",
-                  detection.recommended_mode === "builder" ? "text-violet-600" : "text-sky-600",
-                )}>
-                  {detection.recommended_mode === "builder" ? t.modes.builder : t.modes.coder}
+                <span className="font-medium text-muted-foreground">
+                  {t.modes.autoDetected}:
+                </span>
+                <span
+                  className={cn(
+                    "font-semibold",
+                    detection.recommended_mode === "builder"
+                      ? "text-violet-600"
+                      : "text-sky-600",
+                  )}
+                >
+                  {detection.recommended_mode === "builder"
+                    ? t.modes.builder
+                    : t.modes.coder}
                 </span>
                 <span className="text-muted-foreground">
                   ({Math.round(detection.confidence * 100)}%)
@@ -304,13 +342,17 @@ export function ModeSelector({
                     {detection.signals.file_count} files
                   </span>
                 )}
-                {detection.signals.git_commits != null && detection.signals.git_commits > 0 && (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                    {detection.signals.git_commits} commits
-                  </span>
-                )}
+                {detection.signals.git_commits != null &&
+                  detection.signals.git_commits > 0 && (
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                      {detection.signals.git_commits} commits
+                    </span>
+                  )}
                 {detection.signals.manifests?.map((m) => (
-                  <span key={m} className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                  <span
+                    key={m}
+                    className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                  >
                     {m}
                   </span>
                 ))}
@@ -352,15 +394,24 @@ export function ModeSelector({
                 {t.modes.projectSignals}
               </div>
               <div className="space-y-0.5 text-[10px] text-muted-foreground">
-                {detection.signals.manifests && detection.signals.manifests.length > 0 && (
-                  <div>Tech stack: {detection.signals.manifests.join(", ")}</div>
-                )}
-                {detection.signals.structure_dirs && detection.signals.structure_dirs.length > 0 && (
-                  <div>Directories: {detection.signals.structure_dirs.join(", ")}</div>
-                )}
-                {detection.signals.lock_files && detection.signals.lock_files.length > 0 && (
-                  <div>Lock files: {detection.signals.lock_files.join(", ")}</div>
-                )}
+                {detection.signals.manifests &&
+                  detection.signals.manifests.length > 0 && (
+                    <div>
+                      Tech stack: {detection.signals.manifests.join(", ")}
+                    </div>
+                  )}
+                {detection.signals.structure_dirs &&
+                  detection.signals.structure_dirs.length > 0 && (
+                    <div>
+                      Directories: {detection.signals.structure_dirs.join(", ")}
+                    </div>
+                  )}
+                {detection.signals.lock_files &&
+                  detection.signals.lock_files.length > 0 && (
+                    <div>
+                      Lock files: {detection.signals.lock_files.join(", ")}
+                    </div>
+                  )}
                 {detection.signals.has_readme && <div>README found</div>}
               </div>
             </div>

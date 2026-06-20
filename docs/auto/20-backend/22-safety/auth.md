@@ -34,6 +34,8 @@
 
 | Module | Summary |
 | --- | --- |
+| `adaptive_immunity.py` | Adaptive immunity — the immunity protocol's behavioural-anomaly tier. |
+| `attack_memory.py` | Antibody memory — the immunity protocol's Memory tier. |
 | `file_safety.py` | — |
 | `identity.py` | — |
 | `path_denylist.py` | User-defined path denylist — Marvis-style "不可读取文件夹". |
@@ -44,7 +46,7 @@
 
 ## Who imports this
 
-**22** file(s) reference this package:
+**24** file(s) reference this package:
 
 - **`runtime/adapters/`** · 2 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -53,13 +55,13 @@
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/execution/`** · 10 file(s)
+- **`runtime/execution/`** · 12 file(s)
   - `runtime/execution/subagents/bridge.py`
   - `runtime/execution/suckers/browser_skills.py`
   - `runtime/execution/suckers/builtins.py`
   - `runtime/execution/suckers/computer_skills.py`
-  - `runtime/execution/suckers/fs_search_skills.py`
-  - _… and 5 more_
+  - `runtime/execution/suckers/crawler_skills.py`
+  - _… and 7 more_
 - **`runtime/platform/`** · 3 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/ui/app.py`

@@ -23,9 +23,12 @@ import { cn } from "@/lib/utils";
  * Pull the best-known fields out of the account service response with
  * sensible fallbacks matching the reference UX (2500 / 4000).
  */
-function extractClaimData(
-  data: MoliliDailyClaimData | null | undefined,
-): { fixed: number; max: number; canClaim: boolean; claimed: boolean } {
+function extractClaimData(data: MoliliDailyClaimData | null | undefined): {
+  fixed: number;
+  max: number;
+  canClaim: boolean;
+  claimed: boolean;
+} {
   const fixed = data?.fixedCredits ?? data?.directCredits ?? 2500;
   const max = data?.maxCredits ?? data?.maxDrawCredits ?? 4000;
   const claimed = Boolean(data?.claimed ?? data?.claimedToday ?? false);
@@ -81,7 +84,9 @@ export function DailyClaimDialog({
       );
       onOpenChange(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t.dailyClaim.claimFailed);
+      toast.error(
+        err instanceof Error ? err.message : t.dailyClaim.claimFailed,
+      );
     } finally {
       setPendingDraw(null);
     }
@@ -147,7 +152,9 @@ export function DailyClaimDialog({
                 "hover:bg-black/90 disabled:opacity-60",
               )}
             >
-              {pendingDraw === true ? t.dailyClaim.drawing : t.dailyClaim.drawButton}
+              {pendingDraw === true
+                ? t.dailyClaim.drawing
+                : t.dailyClaim.drawButton}
             </Button>
           </div>
 

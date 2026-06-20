@@ -1,4 +1,10 @@
-import { Loader2Icon, PlayIcon, XIcon, CheckCircle2Icon, AlertCircleIcon } from "lucide-react";
+import {
+  Loader2Icon,
+  PlayIcon,
+  XIcon,
+  CheckCircle2Icon,
+  AlertCircleIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { swallow } from "@/core/utils/log";
@@ -39,7 +45,9 @@ export function ParallelTasksPanel({
       );
       const data = await res.json();
       setTasks(data.tasks ?? []);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, [workspacePath]);
 
   useEffect(() => {
@@ -63,26 +71,38 @@ export function ParallelTasksPanel({
       setInput("");
       onSubmit?.(input.trim());
       setTimeout(refresh, 500);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, [input, workspacePath, onSubmit, refresh]);
 
-  const cancel = useCallback(async (taskId: string) => {
-    try {
-      await fetch(`${getBackendBaseURL()}/api/tasks/${taskId}/cancel`, {
-        method: "POST",
-        headers: authHeaders(),
-      });
-      setTimeout(refresh, 300);
-    } catch (e) { swallow(e); }
-  }, [refresh]);
+  const cancel = useCallback(
+    async (taskId: string) => {
+      try {
+        await fetch(`${getBackendBaseURL()}/api/tasks/${taskId}/cancel`, {
+          method: "POST",
+          headers: authHeaders(),
+        });
+        setTimeout(refresh, 300);
+      } catch (e) {
+        swallow(e);
+      }
+    },
+    [refresh],
+  );
 
   const statusIcon = (status: ParallelTask["status"]) => {
     switch (status) {
-      case "queued": return <Loader2Icon className="size-3 text-muted-foreground" />;
-      case "running": return <Loader2Icon className="size-3 animate-spin text-primary" />;
-      case "completed": return <CheckCircle2Icon className="size-3 text-green-500" />;
-      case "failed": return <AlertCircleIcon className="size-3 text-red-500" />;
-      case "cancelled": return <XIcon className="size-3 text-muted-foreground" />;
+      case "queued":
+        return <Loader2Icon className="size-3 text-muted-foreground" />;
+      case "running":
+        return <Loader2Icon className="size-3 animate-spin text-primary" />;
+      case "completed":
+        return <CheckCircle2Icon className="size-3 text-green-500" />;
+      case "failed":
+        return <AlertCircleIcon className="size-3 text-red-500" />;
+      case "cancelled":
+        return <XIcon className="size-3 text-muted-foreground" />;
     }
   };
 
@@ -96,24 +116,40 @@ export function ParallelTasksPanel({
           placeholder="New parallel task..."
           className="flex-1 rounded-md border border-border/50 bg-muted/30 px-2 py-1 text-xs outline-none focus:border-primary/50"
         />
-        <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs" onClick={submit}>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1 text-xs"
+          onClick={submit}
+        >
           <PlayIcon className="size-3" />
           Run
         </Button>
       </div>
 
       {tasks.length === 0 ? (
-        <p className="text-muted-foreground text-xs text-center py-4">No parallel tasks yet</p>
+        <p className="text-muted-foreground text-xs text-center py-4">
+          No parallel tasks yet
+        </p>
       ) : (
         <div className="flex flex-col gap-1.5 max-h-[400px] overflow-y-auto">
           {tasks.map((task) => (
-            <div key={task.id} className="flex items-start gap-2 rounded-md border border-border/30 bg-muted/10 p-2">
+            <div
+              key={task.id}
+              className="flex items-start gap-2 rounded-md border border-border/30 bg-muted/10 p-2"
+            >
               {statusIcon(task.status)}
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium truncate">{task.prompt}</p>
-                {task.error && <p className="text-[10px] text-red-500 mt-0.5">{task.error}</p>}
+                {task.error && (
+                  <p className="text-[10px] text-red-500 mt-0.5">
+                    {task.error}
+                  </p>
+                )}
                 {task.result && task.status === "completed" && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{task.result}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+                    {task.result}
+                  </p>
                 )}
               </div>
               {(task.status === "queued" || task.status === "running") && (

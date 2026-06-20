@@ -1,4 +1,3 @@
-
 import {
   AnimatedSpan,
   Terminal,
@@ -123,4 +122,3 @@ export function SandboxSection({ className }: { className?: string }) {
     </Section>
   );
 }
-

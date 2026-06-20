@@ -9,10 +9,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.core.graph_runtime import GraphRuntime
+from runtime.execution.suckers import SkillRegistry
+from runtime.execution.suckers.builtins import register_all
+from runtime.execution.suckers.write_skills import register_exec_skill
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import JSONLJournal
-from runtime.safety.auth import TrustEngine
 from runtime.platform.models import (
     ArmId,
     Budget,
@@ -23,9 +25,7 @@ from runtime.platform.models import (
     TaskNode,
     WorkflowEdge,
 )
-from runtime.execution.suckers import SkillRegistry
-from runtime.execution.suckers.builtins import register_all
-from runtime.execution.suckers.write_skills import register_exec_skill
+from runtime.safety.auth import TrustEngine
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
@@ -173,7 +173,7 @@ def build_bugfix_graph(proj: Path) -> TaskGraph:
 # ═══════════════════════════════════════════════════════════
 
 
-def _print_step(step: Any, c: "_C") -> None:
+def _print_step(step: Any, c: _C) -> None:
     """Implementation note."""
     status = step.result.status
     node = step.node_id

@@ -1,5 +1,9 @@
-
-import { BotIcon, MessageSquareIcon, Trash2Icon, WrenchIcon } from "lucide-react";
+import {
+  BotIcon,
+  MessageSquareIcon,
+  Trash2Icon,
+  WrenchIcon,
+} from "lucide-react";
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -60,7 +64,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
   return (
     <>
       <Card
-        className="group flex cursor-pointer flex-col overflow-hidden rounded-lg border-border/55 bg-background/70 py-0 transition-colors duration-150 hover:border-primary/25 hover:bg-muted/20 hover:shadow-sm"
+        className="group flex cursor-pointer flex-col overflow-hidden rounded-lg border-border/55 bg-card/75 py-0 shadow-sm transition-colors duration-150 hover:border-primary/25 hover:bg-card"
         onClick={() => onSelect?.(agent)}
       >
         <CardHeader className="px-3 py-3">
@@ -113,17 +117,18 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
           )}
         </CardHeader>
 
-        <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-border/50 bg-muted/10 px-3 py-2">
+        <CardFooter className="mt-auto flex items-center justify-between gap-2 border-t border-border/45 bg-muted/10 px-3 py-2">
           <Button
             size="sm"
-            className="h-8 flex-1 rounded-lg shadow-none"
+            variant="secondary"
+            className="h-8 flex-1 rounded-lg border border-border/50 bg-background/80 text-foreground shadow-none hover:border-primary/25 hover:bg-primary/10 hover:text-primary"
             onClick={(event) => {
               event.stopPropagation();
               handleChat();
             }}
           >
             <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
-            {t.agents.chat}
+            开聊
           </Button>
           <div className="flex gap-1">
             <Button
@@ -134,7 +139,8 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
                 event.stopPropagation();
                 onSelect?.(agent);
               }}
-              title={t.agentConfig.title}
+              title="角色档案"
+              aria-label={`${displayName} 角色档案`}
             >
               <WrenchIcon className="h-3.5 w-3.5" />
             </Button>

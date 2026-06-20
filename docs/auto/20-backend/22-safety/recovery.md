@@ -98,7 +98,6 @@
 
 | Module | Summary |
 | --- | --- |
-| `camouflage.py` | — |
 | `evolution_constraints.py` | — |
 | `evolution_dataset.py` | — |
 | `external_importers.py` | — |

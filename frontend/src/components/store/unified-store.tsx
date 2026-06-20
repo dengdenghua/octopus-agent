@@ -1,10 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  Globe2,
-  Package,
-  Puzzle,
-  Wrench,
-} from "lucide-react";
+import { Globe2, Package, Puzzle, Wrench } from "lucide-react";
 
 import { AgentWorldUnified } from "@/components/workspace/agents/agent-world-unified";
 import { Button } from "@/components/ui/button";
@@ -54,7 +49,9 @@ function SkillStorePanel() {
       <div className="flex flex-col gap-3 border-b border-border/60 pb-3 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-2">
           <Puzzle className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">{t.unifiedStore.skills.title}</h3>
+          <h3 className="text-sm font-semibold">
+            {t.unifiedStore.skills.title}
+          </h3>
         </div>
       </div>
       <LocalSkillDirectoryPanel />
@@ -81,7 +78,11 @@ export function UnifiedStore({
         compact ? "h-full" : "size-full",
       )}
     >
-      <Tabs value={tab} onValueChange={(value) => setTab(value as StoreTab)} className="min-h-0 flex-1 gap-0">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value as StoreTab)}
+        className="min-h-0 flex-1 gap-0"
+      >
         <div className="relative shrink-0 border-b border-border/60 bg-background/90 px-3 py-3 backdrop-blur">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
@@ -92,19 +93,29 @@ export function UnifiedStore({
                 选择要装进工作区的能力
               </h1>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Agent 负责角色，插件负责外部连接，技能负责具体做法。先选类型，再用搜索收敛。
+                Agent
+                负责角色，插件负责外部连接，技能负责具体做法。先选类型，再用搜索收敛。
               </p>
             </div>
             <TabsList className="grid h-auto w-full grid-cols-3 rounded-lg border border-border/70 bg-muted/35 p-0.5 sm:w-[24rem]">
-              <TabsTrigger value="agents" className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-[0_0_14px_hsl(var(--primary)/0.12)]">
+              <TabsTrigger
+                value="agents"
+                className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-[0_0_14px_hsl(var(--primary)/0.12)]"
+              >
                 <Globe2 className="size-4" />
                 {t.unifiedStore.tabs.agents}
               </TabsTrigger>
-              <TabsTrigger value="plugins" className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-[0_0_14px_hsl(var(--primary)/0.12)]">
+              <TabsTrigger
+                value="plugins"
+                className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-[0_0_14px_hsl(var(--primary)/0.12)]"
+              >
                 <Package className="size-4" />
                 {t.unifiedStore.tabs.plugins}
               </TabsTrigger>
-              <TabsTrigger value="skills" className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-[0_0_14px_hsl(var(--primary)/0.12)]">
+              <TabsTrigger
+                value="skills"
+                className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-[0_0_14px_hsl(var(--primary)/0.12)]"
+              >
                 <Wrench className="size-4" />
                 {t.unifiedStore.tabs.skills}
               </TabsTrigger>

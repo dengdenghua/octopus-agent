@@ -15,6 +15,7 @@ from runtime.safety.chromatophores import (
     TOPIC_ALERT_BUDGET,
     TOPIC_ARM_BUSY,
     TOPIC_ARM_IDLE,
+    TOPIC_ARM_MAILBOX,
     TOPIC_SUCKER_GRABBED,
     BoidsArbitrator,
     ResourceClaim,
@@ -148,7 +149,8 @@ class TestSignalBus:
         assert TOPIC_ARM_IDLE in STANDARD_TOPICS
         assert TOPIC_SUCKER_GRABBED in STANDARD_TOPICS
         assert TOPIC_ALERT_BUDGET in STANDARD_TOPICS
-        assert len(STANDARD_TOPICS) == 5
+        assert TOPIC_ARM_MAILBOX in STANDARD_TOPICS
+        assert len(STANDARD_TOPICS) == 6
 
     def test_concurrent_publish(self):
         bus = SignalBus()

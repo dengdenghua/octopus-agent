@@ -4,7 +4,7 @@
 // (the `desktop_operator` arm, now folded into Octopus/general). This
 // folder exists for backward compatibility with tests + tooling that
 // still construct the old standalone agent. `make_all_agent_presets`
-// does NOT auto-register this agent; callers who want it must call
+// skips this agent through loader policy; callers who want it must call
 // `make_desktop_operator_agent(runtime)` explicitly.
 
 {

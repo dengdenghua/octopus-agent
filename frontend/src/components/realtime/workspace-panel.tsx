@@ -19,7 +19,10 @@ interface WorkspacePanelProps {
 // Try the native folder picker first (Electron) and fall back to a
 // browser `prompt` so the CTA still works in pure web mode. Kept local to
 // this file to avoid modifying the shared `WorkDirSelector`.
-async function pickWorkDir(currentDir: string, promptLabel: string): Promise<string | null> {
+async function pickWorkDir(
+  currentDir: string,
+  promptLabel: string,
+): Promise<string | null> {
   const api = typeof window !== "undefined" ? window.octopus : undefined;
   if (api?.isElectron) {
     try {
@@ -69,7 +72,9 @@ export function WorkspacePanel({
         window.localStorage.setItem(`realtime:workdir:${threadId}`, workDir);
       }
       window.localStorage.setItem("realtime:workdir:lastUsed", workDir);
-    } catch (e) { swallow(e, "storage"); }
+    } catch (e) {
+      swallow(e, "storage");
+    }
   }, [workDir, threadId]);
 
   const handlePick = useCallback(async () => {
@@ -118,4 +123,3 @@ export function WorkspacePanel({
     </div>
   );
 }
-

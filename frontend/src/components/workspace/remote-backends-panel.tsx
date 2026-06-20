@@ -67,7 +67,10 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
           {t.remoteBackendsPanel.title}
         </CardTitle>
         {!enabled && (
-          <Badge variant="outline" aria-label={t.remoteBackendsPanel.disabledAria}>
+          <Badge
+            variant="outline"
+            aria-label={t.remoteBackendsPanel.disabledAria}
+          >
             {t.remoteBackendsPanel.disabled}
           </Badge>
         )}
@@ -109,7 +112,9 @@ export function RemoteBackendsPanel({ baseUrl }: RemoteBackendsPanelProps) {
                 size="sm"
                 disabled={adding || !name.trim() || !url.trim()}
               >
-                {adding ? t.remoteBackendsPanel.adding : t.remoteBackendsPanel.add}
+                {adding
+                  ? t.remoteBackendsPanel.adding
+                  : t.remoteBackendsPanel.add}
               </Button>
             </div>
             {addError && (
@@ -193,9 +198,7 @@ function BackendRow({ backend, disabled, onPing, onRemove }: BackendRowProps) {
                 : backend.health_detail || t.remoteBackendsPanel.error}
           </Badge>
           {backend.ssh && (
-            <Badge variant="outline">
-              ssh {backend.ssh.host}
-            </Badge>
+            <Badge variant="outline">ssh {backend.ssh.host}</Badge>
           )}
         </div>
         <code className="text-muted-foreground text-xs">{backend.url}</code>

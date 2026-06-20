@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -260,4 +259,3 @@ export const WebPreviewConsole = ({
     </Collapsible>
   );
 };
-

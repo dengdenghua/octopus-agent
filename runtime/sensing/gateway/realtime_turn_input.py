@@ -20,10 +20,6 @@ from runtime.protocol import TurnParams
 
 _logger = logging.getLogger(__name__)
 
-_RESUME_PROPOSAL_BLOCK_RE = re.compile(
-    r"<octopus_resume_proposal>\s*(\{.*?\})\s*</octopus_resume_proposal>",
-    re.DOTALL,
-)
 _RESUME_CONFIRM_RE = re.compile(
     r"(?:确认|同意|开始|继续)\s*恢复\s*checkpoint\s*#?\s*(\d+)",
     re.IGNORECASE,
@@ -274,11 +270,11 @@ def _reflex_response_to_text(response: Any) -> str | None:
 
 
 def _parse_resume_intent(text: str) -> dict[str, Any] | None:
-    match = _RESUME_PROPOSAL_BLOCK_RE.search(text or "")
-    if match is None:
+    raw_json = _extract_resume_proposal_json(text)
+    if raw_json is None:
         return None
     try:
-        raw = json.loads(match.group(1))
+        raw = json.loads(raw_json)
     except (json.JSONDecodeError, TypeError, ValueError):
         return None
     if not isinstance(raw, dict):
@@ -299,8 +295,9 @@ def _parse_resume_intent(text: str) -> dict[str, Any] | None:
         for path in raw.get("working_set", [])
         if isinstance(path, str) and path.strip()
     ][:32]
+    recent_tool_calls = _sanitize_recent_tool_calls(raw.get("recent_tool_calls"))
 
-    return {
+    intent = {
         "schema": "octopus.resume_intent.v1",
         "requires_confirmation": True,
         "source": "resume_proposal_block",
@@ -320,6 +317,48 @@ def _parse_resume_intent(text: str) -> dict[str, Any] | None:
             ),
         },
     }
+    if recent_tool_calls:
+        intent["recent_tool_calls"] = recent_tool_calls
+    return intent
+
+
+def _extract_resume_proposal_json(text: str) -> str | None:
+    marker = "<octopus_resume_proposal>"
+    end_marker = "</octopus_resume_proposal>"
+    source = text or ""
+    start = source.find(marker)
+    if start < 0:
+        return None
+    start += len(marker)
+    end = source.find(end_marker, start)
+    if end < 0:
+        return None
+    body = source[start:end].strip()
+    open_at = body.find("{")
+    if open_at < 0:
+        return None
+
+    depth = 0
+    in_string = False
+    escaped = False
+    for idx, char in enumerate(body[open_at:], start=open_at):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return body[open_at : idx + 1]
+    return None
 
 
 def _parse_resume_confirmation(text: str) -> int | None:
@@ -333,7 +372,7 @@ def _execution_resume_intent(
     pending: dict[str, Any],
     checkpoint_id: int,
 ) -> dict[str, Any]:
-    return {
+    intent = {
         "schema": "octopus.resume_intent.v1",
         "requires_confirmation": False,
         "confirmed": True,
@@ -351,6 +390,12 @@ def _execution_resume_intent(
             for path in pending.get("working_set", [])
             if isinstance(path, str) and path.strip()
         ][:32],
+        "resume_plan": [
+            step
+            for step in pending.get("resume_plan", [])
+            if isinstance(step, str) and step.strip()
+        ][:12],
+        "recent_tool_calls": _sanitize_recent_tool_calls(pending.get("recent_tool_calls")),
         "safety": {
             "raw_state_included": bool(
                 (pending.get("safety") or {}).get("raw_state_included") is True,
@@ -365,6 +410,9 @@ def _execution_resume_intent(
         },
         "confirmation_text": f"确认恢复 checkpoint #{checkpoint_id}",
     }
+    if not intent["recent_tool_calls"]:
+        intent.pop("recent_tool_calls")
+    return intent
 
 
 def _resume_confirmation_text(resume_intent: dict[str, Any]) -> str:
@@ -399,9 +447,40 @@ def _resume_confirmation_text(resume_intent: dict[str, Any]) -> str:
     if resume_plan:
         lines.append("")
         lines.append(f"建议恢复计划：{len(resume_plan)} 步")
+    recent_tool_calls = _sanitize_recent_tool_calls(resume_intent.get("recent_tool_calls"))
+    if recent_tool_calls:
+        tools = ", ".join(call["tool"] for call in recent_tool_calls[:4])
+        lines.append(f"- 最近工具：{tools}")
     lines.append("")
     lines.append(f"如需继续，请回复：确认恢复 checkpoint #{checkpoint_id}")
     return "\n".join(lines)
+
+
+def _sanitize_recent_tool_calls(value: Any) -> list[dict[str, Any]]:
+    items = value if isinstance(value, list) else []
+    out: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        tool = _safe_str(item.get("tool"))
+        if not tool:
+            continue
+        out.append({
+            "iteration": _safe_int(item.get("iteration")) or 0,
+            "tool": tool,
+            "input_preview": _truncate_text(item.get("input_preview"), 240),
+            "observation_preview": _truncate_text(item.get("observation_preview"), 280),
+        })
+        if len(out) >= 8:
+            break
+    return out
+
+
+def _truncate_text(value: Any, limit: int) -> str:
+    text = str(value or "")
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)] + "..."
 
 
 def _safe_int(value: Any) -> int | None:

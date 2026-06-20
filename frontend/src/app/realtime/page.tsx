@@ -31,9 +31,10 @@ function randomThreadId(): string {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
     crypto.getRandomValues(bytes);
   } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    for (let i = 0; i < bytes.length; i++)
+      bytes[i] = Math.floor(Math.random() * 256);
   }
-  return `thr_${Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("")}`;
+  return `thr_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
 export default function RealtimeIndex() {
@@ -110,10 +111,14 @@ export default function RealtimeIndex() {
           <Input
             placeholder="thread id"
             value={joinId}
-            onChange={e => setJoinId(e.target.value)}
+            onChange={(e) => setJoinId(e.target.value)}
             className="w-60"
           />
-          <Button variant="secondary" onClick={onJoin} disabled={!joinId.trim()}>
+          <Button
+            variant="secondary"
+            onClick={onJoin}
+            disabled={!joinId.trim()}
+          >
             Open
           </Button>
         </div>
@@ -121,7 +126,11 @@ export default function RealtimeIndex() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium text-muted-foreground">Recent</h2>
-        <ThreadGrid threads={threads} loadError={loadError} onSelect={navigate} />
+        <ThreadGrid
+          threads={threads}
+          loadError={loadError}
+          onSelect={navigate}
+        />
       </section>
     </div>
   );
@@ -136,8 +145,8 @@ function ThreadGrid(props: {
   if (loadError) {
     return (
       <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-        Could not load thread list: <code>{loadError}</code>. Start a new
-        thread above to begin.
+        Could not load thread list: <code>{loadError}</code>. Start a new thread
+        above to begin.
       </div>
     );
   }
@@ -153,7 +162,7 @@ function ThreadGrid(props: {
   }
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {threads.map(t => (
+      {threads.map((t) => (
         <ThreadCard key={t.threadId} thread={t} onSelect={onSelect} />
       ))}
     </div>
@@ -172,7 +181,9 @@ function ThreadCard(props: {
   return (
     <button
       type="button"
-      onClick={() => onSelect(`/realtime/${encodeURIComponent(thread.threadId)}`)}
+      onClick={() =>
+        onSelect(`/realtime/${encodeURIComponent(thread.threadId)}`)
+      }
       className="text-left"
     >
       <Card className="transition hover:border-primary/40 hover:bg-muted/40">

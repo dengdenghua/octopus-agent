@@ -32,30 +32,35 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 # v1 building blocks · reused verbatim
 from demos.bugfix_demo import (
+    _C,
+    _count_commits,
+    _print_step,
     build_bugfix_graph,
     setup_buggy_project,
-    _count_commits,
-    _C,
-    _print_step,
 )
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.core.graph_runtime import GraphRuntime
-from runtime.memory.journal import JSONLJournal
-from runtime.safety.auth import TrustEngine
-from runtime.platform.models import (
-    ArmId, Budget, BudgetLimits, BudgetSpec,
-    SkillId, TaskGraph, TaskNode, WorkflowEdge,
-)
 from runtime.execution.suckers import SkillRegistry
 from runtime.execution.suckers.builtins import register_all
-from runtime.execution.suckers.write_skills import register_exec_skill
 from runtime.execution.suckers.memory_skills import _update_soul
+from runtime.execution.suckers.write_skills import register_exec_skill
+from runtime.execution.tool_engine import ToolExecutor
+from runtime.memory.journal import JSONLJournal
+from runtime.platform.models import (
+    ArmId,
+    Budget,
+    BudgetLimits,
+    BudgetSpec,
+    SkillId,
+    TaskGraph,
+    TaskNode,
+    WorkflowEdge,
+)
+from runtime.safety.auth import TrustEngine
 
 # ── second-round buggy project ───────────────────────────────
 
@@ -201,7 +206,8 @@ def run_demo_v2(*, workdir: Path | None = None, color: bool = True) -> dict[str,
         tmp_ctx = tempfile.TemporaryDirectory(prefix="octopus-bugfix-v2-")
         root = Path(tmp_ctx.name)
     else:
-        root = Path(workdir); root.mkdir(parents=True, exist_ok=True)
+        root = Path(workdir)
+        root.mkdir(parents=True, exist_ok=True)
 
     soul_backup: str | None = None
     try:
@@ -283,10 +289,10 @@ def run_demo_v2(*, workdir: Path | None = None, color: bool = True) -> dict[str,
 
         # ── success summary ──
         print(c.bold("═══ evolution loop · summary ═══"))
-        print(c.dim(f"  Round 1 · fixed operator typo in add.py"))
-        print(c.dim(f"  update_soul recorded the pattern as a persisted lesson"))
-        print(c.dim(f"  Round 2 · DIFFERENT project + operator typo → same shape fix"))
-        print(c.dim(f"  next boot · lesson auto-loaded into system prompt via SOUL.md"))
+        print(c.dim("  Round 1 · fixed operator typo in add.py"))
+        print(c.dim("  update_soul recorded the pattern as a persisted lesson"))
+        print(c.dim("  Round 2 · DIFFERENT project + operator typo → same shape fix"))
+        print(c.dim("  next boot · lesson auto-loaded into system prompt via SOUL.md"))
         print()
         print(c.bold("  ✓ MiniMax-style self-evolution closed"))
         print(c.dim("     (the agent won't forget this pattern unless update_soul again OR revert_soul)"))

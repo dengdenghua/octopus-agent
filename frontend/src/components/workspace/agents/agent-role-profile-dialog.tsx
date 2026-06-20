@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   ChevronRight,
   CircuitBoard,
   ImagePlus,
+  Link,
   Loader2,
+  Plus,
   Save,
   Shield,
   Sparkles,
+  Upload,
   Wrench,
   X,
 } from "lucide-react";
@@ -24,8 +27,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useAgent, useGenerateAgentVisuals, useUpdateAgent } from "@/core/agents/hooks";
+import {
+  useAgent,
+  useGenerateAgentVisuals,
+  useUpdateAgent,
+} from "@/core/agents/hooks";
 import { installAgent } from "@/core/agents/agent-world-api";
 import {
   useAgentToolRegistry,
@@ -42,9 +50,12 @@ import { AgentArmsDialog } from "./agent-arms-dialog";
 
 interface AgentRoleProfileDialogProps {
   agent: AgentWorldAgent | null;
+  agents?: AgentWorldAgent[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onInstallChange?: () => void;
+  onSelectAgent?: (agent: AgentWorldAgent) => void;
+  onCreateAgent?: () => void;
 }
 
 type EditableAgentConfig = {
@@ -54,6 +65,7 @@ type EditableAgentConfig = {
   arms: string[];
   extraAffinity: string;
   privateSkills: string;
+  codeModeUnlock: boolean;
 };
 
 function makeCodeName(agent: AgentWorldAgent): string {
@@ -88,6 +100,10 @@ function sameList(left: string[], right: string[]): boolean {
   return left.every((item, index) => item === right[index]);
 }
 
+function uniqueList(items: string[]): string[] {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+}
+
 type AgentCharacterProfile = {
   epithet: string;
   quote: string;
@@ -96,9 +112,221 @@ type AgentCharacterProfile = {
   age: string;
   personality: string;
   temperament: string;
+  currentState: string;
   visualKeywords: string[];
   prompt: string;
 };
+
+type VisualPromptOption = {
+  id: string;
+  label: string;
+  prompt: string;
+};
+
+type VisualPromptGroup = {
+  id: string;
+  label: string;
+  options: VisualPromptOption[];
+};
+
+type RoleProfileNotes = {
+  bestFor: string[];
+  boundaries: string[];
+};
+
+const MAX_VISUAL_REFERENCE_IMAGES = 3;
+
+const VISUAL_PROMPT_GROUPS: VisualPromptGroup[] = [
+  {
+    id: "style",
+    label: "风格",
+    options: [
+      {
+        id: "game-character",
+        label: "游戏角色立绘",
+        prompt:
+          "premium game character illustration, polished character card art, readable silhouette",
+      },
+      {
+        id: "clean-anime",
+        label: "精致二次元",
+        prompt:
+          "clean anime-inspired linework, delicate rendering, expressive face, refined costume details",
+      },
+      {
+        id: "semi-real",
+        label: "半写实",
+        prompt:
+          "semi-realistic character concept art, natural proportions, cinematic but not photorealistic",
+      },
+    ],
+  },
+  {
+    id: "composition",
+    label: "构图",
+    options: [
+      {
+        id: "full-body",
+        label: "完整全身",
+        prompt:
+          "full body visible, standing pose, entire character contained inside canvas",
+      },
+      {
+        id: "safe-headroom",
+        label: "头顶留白",
+        prompt:
+          "full head visible with extra top margin, do not crop hair or head",
+      },
+      {
+        id: "avatar-ready",
+        label: "头像友好",
+        prompt:
+          "face clear and centered enough for a high quality avatar crop from the front view",
+      },
+      {
+        id: "three-view-consistency",
+        label: "三视图一致",
+        prompt:
+          "front side and back views must keep the same face, hairstyle, outfit, colors, and proportions",
+      },
+    ],
+  },
+  {
+    id: "background",
+    label: "背景",
+    options: [
+      {
+        id: "transparent",
+        label: "透明背景",
+        prompt:
+          "transparent background, isolated character, no scenery, no colored backdrop",
+      },
+      {
+        id: "soft-shadow",
+        label: "轻阴影",
+        prompt:
+          "subtle grounding shadow only, no environment, suitable for UI overlay",
+      },
+    ],
+  },
+  {
+    id: "quality",
+    label: "质量",
+    options: [
+      {
+        id: "high-resolution",
+        label: "高清细节",
+        prompt:
+          "high resolution, crisp edges, detailed outfit materials, sharp eyes, no blur",
+      },
+      {
+        id: "no-artifacts",
+        label: "减少瑕疵",
+        prompt:
+          "avoid extra fingers, distorted hands, asymmetrical eyes, duplicate limbs, messy text, watermark",
+      },
+    ],
+  },
+];
+
+const DEFAULT_VISUAL_PROMPT_OPTION_IDS = [
+  "game-character",
+  "full-body",
+  "safe-headroom",
+  "avatar-ready",
+  "three-view-consistency",
+  "transparent",
+  "high-resolution",
+  "no-artifacts",
+];
+
+function selectedVisualPromptOptions(
+  selectedIds: string[],
+): VisualPromptOption[] {
+  const selected = new Set(selectedIds);
+  return VISUAL_PROMPT_GROUPS.flatMap((group) =>
+    group.options.filter((option) => selected.has(option.id)),
+  );
+}
+
+function buildVisualPrompt(
+  basePrompt: string,
+  selectedIds: string[],
+  customPrompt: string,
+): string {
+  const optionPrompts = selectedVisualPromptOptions(selectedIds).map(
+    (option) => option.prompt,
+  );
+  return [
+    basePrompt,
+    "Use agent-visual-kit metaskill workflow.",
+    "Generate three high-definition character reference views for this Agent.",
+    ...optionPrompts,
+    customPrompt.trim() ? `user additions: ${customPrompt.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join("; ");
+}
+
+function parseReferenceImageInput(value: string): string[] {
+  return value
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function readImageFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("图片读取失败"));
+      }
+    });
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildRoleProfileNotes(agent: AgentWorldAgent): RoleProfileNotes {
+  const key = `${agent.name} ${agent.display_name}`.toLowerCase();
+  if (key.includes("coder")) {
+    return {
+      bestFor: ["代码审查与修复", "重构方案", "测试与边界情况"],
+      boundaries: ["改动前先定位复现路径", "高风险批量修改需要确认"],
+    };
+  }
+  if (key.includes("market_researcher") || key.includes("research")) {
+    return {
+      bestFor: ["赛道调研", "竞品格局", "机会点与风险判断"],
+      boundaries: ["结论必须带来源", "不把猜测包装成确定事实"],
+    };
+  }
+  if (key.includes("vibe") || key.includes("growth")) {
+    return {
+      bestFor: ["活动文案", "增长实验", "产品卖点提炼"],
+      boundaries: ["创意要能落到转化动作", "不替代法务或合规承诺"],
+    };
+  }
+  if (key.includes("ecommerce") || key.includes("commerce")) {
+    return {
+      bestFor: ["品类策略", "货盘与供应链分析", "转化链路优化"],
+      boundaries: ["策略要能对应履约能力", "价格和合同事项需复核"],
+    };
+  }
+  if (key.includes("aoi")) {
+    return {
+      bestFor: ["角色互动", "世界观补完", "创意叙事与氛围设定"],
+      boundaries: ["危险委托先确认", "保持角色口吻但不越过用户意图"],
+    };
+  }
+  return {
+    bestFor: ["写作与总结", "计划拆解", "信息整理与问答"],
+    boundaries: ["涉及外部操作会先确认", "不确定内容会说明缺口"],
+  };
+}
 
 function pickCategoryValue<T>(
   values: Record<string, T>,
@@ -112,14 +340,95 @@ function buildCharacterProfile(
   agent: AgentWorldAgent,
   t: Translations,
 ): AgentCharacterProfile {
+  const custom = agent.character_profile;
+  if (custom) {
+    const visualKeywords =
+      custom.visual_keywords && custom.visual_keywords.length > 0
+        ? custom.visual_keywords
+        : (t.agentConfig.characterVisualKeywords.assistant ?? []);
+    const detailLines = [
+      custom.background ? `background: ${custom.background}` : "",
+      custom.personality ? `personality: ${custom.personality}` : "",
+      custom.temperament ? `temperament: ${custom.temperament}` : "",
+      custom.likes?.length ? `likes: ${custom.likes.join("; ")}` : "",
+      custom.dislikes?.length ? `dislikes: ${custom.dislikes.join("; ")}` : "",
+      custom.quirks?.length ? `quirks: ${custom.quirks.join("; ")}` : "",
+      custom.tone?.length ? `tone: ${custom.tone.join("; ")}` : "",
+      custom.appearance?.length
+        ? `appearance: ${custom.appearance.join("; ")}`
+        : "",
+      custom.interaction?.length
+        ? `interaction: ${custom.interaction.join("; ")}`
+        : "",
+      custom.current_state?.length
+        ? `current state: ${custom.current_state.join("; ")}`
+        : "",
+      custom.emotion_list?.length
+        ? `available emotions: ${custom.emotion_list.join(", ")}`
+        : "",
+    ].filter(Boolean);
+
+    return {
+      epithet:
+        custom.epithet ??
+        t.agentConfig.characterEpithets[agent.category] ??
+        agent.display_name,
+      quote:
+        custom.quote ?? t.agentConfig.characterQuotes[agent.category] ?? "",
+      intro:
+        custom.intro ??
+        custom.background ??
+        descriptionOrFallback(
+          agent.description,
+          t.agentConfig.characterDefaultOrigin,
+        ),
+      background:
+        custom.background ??
+        descriptionOrFallback(
+          agent.description,
+          t.agentConfig.characterDefaultOrigin,
+        ),
+      age:
+        custom.apparent_age ??
+        t.agentConfig.characterAgeArchetypes[agent.category] ??
+        t.agentConfig.characterAgeArchetypes.assistant ??
+        "",
+      personality:
+        custom.personality ??
+        t.agentConfig.characterPersonalities[agent.category] ??
+        t.agentConfig.characterPersonalities.assistant ??
+        "",
+      temperament:
+        custom.temperament ??
+        t.agentConfig.characterTemperaments[agent.category] ??
+        t.agentConfig.characterTemperaments.assistant ??
+        "",
+      currentState: custom.current_state?.[0] ?? "",
+      visualKeywords,
+      prompt: [
+        `character name: ${agent.display_name}`,
+        custom.gender ? `gender: ${custom.gender}` : "",
+        `character epithet: ${custom.epithet ?? agent.display_name}`,
+        custom.quote ? `signature line: ${custom.quote}` : "",
+        custom.intro ? `readable character intro: ${custom.intro}` : "",
+        ...detailLines,
+        `visual keywords: ${visualKeywords.join(", ")}`,
+      ]
+        .filter(Boolean)
+        .join("; "),
+    };
+  }
+
   const role = t.agentConfig.categoryRoles[agent.category] ?? agent.category;
   const type = t.agentConfig.categoryTypes[agent.category] ?? agent.category;
   const faction = agent.is_official
     ? t.agentConfig.officialFaction
     : t.agentConfig.authorFaction(agent.author);
   const fallbackAge = t.agentConfig.characterAgeArchetypes.assistant ?? "";
-  const fallbackPersonality = t.agentConfig.characterPersonalities.assistant ?? "";
-  const fallbackTemperament = t.agentConfig.characterTemperaments.assistant ?? "";
+  const fallbackPersonality =
+    t.agentConfig.characterPersonalities.assistant ?? "";
+  const fallbackTemperament =
+    t.agentConfig.characterTemperaments.assistant ?? "";
   const fallbackVisualKeywords =
     t.agentConfig.characterVisualKeywords.assistant ?? [];
   const fallbackEpithet = t.agentConfig.characterEpithets.assistant ?? role;
@@ -166,7 +475,10 @@ function buildCharacterProfile(
     role,
     type,
     faction,
-    descriptionOrFallback(agent.description, t.agentConfig.characterDefaultOrigin),
+    descriptionOrFallback(
+      agent.description,
+      t.agentConfig.characterDefaultOrigin,
+    ),
     personality,
     temperament,
   );
@@ -189,6 +501,7 @@ function buildCharacterProfile(
     age,
     personality,
     temperament,
+    currentState: "",
     visualKeywords,
     prompt,
   };
@@ -197,7 +510,9 @@ function buildCharacterProfile(
 function descriptionOrFallback(description: string, fallback: string): string {
   const trimmed = description.trim();
   if (!trimmed) return fallback;
-  const fallbackUsesCjk = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(fallback);
+  const fallbackUsesCjk = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(
+    fallback,
+  );
   const descriptionCjkCount = (
     trimmed.match(/[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/g) ?? []
   ).length;
@@ -208,13 +523,7 @@ function descriptionOrFallback(description: string, fallback: string): string {
   return trimmed;
 }
 
-function FieldLabel({
-  label,
-  hint,
-}: {
-  label: string;
-  hint?: string;
-}) {
+function FieldLabel({ label, hint }: { label: string; hint?: string }) {
   return (
     <label className="block text-xs font-medium text-white">
       {label}
@@ -227,19 +536,51 @@ function FieldLabel({
 
 function AgentCoreVisual({
   agent,
-  codeName,
-  uid,
+  agents = [],
+  codeName: _codeName,
+  uid: _uid,
+  onSelectAgent,
+  onCreateAgent,
 }: {
   agent: AgentWorldAgent;
+  agents?: AgentWorldAgent[];
   codeName: string;
   uid: string;
+  onSelectAgent?: (agent: AgentWorldAgent) => void;
+  onCreateAgent?: () => void;
 }) {
   const { t } = useI18n();
   const [view, setView] = useState<"front" | "side" | "back">("front");
+  const [visualPromptOpen, setVisualPromptOpen] = useState(false);
+  const [selectedVisualPromptIds, setSelectedVisualPromptIds] = useState<
+    string[]
+  >(DEFAULT_VISUAL_PROMPT_OPTION_IDS);
+  const [customVisualPrompt, setCustomVisualPrompt] = useState("");
+  const [referenceImageInput, setReferenceImageInput] = useState("");
+  const [uploadedReferenceImages, setUploadedReferenceImages] = useState<
+    string[]
+  >([]);
   const generateVisuals = useGenerateAgentVisuals();
   const characterProfile = useMemo(
     () => buildCharacterProfile(agent, t),
     [agent, t],
+  );
+  const finalVisualPrompt = useMemo(
+    () =>
+      buildVisualPrompt(
+        characterProfile.prompt,
+        selectedVisualPromptIds,
+        customVisualPrompt,
+      ),
+    [characterProfile.prompt, customVisualPrompt, selectedVisualPromptIds],
+  );
+  const referenceImages = useMemo(
+    () =>
+      uniqueList([
+        ...parseReferenceImageInput(referenceImageInput),
+        ...uploadedReferenceImages,
+      ]).slice(0, MAX_VISUAL_REFERENCE_IMAGES),
+    [referenceImageInput, uploadedReferenceImages],
   );
   const viewOptions = [
     ["front", t.agentConfig.viewFront],
@@ -248,17 +589,63 @@ function AgentCoreVisual({
   ] as const;
   const visualUrls = agent.visual_urls ?? {};
   const activeGeneratedVisual = visualUrls[view] ?? null;
-  const activeAvatar = agent.avatar_url ? withAgentAvatarVersion(agent.avatar_url) : null;
+  const activeAvatar = agent.avatar_url
+    ? withAgentAvatarVersion(agent.avatar_url)
+    : null;
   const activeVisual = activeGeneratedVisual ?? activeAvatar;
   const isAvatarOnly = Boolean(activeVisual && !activeGeneratedVisual);
+  const switchAgents = agents.length > 0 ? agents : [agent];
+
+  function toggleVisualPromptOption(id: string) {
+    setSelectedVisualPromptIds((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+  }
+
+  async function handleReferenceImageUpload(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const files = Array.from(event.currentTarget.files ?? [])
+      .filter((file) => file.type.startsWith("image/"))
+      .slice(0, MAX_VISUAL_REFERENCE_IMAGES);
+    event.currentTarget.value = "";
+    if (files.length === 0) return;
+    try {
+      const dataUrls = await Promise.all(files.map(readImageFileAsDataUrl));
+      setUploadedReferenceImages((current) =>
+        uniqueList([...current, ...dataUrls]).slice(
+          0,
+          MAX_VISUAL_REFERENCE_IMAGES,
+        ),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      toast.error(message);
+    }
+  }
+
+  function removeReferenceImage(image: string) {
+    setUploadedReferenceImages((current) =>
+      current.filter((item) => item !== image),
+    );
+    setReferenceImageInput((current) =>
+      parseReferenceImageInput(current)
+        .filter((item) => item !== image)
+        .join("\n"),
+    );
+  }
 
   async function handleGenerateVisuals() {
     try {
       await generateVisuals.mutateAsync({
         name: agent.name,
         provider: "agnes",
-        stylePrompt: characterProfile.prompt,
+        stylePrompt: finalVisualPrompt,
+        referenceImages,
       });
+      setVisualPromptOpen(false);
       toast.success(t.agentConfig.visualGenerateSuccess);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -275,7 +662,7 @@ function AgentCoreVisual({
       <div className="pointer-events-none absolute bottom-[44%] left-[15%] text-sm font-mono uppercase tracking-[0.55em] text-white/[0.045]">
         {t.agentConfig.visualLoadoutLabel}
       </div>
-      <div className="absolute right-8 top-8 z-20 rounded-sm border border-white/10 bg-black/10 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.32em] text-muted-foreground">
+      <div className="absolute right-8 top-8 z-20 rounded-sm border border-primary/20 bg-black/18 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.32em] text-primary/80">
         REC
       </div>
       <div className="absolute right-5 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-3">
@@ -283,7 +670,7 @@ function AgentCoreVisual({
           <button
             key={key}
             className={cn(
-              "group relative h-[74px] w-[62px] rounded-sm border bg-black/10 p-1 text-left transition xl:h-[92px] xl:w-[78px]",
+              "group relative h-[74px] w-[62px] rounded-sm border bg-black/18 p-1 text-left transition xl:h-[92px] xl:w-[78px]",
               view === key
                 ? "border-[#f4e86f] shadow-[0_0_18px_rgba(244,232,111,0.16)]"
                 : "border-white/10 opacity-45 hover:opacity-85",
@@ -294,7 +681,7 @@ function AgentCoreVisual({
             <span className="absolute left-2 top-2 z-10 font-mono text-[9px] uppercase tracking-[0.25em] text-muted-foreground">
               {key}
             </span>
-            <span className="flex h-full items-end justify-center overflow-hidden rounded-sm bg-black/20 pb-1">
+            <span className="flex h-full items-end justify-center overflow-hidden rounded-sm bg-white/[0.035] pb-1">
               {visualUrls[key] ? (
                 <AuthenticatedImage
                   alt={`${agent.display_name} ${key}`}
@@ -316,7 +703,7 @@ function AgentCoreVisual({
           disabled={generateVisuals.isPending}
           title={t.agentConfig.visualGenerateAction}
           variant="outline"
-          onClick={() => void handleGenerateVisuals()}
+          onClick={() => setVisualPromptOpen(true)}
         >
           {generateVisuals.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -333,8 +720,8 @@ function AgentCoreVisual({
       </div>
       <div className="relative z-10 h-full min-h-[520px] px-4 pb-8 pt-8 xl:min-h-[620px] xl:px-6 xl:pb-10 xl:pt-10">
         <div className="relative flex h-full min-h-0 items-end justify-center overflow-hidden pr-20 xl:pr-24">
-          <div className="absolute bottom-[78px] h-16 w-[62%] rounded-[50%] border border-[#f4e86f]/25 bg-[#f4e86f]/10 shadow-[0_0_34px_rgba(244,232,111,0.12)]" />
-          <div className="absolute bottom-[118px] left-[10%] right-[18%] h-px bg-white/10" />
+          <div className="absolute bottom-[60px] h-16 w-[62%] rounded-[50%] border border-[#f4e86f]/25 bg-[#f4e86f]/10 shadow-[0_0_34px_rgba(244,232,111,0.12)]" />
+          <div className="absolute bottom-[100px] left-[10%] right-[18%] h-px bg-white/10" />
           <div className="relative z-10 flex h-[500px] w-full max-w-[460px] items-end justify-center xl:h-[640px] xl:max-w-[580px]">
             {activeVisual ? (
               <div
@@ -349,11 +736,13 @@ function AgentCoreVisual({
                     "object-contain drop-shadow-2xl",
                     isAvatarOnly
                       ? "h-[300px] w-[300px] rounded-[32px] border border-white/10 bg-white/95 object-center p-0 mix-blend-normal xl:h-[360px] xl:w-[360px]"
-                      : "max-h-full w-full object-bottom mix-blend-screen",
+                      : "max-h-full w-full object-center",
                   )}
                   fallback={
                     <div className="mb-24 flex size-32 items-center justify-center rounded-sm border border-primary/35 bg-background text-6xl shadow-lg">
-                      {agent.icon || <Bot className="size-16 text-muted-foreground" />}
+                      {agent.icon || (
+                        <Bot className="size-16 text-muted-foreground" />
+                      )}
                     </div>
                   }
                   src={activeVisual}
@@ -369,30 +758,273 @@ function AgentCoreVisual({
                 </span>
               </div>
             )}
-            <div className="absolute bottom-0 left-[6%] right-[6%] h-9 border-y border-[#111]/30 bg-[#f4e86f] text-center font-mono text-[10px] font-semibold uppercase tracking-[0.55em] text-[#232323] shadow-[0_0_24px_rgba(244,232,111,0.18)]">
+            <div className="absolute bottom-[52px] left-[6%] right-[6%] h-9 border-y border-[#111]/30 bg-[#f4e86f] text-center font-mono text-[10px] font-semibold uppercase tracking-[0.55em] text-[#232323] shadow-[0_0_24px_rgba(244,232,111,0.18)]">
               <div className="flex h-full items-center justify-center gap-4">
                 <span className="h-px w-10 bg-[#232323]/50" />
                 {t.agentConfig.visualSystemOnline}
                 <span className="h-px w-10 bg-[#232323]/50" />
               </div>
             </div>
+            <div className="absolute -bottom-2 left-1/2 z-30 flex max-w-[92%] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-sm border border-white/10 bg-black/35 px-2 py-2 shadow-[0_12px_34px_rgba(0,0,0,0.28)] backdrop-blur [scrollbar-width:none]">
+              {switchAgents.map((candidate) => {
+                const active = candidate.id === agent.id;
+                const avatar = candidate.avatar_url
+                  ? withAgentAvatarVersion(candidate.avatar_url)
+                  : null;
+                return (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    aria-label={`切换到 ${candidate.display_name}`}
+                    title={candidate.display_name}
+                    className={cn(
+                      "relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-sm border bg-white/[0.04] text-sm transition",
+                      active
+                        ? "border-[#f4e86f] shadow-[0_0_18px_rgba(244,232,111,0.22)]"
+                        : "border-white/12 opacity-68 hover:border-white/28 hover:opacity-100",
+                    )}
+                    onClick={() => {
+                      if (!active) onSelectAgent?.(candidate);
+                    }}
+                  >
+                    {avatar ? (
+                      <AuthenticatedImage
+                        alt={candidate.display_name}
+                        className="size-full bg-white object-cover object-top"
+                        src={avatar}
+                      />
+                    ) : (
+                      <span className="text-lg leading-none">
+                        {candidate.icon || <Bot className="size-4" />}
+                      </span>
+                    )}
+                    {active ? (
+                      <span className="absolute inset-x-1 bottom-1 h-0.5 rounded-full bg-[#f4e86f]" />
+                    ) : null}
+                  </button>
+                );
+              })}
+              {onCreateAgent ? (
+                <button
+                  type="button"
+                  aria-label={t.agentWorld.newAgent}
+                  title={t.agentWorld.newAgent}
+                  className="group relative flex size-11 shrink-0 items-center justify-center rounded-sm border border-dashed border-[#f4e86f]/45 bg-[#f4e86f]/8 text-[#f4e86f] transition hover:border-[#f4e86f]/85 hover:bg-[#f4e86f]/14"
+                  onClick={onCreateAgent}
+                >
+                  <Plus className="size-4 transition-transform group-hover:scale-110" />
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
+      <Dialog open={visualPromptOpen} onOpenChange={setVisualPromptOpen}>
+        <DialogContent className="max-h-[88vh] overflow-hidden rounded-sm border-white/10 bg-[#191919] p-0 text-white shadow-2xl sm:max-w-2xl">
+          <div className="relative overflow-hidden border-b border-white/10 bg-[#202020]/92 px-5 py-4">
+            <div className="pointer-events-none absolute inset-0 opacity-25 [background-image:linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:28px_28px]" />
+            <DialogTitle className="relative flex items-center gap-2 text-base">
+              <ImagePlus className="size-4 text-primary" />
+              生成立绘提示词
+            </DialogTitle>
+            <DialogDescription className="relative mt-1 text-xs text-white/48">
+              先用 agent-visual-kit 固定工作流控制质量，再补充你想要的外观词。
+            </DialogDescription>
+          </div>
+
+          <div className="max-h-[calc(88vh-148px)] overflow-y-auto p-5">
+            <div className="grid gap-3">
+              {VISUAL_PROMPT_GROUPS.map((group) => (
+                <div
+                  key={group.id}
+                  className="rounded-sm border border-white/8 bg-black/18 p-3"
+                >
+                  <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
+                    {group.label}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.options.map((option) => {
+                      const active = selectedVisualPromptIds.includes(
+                        option.id,
+                      );
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] leading-5 transition",
+                            active
+                              ? "border-[#f4e86f]/45 bg-[#f4e86f]/12 text-white"
+                              : "border-white/10 bg-white/[0.025] text-white/52 hover:border-white/22 hover:text-white/82",
+                          )}
+                          onClick={() => toggleVisualPromptOption(option.id)}
+                        >
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              active ? "bg-[#f4e86f]" : "bg-white/18",
+                            )}
+                          />
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div className="rounded-sm border border-white/8 bg-black/18 p-3">
+                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
+                  自定义补充
+                </div>
+                <Textarea
+                  className="min-h-[92px] resize-none border-white/10 bg-black/24 text-sm leading-6 text-white placeholder:text-white/28"
+                  placeholder="例如：银白短发、黑色机能外套、黄色能量线条、冷静但有亲和力。"
+                  value={customVisualPrompt}
+                  onChange={(event) =>
+                    setCustomVisualPrompt(event.target.value)
+                  }
+                />
+              </div>
+
+              <div className="rounded-sm border border-white/8 bg-black/18 p-3">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
+                    参考图
+                  </div>
+                  <span className="text-[11px] text-white/36">
+                    最多 {MAX_VISUAL_REFERENCE_IMAGES} 张，辅助保持脸型和画风
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Textarea
+                    className="min-h-[58px] resize-none border-white/10 bg-black/24 text-xs leading-5 text-white placeholder:text-white/28"
+                    placeholder="粘贴图片 URL，可多行；也可以直接上传本地图。"
+                    value={referenceImageInput}
+                    onChange={(event) =>
+                      setReferenceImageInput(event.target.value)
+                    }
+                  />
+                  <label className="inline-flex h-[58px] cursor-pointer items-center justify-center gap-2 rounded-sm border border-white/12 bg-white/[0.04] px-3 text-xs text-white/72 transition hover:border-[#f4e86f]/45 hover:text-white">
+                    <Upload className="size-3.5" />
+                    上传
+                    <input
+                      accept="image/*"
+                      className="sr-only"
+                      multiple
+                      type="file"
+                      onChange={(event) =>
+                        void handleReferenceImageUpload(event)
+                      }
+                    />
+                  </label>
+                </div>
+                {referenceImages.length > 0 ? (
+                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                    {referenceImages.map((image, index) => (
+                      <div
+                        key={`${image.slice(0, 48)}-${index}`}
+                        className="relative size-16 shrink-0 overflow-hidden rounded-sm border border-white/10 bg-white/[0.035]"
+                      >
+                        <img
+                          alt={`参考图 ${index + 1}`}
+                          className="size-full object-cover"
+                          src={image}
+                        />
+                        <button
+                          aria-label="移除参考图"
+                          className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-sm bg-black/62 text-white/78 transition hover:text-white"
+                          type="button"
+                          onClick={() => removeReferenceImage(image)}
+                        >
+                          <X className="size-3" />
+                        </button>
+                        {!image.startsWith("data:") ? (
+                          <span className="absolute bottom-1 left-1 rounded-sm bg-black/62 px-1 text-[9px] text-white/68">
+                            <Link className="inline size-2.5" />
+                          </span>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-sm border border-white/8 bg-white/[0.025] p-3">
+                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/36">
+                  Prompt Preview
+                </div>
+                {referenceImages.length > 0 ? (
+                  <div className="mb-2 text-[11px] text-[#f4e86f]/78">
+                    将携带 {referenceImages.length} 张参考图进入 Agnes
+                    参考图生成。
+                  </div>
+                ) : null}
+                <p className="max-h-28 overflow-y-auto whitespace-pre-wrap text-[11px] leading-5 text-white/48 [scrollbar-width:thin]">
+                  {finalVisualPrompt}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 border-t border-white/10 bg-[#202020]/92 px-5 py-3">
+            <Button
+              className="h-8 rounded-sm border-white/12 bg-black/20 px-3 text-xs text-white/76 hover:bg-white/8 hover:text-white"
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setSelectedVisualPromptIds(DEFAULT_VISUAL_PROMPT_OPTION_IDS);
+                setCustomVisualPrompt("");
+                setReferenceImageInput("");
+                setUploadedReferenceImages([]);
+              }}
+            >
+              重置
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                className="h-8 rounded-sm border-white/12 bg-black/20 px-3 text-xs text-white/76 hover:bg-white/8 hover:text-white"
+                type="button"
+                variant="outline"
+                onClick={() => setVisualPromptOpen(false)}
+              >
+                取消
+              </Button>
+              <Button
+                className="h-8 rounded-sm bg-[#f4e86f] px-4 text-xs text-[#232323] hover:bg-[#fff27c]"
+                disabled={generateVisuals.isPending}
+                type="button"
+                onClick={() => void handleGenerateVisuals()}
+              >
+                {generateVisuals.isPending ? (
+                  <Loader2 className="mr-1 size-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1 size-3.5" />
+                )}
+                生成三视图
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
 
 export function AgentRoleProfileDialog({
   agent,
+  agents = [],
   open,
   onOpenChange,
   onInstallChange,
+  onSelectAgent,
+  onCreateAgent,
 }: AgentRoleProfileDialogProps) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const [armsOpen, setArmsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [configExpanded, setConfigExpanded] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
   const [installingPack, setInstallingPack] = useState(false);
   const [armsInitialTab, setArmsInitialTab] = useState<
@@ -405,6 +1037,7 @@ export function AgentRoleProfileDialog({
     arms: [],
     extraAffinity: "",
     privateSkills: "",
+    codeModeUnlock: false,
   });
 
   const localAgentName = open && agent?.is_installed ? agent.name : null;
@@ -416,7 +1049,6 @@ export function AgentRoleProfileDialog({
   const saveRegistry = useSaveAgentToolRegistry(agent?.name ?? "");
 
   const fullAgent = agentQuery.agent;
-  const arms = armsQuery.data ?? [];
   const registry = registryQuery.data;
   const characterProfile = useMemo(
     () => (agent ? buildCharacterProfile(agent, t) : null),
@@ -438,13 +1070,23 @@ export function AgentRoleProfileDialog({
 
   const serverState = useMemo<EditableAgentConfig | null>(() => {
     if (!agent) return null;
+    const fallbackPrivateSkills =
+      agent.private_skills ?? agent.key_skills ?? [];
+    const capabilities = fullAgent?.capabilities ?? agent.capabilities ?? {};
     return {
       description: fullAgent?.description ?? agent.description ?? "",
-      model: fullAgent?.model ?? "",
-      soul: fullAgent?.soul ?? "",
-      arms: registry?.arms ?? fullAgent?.tool_groups ?? agent.tags ?? [],
-      extraAffinity: serializeList(registry?.extra_affinity),
-      privateSkills: serializeList(registry?.private_skills ?? agent.key_skills),
+      model: fullAgent?.model ?? agent.model ?? "",
+      soul: fullAgent?.soul ?? agent.soul ?? "",
+      arms: registry?.arms ?? fullAgent?.tool_groups ?? agent.tool_groups ?? [],
+      extraAffinity: serializeList(
+        registry?.extra_affinity ?? agent.extra_affinity,
+      ),
+      privateSkills: serializeList(
+        registry?.private_skills?.length
+          ? registry.private_skills
+          : fallbackPrivateSkills,
+      ),
+      codeModeUnlock: capabilities.code_mode_unlock === true,
     };
   }, [agent, fullAgent, registry]);
 
@@ -462,7 +1104,8 @@ export function AgentRoleProfileDialog({
     !!serverState &&
     (form.description !== serverState.description ||
       form.model !== serverState.model ||
-      form.soul !== serverState.soul);
+      form.soul !== serverState.soul ||
+      form.codeModeUnlock !== serverState.codeModeUnlock);
   const registryDirty =
     !!serverState &&
     (!sameList(form.arms, serverState.arms) ||
@@ -475,91 +1118,75 @@ export function AgentRoleProfileDialog({
     agentQuery.isLoading || armsQuery.isLoading || registryQuery.isLoading;
   const isSaving = updateAgent.isPending || saveRegistry.isPending;
   const permissionEnabledCount =
-    permissionsQuery.data?.filter((permission) => permission.enabled).length ?? 0;
+    permissionsQuery.data?.filter((permission) => permission.enabled).length ??
+    0;
   const permissionTotalCount = permissionsQuery.data?.length ?? 0;
   const permissionSummary = permissionTotalCount
-    ? t.agentConfig.permissionCount(permissionEnabledCount, permissionTotalCount)
+    ? t.agentConfig.permissionCount(
+        permissionEnabledCount,
+        permissionTotalCount,
+      )
     : t.agentConfig.guarded;
-  const enabledArmOptions = arms.filter((arm) => form.arms.includes(arm.arm_id));
-  const effectiveSkillPool = new Set<string>(desiredPrivateSkills);
-  for (const arm of enabledArmOptions) {
-    for (const skill of arm.skills) {
-      effectiveSkillPool.add(skill);
-    }
-  }
-  const disabledPermissionSkills = new Set<string>();
-  for (const permission of permissionsQuery.data ?? []) {
-    if (!permission.enabled) {
-      for (const skill of permission.skill_names) {
-        disabledPermissionSkills.add(skill);
-      }
-    }
-  }
-  const blockedSkillCount = [...effectiveSkillPool].filter((skill) =>
-    disabledPermissionSkills.has(skill),
-  ).length;
-  const executableSkillCount = Math.max(0, effectiveSkillPool.size - blockedSkillCount);
-  const loadoutChecks: Array<{
-    id: string;
-    message: string;
-    severity?: "danger";
-    actionLabel?: string;
-    onAction?: () => void;
-    disabled?: boolean;
-  }> = [
-    ...(form.arms.length === 0
-      ? [
-          {
-            id: "no-arms",
-            message: t.agentConfig.checkNoArms,
-            actionLabel: t.agentConfig.configureArmAction,
-            onAction: () => openArmsConfig("arms"),
-          },
-        ]
-      : []),
-    ...(desiredPrivateSkills.length === 0
-      ? [
-          {
-            id: "no-private-skills",
-            message: t.agentConfig.checkNoPrivateSkills,
-            actionLabel: t.agentConfig.configureSkillsAction,
-            onAction: () => openArmsConfig("skills"),
-          },
-        ]
-      : []),
-    ...(blockedSkillCount > 0
-      ? [
-          {
-            id: "blocked-skills",
-            message: t.agentConfig.checkBlockedSkills(blockedSkillCount),
-            actionLabel: t.agentConfig.configurePermissionsAction,
-            onAction: () => openArmsConfig("permissions"),
-          },
-        ]
-      : []),
-    ...(executableSkillCount === 0
-      ? [
-          {
-            id: "no-executable-skills",
-            message: t.agentConfig.checkNoExecutableSkills,
-            severity: "danger" as const,
-            actionLabel: t.agentConfig.configureSkillsAction,
-            onAction: () => openArmsConfig("skills"),
-          },
-        ]
-      : []),
-    ...(isDirty
-      ? [
-          {
-            id: "unsaved-changes",
-            message: t.agentConfig.checkUnsavedChanges,
-            actionLabel: t.agentConfig.saveButton,
-            onAction: () => void handleSave(),
-            disabled: isLoading || isSaving,
-          },
-        ]
-      : []),
-  ];
+  const roleLabel = meta.role ?? agent.category;
+  const typeLabel = meta.type ?? agent.category;
+  const identityRows = [
+    characterProfile.age
+      ? [t.agentConfig.characterAgeLabel, characterProfile.age]
+      : null,
+    characterProfile.temperament
+      ? [t.agentConfig.characterTemperamentLabel, characterProfile.temperament]
+      : null,
+    [typeLabel, characterProfile.currentState || roleLabel],
+  ].filter(Boolean) as Array<[string, string]>;
+  const profileNotes = buildRoleProfileNotes(agent);
+  const personaTags = uniqueList([
+    roleLabel,
+    characterProfile.temperament,
+    ...characterProfile.visualKeywords.slice(0, 3),
+  ]);
+  const sceneTags = uniqueList(profileNotes.bestFor);
+  const boundaryTags = uniqueList(profileNotes.boundaries);
+  const configActions = [
+    {
+      id: "profile",
+      icon: CircuitBoard,
+      label: t.agentConfig.configureProfileAction,
+      shortLabel: t.agentConfig.basicTitle,
+      metric: `${t.agentConfig.descriptionLabel} / ${t.agentConfig.promptSubtitle}`,
+      hint: t.agentConfig.configureProfileHint,
+      onClick: () => setProfileOpen(true),
+    },
+    {
+      id: "arms",
+      icon: Wrench,
+      label: t.agentConfig.configureArmAction,
+      shortLabel: "ARM",
+      metric: t.agentConfig.armCount(form.arms.length),
+      hint: t.agentConfig.configureArmHint,
+      onClick: () => openArmsConfig("arms"),
+    },
+    {
+      id: "skills",
+      icon: Sparkles,
+      label: t.agentConfig.browseSkillWhitelist,
+      shortLabel: "Skill",
+      metric: t.agentConfig.skillCount(desiredPrivateSkills.length),
+      hint: t.agentConfig.configureSkillsHint,
+      onClick: () => openArmsConfig("skills"),
+    },
+    {
+      id: "permissions",
+      icon: Shield,
+      label: t.agentConfig.configurePermissionsAction,
+      shortLabel: t.agentConfig.configurePermissionsAction.replace(
+        /^调整|^Configure\s+/i,
+        "",
+      ),
+      metric: permissionSummary,
+      hint: t.agentConfig.configurePermissionsHint,
+      onClick: () => openArmsConfig("permissions"),
+    },
+  ] as const;
   function openArmsConfig(tab: "arms" | "skills" | "permissions" | "routing") {
     setArmsInitialTab(tab);
     setArmsOpen(true);
@@ -582,6 +1209,10 @@ export function AgentRoleProfileDialog({
             description: form.description,
             model: form.model.trim() || null,
             soul: form.soul,
+            capabilities: {
+              ...(fullAgent?.capabilities ?? agent.capabilities ?? {}),
+              code_mode_unlock: form.codeModeUnlock,
+            },
           },
         });
       }
@@ -607,7 +1238,9 @@ export function AgentRoleProfileDialog({
     try {
       const result = await installAgent(agent.id);
       const assembledSkillCount =
-        result.key_skills?.length ?? result.registered_skills ?? desiredPrivateSkills.length;
+        result.key_skills?.length ??
+        result.registered_skills ??
+        desiredPrivateSkills.length;
       toast.success(
         assembledSkillCount > 0
           ? t.agentWorld.toastCapabilityPackInstalled(
@@ -627,10 +1260,6 @@ export function AgentRoleProfileDialog({
     }
   }
 
-  function handleReset() {
-    if (serverState) setForm(serverState);
-  }
-
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -641,99 +1270,146 @@ export function AgentRoleProfileDialog({
           )}
           showCloseButton={false}
         >
-          <DialogTitle className="sr-only">{t.agentConfig.dialogTitle}</DialogTitle>
+          <DialogTitle className="sr-only">{agent.display_name}</DialogTitle>
           <DialogDescription className="sr-only">
             {t.agentConfig.subtitle}
           </DialogDescription>
           <div className="relative h-full overflow-hidden bg-[#2a2a2a]">
             <div className="pointer-events-none absolute inset-0 opacity-[0.18] [background-image:radial-gradient(circle_at_70%_38%,rgba(255,255,255,0.12),transparent_30%),linear-gradient(to_right,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] [background-size:100%_100%,40px_40px,40px_40px]" />
             <div className="relative grid h-full grid-cols-[minmax(300px,0.42fr)_minmax(0,0.58fr)]">
-                <section className="relative flex min-h-0 flex-col overflow-hidden px-8 py-6 lg:px-10 lg:py-7">
-                  <div className="pointer-events-none absolute left-0 top-0 h-5 w-5 border-l border-t border-primary/60" />
-                  <div className="pointer-events-none absolute bottom-0 right-0 h-5 w-5 border-b border-r border-primary/45" />
-                  <div className="mb-7 flex items-center justify-between">
-                    <Button
-                      aria-label={t.agentConfig.back}
-                      className="h-8 w-8 shrink-0 rounded-sm"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => onOpenChange(false)}
-                    >
-                      <ChevronRight className="size-5 rotate-180" />
-                    </Button>
-                    <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                      <span className={cn("h-1.5 w-1.5 rounded-full", isDirty ? "bg-amber-500" : "bg-emerald-500")} />
-                      {isDirty ? t.agentConfig.unsaved : t.agentConfig.synced}
-                    </div>
-                    <Button
-                      aria-label={t.common.close}
-                      className="h-8 w-8 rounded-sm"
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => onOpenChange(false)}
-                    >
-                      <X className="size-4" />
-                    </Button>
+              <section className="relative flex min-h-0 flex-col overflow-hidden px-8 py-6 lg:px-10 lg:py-7">
+                <div className="pointer-events-none absolute left-0 top-0 h-5 w-5 border-l border-t border-primary/60" />
+                <div className="pointer-events-none absolute bottom-0 right-0 h-5 w-5 border-b border-r border-primary/45" />
+                <div className="mb-5 flex shrink-0 items-center justify-between">
+                  <Button
+                    aria-label={t.agentConfig.back}
+                    className="h-8 w-8 shrink-0 rounded-sm"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    <ChevronRight className="size-5 rotate-180" />
+                  </Button>
+                  <div className="flex items-center gap-2 rounded-sm border border-white/8 bg-white/[0.025] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        isDirty ? "bg-amber-500" : "bg-emerald-500",
+                      )}
+                    />
+                    {isDirty ? t.agentConfig.unsaved : "CHARACTER FILE"}
                   </div>
-                  <div className="max-w-[360px]">
+                  <Button
+                    aria-label={t.common.close}
+                    className="h-8 w-8 rounded-sm"
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto pr-2 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.22)_transparent]">
+                  <div className="max-w-[360px] pb-6">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-primary">
                         <span className="h-px w-6 bg-primary/70" />
                         {t.agentConfig.characterFileLabel}
                       </div>
-                      <h1 className="mt-4 truncate text-4xl font-semibold leading-none text-white">
+                      <h1 className="mt-4 truncate text-5xl font-semibold leading-none text-white">
                         {agent.display_name}
                       </h1>
                       <p className="mt-3 text-xl font-medium leading-7 text-[#f4e86f]">
                         {characterProfile.epithet}
                       </p>
-                      <div className="mt-3 flex flex-wrap gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                        <span className="rounded-sm border border-white/10 bg-black/15 px-2 py-1">
-                          {meta.type}
-                        </span>
-                        <span className="rounded-sm border border-white/10 bg-black/15 px-2 py-1">
-                          {meta.role}
-                        </span>
-                        <span className="rounded-sm border border-white/10 bg-black/15 px-2 py-1">
-                          {meta.codeName}
-                        </span>
+                      <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-sm border border-white/10 bg-white/10">
+                        {identityRows.map(([label, value]) => (
+                          <div
+                            key={`${label}-${value}`}
+                            className="min-w-0 bg-[#2a2a2a]/92 px-2.5 py-2"
+                          >
+                            <div className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-white/36">
+                              {label}
+                            </div>
+                            <div className="mt-1 truncate text-xs font-medium leading-4 text-white/88">
+                              {value}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="mt-7 border-y border-white/10 py-4">
+                    <div className="mt-6 border-l-2 border-[#f4e86f] bg-[#f4e86f]/[0.045] px-4 py-3">
                       <p className="text-base font-medium leading-7 text-white/95">
                         &ldquo;{characterProfile.quote}&rdquo;
                       </p>
                     </div>
 
-                    <div className="mt-5">
-                      <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                        {t.agentConfig.characterBackgroundLabel}
+                    <div className="mt-6">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                          <span className="h-px w-4 bg-white/18" />
+                          PERSONA
+                        </div>
+                        <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/32">
+                          {meta.codeName}
+                        </span>
                       </div>
-                      <p className="line-clamp-7 text-sm leading-7 text-white/82">
+                      <p className="text-sm leading-7 text-white/82">
                         {characterProfile.intro}
                       </p>
                     </div>
 
-                    <div className="mt-5 space-y-4">
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="rounded-sm border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-white/85">
-                          {t.agentConfig.characterAgeLabel} · {characterProfile.age}
-                        </span>
-                        <span className="rounded-sm border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-white/85">
-                          {t.agentConfig.characterTemperamentLabel} · {characterProfile.temperament}
-                        </span>
+                    <div className="mt-5">
+                      <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                        <span className="h-px w-4 bg-white/18" />
+                        {t.agentConfig.characterBackgroundLabel}
                       </div>
+                      <p className="line-clamp-4 text-xs leading-6 text-white/68">
+                        {characterProfile.background}
+                      </p>
+                    </div>
 
-                      <div className="border-l border-primary/45 pl-3">
+                    <div className="mt-5">
+                      <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-primary">
+                        <span className="h-px w-4 bg-primary/60" />
+                        {t.agentConfig.characterBestForLabel}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sceneTags.map((item) => (
+                          <span
+                            key={item}
+                            className="rounded-full border border-primary/22 bg-primary/[0.075] px-2.5 py-1 text-xs leading-5 text-white/86"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-[1fr_auto] gap-3">
+                      <div className="min-w-0 border-l border-primary/45 pl-3">
                         <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-muted-foreground">
                           {t.agentConfig.characterPersonalityLabel}
                         </div>
-                        <p className="mt-1 line-clamp-3 text-sm leading-6 text-white/88">
+                        <p className="mt-1 line-clamp-4 text-sm leading-6 text-white/86">
                           {characterProfile.personality}
                         </p>
                       </div>
+                      <div className="flex w-[94px] flex-col gap-1.5">
+                        {personaTags.slice(0, 4).map((tag) => (
+                          <span
+                            key={tag}
+                            className="truncate rounded-sm border border-white/10 bg-white/[0.035] px-2 py-1 text-[10px] leading-4 text-white/66"
+                            title={tag}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
 
+                    <div className="mt-5 space-y-4">
                       <div>
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -750,6 +1426,23 @@ export function AgentRoleProfileDialog({
                               className="rounded-sm border border-primary/20 bg-primary/10 px-2 py-1 text-xs text-primary"
                             >
                               {keyword}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-sm border border-white/10 bg-black/10 px-3 py-2.5">
+                        <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/48">
+                          <span className="h-px w-4 bg-white/18" />
+                          {t.agentConfig.characterBoundaryLabel}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {boundaryTags.map((item) => (
+                            <span
+                              key={item}
+                              className="rounded-full border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[11px] leading-5 text-white/62"
+                            >
+                              {item}
                             </span>
                           ))}
                         </div>
@@ -782,57 +1475,138 @@ export function AgentRoleProfileDialog({
                       ) : null}
                     </div>
                   </div>
+                </div>
 
-                  <div className="mt-auto max-w-[360px] border-t border-white/10 pt-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="flex h-9 w-9 items-center justify-center rounded-sm border border-white/10 bg-black/20 text-primary transition hover:border-primary/45"
-                        aria-label={t.agentConfig.configureProfileAction}
-                        type="button"
-                        onClick={() => setProfileOpen(true)}
-                      >
-                        <CircuitBoard className="size-4" />
-                      </button>
-                      <button
-                        className="flex h-9 w-9 items-center justify-center rounded-sm border border-white/10 bg-black/20 text-primary transition hover:border-primary/45"
-                        aria-label={t.agentConfig.advancedArmConfig}
-                        type="button"
-                        onClick={() => openArmsConfig("arms")}
-                      >
-                        <Wrench className="size-4" />
-                      </button>
-                      <button
-                        className="flex h-9 w-9 items-center justify-center rounded-sm border border-white/10 bg-black/20 text-primary transition hover:border-primary/45"
-                        aria-label={t.agentConfig.browseSkillWhitelist}
-                        type="button"
-                        onClick={() => openArmsConfig("skills")}
-                      >
-                        <Sparkles className="size-4" />
-                      </button>
-                      <button
-                        className="flex h-9 w-9 items-center justify-center rounded-sm border border-white/10 bg-black/20 text-primary transition hover:border-primary/45"
-                        aria-label={t.agentConfig.configurePermissionsAction}
-                        type="button"
-                        onClick={() => openArmsConfig("permissions")}
-                      >
-                        <Shield className="size-4" />
-                      </button>
-                      <div className="ml-auto min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
-                        {t.agentConfig.loadoutReady}
+                <div className="mt-3 shrink-0 border-t border-white/10 bg-[#2a2a2a]/94 pt-2 shadow-[0_-14px_28px_rgba(0,0,0,0.16)] backdrop-blur">
+                  <div className="max-w-[360px]">
+                    <div className="flex items-center gap-1.5">
+                      <div className="mr-1 flex min-w-0 items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/48">
+                        <span className="size-1.5 rounded-full bg-primary/80" />
+                        <span className="max-w-[72px] truncate">
+                          {t.agentConfig.configDockTitle}
+                        </span>
                       </div>
+                      <div className="grid min-w-0 flex-1 grid-cols-4 gap-1">
+                        {configActions.map((action) => {
+                          const Icon = action.icon;
+                          return (
+                            <button
+                              key={action.id}
+                              type="button"
+                              aria-label={action.label}
+                              title={`${action.label} · ${action.hint}`}
+                              className="group flex h-8 min-w-0 items-center justify-center gap-1 rounded-sm border border-white/8 bg-white/[0.025] px-1.5 text-[11px] text-white/78 transition hover:border-primary/28 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                              onClick={action.onClick}
+                            >
+                              <Icon className="size-3.5 shrink-0 text-primary/82" />
+                              <span className="truncate">
+                                {action.shortLabel}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        aria-expanded={configExpanded}
+                        aria-label={t.agentConfig.configDockTitle}
+                        className="flex size-8 shrink-0 items-center justify-center rounded-sm border border-white/8 bg-white/[0.025] text-white/52 transition hover:border-primary/28 hover:text-primary"
+                        type="button"
+                        onClick={() => setConfigExpanded((value) => !value)}
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "size-3.5 transition-transform",
+                            configExpanded ? "-rotate-90" : "",
+                          )}
+                        />
+                      </button>
                     </div>
+                    {configExpanded ? (
+                      <div className="mt-2 space-y-2 border-t border-white/8 pt-2">
+                        <div className="rounded-sm border border-white/8 bg-black/18 p-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/88">
+                                <CircuitBoard className="size-3.5 text-primary/85" />
+                                编程模式
+                              </div>
+                              <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-white/42">
+                                上层准入开关；开启后才允许进入代码模式与授权额外工作区。
+                              </p>
+                            </div>
+                            <Switch
+                              aria-label="切换编程模式"
+                              checked={form.codeModeUnlock}
+                              className="mt-0.5"
+                              disabled={isLoading || isSaving}
+                              onCheckedChange={(checked) =>
+                                setField("codeModeUnlock", checked)
+                              }
+                            />
+                          </div>
+                          {form.codeModeUnlock !==
+                          serverState?.codeModeUnlock ? (
+                            <Button
+                              className="mt-2 h-7 w-full rounded-sm border-white/10 bg-white/[0.04] text-[11px] text-white/78 hover:bg-white/[0.08] hover:text-white"
+                              disabled={isLoading || isSaving}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                              onClick={() => void handleSave()}
+                            >
+                              {isSaving ? (
+                                <Loader2 className="mr-1.5 size-3 animate-spin" />
+                              ) : (
+                                <Save className="mr-1.5 size-3" />
+                              )}
+                              保存编程模式
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {configActions.map((action) => {
+                            const Icon = action.icon;
+                            return (
+                              <button
+                                key={action.id}
+                                type="button"
+                                aria-label={action.label}
+                                className="group flex min-h-[40px] min-w-0 items-start gap-2 rounded-sm px-1.5 py-1 text-left transition hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                                onClick={action.onClick}
+                              >
+                                <span className="flex size-5 shrink-0 items-center justify-center rounded-sm border border-white/10 bg-white/[0.04] text-primary/85 transition group-hover:border-primary/35 group-hover:bg-primary/10">
+                                  <Icon className="size-3" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[11px] font-medium leading-4 text-white/88">
+                                    {action.label}
+                                  </span>
+                                  <span className="line-clamp-1 block text-[10px] leading-4 text-white/38">
+                                    {action.metric}
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                </section>
+                </div>
+              </section>
 
-                <AgentCoreVisual
-                  agent={{
-                    ...agent,
-                    avatar_url: fullAgent?.avatar_url ?? agent.avatar_url,
-                    visual_urls: fullAgent?.visual_urls ?? agent.visual_urls,
-                  }}
-                  codeName={meta.codeName}
-                  uid={meta.uid}
-                />
+              <AgentCoreVisual
+                agent={{
+                  ...agent,
+                  avatar_url: fullAgent?.avatar_url ?? agent.avatar_url,
+                  visual_urls: fullAgent?.visual_urls ?? agent.visual_urls,
+                }}
+                agents={agents}
+                codeName={meta.codeName}
+                uid={meta.uid}
+                onSelectAgent={onSelectAgent}
+                onCreateAgent={onCreateAgent}
+              />
             </div>
           </div>
         </DialogContent>
@@ -856,11 +1630,16 @@ export function AgentRoleProfileDialog({
                 className="mt-1 min-h-[96px] border-white/10 bg-black/25 text-sm text-white"
                 disabled={isLoading || isSaving}
                 value={form.description}
-                onChange={(event) => setField("description", event.target.value)}
+                onChange={(event) =>
+                  setField("description", event.target.value)
+                }
               />
             </div>
             <div>
-              <FieldLabel label={t.agentConfig.modelLabel} hint={t.agentConfig.modelHint} />
+              <FieldLabel
+                label={t.agentConfig.modelLabel}
+                hint={t.agentConfig.modelHint}
+              />
               <Input
                 className="mt-1 h-9 border-white/10 bg-black/25 text-white"
                 disabled={isLoading || isSaving}
@@ -892,8 +1671,14 @@ export function AgentRoleProfileDialog({
                 disabled={!isDirty || isLoading || isSaving}
                 onClick={() => void handleSave()}
               >
-                {isSaving ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
-                {savedFlash ? t.agentConfig.savedButton : t.agentConfig.saveButton}
+                {isSaving ? (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 size-4" />
+                )}
+                {savedFlash
+                  ? t.agentConfig.savedButton
+                  : t.agentConfig.saveButton}
               </Button>
             </div>
           </div>

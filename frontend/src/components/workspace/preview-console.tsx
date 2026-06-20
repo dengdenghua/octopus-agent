@@ -110,21 +110,23 @@ export function PreviewConsole({
               title="Filter"
             >
               <FilterIcon className="size-3 text-muted-foreground ml-1" />
-              {(["all", "error", "warning", "info"] as LevelFilter[]).map((lvl) => (
-                <button
-                  key={lvl}
-                  type="button"
-                  onClick={() => setFilter(lvl)}
-                  className={cn(
-                    "rounded px-1.5 text-[10px] capitalize transition-colors",
-                    filter === lvl
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {lvl}
-                </button>
-              ))}
+              {(["all", "error", "warning", "info"] as LevelFilter[]).map(
+                (lvl) => (
+                  <button
+                    key={lvl}
+                    type="button"
+                    onClick={() => setFilter(lvl)}
+                    className={cn(
+                      "rounded px-1.5 text-[10px] capitalize transition-colors",
+                      filter === lvl
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {lvl}
+                  </button>
+                ),
+              )}
             </div>
           )}
           {hasEntries && onClear && (

@@ -124,7 +124,11 @@ function textOf(el: Element): string {
   return (el.textContent || "").replace(/\s+/g, " ").trim();
 }
 
-function classifyRisk(el: Element, label: string, kind: PageAgentElementKind): {
+function classifyRisk(
+  el: Element,
+  label: string,
+  kind: PageAgentElementKind,
+): {
   risk: PageAgentRisk;
   riskReasons: string[];
 } {
@@ -175,7 +179,8 @@ function classifyRisk(el: Element, label: string, kind: PageAgentElementKind): {
   for (const [needle, reason] of highPatterns) {
     if (text.includes(needle)) reasons.push(reason);
   }
-  if (reasons.length) return { risk: "high", riskReasons: Array.from(new Set(reasons)) };
+  if (reasons.length)
+    return { risk: "high", riskReasons: Array.from(new Set(reasons)) };
   for (const [needle, reason] of mediumPatterns) {
     if (text.includes(needle)) reasons.push(reason);
   }
@@ -205,8 +210,12 @@ function runState(): PageAgentRunState {
     title: document.title,
     route: location.hash || location.pathname,
     textHash: stateHash(text),
-    actionCount: elements.filter((item) => !["input", "textarea", "select"].includes(item.kind)).length,
-    fieldCount: elements.filter((item) => ["input", "textarea", "select"].includes(item.kind)).length,
+    actionCount: elements.filter(
+      (item) => !["input", "textarea", "select"].includes(item.kind),
+    ).length,
+    fieldCount: elements.filter((item) =>
+      ["input", "textarea", "select"].includes(item.kind),
+    ).length,
     focusedId: active?.getAttribute("data-octopus-agent-id") || undefined,
   };
 }
@@ -235,9 +244,11 @@ function cssPath(el: Element): string {
     const parent: Element | null = node.parentElement;
     if (!parent) break;
     const siblings = Array.from(parent.children).filter(
-      (child): child is Element => child instanceof Element && child.tagName === node!.tagName,
+      (child): child is Element =>
+        child instanceof Element && child.tagName === node!.tagName,
     );
-    const nth = siblings.length > 1 ? `:nth-of-type(${siblings.indexOf(node) + 1})` : "";
+    const nth =
+      siblings.length > 1 ? `:nth-of-type(${siblings.indexOf(node) + 1})` : "";
     parts.unshift(`${tag}${nth}`);
     node = parent;
   }
@@ -280,7 +291,10 @@ function collectElements(): PageAgentElement[] {
     .slice(0, 180)
     .map((el, index) => {
       const kind = elementKind(el) ?? "button";
-      const html = el as HTMLInputElement | HTMLButtonElement | HTMLSelectElement;
+      const html = el as
+        | HTMLInputElement
+        | HTMLButtonElement
+        | HTMLSelectElement;
       const label = textOf(el) || el.getAttribute("name") || kind;
       const inputType = "type" in html ? html.type : undefined;
       const risk = classifyRisk(el, label, kind);
@@ -313,7 +327,9 @@ function collectForms(elements: PageAgentElement[]) {
       .filter(Boolean);
     const fieldIds = elements
       .filter((item) => ["input", "textarea", "select"].includes(item.kind))
-      .filter((item) => form.querySelector(`[data-octopus-agent-id="${item.id}"]`))
+      .filter((item) =>
+        form.querySelector(`[data-octopus-agent-id="${item.id}"]`),
+      )
       .map((item) => item.id);
     const submitIds = elements
       .filter((item) => item.kind === "button")
@@ -403,8 +419,11 @@ async function run(action: Parameters<OctopusPageAgentBridge["run"]>[0]) {
   const el = document.querySelector<HTMLElement>(
     `[data-octopus-agent-id="${CSS.escape(action.id)}"]`,
   );
-  if (!el) return { ok: false, error: `page agent element not found: ${action.id}` };
-  const item = collectElements().find((candidate) => candidate.id === action.id);
+  if (!el)
+    return { ok: false, error: `page agent element not found: ${action.id}` };
+  const item = collectElements().find(
+    (candidate) => candidate.id === action.id,
+  );
   const before = runState();
   if (
     item?.requiresConfirmation &&

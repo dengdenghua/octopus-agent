@@ -1,4 +1,3 @@
-
 import { MonitorSmartphoneIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useMemo, type ComponentType, type SVGProps } from "react";
@@ -15,7 +14,11 @@ import { Separator } from "@/components/ui/separator";
 import { isLocale, type Locale } from "@/core/i18n";
 import { useI18n } from "@/core/i18n/hooks";
 import { useLocalSettings } from "@/core/settings";
-import { useAppearance, type CornerScale, type Density } from "@/hooks/use-appearance";
+import {
+  useAppearance,
+  type CornerScale,
+  type Density,
+} from "@/hooks/use-appearance";
 import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
@@ -47,7 +50,11 @@ function AppleIcon(props: SVGProps<SVGSVGElement>) {
 export default function AppearanceSettingsPage() {
   const { t, locale, changeLocale } = useI18n();
   const { theme, setTheme, systemTheme } = useTheme();
-  const currentTheme = (theme ?? "system") as "system" | "light" | "dark" | "apple";
+  const currentTheme = (theme ?? "system") as
+    | "system"
+    | "light"
+    | "dark"
+    | "apple";
   const [settings, setSetting] = useLocalSettings();
   const { cornerScale, density, setCornerScale, setDensity } = useAppearance();
 
@@ -181,11 +188,31 @@ export default function AppearanceSettingsPage() {
           value={cornerScale}
           onChange={setCornerScale}
           options={[
-            { value: 0.5, label: t.settings.appearance.cornerCrisp, preview: "0.25rem" },
-            { value: 0.75, label: t.settings.appearance.cornerSoft, preview: "0.375rem" },
-            { value: 1, label: t.settings.appearance.cornerDefault, preview: "0.5rem" },
-            { value: 1.25, label: t.settings.appearance.cornerRound, preview: "0.625rem" },
-            { value: 1.5, label: t.settings.appearance.cornerPill, preview: "0.75rem" },
+            {
+              value: 0.5,
+              label: t.settings.appearance.cornerCrisp,
+              preview: "0.25rem",
+            },
+            {
+              value: 0.75,
+              label: t.settings.appearance.cornerSoft,
+              preview: "0.375rem",
+            },
+            {
+              value: 1,
+              label: t.settings.appearance.cornerDefault,
+              preview: "0.5rem",
+            },
+            {
+              value: 1.25,
+              label: t.settings.appearance.cornerRound,
+              preview: "0.625rem",
+            },
+            {
+              value: 1.5,
+              label: t.settings.appearance.cornerPill,
+              preview: "0.75rem",
+            },
           ]}
         />
       </SettingsSection>
@@ -201,8 +228,16 @@ export default function AppearanceSettingsPage() {
           value={density}
           onChange={setDensity}
           options={[
-            { value: "comfortable", label: t.settings.appearance.densityComfortable, preview: "15px" },
-            { value: "compact", label: t.settings.appearance.densityCompact, preview: "14px" },
+            {
+              value: "comfortable",
+              label: t.settings.appearance.densityComfortable,
+              preview: "15px",
+            },
+            {
+              value: "compact",
+              label: t.settings.appearance.densityCompact,
+              preview: "14px",
+            },
           ]}
         />
       </SettingsSection>
@@ -261,12 +296,14 @@ function ThemePreviewCard({
               : "border-slate-200 bg-white text-slate-900",
         )}
       >
-        <div className={cn(
-          "flex items-center gap-2 border-b px-3 py-2",
-          previewMode === "apple"
-            ? "border-slate-100 bg-slate-50/50"
-            : "border-border/50",
-        )}>
+        <div
+          className={cn(
+            "flex items-center gap-2 border-b px-3 py-2",
+            previewMode === "apple"
+              ? "border-slate-100 bg-slate-50/50"
+              : "border-border/50",
+          )}
+        >
           <div
             className={cn(
               "h-2 w-2 rounded-full",
@@ -284,32 +321,38 @@ function ThemePreviewCard({
           <div className="space-y-2">
             <div className="h-3 w-3/4 rounded-md bg-current/15" />
             <div className="h-3 w-1/2 rounded-md bg-current/10" />
-            <div className={cn(
-              "h-[90px] rounded-xl border bg-current/5",
-              previewMode === "apple"
-                ? "border-slate-200 shadow-sm"
-                : "border-current/10",
-            )} />
+            <div
+              className={cn(
+                "h-[90px] rounded-xl border bg-current/5",
+                previewMode === "apple"
+                  ? "border-slate-200 shadow-sm"
+                  : "border-current/10",
+              )}
+            />
           </div>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <div className={cn(
-                "h-8 w-8 rounded-lg",
-                previewMode === "apple"
-                  ? "bg-blue-500/10 rounded-xl"
-                  : "bg-current/10",
-              )} />
+              <div
+                className={cn(
+                  "h-8 w-8 rounded-lg",
+                  previewMode === "apple"
+                    ? "bg-blue-500/10 rounded-xl"
+                    : "bg-current/10",
+                )}
+              />
               <div className="space-y-2">
                 <div className="h-2 w-14 rounded-md bg-current/15" />
                 <div className="h-2 w-10 rounded-md bg-current/10" />
               </div>
             </div>
-            <div className={cn(
-              "flex flex-col gap-1 rounded-lg border border-dashed p-2",
-              previewMode === "apple"
-                ? "border-slate-300/40 rounded-xl"
-                : "border-current/15",
-            )}>
+            <div
+              className={cn(
+                "flex flex-col gap-1 rounded-lg border border-dashed p-2",
+                previewMode === "apple"
+                  ? "border-slate-300/40 rounded-xl"
+                  : "border-current/15",
+              )}
+            >
               <div className="h-2 w-3/5 rounded-md bg-current/15" />
               <div className="h-2 w-2/5 rounded-md bg-current/10" />
             </div>

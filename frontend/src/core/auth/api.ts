@@ -104,7 +104,9 @@ export async function getAuthProviders(): Promise<string[]> {
   try {
     const res = await fetch(`${getBackendBaseURL()}/api/auth/providers`);
     if (!res.ok) return [];
-    const data = (await res.json()) as { providers?: Array<{ id: string }> | string[] };
+    const data = (await res.json()) as {
+      providers?: Array<{ id: string }> | string[];
+    };
     if (!data.providers) return [];
     // Implementation note.
     if (data.providers.length > 0 && typeof data.providers[0] === "object") {
@@ -208,14 +210,11 @@ export function isMoliliDisabled(err: unknown): err is MoliliDisabledError {
 }
 
 export async function moliliSmsSend(phone: string): Promise<SmsSendResponse> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/auth/molili/sms/send`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone }),
-    },
-  );
+  const res = await fetch(`${getBackendBaseURL()}/api/auth/molili/sms/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
   // 404 means the Molili router isn't mounted · raise a typed error so
   // the dialog can show a helpful message + dismiss itself instead of
   // toasting a bare "Not Found".
@@ -237,14 +236,11 @@ export async function moliliSmsVerify(
   phone: string,
   code: string,
 ): Promise<SmsVerifyResponse> {
-  const res = await fetch(
-    `${getBackendBaseURL()}/api/auth/molili/sms/verify`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, code }),
-    },
-  );
+  const res = await fetch(`${getBackendBaseURL()}/api/auth/molili/sms/verify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, code }),
+  });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
     throw new Error(err.detail ?? `登录失败: ${res.statusText}`);

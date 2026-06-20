@@ -291,7 +291,9 @@ describe("<AgentProgressPill />", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Restore Progress" }));
 
-    expect(screen.getAllByText("Phase 2: run research").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Phase 2: run research").length).toBeGreaterThan(
+      0,
+    );
     expect(container.querySelector(".animate-spin")).toBeNull();
     expect(container.querySelector(".text-destructive")).toBeNull();
   });

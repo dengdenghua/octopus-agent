@@ -6,6 +6,7 @@ endpoint. It deliberately does not touch the SkillRegistry.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -182,12 +183,10 @@ def create_subagents_router(
         )
 
         def _emitter(event: dict[str, Any]) -> None:
-            try:
-                event_queue.put_nowait(event)
-            except queue.Full:
+            with contextlib.suppress(queue.Full):
                 # Drop on flood — preserves liveness over completeness.
                 # Producer (subagent loop) must never block on the queue.
-                pass
+                event_queue.put_nowait(event)
 
         def _runner() -> None:
             try:

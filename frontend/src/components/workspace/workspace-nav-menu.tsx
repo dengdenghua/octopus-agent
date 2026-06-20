@@ -1,9 +1,4 @@
-
-import {
-  BotIcon,
-  ChevronsUpDownIcon,
-  UsersIcon,
-} from "lucide-react";
+import { BotIcon, ChevronsUpDownIcon, UsersIcon } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useMemo, useState, useEffect, useCallback } from "react";
 
@@ -115,7 +110,11 @@ export function WorkspaceNavMenu() {
   // Resolve the currently active agent.
   const activeAgent = useMemo(() => {
     if (currentAgentName) {
-      return userAgents.find((a) => a.name === currentAgentName) ?? userAgents[0] ?? null;
+      return (
+        userAgents.find((a) => a.name === currentAgentName) ??
+        userAgents[0] ??
+        null
+      );
     }
     return userAgents[0] ?? null;
   }, [userAgents, currentAgentName]);
@@ -126,9 +125,9 @@ export function WorkspaceNavMenu() {
       setTeams(remote);
       const preferred = readPreferredTeamId();
       const next =
-        (preferred ? remote.find((team) => team.id === preferred) : null)
-        ?? remote[0]
-        ?? null;
+        (preferred ? remote.find((team) => team.id === preferred) : null) ??
+        remote[0] ??
+        null;
       setCurrentTeam(next);
       writePreferredTeam(next);
     } catch (error) {
@@ -156,29 +155,35 @@ export function WorkspaceNavMenu() {
   const handleTeamSelect = useCallback((team: Team) => {
     setCurrentTeam(team);
     writePreferredTeam(team);
-    window.dispatchEvent(new CustomEvent("octopus:select-team", { detail: team }));
+    window.dispatchEvent(
+      new CustomEvent("octopus:select-team", { detail: team }),
+    );
     dispatchTeamUpdated(team);
   }, []);
 
-  const handleDeleteTeam = useCallback(async (teamId: string) => {
-    try {
-      await deleteTeamRoom(teamId);
-      const nextTeams = teams.filter((team) => team.id !== teamId);
-      const nextCurrent =
-        currentTeam?.id === teamId
-          ? nextTeams[0] ?? null
-          : currentTeam && nextTeams.some((team) => team.id === currentTeam.id)
-            ? currentTeam
-            : null;
-      setTeams(nextTeams);
-      setCurrentTeam(nextCurrent);
-      writePreferredTeam(nextCurrent);
-      dispatchTeamUpdated(nextCurrent);
-      window.dispatchEvent(new Event("octopus:teams-refresh"));
-    } catch (error) {
-      console.warn("[team] failed to delete team room", error);
-    }
-  }, [currentTeam, teams]);
+  const handleDeleteTeam = useCallback(
+    async (teamId: string) => {
+      try {
+        await deleteTeamRoom(teamId);
+        const nextTeams = teams.filter((team) => team.id !== teamId);
+        const nextCurrent =
+          currentTeam?.id === teamId
+            ? (nextTeams[0] ?? null)
+            : currentTeam &&
+                nextTeams.some((team) => team.id === currentTeam.id)
+              ? currentTeam
+              : null;
+        setTeams(nextTeams);
+        setCurrentTeam(nextCurrent);
+        writePreferredTeam(nextCurrent);
+        dispatchTeamUpdated(nextCurrent);
+        window.dispatchEvent(new Event("octopus:teams-refresh"));
+      } catch (error) {
+        console.warn("[team] failed to delete team room", error);
+      }
+    },
+    [currentTeam, teams],
+  );
 
   // Handle create team
   const handleCreateTeam = useCallback(() => {
@@ -223,49 +228,45 @@ export function WorkspaceNavMenu() {
         <>
           {/* Normal mode: Agent Selector */}
           <SidebarMenuItem className="group-data-[collapsible=icon]:px-0 px-1.5">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <SidebarMenuButton
-                    className="w-full justify-between group-data-[collapsible=icon]:px-0"
-                    tooltip={activeAgent?.display_name ?? t.sidebar.selectAgent}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <AgentAvatar agent={activeAgent} size={20} />
-                      <span className="truncate">
-                        {activeAgent?.display_name ?? t.sidebar.selectAgent}
-                      </span>
-                    </div>
-                    <ChevronsUpDownIcon className="ml-2 size-3.5 shrink-0 text-muted-foreground" />
-                  </SidebarMenuButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="w-56"
-                  side="right"
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  className="w-full justify-between group-data-[collapsible=icon]:px-0"
+                  tooltip={activeAgent?.display_name ?? t.sidebar.selectAgent}
                 >
-                  <DropdownMenuLabel>{t.sidebar.selectAgent}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {allAgents.map((agent) => (
-                    <DropdownMenuItem
-                      key={agent.name}
-                      asChild
-                      className="cursor-pointer"
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AgentAvatar agent={activeAgent} size={20} />
+                    <span className="truncate">
+                      {activeAgent?.display_name ?? t.sidebar.selectAgent}
+                    </span>
+                  </div>
+                  <ChevronsUpDownIcon className="ml-2 size-3.5 shrink-0 text-muted-foreground" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56" side="right">
+                <DropdownMenuLabel>{t.sidebar.selectAgent}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {userAgents.map((agent) => (
+                  <DropdownMenuItem
+                    key={agent.name}
+                    asChild
+                    className="cursor-pointer"
+                  >
+                    <Link
+                      to={`/workspace/agents/${agent.name}/chats/new`}
+                      className="flex items-center gap-2"
                     >
-                      <Link
-                        to={`/workspace/agents/${agent.name}/chats/new`}
-                        className="flex items-center gap-2"
-                      >
-                        <AgentAvatar agent={agent} size={18} />
-                        <span className="truncate">{agent.display_name}</span>
-                        {agent.name === activeAgent?.name && (
-                          <BotIcon className="ml-auto size-3 text-primary" />
-                        )}
-                      </Link>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </SidebarMenuItem>
+                      <AgentAvatar agent={agent} size={18} />
+                      <span className="truncate">{agent.display_name}</span>
+                      {agent.name === activeAgent?.name && (
+                        <BotIcon className="ml-auto size-3 text-primary" />
+                      )}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
         </>
       )}
     </SidebarMenu>

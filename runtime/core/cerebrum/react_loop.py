@@ -17,8 +17,10 @@ from runtime.core.cerebrum.react_checkpointing import (
     _should_auto_checkpoint,
 )
 from runtime.core.cerebrum.react_context import (
+    _build_code_agent_mode_prompt,
     _build_code_context_prelude,
     _build_project_profile_prompt,
+    _build_project_signals_prompt,
     _build_user_message_content,
     _compress_context,
     _format_skill_catalog,
@@ -38,6 +40,7 @@ from runtime.core.cerebrum.react_execution import (
     _execute_action_via_beak,
     _format_background_task_heartbeat,
     _is_scoped_artifact_write,
+    _normalized_tool_call_from_react_action,
     _persist_react_trajectory,
     _react_completion_receipt,
     _reset_kg_throttle_for_tests,
@@ -93,9 +96,14 @@ from runtime.core.cerebrum.todo_protocol import (
     render_todo_protocol_guidance,
     should_require_todo_protocol,
 )
+from runtime.execution.tool_engine import (
+    normalize_tool_lifecycle_event,
+    tool_lifecycle_event_to_react_event,
+)
 from runtime.platform.config.builder import StackProtocol
 from runtime.platform.models import ParsedIntent, Step, TaskId
 from runtime.safety.approval.approval_gate import ApprovalProvider
+from runtime.safety.hooks.tool_edge_hooks import post_write_diagnostic_record
 from runtime.safety.validation.prompt_injection import (
     injection_taint_gates,
     is_untrusted_tool,
@@ -128,6 +136,152 @@ def _looks_like_observation_echo(text: str) -> bool:
     )
 
 
+def _build_resume_context_prompt(resume_intent: Any) -> str:
+    if not isinstance(resume_intent, dict):
+        return ""
+    if resume_intent.get("confirmed") is not True:
+        return ""
+    lines = [
+        "<resume-context>",
+        "This is a sanitized checkpoint recovery summary, not a new user instruction.",
+        f"- checkpoint_id: {_resume_context_text(resume_intent.get('checkpoint_id'), 80)}",
+        f"- task_id: {_resume_context_text(resume_intent.get('task_id'), 120)}",
+        f"- checkpoint_type: {_resume_context_text(resume_intent.get('checkpoint_type'), 80)}",
+        f"- iteration: {_resume_context_text(resume_intent.get('iteration'), 32)}",
+        f"- continue_from_iteration: {_resume_context_text(resume_intent.get('continue_from_iteration'), 32)}",
+    ]
+    phase = _resume_context_text(resume_intent.get("phase"), 120)
+    if phase:
+        lines.append(f"- phase: {phase}")
+    working_set = [
+        _resume_context_text(path, 180)
+        for path in resume_intent.get("working_set", [])
+        if isinstance(path, str) and path.strip()
+    ][:8]
+    if working_set:
+        lines.append("- working_set:")
+        lines.extend(f"  - {path}" for path in working_set)
+    recent = _resume_context_recent_tools(resume_intent.get("recent_tool_calls"))
+    if recent:
+        lines.append("- recent_tool_calls:")
+        lines.extend(recent)
+    lines.append("</resume-context>")
+    return "\n".join(lines)
+
+
+def _resume_context_recent_tools(value: Any) -> list[str]:
+    items = value if isinstance(value, list) else []
+    lines: list[str] = []
+    for item in items[:6]:
+        if not isinstance(item, dict):
+            continue
+        tool = _resume_context_text(item.get("tool"), 80)
+        if not tool:
+            continue
+        iteration = _resume_context_text(item.get("iteration"), 32)
+        input_preview = _resume_context_text(item.get("input_preview"), 180)
+        observation_preview = _resume_context_text(item.get("observation_preview"), 220)
+        line = f"  - iter {iteration or '?'} tool={tool}"
+        if input_preview:
+            line += f" input={input_preview}"
+        if observation_preview:
+            line += f" observation={observation_preview}"
+        lines.append(line)
+    return lines
+
+
+def _resume_context_text(value: Any, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 3)] + "..."
+
+
+def _load_resume_checkpoint_snapshot(
+    stack: StackProtocol,
+    intent: ParsedIntent,
+    resume_task_id: TaskId,
+) -> dict[str, Any] | None:
+    journal = getattr(stack, "journal", None)
+    if journal is not None:
+        ckpts = [
+            e
+            for e in journal.read_by_type("react_checkpoint")
+            if str(getattr(e, "task_id", "")) == str(resume_task_id)
+        ]
+        if ckpts:
+            return _checkpoint_snapshot_from_journal_event(ckpts[-1])
+    return _load_trace_resume_checkpoint_snapshot(intent, resume_task_id)
+
+
+def _checkpoint_snapshot_from_journal_event(event: Any) -> dict[str, Any]:
+    return {
+        "source": "journal",
+        "iteration_completed": int(getattr(event, "iteration_completed", 0) or 0),
+        "max_iterations": int(getattr(event, "max_iterations", 0) or 0),
+        "messages_snapshot": getattr(event, "messages_snapshot", []) or [],
+        "steps_snapshot": getattr(event, "steps_snapshot", []) or [],
+        "has_final_answer": bool(getattr(event, "has_final_answer", False)),
+        "final_answer": str(getattr(event, "final_answer", "") or ""),
+        "working_set_snapshot": getattr(event, "working_set_snapshot", []) or [],
+        "progress_summary": str(getattr(event, "progress_summary", "") or ""),
+        "current_phase": str(getattr(event, "current_phase", "") or ""),
+    }
+
+
+def _load_trace_resume_checkpoint_snapshot(
+    intent: ParsedIntent,
+    resume_task_id: TaskId,
+) -> dict[str, Any] | None:
+    resume_intent = (intent.user_context or {}).get("resume_intent")
+    if not isinstance(resume_intent, dict):
+        return None
+    checkpoint_id = resume_intent.get("checkpoint_id")
+    if not isinstance(checkpoint_id, int) or checkpoint_id <= 0:
+        return None
+    try:
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+    except (ImportError, AttributeError):
+        session = None
+    metadata = getattr(session, "metadata", None) if session is not None else None
+    trace_store = metadata.get("_trace_store") if isinstance(metadata, dict) else None
+    if trace_store is None or not hasattr(trace_store, "checkpoint_by_id"):
+        return None
+    checkpoint = trace_store.checkpoint_by_id(checkpoint_id)
+    if not isinstance(checkpoint, dict):
+        return None
+    if str(checkpoint.get("task_id") or "") != str(resume_task_id):
+        return None
+    if str(checkpoint.get("checkpoint_type") or "").lower() != "react":
+        return None
+    state = checkpoint.get("state") if isinstance(checkpoint.get("state"), dict) else {}
+    return {
+        "source": "trace_store",
+        "iteration_completed": int(
+            state.get("iteration_completed")
+            or checkpoint.get("iteration")
+            or resume_intent.get("iteration")
+            or 0
+        ),
+        "max_iterations": int(state.get("max_iterations") or 0),
+        "messages_snapshot": state.get("messages_snapshot")
+        if isinstance(state.get("messages_snapshot"), list)
+        else [],
+        "steps_snapshot": state.get("steps_snapshot")
+        if isinstance(state.get("steps_snapshot"), list)
+        else [],
+        "has_final_answer": bool(state.get("has_final_answer") is True),
+        "final_answer": str(state.get("final_answer") or ""),
+        "working_set_snapshot": state.get("working_set_snapshot")
+        if isinstance(state.get("working_set_snapshot"), list)
+        else [],
+        "progress_summary": str(state.get("progress_summary") or checkpoint.get("summary") or ""),
+        "current_phase": str(state.get("current_phase") or ""),
+    }
+
+
 # Re-exports for tests/test_react_loop.py and friends — the helpers live
 # in react_parsing / react_execution / react_guards / react_context /
 # react_checkpointing / react_loop_controls / react_parallel_dispatch
@@ -139,7 +293,10 @@ __all__ = [
     "ReActStep",
     "_background_task_info_from_observation",
     "_beak_step_effective_success",
+    "_build_code_agent_mode_prompt",
     "_build_code_context_prelude",
+    "_build_project_signals_prompt",
+    "_build_resume_context_prompt",
     "_build_user_message_content",
     "_checkpoint_interval",
     "_checkpoint_mirror",
@@ -159,6 +316,7 @@ __all__ = [
     "_long_task_budget_limits",
     "_looks_like_image_attachment",
     "_mirror_checkpoint",
+    "_normalized_tool_call_from_react_action",
     "_parse_action",
     "_parse_step",
     "_placeholder_observation",
@@ -307,6 +465,9 @@ def stream_react_loop(
     _uc = intent.user_context or {}
     _wp = _uc.get("workspace_path") or _uc.get("metadata", {}).get("workspace_path")
     _metadata = _uc.get("metadata") or {}
+    _resume_context_prompt = _build_resume_context_prompt(_uc.get("resume_intent"))
+    if _resume_context_prompt:
+        volatile_parts.append(_resume_context_prompt)
     _goal_mode_value = (
         _uc.get("goal_mode")
         or _metadata.get("goal_mode")
@@ -334,6 +495,10 @@ def stream_react_loop(
     _capability_mode_value = str(
         _uc.get("capability_mode") or _metadata.get("capability_mode") or ""
     ).lower()
+    _agent_mode_value = str(
+        _uc.get("agent_mode") or _metadata.get("agent_mode") or "coder"
+    ).lower()
+    _project_signals = _uc.get("project_signals") or _metadata.get("project_signals")
     _is_swarm_mode = _mode_value in {
         "swarm",
         "swarms",
@@ -366,7 +531,7 @@ def stream_react_loop(
     # "as long as it takes". 10000 is the implementation cap; in
     # practice goal mode terminates via the protocol guard, not the
     # iteration counter.
-    _GOAL_MODE_MAX_ITER = 10_000
+    _GOAL_MODE_MAX_ITER = 10_000  # noqa: N806
     if _is_goal_mode and max_iterations < _GOAL_MODE_MAX_ITER:
         max_iterations = _GOAL_MODE_MAX_ITER
     (
@@ -420,6 +585,10 @@ def stream_react_loop(
                 "用 Final Answer 描述阻塞 + 列出未完成 todo + 已做过的验证。\n"
                 "</code-mode>"
             )
+            system_parts.append(_build_code_agent_mode_prompt(_agent_mode_value))
+            _signals_prompt = _build_project_signals_prompt(_project_signals)
+            if _signals_prompt:
+                system_parts.append(_signals_prompt)
             if _browser_regression_enabled:
                 _preview_line = (
                     f"优先测试预览地址: {_browser_regression_preview_url}\n"
@@ -1172,91 +1341,81 @@ def stream_react_loop(
     _resume_event: dict[str, Any] | None = None
 
     if resume_task_id is not None:
-        journal = getattr(stack, "journal", None)
-        if journal is not None:
-            try:
-                ckpts = [
-                    e
-                    for e in journal.read_by_type("react_checkpoint")
-                    if str(getattr(e, "task_id", "")) == str(resume_task_id)
-                ]
-                if ckpts:
-                    last = ckpts[-1]
-                    from runtime.core.cerebrum.checkpoint_integrity import (
-                        validate_checkpoint_state,
-                    )
+        try:
+            last = _load_resume_checkpoint_snapshot(stack, intent, resume_task_id)
+            if last is not None:
+                from runtime.core.cerebrum.checkpoint_integrity import (
+                    validate_checkpoint_state,
+                )
 
-                    _checkpoint_state = {
-                        "messages_snapshot": last.messages_snapshot,
-                        "steps_snapshot": last.steps_snapshot,
-                        "working_set_snapshot": getattr(
-                            last,
-                            "working_set_snapshot",
-                            [],
-                        ),
-                        "progress_summary": getattr(last, "progress_summary", ""),
-                        "current_phase": getattr(last, "current_phase", ""),
-                    }
-                    _integrity = validate_checkpoint_state(
-                        _checkpoint_state,
-                        iteration=last.iteration_completed,
-                    )
-                    if not _integrity.resume_safe:
-                        _logger.warning(
-                            "react_loop resume checkpoint rejected (task %s): %s",
-                            resume_task_id,
-                            ", ".join(_integrity.errors),
-                        )
-                        raise ValueError("unsafe checkpoint")
-                    resume_from_iter = last.iteration_completed
-                    if last.messages_snapshot:
-                        messages = _restore_messages_from_checkpoint(last.messages_snapshot)
-                    if last.steps_snapshot:
-                        steps = [
-                            ReActStep(
-                                iteration=s.get("iteration", 0),
-                                thought=s.get("thought", ""),
-                                action=s.get("action", ""),
-                                observation=s.get("observation", ""),
-                            )
-                            for s in last.steps_snapshot
-                            if isinstance(s, dict)
-                        ]
-                        messages = _rehydrate_messages_from_steps(messages, steps)
-                    if getattr(last, "working_set_snapshot", None):
-                        _working_set = {
-                            f["path"]: f
-                            for f in last.working_set_snapshot
-                            if isinstance(f, dict) and f.get("path")
-                        }
-                    if getattr(last, "progress_summary", ""):
-                        _progress_summary = last.progress_summary
-                    if getattr(last, "current_phase", ""):
-                        _current_phase = last.current_phase
-                    if getattr(last, "has_final_answer", False) and getattr(
-                        last, "final_answer", ""
-                    ):
-                        final_answer = str(last.final_answer)
-                        terminated_reason = "final_answer"
-                        resume_from_iter = max_iterations
-                    react_task_id = resume_task_id
-                    _resume_event = {
-                        "type": "react_resumed",
-                        "task_id": str(resume_task_id),
-                        "checkpoint_iteration": last.iteration_completed,
-                        "resume_from_iteration": resume_from_iter,
-                        "restored_step_count": len(steps),
-                        "has_final_answer": bool(final_answer),
-                        "current_phase": _current_phase,
-                        "progress_summary": _progress_summary,
-                    }
-                    _logger.info(
-                        "react_loop resuming from iteration %d (task %s)",
-                        resume_from_iter,
+                _checkpoint_state = {
+                    "messages_snapshot": last["messages_snapshot"],
+                    "steps_snapshot": last["steps_snapshot"],
+                    "working_set_snapshot": last["working_set_snapshot"],
+                    "progress_summary": last["progress_summary"],
+                    "current_phase": last["current_phase"],
+                }
+                _checkpoint_iteration = int(last["iteration_completed"] or 0)
+                _integrity = validate_checkpoint_state(
+                    _checkpoint_state,
+                    iteration=_checkpoint_iteration,
+                )
+                if not _integrity.resume_safe:
+                    _logger.warning(
+                        "react_loop resume checkpoint rejected (task %s): %s",
                         resume_task_id,
+                        ", ".join(_integrity.errors),
                     )
-            except (AttributeError, KeyError, TypeError, ValueError):
-                _logger.debug("resume checkpoint loading failed", exc_info=True)
+                    raise ValueError("unsafe checkpoint")
+                resume_from_iter = _checkpoint_iteration
+                if last["messages_snapshot"]:
+                    messages = _restore_messages_from_checkpoint(last["messages_snapshot"])
+                if last["steps_snapshot"]:
+                    steps = [
+                        ReActStep(
+                            iteration=s.get("iteration", 0),
+                            thought=s.get("thought", ""),
+                            action=s.get("action", ""),
+                            observation=s.get("observation", ""),
+                        )
+                        for s in last["steps_snapshot"]
+                        if isinstance(s, dict)
+                    ]
+                    messages = _rehydrate_messages_from_steps(messages, steps)
+                if last["working_set_snapshot"]:
+                    _working_set = {
+                        f["path"]: f
+                        for f in last["working_set_snapshot"]
+                        if isinstance(f, dict) and f.get("path")
+                    }
+                if last["progress_summary"]:
+                    _progress_summary = last["progress_summary"]
+                if last["current_phase"]:
+                    _current_phase = last["current_phase"]
+                if last["has_final_answer"] and last["final_answer"]:
+                    final_answer = str(last["final_answer"])
+                    terminated_reason = "final_answer"
+                    resume_from_iter = max_iterations
+                react_task_id = resume_task_id
+                _resume_event = {
+                    "type": "react_resumed",
+                    "task_id": str(resume_task_id),
+                    "checkpoint_iteration": _checkpoint_iteration,
+                    "resume_from_iteration": resume_from_iter,
+                    "restored_step_count": len(steps),
+                    "has_final_answer": bool(final_answer),
+                    "current_phase": _current_phase,
+                    "progress_summary": _progress_summary,
+                    "checkpoint_source": last.get("source"),
+                }
+                _logger.info(
+                    "react_loop resuming from iteration %d (task %s, source=%s)",
+                    resume_from_iter,
+                    resume_task_id,
+                    last.get("source"),
+                )
+        except (AttributeError, KeyError, TypeError, ValueError):
+            _logger.debug("resume checkpoint loading failed", exc_info=True)
 
     if _resume_event is not None:
         yield _resume_event
@@ -1758,6 +1917,7 @@ def stream_react_loop(
         # ── PHASE 6d · action dispatch + observation ───────────────────
         observation: str | None = step.observation or None
         resolved_name: str | None = None
+        action_args: dict[str, Any] | None = None
         tool_ok = False
         tool_action_requested = (
             tools_active and step.action and step.action.lower() not in {"none", "n/a", ""}
@@ -1799,15 +1959,21 @@ def stream_react_loop(
                 resolved_name = parsed[0] if parsed and executor.registry.has(parsed[0]) else None
                 if resolved_name is not None:
                     call_id = uuid.uuid4().hex[:12]
-                    _input_preview = parsed[1] if parsed else None
+                    action_args = parsed[1] if isinstance(parsed[1], dict) else {}
+                    _input_preview = action_args
                     _tool_started_at = time.monotonic()
-                    yield {
-                        "type": "tool_start",
-                        "tool_name": resolved_name,
-                        "tool_call_id": call_id,
-                        "iteration": i + 1,
-                        "input_preview": _input_preview,
-                    }
+                    yield tool_lifecycle_event_to_react_event(
+                        normalize_tool_lifecycle_event(
+                            "tool_start",
+                            {
+                                "tool_name": resolved_name,
+                                "tool_call_id": call_id,
+                                "iteration": i + 1,
+                                "input_preview": _input_preview,
+                            },
+                            origin="react_compat",
+                        )
+                    )
                     _auto_approve = intent.user_context.get(
                         "auto_approve", False
                     ) or intent.flags.get("auto_approve", False)
@@ -1890,8 +2056,8 @@ def stream_react_loop(
                             "approval_policy": _approval_policy.to_dict(),
                         }
                         observation = (
-                            "(å·¥å…·è¢«é£Žé™©ç­–ç•¥æ‹’ç») æ­¤æ“ä½œè¢« approval risk policy æ‹’ç»ï¼Œ"
-                            "è¯·æ¢ä¸€ç§æ–¹å¼æˆ–è¯¢é—®ç”¨æˆ·ã€‚"
+                            "(工具被风险策略拒绝) 此操作被 approval risk policy 拒绝，"
+                            "请换一种方式或询问用户。"
                         )
                         continue
                     if (
@@ -2065,20 +2231,25 @@ def stream_react_loop(
                             "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
                         }
                     else:
-                        yield {
-                            "type": "tool_end",
-                            "tool_name": resolved_name,
-                            "tool_call_id": call_id,
-                            "iteration": i + 1,
-                            "status": "success" if tool_ok else "error",
-                            "output_preview": (
-                                _summarize_observation(observation)
-                                if isinstance(observation, str) and observation
-                                else observation
-                            ),
-                            "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
-                            **_tool_event_extras_from_beak_step(beak_step, resolved_name),
-                        }
+                        yield tool_lifecycle_event_to_react_event(
+                            normalize_tool_lifecycle_event(
+                                "tool_end",
+                                {
+                                    "tool_name": resolved_name,
+                                    "tool_call_id": call_id,
+                                    "iteration": i + 1,
+                                    "status": "success" if tool_ok else "error",
+                                    "output_preview": (
+                                        _summarize_observation(observation)
+                                        if isinstance(observation, str) and observation
+                                        else observation
+                                    ),
+                                    "duration_ms": int((time.monotonic() - _tool_started_at) * 1000),
+                                    **_tool_event_extras_from_beak_step(beak_step, resolved_name),
+                                },
+                                origin="react_compat",
+                            )
+                        )
                     # Indirect prompt-injection defense (single-action
                     # path; mirrors _dispatch_parallel_actions): fence an
                     # external tool's output as data before it becomes the
@@ -2139,12 +2310,34 @@ def stream_react_loop(
                 }
             )
             if resolved_name in _write_tools and tool_ok:
+                _diag_record = post_write_diagnostic_record(
+                    resolved_name,
+                    action_args or {},
+                    action_args or {},
+                    workspace_path=_wp if isinstance(_wp, str) else "",
+                )
+                _diag_status = str(_diag_record.get("status") or "skipped")
+                _diag_reason = str(_diag_record.get("reason") or "")
+                _diag_target = str(_diag_record.get("target") or "")
+                _diag_text = (
+                    f"{_diag_status}: {_diag_reason}"
+                    + (f" · {_diag_target}" if _diag_target else "")
+                )
+                step.observation = (
+                    (step.observation or observation)
+                    + "\n\n[写后诊断记录]\n"
+                    + _diag_text
+                )
                 _auto_diag = _run_auto_diagnostics(
                     stack,
                     workspace_path=_wp if isinstance(_wp, str) else None,
                 )
                 if _auto_diag:
-                    step.observation = observation + "\n\n[自动诊断结果]\n" + _auto_diag
+                    step.observation = (
+                        (step.observation or observation)
+                        + "\n\n[自动诊断结果]\n"
+                        + _auto_diag
+                    )
                 _prefetch = _prefetch_related_files(step.action, _working_set)
                 if _prefetch:
                     step.observation = (

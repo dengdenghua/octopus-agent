@@ -66,7 +66,11 @@ describe("process trace events", () => {
         name: "verification",
         status: "running",
       }),
-      event({ id: "verification-error", name: "verification", status: "error" }),
+      event({
+        id: "verification-error",
+        name: "verification",
+        status: "error",
+      }),
       event({ id: "read", name: "read_file", status: "done" }),
     ]);
 

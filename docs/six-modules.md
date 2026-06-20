@@ -46,7 +46,7 @@
 | 职责 | 落在章鱼哪个器官/协议 |
 |---|---|
 | 目标分解为 TaskNode 树 | `cerebrum/` Planner |
-| 状态机驱动（pending/running/blocked/done）| `ganglia/` LocalRuntime |
+| 状态机驱动（pending/running/blocked/done）| `ganglia/` LocalRuntime（未实装）|
 | Checkpoint + 断点续跑 | `genome/checkpoint/` |
 | JSONL trajectory 落盘 | `genome/journal/` |
 | 卡住探测 | `ink/` CircuitBreaker 的 `zero_gain_steps`（BDG-I5 附近）|
@@ -174,7 +174,7 @@
 | 器官 | 归入模块 |
 |---|---|
 | `cerebrum/` | 1 长任务 |
-| `ganglia/` | 1 长任务 |
+| `ganglia/` | 1 长任务（未实装）|
 | `nerves/graph/` | 2 工作流 |
 | `suckers/` | 3 技能 |
 | `genome/knowledge/` | 4 KG |
@@ -223,33 +223,33 @@
 
 ---
 
-## 4. 六模块视角暴露的 5 个真缺口（✅ 全部补齐）
+## 4. 六模块视角暴露的 5 个真缺口（协议层 ✅ 全部覆盖，代码接线见 implementation-status.md）
 
-对照六边形的职责清单，当前架构**明确没做**的，现在全部有协议覆盖：
+对照六边形的职责清单，当前架构**明确没做**的，现在全部有**协议层覆盖**（.md 文档已写）。但**协议覆盖 ≠ 代码接线**——以下每个缺口的位置目录可能仍为空或仅含协议桩，代码实装状态以 [implementation-status.md](implementation-status.md) 为准。
 
-### 缺口 1 · Workflow Rewriter（模块 2）→ ✅ [protocols/workflow_rewrite.md](protocols/workflow_rewrite.md)
+### 缺口 1 · Workflow Rewriter（模块 2）→ 协议 ✅ [protocols/workflow_rewrite.md](protocols/workflow_rewrite.md) · 代码 ⚠️
 - 从失败 trajectory 反推"哪个节点要重写"，自动改 DAG
-- 位置：`regeneration/workflow_rewriter/`
+- 位置：`regeneration/workflow_rewriter/`（协议已写，代码侧见 §2 缺口说明）
 
-### 缺口 2 · KG 升级 + 冲突消解（模块 4）→ ✅ [protocols/knowledge_graph.md](protocols/knowledge_graph.md) + [protocols/conflict_resolution.md](protocols/conflict_resolution.md)
+### 缺口 2 · KG 升级 + 冲突消解（模块 4）→ 协议 ✅ [protocols/knowledge_graph.md](protocols/knowledge_graph.md) + [protocols/conflict_resolution.md](protocols/conflict_resolution.md) · 代码 ⚠️
 - 三元组 schema + Kùzu/Neo4j + 简化本体（3 类推理）
 - 冲突消解底座复用给记忆模块
-- 位置：`genome/knowledge/graph/`
+- 位置：`genome/knowledge/graph/`（当前实装为 SQLite + 内存版，图数据库后端待接线）
 
-### 缺口 3 · Skill 回归测试集（模块 3）→ ✅ [protocols/skill_testing.md](protocols/skill_testing.md)
+### 缺口 3 · Skill 回归测试集（模块 3）→ 协议 ✅ [protocols/skill_testing.md](protocols/skill_testing.md) · 代码 ⚠️
 - 三层测试金字塔（Golden / Regression / Synthesized）
-- 位置：`suckers/<id>/tests/`
+- 位置：`suckers/<id>/tests/`（协议已写，§3 缺口说明仍标注未实装）
 
-### 缺口 4 · Context Recipe 评分（模块 6）→ ✅ [protocols/recipe.md](protocols/recipe.md)
+### 缺口 4 · Context Recipe 评分（模块 6）→ 协议 ✅ [protocols/recipe.md](protocols/recipe.md) · 代码 ⚠️
 - F-Recipe 层（方差 + 鲁棒性）+ per-task_type Thompson
 - 位置：`regeneration/recipe_evaluator/`
 
-### 缺口 5 · 记忆冲突消解（模块 5）→ ✅ [protocols/memory_consolidation.md](protocols/memory_consolidation.md)
+### 缺口 5 · 记忆冲突消解（模块 5）→ 协议 ✅ [protocols/memory_consolidation.md](protocols/memory_consolidation.md) · 代码 ⚠️
 - 四层记忆 + 轻/重巩固 + REM 合成 + 冲突消解复用
 - 位置：`regeneration/memory_consolidator/`
 
-**中心反思引擎 5 条产出信号全部闭环**：
-新 skill / workflow 改写 / KG 三元组 / 记忆巩固 / recipe 打分 —— 全在协议层覆盖。
+**中心反思引擎 5 条产出信号在协议层全部闭环**：
+新 skill / workflow 改写 / KG 三元组 / 记忆巩固 / recipe 打分 —— 全有协议文档覆盖。代码接线进度见 [implementation-status.md](implementation-status.md)。
 
 ---
 

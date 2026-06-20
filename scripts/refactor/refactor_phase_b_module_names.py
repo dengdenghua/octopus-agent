@@ -1,5 +1,6 @@
 """Phase B follow-up: rewrite *_mantle module name references."""
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 

@@ -41,7 +41,7 @@ def test_accepts_topic_under_alias_keys() -> None:
         proceeded["called"] = True
         return {}  # empty registry → topology lookup fails → return None
 
-    orig = ms.__dict__.get("load_registry")  # likely not directly importable here
+    ms.__dict__.get("load_registry")  # likely not directly importable here
     # Patch via the import path used inside the helper.
     import runtime.safety.organization.forge as forge
     monkey_orig = forge.load_registry

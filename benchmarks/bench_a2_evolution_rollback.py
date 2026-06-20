@@ -10,15 +10,13 @@ import sys
 import time
 from pathlib import Path
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from runtime.safety.evolution.canary import CanaryConfig, CanaryManager
-from runtime.safety.evolution.proposal_ledger import ProposalLedger, ProposalStatus
-from runtime.safety.evolution.rollback_coordinator import RollbackCoordinator
+from runtime.safety.evolution.canary import CanaryConfig, CanaryManager  # noqa: E402
+from runtime.safety.evolution.proposal_ledger import ProposalLedger, ProposalStatus  # noqa: E402
+from runtime.safety.evolution.rollback_coordinator import RollbackCoordinator  # noqa: E402
 
 
 class TestBenchCanaryRollback:

@@ -1,4 +1,3 @@
-
 import {
   DownloadIcon,
   Loader2Icon,
@@ -9,7 +8,15 @@ import {
   UploadIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Suspense, lazy, useDeferredValue, useEffect, useId, useRef, useState } from "react";
+import {
+  Suspense,
+  lazy,
+  useDeferredValue,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -263,9 +270,7 @@ function summariesToMarkdown(
 // Implementation note.
 // Implementation note.
 // Implementation note.
-function safeSummary(
-  section: { summary?: string } | undefined | null,
-): string {
+function safeSummary(section: { summary?: string } | undefined | null): string {
   return (section?.summary ?? "").trim();
 }
 
@@ -298,9 +303,18 @@ function upperFirst(str: string) {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function factScopeLabel(fact: MemoryFact, t: { settings: { memory: { projectScope: string; agentScope: string; globalScope: string } } }) {
-  if (fact.scope === "project" && fact.project) return `${t.settings.memory.projectScope}${fact.project}`;
-  if (fact.scope === "agent" && fact.agent_id) return `${t.settings.memory.agentScope}${fact.agent_id}`;
+function factScopeLabel(
+  fact: MemoryFact,
+  t: {
+    settings: {
+      memory: { projectScope: string; agentScope: string; globalScope: string };
+    };
+  },
+) {
+  if (fact.scope === "project" && fact.project)
+    return `${t.settings.memory.projectScope}${fact.project}`;
+  if (fact.scope === "agent" && fact.agent_id)
+    return `${t.settings.memory.agentScope}${fact.agent_id}`;
   return t.settings.memory.globalScope;
 }
 
@@ -657,7 +671,9 @@ export default function MemorySettingsPage() {
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">{t.settings.memory.enableMemory}</div>
+                    <div className="text-sm font-medium">
+                      {t.settings.memory.enableMemory}
+                    </div>
                     <div className="text-muted-foreground mt-1 text-xs">
                       {t.settings.memory.enableMemoryDesc}
                     </div>
@@ -673,14 +689,18 @@ export default function MemorySettingsPage() {
 
                 <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">{t.settings.memory.autoCapture}</div>
+                    <div className="text-sm font-medium">
+                      {t.settings.memory.autoCapture}
+                    </div>
                     <div className="text-muted-foreground mt-1 text-xs">
                       {t.settings.memory.autoCaptureDesc}
                     </div>
                   </div>
                   <Switch
                     checked={memoryConfigEnabled && autoCaptureEnabled}
-                    disabled={!memoryConfigEnabled || updateMemoryConfig.isPending}
+                    disabled={
+                      !memoryConfigEnabled || updateMemoryConfig.isPending
+                    }
                     onCheckedChange={(auto_capture_enabled) =>
                       void handleMemoryConfigChange({ auto_capture_enabled })
                     }
@@ -689,14 +709,18 @@ export default function MemorySettingsPage() {
 
                 <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">{t.settings.memory.injectOnReply}</div>
+                    <div className="text-sm font-medium">
+                      {t.settings.memory.injectOnReply}
+                    </div>
                     <div className="text-muted-foreground mt-1 text-xs">
                       {t.settings.memory.injectOnReplyDesc}
                     </div>
                   </div>
                   <Switch
                     checked={memoryConfigEnabled && injectionEnabled}
-                    disabled={!memoryConfigEnabled || updateMemoryConfig.isPending}
+                    disabled={
+                      !memoryConfigEnabled || updateMemoryConfig.isPending
+                    }
                     onCheckedChange={(injection_enabled) =>
                       void handleMemoryConfigChange({ injection_enabled })
                     }

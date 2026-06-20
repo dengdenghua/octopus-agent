@@ -135,9 +135,9 @@ def run_goal(
             )
 
         runtime = GraphRuntime(executor=executor, journal=journal)
-        pool = _build_arm_pool(runtime)
         signal_bus = SignalBus()
         boids = BoidsArbitrator(signal_bus=signal_bus)
+        pool = _build_arm_pool(runtime, signal_bus=signal_bus)
         swarm_runtime = SwarmRuntime(
             arm_pool=pool,
             signal_bus=signal_bus,
@@ -392,6 +392,7 @@ def run_bench(
         f"· {_('cli.bench.wall_fmt', ms=serial_wall_ms)}"
     )
 
+    bench_signal_bus = SignalBus()
     pool = ArmPool(
         [
             Arm(
@@ -399,6 +400,7 @@ def run_bench(
                 affinity=["bench"],
                 allowed_skills=[SkillId("slow_task")],
                 runtime=runtime,
+                signal_bus=bench_signal_bus,
             )
             for i in range(workers)
         ]
@@ -408,7 +410,7 @@ def run_bench(
     )
     swarm_runtime = SwarmRuntime(
         arm_pool=pool,
-        signal_bus=SignalBus(),
+        signal_bus=bench_signal_bus,
         boids=BoidsArbitrator(),
         journal=journal,
         max_workers=workers,

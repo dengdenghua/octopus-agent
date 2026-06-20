@@ -379,6 +379,19 @@ def _tags_for(agent_id: str, profile: dict[str, Any] | None = None) -> list[str]
     return mapping.get(agent_id, [agent_id])
 
 
+def _model_name_for_wire(value: Any) -> str | None:
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, dict):
+        name = str(value.get("name") or "").strip()
+        provider = str(value.get("provider") or "").strip()
+        if name and name != "auto":
+            return name
+        if provider and provider != "auto":
+            return provider
+    return None
+
+
 def _template_by_id(agent_id: str) -> dict[str, Any] | None:
     template = next((t for t in BUILTIN_TEMPLATES if t["id"] == agent_id), None)
     if template:
@@ -474,15 +487,30 @@ def _install_template_agent(
     return agent_root
 
 
-def _read_agent_private_skills(agent_dir: Path) -> list[str]:
+def _read_agent_tool_registry(agent_dir: Path) -> dict[str, list[str]]:
     path = agent_dir / "agent-core" / "tool-registry.jsonc"
     if not path.is_file():
-        return []
+        return {"arms": [], "extra_affinity": [], "private_skills": []}
     try:
         data = _parse_jsonc(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, ValueError):
-        return []
-    raw = data.get("private_skills") or []
+        return {"arms": [], "extra_affinity": [], "private_skills": []}
+
+    def _string_list(key: str) -> list[str]:
+        raw = data.get(key) or []
+        if not isinstance(raw, list):
+            return []
+        return list(dict.fromkeys(str(item).strip() for item in raw if str(item).strip()))
+
+    return {
+        "arms": _string_list("arms"),
+        "extra_affinity": _string_list("extra_affinity"),
+        "private_skills": _string_list("private_skills"),
+    }
+
+
+def _read_agent_private_skills(agent_dir: Path) -> list[str]:
+    raw = _read_agent_tool_registry(agent_dir).get("private_skills") or []
     if not isinstance(raw, list):
         return []
     return list(dict.fromkeys(str(skill).strip() for skill in raw if str(skill).strip()))
@@ -502,6 +530,27 @@ def _avatar_url_for(
         if path.is_file():
             return f"/api/agents/{agent_id}/avatar?v={int(path.stat().st_mtime)}"
     return None
+
+
+def _agent_visual_urls_for(agent_id: str, agent_dir: Path) -> dict[str, str]:
+    visuals_dir = agent_dir / "visuals"
+    urls: dict[str, str] = {}
+    for view in ("front", "side", "back"):
+        for ext in ("png", "jpg", "jpeg", "webp", "svg"):
+            path = visuals_dir / f"{view}.{ext}"
+            if path.is_file():
+                urls[view] = (
+                    f"/api/agents/{agent_id}/visuals/{view}"
+                    f"?v={int(path.stat().st_mtime)}"
+                )
+                break
+
+    reference = visuals_dir / "reference.png"
+    if reference.is_file():
+        version = int(reference.stat().st_mtime)
+        for view in ("front", "side", "back"):
+            urls.setdefault(view, f"/api/agents/{agent_id}/visuals/{view}?v={version}")
+    return urls
 
 
 def _list_local_agents() -> list[dict[str, Any]]:
@@ -531,7 +580,8 @@ def _list_local_agents() -> list[dict[str, Any]]:
             author = _normalize_local_author(profile.get("creator"))
             category = str(profile.get("category") or _category_for(agent_id))
             tags = _tags_for(agent_id, profile)
-            private_skills = _read_agent_private_skills(agent_dir)
+            tool_registry = _read_agent_tool_registry(agent_dir)
+            private_skills = tool_registry["private_skills"]
             avatar_url = _avatar_url_for(agent_id, agent_dir, profile)
             is_official = author == _OCTOPUS_AUTHOR
             # Agents discovered from ``agents/`` are already present on disk,
@@ -549,6 +599,13 @@ def _list_local_agents() -> list[dict[str, Any]]:
                 "tags": tags,
                 "icon": icon,
                 "avatar_url": avatar_url,
+                "visual_urls": _agent_visual_urls_for(agent_id, agent_dir),
+                "character_profile": profile.get("character_profile") or None,
+                "model": _model_name_for_wire(profile.get("model")),
+                "tool_groups": tool_registry["arms"],
+                "extra_affinity": tool_registry["extra_affinity"],
+                "private_skills": private_skills,
+                "capabilities": profile.get("capabilities") or {},
                 "version": str(profile.get("templateVersion") or "1.0.0"),
                 "downloads": 0,
                 "rating": 4.6 if is_official else 4.2,
@@ -584,6 +641,11 @@ def _list_local_agents() -> list[dict[str, Any]]:
             "tags": template["tags"],
             "icon": template["icon"],
             "avatar_url": None,
+            "model": None,
+            "tool_groups": ["fs_writer", "git", "shell"],
+            "extra_affinity": list(template["tags"]),
+            "private_skills": _template_private_skills(template),
+            "capabilities": {},
             "version": "1.0.0",
             "downloads": 0,
             "rating": 4.5,

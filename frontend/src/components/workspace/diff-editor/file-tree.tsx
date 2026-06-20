@@ -21,11 +21,7 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 
 import type { FileDiff, SortMode } from "./utils";
-import {
-  getFileName,
-  groupFilesByDirectory,
-  sortFiles,
-} from "./utils";
+import { getFileName, groupFilesByDirectory, sortFiles } from "./utils";
 
 // ---------------------------------------------------------------------------
 // Status badge / icon helpers

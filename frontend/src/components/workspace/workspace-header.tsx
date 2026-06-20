@@ -1,4 +1,3 @@
-
 import { BotIcon, MessageSquarePlus } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -53,7 +52,11 @@ export function WorkspaceHeader({ className }: { className?: string }) {
         // unifies the pair visually.
         <SidebarMenu>
           <SidebarMenuItem className="group-data-[collapsible=icon]:px-0 px-2">
-            <SidebarMenuButton asChild className={iconTileClass} tooltip="Octopus">
+            <SidebarMenuButton
+              asChild
+              className={iconTileClass}
+              tooltip="Octopus"
+            >
               <button
                 type="button"
                 onClick={() => toggleSidebar()}
@@ -92,7 +95,10 @@ export function WorkspaceHeader({ className }: { className?: string }) {
             >
               <div className="flex h-full items-center justify-between gap-2 px-1">
                 {env.STATIC_WEBSITE_ONLY ? (
-                  <Link to="/" className="ml-0.5 flex h-full items-center transition-opacity hover:opacity-80">
+                  <Link
+                    to="/"
+                    className="ml-0.5 flex h-full items-center transition-opacity hover:opacity-80"
+                  >
                     <OctopusLogo size={18} />
                   </Link>
                 ) : (
@@ -111,7 +117,10 @@ export function WorkspaceHeader({ className }: { className?: string }) {
                 asChild
                 className="rounded-lg py-1.5 text-[13px] transition-all duration-150 hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium text-muted-foreground"
               >
-                <Link className="flex h-full items-center gap-2" to={getNewChatPath(pathname ?? "")}>
+                <Link
+                  className="flex h-full items-center gap-2"
+                  to={getNewChatPath(pathname ?? "")}
+                >
                   <MessageSquarePlus className="size-[15px] transition-transform duration-200 group-hover:rotate-12" />
                   <span className="leading-none">{t.sidebar.newChat}</span>
                 </Link>

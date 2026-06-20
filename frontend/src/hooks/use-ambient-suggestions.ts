@@ -42,10 +42,13 @@ export interface AmbientSuggestionsState {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  generate: (agentId: string, opts?: {
-    model?: string;
-    turnWindow?: number;
-  }) => Promise<{
+  generate: (
+    agentId: string,
+    opts?: {
+      model?: string;
+      turnWindow?: number;
+    },
+  ) => Promise<{
     added: number;
     generated: number;
     error: string | null;
@@ -100,29 +103,27 @@ export function useAmbientSuggestions(
   }, [baseUrl, project]);
 
   const generate = useCallback(
-    async (
-      agentId: string,
-      opts?: { model?: string; turnWindow?: number },
-    ) => {
+    async (agentId: string, opts?: { model?: string; turnWindow?: number }) => {
       if (!project) {
         return { added: 0, generated: 0, error: "project required" };
       }
-      const resp = await fetch(
-        `${baseUrl}/api/ambient-suggestions/run`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            project,
-            agent_id: agentId,
-            model: opts?.model,
-            turn_window: opts?.turnWindow,
-          }),
-        },
-      );
+      const resp = await fetch(`${baseUrl}/api/ambient-suggestions/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project,
+          agent_id: agentId,
+          model: opts?.model,
+          turn_window: opts?.turnWindow,
+        }),
+      });
       if (!resp.ok) {
         const detail = await resp.text();
-        return { added: 0, generated: 0, error: detail || `HTTP ${resp.status}` };
+        return {
+          added: 0,
+          generated: 0,
+          error: detail || `HTTP ${resp.status}`,
+        };
       }
       const body = await resp.json();
       await refresh();
@@ -156,10 +157,9 @@ export function useAmbientSuggestions(
       if (!project) return;
       const params = new URLSearchParams({ project });
       if (onlyStatus) params.set("status", onlyStatus);
-      await fetch(
-        `${baseUrl}/api/ambient-suggestions?${params.toString()}`,
-        { method: "DELETE" },
-      );
+      await fetch(`${baseUrl}/api/ambient-suggestions?${params.toString()}`, {
+        method: "DELETE",
+      });
       await refresh();
     },
     [baseUrl, project, refresh],

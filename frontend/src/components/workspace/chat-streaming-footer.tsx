@@ -122,8 +122,8 @@ export function ChatStreamingFooter({
                   {isDeepMode
                     ? t.chatStreamingFooter.researching
                     : isTeamMode
-                        ? t.chatStreamingFooter.collaborating
-                        : t.chatStreamingFooter.processing}
+                      ? t.chatStreamingFooter.collaborating
+                      : t.chatStreamingFooter.processing}
                 </div>
               )}
             </div>
@@ -281,17 +281,17 @@ function currentPhase(
     total > 0
       ? `${t.chatStreamingFooter.completed} ${done}/${total}${participants.length > 0 ? ` · ${participants.length} ${t.chatStreamingFooter.agentCollaboration}` : ""}`
       : mode === "deep"
-          ? t.chatStreamingFooter.readyToBreakdownAndGather
-          : t.chatStreamingFooter.readyToExecuteTask;
+        ? t.chatStreamingFooter.readyToBreakdownAndGather
+        : t.chatStreamingFooter.readyToExecuteTask;
 
   if (!current) {
     return {
       title:
         mode === "team"
-            ? t.chatStreamingFooter.readyForAgentCollaboration
-            : mode === "deep"
-              ? t.chatStreamingFooter.readyForDeepTask
-              : t.chatStreamingFooter.readyToExecute,
+          ? t.chatStreamingFooter.readyForAgentCollaboration
+          : mode === "deep"
+            ? t.chatStreamingFooter.readyForDeepTask
+            : t.chatStreamingFooter.readyToExecute,
       subtitle: suffix,
     };
   }

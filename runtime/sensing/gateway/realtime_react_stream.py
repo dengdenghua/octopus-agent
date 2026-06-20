@@ -19,6 +19,10 @@ import os
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
+from runtime.execution.tool_engine import (
+    normalize_tool_lifecycle_event,
+    tool_lifecycle_event_to_react_event,
+)
 from runtime.memory.threads.event_log import EventLog
 from runtime.platform.models import ParsedIntent
 from runtime.protocol import ErrorItem, ServerMethod, TurnParams, TurnStatus
@@ -51,23 +55,21 @@ def _agentic_stream_event_to_react_event(
     if kind == "reasoning":
         return {"type": "thinking_delta", "delta": str(delta or "")}
     if kind == "tool_start" and isinstance(delta, dict):
-        return {
-            "type": "tool_start",
-            "tool_call_id": str(delta.get("id") or ""),
-            "tool_name": str(delta.get("name") or "tool"),
-            "input_preview": delta.get("input"),
-            "iteration": delta.get("iteration"),
-        }
+        return tool_lifecycle_event_to_react_event(
+            normalize_tool_lifecycle_event(
+                "tool_start",
+                delta,
+                origin="native",
+            )
+        )
     if kind == "tool_end" and isinstance(delta, dict):
-        is_error = bool(delta.get("is_error"))
-        return {
-            "type": "tool_end",
-            "tool_call_id": str(delta.get("id") or ""),
-            "tool_name": str(delta.get("name") or "tool"),
-            "status": "error" if is_error else "success",
-            "output_preview": str(delta.get("output") or ""),
-            "iteration": delta.get("iteration"),
-        }
+        return tool_lifecycle_event_to_react_event(
+            normalize_tool_lifecycle_event(
+                "tool_end",
+                delta,
+                origin="native",
+            )
+        )
     if kind == "stats" and isinstance(delta, dict):
         return {"type": "throughput", "usage": delta}
     if kind == "done":
@@ -427,6 +429,8 @@ async def _drive_react(
             session_metadata["_artifact_output_root"] = str(
                 runtime._workspaces.layout(turn.thread_id).final,
             )
+        if runtime._trace_store is not None:
+            session_metadata["_trace_store"] = runtime._trace_store
         session_agent = agent if hasattr(agent, "agent_id") else None
         turn_session = Session(
             agent=session_agent,

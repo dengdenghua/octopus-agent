@@ -1,4 +1,3 @@
-
 import { Badge } from "@/components/ui/badge";
 import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
@@ -34,7 +33,9 @@ export function AgentAvatar({
     <div
       className={cn(
         "flex shrink-0 items-center justify-center overflow-hidden border border-border/60 bg-muted text-[13px] leading-none",
-        !fullAvatarUrl && !emoji && "text-[11px] font-semibold text-muted-foreground",
+        !fullAvatarUrl &&
+          !emoji &&
+          "text-[11px] font-semibold text-muted-foreground",
         className,
       )}
     >

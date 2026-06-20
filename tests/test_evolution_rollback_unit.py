@@ -133,11 +133,11 @@ class TestProposalLedgerRollback:
 class TestDriftMonitorTriggers:
     def test_no_drift_on_first_check(self):
         monitor = DriftMonitor("test_agent")
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch.object(monitor, "_check_score_drift", return_value=None):
-                    report = monitor.check()
-                    assert report.has_drift is False
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch.object(monitor, "_check_score_drift", return_value=None):
+                report = monitor.check()
+                assert report.has_drift is False
 
     def test_score_regression_detected(self):
         from runtime.memory.learning.turn_scoring import TurnScore
@@ -147,16 +147,16 @@ class TestDriftMonitorTriggers:
             TurnScore(ts="t", agent_id="test_agent", score=0.5, reason="fail", soul_hash="h", rounds=3)
             for _ in range(10)
         ]
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch(
-                    "runtime.memory.learning.turn_scoring.read_recent_scores",
-                    return_value=declining_scores,
-                ):
-                    report = monitor.check()
-                    assert report.has_drift is True
-                    kinds = [e.kind for e in report.events]
-                    assert "score_regression" in kinds
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch(
+                "runtime.memory.learning.turn_scoring.read_recent_scores",
+                return_value=declining_scores,
+            ):
+                report = monitor.check()
+                assert report.has_drift is True
+                kinds = [e.kind for e in report.events]
+                assert "score_regression" in kinds
 
     def test_severity_critical_on_large_drop(self):
         from runtime.memory.learning.turn_scoring import TurnScore
@@ -166,19 +166,19 @@ class TestDriftMonitorTriggers:
             TurnScore(ts="t", agent_id="test_agent", score=0.4, reason="fail", soul_hash="h", rounds=3)
             for _ in range(10)
         ]
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch(
-                    "runtime.memory.learning.turn_scoring.read_recent_scores",
-                    return_value=crashed_scores,
-                ):
-                    report = monitor.check()
-                    assert report.max_severity == "critical"
-                    regression_events = [
-                        e for e in report.events if e.kind == "score_regression"
-                    ]
-                    assert len(regression_events) == 1
-                    assert regression_events[0].severity == "critical"
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch(
+                "runtime.memory.learning.turn_scoring.read_recent_scores",
+                return_value=crashed_scores,
+            ):
+                report = monitor.check()
+                assert report.max_severity == "critical"
+                regression_events = [
+                    e for e in report.events if e.kind == "score_regression"
+                ]
+                assert len(regression_events) == 1
+                assert regression_events[0].severity == "critical"
 
 
 class TestFitnessVerdict:
@@ -223,7 +223,7 @@ class TestFitnessVerdict:
             for _ in range(5)
         ]
         scores = first_half + second_half
-        with patch("runtime.safety.evolution.fitness.read_recent_scores", return_value=scores):
-            with patch("runtime.safety.evolution.fitness.analyze_soul_impact", return_value={}):
+        with patch("runtime.safety.evolution.fitness.read_recent_scores", return_value=scores), \
+             patch("runtime.safety.evolution.fitness.analyze_soul_impact", return_value={}):
                 l1 = compute_l1("test_agent", window=10)
                 assert l1.trend == "regressing"

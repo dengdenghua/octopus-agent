@@ -203,13 +203,13 @@ class TestDriftToRollbackPipeline:
             for _ in range(10)
         ]
 
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch(
-                    "runtime.memory.learning.turn_scoring.read_recent_scores",
-                    return_value=declining_scores,
-                ):
-                    report = monitor.check()
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch(
+                "runtime.memory.learning.turn_scoring.read_recent_scores",
+                return_value=declining_scores,
+            ):
+                report = monitor.check()
 
         assert report.has_drift is True
         kinds = [e.kind for e in report.events]
@@ -229,13 +229,13 @@ class TestDriftToRollbackPipeline:
             for _ in range(10)
         ]
 
-        with patch.object(monitor, "_check_soul_drift", return_value=None):
-            with patch.object(monitor, "_check_genome_drift", return_value=None):
-                with patch(
-                    "runtime.memory.learning.turn_scoring.read_recent_scores",
-                    return_value=crashed_scores,
-                ):
-                    report = monitor.check()
+        with patch.object(monitor, "_check_soul_drift", return_value=None), \
+             patch.object(monitor, "_check_genome_drift", return_value=None), \
+             patch(
+                "runtime.memory.learning.turn_scoring.read_recent_scores",
+                return_value=crashed_scores,
+            ):
+                report = monitor.check()
 
         assert report.max_severity == "critical"
         regression_events = [

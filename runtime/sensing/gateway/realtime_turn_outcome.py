@@ -13,6 +13,10 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
+from runtime.execution.tool_engine import (
+    normalize_tool_lifecycle_event,
+    tool_lifecycle_event_to_trace_payload,
+)
 from runtime.platform.models import ParsedIntent
 from runtime.protocol import (
     ErrorItem,
@@ -113,6 +117,82 @@ def _code_change_paths(turn: Turn) -> list[str]:
             if _is_code_change_path(change.path) and change.path not in paths:
                 paths.append(change.path)
     return paths
+
+
+def _verification_plan_for_code_paths(
+    paths: list[str],
+    intent: ParsedIntent | None,
+) -> dict[str, Any]:
+    """Build targeted verifier commands for code changes.
+
+    The realtime failure path needs concrete next commands, not a generic
+    "run tests" nudge. This reuses the post-write regression matrix so
+    executor diagnostics, failed-turn metadata, and operator views converge
+    on one verifier selection policy.
+    """
+
+    commands: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    cwd = _intent_cwd(intent)
+    for path in paths:
+        try:
+            from runtime.safety.hooks.tool_edge_hooks import regression_matrix_for_path
+
+            matrix = regression_matrix_for_path(path, workspace_path=cwd)
+        except Exception:  # noqa: BLE001 - verification hints must never fail turns
+            continue
+        for check in matrix.checks:
+            if check.command in seen:
+                continue
+            seen.add(check.command)
+            commands.append({
+                "kind": check.kind,
+                "command": check.command,
+                "reason": check.reason,
+                "priority": check.priority,
+                "target": matrix.target,
+            })
+    return {
+        "schema": "octopus.verification_plan.v1",
+        "workspace": cwd,
+        "targets": list(paths),
+        "commands": commands,
+    }
+
+
+def _verification_plan_stdout_tail(plan: dict[str, Any]) -> str:
+    commands = plan.get("commands") if isinstance(plan, dict) else None
+    if not isinstance(commands, list) or not commands:
+        return (
+            "Run an appropriate test, lint, typecheck, or build command "
+            "and retry the final answer."
+        )
+    lines = ["Recommended verification commands:"]
+    for command in commands[:5]:
+        if not isinstance(command, dict):
+            continue
+        kind = str(command.get("kind") or "check")
+        cmd = str(command.get("command") or "").strip()
+        reason = str(command.get("reason") or "").strip()
+        if not cmd:
+            continue
+        suffix = f" :: {reason}" if reason else ""
+        lines.append(f"- [{kind}] {cmd}{suffix}")
+    if len(lines) == 1:
+        return (
+            "Run an appropriate test, lint, typecheck, or build command "
+            "and retry the final answer."
+        )
+    return "\n".join(lines)
+
+
+def _intent_cwd(intent: ParsedIntent | None) -> str:
+    context = intent.user_context if intent is not None else {}
+    if isinstance(context, dict):
+        cwd = context.get("cwd") or context.get("workspace_path")
+        if isinstance(cwd, str) and cwd.strip():
+            return cwd.strip()
+    return os.getcwd()
 
 
 def _file_change_item_ids(turn: Turn) -> list[str]:
@@ -235,6 +315,191 @@ def _turn_item_counts(turn: Turn) -> dict[str, int]:
     return counts
 
 
+def _classify_verification_failure(item: VerificationItem) -> dict[str, Any]:
+    text = "\n".join(
+        str(part)
+        for part in (item.summary, item.stderr_tail, item.stdout_tail)
+        if isinstance(part, str) and part.strip()
+    )
+    lowered = text.lower()
+    command = (item.command or "").lower()
+    kind = item.kind
+
+    if any(marker in lowered for marker in (
+        "command not found",
+        "not recognized as an internal or external command",
+        "could not determine executable",
+        "no module named",
+        "npx: not found",
+        "[winerror 2]",
+    )):
+        diagnosis = {
+            "category": "environment_missing_tool",
+            "action": "install_or_select_available_verifier",
+            "retryable": True,
+            "evidence": _diagnosis_evidence(text),
+        }
+        diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
+        return diagnosis
+    if "timeout" in lowered or "timed out" in lowered:
+        diagnosis = {
+            "category": "verification_timeout",
+            "action": "rerun_targeted_or_increase_timeout",
+            "retryable": True,
+            "evidence": _diagnosis_evidence(text),
+        }
+        diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
+        return diagnosis
+    if kind == "lint" or "ruff diagnostics" in lowered or "eslint" in command:
+        if "syntaxerror" in lowered or "invalid syntax" in lowered or "e999" in lowered:
+            category = "syntax_error"
+            action = "fix_syntax"
+        else:
+            category = "lint_failure"
+            action = "fix_lint"
+        diagnosis = {
+            "category": category,
+            "action": action,
+            "retryable": False,
+            "evidence": _diagnosis_evidence(text),
+        }
+        diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
+        return diagnosis
+    if kind == "typecheck" or "tsc" in command or "mypy" in command or "pyright" in command:
+        diagnosis = {
+            "category": "type_error",
+            "action": "fix_types",
+            "retryable": False,
+            "evidence": _diagnosis_evidence(text),
+        }
+        diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
+        return diagnosis
+    if kind == "build" or "build" in command:
+        diagnosis = {
+            "category": "build_failure",
+            "action": "fix_build",
+            "retryable": False,
+            "evidence": _diagnosis_evidence(text),
+        }
+        diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
+        return diagnosis
+    if kind == "test" or any(marker in command for marker in ("pytest", "vitest", "jest", "playwright", "test")):
+        diagnosis = {
+            "category": "test_failure",
+            "action": "fix_code_or_test_expectation",
+            "retryable": False,
+            "evidence": _diagnosis_evidence(text),
+        }
+        diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
+        return diagnosis
+    diagnosis = {
+        "category": "verification_failure",
+        "action": "inspect_verification_output",
+        "retryable": False,
+        "evidence": _diagnosis_evidence(text),
+    }
+    diagnosis["repair_route"] = _repair_route_for_diagnosis(diagnosis)
+    return diagnosis
+
+
+def _repair_route_for_diagnosis(diagnosis: dict[str, Any]) -> dict[str, Any]:
+    category = str(diagnosis.get("category") or "verification_failure")
+    routes: dict[str, dict[str, Any]] = {
+        "environment_missing_tool": {
+            "route": "environment_repair",
+            "strategy": "restore_verifier_toolchain",
+            "next_actions": [
+                "Confirm the verifier exists in the project environment.",
+                "Use an installed equivalent before changing application code.",
+            ],
+        },
+        "verification_timeout": {
+            "route": "verification_scope_reduction",
+            "strategy": "rerun_targeted_checks",
+            "next_actions": [
+                "Reduce to the narrowest related test command.",
+                "Retry before editing unrelated code.",
+            ],
+        },
+        "syntax_error": {
+            "route": "syntax_patch",
+            "strategy": "fix_parse_error_first",
+            "next_actions": [
+                "Fix the syntax error at the reported location.",
+                "Run lint before broader tests.",
+            ],
+        },
+        "lint_failure": {
+            "route": "lint_patch",
+            "strategy": "apply_style_or_static_fix",
+            "next_actions": [
+                "Fix the reported lint rule.",
+                "Rerun the same lint command.",
+            ],
+        },
+        "type_error": {
+            "route": "type_repair",
+            "strategy": "repair_type_contract",
+            "next_actions": [
+                "Inspect the failing symbol and type contract.",
+                "Rerun the typecheck before tests.",
+            ],
+        },
+        "build_failure": {
+            "route": "build_repair",
+            "strategy": "repair_bundle_or_compile_contract",
+            "next_actions": [
+                "Fix the first build error.",
+                "Rerun build before broader validation.",
+            ],
+        },
+        "test_failure": {
+            "route": "test_driven_repair",
+            "strategy": "reproduce_and_patch_behavior",
+            "next_actions": [
+                "Rerun the failing test command.",
+                "Patch code or update invalid expectations with evidence.",
+            ],
+        },
+    }
+    route = routes.get(category, {
+        "route": "verification_output_triage",
+        "strategy": "inspect_output_then_choose_repair",
+        "next_actions": [
+            "Read the verifier output.",
+            "Choose the narrowest repair path before broad tests.",
+        ],
+    })
+    return {
+        **route,
+        "retryable": bool(diagnosis.get("retryable")),
+    }
+
+
+def _diagnosis_evidence(text: str) -> str:
+    for line in (text or "").splitlines():
+        stripped = line.strip()
+        if stripped:
+            return stripped[:240]
+    return ""
+
+
+def _repair_routes_from_failed_verifications(
+    failed_verifications: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    routes: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in failed_verifications:
+        diagnosis = item.get("diagnosis") if isinstance(item.get("diagnosis"), dict) else {}
+        route = diagnosis.get("repair_route") if isinstance(diagnosis.get("repair_route"), dict) else {}
+        route_id = str(route.get("route") or "").strip()
+        if not route_id or route_id in seen:
+            continue
+        seen.add(route_id)
+        routes.append(route)
+    return routes
+
+
 def _failed_turn_metadata(
     turn: Turn,
     *,
@@ -250,10 +515,14 @@ def _failed_turn_metadata(
             "exit_code": item.exit_code,
             "related_files": list(item.related_files),
             "related_change_item_ids": list(item.related_change_item_ids),
+            "diagnosis": _classify_verification_failure(item),
         }
         for item in verification_items
         if item.status == ItemStatus.FAILED
     ]
+    repair_routes = _repair_routes_from_failed_verifications(failed_verifications)
+    code_change_paths = _code_change_paths(turn)
+    verification_plan = _verification_plan_for_code_paths(code_change_paths, intent)
     return {
         "turn_id": turn.id,
         "thread_id": turn.thread_id,
@@ -262,10 +531,15 @@ def _failed_turn_metadata(
         "error": _turn_failure_text(turn),
         "status": str(turn.status.value if hasattr(turn.status, "value") else turn.status),
         "item_counts": _turn_item_counts(turn),
-        "code_change_paths": _code_change_paths(turn),
+        "code_change_paths": code_change_paths,
         "verification_count": len(verification_items),
         "failed_verifications": failed_verifications,
-        "has_code_changes": bool(_code_change_paths(turn)),
+        "verification_plan": verification_plan,
+        "primary_repair_route": (
+            str(repair_routes[0].get("route") or "") if repair_routes else ""
+        ),
+        "repair_routes": repair_routes,
+        "has_code_changes": bool(code_change_paths),
     }
 
 
@@ -376,7 +650,16 @@ def _record_react_trace_event(runtime: CerebrumRuntime, turn: Turn, evt: dict[st
     if event_type is None:
         return
     payload = dict(evt)
-    if "tool_name" in payload and "tool" not in payload:
+    if kind in {"tool_start", "tool_end", "tool_background"}:
+        lifecycle_kind = "tool_start" if kind == "tool_start" else "tool_end"
+        normalized = normalize_tool_lifecycle_event(
+            lifecycle_kind,
+            payload,
+            origin="react_compat",
+        )
+        payload = tool_lifecycle_event_to_trace_payload(normalized)
+        payload["event_kind"] = kind
+    elif "tool_name" in payload and "tool" not in payload:
         payload["tool"] = payload.get("tool_name")
     with contextlib.suppress(Exception):
         runtime._trace_store.record_event(

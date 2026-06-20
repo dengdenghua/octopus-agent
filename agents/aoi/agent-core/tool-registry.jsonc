@@ -1,0 +1,20 @@
+// Aoi is primarily a roleplay/character persona.
+// Keep runtime tools minimal unless the user explicitly expands her loadout.
+
+{
+  "arms": [
+    "web_read"
+  ],
+  "extra_affinity": [
+    "aoi",
+    "openroom",
+    "character",
+    "roleplay",
+    "story",
+    "space",
+    "sci-fi",
+    "bounty hunter",
+    "companion"
+  ],
+  "private_skills": []
+}

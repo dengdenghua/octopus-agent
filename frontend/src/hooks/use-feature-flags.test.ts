@@ -97,9 +97,7 @@ describe("useFeatureFlags", () => {
   });
 
   it("manual mode does not auto-fetch", async () => {
-    const { result } = renderHook(() =>
-      useFeatureFlags({ manual: true }),
-    );
+    const { result } = renderHook(() => useFeatureFlags({ manual: true }));
     // Let the effect settle.
     await new Promise((r) => setTimeout(r, 10));
     expect(fetchMock).not.toHaveBeenCalled();
@@ -133,9 +131,7 @@ describe("useFeatureFlags", () => {
 
   it("respects baseUrl override", async () => {
     mockOnce(_SAMPLE);
-    renderHook(() =>
-      useFeatureFlags({ baseUrl: "http://remote:9000" }),
-    );
+    renderHook(() => useFeatureFlags({ baseUrl: "http://remote:9000" }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "http://remote:9000/api/feature-flags",

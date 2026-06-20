@@ -1102,6 +1102,8 @@ class TestBuiltinTriggers:
         # ── 2 mobile capability packages ──
         ("mobile-automate", "帮我用手机自动操作 app 点击按钮"),
         ("mobile-browser", "在安卓浏览器上抓取网页 反爬"),
+        # ── 1 agent visual capability package ──
+        ("agent-visual-kit", "生成 Agent 角色立绘 三视图 透明背景"),
     ]
 
     @pytest.mark.parametrize("name,query", CASES)
@@ -1210,6 +1212,8 @@ class TestCatalogSnapshot:
         # ── 2 mobile capability packages ──
         ("mobile-automate", 4, ["mobile", "android", "automation"]),
         ("mobile-browser", 4, ["mobile", "android", "browser"]),
+        # ── 1 agent visual capability package ──
+        ("agent-visual-kit", 10, ["agent", "visual", "image", "agnes", "character", "hud"]),
     )
 
     def test_catalog_count(self):

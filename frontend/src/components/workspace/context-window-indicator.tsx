@@ -27,9 +27,18 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function BucketBar({ bucket, totalBudget: _totalBudget }: { bucket: ContextBucket; totalBudget: number }) {
+function BucketBar({
+  bucket,
+  totalBudget: _totalBudget,
+}: {
+  bucket: ContextBucket;
+  totalBudget: number;
+}) {
   const Icon = bucket.icon;
-  const usedPct = bucket.allocated > 0 ? Math.min(100, (bucket.used / bucket.allocated) * 100) : 0;
+  const usedPct =
+    bucket.allocated > 0
+      ? Math.min(100, (bucket.used / bucket.allocated) * 100)
+      : 0;
   const overflow = bucket.used > bucket.allocated;
 
   return (
@@ -37,12 +46,18 @@ function BucketBar({ bucket, totalBudget: _totalBudget }: { bucket: ContextBucke
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Icon className={cn("size-3", bucket.color)} />
-          <span className="text-[10px] text-muted-foreground/70">{bucket.name}</span>
+          <span className="text-[10px] text-muted-foreground/70">
+            {bucket.name}
+          </span>
         </div>
-        <span className={cn(
-          "text-[10px] font-mono tabular-nums",
-          overflow ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/50",
-        )}>
+        <span
+          className={cn(
+            "text-[10px] font-mono tabular-nums",
+            overflow
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-muted-foreground/50",
+          )}
+        >
           {formatTokens(bucket.used)}/{formatTokens(bucket.allocated)}
         </span>
       </div>
@@ -107,10 +122,16 @@ export function ContextWindowIndicator({
         <span className="text-[10px] font-medium text-muted-foreground/70">
           {t.contextWindow?.title}
         </span>
-        <span className={cn(
-          "text-[10px] font-mono tabular-nums",
-          isHigh ? "text-red-500" : isMedium ? "text-amber-500" : "text-muted-foreground/50",
-        )}>
+        <span
+          className={cn(
+            "text-[10px] font-mono tabular-nums",
+            isHigh
+              ? "text-red-500"
+              : isMedium
+                ? "text-amber-500"
+                : "text-muted-foreground/50",
+          )}
+        >
           {formatTokens(totalUsed)}/{formatTokens(totalBudget)}
         </span>
       </div>

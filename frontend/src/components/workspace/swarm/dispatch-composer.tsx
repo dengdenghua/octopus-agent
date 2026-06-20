@@ -27,7 +27,11 @@ interface Props {
  * listens to /api/agents/parallel/stream/:id and populates the session
  * from real task_update / batch_complete events.
  */
-export function DispatchComposer({ className, onLaunched, initialPrompt }: Props) {
+export function DispatchComposer({
+  className,
+  onLaunched,
+  initialPrompt,
+}: Props) {
   const { t } = useI18n();
   const { connectBatch, openPanel, session } = useSwarm();
   const [prompt, setPrompt] = useState(initialPrompt ?? "");
@@ -55,9 +59,8 @@ export function DispatchComposer({ className, onLaunched, initialPrompt }: Props
     }
   }, [initialPrompt]);
 
-  const connectedBatchId = session.id !== "idle" && session.agents.length > 0
-    ? session.id
-    : null;
+  const connectedBatchId =
+    session.id !== "idle" && session.agents.length > 0 ? session.id : null;
 
   const handleLaunch = async () => {
     const task = prompt.trim();
@@ -155,14 +158,20 @@ export function DispatchComposer({ className, onLaunched, initialPrompt }: Props
         <label className="flex items-center gap-1.5 text-muted-foreground">
           {t.common.model}
           <ModelPicker
-            models={models.length > 0 ? models : [{ name: DEFAULT_MODEL, display_name: DEFAULT_MODEL }]}
+            models={
+              models.length > 0
+                ? models
+                : [{ name: DEFAULT_MODEL, display_name: DEFAULT_MODEL }]
+            }
             value={modelName}
             onChange={setModelName}
           />
         </label>
         <div className="flex-1" />
         {error && (
-          <span className="text-xs text-red-500 truncate max-w-xs">{error}</span>
+          <span className="text-xs text-red-500 truncate max-w-xs">
+            {error}
+          </span>
         )}
         <button
           type="button"

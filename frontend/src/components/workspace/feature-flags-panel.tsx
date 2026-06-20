@@ -73,9 +73,7 @@ export function FeatureFlagsPanel({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4">
-        <CardTitle className="text-base">
-          {t.featureFlagsPanel.title}
-        </CardTitle>
+        <CardTitle className="text-base">{t.featureFlagsPanel.title}</CardTitle>
         <Button
           variant="outline"
           size="sm"

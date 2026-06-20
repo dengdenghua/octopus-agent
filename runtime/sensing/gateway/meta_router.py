@@ -99,6 +99,9 @@ if FASTAPI_AVAILABLE:
         category: str = "other"
         group: str | None = None
         kind: str = "domain"
+        market_visibility: str = "market"
+        market_reason: str | None = None
+        canonical_skill: str | None = None
 
     class SkillsResponse(BaseModel):
         skills: list[SkillWire]
@@ -307,6 +310,14 @@ def create_meta_router(
                 permission_group = _permission_group_for_skill(str(s.name))
                 is_enabled = registry.is_enabled(s.name)
                 group = _skill_group_for(str(s.name))
+                kind = _skill_kind(group, str(s.name))
+                market_profile = _skill_market_profile(
+                    name=str(s.name),
+                    description=str(s.description or ""),
+                    trusted_source=str(s.trusted_source or ""),
+                    group=group,
+                    kind=kind,
+                )
                 skills_by_name[s.name] = {
                     "name": s.name,
                     "description": s.description,
@@ -319,7 +330,8 @@ def create_meta_router(
                     "permission_group": permission_group,
                     "category": _derive_skill_category(s.name, affinity),
                     "group": group,
-                    "kind": _skill_kind(group, str(s.name)),
+                    "kind": kind,
+                    **market_profile,
                 }
             except Exception as exc:  # noqa: BLE001
                 _LOG.warning("api_skills: skipping registry skill %s: %s", name, exc)
@@ -980,6 +992,176 @@ def create_meta_router(
     return router
 
 
+_INTERNAL_SKILL_GROUPS = {
+    "agent_meta",
+    "blackboard",
+    "browser",
+    "browser_act",
+    "builtin",
+    "code_intel",
+    "computer",
+    "cron",
+    "fs_search",
+    "fs_write",
+    "git",
+    "lsp",
+    "memory",
+    "shell",
+    "skill_library",
+    "web",
+}
+
+_INTERNAL_SKILL_PREFIXES = (
+    "bb_",
+    "browser_",
+    "computer_",
+    "git_",
+    "live_browser_",
+    "lsp_",
+)
+
+_INTERNAL_SKILL_NAMES = {
+    "append_text_file",
+    "apply_skill",
+    "ask_user_question",
+    "background_exec",
+    "cancel_scheduled_task",
+    "edit_file",
+    "edit_text_file",
+    "exec_shell",
+    "exit_plan_mode",
+    "file_stats",
+    "find-skills",
+    "glob_files",
+    "grep_text",
+    "hash_text",
+    "ipython",
+    "keyboard_type",
+    "kill_background_exec",
+    "kill_shell",
+    "learn_skill_from_text",
+    "list_cwd",
+    "list_learned_skills",
+    "list_scheduled_tasks",
+    "mouse_click",
+    "multi_edit_file",
+    "query_skill",
+    "read_background_output",
+    "read_file",
+    "read_file_range",
+    "read_shell_output",
+    "run_orchestration",
+    "run_pipeline",
+    "schedule_task",
+    "search_capabilities",
+    "search_skills",
+    "todo_read",
+    "todo_write",
+    "tree",
+    "use_capability",
+    "write_text_file",
+}
+
+_DUPLICATE_SKILL_CANONICALS = {
+    "ad-creative": "ad-copywriter",
+    "earnings-preview-single": "earnings-preview",
+    "gitlab-cli-skills": "gitlab-cli-guide",
+    "http-load-profiler": "http-load-tester",
+    "seo-analyzer": "seo-audit",
+    "test-driven-dev": "tdd-coach",
+    "test-driven-development": "tdd-coach",
+}
+
+_PROVIDER_SKILL_CANONICALS = {
+    "agnes-image-generate": "generate_image",
+    "seedream-image-generate": "generate_image",
+    "agnes-video-generate": "generate_video",
+    "agnes-video-poll": "generate_video",
+    "seedance-video-generate": "generate_video",
+    "generate_sound_effects": "generate_speech",
+    "generate_speech": "speech-synthesis",
+}
+
+_INTERNAL_EXECUTION_MODES = {
+    "deep-research-swarm": "deep-research",
+    "pptx-author": "pptx",
+    "xlsx-author": "xlsx",
+}
+
+
+def _skill_market_profile(
+    *,
+    name: str,
+    description: str,
+    trusted_source: str,
+    group: str | None,
+    kind: str,
+) -> dict[str, str | None]:
+    """Classify how a skill should appear in the user-facing market.
+
+    This does not disable or unregister skills. It only gives the UI a
+    stable visibility hint so internal primitives remain callable while
+    the marketplace stays oriented around user-level capabilities.
+    """
+    skill_name = name.strip()
+    lower_name = skill_name.lower()
+    lower_desc = description.lower()
+
+    if lower_name in _DUPLICATE_SKILL_CANONICALS:
+        return {
+            "market_visibility": "duplicate",
+            "market_reason": "同类技能已有主入口，避免重复展示",
+            "canonical_skill": _DUPLICATE_SKILL_CANONICALS[lower_name],
+        }
+    if lower_name in _PROVIDER_SKILL_CANONICALS:
+        return {
+            "market_visibility": "provider",
+            "market_reason": "模型或供应商后端入口，归并到主技能下",
+            "canonical_skill": _PROVIDER_SKILL_CANONICALS[lower_name],
+        }
+    if lower_name in _INTERNAL_EXECUTION_MODES:
+        return {
+            "market_visibility": "internal",
+            "market_reason": "执行模式或无界面变体，由主技能自动选择",
+            "canonical_skill": _INTERNAL_EXECUTION_MODES[lower_name],
+        }
+    if trusted_source.startswith("skill://forged/") or lower_name.startswith("forged_"):
+        return {
+            "market_visibility": "deprecated",
+            "market_reason": "自动组合技能，用户价值低，保留给内部兼容",
+            "canonical_skill": None,
+        }
+    if kind != "domain":
+        return {
+            "market_visibility": "internal",
+            "market_reason": "系统或自动化原子技能，不作为市场能力展示",
+            "canonical_skill": None,
+        }
+    if group in _INTERNAL_SKILL_GROUPS:
+        return {
+            "market_visibility": "internal",
+            "market_reason": "底层工具技能，由 agent 自动调用",
+            "canonical_skill": None,
+        }
+    if lower_name in _INTERNAL_SKILL_NAMES or lower_name.startswith(_INTERNAL_SKILL_PREFIXES):
+        return {
+            "market_visibility": "internal",
+            "market_reason": "底层工具技能，由 agent 自动调用",
+            "canonical_skill": None,
+        }
+    if "only when a user wants to create a reusable skill" in lower_desc:
+        return {
+            "market_visibility": "internal",
+            "market_reason": "技能开发辅助入口，不混入普通能力市场",
+            "canonical_skill": None,
+        }
+    return {
+        "market_visibility": "market",
+        "market_reason": None,
+        "canonical_skill": None,
+    }
+
+
 # File-backed SKILL.md catalog. These entries power the frontend skill
 # browser for prompt/workflow skills that do not have Python handlers.
 _FRONTMATTER_PATTERN = re.compile(
@@ -1152,6 +1334,13 @@ def _skill_wire_from_md(
         trusted_source = f"skill://all_skills/{rel_dir}"
     cost_profile = _clean_text(meta.get("cost_profile"))
     has_tests = bool(meta.get("tests")) or (skill_md.parent / "tests").exists()
+    market_profile = _skill_market_profile(
+        name=name,
+        description=description,
+        trusted_source=trusted_source,
+        group=None,
+        kind="domain",
+    )
     return {
         "name": name,
         "description": description,
@@ -1162,6 +1351,7 @@ def _skill_wire_from_md(
         "category": _derive_skill_category(name, affinity),
         "group": None,
         "kind": "domain",
+        **market_profile,
     }
 
 

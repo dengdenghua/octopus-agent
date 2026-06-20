@@ -172,6 +172,107 @@ class WriteScope:
         return False
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutionScope:
+    """Turn-level execution permission domain.
+
+    ``WriteScope`` is kept for compatibility with existing skill handlers
+    and executor checks. This higher-level shape separates read and write
+    roots so sandboxed code mode can keep the selected project readable
+    while confining writes to ``.octopus-work/<thread_id>``.
+    """
+
+    mode: str
+    requested_mode: str
+    readable_roots: tuple[Path, ...]
+    writable_roots: tuple[Path, ...]
+    permission_mode: str = "default"
+    approval_policy: str = "on-request"
+    sandbox_mode: str = "full"
+    execution_environment: str = "sandbox"
+    shell_policy: str = "ask"
+    network_policy: str = "ask"
+    browser_policy: str = "ask"
+
+    @property
+    def primary_write(self) -> Path | None:
+        return self.writable_roots[0] if self.writable_roots else None
+
+    @property
+    def primary_read(self) -> Path | None:
+        return self.readable_roots[0] if self.readable_roots else None
+
+    def allows_write(self, path: str | Path) -> bool:
+        return _path_allowed_by_roots(path, self.writable_roots)
+
+    def allows_read(self, path: str | Path) -> bool:
+        return _path_allowed_by_roots(path, self.readable_roots)
+
+
+def _path_allowed_by_roots(path: str | Path, roots: tuple[Path, ...]) -> bool:
+    if not roots:
+        return False
+    try:
+        p = Path(path).expanduser().resolve(strict=False)
+    except OSError:
+        return False
+    for root in roots:
+        try:
+            p.relative_to(root.resolve(strict=False))
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _path_is_same_or_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve(strict=False).relative_to(root.resolve(strict=False))
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _normalize_permission_mode(value: Any) -> str:
+    raw = str(value or "default").strip().lower()
+    if raw in {"acceptedits", "accept-edits"}:
+        return "acceptEdits"
+    if raw in {
+        "bypasspermissions",
+        "bypass-permissions",
+        "bypass",
+        "yolo",
+        "full",
+    }:
+        return "bypassPermissions"
+    if raw == "plan":
+        return "plan"
+    return "default"
+
+
+def _normalize_approval_policy(value: Any, *, permission_mode: str) -> str:
+    raw = str(value or "").strip()
+    if raw in {"never", "on-request", "untrusted"}:
+        return raw
+    if permission_mode == "bypassPermissions":
+        return "never"
+    return "on-request"
+
+
+def _normalize_sandbox_mode(value: Any) -> str:
+    raw = str(value or "").strip()
+    return raw if raw in {"sandbox", "full"} else "full"
+
+
+def _normalize_execution_environment(value: Any, *, permission_mode: str) -> str:
+    raw = str(value or "").strip()
+    if raw in {"sandbox", "local"}:
+        return raw
+    if permission_mode == "bypassPermissions":
+        return "local"
+    return "sandbox"
+
+
 def agent_has_capability(agent: Any, name: str) -> bool:
     """Check whether ``agent`` has the named capability flag set.
 
@@ -373,11 +474,91 @@ def resolve_write_scope(session: Session | None) -> WriteScope:
     )
 
 
+def resolve_execution_scope(session: Session | None) -> ExecutionScope:
+    """Return the unified execution scope for a turn.
+
+    This is a non-breaking wrapper over ``resolve_write_scope``. Existing
+    callers can keep using ``WriteScope`` while new code migrates to the
+    clearer read/write split and policy fields.
+    """
+    meta = (session.metadata if session else None) or {}
+    write_scope = resolve_write_scope(session)
+    permission_mode = _normalize_permission_mode(meta.get("permission_mode"))
+    approval_policy = _normalize_approval_policy(
+        meta.get("approval_policy"),
+        permission_mode=permission_mode,
+    )
+    sandbox_mode = _normalize_sandbox_mode(meta.get("sandbox_mode"))
+    execution_environment = _normalize_execution_environment(
+        meta.get("execution_environment"),
+        permission_mode=permission_mode,
+    )
+
+    readable_roots = write_scope.roots
+    writable_roots = write_scope.roots
+    workspace_path: Path | None = None
+
+    wp = meta.get("workspace_path")
+    if isinstance(wp, str) and wp.strip():
+        try:
+            candidate = Path(wp).expanduser()
+            if candidate.is_absolute():
+                workspace_path = candidate.resolve()
+        except (OSError, ValueError):
+            workspace_path = None
+
+    if write_scope.mode == "code" and workspace_path is not None:
+        readable_roots = (
+            workspace_path,
+            *tuple(root for root in write_scope.roots if root != workspace_path),
+        )
+
+    if write_scope.mode == "plan" or permission_mode == "plan":
+        writable_roots = ()
+
+    if write_scope.mode == "code" and sandbox_mode == "sandbox" and workspace_path is not None and write_scope.primary is not None:
+        writable_roots = tuple(
+                root
+                for root in write_scope.roots
+                if root == write_scope.primary
+                or not _path_is_same_or_under(root, workspace_path)
+            )
+
+    if permission_mode == "bypassPermissions" or execution_environment == "local":
+        shell_policy = "allow"
+        network_policy = "allow"
+        browser_policy = "allow"
+    elif write_scope.mode == "plan" or permission_mode == "plan":
+        shell_policy = "deny"
+        network_policy = "deny"
+        browser_policy = "deny"
+    else:
+        shell_policy = "ask"
+        network_policy = "allow"
+        browser_policy = "ask"
+
+    return ExecutionScope(
+        mode=write_scope.mode,
+        requested_mode=write_scope.requested_mode,
+        readable_roots=readable_roots,
+        writable_roots=writable_roots,
+        permission_mode=permission_mode,
+        approval_policy=approval_policy,
+        sandbox_mode=sandbox_mode,
+        execution_environment=execution_environment,
+        shell_policy=shell_policy,
+        network_policy=network_policy,
+        browser_policy=browser_policy,
+    )
+
+
 __all__ = [
+    "ExecutionScope",
     "WriteScope",
     "agent_workspace_root",
     "thread_artifact_root",
     "thread_workspace",
     "team_workspace_root",
+    "resolve_execution_scope",
     "resolve_write_scope",
 ]

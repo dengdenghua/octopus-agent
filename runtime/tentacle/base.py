@@ -16,11 +16,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, Protocol, runtime_checkable
 
 
-class TentacleType(str, Enum):
+class TentacleType(StrEnum):
     """触手类型枚举.
 
     工程名（按 ADR-001）—— 不在枚举名里用生物词。
@@ -35,7 +35,7 @@ class TentacleType(str, Enum):
     UNKNOWN = "unknown"
 
 
-class TentacleStatus(str, Enum):
+class TentacleStatus(StrEnum):
     """触手在线状态机."""
 
     OFFLINE = "offline"           # 未连接

@@ -6,6 +6,20 @@
 
 ---
 
+## ⚠️ 代码与文档对齐说明
+
+> 文档描述的进化机制（变异、交叉、选择）在代码中分为两个独立模块，常被混淆：
+>
+> | 概念 | 代码位置 | 职责 |
+> |---|---|---|
+> | **Genome Registry** | `runtime/safety/recovery/genome_registry.py` | 版本化配置快照存储（git 提交），支持 commit / rollback / diff |
+> | **Prompt Evolver** | `runtime/safety/experiments/prompt_evolver.py` | 进化引擎：变异（mutation）、交叉（crossover）、Pareto 前沿选择、淘汰 |
+>
+> Genome Registry 存储的是"被进化的对象"（配置快照），Prompt Evolver 是"执行进化的引擎"。
+> 两者协作但职责不同：Evolver 产生变更，Registry 持久化变更结果。
+
+---
+
 ## 核心等式
 
 ```

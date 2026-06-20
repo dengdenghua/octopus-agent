@@ -5,7 +5,13 @@
  * exercise the full load → render → act → reload cycle for each tab.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/core/config", () => ({
@@ -40,10 +46,7 @@ function routedFetch(routes: Record<string, Handler>) {
     const u = typeof url === "string" ? url : url.toString();
     const method = (init?.method ?? "GET").toUpperCase();
     const key = `${method} ${u}`;
-    const handler =
-      merged[key] ??
-      merged[u] ??
-      (() => [] as unknown[]); // default: empty list
+    const handler = merged[key] ?? merged[u] ?? (() => [] as unknown[]); // default: empty list
     const body = handler(u, init);
     return Promise.resolve({
       ok: true,
@@ -193,7 +196,9 @@ describe("EvolutionControlPanel — integration", () => {
     await waitFor(() =>
       expect(screen.queryByText("summarize-pdfs")).not.toBeInTheDocument(),
     );
-    expect(await screen.findByText("暂无待处理的技能提案。")).toBeInTheDocument();
+    expect(
+      await screen.findByText("暂无待处理的技能提案。"),
+    ).toBeInTheDocument();
   });
 
   it("MCP tab triggers 'vet all' and the install button shows only for vetted rows", async () => {
@@ -284,7 +289,8 @@ describe("EvolutionControlPanel — integration", () => {
           acknowledged: false,
         },
       ],
-      "GET /api/intel-evolution/protocols/repair/proposals?status=pending": () => [],
+      "GET /api/intel-evolution/protocols/repair/proposals?status=pending":
+        () => [],
       "POST /api/intel-evolution/protocols/drift/scan": (_u) => {
         scanCalls.push(1);
         return { ok: true };
@@ -309,8 +315,8 @@ describe("EvolutionControlPanel — integration", () => {
     await user.click(screen.getByRole("button", { name: "生成修复" }));
 
     // Find the ACK-equivalent button within the drift event row.
-    const eventRow = screen.getByText("proto.x").closest("div")!
-      .parentElement!.parentElement!;
+    const eventRow = screen.getByText("proto.x").closest("div")!.parentElement!
+      .parentElement!;
     const ackBtn = within(eventRow).getByRole("button", { name: "确认" });
     await user.click(ackBtn);
 

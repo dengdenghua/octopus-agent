@@ -9,12 +9,20 @@ import {
   GlobeIcon,
   Loader2Icon,
   SearchIcon,
+  ShieldAlertIcon,
+  ShieldCheckIcon,
   SquareIcon,
   TelescopeIcon,
   UsersIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { toast } from "sonner";
 
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -30,6 +38,7 @@ import {
   streamBatch,
   type BatchResult,
   type BatchStreamEvent,
+  type SubagentRouteDecision,
   type TaskResult,
 } from "@/core/parallel-agents/api";
 import { cn } from "@/lib/utils";
@@ -65,8 +74,8 @@ export function DeepResearchPanel({
   const synthesisStep = currentJob.steps.find((s) => s.role_id === "synthesis");
   const cancellableTasks = useMemo(
     () =>
-      (batch?.results ?? []).filter((task) =>
-        task.status === "pending" || task.status === "running"
+      (batch?.results ?? []).filter(
+        (task) => task.status === "pending" || task.status === "running",
       ),
     [batch],
   );
@@ -80,11 +89,24 @@ export function DeepResearchPanel({
     return map;
   }, [batch]);
 
+  const routeDecisionByTaskId = useMemo(() => {
+    const map = new Map<string, SubagentRouteDecision>();
+    for (const event of [...(batch?.event_log ?? []), ...liveEvents]) {
+      if (!event.task_id) continue;
+      const decision = routeDecisionFromPayload(event.payload);
+      if (decision) map.set(event.task_id, decision);
+    }
+    return map;
+  }, [batch?.event_log, liveEvents]);
+
   const totalTasks = batch?.total_tasks ?? activeSteps.length;
   const completedTasks = batch?.completed_tasks ?? 0;
   const progressPct =
     totalTasks > 0
-      ? Math.max(8, Math.min(100, Math.round((completedTasks / totalTasks) * 100)))
+      ? Math.max(
+          8,
+          Math.min(100, Math.round((completedTasks / totalTasks) * 100)),
+        )
       : currentJob.status === "planned"
         ? 18
         : 42;
@@ -104,7 +126,9 @@ export function DeepResearchPanel({
     if (!cancellableTasks.length || canceling) return;
     setCanceling(true);
     try {
-      await Promise.all(cancellableTasks.map((task) => cancelTask(task.task_id)));
+      await Promise.all(
+        cancellableTasks.map((task) => cancelTask(task.task_id)),
+      );
       await refreshBatch();
       await refreshJob();
     } finally {
@@ -225,9 +249,21 @@ export function DeepResearchPanel({
         )}
 
         <div className="grid grid-cols-3 gap-2">
-          <Metric icon={<UsersIcon className="size-3.5" />} label="Roles" value={roleCount} />
-          <Metric icon={<GlobeIcon className="size-3.5" />} label="Sources" value={sourceCount} />
-          <Metric icon={<FileTextIcon className="size-3.5" />} label="Materials" value={materialCount} />
+          <Metric
+            icon={<UsersIcon className="size-3.5" />}
+            label="Roles"
+            value={roleCount}
+          />
+          <Metric
+            icon={<GlobeIcon className="size-3.5" />}
+            label="Sources"
+            value={sourceCount}
+          />
+          <Metric
+            icon={<FileTextIcon className="size-3.5" />}
+            label="Materials"
+            value={materialCount}
+          />
         </div>
 
         <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 p-3">
@@ -241,7 +277,9 @@ export function DeepResearchPanel({
           {batch && (
             <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground">
               <span>{batch.status}</span>
-              <span>{batch.completed_tasks}/{batch.total_tasks} completed</span>
+              <span>
+                {batch.completed_tasks}/{batch.total_tasks} completed
+              </span>
             </div>
           )}
           <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -254,7 +292,9 @@ export function DeepResearchPanel({
             />
           </div>
           <div className="mt-2 truncate text-[11px] text-muted-foreground">
-            {currentJob.dispatch_batch_id ? `Batch ${currentJob.dispatch_batch_id}` : currentJob.status}
+            {currentJob.dispatch_batch_id
+              ? `Batch ${currentJob.dispatch_batch_id}`
+              : currentJob.status}
           </div>
         </div>
 
@@ -301,6 +341,11 @@ export function DeepResearchPanel({
               step={step}
               index={index}
               task={batchByTaskId.get(step.id)}
+              routeDecision={
+                routeDecisionByTaskId.get(step.id) ??
+                step.route_decision ??
+                undefined
+              }
               running={loading && index === 0}
             />
           ))}
@@ -316,99 +361,107 @@ export function DeepResearchPanel({
         <div className="mt-4 space-y-2">
           <div className="text-xs font-medium">Search Sources</div>
           <div className="flex flex-wrap gap-1.5">
-            {currentJob.sources.filter((s) => s.enabled).map((source) => (
-              <span
-                key={source.id}
-                title={[
-                  source.query_hint,
-                  ...(source.query_templates ?? []),
-                  ...(source.site_filters ?? []),
-                ].filter(Boolean).join(" | ")}
-                className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-[10px] text-muted-foreground"
-              >
-                <span>{source.label}</span>
-                <span className="text-[9px] text-muted-foreground/60">
-                  {source.provider ?? source.kind}
+            {currentJob.sources
+              .filter((s) => s.enabled)
+              .map((source) => (
+                <span
+                  key={source.id}
+                  title={[
+                    source.query_hint,
+                    ...(source.query_templates ?? []),
+                    ...(source.site_filters ?? []),
+                  ]
+                    .filter(Boolean)
+                    .join(" | ")}
+                  className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-background px-2 py-1 text-[10px] text-muted-foreground"
+                >
+                  <span>{source.label}</span>
+                  <span className="text-[9px] text-muted-foreground/60">
+                    {source.provider ?? source.kind}
+                  </span>
                 </span>
-              </span>
-            ))}
+              ))}
           </div>
         </div>
 
         {currentJob.final_report ? (
           <>
-          {currentJob.evidence.length > 0 && (
-            <div className="mt-4 space-y-2">
-              <div className="text-xs font-medium">Evidence</div>
-              <div className="space-y-1.5">
-                {currentJob.evidence.slice(0, 12).map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-lg border border-border/60 bg-background/70 p-2"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 text-[11px] font-medium">
-                        {item.url ? (
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline"
-                          >
-                            <span className="truncate">{item.title || item.url}</span>
-                            <ExternalLinkIcon className="size-3 shrink-0" />
-                          </a>
-                        ) : (
-                          <span>{item.title || item.source_kind || "Evidence"}</span>
-                        )}
+            {currentJob.evidence.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="text-xs font-medium">Evidence</div>
+                <div className="space-y-1.5">
+                  {currentJob.evidence.slice(0, 12).map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-lg border border-border/60 bg-background/70 p-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 text-[11px] font-medium">
+                          {item.url ? (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex min-w-0 items-center gap-1 text-primary hover:underline"
+                            >
+                              <span className="truncate">
+                                {item.title || item.url}
+                              </span>
+                              <ExternalLinkIcon className="size-3 shrink-0" />
+                            </a>
+                          ) : (
+                            <span>
+                              {item.title || item.source_kind || "Evidence"}
+                            </span>
+                          )}
+                        </div>
+                        <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                          {item.stance} {Math.round(item.confidence * 100)}%
+                        </span>
                       </div>
-                      <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                        {item.stance} {Math.round(item.confidence * 100)}%
-                      </span>
+                      <div className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
+                        {item.claim || item.quote_or_summary}
+                      </div>
                     </div>
-                    <div className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">
-                      {item.claim || item.quote_or_summary}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-xs font-medium">Final Report</div>
-              <div className="flex items-center gap-1.5">
-                {currentJob.memory_written_at && (
-                  <span className="rounded-md bg-green-500/10 px-2 py-0.5 text-[10px] text-green-600 dark:text-green-400">
-                    saved to lead memory
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleCopyReport}
-                  className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                  title={copied ? "Copied" : "Copy Markdown"}
-                >
-                  {copied ? (
-                    <CheckCircle2Icon className="size-3.5 text-green-500" />
-                  ) : (
-                    <ClipboardIcon className="size-3.5" />
+            )}
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-medium">Final Report</div>
+                <div className="flex items-center gap-1.5">
+                  {currentJob.memory_written_at && (
+                    <span className="rounded-md bg-green-500/10 px-2 py-0.5 text-[10px] text-green-600 dark:text-green-400">
+                      saved to lead memory
+                    </span>
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadReport}
-                  className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-                  title="Download Markdown"
-                >
-                  <DownloadIcon className="size-3.5" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyReport}
+                    className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    title={copied ? "Copied" : "Copy Markdown"}
+                  >
+                    {copied ? (
+                      <CheckCircle2Icon className="size-3.5 text-green-500" />
+                    ) : (
+                      <ClipboardIcon className="size-3.5" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadReport}
+                    className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+                    title="Download Markdown"
+                  >
+                    <DownloadIcon className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed">
+                {currentJob.final_report}
               </div>
             </div>
-            <div className="max-h-96 overflow-y-auto whitespace-pre-wrap rounded-lg border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed">
-              {currentJob.final_report}
-            </div>
-          </div>
           </>
         ) : batch?.aggregated_content ? (
           <div className="mt-4 space-y-2">
@@ -440,9 +493,7 @@ function PrefetchLogRow({ item }: { item: ResearchPrefetchLog }) {
             <span className="shrink-0 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
               {item.action}
             </span>
-            <span className="truncate text-[11px] font-medium">
-              {subject}
-            </span>
+            <span className="truncate text-[11px] font-medium">{subject}</span>
             {item.url && (
               <a
                 href={item.url}
@@ -462,10 +513,12 @@ function PrefetchLogRow({ item }: { item: ResearchPrefetchLog }) {
             <span>{item.evidence_count} evidence</span>
           </div>
         </div>
-        <span className={cn(
-          "shrink-0 rounded-md border px-1.5 py-0.5 text-[9px]",
-          statusClass,
-        )}>
+        <span
+          className={cn(
+            "shrink-0 rounded-md border px-1.5 py-0.5 text-[9px]",
+            statusClass,
+          )}
+        >
           {item.status}
         </span>
       </div>
@@ -486,6 +539,29 @@ function appendBatchEvent(
   return next.length > 80 ? next.slice(-80) : next;
 }
 
+export function routeDecisionFromPayload(
+  payload: BatchStreamEvent["payload"],
+): SubagentRouteDecision | null {
+  const raw = payload?.subagent_route_decision;
+  if (!raw || typeof raw !== "object") return null;
+  const decision = raw as Record<string, unknown>;
+  if (decision.schema !== "octopus.subagent_route_decision.v1") return null;
+  return {
+    schema: "octopus.subagent_route_decision.v1",
+    role: stringValue(decision.role),
+    action: stringValue(decision.action) || "allow",
+    reason: stringValue(decision.reason),
+    risk_level: stringValue(decision.risk_level) || "low",
+    verdict: stringValue(decision.verdict) || "unknown",
+    score: numberOrNull(decision.score),
+    confidence:
+      typeof decision.confidence === "number" ? decision.confidence : 0,
+    evidence_item_ids: Array.isArray(decision.evidence_item_ids)
+      ? decision.evidence_item_ids.map(stringValue).filter(Boolean)
+      : [],
+  };
+}
+
 function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
   const isDone =
     event.status === "completed" ||
@@ -493,6 +569,7 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
     event.status === "cancelled" ||
     event.type === "batch_complete";
   const isError = event.status === "failed" || event.error;
+  const routeDecision = routeDecisionFromPayload(event.payload);
   const title =
     event.message ||
     (event.type === "batch_complete"
@@ -514,8 +591,12 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex min-w-0 items-center gap-1.5 font-medium">
-            {!isDone && !isError && <Loader2Icon className="size-3 animate-spin" />}
-            {isDone && !isError && <CheckCircle2Icon className="size-3 text-green-500" />}
+            {!isDone && !isError && (
+              <Loader2Icon className="size-3 animate-spin" />
+            )}
+            {isDone && !isError && (
+              <CheckCircle2Icon className="size-3 text-green-500" />
+            )}
             {isError && <CircleAlertIcon className="size-3 text-destructive" />}
             <span className="truncate">{title}</span>
           </div>
@@ -524,11 +605,61 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
               {detail}
             </div>
           )}
+          {routeDecision && (
+            <RouteDecisionSummary decision={routeDecision} className="mt-1" />
+          )}
         </div>
         <span className="shrink-0 rounded-md bg-background/70 px-1.5 py-0.5 text-[9px] text-muted-foreground">
           {event.phase ?? event.status ?? event.type}
         </span>
       </div>
+    </div>
+  );
+}
+
+function RouteDecisionSummary({
+  decision,
+  className,
+}: {
+  decision: SubagentRouteDecision;
+  className?: string;
+}) {
+  const blocked = decision.action === "block";
+  const warning = decision.action === "allow_with_warning";
+  const label = blocked
+    ? "Route blocked"
+    : warning
+      ? "Route warning"
+      : "Route allowed";
+  return (
+    <div className={cn("space-y-1", className)}>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px]",
+            blocked
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
+              : warning
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                : "border-green-500/25 bg-green-500/10 text-green-600 dark:text-green-400",
+          )}
+        >
+          {blocked || warning ? (
+            <ShieldAlertIcon className="size-2.5" />
+          ) : (
+            <ShieldCheckIcon className="size-2.5" />
+          )}
+          {label}
+        </span>
+        <span className="text-[9px] text-muted-foreground">
+          {decision.verdict} · {decision.risk_level}
+        </span>
+      </div>
+      {decision.reason && (
+        <div className="line-clamp-2 break-words text-[10px] text-muted-foreground">
+          {decision.reason}
+        </div>
+      )}
     </div>
   );
 }
@@ -568,12 +699,14 @@ function StepRow({
   step,
   index,
   task,
+  routeDecision,
   running,
   synthesis,
 }: {
   step: ResearchStep;
   index: number;
   task?: TaskResult;
+  routeDecision?: SubagentRouteDecision;
   running?: boolean;
   synthesis?: boolean;
 }) {
@@ -598,9 +731,7 @@ function StepRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="line-clamp-2 text-xs font-medium">
-          {step.title}
-        </div>
+        <div className="line-clamp-2 text-xs font-medium">{step.title}</div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
           <span>{synthesis ? "synthesis" : step.role_id}</span>
           <span>{status}</span>
@@ -616,6 +747,9 @@ function StepRow({
             {task.error}
           </div>
         )}
+        {routeDecision && (
+          <RouteDecisionSummary decision={routeDecision} className="mt-1" />
+        )}
         {task?.result && (
           <div className="mt-1 line-clamp-3 text-[10px] text-muted-foreground">
             {task.result}
@@ -624,4 +758,12 @@ function StepRow({
       </div>
     </div>
   );
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

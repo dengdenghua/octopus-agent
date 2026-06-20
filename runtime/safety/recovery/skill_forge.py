@@ -5,15 +5,15 @@ import hashlib
 import logging
 
 _LOG = logging.getLogger(__name__)
-from collections import defaultdict
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any
+from collections import defaultdict  # noqa: E402
+from collections.abc import Callable  # noqa: E402
+from dataclasses import dataclass  # noqa: E402
+from typing import Any  # noqa: E402
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field  # noqa: E402
 
-from runtime.adapters.instrumentation import trace_stage
-from runtime.execution.suckers import (
+from runtime.adapters.instrumentation import trace_stage  # noqa: E402
+from runtime.execution.suckers import (  # noqa: E402
     Skill,
     SkillExpect,
     SkillRegistry,
@@ -23,9 +23,9 @@ from runtime.execution.suckers import (
     SkillTestResult,
     SkillTestsFailed,
 )
-from runtime.memory.journal import Journal, TrajectoryEvent
-from runtime.platform.models import Trajectory
-from runtime.safety.approval.approval_gate import is_dangerous_tool
+from runtime.memory.journal import Journal, TrajectoryEvent  # noqa: E402
+from runtime.platform.models import Trajectory  # noqa: E402
+from runtime.safety.approval.approval_gate import is_dangerous_tool  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════

@@ -50,7 +50,12 @@ export function normalizeEventsForSettledDisplay(
   events: LiveToolEvent[],
   options: SettledRunDisplayOptions = {},
 ): LiveToolEvent[] {
-  if (!options.runSettled || options.runFailed || options.paused || !options.hasAnswer) {
+  if (
+    !options.runSettled ||
+    options.runFailed ||
+    options.paused ||
+    !options.hasAnswer
+  ) {
     return events;
   }
   return events.map((event) => {
@@ -96,7 +101,8 @@ export function progressForWorkBlocks(blocks: WorkBlock[], current: WorkBlock) {
 
 export function isWorkRunning(blocks: WorkBlock[]): boolean {
   return blocks.some(
-    (block) => block.status === "running" || block.status === "waiting_approval",
+    (block) =>
+      block.status === "running" || block.status === "waiting_approval",
   );
 }
 
@@ -141,7 +147,12 @@ function isVisibleWorkEvent(event: LiveToolEvent): boolean {
 function workKind(name: string): WorkBlockKind {
   if (name === "call_agent_parallel") return "swarm";
   if (name === "todo_write") return "todo";
-  if (/skill|deep-research|report-writing|docx|pptx-swarm|webapp-building-swarm/i.test(name)) return "skill";
+  if (
+    /skill|deep-research|report-writing|docx|pptx-swarm|webapp-building-swarm/i.test(
+      name,
+    )
+  )
+    return "skill";
   if (/shell|bash|terminal|cmd|exec|python/i.test(name)) return "terminal";
   if (/fetch|browser|url|web/i.test(name)) return "browser";
   if (/search|grep|glob|list/i.test(name)) return "search";

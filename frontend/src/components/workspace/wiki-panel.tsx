@@ -1,4 +1,3 @@
-
 import {
   BookOpenIcon,
   EditIcon,
@@ -97,11 +96,14 @@ const api = {
     return data.content;
   },
   async writeDoc(path: string, content: string): Promise<void> {
-    const res = await fetch(`${getBackendBaseURL()}/api/wiki/docs/${encodeURIComponent(path)}`, {
-      method: "PUT",
-      headers: jsonAuthHeaders(),
-      body: JSON.stringify({ content }),
-    });
+    const res = await fetch(
+      `${getBackendBaseURL()}/api/wiki/docs/${encodeURIComponent(path)}`,
+      {
+        method: "PUT",
+        headers: jsonAuthHeaders(),
+        body: JSON.stringify({ content }),
+      },
+    );
     if (!res.ok) throw new Error("Failed to save document");
   },
   async generate(root?: string): Promise<void> {
@@ -111,7 +113,9 @@ const api = {
     );
     if (!res.ok) throw new Error("Failed to start generation");
   },
-  async update(root?: string): Promise<{ status: string; updated_files?: number }> {
+  async update(
+    root?: string,
+  ): Promise<{ status: string; updated_files?: number }> {
     const res = await fetch(
       `${getBackendBaseURL()}/api/wiki/update${rootQ1(root)}`,
       { method: "POST", headers: authHeaders() },
@@ -120,14 +124,18 @@ const api = {
     return res.json();
   },
   async progress(): Promise<WikiProgress> {
-    const res = await fetch(`${getBackendBaseURL()}/api/wiki/progress`, { headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/wiki/progress`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to fetch progress");
     return res.json();
   },
   // Per-project autosync flag · only meaningful when the wiki is
   // running in per-project mode (root passed). Backend rejects
   // missing root with 400.
-  async getSettings(root: string): Promise<{ autosync: boolean; watching?: boolean }> {
+  async getSettings(
+    root: string,
+  ): Promise<{ autosync: boolean; watching?: boolean }> {
     const res = await fetch(
       `${getBackendBaseURL()}/api/wiki/settings${rootQ1(root)}`,
       { headers: authHeaders() },
@@ -135,7 +143,14 @@ const api = {
     if (!res.ok) return { autosync: false, watching: false };
     return res.json();
   },
-  async setSettings(root: string, autosync: boolean): Promise<{ autosync: boolean; watching?: boolean; watcher_error?: string }> {
+  async setSettings(
+    root: string,
+    autosync: boolean,
+  ): Promise<{
+    autosync: boolean;
+    watching?: boolean;
+    watcher_error?: string;
+  }> {
     const res = await fetch(
       `${getBackendBaseURL()}/api/wiki/settings${rootQ1(root)}`,
       {
@@ -154,8 +169,14 @@ const api = {
 // ---------------------------------------------------------------------------
 
 const LEGACY_CANDIDATES = [
-  "CLAUDE.md", "README.md", "README_zh.md", "docs/ARCHITECTURE.md",
-  "docs/CONFIGURATION.md", "docs/API.md", "CONTRIBUTING.md", "CHANGELOG.md",
+  "CLAUDE.md",
+  "README.md",
+  "README_zh.md",
+  "docs/ARCHITECTURE.md",
+  "docs/CONFIGURATION.md",
+  "docs/API.md",
+  "CONTRIBUTING.md",
+  "CHANGELOG.md",
 ];
 
 async function fetchLegacyDocs(workDir: string) {
@@ -177,7 +198,11 @@ async function fetchLegacyDocs(workDir: string) {
       }
     }),
   );
-  return results.filter(Boolean) as Array<{ path: string; name: string; content: string }>;
+  return results.filter(Boolean) as Array<{
+    path: string;
+    name: string;
+    content: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +273,10 @@ function simpleMarkdownToHtml(md: string): string {
   out = out
     .replace(/^#### (.+)$/gm, '<h4 class="text-xs font-bold mt-3 mb-1">$1</h4>')
     .replace(/^### (.+)$/gm, '<h3 class="text-sm font-bold mt-4 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-sm font-bold mt-4 mb-2 pb-1 border-b">$1</h2>')
+    .replace(
+      /^## (.+)$/gm,
+      '<h2 class="text-sm font-bold mt-4 mb-2 pb-1 border-b">$1</h2>',
+    )
     .replace(/^# (.+)$/gm, '<h1 class="text-base font-bold mt-4 mb-2">$1</h1>')
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>");
@@ -283,17 +311,61 @@ function simpleMarkdownToHtml(md: string): string {
  */
 const DOMPURIFY_CONFIG = {
   ALLOWED_TAGS: [
-    "a", "b", "br", "code", "div", "em", "h1", "h2", "h3", "h4", "h5", "h6",
-    "hr", "i", "img", "li", "ol", "p", "pre", "span", "strong", "sub", "sup",
-    "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
-    "details", "summary", "blockquote",
+    "a",
+    "b",
+    "br",
+    "code",
+    "div",
+    "em",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "i",
+    "img",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "span",
+    "strong",
+    "sub",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "u",
+    "ul",
+    "details",
+    "summary",
+    "blockquote",
   ],
   ALLOWED_ATTR: [
-    "align", "alt", "class", "href", "id", "rel", "src", "srcset",
-    "target", "title", "width", "height", "colspan", "rowspan",
+    "align",
+    "alt",
+    "class",
+    "href",
+    "id",
+    "rel",
+    "src",
+    "srcset",
+    "target",
+    "title",
+    "width",
+    "height",
+    "colspan",
+    "rowspan",
   ],
   // http / https / relative / anchor only
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  ALLOWED_URI_REGEXP:
+    /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
 };
 
 function WikiMarkdown({ content }: { content: string }) {
@@ -311,14 +383,19 @@ function WikiMarkdown({ content }: { content: string }) {
   // compromise cannot inject arbitrary JS into the app.
   useEffect(() => {
     if (!ref.current) return;
-    const mermaidDivs = ref.current.querySelectorAll<HTMLDivElement>(".mermaid");
+    const mermaidDivs =
+      ref.current.querySelectorAll<HTMLDivElement>(".mermaid");
     if (mermaidDivs.length === 0) return;
 
     let cancelled = false;
     void import("mermaid").then((mod) => {
       if (cancelled) return;
       const mermaid = mod.default;
-      mermaid.initialize({ startOnLoad: false, theme: "neutral", fontSize: 12 });
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: "neutral",
+        fontSize: 12,
+      });
       void mermaid.run({ nodes: Array.from(mermaidDivs) });
     });
     return () => {
@@ -378,7 +455,9 @@ function DocTree({
             style={{ paddingLeft: `${depth * 12 + 8}px` }}
           >
             <FileTextIcon className="size-3 shrink-0" />
-            <span className="truncate">{key.replace(/^_/, "").replace(/\.md$/, "") || t.wiki.overview}</span>
+            <span className="truncate">
+              {key.replace(/^_/, "").replace(/\.md$/, "") || t.wiki.overview}
+            </span>
           </button>
         );
       }
@@ -392,7 +471,11 @@ function DocTree({
             <FolderIcon className="size-3" />
             {key}
           </div>
-          {renderNode(value as Record<string, unknown>, prefix + key + "/", depth + 1)}
+          {renderNode(
+            value as Record<string, unknown>,
+            prefix + key + "/",
+            depth + 1,
+          )}
         </div>
       );
     });
@@ -424,7 +507,8 @@ function GenerationProgress({ progress }: { progress: WikiProgress }) {
         <span>{Math.round(progress.progress_pct)}%</span>
       </div>
       <div className="text-muted-foreground/60 text-[10px]">
-        {progress.completed_steps}/{progress.total_steps} {t.wiki.steps} · {Math.round(progress.elapsed_seconds)}s {t.wiki.elapsed}
+        {progress.completed_steps}/{progress.total_steps} {t.wiki.steps} ·{" "}
+        {Math.round(progress.elapsed_seconds)}s {t.wiki.elapsed}
       </div>
       {progress.errors.length > 0 && (
         <div className="mt-1 text-[10px] text-amber-500">
@@ -477,7 +561,9 @@ export function WikiPanel({
   const [wikiBackendAvailable, setWikiBackendAvailable] = useState(true);
 
   // Legacy fallback state
-  const [legacyDocs, setLegacyDocs] = useState<Array<{ path: string; name: string; content: string }>>([]);
+  const [legacyDocs, setLegacyDocs] = useState<
+    Array<{ path: string; name: string; content: string }>
+  >([]);
   const [useLegacy, setUseLegacy] = useState(false);
   // Per-project autosync flag. Source of truth is the backend
   // (``<workDir>/.octopus-wiki/settings.json``); we hydrate from
@@ -518,7 +604,9 @@ export function WikiPanel({
         try {
           const s = await api.getSettings(workDir);
           setWatching(Boolean(s.watching));
-        } catch (e) { swallow(e); }
+        } catch (e) {
+          swallow(e);
+        }
       }
 
       if (status.exists) {
@@ -575,30 +663,33 @@ export function WikiPanel({
   }, [loadStatus, active]);
 
   // ── Load document content ──
-  const loadDoc = useCallback(async (path: string) => {
-    setActiveDocPath(path);
-    setEditing(false);
+  const loadDoc = useCallback(
+    async (path: string) => {
+      setActiveDocPath(path);
+      setEditing(false);
 
-    if (useLegacy) {
-      const doc = legacyDocs.find((d) => d.path === path);
-      setDocContent(doc?.content ?? null);
-      return;
-    }
+      if (useLegacy) {
+        const doc = legacyDocs.find((d) => d.path === path);
+        setDocContent(doc?.content ?? null);
+        return;
+      }
 
-    try {
-      const content = await api.readDoc(path, workDir);
-      setDocContent(content);
-    } catch (e) {
-      swallow(e);
-      setDocContent(t.wiki.failedToLoad);
-    }
-  }, [useLegacy, legacyDocs, workDir, t.wiki.failedToLoad]);
+      try {
+        const content = await api.readDoc(path, workDir);
+        setDocContent(content);
+      } catch (e) {
+        swallow(e);
+        setDocContent(t.wiki.failedToLoad);
+      }
+    },
+    [useLegacy, legacyDocs, workDir, t.wiki.failedToLoad],
+  );
 
   // ── Generate wiki ──
   const handleGenerate = useCallback(async () => {
     // Confirm with user — generation consumes LLM tokens
     const confirmed = window.confirm(
-      t.wiki.generateConfirmTitle + "\n\n" + t.wiki.generateConfirmBody
+      t.wiki.generateConfirmTitle + "\n\n" + t.wiki.generateConfirmBody,
     );
     if (!confirmed) return;
 
@@ -628,7 +719,9 @@ export function WikiPanel({
             toast.success(t.wiki.generateComplete);
             void loadStatus();
           }
-        } catch (e) { swallow(e); }
+        } catch (e) {
+          swallow(e);
+        }
       }, 2000);
     } catch {
       toast.error(t.wiki.generateFailed);
@@ -639,7 +732,7 @@ export function WikiPanel({
   // ── Update wiki ──
   const handleUpdate = useCallback(async () => {
     const confirmed = window.confirm(
-      t.wiki.updateConfirmTitle + "\n\n" + t.wiki.updateConfirmBody
+      t.wiki.updateConfirmTitle + "\n\n" + t.wiki.updateConfirmBody,
     );
     if (!confirmed) return;
 
@@ -713,9 +806,16 @@ export function WikiPanel({
 
   if (loading) {
     return (
-      <div className={cn("flex flex-col items-center justify-center gap-2 py-12", className)}>
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center gap-2 py-12",
+          className,
+        )}
+      >
         <Loader2Icon className="text-muted-foreground size-5 animate-spin" />
-        <span className="text-muted-foreground text-xs">{t.wiki.loadingWiki}</span>
+        <span className="text-muted-foreground text-xs">
+          {t.wiki.loadingWiki}
+        </span>
       </div>
     );
   }
@@ -733,11 +833,18 @@ export function WikiPanel({
   // supports generation) or an explanation (if it doesn't).
   if (!wikiStatus?.exists && legacyDocs.length === 0) {
     return (
-      <div className={cn("flex flex-col items-center justify-center gap-3 px-4 py-12", className)}>
+      <div
+        className={cn(
+          "flex flex-col items-center justify-center gap-3 px-4 py-12",
+          className,
+        )}
+      >
         <div className="bg-muted/40 rounded-lg p-4">
           <BookOpenIcon className="text-muted-foreground/40 size-8" />
         </div>
-        <p className="text-muted-foreground text-sm font-medium">{t.wiki.noWikiYet}</p>
+        <p className="text-muted-foreground text-sm font-medium">
+          {t.wiki.noWikiYet}
+        </p>
         <p className="text-muted-foreground/60 text-center text-xs leading-relaxed whitespace-pre-line">
           {t.wiki.noWikiDesc}
         </p>
@@ -770,13 +877,15 @@ export function WikiPanel({
   const _showDocs = useLegacy ? legacyDocs : docs;
 
   const wikiContent = (
-    <div className={cn(
-      "flex flex-col",
-      expanded
-        ? "fixed inset-4 z-[200] rounded-lg border bg-background shadow-2xl"
-        : "h-full",
-      !expanded && className,
-    )}>
+    <div
+      className={cn(
+        "flex flex-col",
+        expanded
+          ? "fixed inset-4 z-[200] rounded-lg border bg-background shadow-2xl"
+          : "h-full",
+        !expanded && className,
+      )}
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
         <div className="flex items-center gap-1.5">
@@ -794,21 +903,26 @@ export function WikiPanel({
           {wikiStatus?.status === "outdated" && (
             <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
               {wikiStatus.changes_pending
-                ? t.wiki.filesChanged((wikiStatus.changes_pending.modified || 0) + (wikiStatus.changes_pending.added || 0))
+                ? t.wiki.filesChanged(
+                    (wikiStatus.changes_pending.modified || 0) +
+                      (wikiStatus.changes_pending.added || 0),
+                  )
                 : t.wiki.outdated}
             </span>
           )}
         </div>
         <div className="flex items-center gap-0.5">
-          {wikiBackendAvailable && !useLegacy && wikiStatus?.status === "outdated" && (
-            <button
-              onClick={handleUpdate}
-              className="text-primary hover:text-primary/80 p-1 rounded-lg hover:bg-primary/10 text-[10px] font-medium transition-colors"
-              title={t.wiki.update}
-            >
-              {t.wiki.update}
-            </button>
-          )}
+          {wikiBackendAvailable &&
+            !useLegacy &&
+            wikiStatus?.status === "outdated" && (
+              <button
+                onClick={handleUpdate}
+                className="text-primary hover:text-primary/80 p-1 rounded-lg hover:bg-primary/10 text-[10px] font-medium transition-colors"
+                title={t.wiki.update}
+              >
+                {t.wiki.update}
+              </button>
+            )}
           {wikiBackendAvailable && !wikiStatus?.exists && (
             <button
               onClick={handleGenerate}
@@ -848,9 +962,7 @@ export function WikiPanel({
                 <span
                   className={cn(
                     "inline-block size-1.5 rounded-full",
-                    watching
-                      ? "bg-emerald-400 animate-pulse"
-                      : "bg-amber-400",
+                    watching ? "bg-emerald-400 animate-pulse" : "bg-amber-400",
                   )}
                 />
               )}
@@ -862,7 +974,11 @@ export function WikiPanel({
             className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted/60 transition-colors"
             title={expanded ? t.wiki.collapse : t.wiki.expand}
           >
-            {expanded ? <MinimizeIcon className="size-3" /> : <MaximizeIcon className="size-3" />}
+            {expanded ? (
+              <MinimizeIcon className="size-3" />
+            ) : (
+              <MaximizeIcon className="size-3" />
+            )}
           </button>
           <button
             onClick={() => void loadStatus()}
@@ -875,105 +991,127 @@ export function WikiPanel({
       </div>
 
       {/* Content area: vertical in sidebar, horizontal when expanded */}
-      <div className={cn("flex min-h-0 flex-1", expanded ? "flex-row" : "flex-col")}>
-
-      {/* Doc tree or list */}
-      <div className={cn(
-        "shrink-0 overflow-y-auto",
-        expanded ? "w-56 border-r" : "border-b",
-      )} style={expanded ? undefined : { maxHeight: "40%" }}>
-        {useLegacy ? (
-          // Legacy file list
-          <div className="space-y-0.5 py-1">
-            {legacyDocs.map((doc) => (
-              <button
-                key={doc.path}
-                onClick={() => void loadDoc(doc.path)}
-                className={cn(
-                  "flex w-full items-center gap-1.5 px-3 py-1 text-left text-[11px] transition-colors",
-                  doc.path === activeDocPath
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-muted",
-                )}
-              >
-                <FileTextIcon className="size-3 shrink-0" />
-                <span className="truncate">{doc.name}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <DocTree docs={docs} activeDoc={activeDocPath} onSelect={(p) => void loadDoc(p)} />
+      <div
+        className={cn(
+          "flex min-h-0 flex-1",
+          expanded ? "flex-row" : "flex-col",
         )}
-        {/* Status bar */}
-        {!useLegacy && wikiStatus && (
-          <div className="text-muted-foreground/60 flex items-center justify-between border-t px-3 py-1 text-[9px]">
-            <span>{wikiStatus.files_analyzed ?? 0} {t.wiki.files}</span>
-            <span>{wikiStatus.modules?.length ?? 0} {t.wiki.modules}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Document content */}
-      <div className="flex-1 overflow-y-auto">
-        {docContent ? (
-          editing ? (
-            // Edit mode
-            <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b px-3 py-1.5">
-                <span className="text-[10px] font-medium text-amber-600">{t.wiki.editing}</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="text-primary flex items-center gap-0.5 text-[10px] font-medium"
-                  >
-                    {saving ? <Loader2Icon className="size-3 animate-spin" /> : <SaveIcon className="size-3" />}
-                    {t.wiki.save}
-                  </button>
-                  <button
-                    onClick={() => setEditing(false)}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <XIcon className="size-3" />
-                  </button>
-                </div>
-              </div>
-              <textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="bg-background flex-1 resize-none p-3 font-mono text-[11px] leading-relaxed outline-none"
-                spellCheck={false}
-              />
+      >
+        {/* Doc tree or list */}
+        <div
+          className={cn(
+            "shrink-0 overflow-y-auto",
+            expanded ? "w-56 border-r" : "border-b",
+          )}
+          style={expanded ? undefined : { maxHeight: "40%" }}
+        >
+          {useLegacy ? (
+            // Legacy file list
+            <div className="space-y-0.5 py-1">
+              {legacyDocs.map((doc) => (
+                <button
+                  key={doc.path}
+                  onClick={() => void loadDoc(doc.path)}
+                  className={cn(
+                    "flex w-full items-center gap-1.5 px-3 py-1 text-left text-[11px] transition-colors",
+                    doc.path === activeDocPath
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-muted",
+                  )}
+                >
+                  <FileTextIcon className="size-3 shrink-0" />
+                  <span className="truncate">{doc.name}</span>
+                </button>
+              ))}
             </div>
           ) : (
-            // Read mode
-            <div className="relative">
-              {!useLegacy && (
-                <button
-                  onClick={() => {
-                    setEditing(true);
-                    setEditContent(docContent);
-                  }}
-                  className="text-muted-foreground hover:text-foreground absolute top-2 right-2 z-10 rounded p-1"
-                  title={t.wiki.editDocument}
-                >
-                  <EditIcon className="size-3" />
-                </button>
-              )}
-              <div className="px-3 py-3">
-                <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed">
-                  <WikiMarkdown content={docContent} />
+            <DocTree
+              docs={docs}
+              activeDoc={activeDocPath}
+              onSelect={(p) => void loadDoc(p)}
+            />
+          )}
+          {/* Status bar */}
+          {!useLegacy && wikiStatus && (
+            <div className="text-muted-foreground/60 flex items-center justify-between border-t px-3 py-1 text-[9px]">
+              <span>
+                {wikiStatus.files_analyzed ?? 0} {t.wiki.files}
+              </span>
+              <span>
+                {wikiStatus.modules?.length ?? 0} {t.wiki.modules}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Document content */}
+        <div className="flex-1 overflow-y-auto">
+          {docContent ? (
+            editing ? (
+              // Edit mode
+              <div className="flex h-full flex-col">
+                <div className="flex items-center justify-between border-b px-3 py-1.5">
+                  <span className="text-[10px] font-medium text-amber-600">
+                    {t.wiki.editing}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="text-primary flex items-center gap-0.5 text-[10px] font-medium"
+                    >
+                      {saving ? (
+                        <Loader2Icon className="size-3 animate-spin" />
+                      ) : (
+                        <SaveIcon className="size-3" />
+                      )}
+                      {t.wiki.save}
+                    </button>
+                    <button
+                      onClick={() => setEditing(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="bg-background flex-1 resize-none p-3 font-mono text-[11px] leading-relaxed outline-none"
+                  spellCheck={false}
+                />
+              </div>
+            ) : (
+              // Read mode
+              <div className="relative">
+                {!useLegacy && (
+                  <button
+                    onClick={() => {
+                      setEditing(true);
+                      setEditContent(docContent);
+                    }}
+                    className="text-muted-foreground hover:text-foreground absolute top-2 right-2 z-10 rounded p-1"
+                    title={t.wiki.editDocument}
+                  >
+                    <EditIcon className="size-3" />
+                  </button>
+                )}
+                <div className="px-3 py-3">
+                  <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed">
+                    <WikiMarkdown content={docContent} />
+                  </div>
                 </div>
               </div>
+            )
+          ) : (
+            <div className="text-muted-foreground/50 py-8 text-center text-xs">
+              {t.wiki.selectDocument}
             </div>
-          )
-        ) : (
-          <div className="text-muted-foreground/50 py-8 text-center text-xs">
-            {t.wiki.selectDocument}
-          </div>
-        )}
+          )}
+        </div>
       </div>
-      </div>{/* close content flex row/col */}
+      {/* close content flex row/col */}
     </div>
   );
 

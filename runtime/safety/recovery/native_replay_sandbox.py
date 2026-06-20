@@ -10,19 +10,19 @@ the case was replayable in an isolated workspace, the candidate prompt was
 inspectable, and the replay score can be tied to persisted artifacts.
 """
 
-import json
-import tempfile
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any
+import json  # noqa: E402
+import tempfile  # noqa: E402
+from dataclasses import asdict, dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from runtime.safety.recovery.evolution_dataset import EvolutionDataset
-from runtime.safety.recovery.native_replay import (
+from runtime.safety.recovery.evolution_dataset import EvolutionDataset  # noqa: E402
+from runtime.safety.recovery.native_replay import (  # noqa: E402
     ReplayCase,
     build_replay_cases,
     replay_candidate,
 )
-from runtime.safety.sandboxing.sandbox import (
+from runtime.safety.sandboxing.sandbox import (  # noqa: E402
     SandboxPolicy,
     SandboxRunner,
     SandboxViolation,

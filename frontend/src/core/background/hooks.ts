@@ -91,7 +91,17 @@ export function useBackgroundTasks() {
     [refresh],
   );
 
-  return { tasks, loading, error, refresh, submit, pause, resume, cancel, remove };
+  return {
+    tasks,
+    loading,
+    error,
+    refresh,
+    submit,
+    pause,
+    resume,
+    cancel,
+    remove,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -120,7 +130,8 @@ export function useBackgroundTaskOutput(taskId: string | null) {
         setMessages(existing);
 
         // Then connect SSE for live updates
-        const lastSeq = existing.length > 0 ? existing[existing.length - 1]!.seq : -1;
+        const lastSeq =
+          existing.length > 0 ? existing[existing.length - 1]!.seq : -1;
         const controller = connectOutputSSE(
           taskId,
           {
@@ -171,7 +182,9 @@ export function useActiveBackgroundTaskCount() {
       try {
         const c = await getActiveBackgroundTaskCount();
         if (!cancelled) setCount(c);
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
     };
 
     // Delay the first poll so every workspace page mount doesn't

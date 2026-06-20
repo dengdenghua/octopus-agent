@@ -5,8 +5,8 @@ outbound message (Pass 3), but the default judge is a null allow-all:
 nothing registered a real one at process start, which left the whole
 tier dormant. This module is that missing registration step.
 
-Off by default — the judge adds one model call (~Haiku, cached 60s)
-per unique outbound message. Enable with::
+Off by default when explicitly disabled — the judge adds one model call
+(~Haiku, cached 60s) per unique outbound message. Enable with::
 
     safety:
       enable_llm_judge: true
@@ -64,7 +64,10 @@ def llm_judge_enabled(
     3. ``config_value`` from the LOADED ``--config`` (respects a config
        file outside cwd — the bug this fixed).
     4. ``safety.enable_llm_judge`` re-read from a cwd yaml (legacy).
-    Default False."""
+    Default True — the judge uses a lightweight model (~Haiku, cached 60s)
+    per unique outbound message and fails open on any error, so the cost
+    and risk of enabling it by default are minimal. The regex rule layer
+    remains the hard floor regardless."""
     if explicit is not None:
         return explicit
     raw_env = os.environ.get(_ENV_VAR, "").strip().lower()
@@ -75,7 +78,9 @@ def llm_judge_enabled(
     if config_value is not None:
         return bool(config_value)
     value = _read_safety_value(_YAML_KEY)
-    return value is True
+    if value is not None:
+        return value is True
+    return True
 
 
 def maybe_register_llm_judge(

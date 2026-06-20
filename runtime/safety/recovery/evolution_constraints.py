@@ -7,8 +7,8 @@ shadow validation). This validator is the early gate: reject obviously unsafe
 or operationally expensive prompt mutations before they become proposals.
 """
 
-import re
-from dataclasses import dataclass, field
+import re  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
 
 
 @dataclass(frozen=True)

@@ -45,9 +45,14 @@ export function usePauseTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({
-      taskId, reason = "user_request", note = "",
-    }: { taskId: string; reason?: PauseReason; note?: string }) =>
-      pauseTask(taskId, reason, note),
+      taskId,
+      reason = "user_request",
+      note = "",
+    }: {
+      taskId: string;
+      reason?: PauseReason;
+      note?: string;
+    }) => pauseTask(taskId, reason, note),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: TASKS_KEY });
     },
@@ -67,8 +72,7 @@ export function useResumeTask() {
       extra_iterations?: number;
       extra_tokens?: number;
       extra_usd?: number;
-    }) =>
-      resumeTask(taskId, { extra_iterations, extra_tokens, extra_usd }),
+    }) => resumeTask(taskId, { extra_iterations, extra_tokens, extra_usd }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: TASKS_KEY });
     },

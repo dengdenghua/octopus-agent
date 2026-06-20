@@ -75,12 +75,22 @@ def build_turn_metadata(
     if isinstance(sb_mode, str) and sb_mode in ("sandbox", "full"):
         metadata["sandbox_mode"] = sb_mode
 
-    for key in ("capability_mode", "code_mode", "interaction_mode", "model_name"):
+    for key in (
+        "capability_mode",
+        "code_mode",
+        "agent_mode",
+        "interaction_mode",
+        "model_name",
+    ):
         value = ctx.get(key) or stored_meta.get(key)
         if isinstance(value, str) and value.strip():
             metadata[key] = value.strip()
         elif isinstance(value, bool):
             metadata[key] = value
+
+    project_signals = ctx.get("project_signals") or stored_meta.get("project_signals")
+    if isinstance(project_signals, dict):
+        metadata["project_signals"] = project_signals
 
     return metadata
 

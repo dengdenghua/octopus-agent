@@ -220,7 +220,7 @@ def _build_stack(
     return planner, executor, journal
 
 
-def _build_arm_pool(runtime) -> ArmPool:
+def _build_arm_pool(runtime, signal_bus=None) -> ArmPool:
     return ArmPool(
         [
             Arm(
@@ -232,6 +232,7 @@ def _build_arm_pool(runtime) -> ArmPool:
                     SkillId("file_stats"),
                 ],
                 runtime=runtime,
+                signal_bus=signal_bus,
             ),
             Arm(
                 arm_id=ArmId("text_arm"),
@@ -241,6 +242,7 @@ def _build_arm_pool(runtime) -> ArmPool:
                     SkillId("hash_text"),
                 ],
                 runtime=runtime,
+                signal_bus=signal_bus,
             ),
             Arm(
                 arm_id=ArmId("generic_arm"),
@@ -253,6 +255,7 @@ def _build_arm_pool(runtime) -> ArmPool:
                     SkillId("file_stats"),
                 ],
                 runtime=runtime,
+                signal_bus=signal_bus,
             ),
         ]
     )

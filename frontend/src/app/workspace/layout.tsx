@@ -46,12 +46,14 @@ function useTitleBarThemeSync() {
           return v;
         return `hsl(${v})`;
       };
-      void window.octopus!.window
-        .setTitleBarOverlay({
+      void window
+        .octopus!.window.setTitleBarOverlay({
           color: wrap(bg, "#fcfcfd"),
           symbolColor: wrap(fg, "#525252"),
         })
-        .catch((e) => { swallow(e); });
+        .catch((e) => {
+          swallow(e);
+        });
     };
     apply();
     const obs = new MutationObserver(apply);

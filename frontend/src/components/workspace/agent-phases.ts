@@ -86,7 +86,11 @@ function extractTodoPhases(
         firstString(record, ["activeForm", "active_form"]) ||
         firstString(record, ["content", "text", "title", "task"]);
       if (!title) return null;
-      const status = normalizePhaseStatus(todoStatus(record.status), [], options);
+      const status = normalizePhaseStatus(
+        todoStatus(record.status),
+        [],
+        options,
+      );
       const displayTitle =
         (options.runSettled || options.hasAnswer) && status === "done"
           ? title.replace(/^正在\s*/, "")
@@ -179,7 +183,11 @@ function normalizePhaseStatus(
   if (!options.runSettled) return status;
   if (options.runFailed && status === "running") return "error";
   if (options.runFailed && status === "pending") return "pending";
-  if (!options.runFailed && options.hasAnswer && (status === "running" || status === "pending")) {
+  if (
+    !options.runFailed &&
+    options.hasAnswer &&
+    (status === "running" || status === "pending")
+  ) {
     return "done";
   }
   if (status === "pending") return "pending";
@@ -194,7 +202,11 @@ function markFailedTodoPhase(
   phases: AgentPhase[],
   options: DeriveAgentPhasesOptions,
 ): AgentPhase[] {
-  if (options.paused || !options.runSettled || (options.hasAnswer && !options.runFailed)) {
+  if (
+    options.paused ||
+    !options.runSettled ||
+    (options.hasAnswer && !options.runFailed)
+  ) {
     return phases;
   }
   let marked = false;

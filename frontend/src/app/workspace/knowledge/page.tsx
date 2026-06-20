@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import { KnowledgeGraphPanel } from "@/components/workspace/knowledge-graph-panel";
 import {
   WorkspaceBody,
@@ -50,6 +51,7 @@ export default function KnowledgePage() {
       <WorkspaceHeader />
       <WorkspaceBody>
         <div className="ui-density-stack mx-auto flex w-full max-w-6xl flex-col py-2">
+          <CapabilityQualityStrip surface="knowledge" />
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid h-auto w-full max-w-lg grid-cols-4 rounded-lg p-1">
               <TabsTrigger value="graph" className="h-8 gap-1.5 px-3 text-xs">

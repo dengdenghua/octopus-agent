@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import hashlib
 import json
 import os
 import time
@@ -26,6 +27,9 @@ _BRIDGE_TIMEOUT = 30  # Implementation note.
 # "no active stream" → file-only behavior, same as before.
 _ACTIVE_ARTIFACT_EMITTER: ContextVar[Callable[[dict[str, Any]], None] | None] = (
     ContextVar("active_artifact_emitter", default=None)
+)
+_LAST_SCREENSHOT_ARTIFACT: ContextVar[Path | None] = (
+    ContextVar("last_screenshot_artifact", default=None)
 )
 
 
@@ -155,6 +159,133 @@ def _artifacts_root() -> Path:
     return app_paths().data_dir / "browser_artifacts"
 
 
+def _pixel_assertion_for_screenshot(path: Path) -> dict[str, Any]:
+    try:
+        from runtime.safety.replay.browser_pixel_assertions import (
+            assert_screenshot_pixels,
+        )
+
+        return assert_screenshot_pixels(path)
+    except Exception as exc:  # noqa: BLE001 - screenshot evidence is best-effort
+        return {
+            "schema": "octopus.browser_pixel_assertion.v1",
+            "ok": False,
+            "reason": f"pixel assertion unavailable: {exc}",
+        }
+
+
+def _pixel_comparison_for_screenshots(before: Path | None, after: Path) -> dict[str, Any] | None:
+    if before is None or not before.is_file():
+        return None
+    try:
+        from runtime.safety.replay.browser_pixel_assertions import (
+            compare_screenshot_pixels,
+        )
+
+        return compare_screenshot_pixels(before, after)
+    except Exception as exc:  # noqa: BLE001 - screenshot evidence is best-effort
+        return {
+            "schema": "octopus.browser_pixel_comparison.v1",
+            "ok": False,
+            "reason": f"pixel comparison unavailable: {exc}",
+        }
+
+
+def _pixel_replay_gate_case_for_artifact(
+    event: dict[str, Any],
+    pixel_assertion: dict[str, Any],
+    pixel_comparison: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    try:
+        from runtime.safety.replay.browser_pixel_assertions import (
+            browser_pixel_replay_gate_case,
+        )
+
+        return browser_pixel_replay_gate_case(
+            artifact=event,
+            assertion=pixel_assertion,
+            comparison=pixel_comparison,
+        )
+    except Exception:  # noqa: BLE001 - replay evidence is best-effort
+        return None
+
+
+def _queue_pixel_replay_gate_case(
+    replay_gate_case: dict[str, Any],
+) -> dict[str, Any] | None:
+    try:
+        from runtime.memory.learning.review_queue import ReviewQueue
+        from runtime.platform.process.paths import app_paths
+
+        artifact = (
+            replay_gate_case.get("artifact")
+            if isinstance(replay_gate_case.get("artifact"), dict)
+            else {}
+        )
+        failures = (
+            replay_gate_case.get("failures")
+            if isinstance(replay_gate_case.get("failures"), list)
+            else []
+        )
+        case_id = str(replay_gate_case.get("case_id") or "")
+        filename = str(artifact.get("filename") or "browser screenshot")
+        reasons = [
+            str(item.get("reason") or "")
+            for item in failures
+            if isinstance(item, dict) and item.get("reason")
+        ]
+        reason_text = "; ".join(reasons) or "browser pixel evidence failed"
+        replay_gate = (
+            replay_gate_case.get("replay_gate")
+            if isinstance(replay_gate_case.get("replay_gate"), dict)
+            else {}
+        )
+        replay_summary = {
+            "schema": replay_gate_case.get("schema"),
+            "case_id": case_id,
+            "fingerprint": _case_fingerprint(case_id),
+            "replayable": False,
+            "step_count": 1,
+            "kind": replay_gate_case.get("kind"),
+        }
+        return ReviewQueue(app_paths().review_queue_path).upsert_item(
+            source="browser_pixel_replay_gate",
+            source_kind="browser_desktop_replay",
+            candidate_kind="browser_pixel_replay_gate_case",
+            priority="P0",
+            target_bucket="browser_desktop_replay",
+            title=f"Review browser pixel replay gate: {filename}",
+            text=(
+                f"Browser pixel replay gate case `{case_id}` failed for `{filename}`.\n"
+                f"Reason: {reason_text}."
+            ),
+            metadata={
+                "schema": replay_gate_case.get("schema"),
+                "case_id": case_id,
+                "replay": replay_summary,
+                "replay_gate": replay_gate,
+                "replay_gate_case": replay_gate_case,
+                "artifact": artifact,
+                "failure_count": len(failures),
+            },
+            source_task_ids=[str(replay_gate_case.get("task_id") or "")],
+            agent_ids=[str(replay_gate_case.get("agent_id") or "")],
+            tags=[
+                "browser",
+                "pixel",
+                "replay_gate",
+                "review_queue",
+                "browser_pixel_evidence_failed",
+            ],
+        )
+    except Exception:  # noqa: BLE001 - queueing must not break screenshots
+        return None
+
+
+def _case_fingerprint(case_id: str) -> str:
+    return hashlib.blake2b(case_id.encode("utf-8"), digest_size=8).hexdigest()
+
+
 def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
     """Save the base64 screenshot to disk and push an ``artifact``
     event into the active SSE stream (when one is bound).
@@ -178,7 +309,11 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
         root.mkdir(parents=True, exist_ok=True)
         fname = f"screenshot-{ts}.png"
         fpath = root / fname
+        previous_path = _LAST_SCREENSHOT_ARTIFACT.get()
         fpath.write_bytes(img_bytes)
+        pixel_assertion = _pixel_assertion_for_screenshot(fpath)
+        pixel_comparison = _pixel_comparison_for_screenshots(previous_path, fpath)
+        _LAST_SCREENSHOT_ARTIFACT.set(fpath)
 
         width = bridge_response.get("width")
         height = bridge_response.get("height")
@@ -216,7 +351,20 @@ def _emit_screenshot_artifact(bridge_response: dict[str, Any]) -> None:
             "height": height,
             "iso_ts": datetime.now(UTC).isoformat(),
             "local_path": str(fpath),
+            "pixel_assertion": pixel_assertion,
         }
+        if pixel_comparison is not None:
+            event["pixel_comparison"] = pixel_comparison
+        replay_gate_case = _pixel_replay_gate_case_for_artifact(
+            event,
+            pixel_assertion,
+            pixel_comparison,
+        )
+        if replay_gate_case is not None:
+            event["replay_gate_case"] = replay_gate_case
+            queued = _queue_pixel_replay_gate_case(replay_gate_case)
+            if queued is not None:
+                event["replay_gate_queue"] = queued
 
         # Primary path · push to the live SSE queue when a stream is
         # attached. Zero wiring changes for intermediate callers because

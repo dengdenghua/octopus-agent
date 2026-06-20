@@ -55,13 +55,16 @@ export interface AgentInstallResult {
   tool_registry?: string;
 }
 
-export async function previewAgentPack(path: string): Promise<AgentPackPreview> {
+export async function previewAgentPack(
+  path: string,
+): Promise<AgentPackPreview> {
   const qs = new URLSearchParams({ path });
   const res = await fetch(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/packs/preview?${qs.toString()}`,
     { headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Failed to preview agent pack: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to preview agent pack: ${res.statusText}`);
   return res.json() as Promise<AgentPackPreview>;
 }
 
@@ -77,7 +80,8 @@ export async function importAgentFromPack(args: {
       body: JSON.stringify({ path: args.path, agent_name: args.agentName }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to import agent pack: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to import agent pack: ${res.statusText}`);
   return res.json() as Promise<AgentPackImportResult>;
 }
 
@@ -96,7 +100,8 @@ export async function listStoreAgents(
       `${getBackendBaseURL()}${AGENT_MARKET_API}/store/featured?${qs.toString()}`,
       { headers: authHeaders() },
     );
-    if (!res.ok) throw new Error(`Failed to load featured agents: ${res.statusText}`);
+    if (!res.ok)
+      throw new Error(`Failed to load featured agents: ${res.statusText}`);
     return res.json() as Promise<AgentWorldListResponse>;
   }
 
@@ -104,19 +109,23 @@ export async function listStoreAgents(
   if (params.category) qs.set("category", params.category);
   if (params.search) qs.set("search", params.search);
   if (params.sort_by) qs.set("sort", params.sort_by);
-  if (params.page !== undefined) qs.set("offset", String(((params.page ?? 1) - 1) * (params.page_size ?? 50)));
-  if (params.page_size !== undefined)
-    qs.set("limit", String(params.page_size));
+  if (params.page !== undefined)
+    qs.set(
+      "offset",
+      String(((params.page ?? 1) - 1) * (params.page_size ?? 50)),
+    );
+  if (params.page_size !== undefined) qs.set("limit", String(params.page_size));
 
   const res = await fetch(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/store?${qs.toString()}`,
     { headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Failed to load store agents: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load store agents: ${res.statusText}`);
   return res.json() as Promise<AgentWorldListResponse>;
 }
 
-// ── 企业版角色资产(数字分身归并 C · 消费侧)─────────────────────
+// ── 企业版角色资产(消费侧)─────────────────────
 export type EnterpriseAsset = {
   id: string;
   name: string;
@@ -212,7 +221,8 @@ export async function getAgentProfile(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/profile/${agentName}`,
     { headers: authHeaders() },
   );
-  if (!res.ok) throw new Error(`Failed to load agent profile: ${res.statusText}`);
+  if (!res.ok)
+    throw new Error(`Failed to load agent profile: ${res.statusText}`);
   return res.json() as Promise<AgentProfile>;
 }
 
@@ -239,7 +249,11 @@ export async function addAgentMemory(
 ): Promise<AgentMemory> {
   const res = await fetch(
     `${getBackendBaseURL()}${AGENT_MARKET_API}/memory/${agentName}/remember`,
-    { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(memory) },
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(memory),
+    },
   );
   if (!res.ok) throw new Error(`Failed to add memory: ${res.statusText}`);
   return res.json() as Promise<AgentMemory>;

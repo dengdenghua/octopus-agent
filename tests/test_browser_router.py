@@ -59,6 +59,32 @@ def test_browser_config_update(client: TestClient) -> None:
     assert data["headless"] is False
 
 
+def test_browser_system_info_detects_macos_chrome_path(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_exists = Path.exists
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+    monkeypatch.setattr("shutil.which", lambda _candidate: None)
+
+    def fake_exists(path: Path) -> bool:
+        return str(path) == chrome_path or original_exists(path)
+
+    monkeypatch.setattr(Path, "exists", fake_exists)
+
+    response = client.get("/api/browser/system-info")
+
+    assert response.status_code == 200
+    browsers = response.json()["browsers"]
+    assert any(
+        browser["name"] == "chrome"
+        and browser["path"] == chrome_path
+        and browser["connection_modes"] == ["extension", "cdp"]
+        for browser in browsers
+    )
+
+
 def test_browser_relay_heartbeat_and_status(client: TestClient) -> None:
     heartbeat = client.post(
         "/api/browser/relay/heartbeat",

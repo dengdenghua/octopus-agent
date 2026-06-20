@@ -127,13 +127,13 @@ export function QuickTemplates({ onSelect, className }: QuickTemplatesProps) {
               className={cn(
                 "group flex items-start gap-3 p-3 rounded-lg border border-border/50",
                 "hover:border-primary/30 hover:bg-primary/5 transition-all duration-200",
-                "text-left"
+                "text-left",
               )}
             >
               <div
                 className={cn(
                   "flex size-8 items-center justify-center rounded-lg shrink-0",
-                  categoryColors[template.category]
+                  categoryColors[template.category],
                 )}
               >
                 {template.icon}

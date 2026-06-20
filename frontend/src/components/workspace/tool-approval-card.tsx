@@ -1,9 +1,4 @@
-
-import {
-  CheckCircle2Icon,
-  ShieldAlertIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { CheckCircle2Icon, ShieldAlertIcon, XCircleIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -24,7 +19,9 @@ function parseApprovalRequest(content: string): ToolApprovalRequest | null {
   try {
     const match = content.match(/\[APPROVAL REQUIRED\]/);
     if (!match) return null;
-    const jsonMatch = content.match(/\{[\s\S]*"type"\s*:\s*"tool_approval_request"[\s\S]*\}/);
+    const jsonMatch = content.match(
+      /\{[\s\S]*"type"\s*:\s*"tool_approval_request"[\s\S]*\}/,
+    );
     if (!jsonMatch) return null;
     return JSON.parse(jsonMatch[0]) as ToolApprovalRequest;
   } catch (e) {
@@ -58,12 +55,30 @@ export function getApprovalData(
 }
 
 const TOOL_LABELS: Record<string, { label: string; color: string }> = {
-  bash: { label: "Terminal", color: "bg-orange-500/10 text-orange-600 dark:text-orange-400" },
-  write_file: { label: "Write File", color: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  str_replace: { label: "Edit File", color: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
-  git_commit: { label: "Git Commit", color: "bg-green-500/10 text-green-600 dark:text-green-400" },
-  schedule_cron: { label: "Cron Job", color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400" },
-  remote_trigger: { label: "Webhook", color: "bg-red-500/10 text-red-600 dark:text-red-400" },
+  bash: {
+    label: "Terminal",
+    color: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  },
+  write_file: {
+    label: "Write File",
+    color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  },
+  str_replace: {
+    label: "Edit File",
+    color: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+  },
+  git_commit: {
+    label: "Git Commit",
+    color: "bg-green-500/10 text-green-600 dark:text-green-400",
+  },
+  schedule_cron: {
+    label: "Cron Job",
+    color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+  },
+  remote_trigger: {
+    label: "Webhook",
+    color: "bg-red-500/10 text-red-600 dark:text-red-400",
+  },
 };
 
 export function ToolApprovalCard({
@@ -78,7 +93,9 @@ export function ToolApprovalCard({
   onReject?: (approvalData: ToolApprovalRequest) => void;
 }) {
   const { t } = useI18n();
-  const [status, setStatus] = useState<"pending" | "approved" | "rejected">("pending");
+  const [status, setStatus] = useState<"pending" | "approved" | "rejected">(
+    "pending",
+  );
   const approvalData = getApprovalData(content, additional_kwargs);
 
   const handleApprove = useCallback(() => {
@@ -105,15 +122,22 @@ export function ToolApprovalCard({
   };
 
   return (
-    <div className={cn(
-      "border rounded-lg p-3 space-y-3 transition-colors",
-      status === "approved" && "border-green-500/30 bg-green-500/5",
-      status === "rejected" && "border-red-500/30 bg-red-500/5",
-      status === "pending" && "border-yellow-500/30 bg-yellow-500/5",
-    )}>
+    <div
+      className={cn(
+        "border rounded-lg p-3 space-y-3 transition-colors",
+        status === "approved" && "border-green-500/30 bg-green-500/5",
+        status === "rejected" && "border-red-500/30 bg-red-500/5",
+        status === "pending" && "border-yellow-500/30 bg-yellow-500/5",
+      )}
+    >
       <div className="flex items-center gap-2">
         <ShieldAlertIcon className="size-4 text-yellow-600 dark:text-yellow-400" />
-        <span className={cn("text-xs font-medium px-2 py-0.5 rounded-lg", toolInfo.color)}>
+        <span
+          className={cn(
+            "text-xs font-medium px-2 py-0.5 rounded-lg",
+            toolInfo.color,
+          )}
+        >
           {toolInfo.label}
         </span>
         <span className="text-muted-foreground text-xs">
@@ -152,11 +176,13 @@ export function ToolApprovalCard({
           </Button>
         </div>
       ) : (
-        <div className={cn(
-          "flex items-center gap-1.5 text-xs font-medium",
-          status === "approved" && "text-green-600 dark:text-green-400",
-          status === "rejected" && "text-red-600 dark:text-red-400",
-        )}>
+        <div
+          className={cn(
+            "flex items-center gap-1.5 text-xs font-medium",
+            status === "approved" && "text-green-600 dark:text-green-400",
+            status === "rejected" && "text-red-600 dark:text-red-400",
+          )}
+        >
           {status === "approved" ? (
             <>
               <CheckCircle2Icon className="size-3.5" />

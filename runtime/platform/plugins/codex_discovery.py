@@ -109,6 +109,135 @@ def _asset_url(plugin_dir: Path, plugin_id: str, raw_path: Any) -> str | None:
     return f"/api/plugins/{quote(plugin_id, safe='')}/assets/{quote(posix_rel, safe='/')}"
 
 
+def _has_skill_files(plugin_dir: Path) -> bool:
+    skills_dir = plugin_dir / "skills"
+    return skills_dir.is_dir() and any(skills_dir.glob("*/SKILL.md"))
+
+
+def _has_app_manifest(plugin_dir: Path) -> bool:
+    return any(
+        (plugin_dir / name).is_file()
+        for name in (".app.json", "octopus-app.jsonc", "app.json")
+    )
+
+
+def _plugin_smoke_check(
+    plugin_dir: Path,
+    manifest: dict[str, Any],
+    *,
+    info: dict[str, Any],
+    logo_url: str | None,
+    composer_icon_url: str | None,
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    issues: list[str] = []
+    warnings: list[str] = []
+
+    def add(name: str, ok: bool, detail: str = "") -> None:
+        checks.append({"name": name, "ok": ok, "detail": detail})
+        if not ok:
+            issues.append(detail or name)
+
+    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+    add("manifest", manifest_path.is_file(), "missing .codex-plugin/plugin.json")
+    add("name", bool(_string(manifest.get("name")).strip()), "manifest is missing name")
+    add(
+        "version",
+        bool(_string(manifest.get("version")).strip()),
+        "manifest is missing version",
+    )
+
+    interface = manifest.get("interface") if isinstance(manifest.get("interface"), dict) else {}
+    has_capabilities = bool(info.get("capabilities"))
+    has_skills = _has_skill_files(plugin_dir)
+    has_apps = bool(manifest.get("apps")) or _has_app_manifest(plugin_dir)
+    has_mcp = bool(manifest.get("mcpServers")) or (plugin_dir / ".mcp.json").is_file()
+    has_commands = (plugin_dir / "commands").is_dir()
+    surface_count = sum(
+        1
+        for present in (has_capabilities, has_skills, has_apps, has_mcp, has_commands)
+        if present
+    )
+    add(
+        "capability_surface",
+        surface_count > 0,
+        "plugin exposes no capabilities, skills, apps, MCP servers, or commands",
+    )
+
+    if interface.get("logo") and logo_url is None:
+        warnings.append("logo path is missing, unsafe, or outside plugin root")
+    if interface.get("composerIcon") and composer_icon_url is None:
+        warnings.append("composer icon path is missing, unsafe, or outside plugin root")
+    if has_mcp and not manifest.get("permissions"):
+        warnings.append("MCP-capable plugin has no explicit permissions declaration")
+
+    permission_resolution = _permission_resolution(
+        manifest,
+        has_mcp=has_mcp,
+        warnings=warnings,
+    )
+    ok = not issues
+    return {
+        "schema": "octopus.codex_plugin_smoke.v1",
+        "ok": ok,
+        "checks": checks,
+        "issues": issues,
+        "warnings": warnings,
+        "surfaces": {
+            "capabilities": has_capabilities,
+            "skills": has_skills,
+            "apps": has_apps,
+            "mcp": has_mcp,
+            "commands": has_commands,
+        },
+        "trust": {
+            "level": "local_verified" if ok and not warnings else "local_review_required",
+            "signed": False,
+            "reason": "local plugin manifest smoke check",
+        },
+        "permission_resolution": permission_resolution,
+    }
+
+
+def _permission_resolution(
+    manifest: dict[str, Any],
+    *,
+    has_mcp: bool,
+    warnings: list[str],
+) -> dict[str, Any]:
+    raw_permissions = manifest.get("permissions")
+    explicit_permissions = raw_permissions if isinstance(raw_permissions, list) else []
+    if explicit_permissions:
+        return {
+            "schema": "octopus.codex_plugin_permission_resolution.v1",
+            "status": "explicit",
+            "review_required": False,
+            "accepted_risk": False,
+            "permissions": explicit_permissions,
+            "reason": "plugin declares explicit permissions",
+        }
+    inferred: list[str] = []
+    if has_mcp:
+        inferred.append("mcp:execute:review_required")
+    if manifest.get("apps"):
+        inferred.append("app:render:review_required")
+    if manifest.get("interface"):
+        inferred.append("ui:metadata:local")
+    status = "review_required" if inferred or warnings else "none"
+    return {
+        "schema": "octopus.codex_plugin_permission_resolution.v1",
+        "status": status,
+        "review_required": status == "review_required",
+        "accepted_risk": False,
+        "permissions": inferred,
+        "reason": (
+            "default permissions inferred from plugin surfaces"
+            if inferred
+            else "no permission-bearing surfaces detected"
+        ),
+    }
+
+
 def _plugin_info(plugin_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
     interface = manifest.get("interface")
     if not isinstance(interface, dict):
@@ -126,7 +255,7 @@ def _plugin_info(plugin_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         or _string(interface.get("developerName"))
         or "octopus"
     )
-    return {
+    info = {
         "id": name,
         "name": display_name,
         "version": _string(manifest.get("version"), "0.1.0"),
@@ -145,6 +274,14 @@ def _plugin_info(plugin_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
         "source": "codex",
         "path": str(plugin_dir),
     }
+    info["smoke"] = _plugin_smoke_check(
+        plugin_dir,
+        manifest,
+        info=info,
+        logo_url=logo_url,
+        composer_icon_url=composer_icon_url,
+    )
+    return info
 
 
 def discover_codex_plugins(roots: list[Path] | None = None) -> list[dict[str, Any]]:

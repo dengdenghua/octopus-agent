@@ -146,6 +146,29 @@ class TestPlanExecuteVerifyHappyPath:
         # Per-step records exist for all three nodes.
         assert len(journal.read_by_type("step")) == 3
 
+    def test_task_nodes_execute_through_normalized_tool_protocol(self):
+        runtime, _journal, calls = _stack()
+        graph = TaskGraph(
+            nodes=[
+                TaskNode(node_id="n0", skill_ref=SkillId("read_src")),
+                TaskNode(
+                    node_id="n1",
+                    skill_ref=SkillId("transform"),
+                    args_template={"lines": "{n0.lines}"},
+                ),
+            ],
+            edges=[WorkflowEdge(from_node="n0", to_node="n1")],
+            budget=BudgetSpec(tokens=10_000, usd=0.10),
+        )
+
+        traj = _run(runtime, graph)
+
+        assert traj.outcome.success
+        assert calls == ["read_src", "transform"]
+        assert traj.steps[1].action.sucker_id == SkillId("transform")
+        assert traj.steps[1].action.args == {"lines": 1}
+        assert traj.steps[1].args_template == {"lines": "{n0.lines}"}
+
 
 class TestParallelLayer:
     def test_parallel_layer_runs_both_branches(self):

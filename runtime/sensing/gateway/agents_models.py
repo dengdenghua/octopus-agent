@@ -31,17 +31,20 @@ class UpdateAgentRequest(BaseModel):
     description: str | None = None
     model: str | None = None
     soul: str | None = None
+    capabilities: dict[str, Any] | None = None
 
 
 class GenerateAgentVisualsRequest(BaseModel):
     provider: str | None = None
     style_prompt: str = ""
+    reference_images: list[str] = Field(default_factory=list)
 
 
 class AgentVisualsWire(BaseModel):
     agent_id: str
     provider: str
     prompt: str
+    avatar_url: str | None = None
     visual_urls: dict[str, str] = Field(default_factory=dict)
 
 

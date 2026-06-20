@@ -60,7 +60,9 @@ export function DiagnosticsContent() {
             return;
           }
         }
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
       if (!cancelled) setProject("");
     })();
     return () => {

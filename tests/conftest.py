@@ -47,9 +47,11 @@ def _reset_module_state():
     from runtime.platform import identity_filter as _idf
     _idf.set_runtime_lock(None)
     _reset_injection_taint()
+    _reset_delegation_budget()
     yield
     _idf.set_runtime_lock(None)
     _reset_injection_taint()
+    _reset_delegation_budget()
     _reset_singletons()
 
 
@@ -69,6 +71,23 @@ def _reset_injection_taint() -> None:
         pass
 
 
+def _reset_delegation_budget() -> None:
+    """Clear the per-turn delegation budget ledgers between tests.
+
+    ``delegation_budget`` tracks two process-wide ``OrderedDict``s keyed by
+    ``turn_id`` (``_TURN_DELEGATIONS`` count + ``_TURN_FAILED_FINGERPRINTS``).
+    A test that leaks an active ``current_session`` (and thus a non-None
+    turn_id) lets the next session-less delegation test inherit that turn's
+    exhausted budget — every spawn then short-circuits as "budget exhausted"
+    and retry/parallel assertions flake. Reset every test for isolation."""
+    try:
+        from runtime.execution.suckers import delegation_budget as _db
+        _db._TURN_DELEGATIONS.clear()
+        _db._TURN_FAILED_FINGERPRINTS.clear()
+    except Exception:  # noqa: BLE001 — never let cleanup break a test
+        pass
+
+
 def _reset_singletons() -> None:
     """Drop every process-wide singleton between tests.
 
@@ -82,7 +101,7 @@ def _reset_singletons() -> None:
 
     # (module_path, attr) tuples — imported lazily so a missing
     # optional dep on the import chain doesn't break the fixture.
-    _SINGLETONS = (
+    _SINGLETONS = (  # noqa: N806
         ("runtime.platform.process.eventbus", "EventBus"),
         ("runtime.platform.process.state", "StateStore"),
         ("runtime.platform.plugins.plugin_loader", "PluginLoader"),

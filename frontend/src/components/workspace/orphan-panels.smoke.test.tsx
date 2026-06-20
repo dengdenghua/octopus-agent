@@ -85,9 +85,13 @@ vi.mock("@/core/i18n/hooks", () => {
 });
 
 vi.mock("./messages/markdown-content", () => ({
-  MarkdownContent: ({ content, className }: { content: string; className?: string }) => (
-    <div className={className}>{content}</div>
-  ),
+  MarkdownContent: ({
+    content,
+    className,
+  }: {
+    content: string;
+    className?: string;
+  }) => <div className={className}>{content}</div>,
 }));
 
 import { ArenaPanel } from "./arena-panel";
@@ -201,7 +205,6 @@ function withProviders(node: React.ReactNode) {
   );
 }
 
-
 describe("SwarmPanel", () => {
   it("mounts without throwing (hook-order regression guard)", async () => {
     render(withProviders(<SwarmPanel />));
@@ -210,8 +213,7 @@ describe("SwarmPanel", () => {
       // are proof the post-loading code path ran without the
       // "Rendered more hooks than during the previous render" crash.
       expect(
-        screen.queryByText(/暂无并行任务/) ??
-          screen.queryByText(/总任务/),
+        screen.queryByText(/暂无并行任务/) ?? screen.queryByText(/总任务/),
       ).toBeTruthy();
     });
     // React prints hook-order mismatches to console.error · assert
@@ -219,7 +221,6 @@ describe("SwarmPanel", () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
-
 
 describe("KnowledgeGraphPanel", () => {
   it("renders empty-state content when KG is empty", async () => {
@@ -230,7 +231,6 @@ describe("KnowledgeGraphPanel", () => {
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
-
 
 describe("IntelligencePanel", () => {
   it("renders empty subscription prompt when no subs configured", async () => {
@@ -271,7 +271,8 @@ describe("IntelligencePanel", () => {
           topic: "browser-automation",
           title: "AI 浏览器自动化周报",
           summary: "验证浏览器回归测试交互是否更自然。",
-          markdown: "## 核心结论\n浏览器回归应放在预览面板内，报告详情像文章一样阅读。",
+          markdown:
+            "## 核心结论\n浏览器回归应放在预览面板内，报告详情像文章一样阅读。",
           created_at: "2026-05-27T08:00:00Z",
           items_analyzed: 3,
           findings: ["预览内开关比顶栏按钮更轻量"],
@@ -296,16 +297,21 @@ describe("IntelligencePanel", () => {
     });
     expect(screen.getByText(/旧内容/)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /AI 浏览器自动化周报/ }));
+    await user.click(
+      screen.getByRole("button", { name: /AI 浏览器自动化周报/ }),
+    );
 
     await waitFor(() => {
-      expect(screen.getByText(/浏览器回归应放在预览面板内，报告详情像文章一样阅读。/)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /浏览器回归应放在预览面板内，报告详情像文章一样阅读。/,
+        ),
+      ).toBeInTheDocument();
     });
     expect(screen.getByText("预览内开关比顶栏按钮更轻量")).toBeInTheDocument();
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
-
 
 describe("ArenaPanel", () => {
   it("mounts in idle phase without throwing (hook-order regression guard)", async () => {
@@ -323,7 +329,6 @@ describe("ArenaPanel", () => {
   });
 });
 
-
 describe("EvolutionDashboard", () => {
   it("mounts + fetches in parallel without hook-order or render errors", async () => {
     render(withProviders(<EvolutionDashboard />));
@@ -337,14 +342,12 @@ describe("EvolutionDashboard", () => {
       // its presence confirms we got past the loading early return.
       // Use Proxy-stubbed t so the actual text is "title".
       expect(
-        screen.queryByText("title") ??
-          screen.queryByText(/loading/i),
+        screen.queryByText("title") ?? screen.queryByText(/loading/i),
       ).toBeTruthy();
     });
     expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });
-
 
 describe("WikiPanel", () => {
   it("mounts and clears loading without render errors", async () => {

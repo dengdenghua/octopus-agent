@@ -9,10 +9,7 @@
 import { swallow } from "@/core/utils/log";
 import { useEffect, useState } from "react";
 
-import {
-  useDailyClaimInfo,
-  useMoliliLink,
-} from "@/core/molili";
+import { useDailyClaimInfo, useMoliliLink } from "@/core/molili";
 import { useAuth } from "@/providers/AuthProvider";
 
 import { DailyClaimDialog } from "./daily-claim-dialog";
@@ -43,7 +40,9 @@ function markDismissedToday() {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(todayKey(), "1");
-  } catch (e) { swallow(e, "storage"); }
+  } catch (e) {
+    swallow(e, "storage");
+  }
 }
 
 export function DailyClaimAutoPopup() {

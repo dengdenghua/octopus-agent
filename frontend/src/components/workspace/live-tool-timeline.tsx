@@ -152,13 +152,15 @@ function workflowEvents(events: LiveToolEvent[]): LiveToolEvent[] {
 function getVisibleEvents(events: LiveToolEvent[]): LiveToolEvent[] {
   const topLevel = workflowEvents(events).filter((e) => !e.parentToolUseId);
   const runningEvents = topLevel
-    .filter((event) => event.status === "running" || event.status === "waiting_approval")
+    .filter(
+      (event) =>
+        event.status === "running" || event.status === "waiting_approval",
+    )
     .sort((a, b) => a.startedAt - b.startedAt);
   const recentFinishedEvents = topLevel
     .filter((event) => event.status !== "running")
     .sort(
-      (a, b) =>
-        (b.finishedAt ?? b.startedAt) - (a.finishedAt ?? a.startedAt),
+      (a, b) => (b.finishedAt ?? b.startedAt) - (a.finishedAt ?? a.startedAt),
     )
     .slice(0, runningEvents.length > 0 ? 2 : 4);
 
@@ -178,7 +180,8 @@ function getRunningEvents(events: LiveToolEvent[]): LiveToolEvent[] {
 }
 
 function getChildren(
-  events: LiveToolEvent[], parentId: string,
+  events: LiveToolEvent[],
+  parentId: string,
 ): LiveToolEvent[] {
   return events
     .filter((e) => e.parentToolUseId === parentId)
@@ -226,9 +229,9 @@ export function LiveToolTimeline({
 
   return (
     <div className={cn("space-y-1 py-1.5", className)}>
-      {visibleEvents.map((event) => (
+      {visibleEvents.map((event, index) => (
         <ParentWithChildren
-          key={event.id}
+          key={`${event.id}:${index}`}
           event={event}
           allEvents={events}
           toolLabels={toolLabels}
@@ -258,16 +261,26 @@ function ParentWithChildren({
   );
   if (children.length === 0) {
     return (
-      <ToolEventRow event={event} toolLabels={toolLabels} t={t} showAgent={showAgent} />
+      <ToolEventRow
+        event={event}
+        toolLabels={toolLabels}
+        t={t}
+        showAgent={showAgent}
+      />
     );
   }
   return (
     <div className="space-y-1">
-      <ToolEventRow event={event} toolLabels={toolLabels} t={t} showAgent={showAgent} />
+      <ToolEventRow
+        event={event}
+        toolLabels={toolLabels}
+        t={t}
+        showAgent={showAgent}
+      />
       <div className="ml-6 space-y-1 border-l border-primary/20 pl-2">
-        {children.map((child) => (
+        {children.map((child, index) => (
           <ToolEventRow
-            key={child.id}
+            key={`${event.id}:${child.id}:${index}`}
             event={child}
             toolLabels={toolLabels}
             t={t}
@@ -280,18 +293,35 @@ function ParentWithChildren({
   );
 }
 
-function formatInputSummary(input?: Record<string, unknown>): string | undefined {
+function formatInputSummary(
+  input?: Record<string, unknown>,
+): string | undefined {
   if (!input) return undefined;
-  const priority = ["command", "path", "file_path", "cwd", "pattern", "url", "query", "task", "prompt", "description"] as const;
+  const priority = [
+    "command",
+    "path",
+    "file_path",
+    "cwd",
+    "pattern",
+    "url",
+    "query",
+    "task",
+    "prompt",
+    "description",
+  ] as const;
   for (const key of priority) {
     const v = input[key];
     if (v !== undefined && v !== null && `${v}`.trim() !== "") {
       const text = typeof v === "string" ? v : JSON.stringify(v);
       const normalized = text.replace(/\s+/g, " ").trim();
-      return normalized.length > 120 ? `${normalized.slice(0, 120)}…` : normalized;
+      return normalized.length > 120
+        ? `${normalized.slice(0, 120)}…`
+        : normalized;
     }
   }
-  const entries = Object.entries(input).filter(([, v]) => v !== undefined && v !== null);
+  const entries = Object.entries(input).filter(
+    ([, v]) => v !== undefined && v !== null,
+  );
   if (entries.length === 0) return undefined;
   return entries
     .slice(0, 2)
@@ -306,11 +336,21 @@ function formatOutputSummary(output: unknown): string | undefined {
   if (output === undefined || output === null) return undefined;
   if (typeof output === "string") {
     const normalized = output.replace(/\s+/g, " ").trim();
-    return normalized.length > 140 ? `${normalized.slice(0, 140)}…` : normalized;
+    return normalized.length > 140
+      ? `${normalized.slice(0, 140)}…`
+      : normalized;
   }
   if (typeof output === "object" && !Array.isArray(output)) {
     const record = output as Record<string, unknown>;
-    for (const key of ["error", "stderr", "stdout", "result", "message", "path", "content"]) {
+    for (const key of [
+      "error",
+      "stderr",
+      "stdout",
+      "result",
+      "message",
+      "path",
+      "content",
+    ]) {
       const v = record[key];
       if (v !== undefined && v !== null && `${v}`.trim() !== "") {
         const text = typeof v === "string" ? v : JSON.stringify(v);
@@ -325,10 +365,13 @@ function formatOutputSummary(output: unknown): string | undefined {
 
 function formatDetailBlock(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
-  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  const text =
+    typeof value === "string" ? value : JSON.stringify(value, null, 2);
   const normalized = text.trim();
   if (!normalized) return undefined;
-  return normalized.length > 4000 ? `${normalized.slice(0, 4000)}\n...` : normalized;
+  return normalized.length > 4000
+    ? `${normalized.slice(0, 4000)}\n...`
+    : normalized;
 }
 
 function parseMaybeJson(value: unknown): unknown {
@@ -461,16 +504,22 @@ function extractSourceLabels(value: unknown, max = 4): string[] {
   return out;
 }
 
-function researchLogText(event: LiveToolEvent, t: TimelineT): {
+function researchLogText(
+  event: LiveToolEvent,
+  t: TimelineT,
+): {
   label: string;
   detail?: string;
   sources?: string[];
 } | null {
   if (event.name === "web_search") {
-    const query = typeof event.input?.query === "string" ? event.input.query.trim() : "";
+    const query =
+      typeof event.input?.query === "string" ? event.input.query.trim() : "";
     const count =
       countItems(event.output, ["results", "items", "sources"]) ??
-      (typeof event.input?.max_results === "number" ? event.input.max_results : null);
+      (typeof event.input?.max_results === "number"
+        ? event.input.max_results
+        : null);
     if (event.status === "running") {
       return {
         label: t.liveToolTimeline.searchingWeb,
@@ -487,7 +536,8 @@ function researchLogText(event: LiveToolEvent, t: TimelineT): {
   }
 
   if (event.name === "fetch_url") {
-    const url = typeof event.input?.url === "string" ? event.input.url.trim() : "";
+    const url =
+      typeof event.input?.url === "string" ? event.input.url.trim() : "";
     const source = url
       ? (() => {
           try {
@@ -499,8 +549,13 @@ function researchLogText(event: LiveToolEvent, t: TimelineT): {
         })()
       : undefined;
     return {
-      label: event.status === "running" ? t.liveToolTimeline.browsingPage : t.liveToolTimeline.browsedOnePage,
-      detail: source ? t.liveToolTimeline.sourceFrom(source) : t.liveToolTimeline.pageOpenedAndExtracted,
+      label:
+        event.status === "running"
+          ? t.liveToolTimeline.browsingPage
+          : t.liveToolTimeline.browsedOnePage,
+      detail: source
+        ? t.liveToolTimeline.sourceFrom(source)
+        : t.liveToolTimeline.pageOpenedAndExtracted,
       sources: source ? [source] : extractSourceLabels(event.output, 1),
     };
   }
@@ -536,15 +591,22 @@ function actionStatusLabel(
   en: [string, string],
   target?: string,
 ): string {
-  const [running, done] = isChineseText(t.liveToolTimeline.searchingWeb) ? zh : en;
+  const [running, done] = isChineseText(t.liveToolTimeline.searchingWeb)
+    ? zh
+    : en;
   const verb = event.status === "running" ? running : done;
   return target ? `${verb} ${target}` : verb;
 }
 
 function elapsedInputMs(input?: Record<string, unknown>): number | undefined {
   const value = input?.elapsed_ms ?? input?.elapsedMs;
-  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value);
-  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
+  if (typeof value === "number" && Number.isFinite(value))
+    return Math.max(0, value);
+  if (
+    typeof value === "string" &&
+    value.trim() &&
+    !Number.isNaN(Number(value))
+  ) {
     return Math.max(0, Number(value));
   }
   return undefined;
@@ -554,7 +616,10 @@ function elapsedSeconds(input?: Record<string, unknown>): number {
   return Math.max(0, Math.floor((elapsedInputMs(input) ?? 0) / 1000));
 }
 
-function swarmLogText(event: LiveToolEvent, t: TimelineT): {
+function swarmLogText(
+  event: LiveToolEvent,
+  t: TimelineT,
+): {
   label: string;
   detail?: string;
 } | null {
@@ -584,7 +649,9 @@ function swarmLogText(event: LiveToolEvent, t: TimelineT): {
   if (event.name === "call_agent") {
     const role = stringInput(event.input, ["agent_id", "role", "name"]);
     return {
-      label: role ? t.liveToolTimeline.callSubAgent(role) : t.liveToolTimeline.callSubAgentShort,
+      label: role
+        ? t.liveToolTimeline.callSubAgent(role)
+        : t.liveToolTimeline.callSubAgentShort,
       detail: t.liveToolTimeline.focusedDelegation,
     };
   }
@@ -592,7 +659,9 @@ function swarmLogText(event: LiveToolEvent, t: TimelineT): {
   if (event.name === "bb_write") {
     const key = stringInput(event.input, ["key"]);
     return {
-      label: key ? t.liveToolTimeline.writeBlackboard(compactMiddle(key, 60)) : t.liveToolTimeline.writeBlackboardShort,
+      label: key
+        ? t.liveToolTimeline.writeBlackboard(compactMiddle(key, 60))
+        : t.liveToolTimeline.writeBlackboardShort,
       detail: t.liveToolTimeline.saveBlackboardFinding,
     };
   }
@@ -613,13 +682,18 @@ function swarmLogText(event: LiveToolEvent, t: TimelineT): {
   return null;
 }
 
-function codeLogText(event: LiveToolEvent, t: TimelineT): {
+function codeLogText(
+  event: LiveToolEvent,
+  t: TimelineT,
+): {
   label: string;
   detail?: string;
 } | null {
   if (event.name === "agent_thought") {
     return {
-      label: t.liveToolTimeline.thoughtDetailLabel(event.iteration || undefined),
+      label: t.liveToolTimeline.thoughtDetailLabel(
+        event.iteration || undefined,
+      ),
       detail: event.thought ?? t.liveToolTimeline.modelPublicReasoningFragment,
     };
   }
@@ -641,8 +715,15 @@ function codeLogText(event: LiveToolEvent, t: TimelineT): {
   }
 
   if (isSkillToolName(event.name)) {
-    const skillName = stringInput(event.input, ["skill", "skill_name", "name"]) || event.name;
-    const request = stringInput(event.input, ["user_request", "request", "query", "task", "prompt"]);
+    const skillName =
+      stringInput(event.input, ["skill", "skill_name", "name"]) || event.name;
+    const request = stringInput(event.input, [
+      "user_request",
+      "request",
+      "query",
+      "task",
+      "prompt",
+    ]);
     return {
       label: actionStatusLabel(
         t,
@@ -651,12 +732,19 @@ function codeLogText(event: LiveToolEvent, t: TimelineT): {
         ["Applying skill", "Applied skill"],
         compactMiddle(skillName, 80),
       ),
-      detail: request ? compactMiddle(request, 180) : t.liveToolTimeline.invokeSkillProcess,
+      detail: request
+        ? compactMiddle(request, 180)
+        : t.liveToolTimeline.invokeSkillProcess,
     };
   }
 
   if (event.name === "planning") {
-    const request = stringInput(event.input, ["task", "prompt", "description", "summary"]);
+    const request = stringInput(event.input, [
+      "task",
+      "prompt",
+      "description",
+      "summary",
+    ]);
     return {
       label: actionStatusLabel(
         t,
@@ -664,7 +752,9 @@ function codeLogText(event: LiveToolEvent, t: TimelineT): {
         ["正在规划下一步", "已规划下一步"],
         ["Planning next step", "Planned next step"],
       ),
-      detail: request ? compactMiddle(request, 180) : t.liveToolTimeline.modelOrganizingNextStep,
+      detail: request
+        ? compactMiddle(request, 180)
+        : t.liveToolTimeline.modelOrganizingNextStep,
     };
   }
 
@@ -717,11 +807,20 @@ function codeLogText(event: LiveToolEvent, t: TimelineT): {
     };
   }
 
-  const path = stringInput(event.input, ["path", "file_path", "target_path", "cwd"]);
+  const path = stringInput(event.input, [
+    "path",
+    "file_path",
+    "target_path",
+    "cwd",
+  ]);
   const command = stringInput(event.input, ["command", "cmd", "script"]);
   const pattern = stringInput(event.input, ["pattern", "query"]);
   const description = stringInput(event.input, ["description", "summary"]);
-  const lineStart = stringInput(event.input, ["line_start", "start_line", "start"]);
+  const lineStart = stringInput(event.input, [
+    "line_start",
+    "start_line",
+    "start",
+  ]);
   const lineEnd = stringInput(event.input, ["line_end", "end_line", "end"]);
   const lineSuffix =
     lineStart && lineEnd
@@ -782,7 +881,11 @@ function codeLogText(event: LiveToolEvent, t: TimelineT): {
     };
   }
 
-  if (event.name === "bash" || event.name === "exec_shell" || event.name === "shell_command") {
+  if (
+    event.name === "bash" ||
+    event.name === "exec_shell" ||
+    event.name === "shell_command"
+  ) {
     return {
       label: actionStatusLabel(
         t,
@@ -795,21 +898,33 @@ function codeLogText(event: LiveToolEvent, t: TimelineT): {
     };
   }
 
-  if (event.name === "write_file" || event.name === "write_text_file" || event.name === "create_file") {
+  if (
+    event.name === "write_file" ||
+    event.name === "write_text_file" ||
+    event.name === "create_file"
+  ) {
     const creating = event.name === "create_file";
     return {
       label: actionStatusLabel(
         t,
         event,
-        creating ? ["正在创建文件", "已创建文件"] : ["正在写入文件", "已写入文件"],
-        creating ? ["Creating file", "Created file"] : ["Writing file", "Wrote file"],
+        creating
+          ? ["正在创建文件", "已创建文件"]
+          : ["正在写入文件", "已写入文件"],
+        creating
+          ? ["Creating file", "Created file"]
+          : ["Writing file", "Wrote file"],
         compactMiddle(path || "file"),
       ),
       detail: t.liveToolTimeline.writeFileContent,
     };
   }
 
-  if (event.name === "edit_code" || event.name === "edit_text_file" || event.name === "str_replace") {
+  if (
+    event.name === "edit_code" ||
+    event.name === "edit_text_file" ||
+    event.name === "str_replace"
+  ) {
     return {
       label: actionStatusLabel(
         t,
@@ -818,7 +933,9 @@ function codeLogText(event: LiveToolEvent, t: TimelineT): {
         ["Editing file", "Edited file"],
         compactMiddle(path || "file"),
       ),
-      detail: pattern ? t.liveToolTimeline.matchPattern(compactMiddle(pattern)) : undefined,
+      detail: pattern
+        ? t.liveToolTimeline.matchPattern(compactMiddle(pattern))
+        : undefined,
     };
   }
 
@@ -867,7 +984,8 @@ const CONTENT_PREVIEW_KEYS = [
 
 function normalizePreviewText(value: unknown): string | undefined {
   if (value === undefined || value === null) return undefined;
-  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  const text =
+    typeof value === "string" ? value : JSON.stringify(value, null, 2);
   const trimmed = text.trim();
   if (!trimmed) return undefined;
   const lines = trimmed.split(/\r?\n/);
@@ -900,7 +1018,10 @@ function getContentPreview(event: LiveToolEvent): string | undefined {
   return undefined;
 }
 
-function researchAdjustmentSummary(event: LiveToolEvent, t: TimelineT): string | undefined {
+function researchAdjustmentSummary(
+  event: LiveToolEvent,
+  t: TimelineT,
+): string | undefined {
   if (event.name !== "web_search") return undefined;
   if (event.status === "running") {
     return t.liveToolTimeline.collectingEvidence;
@@ -912,7 +1033,9 @@ function researchAdjustmentSummary(event: LiveToolEvent, t: TimelineT): string |
   if (/规模|增[长長]|CAGR|market size|forecast/i.test(query)) {
     return t.liveToolTimeline.marketSizeLeads;
   }
-  if (/品牌|竞争|格局|company|companies|Oura|Eight Sleep|床垫|床墊/i.test(query)) {
+  if (
+    /品牌|竞争|格局|company|companies|Oura|Eight Sleep|床垫|床墊/i.test(query)
+  ) {
     return t.liveToolTimeline.competitionLeads;
   }
   if (/技术|technology|AI|sensor|wearable|产品|product/i.test(query)) {
@@ -954,7 +1077,13 @@ function statusClassName(status: LiveToolEvent["status"]): string {
 
 function detailTitle(
   t: TimelineT,
-  key: "input" | "thought" | "publicReasoning" | "result" | "observation" | "preview",
+  key:
+    | "input"
+    | "thought"
+    | "publicReasoning"
+    | "result"
+    | "observation"
+    | "preview",
 ): string {
   const titles = {
     input: ["\u8f93\u5165", "Input"],
@@ -1027,7 +1156,9 @@ function ToolEventRow({
     event.name === "model_reasoning";
   const inputSummary = formatInputSummary(event.input);
   const outputSummary = formatOutputSummary(event.output);
-  const inputDetail = isSystemWorkLogEvent ? undefined : formatDetailBlock(event.input);
+  const inputDetail = isSystemWorkLogEvent
+    ? undefined
+    : formatDetailBlock(event.input);
   const outputDetail =
     event.name === "model_reasoning"
       ? modelReasoningOutput
@@ -1036,7 +1167,9 @@ function ToolEventRow({
         : formatDetailBlock(event.output);
   const thoughtDetail = formatDetailBlock(event.thought);
   const observationDetail = formatDetailBlock(event.observation);
-  const contentPreview = isSystemWorkLogEvent ? undefined : getContentPreview(event);
+  const contentPreview = isSystemWorkLogEvent
+    ? undefined
+    : getContentPreview(event);
   const researchSummary = researchAdjustmentSummary(event, t);
   const researchLog = researchLogText(event, t);
   const searchResults =
@@ -1045,17 +1178,29 @@ function ToolEventRow({
       : [];
   const swarmLog = researchLog ? null : swarmLogText(event, t);
   const codeLog = researchLog || swarmLog ? null : codeLogText(event, t);
-  const [open, setOpen] = useState(event.status === "running" || event.status === "error");
+  const [open, setOpen] = useState(
+    event.status === "running" || event.status === "error",
+  );
   const inlineInputSummary =
-    inputSummary && !researchLog && !isSystemWorkLogEvent && inputSummary !== codeLog?.detail
+    inputSummary &&
+    !researchLog &&
+    !isSystemWorkLogEvent &&
+    inputSummary !== codeLog?.detail
       ? inputSummary
       : undefined;
   const inlineOutputSummary =
-    outputSummary && !researchLog && !isSystemWorkLogEvent && event.status !== "running"
+    outputSummary &&
+    !researchLog &&
+    !isSystemWorkLogEvent &&
+    event.status !== "running"
       ? outputSummary
       : undefined;
   const hasDetails = Boolean(
-    inputDetail || outputDetail || thoughtDetail || observationDetail || contentPreview,
+    inputDetail ||
+    outputDetail ||
+    thoughtDetail ||
+    observationDetail ||
+    contentPreview,
   );
 
   return (
@@ -1063,7 +1208,9 @@ function ToolEventRow({
       className={cn(
         "relative transition-all duration-200",
         nested ? "py-1 pl-2 text-[11px]" : "py-1.5 pl-2 text-xs",
-        event.status === "error" ? "text-muted-foreground" : "text-muted-foreground",
+        event.status === "error"
+          ? "text-muted-foreground"
+          : "text-muted-foreground",
       )}
     >
       <div className="flex items-center gap-2">
@@ -1083,7 +1230,9 @@ function ToolEventRow({
         </span>
 
         {showAgent && event.agentName && (
-          <span className="text-muted-foreground text-[10px]">· {event.agentName}</span>
+          <span className="text-muted-foreground text-[10px]">
+            · {event.agentName}
+          </span>
         )}
 
         {researchLog?.sources && researchLog.sources.length > 0 && (
@@ -1112,11 +1261,11 @@ function ToolEventRow({
           </span>
 
           {event.status === "done" && event.durationMs != null && (
-          <span className="text-muted-foreground text-[10px]">
-            {event.durationMs < 1000
-              ? `${event.durationMs}ms`
-              : `${(event.durationMs / 1000).toFixed(1)}s`}
-          </span>
+            <span className="text-muted-foreground text-[10px]">
+              {event.durationMs < 1000
+                ? `${event.durationMs}ms`
+                : `${(event.durationMs / 1000).toFixed(1)}s`}
+            </span>
           )}
 
           {hasDetails && (
@@ -1124,11 +1273,22 @@ function ToolEventRow({
               type="button"
               className="flex size-5 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
               onClick={() => setOpen((value) => !value)}
-              aria-label={open ? t.liveToolTimeline.collapseToolDetails : t.liveToolTimeline.expandToolDetails}
-              title={open ? t.liveToolTimeline.collapseToolDetails : t.liveToolTimeline.expandToolDetails}
+              aria-label={
+                open
+                  ? t.liveToolTimeline.collapseToolDetails
+                  : t.liveToolTimeline.expandToolDetails
+              }
+              title={
+                open
+                  ? t.liveToolTimeline.collapseToolDetails
+                  : t.liveToolTimeline.expandToolDetails
+              }
             >
               <ChevronDownIcon
-                className={cn("size-3.5 transition-transform", open ? "rotate-180" : "rotate-0")}
+                className={cn(
+                  "size-3.5 transition-transform",
+                  open ? "rotate-180" : "rotate-0",
+                )}
               />
             </button>
           )}
@@ -1217,17 +1377,17 @@ function ToolEventRow({
       {open &&
         outputDetail &&
         (event.status !== "running" || event.name === "model_reasoning") && (
-        <div className="mt-2 ml-5 overflow-hidden border-l border-emerald-500/25 pl-2">
-          <div className="pb-1 text-[10px] font-medium text-muted-foreground">
-            {event.name === "model_reasoning"
-              ? detailTitle(t, "publicReasoning")
-              : detailTitle(t, "result")}
+          <div className="mt-2 ml-5 overflow-hidden border-l border-emerald-500/25 pl-2">
+            <div className="pb-1 text-[10px] font-medium text-muted-foreground">
+              {event.name === "model_reasoning"
+                ? detailTitle(t, "publicReasoning")
+                : detailTitle(t, "result")}
+            </div>
+            <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
+              {outputDetail}
+            </pre>
           </div>
-          <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-emerald-500/5 px-2 py-1.5 font-mono text-[10px] leading-4 text-foreground/80">
-            {outputDetail}
-          </pre>
-        </div>
-      )}
+        )}
 
       {open && observationDetail && (
         <div className="mt-2 ml-5 overflow-hidden border-l border-emerald-500/25 pl-2">
@@ -1286,7 +1446,10 @@ function SearchResultsInline({
               {result.title}
             </a>
           ) : (
-            <span className="min-w-0 truncate text-foreground/75" title={result.title}>
+            <span
+              className="min-w-0 truncate text-foreground/75"
+              title={result.title}
+            >
               {result.title}
             </span>
           )}

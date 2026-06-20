@@ -1,4 +1,3 @@
-
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
@@ -146,11 +145,7 @@ const PROVIDERS: readonly ProviderPreset[] = [
     baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
     protocol: "openai",
     consoleUrl: "https://console.cloud.tencent.com/hunyuan/api-key",
-    suggestedModels: [
-      "hunyuan-turbos-latest",
-      "hunyuan-large",
-      "hunyuan-lite",
-    ],
+    suggestedModels: ["hunyuan-turbos-latest", "hunyuan-large", "hunyuan-lite"],
   },
   {
     label: "火山 · 豆包 (Ark)",
@@ -261,7 +256,9 @@ export default function ModelSettingsPage() {
   const [editingModel, setEditingModel] = useState<string | null>(null);
 
   // Gateway connection state
-  const [gatewayStatus, setGatewayStatus] = useState<"connected" | "disconnected" | "checking">("checking");
+  const [gatewayStatus, setGatewayStatus] = useState<
+    "connected" | "disconnected" | "checking"
+  >("checking");
 
   // List / CRUD all target the new hot-register dispatcher endpoints
   // (/api/config/custom-models/*). The legacy /api/models was the
@@ -269,9 +266,12 @@ export default function ModelSettingsPage() {
   // writable CRUD on this backend — writing to it was silently no-op.
   const fetchModels = useCallback(async () => {
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models`, {
-        headers: authHeaders(),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/custom-models`,
+        {
+          headers: authHeaders(),
+        },
+      );
       if (!res.ok) {
         throw new Error(`Failed to fetch models: ${res.status}`);
       }
@@ -281,16 +281,21 @@ export default function ModelSettingsPage() {
     } catch (error) {
       console.error(error);
       toast.error(t.modelSettings.loadFailed);
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const checkGateway = useCallback(async () => {
     setGatewayStatus("checking");
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models`, {
-        headers: authHeaders(),
-        signal: AbortSignal.timeout(5000),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/custom-models`,
+        {
+          headers: authHeaders(),
+          signal: AbortSignal.timeout(5000),
+        },
+      );
       setGatewayStatus(res.ok ? "connected" : "disconnected");
     } catch (e) {
       swallow(e);
@@ -298,7 +303,10 @@ export default function ModelSettingsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchModels(); checkGateway(); }, [fetchModels, checkGateway]);
+  useEffect(() => {
+    fetchModels();
+    checkGateway();
+  }, [fetchModels, checkGateway]);
 
   const handleSetDefault = async (name: string) => {
     try {
@@ -314,17 +322,24 @@ export default function ModelSettingsPage() {
       toast.success(t.modelSettings.setDefaultSuccess);
       await fetchModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.modelSettings.setDefaultFailed);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t.modelSettings.setDefaultFailed,
+      );
     }
   };
 
   const handleDelete = async (name: string) => {
     if (!confirm(t.modelSettings.deleteConfirm(name))) return;
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(name)}`, {
-        method: "DELETE",
-        headers: authHeaders(),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(name)}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        },
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Delete failed: ${res.status}`);
@@ -332,21 +347,31 @@ export default function ModelSettingsPage() {
       toast.success(t.modelSettings.deleteSuccess);
       await fetchModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.modelSettings.deleteFailed);
+      toast.error(
+        error instanceof Error ? error.message : t.modelSettings.deleteFailed,
+      );
     }
   };
 
-  const handleReconnect = () => { checkGateway(); };
+  const handleReconnect = () => {
+    checkGateway();
+  };
 
   const handleDiagnose = async () => {
     const issues: string[] = [];
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models`, {
-        headers: authHeaders(),
-        signal: AbortSignal.timeout(5000),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/custom-models`,
+        {
+          headers: authHeaders(),
+          signal: AbortSignal.timeout(5000),
+        },
+      );
       if (!res.ok) issues.push(t.modelSettings.gatewayReturned(res.status));
-    } catch (e) { swallow(e); issues.push(t.modelSettings.cannotReachGateway); }
+    } catch (e) {
+      swallow(e);
+      issues.push(t.modelSettings.cannotReachGateway);
+    }
 
     if (issues.length === 0) {
       toast.success(t.modelSettings.diagnoseHealthy);
@@ -358,7 +383,7 @@ export default function ModelSettingsPage() {
   };
 
   const { isGuest } = useAuth();
-  
+
   // Implementation note.
   const defaultModelName = getLocalSettings().context.model_name;
 
@@ -367,7 +392,8 @@ export default function ModelSettingsPage() {
       registerPageAgentCapability({
         id: "models.custom.list",
         label: "List custom models",
-        description: "Return current custom model summaries and gateway status.",
+        description:
+          "Return current custom model summaries and gateway status.",
         risk: "low",
         riskReasons: [],
         requiresConfirmation: false,
@@ -429,12 +455,15 @@ export default function ModelSettingsPage() {
           const name = String(input?.name || "").trim();
           if (!name) throw new Error("name is required");
           const started = performance.now();
-          const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models/test`, {
-            method: "POST",
-            headers: jsonAuthHeaders(),
-            body: JSON.stringify({ id: name }),
-            signal: AbortSignal.timeout(8000),
-          });
+          const res = await fetch(
+            `${getBackendBaseURL()}/api/config/custom-models/test`,
+            {
+              method: "POST",
+              headers: jsonAuthHeaders(),
+              body: JSON.stringify({ id: name }),
+              signal: AbortSignal.timeout(8000),
+            },
+          );
           const data = await res.json().catch(() => ({}));
           return {
             ok: res.ok && data.ok !== false,
@@ -496,10 +525,13 @@ export default function ModelSettingsPage() {
           if (!models.some((model) => model.name === name)) {
             throw new Error(`custom model not found: ${name}`);
           }
-          const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(name)}`, {
-            method: "DELETE",
-            headers: authHeaders(),
-          });
+          const res = await fetch(
+            `${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(name)}`,
+            {
+              method: "DELETE",
+              headers: authHeaders(),
+            },
+          );
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data.detail || `Delete failed: ${res.status}`);
@@ -525,15 +557,22 @@ export default function ModelSettingsPage() {
           <div className="flex items-center justify-between w-full">
             <span>{t.modelSettings.customModels}</span>
             {!showAdd && !editingModel && (
-              <Button variant="outline" size="sm" onClick={() => setShowAdd(true)}>
-                <PlusIcon className="mr-1 h-3 w-3" /> {t.modelSettings.addCustomModel}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAdd(true)}
+              >
+                <PlusIcon className="mr-1 h-3 w-3" />{" "}
+                {t.modelSettings.addCustomModel}
               </Button>
             )}
           </div>
         }
       >
         {loading ? (
-          <div className="text-muted-foreground text-sm">{t.common.loading}</div>
+          <div className="text-muted-foreground text-sm">
+            {t.common.loading}
+          </div>
         ) : (
           <div className="flex w-full flex-col">
             {/* Model list */}
@@ -568,7 +607,11 @@ export default function ModelSettingsPage() {
                               className="flex items-center gap-2"
                             >
                               <span className="w-4 shrink-0 text-right text-muted-foreground/60 tabular-nums">
-                                {idx === 0 ? "★" : idx === list.length - 1 ? "▴" : "·"}
+                                {idx === 0
+                                  ? "★"
+                                  : idx === list.length - 1
+                                    ? "▴"
+                                    : "·"}
                               </span>
                               <code className="truncate rounded bg-muted/60 px-1.5 py-0.5">
                                 {id}
@@ -593,7 +636,11 @@ export default function ModelSettingsPage() {
                       )}
                       <button
                         className="text-xs font-medium text-orange-500 hover:text-orange-600"
-                        onClick={() => setEditingModel(editingModel === m.name ? null : m.name)}
+                        onClick={() =>
+                          setEditingModel(
+                            editingModel === m.name ? null : m.name,
+                          )
+                        }
                       >
                         {t.common.edit}
                       </button>
@@ -620,7 +667,10 @@ export default function ModelSettingsPage() {
                 <EditModelForm
                   modelName={editingModel}
                   onCancel={() => setEditingModel(null)}
-                  onSaved={() => { setEditingModel(null); fetchModels(); }}
+                  onSaved={() => {
+                    setEditingModel(null);
+                    fetchModels();
+                  }}
                 />
               </div>
             )}
@@ -630,7 +680,10 @@ export default function ModelSettingsPage() {
               <div className="mt-4">
                 <AddModelForm
                   onCancel={() => setShowAdd(false)}
-                  onSaved={() => { setShowAdd(false); fetchModels(); }}
+                  onSaved={() => {
+                    setShowAdd(false);
+                    fetchModels();
+                  }}
                 />
               </div>
             )}
@@ -652,7 +705,9 @@ export default function ModelSettingsPage() {
           {/* Status bar */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium">{t.modelSettings.gatewayUrl}</span>
+              <span className="text-sm font-medium">
+                {t.modelSettings.gatewayUrl}
+              </span>
               {gatewayStatus === "connected" && (
                 <span className="inline-flex items-center rounded-lg bg-green-100 dark:bg-green-500/20 px-3 py-1 text-xs font-medium text-green-700 dark:text-green-400">
                   {t.modelSettings.connected}
@@ -665,16 +720,19 @@ export default function ModelSettingsPage() {
               )}
               {gatewayStatus === "checking" && (
                 <span className="inline-flex items-center gap-1 rounded-lg bg-blue-100 dark:bg-blue-500/20 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-400">
-                  <Loader2Icon className="h-3 w-3 animate-spin" /> {t.common.loading}
+                  <Loader2Icon className="h-3 w-3 animate-spin" />{" "}
+                  {t.common.loading}
                 </span>
               )}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReconnect}>
-                <RefreshCwIcon className="mr-1 h-3 w-3" /> {t.modelSettings.reconnect}
+                <RefreshCwIcon className="mr-1 h-3 w-3" />{" "}
+                {t.modelSettings.reconnect}
               </Button>
               <Button variant="outline" size="sm" onClick={handleDiagnose}>
-                <SearchIcon className="mr-1 h-3 w-3" /> {t.modelSettings.diagnose}
+                <SearchIcon className="mr-1 h-3 w-3" />{" "}
+                {t.modelSettings.diagnose}
               </Button>
             </div>
           </div>
@@ -683,7 +741,9 @@ export default function ModelSettingsPage() {
           <div className="rounded-lg border border-border p-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-medium">{t.modelSettings.port}</div>
+                <div className="text-sm font-medium">
+                  {t.modelSettings.port}
+                </div>
                 <div className="text-xs text-muted-foreground mt-1">
                   {t.modelSettings.backendUrlHint}
                 </div>
@@ -733,7 +793,9 @@ function OfficialModelsSection() {
   const { t } = useI18n();
   const [models, setModels] = useState<UpstreamModel[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -764,7 +826,9 @@ function OfficialModelsSection() {
       } catch (err) {
         swallow(err);
         if (!cancelled) {
-          setUnavailableReason(err instanceof Error ? err.message : String(err));
+          setUnavailableReason(
+            err instanceof Error ? err.message : String(err),
+          );
           setModels([]);
         }
       } finally {
@@ -822,9 +886,7 @@ function OfficialModelsSection() {
                   </span>
                 )}
               </div>
-              <div className="text-xs text-muted-foreground">
-                {upstream.id}
-              </div>
+              <div className="text-xs text-muted-foreground">{upstream.id}</div>
             </div>
             <div className="flex items-center gap-3">
               <span className="rounded-lg bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
@@ -852,7 +914,15 @@ function OfficialModelsSection() {
 // it was stored as `$ENV_VAR` the form displays the variable name (safe)
 // and the user can leave the field blank to keep it; typing a new value
 // overrides. Literal keys are shown as a "•••" placeholder.
-function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; onCancel: () => void; onSaved: () => void }) {
+function EditModelForm({
+  modelName,
+  onCancel,
+  onSaved,
+}: {
+  modelName: string;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
   const { t } = useI18n();
   const [displayName, setDisplayName] = useState("");
   // Open-ended list of upstream model ids this entry can dispatch
@@ -861,7 +931,9 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
   // ``models`` field on the custom-model entry.
   const [models, setModels] = useState<string[]>([""]);
   const [apiKey, setApiKey] = useState("");
-  const [apiKeyPlaceholder, setApiKeyPlaceholder] = useState(t.modelSettings.apiKeyPlaceholder);
+  const [apiKeyPlaceholder, setApiKeyPlaceholder] = useState(
+    t.modelSettings.apiKeyPlaceholder,
+  );
   const [baseUrl, setBaseUrl] = useState("");
   const [thinking, setThinking] = useState(false);
   const [vision, setVision] = useState(false);
@@ -877,7 +949,8 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
     const u = (baseUrl || "").toLowerCase();
     if (!u) return "—";
     if (u.includes("anthropic.com")) return "anthropic";
-    if (u.includes("googleapis.com") || u.includes("generativelanguage")) return "gemini";
+    if (u.includes("googleapis.com") || u.includes("generativelanguage"))
+      return "gemini";
     if (u.includes("ollama") || /:11434(\b|\/)/.test(u)) return "ollama";
     return "openai";
   })();
@@ -900,11 +973,15 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
           { headers: authHeaders() },
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const list = (await res.json()).models as Array<Record<string, unknown>>;
+        const list = (await res.json()).models as Array<
+          Record<string, unknown>
+        >;
         const d = list.find((m) => m.id === modelName) ?? {};
         if (cancelled) return;
         setDisplayName((d.display_name as string) || (d.name as string) || "");
-        const rawModels = Array.isArray(d.models) ? (d.models as unknown[]) : [];
+        const rawModels = Array.isArray(d.models)
+          ? (d.models as unknown[])
+          : [];
         const normalised = rawModels
           .map((m) => (typeof m === "string" ? m.trim() : ""))
           .filter((m) => m.length > 0);
@@ -922,7 +999,9 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
       } catch (e) {
         swallow(e);
         if (!cancelled)
-          setError(e instanceof Error ? e.message : t.modelSettings.networkError);
+          setError(
+            e instanceof Error ? e.message : t.modelSettings.networkError,
+          );
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -930,7 +1009,12 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
     return () => {
       cancelled = true;
     };
-  }, [modelName, t.modelSettings.apiKeyPlaceholder, t.modelSettings.keepApiKeyHint, t.modelSettings.networkError]);
+  }, [
+    modelName,
+    t.modelSettings.apiKeyPlaceholder,
+    t.modelSettings.keepApiKeyHint,
+    t.modelSettings.networkError,
+  ]);
 
   const handleModelChange = (idx: number, value: string) => {
     setModels((prev) => prev.map((m, i) => (i === idx ? value : m)));
@@ -939,7 +1023,9 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
     setModels((prev) => [...prev, ""]);
   };
   const handleModelRemove = (idx: number) => {
-    setModels((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+    setModels((prev) =>
+      prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx),
+    );
   };
 
   const handleSave = async () => {
@@ -948,7 +1034,9 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
     // Drop empty rows before persisting so the backend never sees
     // a trailing blank in the models list. The UI still shows the
     // last row even if it's empty, so the user can keep typing.
-    const cleanedModels = models.map((m) => m.trim()).filter((m) => m.length > 0);
+    const cleanedModels = models
+      .map((m) => m.trim())
+      .filter((m) => m.length > 0);
     if (cleanedModels.length === 0) {
       setError(t.modelSettings.modelList.empty);
       setSaving(false);
@@ -1007,21 +1095,27 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
     setTestLatency(null);
     const started = performance.now();
     // Test against the first non-empty model id (the picker default).
-    const firstModel = models.map((m) => m.trim()).find((m) => m.length > 0) || modelName;
+    const firstModel =
+      models.map((m) => m.trim()).find((m) => m.length > 0) || modelName;
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models/test`, {
-        method: "POST",
-        headers: jsonAuthHeaders(),
-        body: JSON.stringify({
-          id: modelName,
-          base_url: baseUrl,
-          api_key: apiKey || undefined,
-          model: firstModel,
-          provider: baseUrl.includes("anthropic.com") ? "anthropic" : undefined,
-          default_headers: parseHeadersText(headersText),
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/custom-models/test`,
+        {
+          method: "POST",
+          headers: jsonAuthHeaders(),
+          body: JSON.stringify({
+            id: modelName,
+            base_url: baseUrl,
+            api_key: apiKey || undefined,
+            model: firstModel,
+            provider: baseUrl.includes("anthropic.com")
+              ? "anthropic"
+              : undefined,
+            default_headers: parseHeadersText(headersText),
+          }),
+          signal: AbortSignal.timeout(8000),
+        },
+      );
       const latency = Math.round(performance.now() - started);
       setTestLatency(latency);
       const data = await res.json().catch(() => ({}));
@@ -1034,13 +1128,17 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
       }
     } catch (e: unknown) {
       setTestStatus("fail");
-      setTestMessage(e instanceof Error ? e.message : t.modelSettings.networkError);
+      setTestMessage(
+        e instanceof Error ? e.message : t.modelSettings.networkError,
+      );
     }
   };
 
   return (
     <div className="rounded-lg border border-border p-4 space-y-3">
-      <div className="text-sm font-medium">{t.modelSettings.editModelTitle(modelName)}</div>
+      <div className="text-sm font-medium">
+        {t.modelSettings.editModelTitle(modelName)}
+      </div>
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2Icon className="size-3.5 animate-spin" />
@@ -1050,7 +1148,9 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
         <>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-muted-foreground">{t.modelSettings.providerLabel}</label>
+              <label className="text-xs text-muted-foreground">
+                {t.modelSettings.providerLabel}
+              </label>
               <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm">
                 <span className="font-mono">{detectedProvider}</span>
                 <span className="ml-2 text-[10px] text-muted-foreground/70">
@@ -1059,18 +1159,40 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
               </div>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">{t.modelSettings.keepApiKeyHint}</label>
+              <label className="text-xs text-muted-foreground">
+                {t.modelSettings.keepApiKeyHint}
+              </label>
               <div className="relative">
-                <Input className="pr-10" type={showKey ? "text" : "password"} placeholder={apiKeyPlaceholder} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-                <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(!showKey)}>
-                  {showKey ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+                <Input
+                  className="pr-10"
+                  type={showKey ? "text" : "password"}
+                  placeholder={apiKeyPlaceholder}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowKey(!showKey)}
+                >
+                  {showKey ? (
+                    <EyeOffIcon className="size-4" />
+                  ) : (
+                    <EyeIcon className="size-4" />
+                  )}
                 </button>
               </div>
             </div>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground">{t.modelSettings.baseUrlLabel}</label>
-            <Input placeholder={t.modelSettings.baseUrlPlaceholder} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+            <label className="text-xs text-muted-foreground">
+              {t.modelSettings.baseUrlLabel}
+            </label>
+            <Input
+              placeholder={t.modelSettings.baseUrlPlaceholder}
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+            />
           </div>
 
           <div>
@@ -1084,7 +1206,10 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
             </div>
             <ul className="space-y-1.5">
               {models.map((id, idx) => (
-                <li key={`edit-model-${idx}`} className="flex items-center gap-1.5">
+                <li
+                  key={`edit-model-${idx}`}
+                  className="flex items-center gap-1.5"
+                >
                   <span
                     className="w-4 shrink-0 text-right text-[11px] text-muted-foreground/60 tabular-nums"
                     title={
@@ -1129,7 +1254,8 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
               onClick={handleModelAdd}
               disabled={loading}
             >
-              <PlusIcon className="mr-1 h-3 w-3" /> {t.modelSettings.modelList.addButton}
+              <PlusIcon className="mr-1 h-3 w-3" />{" "}
+              {t.modelSettings.modelList.addButton}
             </Button>
           </div>
 
@@ -1169,24 +1295,58 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
 
           <div className="grid grid-cols-3 gap-3">
             <div className="flex items-center gap-2 pt-5">
-              <Switch checked={thinking} onCheckedChange={setThinking} /> <span className="text-xs">{t.modelSettings.thinkingLabel}</span>
+              <Switch checked={thinking} onCheckedChange={setThinking} />{" "}
+              <span className="text-xs">{t.modelSettings.thinkingLabel}</span>
             </div>
             <div className="flex items-center gap-2 pt-5">
-              <Switch checked={vision} onCheckedChange={setVision} /> <span className="text-xs">{t.modelSettings.visionLabel}</span>
+              <Switch checked={vision} onCheckedChange={setVision} />{" "}
+              <span className="text-xs">{t.modelSettings.visionLabel}</span>
             </div>
           </div>
 
           {/* Test status + buttons */}
           <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
             <div className="flex items-center gap-2 text-sm">
-              {testStatus === "idle" && <><div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" /><span className="text-muted-foreground">{t.modelSettings.testFailed}</span></>}
-              {testStatus === "testing" && <><Loader2Icon className="h-4 w-4 animate-spin text-blue-500" /><span className="text-blue-500">{t.common.loading}</span></>}
-              {testStatus === "success" && <><CheckCircle2Icon className="h-4 w-4 text-green-500" /><span className="text-green-500">{testMessage}{testLatency != null ? ` (${testLatency}ms)` : ""}</span></>}
-              {testStatus === "fail" && <><XCircleIcon className="h-4 w-4 text-destructive" /><span className="text-destructive">{testMessage}</span></>}
-              <span className="text-xs text-muted-foreground ml-2">{t.modelSettings.testEndpointHint}</span>
+              {testStatus === "idle" && (
+                <>
+                  <div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" />
+                  <span className="text-muted-foreground">
+                    {t.modelSettings.testFailed}
+                  </span>
+                </>
+              )}
+              {testStatus === "testing" && (
+                <>
+                  <Loader2Icon className="h-4 w-4 animate-spin text-blue-500" />
+                  <span className="text-blue-500">{t.common.loading}</span>
+                </>
+              )}
+              {testStatus === "success" && (
+                <>
+                  <CheckCircle2Icon className="h-4 w-4 text-green-500" />
+                  <span className="text-green-500">
+                    {testMessage}
+                    {testLatency != null ? ` (${testLatency}ms)` : ""}
+                  </span>
+                </>
+              )}
+              {testStatus === "fail" && (
+                <>
+                  <XCircleIcon className="h-4 w-4 text-destructive" />
+                  <span className="text-destructive">{testMessage}</span>
+                </>
+              )}
+              <span className="text-xs text-muted-foreground ml-2">
+                {t.modelSettings.testEndpointHint}
+              </span>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleTest} disabled={testStatus === "testing" || loading}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleTest}
+                disabled={testStatus === "testing" || loading}
+              >
                 <WifiIcon className="mr-1 h-3 w-3" /> {t.modelSettings.diagnose}
               </Button>
             </div>
@@ -1195,8 +1355,15 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
       )}
       {error && <div className="text-xs text-destructive">{error}</div>}
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onCancel}>{t.common.cancel}</Button>
-        <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white" onClick={handleSave} disabled={saving || loading}>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          {t.common.cancel}
+        </Button>
+        <Button
+          size="sm"
+          className="bg-orange-500 hover:bg-orange-600 text-white"
+          onClick={handleSave}
+          disabled={saving || loading}
+        >
           {saving ? t.common.loading : t.common.save}
         </Button>
       </div>
@@ -1205,7 +1372,13 @@ function EditModelForm({ modelName, onCancel, onSaved }: { modelName: string; on
 }
 
 // ── Add model form ─────────────────────────────────────────────
-function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: () => void }) {
+function AddModelForm({
+  onCancel,
+  onSaved,
+}: {
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
   const { t } = useI18n();
   const [provider, setProvider] = useState("openai");
   const [protocol, setProtocol] = useState("openai");
@@ -1232,7 +1405,10 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
   const handleProviderChange = (value: string) => {
     setProvider(value);
     const preset = PROVIDERS.find((p) => p.value === value);
-    if (preset) { setBaseUrl(preset.baseUrl); setProtocol(preset.protocol); }
+    if (preset) {
+      setBaseUrl(preset.baseUrl);
+      setProtocol(preset.protocol);
+    }
   };
 
   const handleModelChange = (idx: number, value: string) => {
@@ -1242,29 +1418,38 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
     setModels((prev) => [...prev, ""]);
   };
   const handleModelRemove = (idx: number) => {
-    setModels((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx)));
+    setModels((prev) =>
+      prev.length <= 1 ? prev : prev.filter((_, i) => i !== idx),
+    );
   };
 
   const handleTest = async () => {
     const firstModel = models.map((m) => m.trim()).find((m) => m.length > 0);
     if (!apiKey || !baseUrl || !firstModel) {
-      setTestStatus("fail"); setTestMessage(t.modelSettings.fillRequiredBeforeTest); return;
+      setTestStatus("fail");
+      setTestMessage(t.modelSettings.fillRequiredBeforeTest);
+      return;
     }
-    setTestStatus("testing"); setTestMessage(""); setTestLatency(null);
+    setTestStatus("testing");
+    setTestMessage("");
+    setTestLatency(null);
     const started = performance.now();
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/config/custom-models/test`, {
-        method: "POST",
-        headers: jsonAuthHeaders(),
-        body: JSON.stringify({
-          provider: protocol === "anthropic" ? "anthropic" : "openai",
-          base_url: baseUrl,
-          api_key: apiKey,
-          model: firstModel,
-          default_headers: parseHeadersText(headersText),
-        }),
-        signal: AbortSignal.timeout(8000),
-      });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/custom-models/test`,
+        {
+          method: "POST",
+          headers: jsonAuthHeaders(),
+          body: JSON.stringify({
+            provider: protocol === "anthropic" ? "anthropic" : "openai",
+            base_url: baseUrl,
+            api_key: apiKey,
+            model: firstModel,
+            default_headers: parseHeadersText(headersText),
+          }),
+          signal: AbortSignal.timeout(8000),
+        },
+      );
       const latency = Math.round(performance.now() - started);
       setTestLatency(latency);
       const data = await res.json().catch(() => ({}));
@@ -1277,17 +1462,26 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
       }
     } catch (e: unknown) {
       setTestStatus("fail");
-      setTestMessage(e instanceof Error ? e.message : t.modelSettings.networkError);
+      setTestMessage(
+        e instanceof Error ? e.message : t.modelSettings.networkError,
+      );
     }
   };
 
   const handleSave = async () => {
-    const cleanedModels = models.map((m) => m.trim()).filter((m) => m.length > 0);
+    const cleanedModels = models
+      .map((m) => m.trim())
+      .filter((m) => m.length > 0);
     if (!apiKey || !baseUrl || cleanedModels.length === 0) {
-      setError(cleanedModels.length === 0 ? t.modelSettings.modelList.empty : t.modelSettings.requiredFields);
+      setError(
+        cleanedModels.length === 0
+          ? t.modelSettings.modelList.empty
+          : t.modelSettings.requiredFields,
+      );
       return;
     }
-    setSaving(true); setError("");
+    setSaving(true);
+    setError("");
     // The first non-empty model id doubles as the entry id, since
     // ids have to be filename-safe and the picker shows the model
     // name the user just typed. Same convention as the previous
@@ -1314,11 +1508,18 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
           }),
         },
       );
-      if (!res.ok) { const data = await res.json(); setError(data.detail || t.modelSettings.updateFailed); return; }
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.detail || t.modelSettings.updateFailed);
+        return;
+      }
       toast.success(t.modelSettings.saveSuccess);
       onSaved();
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : t.modelSettings.networkError); }
-    finally { setSaving(false); }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : t.modelSettings.networkError);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -1329,23 +1530,34 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
       </div>
 
       <div>
-        <label className="text-sm font-medium"><span className="text-destructive">*</span> {t.modelSettings.provider}</label>
-        <select className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={provider} onChange={(e) => handleProviderChange(e.target.value)}>
-          {PROVIDERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+        <label className="text-sm font-medium">
+          <span className="text-destructive">*</span> {t.modelSettings.provider}
+        </label>
+        <select
+          className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          value={provider}
+          onChange={(e) => handleProviderChange(e.target.value)}
+        >
+          {PROVIDERS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
         </select>
       </div>
 
       <div>
-        <label className="text-sm font-medium"><span className="text-destructive">*</span> {t.modelSettings.modelList.label}</label>
+        <label className="text-sm font-medium">
+          <span className="text-destructive">*</span>{" "}
+          {t.modelSettings.modelList.label}
+        </label>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {t.modelSettings.modelList.hint}
         </p>
         <ul className="mt-2 space-y-1.5">
           {models.map((id, idx) => (
             <li key={`add-model-${idx}`} className="flex items-center gap-1.5">
-              <span
-                className="w-4 shrink-0 text-right text-xs text-muted-foreground/60 tabular-nums"
-              >
+              <span className="w-4 shrink-0 text-right text-xs text-muted-foreground/60 tabular-nums">
                 {idx === 0 ? "★" : idx === models.length - 1 ? "▴" : "·"}
               </span>
               <Input
@@ -1382,7 +1594,8 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
           className="mt-2 w-full border-dashed"
           onClick={handleModelAdd}
         >
-          <PlusIcon className="mr-1 h-3 w-3" /> {t.modelSettings.modelList.addButton}
+          <PlusIcon className="mr-1 h-3 w-3" />{" "}
+          {t.modelSettings.modelList.addButton}
         </Button>
         {/* Click-to-fill suggested model IDs · lets users skip
             "go look up the exact model name" · each chip populates
@@ -1410,15 +1623,24 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
       </div>
 
       <div>
-        <label className="text-sm font-medium">{t.modelSettings.displayName}</label>
-        <Input className="mt-1" placeholder={t.modelSettings.displayNamePlaceholder} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+        <label className="text-sm font-medium">
+          {t.modelSettings.displayName}
+        </label>
+        <Input
+          className="mt-1"
+          placeholder={t.modelSettings.displayNamePlaceholder}
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="text-sm font-medium flex items-center justify-between gap-2">
             <span>
-              {PROVIDERS.find((p) => p.value === provider)?.label || t.modelSettings.provider} {t.modelSettings.apiKey}
+              {PROVIDERS.find((p) => p.value === provider)?.label ||
+                t.modelSettings.provider}{" "}
+              {t.modelSettings.apiKey}
             </span>
             {/* Console link · opens the provider's dashboard in a
                 new tab so users don't have to hunt for the API
@@ -1439,23 +1661,54 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
             })()}
           </label>
           <div className="relative mt-1">
-            <Input className="pr-10" type={showKey ? "text" : "password"} placeholder={t.modelSettings.apiKeyPlaceholder} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-            <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => setShowKey(!showKey)}>
-              {showKey ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
+            <Input
+              className="pr-10"
+              type={showKey ? "text" : "password"}
+              placeholder={t.modelSettings.apiKeyPlaceholder}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowKey(!showKey)}
+            >
+              {showKey ? (
+                <EyeOffIcon className="size-4" />
+              ) : (
+                <EyeIcon className="size-4" />
+              )}
             </button>
           </div>
         </div>
         <div>
-          <label className="text-sm font-medium">{t.modelSettings.apiProtocol}</label>
-          <select className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" value={protocol} onChange={(e) => setProtocol(e.target.value)}>
-            {PROTOCOLS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+          <label className="text-sm font-medium">
+            {t.modelSettings.apiProtocol}
+          </label>
+          <select
+            className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            value={protocol}
+            onChange={(e) => setProtocol(e.target.value)}
+          >
+            {PROTOCOLS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>
 
       <div>
-        <label className="text-sm font-medium">{t.modelSettings.baseUrlLabel}</label>
-        <Input className="mt-1" placeholder={t.modelSettings.baseUrlPlaceholder} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+        <label className="text-sm font-medium">
+          {t.modelSettings.baseUrlLabel}
+        </label>
+        <Input
+          className="mt-1"
+          placeholder={t.modelSettings.baseUrlPlaceholder}
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+        />
       </div>
 
       {/* Extra HTTP headers — collapsed by default to keep the form
@@ -1497,25 +1750,66 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
 
       <div className="grid grid-cols-3 gap-4">
         <div className="flex items-center gap-2 pt-6">
-          <Switch checked={thinking} onCheckedChange={setThinking} /> <span className="text-sm">{t.modelSettings.thinkingLabel}</span>
+          <Switch checked={thinking} onCheckedChange={setThinking} />{" "}
+          <span className="text-sm">{t.modelSettings.thinkingLabel}</span>
         </div>
         <div className="flex items-center gap-2 pt-6">
-          <Switch checked={vision} onCheckedChange={setVision} /> <span className="text-sm">{t.modelSettings.visionLabel}</span>
+          <Switch checked={vision} onCheckedChange={setVision} />{" "}
+          <span className="text-sm">{t.modelSettings.visionLabel}</span>
         </div>
       </div>
 
       {/* Test status + buttons */}
       <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
         <div className="flex items-center gap-2 text-sm">
-          {testStatus === "idle" && <><div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" /><span className="text-muted-foreground">{t.modelSettings.testFailed}</span></>}
-          {testStatus === "testing" && <><Loader2Icon className="h-4 w-4 animate-spin text-blue-500" /><span className="text-blue-500">{t.common.loading}</span></>}
-          {testStatus === "success" && <><CheckCircle2Icon className="h-4 w-4 text-green-500" /><span className="text-green-500">{testMessage}{testLatency != null ? ` (${testLatency}ms)` : ""}</span></>}
-          {testStatus === "fail" && <><XCircleIcon className="h-4 w-4 text-destructive" /><span className="text-destructive">{testMessage}</span></>}
-          <span className="text-xs text-muted-foreground ml-2">{t.modelSettings.testEndpointHint}</span>
+          {testStatus === "idle" && (
+            <>
+              <div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" />
+              <span className="text-muted-foreground">
+                {t.modelSettings.testFailed}
+              </span>
+            </>
+          )}
+          {testStatus === "testing" && (
+            <>
+              <Loader2Icon className="h-4 w-4 animate-spin text-blue-500" />
+              <span className="text-blue-500">{t.common.loading}</span>
+            </>
+          )}
+          {testStatus === "success" && (
+            <>
+              <CheckCircle2Icon className="h-4 w-4 text-green-500" />
+              <span className="text-green-500">
+                {testMessage}
+                {testLatency != null ? ` (${testLatency}ms)` : ""}
+              </span>
+            </>
+          )}
+          {testStatus === "fail" && (
+            <>
+              <XCircleIcon className="h-4 w-4 text-destructive" />
+              <span className="text-destructive">{testMessage}</span>
+            </>
+          )}
+          <span className="text-xs text-muted-foreground ml-2">
+            {t.modelSettings.testEndpointHint}
+          </span>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="text-destructive border-destructive hover:bg-destructive/10" onClick={onCancel}>{t.common.cancel}</Button>
-          <Button variant="outline" size="sm" onClick={handleTest} disabled={testStatus === "testing"}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-destructive border-destructive hover:bg-destructive/10"
+            onClick={onCancel}
+          >
+            {t.common.cancel}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTest}
+            disabled={testStatus === "testing"}
+          >
             <WifiIcon className="mr-1 h-3 w-3" /> {t.modelSettings.diagnose}
           </Button>
         </div>
@@ -1524,8 +1818,14 @@ function AddModelForm({ onCancel, onSaved }: { onCancel: () => void; onSaved: ()
       {error && <div className="text-sm text-destructive">{error}</div>}
 
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" onClick={onCancel}>{t.common.cancel}</Button>
-        <Button className="bg-orange-500 hover:bg-orange-600 text-white" onClick={handleSave} disabled={saving}>
+        <Button variant="ghost" onClick={onCancel}>
+          {t.common.cancel}
+        </Button>
+        <Button
+          className="bg-orange-500 hover:bg-orange-600 text-white"
+          onClick={handleSave}
+          disabled={saving}
+        >
           {saving ? t.common.loading : t.common.save}
         </Button>
       </div>
@@ -1562,7 +1862,9 @@ interface DiscoveredService {
 function LocalModelsSection({ onImported }: { onImported?: () => void }) {
   const { t } = useI18n();
   const [services, setServices] = useState<DiscoveredService[]>([]);
-  const [scanStatus, setScanStatus] = useState<"idle" | "scanning" | "done" | "error">("idle");
+  const [scanStatus, setScanStatus] = useState<
+    "idle" | "scanning" | "done" | "error"
+  >("idle");
   // Per-row import-in-flight flag, keyed by base_url so a slow
   // import on one service doesn't lock out importing the others.
   const [importing, setImporting] = useState<Record<string, boolean>>({});
@@ -1725,7 +2027,9 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
                         {svc.status === "ok" &&
-                          t.modelSettings.localModels.modelsCount(svc.models.length)}
+                          t.modelSettings.localModels.modelsCount(
+                            svc.models.length,
+                          )}
                         {svc.status === "empty" &&
                           t.modelSettings.localModels.serviceStatus.empty}
                         {svc.error &&

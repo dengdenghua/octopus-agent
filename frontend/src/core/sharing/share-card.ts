@@ -61,7 +61,11 @@ export function escapeXml(value: string): string {
  * hard-break any single "word" longer than a line. Returns plain (un-escaped)
  * lines — escaping happens at render time.
  */
-export function wrapLines(text: string, maxChars: number, maxLines: number): string[] {
+export function wrapLines(
+  text: string,
+  maxChars: number,
+  maxLines: number,
+): string[] {
   const clean = text.replace(/\s+/g, " ").trim();
   if (!clean) return [];
 

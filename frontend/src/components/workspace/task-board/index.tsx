@@ -57,8 +57,10 @@ import { TimelineView } from "./timeline-view";
 
 type ViewMode = "kanban" | "timeline" | "list" | "schedules";
 
-const CronSettingsPage = lazy(
-  () => import("@/components/workspace/settings/cron-settings-page").then(m => ({ default: m.CronSettingsPage })),
+const CronSettingsPage = lazy(() =>
+  import("@/components/workspace/settings/cron-settings-page").then((m) => ({
+    default: m.CronSettingsPage,
+  })),
 );
 
 const VIEW_MODE_ICONS: Record<ViewMode, React.ReactNode> = {
@@ -132,7 +134,12 @@ function KanbanColumn({
     >
       {/* Column header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-inherit">
-        <span className={cn("flex items-center gap-1.5 text-sm font-semibold", cfg.color)}>
+        <span
+          className={cn(
+            "flex items-center gap-1.5 text-sm font-semibold",
+            cfg.color,
+          )}
+        >
           {cfg.icon}
           {columnLabels[columnId]}
         </span>
@@ -204,7 +211,8 @@ type SortKey = "type" | "name" | "status" | "duration_ms" | "created_at";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
-  if (!active) return <ArrowUpDownIcon className="size-3 text-muted-foreground/40" />;
+  if (!active)
+    return <ArrowUpDownIcon className="size-3 text-muted-foreground/40" />;
   return dir === "asc" ? (
     <ArrowUpIcon className="size-3" />
   ) : (
@@ -301,13 +309,17 @@ function ListView({ tasks }: { tasks: UnifiedTask[] }) {
         <tbody>
           {sorted.length === 0 ? (
             <tr>
-              <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+              <td
+                colSpan={5}
+                className="px-3 py-8 text-center text-muted-foreground"
+              >
                 {t.taskBoard.noTasks}
               </td>
             </tr>
           ) : (
             sorted.map((task) => {
-              const statusCfg = STATUS_STYLE[task.status] ?? STATUS_STYLE.queued;
+              const statusCfg =
+                STATUS_STYLE[task.status] ?? STATUS_STYLE.queued;
               return (
                 <tr
                   key={task.id}
@@ -315,18 +327,29 @@ function ListView({ tasks }: { tasks: UnifiedTask[] }) {
                 >
                   {/* Type */}
                   <td className="px-3 py-2.5">
-                    <div className={cn("flex items-center gap-1.5", TYPE_COLORS[task.type])}>
+                    <div
+                      className={cn(
+                        "flex items-center gap-1.5",
+                        TYPE_COLORS[task.type],
+                      )}
+                    >
                       {TYPE_ICONS[task.type]}
-                      <span className="text-xs font-medium">{TYPE_LABELS[task.type]}</span>
+                      <span className="text-xs font-medium">
+                        {TYPE_LABELS[task.type]}
+                      </span>
                     </div>
                   </td>
 
                   {/* Name */}
                   <td className="px-3 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{task.name || task.id}</p>
+                      <p className="truncate font-medium">
+                        {task.name || task.id}
+                      </p>
                       {task.phase && (
-                        <p className="truncate text-xs text-muted-foreground">{task.phase}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {task.phase}
+                        </p>
                       )}
                     </div>
                   </td>
@@ -391,7 +414,13 @@ function TypeFilterPills({
 }) {
   const { t: i18n } = useI18n();
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: tasks.length, background: 0, quest: 0, scheduled: 0, intelligence: 0 };
+    const c: Record<string, number> = {
+      all: tasks.length,
+      background: 0,
+      quest: 0,
+      scheduled: 0,
+      intelligence: 0,
+    };
     for (const t of tasks) c[t.type] = (c[t.type] ?? 0) + 1;
     return c;
   }, [tasks]);
@@ -443,11 +472,14 @@ export function TaskBoard({
   const initialType = searchParams.get("type");
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>(
-    initialType === "background" || initialType === "quest" || initialType === "scheduled" || initialType === "intelligence"
+    initialType === "background" ||
+      initialType === "quest" ||
+      initialType === "scheduled" ||
+      initialType === "intelligence"
       ? initialType
       : initialTypeFilter
         ? initialTypeFilter
-      : "all",
+        : "all",
   );
 
   // Fetch data
@@ -460,9 +492,11 @@ export function TaskBoard({
     type: typeFilter === "all" ? undefined : typeFilter,
   });
   const { stats, loading: statsLoading } = useTaskBoardStats();
-  const { data: timelineData, loading: timelineLoading } = useTaskBoardTimeline({
-    type: typeFilter === "all" ? undefined : typeFilter,
-  });
+  const { data: timelineData, loading: timelineLoading } = useTaskBoardTimeline(
+    {
+      type: typeFilter === "all" ? undefined : typeFilter,
+    },
+  );
 
   const tasks = taskData.tasks;
 
@@ -471,11 +505,18 @@ export function TaskBoard({
   }, [refreshTasks]);
 
   return (
-    <div className={cn("ui-density-stack flex h-full flex-col", compact ? "p-0" : "ui-density-page")}>
+    <div
+      className={cn(
+        "ui-density-stack flex h-full flex-col",
+        compact ? "p-0" : "ui-density-page",
+      )}
+    >
       {/* Page header */}
       <div className="ui-density-panel flex items-center justify-between rounded-lg border border-border/50 bg-card/60">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">{t.taskBoard.title}</h1>
+          <h1 className="text-xl font-bold tracking-tight">
+            {t.taskBoard.title}
+          </h1>
           <p className="text-sm text-muted-foreground">
             {t.taskBoard.description}
           </p>
@@ -544,16 +585,20 @@ export function TaskBoard({
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/50 bg-card/30 py-20 text-muted-foreground">
           <KanbanIcon className="size-12 mb-3 opacity-30" />
           <p className="text-lg font-medium">{t.taskBoard.noTasks}</p>
-          <p className="text-sm">
-            {t.taskBoard.noTasksDescription}
-          </p>
+          <p className="text-sm">{t.taskBoard.noTasksDescription}</p>
         </div>
       )}
 
       {/* View content */}
       {viewMode === "schedules" ? (
         <div className="flex-1 min-h-0 overflow-auto">
-          <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2Icon className="size-6 animate-spin text-muted-foreground" /></div>}>
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-20">
+                <Loader2Icon className="size-6 animate-spin text-muted-foreground" />
+              </div>
+            }
+          >
             <CronSettingsPage />
           </Suspense>
         </div>

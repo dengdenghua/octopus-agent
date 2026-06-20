@@ -28,7 +28,8 @@ function randomThreadId(): string {
   if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
     crypto.getRandomValues(bytes);
   } else {
-    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    for (let i = 0; i < bytes.length; i++)
+      bytes[i] = Math.floor(Math.random() * 256);
   }
   return `thr_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
@@ -52,7 +53,10 @@ function threadTitle(thread: ThreadSummary): string {
  * hold a long-lived sidebar socket — the active thread page already
  * keeps one open and a second connection per user is wasteful.
  */
-export function ThreadsSidebar({ currentThreadId, className }: ThreadsSidebarProps) {
+export function ThreadsSidebar({
+  currentThreadId,
+  className,
+}: ThreadsSidebarProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [threads, setThreads] = useState<ThreadSummary[] | null>(null);

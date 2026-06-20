@@ -6,11 +6,7 @@
 
 ## Exports
 
-- `BUILTIN_SKILLS`
-- `COMPUTER_USE_SKILL`
-- `FILE_EDIT_SKILL`
 - `PRESET_FACTORIES`
-- `SHELL_EXEC_SKILL`
 - `Arm`
 - `ArmPool`
 - `ByteStreamBuffer`
@@ -33,11 +29,6 @@
 - `ShellExecEvent`
 - `ShellExecTelemetry`
 - `ShellStateManager`
-- `SkillBuilder`
-- `SkillCapability`
-- `SkillCategory`
-- `SkillDefinition`
-- `SkillInterface`
 - `ToolCallContext`
 - `ToolCallResult`
 - `ToolDefinition`
@@ -72,7 +63,6 @@
 | `shell_state.py` | Shell environment state snapshot model. |
 | `shell_state_manager.py` | Shell state snapshot manager. |
 | `shell_telemetry.py` | Shell execution telemetry events. |
-| `skill_manifest.py` | Self-describing skill definition. |
 | `specialized.py` | — |
 | `tool_registry.py` | MCP-style tool registry — declarative tool registration pattern. |
 

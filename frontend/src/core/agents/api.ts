@@ -17,7 +17,9 @@ export class AgentNameCheckError extends Error {
   }
 }
 
-export async function listAgents(opts?: { signal?: AbortSignal }): Promise<Agent[]> {
+export async function listAgents(opts?: {
+  signal?: AbortSignal;
+}): Promise<Agent[]> {
   const res = await fetch(`${getBackendBaseURL()}/api/agents`, {
     headers: authHeaders(),
     signal: opts?.signal,
@@ -28,11 +30,17 @@ export async function listAgents(opts?: { signal?: AbortSignal }): Promise<Agent
   return agents.filter((agent) => !HIDDEN_AGENT_IDS.has(agent.name));
 }
 
-export async function getAgent(name: string, opts?: { signal?: AbortSignal }): Promise<Agent> {
-  const res = await fetch(`${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}`, {
-    headers: authHeaders(),
-    signal: opts?.signal,
-  });
+export async function getAgent(
+  name: string,
+  opts?: { signal?: AbortSignal },
+): Promise<Agent> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}`,
+    {
+      headers: authHeaders(),
+      signal: opts?.signal,
+    },
+  );
   if (!res.ok) throw new Error(`Agent '${name}' not found`);
   return (await res.json()) as Agent;
 }
@@ -104,7 +112,9 @@ export async function registerLocalAgentPartners(
   );
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Failed to register local partners: ${res.statusText}`);
+    throw new Error(
+      err.detail ?? `Failed to register local partners: ${res.statusText}`,
+    );
   }
   return (await res.json()) as LocalAgentPartnerRegisterResponse;
 }
@@ -113,11 +123,14 @@ export async function updateAgent(
   name: string,
   request: UpdateAgentRequest,
 ): Promise<Agent> {
-  const res = await fetch(`${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}`, {
-    method: "PUT",
-    headers: jsonAuthHeaders(),
-    body: JSON.stringify(request),
-  });
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}`,
+    {
+      method: "PUT",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(request),
+    },
+  );
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
     throw new Error(err.detail ?? `Failed to update agent: ${res.statusText}`);
@@ -127,10 +140,15 @@ export async function updateAgent(
 
 export async function generateAgentVisuals(
   name: string,
-  request: { provider?: string; style_prompt?: string } = {},
+  request: {
+    provider?: string;
+    style_prompt?: string;
+    reference_images?: string[];
+  } = {},
 ): Promise<{
   agent_id: string;
   provider: string;
+  avatar_url?: string | null;
   visual_urls: Record<string, string>;
 }> {
   const res = await fetch(
@@ -143,20 +161,26 @@ export async function generateAgentVisuals(
   );
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Failed to generate visuals: ${res.statusText}`);
+    throw new Error(
+      err.detail ?? `Failed to generate visuals: ${res.statusText}`,
+    );
   }
   return (await res.json()) as {
     agent_id: string;
     provider: string;
+    avatar_url?: string | null;
     visual_urls: Record<string, string>;
   };
 }
 
 export async function deleteAgent(name: string): Promise<void> {
-  const res = await fetch(`${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-    headers: authHeaders(),
-  });
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/agents/${encodeURIComponent(name)}`,
+    {
+      method: "DELETE",
+      headers: authHeaders(),
+    },
+  );
   if (!res.ok) throw new Error(`Failed to delete agent: ${res.statusText}`);
 }
 

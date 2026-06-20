@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -271,4 +270,3 @@ export const Queue = ({ className, ...props }: QueueProps) => (
     {...props}
   />
 );
-

@@ -13,7 +13,6 @@
 """
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
 
@@ -176,7 +175,7 @@ def main() -> int:
         for e in errors:
             print(f"  - {e}")
         return 1
-    print(f"\033[92m✅ 所有检查通过（0 个问题）\033[0m")
+    print("\033[92m✅ 所有检查通过（0 个问题）\033[0m")
     return 0
 
 

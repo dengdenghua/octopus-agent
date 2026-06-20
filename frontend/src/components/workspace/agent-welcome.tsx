@@ -1,4 +1,3 @@
-
 import { BotIcon } from "lucide-react";
 
 import { type Agent } from "@/core/agents";

@@ -112,7 +112,7 @@ class TestIterationBudget:
             progress_threshold=0.6,
             hard_limit=True,
         ))
-        for i in range(5):
+        for _i in range(5):
             b.tick(tool_name="same_tool", success=False, is_unique=False)
         with pytest.raises(IterationBudgetExceeded):
             b.tick(tool_name="same_tool", success=False, is_unique=False)
@@ -123,7 +123,7 @@ class TestIterationBudget:
             progress_window=5,
             progress_threshold=0.6,
         ))
-        for i in range(10):
+        for _i in range(10):
             b.tick(tool_name="same_tool", success=False, is_unique=False)
         assert b.is_stuck() is True
 

@@ -69,7 +69,11 @@ function installFetchRouter(routes: Record<string, () => unknown>) {
         const method = init?.method ?? "GET";
         const body = handler();
         // Allow handlers to return a status-tagged tuple.
-        if (Array.isArray(body) && body.length === 2 && typeof body[1] === "number") {
+        if (
+          Array.isArray(body) &&
+          body.length === 2 &&
+          typeof body[1] === "number"
+        ) {
           return Promise.resolve(jsonResponse(body[0], body[1] as number));
         }
         // Ignore method for now — tests assert via fetchMock.mock.calls.
@@ -121,7 +125,10 @@ describe("PrivacySettingsPage · AI mode section", () => {
 
     renderWithProviders(<PrivacySettingsPage />, { locale: "zh-CN" });
 
-    const privacyCard = await screen.findByRole("button", { pressed: false, name: /隐私模式/ });
+    const privacyCard = await screen.findByRole("button", {
+      pressed: false,
+      name: /隐私模式/,
+    });
     fireEvent.click(privacyCard);
 
     await waitFor(() => {

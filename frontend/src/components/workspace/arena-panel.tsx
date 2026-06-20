@@ -19,20 +19,11 @@ import {
   TrophyIcon,
   XIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  createBattle,
-  fetchLeaderboard,
-  submitVote,
-} from "@/core/arena/api";
+import { createBattle, fetchLeaderboard, submitVote } from "@/core/arena/api";
 import type {
   BattleResponse,
   LeaderboardEntry,
@@ -135,7 +126,11 @@ export function ArenaPanel({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex min-h-0 flex-1 flex-col"
+      >
         <div className="border-b px-4">
           <TabsList variant="line">
             <TabsTrigger value="battle">
@@ -150,7 +145,10 @@ export function ArenaPanel({ onClose }: { onClose?: () => void }) {
         </div>
 
         {/* Battle Tab */}
-        <TabsContent value="battle" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+        <TabsContent
+          value="battle"
+          className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
           {phase === "idle" && (
             <IdleView
               ref={inputRef}
@@ -173,7 +171,10 @@ export function ArenaPanel({ onClose }: { onClose?: () => void }) {
         </TabsContent>
 
         {/* Leaderboard Tab */}
-        <TabsContent value="leaderboard" className="mt-0 flex min-h-0 flex-1 flex-col overflow-auto">
+        <TabsContent
+          value="leaderboard"
+          className="mt-0 flex min-h-0 flex-1 flex-col overflow-auto"
+        >
           <LeaderboardView />
         </TabsContent>
       </Tabs>
@@ -348,7 +349,12 @@ function BattleView({
             <ThumbsUpIcon className="mr-1.5 size-3.5 text-orange-500" />
             {t.arena.bIsBetter}
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onVote("tie")} className="focus-visible:ring-2 focus-visible:ring-ring">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onVote("tie")}
+            className="focus-visible:ring-2 focus-visible:ring-ring"
+          >
             {t.arena.tie}
           </Button>
           <Button
@@ -391,7 +397,12 @@ function ResponseColumn({
   return (
     <div className="flex min-h-0 flex-col">
       <div className="flex items-center justify-between border-b px-3 py-2">
-        <span className={cn("rounded-lg px-2 py-0.5 text-xs font-semibold", colorClasses)}>
+        <span
+          className={cn(
+            "rounded-lg px-2 py-0.5 text-xs font-semibold",
+            colorClasses,
+          )}
+        >
           {label}
         </span>
         <div className="flex items-center gap-2">
@@ -510,7 +521,9 @@ function LeaderboardView() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (loading) {
@@ -533,9 +546,7 @@ function LeaderboardView() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6">
         <TrophyIcon className="text-muted-foreground size-10 opacity-30" />
-        <p className="text-muted-foreground text-sm">
-          {t.arena.noBattles}
-        </p>
+        <p className="text-muted-foreground text-sm">{t.arena.noBattles}</p>
       </div>
     );
   }
@@ -555,13 +566,27 @@ function LeaderboardView() {
           <thead>
             <tr className="bg-muted/50 border-b">
               <th className="px-3 py-2 text-left font-medium">#</th>
-              <th className="px-3 py-2 text-left font-medium">{t.arena.model}</th>
-              <th className="px-3 py-2 text-right font-medium">{t.arena.elo}</th>
-              <th className="px-3 py-2 text-right font-medium">{t.arena.winRate}</th>
-              <th className="px-3 py-2 text-right font-medium">{t.arena.wins}</th>
-              <th className="px-3 py-2 text-right font-medium">{t.arena.losses}</th>
-              <th className="px-3 py-2 text-right font-medium">{t.arena.ties}</th>
-              <th className="px-3 py-2 text-right font-medium">{t.arena.battles}</th>
+              <th className="px-3 py-2 text-left font-medium">
+                {t.arena.model}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">
+                {t.arena.elo}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">
+                {t.arena.winRate}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">
+                {t.arena.wins}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">
+                {t.arena.losses}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">
+                {t.arena.ties}
+              </th>
+              <th className="px-3 py-2 text-right font-medium">
+                {t.arena.battles}
+              </th>
             </tr>
           </thead>
           <tbody>

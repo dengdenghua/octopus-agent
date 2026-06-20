@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -362,4 +361,3 @@ export const OpenInCursor = (props: OpenInCursorProps) => {
     </DropdownMenuItem>
   );
 };
-

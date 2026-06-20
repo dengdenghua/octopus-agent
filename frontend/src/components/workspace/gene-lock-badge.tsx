@@ -17,12 +17,7 @@
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import {
-  DnaIcon,
-  SirenIcon,
-  ShieldCheckIcon,
-  ShieldIcon,
-} from "lucide-react";
+import { DnaIcon, SirenIcon, ShieldCheckIcon, ShieldIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -43,13 +38,7 @@ type LockStatus = {
   cooldowns_seconds?: Record<string, number>;
 };
 
-const LEVEL_NAMES = [
-  "初生",
-  "幼年",
-  "成长期",
-  "成熟",
-  "完全成熟",
-];
+const LEVEL_NAMES = ["初生", "幼年", "成长期", "成熟", "完全成熟"];
 
 const LEVEL_DESCRIPTIONS = [
   "所有自主进化禁用",
@@ -95,14 +84,17 @@ export function GeneLockBadge() {
         // a human approver. For the UI badge we always pass a
         // synthetic "ui-operator" signature · real deploys should
         // replace this with the logged-in user's ID.
-        const r = await fetch(`${getBackendBaseURL()}/api/gene-locks/maturity`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Human-Approver": "ui-operator",
+        const r = await fetch(
+          `${getBackendBaseURL()}/api/gene-locks/maturity`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Human-Approver": "ui-operator",
+            },
+            body: JSON.stringify({ level: target }),
           },
-          body: JSON.stringify({ level: target }),
-        }).then((r) => r.json());
+        ).then((r) => r.json());
         setMsg(
           r.ok
             ? `${status.maturity_level} → ${target}`
@@ -211,9 +203,7 @@ export function GeneLockBadge() {
                     ? new Date(status.panic.since * 1000).toLocaleString()
                     : "?"}
                 </div>
-                <div className="text-[10px]">
-                  原因: {status.panic.reason}
-                </div>
+                <div className="text-[10px]">原因: {status.panic.reason}</div>
               </div>
             )}
           </div>
@@ -266,10 +256,14 @@ export function GeneLockBadge() {
           )}
           <div className="mt-2 border-t border-border/30 pt-2 text-[10px] text-muted-foreground">
             Lv 0 初生 · 所有自主进化禁用
-            <br />Lv 1 幼年 · 允许应用变更，但需要人工确认
-            <br />Lv 2 成长期 · 允许调整权重
-            <br />Lv 3 成熟 · 允许自动晋升
-            <br />Lv 4 完全成熟 · 除不可变字段外不再限制
+            <br />
+            Lv 1 幼年 · 允许应用变更，但需要人工确认
+            <br />
+            Lv 2 成长期 · 允许调整权重
+            <br />
+            Lv 3 成熟 · 允许自动晋升
+            <br />
+            Lv 4 完全成熟 · 除不可变字段外不再限制
           </div>
         </div>
       )}
@@ -366,7 +360,9 @@ export function GeneLockControlCard({
             headers: enabled
               ? { "Content-Type": "application/json" }
               : { "X-Human-Approver": "ui-operator" },
-            body: enabled ? JSON.stringify({ reason: "ui-operator" }) : undefined,
+            body: enabled
+              ? JSON.stringify({ reason: "ui-operator" })
+              : undefined,
           },
         ),
       ),
@@ -478,7 +474,9 @@ export function GeneLockControlCard({
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-5 text-muted-foreground">
           <span>{strict ? "严格拦截不合规自修改" : "宽松模式只提示风险"}</span>
           <span>{LEVEL_DESCRIPTIONS[lvl]}</span>
-          {panic ? <span className="text-destructive">自主变更已暂停</span> : null}
+          {panic ? (
+            <span className="text-destructive">自主变更已暂停</span>
+          ) : null}
         </div>
       </div>
     );
@@ -505,7 +503,9 @@ export function GeneLockControlCard({
           <Badge variant={panic ? "destructive" : "outline"} className="h-7">
             {panic ? "紧急锁定中" : `Lv ${lvl} · ${LEVEL_NAMES[lvl]}`}
           </Badge>
-          {msg ? <span className="text-xs text-muted-foreground">{msg}</span> : null}
+          {msg ? (
+            <span className="text-xs text-muted-foreground">{msg}</span>
+          ) : null}
         </div>
       </div>
 

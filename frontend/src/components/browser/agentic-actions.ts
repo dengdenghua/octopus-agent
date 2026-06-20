@@ -50,7 +50,9 @@ export function parseActions(text: string): AgentAction[] {
         if (parsed && typeof parsed.type === "string") {
           out.push(parsed);
         }
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
     }
   }
   return out;
@@ -111,7 +113,8 @@ export async function runAction(
         return {
           ...base,
           ok: false,
-          error: "page agent actions are only available in the browser relay path",
+          error:
+            "page agent actions are only available in the browser relay path",
         };
       }
       case "navigate": {
@@ -174,7 +177,9 @@ export async function withActionTimeout<T>(
         timer = setTimeout(
           () =>
             reject(
-              new Error(`action timeout (${Math.round(timeoutMs / 1000)}s): ${label}`),
+              new Error(
+                `action timeout (${Math.round(timeoutMs / 1000)}s): ${label}`,
+              ),
             ),
           timeoutMs,
         );
@@ -205,12 +210,15 @@ export async function runActionWithRetry(
 }
 
 /* Implementation note. */
-export function formatResults(results: ActionResult[], pageInfo?: {
-  url: string;
-  title: string;
-  text: string;
-  pageAgent?: unknown;
-}): string {
+export function formatResults(
+  results: ActionResult[],
+  pageInfo?: {
+    url: string;
+    title: string;
+    text: string;
+    pageAgent?: unknown;
+  },
+): string {
   const lines: string[] = ["[操作执行结果]"];
   for (const r of results) {
     const tag = r.ok ? "✓" : "✗";
@@ -237,7 +245,9 @@ export function formatResults(results: ActionResult[], pageInfo?: {
       }
       return r.detail != null ? String(r.detail) : "ok";
     })();
-    lines.push(`${tag} ${r.action.type}${r.attempt ? ` (retry x${r.attempt})` : ""}: ${summary}`);
+    lines.push(
+      `${tag} ${r.action.type}${r.attempt ? ` (retry x${r.attempt})` : ""}: ${summary}`,
+    );
   }
   if (pageInfo) {
     lines.push("", "[当前页面]");
@@ -248,7 +258,9 @@ export function formatResults(results: ActionResult[], pageInfo?: {
       lines.push(`摘要: ${snippet}${pageInfo.text.length > 1500 ? "…" : ""}`);
     }
     if (pageInfo.pageAgent) {
-      lines.push(`pageAgent: ${JSON.stringify(pageInfo.pageAgent).slice(0, 6000)}`);
+      lines.push(
+        `pageAgent: ${JSON.stringify(pageInfo.pageAgent).slice(0, 6000)}`,
+      );
     }
   }
   return lines.join("\n");

@@ -73,7 +73,7 @@ describe("useAmbientSuggestions", () => {
     renderHook(() => useAmbientSuggestions("/some/project"));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const url = (fetchMock.mock.calls[0][0] as string);
+    const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain("/api/ambient-suggestions?project=");
     expect(url).toContain(encodeURIComponent("/some/project"));
   });
@@ -115,7 +115,9 @@ describe("useAmbientSuggestions", () => {
     });
 
     const calls = fetchMock.mock.calls.map((c) => c[0] as string);
-    expect(calls.some((u) => u.endsWith("/api/ambient-suggestions/run"))).toBe(true);
+    expect(calls.some((u) => u.endsWith("/api/ambient-suggestions/run"))).toBe(
+      true,
+    );
     expect(result.current.bucket?.suggestions).toHaveLength(2);
   });
 

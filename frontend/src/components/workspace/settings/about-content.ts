@@ -62,4 +62,3 @@ Finally, we want to express our heartfelt gratitude to the core authors:
 
 Without their vision, passion and dedication, \`Octopus\` would not be what it is today.
 `;
-

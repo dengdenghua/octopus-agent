@@ -75,11 +75,11 @@ def rewrite_file(path: Path) -> int:
             r"(from\s+" + re.escape(parent) + r"\s+import\s+)([^\n(]+)",
         )
 
-        def replace_names(match: re.Match) -> str:
+        def replace_names(match: re.Match, _name_map=name_map) -> str:
             head, body = match.group(1), match.group(2)
             tail = match.group(3) if match.lastindex == 3 else ""
             new_body = body
-            for old, new in name_map.items():
+            for old, new in _name_map.items():
                 # Replace only whole-word identifiers
                 new_body, n = re.subn(r"\b" + re.escape(old) + r"\b", new, new_body)
                 nonlocal replacements

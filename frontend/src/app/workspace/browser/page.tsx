@@ -1,10 +1,17 @@
-import { GlobeIcon, LaptopIcon, SmartphoneIcon, TabletIcon, XIcon } from "lucide-react";
+import {
+  GlobeIcon,
+  LaptopIcon,
+  SmartphoneIcon,
+  TabletIcon,
+  XIcon,
+} from "lucide-react";
 import {
   BrowserPanel,
   BrowserProvider,
   useBrowserPanel,
   type DevicePreset,
 } from "@/components/workspace/embedded-browser";
+import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -34,7 +41,7 @@ function BrowserPageBody() {
   const isPhone = mode !== "desktop";
 
   const devicePicker = (
-    <div className="flex items-center rounded border bg-muted/40 p-0.5">
+    <div className="flex items-center rounded-lg border border-border/60 bg-muted/35 p-0.5 shadow-sm">
       {PRESET_ORDER.map((preset) => {
         const Icon = DEVICE_SPECS[preset].Icon;
         const active = mode === preset;
@@ -44,8 +51,8 @@ function BrowserPageBody() {
             onClick={() => setMode(preset)}
             className={
               active
-                ? "rounded bg-background px-1.5 py-1 shadow-sm"
-                : "rounded px-1.5 py-1 hover:bg-background/60"
+                ? "rounded-md bg-background px-2 py-1 shadow-sm"
+                : "rounded-md px-2 py-1 hover:bg-background/70"
             }
             title={
               preset === "desktop"
@@ -69,17 +76,28 @@ function BrowserPageBody() {
   );
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden p-4">
+    <div className="flex h-full w-full flex-col overflow-hidden p-3">
       {/* Implementation note. */}
-      <div className="mx-auto mb-3 flex w-full max-w-6xl items-center justify-between gap-3">
-        <div className="text-[11px] text-muted-foreground">
-          {isPhone
-            ? t.browser.viewportHint(spec.label, spec.width, spec.height)
-            : ""}
+      <div className="mx-auto mb-2 flex w-full max-w-6xl flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="text-[11px] text-muted-foreground">
+            {isPhone
+              ? t.browser.viewportHint(spec.label, spec.width, spec.height)
+              : ""}
+          </div>
+          <CapabilityQualityStrip
+            surface="browser"
+            includeBrowserDesktop
+            className="rounded-lg px-3 py-2"
+          />
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center justify-end gap-1">
           {devicePicker}
-          <button onClick={toggle} className="rounded p-1 hover:bg-muted">
+          <button
+            onClick={toggle}
+            className="rounded-lg border border-transparent p-1.5 hover:border-border/60 hover:bg-muted"
+            aria-label="关闭浏览器预览"
+          >
             <XIcon className="size-4 text-muted-foreground" />
           </button>
         </div>
@@ -90,8 +108,8 @@ function BrowserPageBody() {
         <div
           className={
             isPhone
-              ? "workspace-panel flex flex-col overflow-hidden rounded-[2rem] border-[6px] border-foreground/80 bg-background shadow-2xl"
-              : "workspace-panel flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-[1.75rem]"
+              ? "flex flex-col overflow-hidden rounded-[1.75rem] border-[6px] border-foreground/80 bg-background shadow-2xl"
+              : "flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm"
           }
           style={
             isPhone
@@ -111,11 +129,13 @@ function BrowserPageBody() {
               : undefined
           }
         >
-          <div className="flex items-center gap-3 border-b px-4 py-3">
-            <GlobeIcon className="h-5 w-5 text-primary" />
-            <h1 className="font-semibold">{t.sidebar.browser}</h1>
+          <div className="flex h-11 items-center gap-2.5 border-b border-border/60 bg-muted/20 px-3">
+            <span className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <GlobeIcon className="size-4" />
+            </span>
+            <h1 className="text-sm font-semibold">{t.sidebar.browser}</h1>
           </div>
-          <div className="flex-1 overflow-hidden p-4">
+          <div className="flex-1 overflow-hidden bg-muted/15 p-2.5">
             <BrowserPanel />
           </div>
         </div>

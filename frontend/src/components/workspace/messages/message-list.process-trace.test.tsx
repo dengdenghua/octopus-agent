@@ -80,11 +80,13 @@ function messageListTree({
   lastTurnToolEvents = [],
   mode = "code",
   currentAgent = null,
+  completedAgentOutput = false,
 }: {
   thread: BaseStream<AgentThreadState>;
   liveToolEvents?: LiveToolEvent[];
   lastTurnToolEvents?: LiveToolEvent[];
   mode?: "chat" | "code";
+  completedAgentOutput?: boolean;
   currentAgent?: {
     name: string;
     display_name?: string | null;
@@ -102,6 +104,7 @@ function messageListTree({
           liveToolEvents={liveToolEvents}
           lastTurnToolEvents={lastTurnToolEvents}
           mode={mode}
+          completedAgentOutput={completedAgentOutput}
           currentAgent={currentAgent}
         />
       </ThreadProviders>
@@ -121,6 +124,7 @@ function renderMessageList(args: {
     avatar_url?: string | null;
     icon?: string | null;
   } | null;
+  completedAgentOutput?: boolean;
 }) {
   return renderWithProviders(messageListTree(args), {
     locale: args.locale ?? "en-US",
@@ -258,6 +262,38 @@ describe("MessageList process trace lifecycle", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("Replay 1 previous steps")).toBeInTheDocument();
   });
+
+  test("does not mark a delivered run red for partial tool failures", () => {
+    const messages: Message[] = [
+      message("user-1", "human", "Write a research report"),
+      message("assistant-1", "ai", "Report artifact generated."),
+    ];
+    const thread = mockThread({
+      messages,
+      error: new Error("some web searches failed"),
+    });
+    const { container } = renderMessageList({
+      thread,
+      completedAgentOutput: true,
+      lastTurnToolEvents: [
+        toolEvent("web_search", {
+          id: "search-error",
+          status: "error",
+          input: { query: "source timeout" },
+        }),
+        toolEvent("write_file", {
+          id: "write-final",
+          status: "done",
+          input: { path: "/tmp/workspace/output/final/report.md" },
+        }),
+      ],
+    });
+
+    expect(
+      container.querySelector('[data-turn-marker-status="error"]'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Report artifact generated.")).toBeInTheDocument();
+  });
 });
 
 describe("MessageList reasoning privacy", () => {
@@ -288,6 +324,30 @@ describe("MessageList reasoning privacy", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText(privateChineseReasoning)).not.toBeInTheDocument();
     expect(screen.queryByText(/SOUL\.md/)).not.toBeInTheDocument();
+  });
+
+  test("does not expose raw reasoning-only streaming messages", () => {
+    const leakedReasoning =
+      "好的，用户之前发了很长一段关于我是Octopus的系统指令，现在又发了当前日期，我应该先判断是否需要工具。";
+    const assistant: AIMessage = {
+      id: "assistant-reasoning-only",
+      type: "ai",
+      content: "",
+      additional_kwargs: {
+        reasoning_content: leakedReasoning,
+      },
+    };
+    const thread = mockThread({
+      messages: [message("user-1", "human", "请只回复收到"), assistant],
+      streamingMessage: assistant,
+      isLoading: true,
+    });
+
+    renderMessageList({ thread, locale: "zh-CN" });
+
+    expect(screen.queryByText(leakedReasoning)).not.toBeInTheDocument();
+    expect(screen.queryByText(/系统指令/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/当前日期/)).not.toBeInTheDocument();
   });
 
   test("renders explicitly public reasoning summaries without exposing raw reasoning", () => {

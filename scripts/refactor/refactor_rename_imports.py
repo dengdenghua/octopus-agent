@@ -9,7 +9,6 @@ context is NOT touched because the prefix `runtime.core.` is required).
 """
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 

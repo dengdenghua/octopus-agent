@@ -142,4 +142,3 @@ export function exportThreadAsJSON(thread: AgentThread, messages: Message[]) {
   const filename = `${sanitizeFilename(titleOfThread(thread))}.json`;
   downloadAsFile(json, filename, "application/json;charset=utf-8");
 }
-

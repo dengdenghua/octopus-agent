@@ -34,6 +34,7 @@ export interface LocalSlashContext {
 
 const VALID_MODES: ReadonlySet<ReasoningMode> = new Set([
   "chat",
+  "code",
   "react",
   "deep",
   "flash",

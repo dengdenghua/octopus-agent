@@ -199,6 +199,51 @@ def _role_defaults_to_cheap(role: str) -> bool:
     return role in _CHEAP_BY_DEFAULT_ROLES
 
 
+def _route_context_risk_level(context: dict[str, Any] | None) -> str:
+    ctx = context or {}
+    for key in (
+        "task_risk_level",
+        "risk_level",
+        "approval_risk_level",
+        "quality_risk_level",
+    ):
+        value = ctx.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "low"
+
+
+def _parallel_route_decision(
+    agent_id: str,
+    context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    ctx = context or {}
+    try:
+        from runtime.safety.evolution.subagent_routing import (
+            decide_subagent_route,
+        )
+        decision = decide_subagent_route(
+            role=agent_id,
+            risk_level=_route_context_risk_level(ctx),
+            review_queue_path=ctx.get("review_queue_path"),
+            subagent_policy_path=ctx.get("subagent_policy_path"),
+            enabled=bool(ctx.get("enable_subagent_fitness_routing", True)),
+        )
+        return decision.to_dict()
+    except Exception:  # noqa: BLE001
+        return {
+            "schema": "octopus.subagent_route_decision.v1",
+            "role": agent_id,
+            "action": "allow",
+            "reason": "subagent fitness routing unavailable",
+            "risk_level": _route_context_risk_level(ctx),
+            "verdict": "unknown",
+            "score": None,
+            "confidence": 0.0,
+            "evidence_item_ids": [],
+        }
+
+
 def _dedupe_names(names: list[str]) -> list[str]:
     return list(OrderedDict((name, None) for name in names if name).keys())
 
@@ -430,16 +475,19 @@ def _resolve_custom_agent_id(
         return requested, None
     lower = requested.lower()
     # Research-shaped → researcher (cheap model, broad search tools)
-    if any(hint in lower for hint in _RESEARCH_NAME_HINTS):
-        if "researcher" in allowed:
-            return "researcher", requested
+    if any(hint in lower for hint in _RESEARCH_NAME_HINTS) and "researcher" in allowed:
+        return "researcher", requested
     # Code-shaped → debugger or explorer
-    if any(hint in lower for hint in ("debug", "fix", "trace", "diagnose")):
-        if "debugger" in allowed:
-            return "debugger", requested
-    if any(hint in lower for hint in ("review", "critic", "audit_code")):
-        if "reviewer" in allowed:
-            return "reviewer", requested
+    if (
+        any(hint in lower for hint in ("debug", "fix", "trace", "diagnose"))
+        and "debugger" in allowed
+    ):
+        return "debugger", requested
+    if (
+        any(hint in lower for hint in ("review", "critic", "audit_code"))
+        and "reviewer" in allowed
+    ):
+        return "reviewer", requested
     # Unknown shape → general/explorer fallback
     for fallback in ("explorer", "researcher", "general"):
         if fallback in allowed:
@@ -929,11 +977,36 @@ def _call_agent_parallel(
         original_id = spec.get("agent_id_original") or spec["agent_id"]
         role_label = spec.get("role_label")
         task_label = spec.get("bb_key") or role_label or original_id
+        route_decision = _parallel_route_decision(
+            str(spec["agent_id"]),
+            spec.get("context"),
+        )
+        if route_decision.get("action") == "block":
+            return {
+                "agent_id": original_id,
+                "resolved_to": spec.get("agent_id"),
+                "custom_role": role_label,
+                "output": "",
+                "success": False,
+                "status": "blocked",
+                "error": str(
+                    route_decision.get("reason")
+                    or "subagent blocked by routing policy"
+                ),
+                "error_type": "subagent_route_blocked",
+                "spec_index": spec.get("spec_index"),
+                "task_label": task_label,
+                "bb_key": spec.get("bb_key"),
+                "task_preview": spec.get("task_preview"),
+                "subagent_route_decision": route_decision,
+            }
+        call_context = dict(spec.get("context") or {})
+        call_context["subagent_route_decision"] = route_decision
         try:
             result = call_subagent(
                 agent_id=spec["agent_id"],
                 prompt=spec["prompt"],
-                context=spec.get("context"),
+                context=call_context,
                 timeout_s=timeout_s,
                 session=session,
                 use_cheap_model=bool(spec.get("cheap")),
@@ -951,6 +1024,7 @@ def _call_agent_parallel(
         result["task_label"] = task_label
         result["bb_key"] = spec.get("bb_key")
         result["task_preview"] = spec.get("task_preview")
+        result["subagent_route_decision"] = route_decision
         # Retry once on transient failure. Per-spec retry, not per
         # parallel batch — one slow worker shouldn't block faster ones.
         if _is_transient_error(result):
@@ -958,7 +1032,7 @@ def _call_agent_parallel(
                 retry = call_subagent(
                     agent_id=spec["agent_id"],
                     prompt=spec["prompt"],
-                    context=spec.get("context"),
+                    context=call_context,
                     timeout_s=timeout_s,
                     session=session,
                     use_cheap_model=bool(spec.get("cheap")),
@@ -1107,6 +1181,7 @@ def _build_parallel_envelope(
             "retried": bool(r.get("retried") or r.get("retry_attempted")),
             "round_cap_exceeded": bool(r.get("round_cap_exceeded")),
             "partial": bool(r.get("partial")),
+            "subagent_route_decision": r.get("subagent_route_decision"),
         }
         if r.get("success"):
             success_entry = {**common, "output": output}

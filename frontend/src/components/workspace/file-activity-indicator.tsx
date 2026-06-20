@@ -62,17 +62,18 @@ export function FileActivityIndicator({ className }: Props) {
             onAnimationEnd={() => setFlashKey(null)}
           />
           <span className="truncate max-w-[140px]">
-            {latest ? shortPath(latest.path) : t.activityIndicators.filesCount(events.length)}
+            {latest
+              ? shortPath(latest.path)
+              : t.activityIndicators.filesCount(events.length)}
           </span>
         </button>
       </HoverCardTrigger>
-      <HoverCardContent
-        align="start"
-        className="w-[480px] p-2 text-[12px]"
-      >
+      <HoverCardContent align="start" className="w-[480px] p-2 text-[12px]">
         <div className="font-medium mb-1.5 flex items-center justify-between">
           <span>{t.activityIndicators.fileActivityTitle(events.length)}</span>
-          <span className="text-[10px] text-muted-foreground">{t.activityIndicators.realtimeLabel}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {t.activityIndicators.realtimeLabel}
+          </span>
         </div>
         <ul className="space-y-1 max-h-[60vh] overflow-y-auto">
           {[...events].reverse().map((e, i) => (
@@ -121,9 +122,7 @@ function FileOpRow({ event }: { event: FileOpEvent }) {
           {formatDelta(event.bytes_delta)}
         </span>
       </button>
-      {expanded && event.diff && (
-        <DiffBlock diff={event.diff} />
-      )}
+      {expanded && event.diff && <DiffBlock diff={event.diff} />}
     </li>
   );
 }
@@ -142,8 +141,12 @@ function DiffBlock({ diff }: { diff: string }) {
           key={i}
           className={cn(
             "block",
-            line.startsWith("+") && !line.startsWith("+++") && "text-emerald-600 dark:text-emerald-400",
-            line.startsWith("-") && !line.startsWith("---") && "text-rose-600 dark:text-rose-400",
+            line.startsWith("+") &&
+              !line.startsWith("+++") &&
+              "text-emerald-600 dark:text-emerald-400",
+            line.startsWith("-") &&
+              !line.startsWith("---") &&
+              "text-rose-600 dark:text-rose-400",
             line.startsWith("@@") && "text-sky-600 dark:text-sky-400",
             line.startsWith("+++") && "text-muted-foreground",
             line.startsWith("---") && "text-muted-foreground",
@@ -157,7 +160,9 @@ function DiffBlock({ diff }: { diff: string }) {
 }
 
 function ActionIcon({
-  action, className, onAnimationEnd,
+  action,
+  className,
+  onAnimationEnd,
 }: {
   action: FileOpEvent["action"];
   className?: string;

@@ -9,7 +9,11 @@ interface SelectionEditorProps {
   className?: string;
 }
 
-export function SelectionEditor({ onSubmit, isLoading, className }: SelectionEditorProps) {
+export function SelectionEditor({
+  onSubmit,
+  isLoading,
+  className,
+}: SelectionEditorProps) {
   const { t } = useI18n();
   const [isVisible, setIsVisible] = useState(false);
   const [selection, setSelection] = useState("");
@@ -21,13 +25,13 @@ export function SelectionEditor({ onSubmit, isLoading, className }: SelectionEdi
   // Handle text selection
   const handleSelectionChange = useCallback(() => {
     const selectedText = window.getSelection()?.toString() || "";
-    
+
     if (selectedText.length > 0) {
       const selectionObj = window.getSelection();
       if (selectionObj && selectionObj.rangeCount > 0) {
         const range = selectionObj.getRangeAt(0);
         const rect = range.getBoundingClientRect();
-        
+
         // Position the editor below the selection
         setPosition({
           x: rect.left + rect.width / 2,
@@ -39,7 +43,7 @@ export function SelectionEditor({ onSubmit, isLoading, className }: SelectionEdi
     } else {
       // Don't hide immediately to allow clicking the editor
       setTimeout(() => {
-        if (!containerRef.current?.matches(':hover')) {
+        if (!containerRef.current?.matches(":hover")) {
           setIsVisible(false);
           setInstruction("");
         }
@@ -49,7 +53,8 @@ export function SelectionEditor({ onSubmit, isLoading, className }: SelectionEdi
 
   useEffect(() => {
     document.addEventListener("selectionchange", handleSelectionChange);
-    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+    return () =>
+      document.removeEventListener("selectionchange", handleSelectionChange);
   }, [handleSelectionChange]);
 
   useEffect(() => {
@@ -73,15 +78,18 @@ export function SelectionEditor({ onSubmit, isLoading, className }: SelectionEdi
     window.getSelection()?.removeAllRanges();
   }, []);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-    if (e.key === "Escape") {
-      handleClose();
-    }
-  }, [handleSubmit, handleClose]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+      if (e.key === "Escape") {
+        handleClose();
+      }
+    },
+    [handleSubmit, handleClose],
+  );
 
   if (!isVisible) return null;
 
@@ -90,7 +98,7 @@ export function SelectionEditor({ onSubmit, isLoading, className }: SelectionEdi
       ref={containerRef}
       className={cn(
         "fixed z-50 animate-in fade-in zoom-in-95 duration-200",
-        className
+        className,
       )}
       style={{
         left: position.x,

@@ -1,4 +1,5 @@
-const isDev = typeof process !== "undefined" && process.env.NODE_ENV === "development";
+const isDev =
+  typeof process !== "undefined" && process.env.NODE_ENV === "development";
 
 export function swallow(error: unknown, context?: string) {
   if (isDev) {

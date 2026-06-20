@@ -8,22 +8,22 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from runtime.execution.tool_engine import ToolExecutor
 from runtime.core.graph_runtime import GraphRuntime
+from runtime.execution.suckers import SkillRegistry
+from runtime.execution.suckers.builtins import register_all
+from runtime.execution.suckers.write_skills import register_exec_skill
+from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import JSONLJournal
-from runtime.safety.auth import TrustEngine
 from runtime.platform.models import (
     ArmId,
     Budget,
     BudgetLimits,
 )
+from runtime.safety.auth import TrustEngine
 from runtime.safety.recovery import (
     ForgeConfig,
     SkillForge,
 )
-from runtime.execution.suckers import SkillRegistry
-from runtime.execution.suckers.builtins import register_all
-from runtime.execution.suckers.write_skills import register_exec_skill
 
 from .bugfix_demo import build_bugfix_graph, setup_buggy_project
 
@@ -214,7 +214,7 @@ def run_demo(
         # Implementation note.
         skills_after = set(registry.all_names())
         new_skills = skills_after - skills_before
-        forged_still_in_registry = new_skills & set(forge_result["promoted"])
+        new_skills & set(forge_result["promoted"])
         if verbose:
             print(c.bold(f"  ▸ after:  {len(skills_after)} skills in registry"))
             print(

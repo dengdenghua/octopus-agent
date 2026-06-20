@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import base64
+import struct
+import zlib
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +17,35 @@ def _make_png_b64(size: int = 16) -> str:
     """Return a minimal valid base64-encoded PNG-header bytes."""
     # Not a real PNG but enough to test save/decode path.
     return base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\x00" * size).decode()
+
+
+def _make_valid_png_b64(black_pixels: int = 1) -> str:
+    pixels = [(255, 255, 255)] * 16
+    for idx in range(min(16, max(0, black_pixels))):
+        pixels[idx] = (0, 0, 0)
+    rows = []
+    for y in range(4):
+        row = bytearray([0])
+        for pixel in pixels[y * 4: (y + 1) * 4]:
+            row.extend(pixel)
+        rows.append(bytes(row))
+    payload = b"".join(rows)
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0))
+        + _png_chunk(b"IDAT", zlib.compress(payload))
+        + _png_chunk(b"IEND", b"")
+    )
+    return base64.b64encode(png).decode()
+
+
+def _png_chunk(kind: bytes, payload: bytes) -> bytes:
+    return (
+        struct.pack(">I", len(payload))
+        + kind
+        + payload
+        + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+    )
 
 
 def test_screenshot_saves_file_to_disk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -51,6 +82,117 @@ def test_screenshot_strips_data_uri_prefix(tmp_path: Path, monkeypatch: pytest.M
 
     files = list((tmp_path / "artifacts").glob("screenshot-*.png"))
     assert len(files) == 1
+
+
+def test_screenshot_artifact_includes_pixel_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.execution.suckers import browser_act_skills as bas
+
+    monkeypatch.setattr(bas, "_artifacts_root", lambda: tmp_path / "artifacts")
+    events: list[dict] = []
+    token = bas._ACTIVE_ARTIFACT_EMITTER.set(events.append)
+    try:
+        bas._emit_screenshot_artifact(
+            {
+                "ok": True,
+                "data": _make_valid_png_b64(),
+                "width": 4,
+                "height": 4,
+            }
+        )
+    finally:
+        bas._ACTIVE_ARTIFACT_EMITTER.reset(token)
+
+    assert len(events) == 1
+    assert events[0]["pixel_assertion"]["schema"] == "octopus.browser_pixel_assertion.v1"
+    assert events[0]["pixel_assertion"]["ok"] is True
+    assert events[0]["pixel_assertion"]["unique_colors"] == 2
+
+
+def test_screenshot_artifact_includes_replay_gate_case_for_blank_pixels(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.execution.suckers import browser_act_skills as bas
+    from runtime.memory.learning.review_queue import ReviewQueue
+
+    monkeypatch.setattr(bas, "_artifacts_root", lambda: tmp_path / "artifacts")
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    events: list[dict] = []
+    token = bas._ACTIVE_ARTIFACT_EMITTER.set(events.append)
+    try:
+        bas._emit_screenshot_artifact(
+            {
+                "ok": True,
+                "data": _make_valid_png_b64(black_pixels=0),
+                "width": 4,
+                "height": 4,
+            }
+        )
+    finally:
+        bas._ACTIVE_ARTIFACT_EMITTER.reset(token)
+
+    assert len(events) == 1
+    assert events[0]["pixel_assertion"]["ok"] is False
+    assert events[0]["replay_gate_case"]["schema"] == (
+        "octopus.browser_pixel_replay_gate_case.v1"
+    )
+    assert events[0]["replay_gate_case"]["replay_gate"]["passed"] is False
+    assert events[0]["replay_gate_queue"]["created"] == 1
+
+    queue = ReviewQueue(tmp_path / "data" / "review_queue.json").items()
+    assert queue["items"][0]["priority"] == "P0"
+    assert queue["items"][0]["target_bucket"] == "browser_desktop_replay"
+    assert queue["items"][0]["candidate_kind"] == "browser_pixel_replay_gate_case"
+    assert queue["items"][0]["metadata"]["case_id"].startswith("browser-pixel::")
+    assert queue["items"][0]["metadata"]["replay"]["case_id"].startswith(
+        "browser-pixel::"
+    )
+    assert len(queue["items"][0]["metadata"]["replay"]["fingerprint"]) == 16
+    assert queue["items"][0]["metadata"]["replay_gate"]["passed"] is False
+    assert queue["items"][0]["metadata"]["replay_gate_case"]["replay_gate"]["reason"] == (
+        "browser_pixel_evidence_failed"
+    )
+
+
+def test_screenshot_artifact_includes_previous_pixel_comparison(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.execution.suckers import browser_act_skills as bas
+
+    monkeypatch.setattr(bas, "_artifacts_root", lambda: tmp_path / "artifacts")
+    events: list[dict] = []
+    emitter_token = bas._ACTIVE_ARTIFACT_EMITTER.set(events.append)
+    last_token = bas._LAST_SCREENSHOT_ARTIFACT.set(None)
+    try:
+        bas._emit_screenshot_artifact(
+            {
+                "ok": True,
+                "data": _make_valid_png_b64(black_pixels=1),
+                "width": 4,
+                "height": 4,
+            }
+        )
+        bas._emit_screenshot_artifact(
+            {
+                "ok": True,
+                "data": _make_valid_png_b64(black_pixels=3),
+                "width": 4,
+                "height": 4,
+            }
+        )
+    finally:
+        bas._LAST_SCREENSHOT_ARTIFACT.reset(last_token)
+        bas._ACTIVE_ARTIFACT_EMITTER.reset(emitter_token)
+
+    assert len(events) == 2
+    assert "pixel_comparison" not in events[0]
+    assert events[1]["pixel_comparison"]["schema"] == "octopus.browser_pixel_comparison.v1"
+    assert events[1]["pixel_comparison"]["ok"] is True
+    assert events[1]["pixel_comparison"]["changed_ratio"] == 0.125
 
 
 def test_screenshot_no_data_field_no_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

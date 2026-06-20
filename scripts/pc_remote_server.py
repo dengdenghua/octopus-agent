@@ -20,8 +20,8 @@ from fractions import Fraction
 
 sys.path.insert(0, "/Users/dangbei/Public/octopus/octopus-agent")
 import mss  # noqa: E402
-from PIL import Image  # noqa: E402
 import pyautogui  # noqa: E402
+from PIL import Image  # noqa: E402
 
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.0
@@ -39,10 +39,13 @@ W, H = pyautogui.size()  # logical size for input mapping (Retina-correct)
 
 # 选择 H.264 编码器（优先硬件 videotoolbox），否则降级 JPEG
 import av  # noqa: E402
+
 ENC_NAME = None
 for _n in ("h264_videotoolbox", "libx264"):
     try:
-        av.codec.Codec(_n, "w"); ENC_NAME = _n; break
+        av.codec.Codec(_n, "w")
+        ENC_NAME = _n
+        break
     except Exception:
         pass
 
@@ -55,7 +58,9 @@ def build_frame(ftype: int, is_key: bool, data: bytes) -> bytes:
 
 def make_encoder():
     cc = av.CodecContext.create(ENC_NAME, "w")
-    cc.width = EW; cc.height = EH; cc.pix_fmt = "yuv420p"
+    cc.width = EW
+    cc.height = EH
+    cc.pix_fmt = "yuv420p"
     cc.bit_rate = 4_000_000
     cc.framerate = Fraction(FPS, 1)
     cc.time_base = Fraction(1, FPS)
@@ -80,14 +85,16 @@ async def capture_loop():
             im = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX").resize((EW, EH))
             if enc is not None:
                 fr = av.VideoFrame.from_image(im)
-                fr.pts = pts; pts += 1
+                fr.pts = pts
+                pts += 1
                 for pkt in enc.encode(fr):
                     await server.push_pc_frame(build_frame(0x01, pkt.is_keyframe, bytes(pkt)))
                     sent += 1
                     if sent % 75 == 0:
                         log.info("sent %d H264 pkts (last %dB, key=%s)", sent, pkt.size, pkt.is_keyframe)
             else:
-                buf = io.BytesIO(); im.save(buf, "JPEG", quality=50)
+                buf = io.BytesIO()
+                im.save(buf, "JPEG", quality=50)
                 await server.push_pc_frame(build_frame(0x02, True, buf.getvalue()))
         except Exception as e:
             log.warning("capture error: %s", e)
@@ -100,7 +107,8 @@ async def on_remote_input(tentacle_id, params):
     nx = float(params.get("x", 0) or 0)
     ny = float(params.get("y", 0) or 0)
     text = params.get("text")
-    px = int(nx * W); py = int(ny * H)
+    px = int(nx * W)
+    py = int(ny * H)
 
     def do():
         if action == "tap":

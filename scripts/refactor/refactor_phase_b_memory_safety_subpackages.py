@@ -4,6 +4,7 @@ memory/<file>           → memory/<group>/<file>     (5 groups, 25 files)
 safety/<file>           → safety/<group>/<file>     (3 new groups + hooks, 11 files)
 """
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 

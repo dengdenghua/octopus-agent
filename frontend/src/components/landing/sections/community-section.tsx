@@ -1,4 +1,3 @@
-
 import { Github as GitHubLogoIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -20,11 +19,7 @@ export function CommunitySection() {
     >
       <div className="flex justify-center">
         <Button className="text-xl" size="lg" asChild>
-          <Link
-            to={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <Link to={GITHUB_URL} target="_blank" rel="noopener noreferrer">
             <GitHubLogoIcon />
             Contribute Now
           </Link>

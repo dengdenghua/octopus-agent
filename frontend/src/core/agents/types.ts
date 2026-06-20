@@ -58,6 +58,7 @@ export interface AgentWorldAgent {
   tool_groups?: string[] | null;
   extra_affinity?: string[];
   private_skills?: string[];
+  capabilities?: Record<string, unknown>;
   character_profile?: {
     gender?: string;
     apparent_age?: string;
@@ -160,4 +161,5 @@ export interface UpdateAgentRequest {
   model?: string | null;
   tool_groups?: string[] | null;
   soul?: string | null;
+  capabilities?: Record<string, unknown> | null;
 }

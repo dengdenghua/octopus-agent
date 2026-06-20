@@ -273,7 +273,7 @@ class _LazyString:
         return f"LazyString({self._key!r})"
 
 
-def L(key: str, **kwargs: Any) -> _LazyString:
+def L(key: str, **kwargs: Any) -> _LazyString:  # noqa: N802
     count = kwargs.pop("count", None)
     if count is not None and not isinstance(count, int):
         kwargs["count"] = count

@@ -85,7 +85,7 @@ class LlmConfig:
     # ── 预设工厂 ────────────────────────────────────────────
 
     @classmethod
-    def deepSeek(cls, api_key: str | None = None, model: str = "deepseek-chat") -> LlmConfig:
+    def deepSeek(cls, api_key: str | None = None, model: str = "deepseek-chat") -> LlmConfig:  # noqa: N802
         return cls(
             base_url="https://api.deepseek.com/v1",
             api_key=api_key or os.environ.get("DEEPSEEK_API_KEY", ""),
@@ -101,7 +101,7 @@ class LlmConfig:
         )
 
     @classmethod
-    def openAi(cls, api_key: str | None = None, model: str = "gpt-4o-mini") -> LlmConfig:
+    def openAi(cls, api_key: str | None = None, model: str = "gpt-4o-mini") -> LlmConfig:  # noqa: N802
         return cls(
             base_url="https://api.openai.com/v1",
             api_key=api_key or os.environ.get("OPENAI_API_KEY", ""),

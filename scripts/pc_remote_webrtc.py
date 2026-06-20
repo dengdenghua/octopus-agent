@@ -20,11 +20,15 @@ import sys
 sys.path.insert(0, "/Users/dangbei/Public/octopus/octopus-agent")
 import av  # noqa: E402
 import mss  # noqa: E402
-from PIL import Image  # noqa: E402
 import pyautogui  # noqa: E402
 from aiortc import (  # noqa: E402
-    RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCSessionDescription, VideoStreamTrack,
+    RTCConfiguration,
+    RTCIceServer,
+    RTCPeerConnection,
+    RTCSessionDescription,
+    VideoStreamTrack,
 )
+from PIL import Image  # noqa: E402
 
 from runtime.tentacle.transport.ws_server import TentacleWebSocketServer  # noqa: E402
 
@@ -78,7 +82,8 @@ def apply_input(params: dict):
     nx = float(params.get("x", 0) or 0)
     ny = float(params.get("y", 0) or 0)
     text = params.get("text")
-    px = int(nx * W); py = int(ny * H)
+    px = int(nx * W)
+    py = int(ny * H)
     if action == "tap":
         pyautogui.click(px, py)
     elif action == "rightclick":

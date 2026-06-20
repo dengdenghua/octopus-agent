@@ -137,7 +137,9 @@ export function AnnotationThread({
                   variant="ghost"
                   size="icon"
                   className="size-6"
-                  onClick={() => void unresolveAnnotation(annotation.annotation_id)}
+                  onClick={() =>
+                    void unresolveAnnotation(annotation.annotation_id)
+                  }
                 >
                   <Undo2 size={12} />
                 </Button>
@@ -151,7 +153,9 @@ export function AnnotationThread({
                   variant="ghost"
                   size="icon"
                   className="size-6"
-                  onClick={() => void resolveAnnotation(annotation.annotation_id)}
+                  onClick={() =>
+                    void resolveAnnotation(annotation.annotation_id)
+                  }
                 >
                   <CheckCircle2 size={12} />
                 </Button>
@@ -290,9 +294,7 @@ export function AnnotationSidebar({
       >
         <MessageSquarePlus size={32} strokeWidth={1.5} />
         <p className="text-sm">{t.annotations.noAnnotations}</p>
-        <p className="text-xs">
-          {t.annotations.noAnnotationsHint}
-        </p>
+        <p className="text-xs">{t.annotations.noAnnotationsHint}</p>
       </div>
     );
   }
@@ -312,7 +314,9 @@ export function AnnotationSidebar({
             onClick={() => setShowResolved((v) => !v)}
           >
             <RotateCcw size={12} className="mr-1" />
-            {showResolved ? t.annotations.hideResolved(resolvedCount) : t.annotations.showResolved(resolvedCount)}
+            {showResolved
+              ? t.annotations.hideResolved(resolvedCount)
+              : t.annotations.showResolved(resolvedCount)}
           </Button>
         )}
       </div>
@@ -382,7 +386,12 @@ export function AddAnnotationButton({
   }
 
   return (
-    <div className={cn("mt-1 flex flex-col gap-1.5 rounded-lg border bg-card p-2 shadow-sm", className)}>
+    <div
+      className={cn(
+        "mt-1 flex flex-col gap-1.5 rounded-lg border bg-card p-2 shadow-sm",
+        className,
+      )}
+    >
       <textarea
         ref={inputRef}
         className="min-h-[60px] w-full resize-none rounded-lg border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"

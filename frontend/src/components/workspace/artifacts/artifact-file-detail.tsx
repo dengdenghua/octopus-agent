@@ -9,7 +9,14 @@ import {
   SquareArrowOutUpRightIcon,
   XIcon,
 } from "lucide-react";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import type { StreamdownProps } from "streamdown";
 
@@ -31,20 +38,18 @@ import {
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { lazy } from "react";
 
-const CodeEditor = lazy(
-  () =>
-    import("@/components/workspace/code-editor").then((m) => ({
-      default: m.CodeEditor,
-    })),
+const CodeEditor = lazy(() =>
+  import("@/components/workspace/code-editor").then((m) => ({
+    default: m.CodeEditor,
+  })),
 );
 const LazyStreamdown = lazy(
   () => import("@/components/ai-elements/streamdown-host"),
 );
-const DiffViewer = lazy(
-  () =>
-    import("@/components/workspace/diff-viewer").then((m) => ({
-      default: m.DiffViewer,
-    })),
+const DiffViewer = lazy(() =>
+  import("@/components/workspace/diff-viewer").then((m) => ({
+    default: m.DiffViewer,
+  })),
 );
 import { useArtifactContent, useArtifactDiff } from "@/core/artifacts/hooks";
 import { artifactDisplayPath, urlOfArtifact } from "@/core/artifacts/utils";
@@ -224,10 +229,7 @@ export function ArtifactFileDetail({
                   icon={isInstalling ? LoaderIcon : PackageIcon}
                   label={t.common.install}
                   tooltip={t.common.install}
-                  disabled={
-                    isInstalling ||
-                    env.STATIC_WEBSITE_ONLY
-                  }
+                  disabled={isInstalling || env.STATIC_WEBSITE_ONLY}
                   onClick={handleInstallSkill}
                 />
               </Tooltip>
@@ -339,7 +341,11 @@ export function ArtifactFileDetail({
         {!isCodeFile && (
           <iframe
             className="size-full"
-            src={urlOfArtifact({ filepath: filepathFromProps, threadId, isMock })}
+            src={urlOfArtifact({
+              filepath: filepathFromProps,
+              threadId,
+              isMock,
+            })}
           />
         )}
       </ArtifactContent>
@@ -423,17 +429,17 @@ function HtmlPreview({
   }, [content, isWriteFile]);
 
   return (
-    <InspectOverlay enabled={canInspect} filepath={filepath} iframeRef={iframeRef}>
+    <InspectOverlay
+      enabled={canInspect}
+      filepath={filepath}
+      iframeRef={iframeRef}
+    >
       <iframe
         className="size-full"
         ref={iframeRef}
         sandbox="allow-scripts allow-forms"
         title="Artifact preview"
-        {...(isWriteFile
-          ? { srcDoc }
-          : url
-            ? { src: url }
-            : {})}
+        {...(isWriteFile ? { srcDoc } : url ? { src: url } : {})}
       />
     </InspectOverlay>
   );

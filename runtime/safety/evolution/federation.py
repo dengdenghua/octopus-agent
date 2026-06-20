@@ -164,7 +164,7 @@ class FederationHub:
                     f.unlink()
 
 
-import contextlib
+import contextlib  # noqa: E402
 
 __all__ = [
     "FederationConfig",

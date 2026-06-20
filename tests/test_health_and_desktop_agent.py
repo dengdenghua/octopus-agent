@@ -68,10 +68,10 @@ class TestDesktopOperatorAgent:
         assert agent.can_use("read_file")
 
     def test_not_in_default_preset_list(self):
-        """Implementation note."""
-        from runtime.execution.agents import AGENT_PRESET_FACTORIES
-        factory_names = {f.__name__ for f in AGENT_PRESET_FACTORIES}
-        assert "make_desktop_operator_agent" not in factory_names
+        """desktop_operator is a special persona, not part of the default roster."""
+        from runtime.execution.agents import make_all_agent_presets
+        roster_ids = {getattr(a, "agent_id", None) for a in make_all_agent_presets(_rt())}
+        assert "desktop_operator" not in roster_ids
 
     def test_general_agent_has_desktop_arm(self):
         """Implementation note."""

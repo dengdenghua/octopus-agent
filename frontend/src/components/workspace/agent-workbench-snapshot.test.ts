@@ -8,6 +8,7 @@ import {
   screenBlocksForAgent,
   useAgentWorkbenchSnapshot,
 } from "./agent-workbench-snapshot";
+import { hasFinalOutputArtifact } from "./agent-workbench-utils";
 
 function event(partial: Partial<LiveToolEvent>): LiveToolEvent {
   return {
@@ -179,6 +180,215 @@ describe("agent workbench snapshot", () => {
       "server-phase-1",
       "server-phase-2",
     ]);
+  });
+
+  test("settled final answers ignore stale server current phase ids", () => {
+    const snapshot = buildAgentWorkbenchSnapshot(
+      [
+        event({
+          id: "snapshot-stale",
+          name: "todo_write",
+          input: {
+            workbenchSnapshot: {
+              schemaVersion: 2,
+              version: 9,
+              status: "running",
+              phases: [
+                {
+                  id: "phase-1",
+                  index: 1,
+                  total: 3,
+                  title: "Phase 1: Pick market",
+                  status: "done",
+                },
+                {
+                  id: "phase-2",
+                  index: 2,
+                  total: 3,
+                  title: "Phase 2: Deep research",
+                  status: "running",
+                  activeItemId: "search-1",
+                },
+                {
+                  id: "phase-3",
+                  index: 3,
+                  total: 3,
+                  title: "Phase 3: Write report",
+                  status: "pending",
+                },
+              ],
+              currentPhaseId: "phase-2",
+              currentItemId: "search-1",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          },
+        }),
+        event({
+          id: "search-1",
+          name: "web_search",
+          status: "done",
+          startedAt: 1500,
+        }),
+      ],
+      { deriveAgentTiles, hasAnswer: true, runSettled: true },
+    );
+
+    expect(snapshot.phases.map((phase) => phase.status)).toEqual([
+      "done",
+      "done",
+      "done",
+    ]);
+    expect(snapshot.currentPhase?.id).toBe("phase-3");
+  });
+
+  test("treats generated final artifacts as completed output", () => {
+    const events = [
+      event({
+        id: "snapshot-stale",
+        name: "todo_write",
+        input: {
+          workbenchSnapshot: {
+            schemaVersion: 2,
+            version: 9,
+            status: "running",
+            phases: [
+              {
+                id: "phase-1",
+                index: 1,
+                total: 2,
+                title: "Phase 1: Research",
+                status: "done",
+              },
+              {
+                id: "phase-2",
+                index: 2,
+                total: 2,
+                title: "Phase 2: Write final report",
+                status: "running",
+                activeItemId: "search-failed",
+              },
+            ],
+            currentPhaseId: "phase-2",
+            currentItemId: "search-failed",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      }),
+      event({
+        id: "search-failed",
+        name: "web_search",
+        status: "error",
+        startedAt: 1500,
+        input: { query: "source that timed out" },
+      }),
+      event({
+        id: "write-final",
+        name: "write_file",
+        status: "done",
+        startedAt: 2000,
+        input: {
+          path: "/tmp/workspace/output/final/market_report.md",
+        },
+      }),
+    ];
+
+    expect(hasFinalOutputArtifact(events)).toBe(true);
+
+    const snapshot = buildAgentWorkbenchSnapshot(events, {
+      deriveAgentTiles,
+      hasAnswer: true,
+      runSettled: true,
+    });
+
+    expect(snapshot.visibleDiffEntries).toEqual([
+      expect.objectContaining({
+        created: true,
+        path: "/tmp/workspace/output/final/market_report.md",
+      }),
+    ]);
+    expect(snapshot.phases.map((phase) => phase.status)).toEqual([
+      "done",
+      "done",
+    ]);
+    expect(snapshot.currentPhase?.id).toBe("phase-2");
+  });
+
+  test("treats persisted artifact items as completed final output", () => {
+    const events = [
+      event({
+        id: "search-failed",
+        name: "web_search",
+        status: "error",
+        input: { query: "source timeout" },
+      }),
+      event({
+        id: "artifact-final",
+        name: "artifact",
+        status: "done",
+        startedAt: 2000,
+        input: {
+          path: "/tmp/workspace/output/final/market_report.pdf",
+          kind: "pdf",
+          title: "Market report",
+        },
+      }),
+    ];
+
+    expect(hasFinalOutputArtifact(events)).toBe(true);
+  });
+
+  test("treats updated report deliverables as completed output", () => {
+    const events = [
+      event({
+        id: "file-update",
+        name: "file_change",
+        status: "done",
+        startedAt: 2000,
+        input: {
+          changes: [
+            {
+              path: "/tmp/workspace/reports/ai_glasses_report.md",
+              op: "update",
+            },
+          ],
+        },
+      }),
+    ];
+
+    expect(hasFinalOutputArtifact(events)).toBe(true);
+  });
+
+  test("treats MCP write_text_file report outputs as completed output", () => {
+    const events = [
+      event({
+        id: "write-text-final",
+        name: "mcp:filesystem.write_text_file",
+        status: "done",
+        startedAt: 2000,
+        input: {
+          filePath: "/tmp/workspace/个人知识库自动化周报方案.md",
+          content: "# 个人知识库 + 自动化周报方案\n",
+        },
+      }),
+    ];
+
+    expect(hasFinalOutputArtifact(events)).toBe(true);
+  });
+
+  test("does not treat read-only report sources as final output", () => {
+    const events = [
+      event({
+        id: "read-source",
+        name: "read_file",
+        status: "done",
+        startedAt: 2000,
+        input: {
+          path: "/tmp/source/industry_report.pdf",
+        },
+      }),
+    ];
+
+    expect(hasFinalOutputArtifact(events)).toBe(false);
   });
 
   test("keeps observed frame ids attached to their server phases", () => {

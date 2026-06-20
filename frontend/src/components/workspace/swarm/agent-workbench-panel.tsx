@@ -54,8 +54,11 @@ export function AgentWorkbenchPanel({
   const isThreadTimeline = session.id.startsWith("thread-");
   // Composer is only for the standalone/manual workbench. Thread-mirrored
   // sessions are rendered as the agent's live timeline, not as a template.
-  const [composerOpen, setComposerOpen] = useState(!hasAgents && !isThreadTimeline);
-  const selected = session.agents.find((a) => a.id === selectedAgentId) ?? session.agents[0];
+  const [composerOpen, setComposerOpen] = useState(
+    !hasAgents && !isThreadTimeline,
+  );
+  const selected =
+    session.agents.find((a) => a.id === selectedAgentId) ?? session.agents[0];
   const isArchived = session.status === "done";
   const effectiveMode = composerOpen ? "clone" : mode;
   const orderedTrace = useMemo(
@@ -78,7 +81,10 @@ export function AgentWorkbenchPanel({
     [orderedTrace, replayIndex, effectiveMode],
   );
   const selectedEntries = useMemo(
-    () => (selected && effectiveMode !== "result" ? timelineEntries.filter((t) => t.agentId === selected.id) : []),
+    () =>
+      selected && effectiveMode !== "result"
+        ? timelineEntries.filter((t) => t.agentId === selected.id)
+        : [],
     [timelineEntries, selected, effectiveMode],
   );
 
@@ -98,11 +104,20 @@ export function AgentWorkbenchPanel({
       setReplayPlaying(false);
       return;
     }
-    const timer = window.setTimeout(() => {
-      setReplayIndex((value) => Math.min(value + 1, orderedTrace.length));
-    }, Math.max(80, 450 / replaySpeed));
+    const timer = window.setTimeout(
+      () => {
+        setReplayIndex((value) => Math.min(value + 1, orderedTrace.length));
+      },
+      Math.max(80, 450 / replaySpeed),
+    );
     return () => window.clearTimeout(timer);
-  }, [effectiveMode, orderedTrace.length, replayIndex, replayPlaying, replaySpeed]);
+  }, [
+    effectiveMode,
+    orderedTrace.length,
+    replayIndex,
+    replayPlaying,
+    replaySpeed,
+  ]);
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -164,7 +179,9 @@ export function AgentWorkbenchPanel({
       {!isThreadTimeline && composerOpen && (
         <div className="border-b border-border/60 bg-muted/20 p-3">
           <DispatchComposer
-            initialPrompt={effectiveMode === "clone" ? session.sourcePrompt : undefined}
+            initialPrompt={
+              effectiveMode === "clone" ? session.sourcePrompt : undefined
+            }
             onLaunched={() => setComposerOpen(false)}
           />
         </div>
@@ -264,7 +281,9 @@ export function AgentWorkbenchPanel({
                 setReplayPlaying(false);
               }}
               onSpeed={() => {
-                setReplaySpeed((value) => value === 1 ? 2 : value === 2 ? 4 : 1);
+                setReplaySpeed((value) =>
+                  value === 1 ? 2 : value === 2 ? 4 : 1,
+                );
               }}
             />
           )}
@@ -281,7 +300,10 @@ export function AgentWorkbenchPanel({
                   />
                 )}
                 <HandoffSummary session={session} />
-                <TraceFeed entries={timelineEntries} emptyHint={t.agentWorkbench.traceFeedEmpty} />
+                <TraceFeed
+                  entries={timelineEntries}
+                  emptyHint={t.agentWorkbench.traceFeedEmpty}
+                />
               </div>
             ) : (
               <>
@@ -295,7 +317,10 @@ export function AgentWorkbenchPanel({
                       />
                     )}
                     <HandoffSummary session={session} />
-                    <TraceFeed entries={timelineEntries} emptyHint={t.agentWorkbench.traceFeedEmpty} />
+                    <TraceFeed
+                      entries={timelineEntries}
+                      emptyHint={t.agentWorkbench.traceFeedEmpty}
+                    />
                   </div>
                 )}
                 {view === "computer" && (
@@ -371,29 +396,34 @@ function PlanSummary({
           const report = reportByPhase.get(phase.phaseIndex);
           const phaseVisual = getPhaseVisual(report?.status);
           return (
-          <div key={phase.phaseIndex} className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-[11px]">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-1.5 font-medium">
-                <phaseVisual.Icon className={cn("size-3.5 shrink-0", phaseVisual.className)} />
-                <span className="truncate">Phase {phase.phaseIndex + 1}</span>
-              </span>
-              <span className="text-muted-foreground">
-                {phase.parallel ? "parallel" : "serial"}
-                {report ? ` · ${report.status}` : ""}
-              </span>
-            </div>
-            <div className="mt-1 text-muted-foreground">
-              {phase.taskIds.join(" · ")}
-            </div>
-            {report && (
-              <div className="mt-2 grid grid-cols-4 gap-1 text-[10px] text-muted-foreground">
-                <Metric label="ok" value={report.succeeded} />
-                <Metric label="fail" value={report.failed} />
-                <Metric label="handoff" value={report.handoffCount} />
-                <Metric label="ms" value={Math.round(report.wallMs)} />
+            <div
+              key={phase.phaseIndex}
+              className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-[11px]"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                  <phaseVisual.Icon
+                    className={cn("size-3.5 shrink-0", phaseVisual.className)}
+                  />
+                  <span className="truncate">Phase {phase.phaseIndex + 1}</span>
+                </span>
+                <span className="text-muted-foreground">
+                  {phase.parallel ? "parallel" : "serial"}
+                  {report ? ` · ${report.status}` : ""}
+                </span>
               </div>
-            )}
-          </div>
+              <div className="mt-1 text-muted-foreground">
+                {phase.taskIds.join(" · ")}
+              </div>
+              {report && (
+                <div className="mt-2 grid grid-cols-4 gap-1 text-[10px] text-muted-foreground">
+                  <Metric label="ok" value={report.succeeded} />
+                  <Metric label="fail" value={report.failed} />
+                  <Metric label="handoff" value={report.handoffCount} />
+                  <Metric label="ms" value={Math.round(report.wallMs)} />
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -524,12 +554,18 @@ function HandoffSummary({ session }: { session: SwarmSession }) {
             {(handoff.nodeIds.length > 0 || handoff.artifacts.length > 0) && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {handoff.nodeIds.map((nodeId) => (
-                  <span key={nodeId} className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <span
+                    key={nodeId}
+                    className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                  >
                     {nodeId}
                   </span>
                 ))}
                 {handoff.artifacts.slice(0, 3).map((artifact) => (
-                  <span key={artifact} className="max-w-44 truncate rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  <span
+                    key={artifact}
+                    className="max-w-44 truncate rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                  >
                     {artifact}
                   </span>
                 ))}
@@ -550,7 +586,11 @@ function ViewSwitch({
   onChange: (v: View) => void;
 }) {
   const { t } = useI18n();
-  const items: { id: View; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  const items: {
+    id: View;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }[] = [
     { id: "tasks", label: t.agentWorkbench.taskListView, icon: ListChecksIcon },
     { id: "computer", label: t.agentWorkbench.computerView, icon: MonitorIcon },
     { id: "report", label: t.agentWorkbench.reportView, icon: FileTextIcon },
@@ -593,9 +633,24 @@ function ModeSwitch({
   onClone: () => void;
 }) {
   const items = [
-    { id: "replay" as const, label: "Replay", icon: PlayIcon, action: onReplay },
-    { id: "result" as const, label: "Result", icon: FileTextIcon, action: onResult },
-    { id: "clone" as const, label: "Clone", icon: GitForkIcon, action: onClone },
+    {
+      id: "replay" as const,
+      label: "Replay",
+      icon: PlayIcon,
+      action: onReplay,
+    },
+    {
+      id: "result" as const,
+      label: "Result",
+      icon: FileTextIcon,
+      action: onResult,
+    },
+    {
+      id: "clone" as const,
+      label: "Clone",
+      icon: GitForkIcon,
+      action: onClone,
+    },
   ];
   return (
     <div className="flex items-center gap-0.5 rounded-lg border border-border/60 bg-muted/30 p-0.5 text-xs">
@@ -631,7 +686,9 @@ function ComputerView({
   entries: TraceEntry[];
 }) {
   const { t } = useI18n();
-  const computerEntries = entries.filter((e) => e.kind === "read" || e.kind === "tool");
+  const computerEntries = entries.filter(
+    (e) => e.kind === "read" || e.kind === "tool",
+  );
   if (computerEntries.length === 0) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-xs">
@@ -708,7 +765,9 @@ function ReportView({
   if (!hasResult && !hasError && !file) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-xs">
-        {agent?.status === "done" ? t.agentWorkbench.reportPending : t.agentWorkbench.agentRunning}
+        {agent?.status === "done"
+          ? t.agentWorkbench.reportPending
+          : t.agentWorkbench.agentRunning}
       </div>
     );
   }

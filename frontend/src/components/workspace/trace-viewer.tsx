@@ -1,4 +1,3 @@
-
 import {
   ActivityIcon,
   AlertCircleIcon,
@@ -170,7 +169,9 @@ function TraceListItem({
     [trace.spans],
   );
 
-  const hasError = trace.spans.some((s) => s.status === "error" || s.status === "failed");
+  const hasError = trace.spans.some(
+    (s) => s.status === "error" || s.status === "failed",
+  );
 
   return (
     <button
@@ -188,7 +189,9 @@ function TraceListItem({
           {trace.agent_name || trace.trace_id.slice(0, 12)}
         </div>
         <div className="text-muted-foreground flex items-center gap-2 text-[10px]">
-          <span>{trace.spans.length} {t.traces.spans}</span>
+          <span>
+            {trace.spans.length} {t.traces.spans}
+          </span>
           <span>{formatDuration(totalMs)}</span>
         </div>
       </div>
@@ -234,7 +237,10 @@ function WaterfallRow({
       <div className="flex w-20 shrink-0 items-center gap-1">
         <div className="relative h-3 flex-1 overflow-hidden rounded-lg bg-muted/50">
           <div
-            className={cn("absolute inset-y-0 left-0 rounded-lg", statusBarBg(node.span.status))}
+            className={cn(
+              "absolute inset-y-0 left-0 rounded-lg",
+              statusBarBg(node.span.status),
+            )}
             style={{ width: `${barWidthPct}%` }}
           />
         </div>
@@ -305,10 +311,7 @@ function SpanDetail({
             </div>
             <div className="space-y-1">
               {span.events.map((ev, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg border p-2 text-[10px]"
-                >
+                <div key={i} className="rounded-lg border p-2 text-[10px]">
                   <div className="text-foreground/80 font-mono font-medium">
                     {ev.name}
                   </div>
@@ -344,7 +347,10 @@ export function TraceViewer({ className }: { className?: string }) {
 
   const fetchTraces = useCallback(async () => {
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/trace/recent?limit=20`, { headers: authHeaders() });
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/trace/recent?limit=20`,
+        { headers: authHeaders() },
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as { traces: Trace[] };
       setTraces(data.traces ?? []);
@@ -382,7 +388,11 @@ export function TraceViewer({ className }: { className?: string }) {
     try {
       const res = await fetch(`${getBackendBaseURL()}/api/trace/${traceId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { success: boolean; trace?: Trace; error?: string };
+      const data = (await res.json()) as {
+        success: boolean;
+        trace?: Trace;
+        error?: string;
+      };
       if (data.success && data.trace) {
         setSelectedTrace(data.trace);
         setSelectedSpan(null);
@@ -412,7 +422,10 @@ export function TraceViewer({ className }: { className?: string }) {
 
   const totalMs = useMemo(() => {
     if (!selectedTrace) return 0;
-    return selectedTrace.spans.reduce((acc, s) => acc + (s.duration_ms ?? 0), 0);
+    return selectedTrace.spans.reduce(
+      (acc, s) => acc + (s.duration_ms ?? 0),
+      0,
+    );
   }, [selectedTrace]);
 
   // ---- Handlers -----------------------------------------------------------

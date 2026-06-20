@@ -65,7 +65,6 @@ ReAct path is still the tool mechanism for everyone else.
 from __future__ import annotations
 
 import contextlib
-import json
 import logging
 import threading
 import time
@@ -81,6 +80,13 @@ from runtime.core.cerebrum.todo_protocol import (
     context_mode,
     render_todo_protocol_guidance,
     should_require_todo_protocol,
+)
+from runtime.execution.tool_engine import (
+    NormalizedToolCall,
+    normalize_step_tool_result,
+    normalize_tool_call,
+    normalize_tool_result,
+    output_signals_error,
 )
 from runtime.execution.tool_spec_builder import (  # re-exported
     build_anthropic_tool_specs,
@@ -194,7 +200,7 @@ def _reflection_checkpoint_message(round_i: int, max_rounds: int) -> str:
 
 
 def _execute_tool_call(
-    stack: Any, call: ToolCall,
+    stack: Any, call: ToolCall | NormalizedToolCall | dict[str, Any],
 ) -> tuple[str, bool]:
     """Run one tool_use via the existing executor.
 
@@ -205,20 +211,24 @@ def _execute_tool_call(
     executor = getattr(stack, "executor", None)
     if executor is None:
         return ("(executor unavailable)", True)
+    try:
+        normalized = normalize_tool_call(call, origin="native")
+    except ValueError as exc:
+        return (f"(invalid tool call: {exc})", True)
 
     # Use execute_step when available so agentic tool calls get the
     # same scope/cwd injection, hooks, immunity, budget accounting,
     # and journal integration as planner/ReAct tool calls.
     try:
         registry = executor.registry
-        if not registry.has(call.name):
-            return (f"(skill not found: {call.name})", True)
+        if not registry.has(normalized.name):
+            return (f"(skill not found: {normalized.name})", True)
         try:
-            if not registry.is_enabled(call.name):
-                return (f"(skill disabled: {call.name})", True)
+            if not registry.is_enabled(normalized.name):
+                return (f"(skill disabled: {normalized.name})", True)
         except (AttributeError, TypeError, ValueError):  # noqa: BLE001 — is_enabled check unsupported by this registry; proceed to get()
             pass
-        skill = registry.get(call.name)
+        skill = registry.get(normalized.name)
     except (AttributeError, TypeError, KeyError) as exc:
         return (f"(registry error: {exc})", True)
 
@@ -237,9 +247,9 @@ def _execute_tool_call(
             session = current_session()
             step = executor.execute_step(
                 0,
-                f"agentic:{call.id}",
-                SkillId(call.name),
-                dict(call.input),
+                f"agentic:{normalized.id}",
+                SkillId(normalized.name),
+                dict(normalized.arguments),
                 caller="agentic",
                 task_id=task_id,
                 arm_id=ArmId("agentic"),
@@ -251,26 +261,20 @@ def _execute_tool_call(
             )
             output = step.result.output
             if step.result.status != "success":
-                if isinstance(output, str):
-                    rendered_error = output
-                else:
-                    try:
-                        rendered_error = json.dumps(
-                            output,
-                            ensure_ascii=False,
-                            default=str,
-                        )
-                    except (TypeError, ValueError):
-                        rendered_error = repr(output)
+                result = normalize_step_tool_result(
+                    step,
+                    origin="native",
+                    max_chars=TOOL_OUTPUT_MAX_CHARS,
+                )
                 reason = step.result.error_type or step.result.status
-                return (rendered_error or f"({reason})", True)
+                return (result.rendered or f"({reason})", True)
         except (RuntimeError, ValueError, TypeError, OSError) as exc:
             return (f"(skill error: {type(exc).__name__}: {exc})", True)
     else:
         # Fall back to direct handler invocation only for lightweight test
         # doubles that do not implement the executor contract.
         try:
-            output = skill.handler(**call.input)
+            output = skill.handler(**normalized.arguments)
         except TypeError as exc:
             # Handler signature mismatch · surface the error so the
             # model can correct its arg names on the next round.
@@ -286,24 +290,13 @@ def _execute_tool_call(
     # Without this, a skill that cleanly returns ``{"ok": False}``
     # looks identical to one that succeeded · observability blind spot
     # found in ``benchmarks/bench_b3_failure_injection.py``.
-    is_error = _is_semantic_error(output)
-
-    # Normalize to string · the standard tool_result content shape
-    # accepts a string or a list of content blocks; string is simpler.
-    if isinstance(output, str):
-        rendered = output
-    else:
-        try:
-            rendered = json.dumps(output, ensure_ascii=False, default=str)
-        except (TypeError, ValueError):
-            rendered = repr(output)
-
-    if len(rendered) > TOOL_OUTPUT_MAX_CHARS:
-        rendered = (
-            rendered[:TOOL_OUTPUT_MAX_CHARS]
-            + f"\n\n...(truncated, {len(rendered) - TOOL_OUTPUT_MAX_CHARS} more chars)"
-        )
-    return (rendered, is_error)
+    result = normalize_tool_result(
+        normalized,
+        output,
+        origin="native",
+        max_chars=TOOL_OUTPUT_MAX_CHARS,
+    )
+    return (result.rendered, result.is_error)
 
 
 def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
@@ -318,10 +311,34 @@ def _session_metadata_from_intent(intent: ParsedIntent) -> dict[str, Any]:
             "extra_workspaces",
             "workspace_path",
             "sandbox_mode",
+            "permission_mode",
+            "approval_policy",
+            "execution_environment",
+            "capability_mode",
+            "code_mode",
+            "agent_mode",
+            "project_signals",
         ):
             value = nested.get(key)
             if value is not None:
                 metadata[key] = value
+
+    for key in (
+        "mode",
+        "team_id",
+        "extra_workspaces",
+        "sandbox_mode",
+        "permission_mode",
+        "approval_policy",
+        "execution_environment",
+        "capability_mode",
+        "code_mode",
+        "agent_mode",
+        "project_signals",
+    ):
+        value = user_context.get(key)
+        if value is not None:
+            metadata.setdefault(key, value)
 
     workspace_path = user_context.get("workspace_path")
     if isinstance(workspace_path, str) and workspace_path.strip():
@@ -352,16 +369,7 @@ def _is_semantic_error(output: Any) -> bool:
     AND an explicit non-empty ``error`` IS treated as error — rare
     but possible signal of a warning the skill wants to surface.
     """
-    if not isinstance(output, dict):
-        return False
-    ok = output.get("ok")
-    if ok is False:
-        return True
-    err = output.get("error")
-    if isinstance(err, str) and err.strip() and ok is not True:
-        return True
-    status = output.get("status")
-    return bool(isinstance(status, str) and status.lower() in ("error", "failed", "failure"))
+    return output_signals_error(output)
 
 
 def stream_agentic_fallback(
@@ -670,7 +678,7 @@ def stream_agentic_fallback(
                 )
             ),
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort; logged
         _logger.debug("memory hub prompt injection failed", exc_info=True)
         memory_section = ""
     if memory_section:

@@ -37,21 +37,35 @@ import { useThreadStreaming } from "./context";
 
 import { MarkdownContent } from "./markdown-content";
 
-const LazyStreamdown = lazy(() => import("@/components/ai-elements/streamdown-host"));
+const LazyStreamdown = lazy(
+  () => import("@/components/ai-elements/streamdown-host"),
+);
 
 function getStatusIcon(status: SubtaskStatus) {
   if (status === "completed") return <CheckCircleIcon className="size-3" />;
-  if (status === "failed") return <XCircleIcon className="size-3 text-red-500" />;
-  if (status === "cancelled") return <XCircleIcon className="size-3 text-yellow-500" />;
-  if (status === "timed_out") return <XCircleIcon className="size-3 text-orange-500" />;
-  if (status === "pending") return <PauseCircleIcon className="size-3 text-muted-foreground" />;
-  if (isSubtaskActive(status)) return <Loader2Icon className="size-3 animate-spin" />;
+  if (status === "failed")
+    return <XCircleIcon className="size-3 text-red-500" />;
+  if (status === "cancelled")
+    return <XCircleIcon className="size-3 text-yellow-500" />;
+  if (status === "timed_out")
+    return <XCircleIcon className="size-3 text-orange-500" />;
+  if (status === "pending")
+    return <PauseCircleIcon className="size-3 text-muted-foreground" />;
+  if (isSubtaskActive(status))
+    return <Loader2Icon className="size-3 animate-spin" />;
   return <ClipboardListIcon className="size-3" />;
 }
 
-function getStatusLabel(status: SubtaskStatus, t: ReturnType<typeof useI18n>["t"]): string {
+function getStatusLabel(
+  status: SubtaskStatus,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   const label = t.subagents[status as keyof typeof t.subagents];
-  return (typeof label === "string" ? label : undefined) ?? SUBTASK_STATUS_LABELS[status] ?? status;
+  return (
+    (typeof label === "string" ? label : undefined) ??
+    SUBTASK_STATUS_LABELS[status] ??
+    status
+  );
 }
 
 export function SubtaskCard({
@@ -72,7 +86,10 @@ export function SubtaskCard({
   const task = useSubtask(taskId);
   const { subgraphStreams } = useThreadStreaming();
   const subgraphStream = task ? subgraphStreams[task.id] : undefined;
-  const icon = useMemo(() => task ? getStatusIcon(task.status) : null, [task]);
+  const icon = useMemo(
+    () => (task ? getStatusIcon(task.status) : null),
+    [task],
+  );
   const isActive = task ? isSubtaskActive(task.status) : false;
 
   // Hoisted above the ``if (!task) return`` guard so the hook fires
@@ -89,7 +106,12 @@ export function SubtaskCard({
 
   if (!task) {
     return (
-      <div className={cn("rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground", className)}>
+      <div
+        className={cn(
+          "rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground",
+          className,
+        )}
+      >
         {taskId}
       </div>
     );
@@ -100,12 +122,7 @@ export function SubtaskCard({
       className={cn("relative w-full gap-2 rounded-lg border py-0", className)}
       open={!collapsed}
     >
-      <div
-        className={cn(
-          "ambilight z-[-1]",
-          isActive ? "enabled" : "",
-        )}
-      ></div>
+      <div className={cn("ambilight z-[-1]", isActive ? "enabled" : "")}></div>
       {isActive && (
         <>
           <ShineBorder
@@ -126,7 +143,11 @@ export function SubtaskCard({
                 {task.avatarEmoji && (
                   <span
                     className="flex size-6 shrink-0 items-center justify-center rounded-lg text-xs"
-                    style={task.hue != null ? { background: `hsl(${task.hue} 70% 92%)` } : undefined}
+                    style={
+                      task.hue != null
+                        ? { background: `hsl(${task.hue} 70% 92%)` }
+                        : undefined
+                    }
                   >
                     {task.avatarEmoji}
                   </span>
@@ -139,7 +160,7 @@ export function SubtaskCard({
                         {task.name ?? task.description}
                       </Shimmer>
                     ) : (
-                      task.name ?? task.description
+                      (task.name ?? task.description)
                     )
                   }
                   icon={<ClipboardListIcon />}
@@ -150,7 +171,9 @@ export function SubtaskCard({
                   <div
                     className={cn(
                       "text-muted-foreground flex items-center gap-1 text-xs font-normal",
-                      task.status === "failed" ? "text-red-500 dark:text-red-400 opacity-60" : "",
+                      task.status === "failed"
+                        ? "text-red-500 dark:text-red-400 opacity-60"
+                        : "",
                     )}
                   >
                     {icon}
@@ -214,21 +237,28 @@ export function SubtaskCard({
                       key={msg.id ?? `step-${idx}`}
                       label={explainLastToolCall(msg, t)}
                       icon={
-                        idx === task.messages!.length - 1 && isActive
-                          ? <Loader2Icon className="size-4 animate-spin" />
-                          : <CheckCircleIcon className="size-4 text-green-500 dark:text-green-400" />
+                        idx === task.messages!.length - 1 && isActive ? (
+                          <Loader2Icon className="size-4 animate-spin" />
+                        ) : (
+                          <CheckCircleIcon className="size-4 text-green-500 dark:text-green-400" />
+                        )
                       }
                     />
                   );
                 }
-                const content = typeof msg.content === "string" ? msg.content : "";
+                const content =
+                  typeof msg.content === "string" ? msg.content : "";
                 if (content.trim()) {
                   return (
                     <ChainOfThoughtStep
                       key={msg.id ?? `thought-${idx}`}
                       label={
                         <MarkdownContent
-                          content={content.length > 400 ? content.slice(0, 400) + "…" : content}
+                          content={
+                            content.length > 400
+                              ? content.slice(0, 400) + "…"
+                              : content
+                          }
                           isLoading={false}
                           rehypePlugins={rehypePlugins}
                         />
@@ -278,40 +308,64 @@ export function SubtaskCard({
           )}
           {task.status === "cancelled" && (
             <ChainOfThoughtStep
-              label={<div className="text-yellow-600 dark:text-yellow-400">{task.error ?? t.subtask.cancelled}</div>}
+              label={
+                <div className="text-yellow-600 dark:text-yellow-400">
+                  {task.error ?? t.subtask.cancelled}
+                </div>
+              }
               icon={<XCircleIcon className="size-4 text-yellow-500" />}
             ></ChainOfThoughtStep>
           )}
           {task.status === "timed_out" && (
             <ChainOfThoughtStep
-              label={<div className="text-orange-500 dark:text-orange-400">{task.error ?? t.subtask.timedOut}</div>}
+              label={
+                <div className="text-orange-500 dark:text-orange-400">
+                  {task.error ?? t.subtask.timedOut}
+                </div>
+              }
               icon={<XCircleIcon className="size-4 text-orange-500" />}
             ></ChainOfThoughtStep>
           )}
-          {isActive && subgraphStream && (() => {
-            const raw = subgraphStream.content;
-            const text = typeof raw === "string"
-              ? raw
-              : Array.isArray(raw)
-                ? raw
-                    .filter((b): b is Extract<typeof raw[number], { type: "text" }> => typeof b === "object" && b !== null && "type" in b && b.type === "text")
-                    .map((b) => b.text)
-                    .join("")
-                : "";
-            if (!text.trim()) return null;
-            return (
-              <ChainOfThoughtStep
-                label={
-                  <MarkdownContent
-                    content={text.length > 600 ? text.slice(0, 600) + "…" : text}
-                    isLoading={isActive}
-                    rehypePlugins={rehypePlugins}
-                  />
-                }
-                icon={<Loader2Icon className="size-4 animate-spin" />}
-              />
-            );
-          })()}
+          {isActive &&
+            subgraphStream &&
+            (() => {
+              const raw = subgraphStream.content;
+              const text =
+                typeof raw === "string"
+                  ? raw
+                  : Array.isArray(raw)
+                    ? raw
+                        .filter(
+                          (
+                            b,
+                          ): b is Extract<
+                            (typeof raw)[number],
+                            { type: "text" }
+                          > =>
+                            typeof b === "object" &&
+                            b !== null &&
+                            "type" in b &&
+                            b.type === "text",
+                        )
+                        .map((b) => b.text)
+                        .join("")
+                    : "";
+              if (!text.trim()) return null;
+              return (
+                <ChainOfThoughtStep
+                  label={
+                    <MarkdownContent
+                      content={
+                        text.length > 600 ? text.slice(0, 600) + "…" : text
+                      }
+                      isLoading={isActive}
+                      rehypePlugins={rehypePlugins}
+                    />
+                  }
+                  icon={<Loader2Icon className="size-4 animate-spin" />}
+                />
+              );
+            })()}
         </ChainOfThoughtContent>
       </div>
     </ChainOfThought>

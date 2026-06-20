@@ -3,4 +3,3 @@ export interface Todo {
   status: string;
   activeForm?: string;
 }
-

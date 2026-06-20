@@ -1,4 +1,3 @@
-
 import { UserCircleIcon, UsersIcon } from "lucide-react";
 import { useMemo } from "react";
 
@@ -24,7 +23,12 @@ export function normalizeTeamMode(
   // ``chat``, which is what the backend always treated them as.
   if (value === "chat" || value === "group_chat") return "chat";
   if (value === "free" || value === "free_chat") return "chat";
-  if (value === "cowork" || value === "swarm" || value === "debate" || value === "pipeline") {
+  if (
+    value === "cowork" ||
+    value === "swarm" ||
+    value === "debate" ||
+    value === "pipeline"
+  ) {
     return "cowork";
   }
   return "chat";
@@ -67,7 +71,12 @@ export function TeamModePicker({
   );
 
   return (
-    <div className={cn("relative flex items-center rounded-full bg-muted/50 p-[3px] ring-1 ring-border/20", className)}>
+    <div
+      className={cn(
+        "relative flex items-center rounded-full bg-muted/50 p-[3px] ring-1 ring-border/20",
+        className,
+      )}
+    >
       <div
         className="absolute top-[3px] bottom-[3px] rounded-full bg-background shadow-sm ring-1 ring-border/40 transition-all duration-300 ease-out"
         style={{
@@ -91,7 +100,12 @@ export function TeamModePicker({
                 : "text-muted-foreground/60 hover:text-muted-foreground",
             )}
           >
-            <Icon className={cn("size-3.5 transition-colors duration-200", active && mode.activeIconColor)} />
+            <Icon
+              className={cn(
+                "size-3.5 transition-colors duration-200",
+                active && mode.activeIconColor,
+              )}
+            />
             {label}
           </button>
         );
@@ -112,8 +126,6 @@ export function TeamModeDescription({
   const desc = t.teamMode[descKey];
 
   return (
-    <p className={cn("text-muted-foreground text-xs", className)}>
-      {desc}
-    </p>
+    <p className={cn("text-muted-foreground text-xs", className)}>{desc}</p>
   );
 }

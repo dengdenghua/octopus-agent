@@ -58,14 +58,21 @@ export function DiagnosticsPanel({
     setLoading(true);
     try {
       const base = getBackendBaseURL();
-      const params = new URLSearchParams({ thread_id: threadId, workspace_path: workDir });
+      const params = new URLSearchParams({
+        thread_id: threadId,
+        workspace_path: workDir,
+      });
       const res = await fetch(`${base}/api/debug/session-info?${params}`);
       if (res.ok) setInfo(await res.json());
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
     setLoading(false);
   }, [threadId, workDir]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
@@ -80,7 +87,11 @@ export function DiagnosticsPanel({
           disabled={loading}
           className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
         >
-          {loading ? <Loader2Icon className="size-3 animate-spin" /> : <RefreshCwIcon className="size-3" />}
+          {loading ? (
+            <Loader2Icon className="size-3 animate-spin" />
+          ) : (
+            <RefreshCwIcon className="size-3" />
+          )}
         </button>
       </div>
 
@@ -116,16 +127,28 @@ export function DiagnosticsPanel({
 
             <Section title="Project">
               <Row label="Type" value={info.project.kind} />
-              <Row label="Checks" value={info.project.checks.join(", ") || "none"} />
+              <Row
+                label="Checks"
+                value={info.project.checks.join(", ") || "none"}
+              />
             </Section>
 
             {info.thread_metadata && (
               <Section title="Thread">
                 <Row label="Mode" value={info.thread_metadata.mode ?? "—"} />
-                <Row label="Sandbox" value={info.thread_metadata.sandbox_mode ?? "—"} />
-                <Row label="Agent" value={info.thread_metadata.agent_name ?? "—"} />
+                <Row
+                  label="Sandbox"
+                  value={info.thread_metadata.sandbox_mode ?? "—"}
+                />
+                <Row
+                  label="Agent"
+                  value={info.thread_metadata.agent_name ?? "—"}
+                />
                 {info.thread_metadata.workspace_path && (
-                  <Row label="Persisted WD" value={info.thread_metadata.workspace_path} />
+                  <Row
+                    label="Persisted WD"
+                    value={info.thread_metadata.workspace_path}
+                  />
                 )}
               </Section>
             )}
@@ -133,13 +156,22 @@ export function DiagnosticsPanel({
             {info.write_scope && (
               <Section title="Write Scope">
                 {info.write_scope.error ? (
-                  <div className="text-[10px] text-rose-500">{info.write_scope.error}</div>
+                  <div className="text-[10px] text-rose-500">
+                    {info.write_scope.error}
+                  </div>
                 ) : (
                   <>
                     <Row label="Mode" value={info.write_scope.mode} />
-                    <Row label="Requested" value={info.write_scope.requested_mode} />
+                    <Row
+                      label="Requested"
+                      value={info.write_scope.requested_mode}
+                    />
                     {info.write_scope.roots.map((r, i) => (
-                      <Row key={i} label={i === 0 ? "Primary root" : `Root ${i + 1}`} value={r} />
+                      <Row
+                        key={i}
+                        label={i === 0 ? "Primary root" : `Root ${i + 1}`}
+                        value={r}
+                      />
                     ))}
                   </>
                 )}
@@ -163,10 +195,18 @@ export function DiagnosticsPanel({
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">{title}</div>
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+        {title}
+      </div>
       <div className="space-y-0.5 ml-1">{children}</div>
     </div>
   );
@@ -193,7 +233,9 @@ function PreviewDiagnosticRow({ item }: { item: PreviewDiagnostic }) {
         <span
           className={cn(
             "font-medium uppercase",
-            isError ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400",
+            isError
+              ? "text-rose-600 dark:text-rose-400"
+              : "text-amber-600 dark:text-amber-400",
           )}
         >
           {item.source}
@@ -232,7 +274,9 @@ function StatusRow({ label, ok }: { label: string; ok: boolean }) {
       ) : (
         <AlertTriangleIcon className="size-3 text-amber-500" />
       )}
-      <span className={ok ? "text-emerald-600" : "text-amber-600"}>{ok ? "Yes" : "No"}</span>
+      <span className={ok ? "text-emerald-600" : "text-amber-600"}>
+        {ok ? "Yes" : "No"}
+      </span>
     </div>
   );
 }

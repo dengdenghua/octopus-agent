@@ -36,6 +36,11 @@
 | `ask_user_question.py` | ask_user_question · pause-and-ask skill. |
 | `blackboard_skills.py` | blackboard_skills · expose the turn-scoped shared dict as 3 skills. |
 | `browser_act_skills.py` | — |
+| `browser_backend.py` | Unified browser automation backend — the seam over three tracks. |
+| `browser_backends.py` | Real BrowserBackend adapters over the three automation tracks. |
+| `browser_backends_mock.py` | Mock browser backend — scripted, deterministic, no runtime needed. |
+| `browser_dom_js.py` | Shared in-page JavaScript for browser perception. |
+| `browser_session_worker.py` | Persistent, thread-affine browser sessions for agent browser skills. |
 | `browser_skills.py` | — |
 | `builtins.py` | — |
 | `capability_skills.py` | — |
@@ -45,11 +50,13 @@
 | `computer_skills.py` | — |
 | `computer_uia_skills.py` | — |
 | `computer_use_loop.py` | — |
-| `config_interface.py` | — |
+| `crawler_skills.py` | — |
 | `cron_skills.py` | cron_skills · let the agent self-schedule a future turn from inside a turn. |
 | `delegation_budget.py` | Smart per-turn delegation budget. |
 | `delegation_skills.py` | — |
+| `desktop_grounding.py` | Semantic grounding for the desktop vision loop. |
 | `ephemeral_agents.py` | Ephemeral sub-agent roles · lightweight personas for one-shot delegation tasks (``researcher`` / ``debugger`` / ``reviewer`` / …). |
+| `ephemeral_injection_gate.py` | Prompt-injection taint gate for ephemeral sub-agent tool calls. |
 | `ephemeral_runner.py` | LLM-backed runner for ephemeral sub-agent roles. |
 | `forged_persistence.py` | — |
 | `fs_search_skills.py` | — |

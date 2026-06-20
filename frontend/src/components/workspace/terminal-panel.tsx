@@ -17,7 +17,12 @@ interface TerminalPanelProps {
   onClose?: () => void;
 }
 
-export function TerminalPanel({ sessionId, cwd, className, onClose }: TerminalPanelProps) {
+export function TerminalPanel({
+  sessionId,
+  cwd,
+  className,
+  onClose,
+}: TerminalPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -50,7 +55,9 @@ export function TerminalPanel({ sessionId, cwd, className, onClose }: TerminalPa
           termRef.current.write(msg.data);
         } else if (msg.type === "exit") {
           setHasOutput(true);
-          termRef.current?.writeln(`\r\n[Process exited with code ${msg.code}]`);
+          termRef.current?.writeln(
+            `\r\n[Process exited with code ${msg.code}]`,
+          );
           setConnected(false);
         } else if (msg.type === "error") {
           setHasOutput(true);
@@ -107,7 +114,11 @@ export function TerminalPanel({ sessionId, cwd, className, onClose }: TerminalPa
     connect();
 
     const ro = new ResizeObserver(() => {
-      try { fit.fit(); } catch (e) { swallow(e); }
+      try {
+        fit.fit();
+      } catch (e) {
+        swallow(e);
+      }
     });
     ro.observe(containerRef.current);
 
@@ -124,7 +135,9 @@ export function TerminalPanel({ sessionId, cwd, className, onClose }: TerminalPa
     const base = getBackendBaseURL() || window.location.origin;
     try {
       await fetch(`${base}/api/terminal/kill/${sessionId}`, { method: "POST" });
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
     termRef.current?.clear();
     setHasOutput(false);
     setConnectionError(false);
@@ -132,16 +145,20 @@ export function TerminalPanel({ sessionId, cwd, className, onClose }: TerminalPa
   }, [sessionId, connect]);
 
   return (
-    <div className={cn("flex h-full flex-col bg-white text-slate-950", className)}>
+    <div
+      className={cn("flex h-full flex-col bg-white text-slate-950", className)}
+    >
       <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <TerminalIcon className="size-3.5" />
           <span className="text-sm font-semibold text-slate-950">Terminal</span>
           <span className="font-medium">powershell</span>
-          <span className={cn(
-            "size-1.5 rounded-full",
-            connected ? "bg-emerald-400" : "bg-rose-400"
-          )} />
+          <span
+            className={cn(
+              "size-1.5 rounded-full",
+              connected ? "bg-emerald-400" : "bg-rose-400",
+            )}
+          />
         </div>
         <div className="flex items-center gap-1">
           <button

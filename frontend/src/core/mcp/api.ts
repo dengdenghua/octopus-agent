@@ -5,7 +5,9 @@ import type { MCPConfig } from "./types";
 
 async function assertOk(response: Response, label: string): Promise<void> {
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ detail: response.statusText }));
+    const err = await response
+      .json()
+      .catch(() => ({ detail: response.statusText }));
     throw new Error(
       (err as { detail?: string }).detail ?? `${label}: ${response.statusText}`,
     );

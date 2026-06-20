@@ -101,7 +101,7 @@ export function buildAgentWorkbenchSnapshot(
       observedPhaseBlockIds,
     ) ?? derived.phases;
   const currentPhase =
-    currentPhaseFromServerSnapshot(serverSnapshot, phases) ??
+    currentPhaseFromServerSnapshot(serverSnapshot, phases, options) ??
     derived.currentPhase;
   const currentBlocks = currentPhase
     ? blocks.filter((block) => currentPhase.blockIds.includes(block.id))
@@ -253,8 +253,17 @@ function uniqueBlockIds(blockIds: string[]): string[] {
 function currentPhaseFromServerSnapshot(
   snapshot: WorkbenchSnapshotV2 | null,
   phases: AgentPhase[],
+  options: AgentWorkbenchSnapshotOptions,
 ): AgentPhase | null {
   if (!snapshot || phases.length === 0) return null;
+  if (
+    options.runSettled &&
+    options.hasAnswer &&
+    !options.runFailed &&
+    phases.every((phase) => phase.status === "done")
+  ) {
+    return phases[phases.length - 1] ?? null;
+  }
   if (snapshot.currentPhaseId) {
     const explicit = phases.find(
       (phase) => phase.id === snapshot.currentPhaseId,
@@ -298,10 +307,15 @@ function serverPhaseStatus(
 ): AgentPhase["status"] {
   if (status === "done") return "done";
   if (status === "error") return "error";
+  if (
+    options.runSettled &&
+    options.hasAnswer &&
+    !options.runFailed &&
+    !options.paused
+  ) {
+    return "done";
+  }
   if (status === "running" || status === "waiting_approval") {
-    if (options.runSettled && options.hasAnswer && !options.runFailed) {
-      return "done";
-    }
     return "running";
   }
   return "pending";

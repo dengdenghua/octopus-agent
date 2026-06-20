@@ -9,7 +9,12 @@ import {
   MIN_AGGREGATION_SIZE,
 } from "./message-grouping";
 
-function aiToolCallMsg(id: string, name: string, args: any = {}, tcId?: string) {
+function aiToolCallMsg(
+  id: string,
+  name: string,
+  args: any = {},
+  tcId?: string,
+) {
   return {
     id,
     type: "ai",
@@ -152,7 +157,9 @@ describe("groupActivities", () => {
     const chunks = groupActivities(messages as any);
     expect(chunks.length).toBe(1);
     if (chunks[0].kind === "activity") {
-      expect(chunks[0].items[0].label.length < longCmd.length + 10).toBeTruthy();
+      expect(
+        chunks[0].items[0].label.length < longCmd.length + 10,
+      ).toBeTruthy();
       expect(chunks[0].items[0].label.endsWith("...")).toBeTruthy();
     }
   });
@@ -178,7 +185,13 @@ describe("groupActivities", () => {
   test("tool result message with error status marks item as error", () => {
     const messages = [
       aiToolCallMsg("a1", "bash", { command: "ls" }, "tc-a1"),
-      { id: "t1", type: "tool", content: "boom", tool_call_id: "tc-a1", status: "error" },
+      {
+        id: "t1",
+        type: "tool",
+        content: "boom",
+        tool_call_id: "tc-a1",
+        status: "error",
+      },
       aiToolCallMsg("a2", "bash", { command: "pwd" }, "tc-a2"),
       toolResultMsg("t2", "tc-a2"),
     ];
@@ -215,7 +228,11 @@ describe("groupActivities", () => {
 
   test("realtime file edits classify as file_ops", () => {
     const messages = [
-      aiToolCallMsg("a1", "edit_text_file", { path: "/a.ts", lines_added: 5, lines_removed: 2 }),
+      aiToolCallMsg("a1", "edit_text_file", {
+        path: "/a.ts",
+        lines_added: 5,
+        lines_removed: 2,
+      }),
       aiToolCallMsg("a2", "write_text_file", { path: "/b.ts", lines_added: 1 }),
     ];
     const chunks = groupActivities(messages as any);

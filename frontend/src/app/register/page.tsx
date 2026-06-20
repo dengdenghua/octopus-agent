@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRightIcon, SparklesIcon } from "lucide-react";
@@ -16,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
+
+const octopusLogoUrl = `${import.meta.env.BASE_URL}images/octopus.svg`;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -52,7 +53,9 @@ export default function RegisterPage() {
       toast.success(t.registerPage.toastSuccess);
       navigate("/login");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.registerPage.toastFailed);
+      toast.error(
+        error instanceof Error ? error.message : t.registerPage.toastFailed,
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -60,8 +63,10 @@ export default function RegisterPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]">
-        <div className="animate-pulse">{t.registerPage.loadingText}</div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-pulse text-sm text-muted-foreground">
+          {t.registerPage.loadingText}
+        </div>
       </div>
     );
   }
@@ -72,112 +77,143 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#08080c]">
-      <div className="absolute inset-0 css-starfield" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background text-foreground">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(ellipse at top, color-mix(in oklch, var(--primary) 10%, transparent), transparent 55%), radial-gradient(ellipse at bottom right, color-mix(in oklch, var(--primary) 8%, transparent), transparent 50%)`,
+        }}
+      />
+      <div className="pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-1/2 rounded-full bg-primary/15 blur-3xl" />
 
-      <div className="relative z-10 grid w-full max-w-5xl gap-10 px-4 md:grid-cols-[1.05fr_0.95fr] md:px-6">
-        <div className="hidden flex-col justify-center md:flex">
-          <div className="max-w-xl space-y-5">
-            <div className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-white/65 backdrop-blur-sm">
-              <SparklesIcon className="size-3.5 text-white/70" />
+      <div className="relative z-10 grid w-full max-w-6xl items-center gap-12 px-6 py-12 md:grid-cols-2 lg:gap-16">
+        <div className="hidden flex-col justify-center space-y-8 md:flex">
+          <div className="inline-flex items-center gap-2.5">
+            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
+              <img src={octopusLogoUrl} alt="" className="size-6" />
+            </div>
+            <span className="text-base font-semibold tracking-tight text-foreground">
+              Octopus Agent OS
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+              <SparklesIcon className="size-3" />
               {t.registerPage.badgeText}
             </div>
-            <div className="space-y-3">
-              <h1 className="text-5xl font-bold tracking-tight text-white">
-                {t.registerPage.heroTitleLine1}
-                <span className="block text-white/80">
-                  {t.registerPage.heroTitleLine2}
-                </span>
-              </h1>
-              <p className="max-w-lg text-base leading-7 text-white/45">
-                {t.registerPage.heroDescription}
-              </p>
-            </div>
+            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight text-foreground lg:text-[2.75rem]">
+              {t.registerPage.heroTitleLine1}
+              <span className="block text-muted-foreground">
+                {t.registerPage.heroTitleLine2}
+              </span>
+            </h1>
+            <p className="max-w-md text-base leading-relaxed text-muted-foreground">
+              {t.registerPage.heroDescription}
+            </p>
           </div>
         </div>
 
-        <Card className="border-white/10 bg-white/[0.06] shadow-2xl shadow-black/25 backdrop-blur-xl">
-          <CardHeader className="text-center">
-            <div className="flex items-center justify-center gap-2 mb-4">
-              <div className="flex size-11 items-center justify-center rounded-xl border border-white/12 bg-white/[0.04] text-white/80 shadow-sm">
-                <svg width="21" height="21" viewBox="0 0 512 512" fill="none" aria-hidden="true">
-                  <path d="M256 32C167.6 32 96 103.6 96 192c0 52.8 25.6 99.6 65.2 128.8C128 348 96 404 96 448c0 17.7 14.3 32 32 32s32-14.3 32-32c0-28 16-68 40-96 8 4 16.4 7.2 25.2 9.6-4 26.4-9.2 56-9.2 86.4 0 17.7 14.3 32 32 32s32-14.3 32-32c0-26.4 4-52 8-76 12-2.4 23.6-6 34.8-11.2C348 384 368 420 368 448c0 17.7 14.3 32 32 32s32-14.3 32-32c0-48-36-108-72-147.2C399.6 271.6 416 233.6 416 192c0-88.4-71.6-160-160-160zm0 64c53 0 96 43 96 96s-43 96-96 96-96-43-96-96 43-96 96-96z" fill="currentColor"/>
-                  <circle cx="224" cy="176" r="20" fill="currentColor"/>
-                  <circle cx="288" cy="176" r="20" fill="currentColor"/>
-                  <circle cx="228" cy="180" r="10" fill="#08080c"/>
-                  <circle cx="292" cy="180" r="10" fill="#08080c"/>
-                </svg>
-              </div>
+        <div className="mx-auto w-full max-w-sm">
+          <div className="mb-6 flex items-center justify-center gap-2 md:hidden">
+            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
+              <img src={octopusLogoUrl} alt="" className="size-6" />
             </div>
-            <CardTitle className="text-2xl">
-              <span className="text-white">{t.registerPage.cardTitle}</span>
-            </CardTitle>
-            <CardDescription>{t.registerPage.cardDescription}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="username">{t.registerPage.usernameLabel}</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder={t.registerPage.usernamePlaceholder}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
-                  autoFocus
-                />
+            <span className="text-sm font-semibold tracking-tight text-foreground">
+              Octopus Agent OS
+            </span>
+          </div>
+
+          <Card>
+            <CardHeader className="space-y-1.5 pb-4 text-center">
+              <div className="mb-2 flex items-center justify-center">
+                <div className="flex size-11 items-center justify-center rounded-xl border border-border bg-muted shadow-sm">
+                  <img src={octopusLogoUrl} alt="" className="size-7" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">{t.registerPage.emailLabel}</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
-                />
+              <CardTitle className="text-xl font-semibold tracking-tight text-foreground">
+                {t.registerPage.cardTitle}
+              </CardTitle>
+              <CardDescription>
+                {t.registerPage.cardDescription}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-2">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">
+                    {t.registerPage.usernameLabel}
+                  </Label>
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder={t.registerPage.usernamePlaceholder}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                    autoFocus
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">{t.registerPage.emailLabel}</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    autoComplete="email"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">
+                    {t.registerPage.passwordLabel}
+                  </Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder={t.registerPage.passwordPlaceholder}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">
+                    {t.registerPage.confirmPasswordLabel}
+                  </Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder={t.registerPage.confirmPasswordPlaceholder}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting
+                    ? t.registerPage.submitting
+                    : t.registerPage.submitButton}
+                  {!isSubmitting && <ArrowRightIcon className="size-4" />}
+                </Button>
+              </form>
+              <div className="mt-4 text-center text-sm text-muted-foreground">
+                {t.registerPage.alreadyHaveAccount}{" "}
+                <Link
+                  to="/login"
+                  className="text-primary hover:text-primary/80"
+                >
+                  {t.registerPage.loginLink}
+                </Link>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">{t.registerPage.passwordLabel}</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder={t.registerPage.passwordPlaceholder}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">{t.registerPage.confirmPasswordLabel}</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder={t.registerPage.confirmPasswordPlaceholder}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </div>
-              <Button
-                type="submit"
-                className="w-full bg-white text-[#08080c] hover:bg-white/90"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? t.registerPage.submitting : t.registerPage.submitButton}
-                {!isSubmitting && <ArrowRightIcon className="size-4" />}
-              </Button>
-            </form>
-            <div className="mt-4 text-center text-sm text-muted-foreground">
-              {t.registerPage.alreadyHaveAccount}{" "}
-              <Link to="/login" className="text-white/70 hover:text-white">
-                {t.registerPage.loginLink}
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

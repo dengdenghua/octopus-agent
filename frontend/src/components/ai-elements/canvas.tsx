@@ -20,4 +20,3 @@ export const Canvas = ({ children, ...props }: CanvasProps) => (
     {children}
   </ReactFlow>
 );
-

@@ -404,8 +404,8 @@ describe("MessageGroup reasoning grouping", () => {
     );
 
     expect(
-      screen.getByText("这个问题需要先确认赛道边界，否则机会点会太泛。"),
-    ).toBeInTheDocument();
+      screen.queryByText("这个问题需要先确认赛道边界，否则机会点会太泛。"),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText("Phase 1: 先拆分候选细分赛道。"),
     ).toBeInTheDocument();
@@ -568,10 +568,12 @@ describe("MessageGroup reasoning grouping", () => {
 
     expect(screen.queryByText("已调用")).not.toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
-    expect(screen.getByText("继续检查输出文件。")).toBeInTheDocument();
+    expect(screen.queryByText("继续检查输出文件。")).not.toBeInTheDocument();
+    expect(screen.getByText("执行动作")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("过程回放 2 步"));
+    fireEvent.click(screen.getByText("过程回放 1 步"));
 
+    expect(screen.getByText("整理调研结果")).toBeInTheDocument();
     expect(screen.getByText("\u6267\u884c\u52a8\u4f5c")).toBeInTheDocument();
     expect(screen.queryByText(/ipython/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Action:/)).not.toBeInTheDocument();

@@ -13,6 +13,7 @@ from runtime.safety.approval.approval_gate import (
 from runtime.safety.audit.trust_gateway import (
     TrustGatewayApprovalProvider,
     evaluate_tool_trust,
+    summarize_trust_denials,
     trace_metadata_for_tool,
 )
 
@@ -110,6 +111,50 @@ def test_trust_gateway_provider_records_static_allow_to_trace(tmp_path: Path) ->
     assert trust["source"] == "static_policy"
     assert trust["static_decision"] == "allow"
     assert trust["reason"] == "safe reads"
+
+
+def test_trust_denial_summary_groups_static_denies(tmp_path: Path) -> None:
+    trace = AgentTraceStore(tmp_path / "trace.sqlite")
+    fallback = _FallbackProvider()
+    policy = ApprovalPolicy(
+        rules=(
+            ApprovalRule(
+                effect="deny",
+                tool="exec_shell",
+                args_contains="rm -rf",
+                reason="no destructive shell",
+            ),
+        )
+    )
+    provider = TrustGatewayApprovalProvider(
+        static_policy=policy,
+        fallback=fallback,
+        trace_store=trace,
+        turn_id="turn-deny",
+        agent_id="agent-a",
+    )
+
+    try:
+        decision = provider.request(
+            ApprovalRequest(
+                thread_id="thread-1",
+                tool_name="exec_shell",
+                tool_call_id="call-deny",
+                args_preview="rm -rf tmp",
+            )
+        )
+        summary = summarize_trust_denials(trace.approvals(thread_id="thread-1"))
+    finally:
+        trace.close()
+
+    assert decision.approved is False
+    assert fallback.called is False
+    assert summary["schema"] == "octopus.trust_denial_summary.v1"
+    assert summary["total"] == 1
+    assert summary["by_tool"] == {"exec_shell": 1}
+    assert summary["by_action"] == {"deny": 1}
+    assert summary["recent"][0]["reason"] == "no destructive shell"
+    assert summary["recent"][0]["risk_level"] == "critical"
 
 
 def test_trust_gateway_provider_delegates_policy_miss() -> None:

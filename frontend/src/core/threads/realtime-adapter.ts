@@ -312,9 +312,10 @@ function turnToMessages(turn: Turn): Message[] {
         // whatever reasoning the earlier ``reasoning`` items already
         // accumulated.
         if (split.thought) {
-          const existing = typeof kwargs.reasoning_content === "string"
-            ? (kwargs.reasoning_content as string)
-            : "";
+          const existing =
+            typeof kwargs.reasoning_content === "string"
+              ? (kwargs.reasoning_content as string)
+              : "";
           kwargs.reasoning_content = existing
             ? `${existing}\n\n${split.thought}`
             : split.thought;
@@ -459,7 +460,13 @@ function isPostFinalStatusOnlyMessage(
   pending: { reasoning: string[]; toolCalls: ToolCall[] },
   out: Message[],
 ): boolean {
-  if (!out.some((message) => message.type === "ai" && normalizeMessageTextForDedupe(message.content).length >= 24)) {
+  if (
+    !out.some(
+      (message) =>
+        message.type === "ai" &&
+        normalizeMessageTextForDedupe(message.content).length >= 24,
+    )
+  ) {
     return false;
   }
   const hasOnlyTodoTools =
@@ -469,10 +476,9 @@ function isPostFinalStatusOnlyMessage(
     );
   if (!hasOnlyTodoTools) return false;
 
-  const text = normalizeStatusOnlyText([
-    content,
-    ...pending.reasoning,
-  ].join("\n"));
+  const text = normalizeStatusOnlyText(
+    [content, ...pending.reasoning].join("\n"),
+  );
   if (!text) return false;
   return mentionsDelivered(text) && mentionsCompletion(text);
 }
@@ -493,7 +499,10 @@ function normalizeMessageTextForDedupe(value: unknown): string {
     .replace(TEAM_ROLE_START_RE, "")
     .replace(TEAM_ROLE_PREFIX_RE, "")
     .trim();
-  if (NULLISH_PLACEHOLDER_RE.test(stripped) || REPEATED_NULL_PLACEHOLDER_RE.test(stripped)) {
+  if (
+    NULLISH_PLACEHOLDER_RE.test(stripped) ||
+    REPEATED_NULL_PLACEHOLDER_RE.test(stripped)
+  ) {
     return "";
   }
   return stripped
@@ -505,7 +514,10 @@ function normalizeMessageTextForDedupe(value: unknown): string {
     .toLowerCase();
 }
 
-function findDuplicateAiMessageIndex(messages: Message[], candidate: AIMessage): number {
+function findDuplicateAiMessageIndex(
+  messages: Message[],
+  candidate: AIMessage,
+): number {
   const candidateText = normalizeMessageTextForDedupe(candidate.content);
   if (candidateText.length < 24) return -1;
 
@@ -520,11 +532,17 @@ function findDuplicateAiMessageIndex(messages: Message[], candidate: AIMessage):
   return -1;
 }
 
-function mergeDuplicateAiMessages(existing: AIMessage, duplicate: AIMessage): AIMessage {
+function mergeDuplicateAiMessages(
+  existing: AIMessage,
+  duplicate: AIMessage,
+): AIMessage {
   return mergeAiTraceMetadata(existing, duplicate);
 }
 
-function mergeAiTraceMetadata(existing: AIMessage, duplicate: AIMessage): AIMessage {
+function mergeAiTraceMetadata(
+  existing: AIMessage,
+  duplicate: AIMessage,
+): AIMessage {
   const additional = mergeAdditionalKwargs(
     existing.additional_kwargs,
     duplicate.additional_kwargs,
@@ -560,7 +578,10 @@ function mergeAdditionalKwargs(
 
 function mergeTextBlocks(a: unknown, b: unknown): string | undefined {
   const blocks = [a, b]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    )
     .map((value) => value.trim());
   if (blocks.length === 0) return undefined;
   const seen = new Set<string>();
@@ -640,7 +661,9 @@ export function conversationIsLoading(conv: Conversation): boolean {
   return last !== undefined && last.status === "inProgress";
 }
 
-export function conversationStreamingMessage(conv: Conversation): Message | null {
+export function conversationStreamingMessage(
+  conv: Conversation,
+): Message | null {
   if (!conversationIsLoading(conv)) return null;
   const last = conv.turns[conv.turns.length - 1];
   if (!last) return null;

@@ -103,9 +103,9 @@ describe("FeatureFlagsPanel", () => {
 
     await waitFor(() => {
       const calls = fetchMock.mock.calls.map((c) => c[0] as string);
-      expect(
-        calls.some((u) => u.endsWith("/api/feature-flags/reload")),
-      ).toBe(true);
+      expect(calls.some((u) => u.endsWith("/api/feature-flags/reload"))).toBe(
+        true,
+      );
     });
   });
 });

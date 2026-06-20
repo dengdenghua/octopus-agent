@@ -1,4 +1,3 @@
-
 import {
   Children,
   createContext,
@@ -254,4 +253,3 @@ export const Terminal = ({
     </SequenceContext.Provider>
   );
 };
-

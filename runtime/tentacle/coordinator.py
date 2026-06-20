@@ -323,14 +323,13 @@ class TentacleCoordinator:
 
     def stats(self) -> dict[str, Any]:
         """获取协调器统计."""
-        result = {
+        return {
             "pool": self.pool.stats(),
             "ws_connected": self.ws_server.connected_count,
             "screen_relay": self.screen_relay.stats(),
             "pc_screen": self.pc_screen_capture.stats if self.pc_screen_capture else None,
             "remote_input": self.remote_input_handler is not None,
         }
-        return result
 
     @classmethod
     def with_cerebrum(
@@ -470,7 +469,7 @@ class TentacleCoordinator:
                         screenshot_base64=screenshot_b64,
                         task=task,
                     )
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort; logged
                 logger.exception("VLM 分析失败")
                 return []
 
@@ -483,12 +482,11 @@ class TentacleCoordinator:
 
             # 4. 转为 ToolCall 列表
             from .mobile.vlm.react_with_vision import VisionReAct
-            tool_calls = VisionReAct.suggested_action_to_tool_calls(
+            return VisionReAct.suggested_action_to_tool_calls(
                 analysis.suggested_actions,
                 tentacle_id=device.tentacle_id,
             )
 
-            return tool_calls
 
         return cls(
             host=host,

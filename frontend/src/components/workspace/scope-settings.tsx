@@ -215,13 +215,10 @@ export function ScopeSettings({
         </Button>
       </div>
 
-      {error && (
-        <div className="text-xs text-destructive">{error}</div>
-      )}
+      {error && <div className="text-xs text-destructive">{error}</div>}
     </div>
   );
 }
-
 
 /**
  * Drop-in button + dialog for the code page header. Auto-detects the
@@ -244,8 +241,9 @@ export function ScopeSettingsButton({
   // Capability type isn't on the bare `Agent` wire · backend sends it
   // nested under a `capabilities` dict. Tolerant cast: if we can't see
   // it, treat as "don't know" → disabled (safe default).
-  const caps = (active as { capabilities?: Record<string, unknown> } | undefined)
-    ?.capabilities;
+  const caps = (
+    active as { capabilities?: Record<string, unknown> } | undefined
+  )?.capabilities;
   const codeModeEnabled = Boolean(caps?.code_mode_unlock);
 
   return (
@@ -253,7 +251,11 @@ export function ScopeSettingsButton({
       <DialogTrigger asChild>
         <button
           type="button"
-          title={codeModeEnabled ? t.scopeSettings.writeScopeTooltip : t.scopeSettings.codeModeDisabled}
+          title={
+            codeModeEnabled
+              ? t.scopeSettings.writeScopeTooltip
+              : t.scopeSettings.codeModeDisabled
+          }
           className={cn(
             "text-muted-foreground hover:text-foreground flex size-7 items-center justify-center rounded-md transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             className,
@@ -269,10 +271,7 @@ export function ScopeSettingsButton({
             {t.scopeSettings.writeScopeDescription}
           </DialogDescription>
         </DialogHeader>
-        <ScopeSettings
-          threadId={threadId}
-          codeModeEnabled={codeModeEnabled}
-        />
+        <ScopeSettings threadId={threadId} codeModeEnabled={codeModeEnabled} />
       </DialogContent>
     </Dialog>
   );

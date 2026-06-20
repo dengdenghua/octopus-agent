@@ -264,7 +264,9 @@ function RecipeRow({
         )}/stats`,
       ).then((r) => r.json());
       setStats(r);
-    } catch (e) { swallow(e); } finally {
+    } catch (e) {
+      swallow(e);
+    } finally {
       setLoading(false);
     }
   }, [summary.recipe_id]);
@@ -324,9 +326,7 @@ function RecipeRow({
   return (
     <div className="rounded-xl border border-border/60 bg-background/60 px-4 py-3">
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm">
-        <span className="font-mono text-xs text-muted-foreground">
-          recipe:
-        </span>
+        <span className="font-mono text-xs text-muted-foreground">recipe:</span>
         <span className="font-mono">{summary.recipe_id}</span>
         <Badge variant="outline" className="text-[10px]">
           {summary.variant_count} variants · total weight {summary.total_weight}
@@ -436,20 +436,16 @@ function RecipeRow({
           )}
         >
           {promote.error && <div>✗ {promote.error}</div>}
-          {promote.skipped && (
-            <div>ℹ︎ no winner yet · {promote.reason}</div>
-          )}
+          {promote.skipped && <div>ℹ︎ no winner yet · {promote.reason}</div>}
           {promote.proposal && (
             <>
               <div className="font-medium">
-                {promote.applied ? "✓ Applied" : "Proposed"}:{" "}
-                winner <span className="font-mono">
+                {promote.applied ? "✓ Applied" : "Proposed"}: winner{" "}
+                <span className="font-mono">
                   {promote.proposal.winner_variant_id}
                 </span>
               </div>
-              <div className="mt-1 italic">
-                "{promote.proposal.rationale}"
-              </div>
+              <div className="mt-1 italic">"{promote.proposal.rationale}"</div>
               <div className="mt-1 font-mono text-[10px]">
                 new weights:{" "}
                 {Object.entries(promote.proposal.weights)
@@ -497,9 +493,7 @@ function AutoTickBar({
   const nextStr = status.next_tick_at
     ? new Date(status.next_tick_at * 1000).toLocaleString()
     : null;
-  const lastStr = last
-    ? new Date(last.ts * 1000).toLocaleString()
-    : null;
+  const lastStr = last ? new Date(last.ts * 1000).toLocaleString() : null;
   return (
     <div
       className={cn(
@@ -524,9 +518,7 @@ function AutoTickBar({
               ? "bg-emerald-500/15 text-emerald-300"
               : "bg-slate-500/15 text-slate-400",
             "hover:" +
-              (status.enabled
-                ? "bg-emerald-500/15"
-                : "bg-slate-500/15"),
+              (status.enabled ? "bg-emerald-500/15" : "bg-slate-500/15"),
           )}
         >
           {status.enabled ? "ON" : "OFF"}
@@ -534,8 +526,7 @@ function AutoTickBar({
         {status.enabled && (
           <span className="text-xs text-muted-foreground">
             every {status.interval_hours.toFixed(0)}h · min_uses{" "}
-            {status.min_uses} · min_lead{" "}
-            {(status.min_lead * 100).toFixed(0)}pp
+            {status.min_uses} · min_lead {(status.min_lead * 100).toFixed(0)}pp
           </span>
         )}
         <div className="flex-1" />
@@ -576,11 +567,8 @@ function AutoTickBar({
             <>
               last ran {lastStr} · scanned {last.recipes_scanned} recipe
               {last.recipes_scanned !== 1 ? "s" : ""} · promoted{" "}
-              <span className="text-emerald-400">
-                {last.recipes_promoted}
-              </span>
-              {last.elapsed_s > 0 &&
-                ` · ${last.elapsed_s.toFixed(2)}s`}
+              <span className="text-emerald-400">{last.recipes_promoted}</span>
+              {last.elapsed_s > 0 && ` · ${last.elapsed_s.toFixed(2)}s`}
               {" · "}
             </>
           )}
@@ -648,7 +636,9 @@ function VariantStatRow({
       )}
     >
       <td className="py-1 font-mono">
-        {isLeader && <TrophyIcon className="mr-1 inline size-3 text-emerald-400" />}
+        {isLeader && (
+          <TrophyIcon className="mr-1 inline size-3 text-emerald-400" />
+        )}
         {label}
       </td>
       <td className="py-1 text-right font-mono">{row.uses}</td>

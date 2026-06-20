@@ -150,6 +150,7 @@ function nameOfSegment(
   if (segment === "intelligence") return t.sidebar.navIntelligence;
   if (segment === "channels") return t.sidebar.channels;
   if (segment === "desktop-organizer") return t.sidebar.navDesktopOrganizer;
+  if (segment === "nas" || segment === "database") return t.sidebar.navDatabase;
   if (segment === "knowledge") return t.sidebar.navKnowledgeGraph;
   if (segment === "evolution") return t.sidebar.evolution;
   if (segment === "workflows") return "工作流";

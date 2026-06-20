@@ -64,7 +64,10 @@ describe("agent phases", () => {
             items: [
               { content: "已确认调研范围", status: "completed" },
               { content: "撰写 plan.md", status: "completed" },
-              { content: "执行 deep-research-swarm 多源调研", status: "pending" },
+              {
+                content: "执行 deep-research-swarm 多源调研",
+                status: "pending",
+              },
               { content: "正在汇总最终交付", status: "pending" },
             ],
           },
@@ -96,7 +99,10 @@ describe("agent phases", () => {
             items: [
               { content: "已确认调研范围", status: "completed" },
               { content: "撰写 plan.md", status: "completed" },
-              { content: "执行 deep-research-swarm 多源调研", status: "pending" },
+              {
+                content: "执行 deep-research-swarm 多源调研",
+                status: "pending",
+              },
               { content: "正在汇总最终交付", status: "pending" },
             ],
           },

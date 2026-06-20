@@ -2376,7 +2376,7 @@ def _step_introduces_long_function(step: ReActStep) -> list[tuple[str, int]]:
 # The following detectors have been extracted to react_security_detectors.py
 # to reduce this file's size. Re-exported here for backward compatibility.
 
-from .react_security_detectors import (  # noqa: F401 — re-exported for backward compatibility
+from .react_security_detectors import (  # noqa: E402, F401 — re-exported for backward compatibility
     _detect_dynamic_exec_in_payload,
     _detect_magic_numbers_in_payload,
     _detect_repeated_literals_in_payload,

@@ -176,8 +176,11 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
   const [cards, setCards] = useState<CardModel[] | null>(null);
   const [origIds, setOrigIds] = useState<Set<string>>(new Set());
   const [mtime, setMtime] = useState<number>(0);
-  const [workflows, setWorkflows] = useState<WorkflowItem[]>([]);
-  const [status, setStatus] = useState<{ kind: "idle" | "ok" | "err"; msg: string }>({
+  const [workflows, _setWorkflows] = useState<WorkflowItem[]>([]);
+  const [status, setStatus] = useState<{
+    kind: "idle" | "ok" | "err";
+    msg: string;
+  }>({
     kind: "idle",
     msg: "",
   });
@@ -185,7 +188,9 @@ export function ReflexCardEditor({ onSwitchToYaml, onSavedExternally }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const r: CardsResp = await fetch(`${getBackendBaseURL()}/api/reflex/rules-cards`).then((r) => r.json());
+      const r: CardsResp = await fetch(
+        `${getBackendBaseURL()}/api/reflex/rules-cards`,
+      ).then((r) => r.json());
       if (!r.ok || !r.cards) {
         setStatus({ kind: "err", msg: r.error ?? "load failed" });
         return;
@@ -462,7 +467,9 @@ function RuleCard({
               className="rounded-md border border-border/60 bg-background px-2 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
             >
               <option value="exact">{t.reflexEditor.triggerMode_exact}</option>
-              <option value="contains">{t.reflexEditor.triggerMode_contains}</option>
+              <option value="contains">
+                {t.reflexEditor.triggerMode_contains}
+              </option>
               <option value="regex">{t.reflexEditor.triggerMode_regex}</option>
             </select>
             <input
@@ -523,10 +530,14 @@ function RuleCard({
               <select
                 value={card.delegate_to_workflow}
                 disabled={readOnly}
-                onChange={(e) => onChange({ delegate_to_workflow: e.target.value })}
+                onChange={(e) =>
+                  onChange({ delegate_to_workflow: e.target.value })
+                }
                 className="rounded-md border border-border/60 bg-background px-3 py-1.5 text-sm outline-none focus:border-primary disabled:cursor-not-allowed"
               >
-                <option value="">{t.reflexEditor.cardField_workflowPick}</option>
+                <option value="">
+                  {t.reflexEditor.cardField_workflowPick}
+                </option>
                 {workflows.map((w) => (
                   <option key={w.id} value={w.id}>
                     {(w.name || w.id) +

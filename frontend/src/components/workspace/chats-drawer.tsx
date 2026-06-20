@@ -37,7 +37,9 @@ function deriveTitle(thread: AgentThread): string {
   }
   const values = (thread.values ?? {}) as Record<string, unknown>;
   const valuesTitle =
-    typeof values["title"] === "string" ? (values["title"] as string).trim() : "";
+    typeof values["title"] === "string"
+      ? (values["title"] as string).trim()
+      : "";
   if (valuesTitle && valuesTitle !== "New chat" && valuesTitle !== "New task") {
     return valuesTitle.length > 60
       ? `${valuesTitle.slice(0, 58)}...`
@@ -67,7 +69,8 @@ function deriveTitle(thread: AgentThread): string {
 
 function threadHref(thread: AgentThread): string {
   const meta = (thread.metadata ?? {}) as Record<string, unknown>;
-  const mode = typeof meta["mode"] === "string" ? (meta["mode"] as string) : "chats";
+  const mode =
+    typeof meta["mode"] === "string" ? (meta["mode"] as string) : "chats";
   if (mode === "react" || mode === "deep" || mode === "agent") {
     const agent =
       typeof meta["agent"] === "string"
@@ -110,9 +113,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
   const filteredThreads = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return threads;
-    return threads.filter((t) =>
-      deriveTitle(t).toLowerCase().includes(q),
-    );
+    return threads.filter((t) => deriveTitle(t).toLowerCase().includes(q));
   }, [threads, query]);
 
   const startNewChat = useCallback(() => {
@@ -122,9 +123,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
 
   const handleDelete = useCallback(
     (thread: AgentThread) => {
-      if (
-        !window.confirm(t.sidebar.confirmDeleteThread(deriveTitle(thread)))
-      ) {
+      if (!window.confirm(t.sidebar.confirmDeleteThread(deriveTitle(thread)))) {
         return;
       }
       deleteThread.mutate({ threadId: thread.thread_id });
@@ -208,7 +207,8 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                       className={cn(
                         "flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-[12.5px] transition-colors",
                         "hover:bg-muted/55",
-                        active && "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] font-medium",
+                        active &&
+                          "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] font-medium",
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate leading-tight">

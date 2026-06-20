@@ -299,12 +299,11 @@ export const zhCN: Translations = {
     modeTeam: "团队",
     modeTeamDesc: "与多个智能体协作",
     createTeam: "创建团队",
-    chat: "主持",
-    chatDescription:
-      "TL 协调的群聊，TL 每条消息都先回应并决定让谁发言，可 @ 特定成员",
-    cowork: "协作",
+    chat: "单人任务",
+    chatDescription: "先由一个角色推进，过程中可以随时添加成员升级为群任务",
+    cowork: "群任务",
     coworkDescription:
-      "TL 先拆解，成员各自贡献，最后 TL 归纳；适合需要固定团队记忆的 Agent 任务",
+      "TL 先拆解，成员各自贡献，最后 TL 归纳；适合复杂协作任务",
     comingSoon: "即将推出",
   },
 
@@ -496,13 +495,13 @@ export const zhCN: Translations = {
     autoVerifyRunning: "自动验证运行中",
     changesAwaitingVerify: "变更等待验证",
     verify: "验证",
-    attemptCompleted: (attempt: number, count: number, singular: boolean) =>
+    attemptCompleted: (attempt: number, count: number, _singular: boolean) =>
       `第 ${attempt} 次尝试完成${count > 0 ? `，涉及 ${count} 个文件` : ""}`,
     autoFixLimitReached: (attempt: number, max: number) =>
       `第 ${attempt} 次尝试。自动修复次数已达上限 (${max}/${max})`,
-    failedChecks: (count: number, singular: boolean) =>
+    failedChecks: (count: number, _singular: boolean) =>
       `第 ${count} 项检查失败`,
-    changedFilesPending: (count: number, singular: boolean) =>
+    changedFilesPending: (count: number, _singular: boolean) =>
       `${count} 个变更文件等待检查`,
     runningProjectChecks: "正在运行项目检查",
     // Panel labels
@@ -1010,6 +1009,7 @@ export const zhCN: Translations = {
     navSwarm: "协作",
     navCompany: "工作",
     navTeam: "团队",
+    navDatabase: "本地数据库",
     navKnowledgeGraph: "知识库",
     navReflex: "反射规则",
     navIntelligence: "自动化",
@@ -1017,7 +1017,7 @@ export const zhCN: Translations = {
     navStore: "市场",
     navEvolution: "自进化",
     navPlugins: "插件",
-    navHR: "人力池",
+    navHR: "智能体库",
     navComputer: "本机助手",
     navDesktopOrganizer: "桌面助手",
     navMobile: "移动设备",
@@ -1062,6 +1062,27 @@ export const zhCN: Translations = {
     collapseSidebar: "收起侧栏 (⌘B)",
     expandSidebar: "展开侧栏 (⌘B)",
     projectNamePlaceholder: "项目名称",
+    // Surface switch + task statuses
+    navBrowserSurface: "浏览器",
+    sectionOngoing: "进行中",
+    noOngoingTasks: "暂无运行中的任务",
+    sectionTaskHistory: "历史任务",
+    noTaskHistory: "暂无历史任务",
+    unnamedTask: "未命名任务",
+    currentTaskSession: "当前任务会话",
+    taskStatusRunning: "运行中",
+    taskStatusFailed: "异常待处理",
+    taskStatusPending: "待启动",
+    // Aria labels
+    ariaCollapseLocalDatabase: "收起本地数据库",
+    ariaExpandLocalDatabase: "展开本地数据库",
+    ariaResizeSidebar: "拖拽调整宽度",
+    // Storage library labels
+    libraryApps: "应用",
+    libraryDocs: "文档",
+    libraryImages: "图片",
+    libraryComputer: "本机",
+    libraryAuthorizedDirs: "授权目录",
   },
 
   // Browser settings
@@ -1404,11 +1425,11 @@ export const zhCN: Translations = {
     configBadge: "配置",
     uidLabel: "UID",
     back: "返回",
-    synced: "已同步",
-    unsaved: "未保存",
+    synced: "档案已保存",
+    unsaved: "有未保存修改",
     active: "运行中",
     ready: "配置就绪",
-    loadoutReady: "装配就绪",
+    loadoutReady: "能力已接入",
     saved: "Agent 配置已保存",
     saveFailed: (msg) => `保存失败：${msg}`,
     officialFaction: "Octopus Command",
@@ -1445,10 +1466,10 @@ export const zhCN: Translations = {
     visualWatermark: "CHARACTER",
     visualLoadoutLabel: "FOR YOUR LOADOUT",
     visualSystemOnline: "SYSTEM ONLINE",
-    visualGenerateAction: "Agnes 一键生成立绘信息卡",
+    visualGenerateAction: "Agnes 一键生成高清三视图",
     visualGenerating: "生成中",
-    visualGenerateSuccess: "Agnes 立绘信息卡已生成",
-    visualGenerateFailed: (msg) => `Agnes 生成立绘信息卡失败：${msg}`,
+    visualGenerateSuccess: "Agnes 高清三视图已生成",
+    visualGenerateFailed: (msg) => `Agnes 生成高清三视图失败：${msg}`,
     visualMissing: "暂无三视图",
     viewFront: "正面",
     viewSide: "侧面",
@@ -1471,18 +1492,29 @@ export const zhCN: Translations = {
     privateSkillsLabel: "私有 skill 白名单",
     privateSkillsPlaceholder: "skill-a, skill-b",
     characterFileLabel: "角色档案",
-    characterBackgroundLabel: "档案记录",
+    characterBackgroundLabel: "背景档案",
     characterAgeLabel: "年龄感",
     characterTemperamentLabel: "气质",
     characterPersonalityLabel: "性格底色",
+    characterBestForLabel: "适合委托",
+    characterBoundaryLabel: "行动边界",
     characterVisualKeywordsLabel: "立绘关键词",
     characterProfileReady: "角色设定已就绪",
     characterPromptHint: "用于立绘生成",
-    characterSkillHiddenHint: "技能与权限已移到底部配置入口，这里只保留有利于立绘生成的角色设定。",
+    characterSkillHiddenHint:
+      "技能与权限已移到底部配置入口，这里只保留有利于立绘生成的角色设定。",
     capabilityPackLabel: "能力包待装配",
     characterBackground: (name, role, type, faction, description) =>
       `${name} 是来自 ${faction} 的${type}，定位偏向${role}。${description || "背景可继续在基础资料中补充。"} 立绘应体现其职责、经验和可信赖的个人气场。`,
-    characterIntro: (name, role, type, faction, origin, personality, temperament) =>
+    characterIntro: (
+      name,
+      role,
+      type,
+      faction,
+      origin,
+      personality,
+      temperament,
+    ) =>
       `${name} 是 ${faction} 派出的 ${type}，常被安排在${role}位。${origin}进入任务现场时，${name} 通常先判断局势，再把分散的信息收束成下一步行动。性格底色是：${personality}视觉气质要有${temperament}的可读感。`,
     characterDefaultOrigin:
       "档案里还没有写入完整来历，但已经能看出它擅长在复杂局面里保持节奏。",
@@ -1565,10 +1597,15 @@ export const zhCN: Translations = {
     checkBlockedSkills: (count) => `${count} 个 Skill 被权限组阻断`,
     checkNoExecutableSkills: "可执行 Skill 为 0，Agent 当前基本不可用",
     checkUnsavedChanges: "存在未保存变更，保存后才会生效",
+    configDockTitle: "能力配置",
     configureProfileAction: "编辑基础与 Prompt",
+    configureProfileHint: "描述、模型与 Soul Prompt",
     configureArmAction: "配置 ARM",
+    configureArmHint: "能力模块调用范围",
     configureSkillsAction: "打开 Skill 商城",
+    configureSkillsHint: "私有 Skill 白名单",
     configurePermissionsAction: "调整权限",
+    configurePermissionsHint: "高风险能力限制",
     routingConfig: "路由与预算",
     saveTitle: "保存",
     saveSubtitle: "应用修改",
@@ -2751,7 +2788,7 @@ export const zhCN: Translations = {
     featured: "精选",
     popular: "热门",
     discover: "广场",
-    searchPlaceholder: "搜索智能体...",
+    searchPlaceholder: "搜索角色...",
     categories: {
       all: "全部",
       assistant: "助手",
@@ -2762,24 +2799,24 @@ export const zhCN: Translations = {
       specialist: "专家",
       financial: "金融",
     },
-    searchAgents: "搜索 Agent...",
-    noAgentsFound: "未找到 Agent",
+    searchAgents: "搜索角色...",
+    noAgentsFound: "未找到角色",
     noFeatured: "暂无精选",
     noPopular: "暂无热门",
-    title: "人力池",
-    description: "浏览、配置和安装 Agent",
+    title: "智能体库",
+    description: "浏览、配置和召唤可协作的角色",
     pageOf: (page: number, total: number) => `第 ${page} 页 / 共 ${total} 页`,
     by: "作者",
-    agentInstalled: "已安装",
+    agentInstalled: "已加入",
     agentUninstalled: "已卸载",
-    installThisAgent: "安装此 Agent",
+    installThisAgent: "加入角色库",
     assembleCapabilityPack: "一键装配能力包",
-    keySkillCount: (count) => `${count} 项关键技能`,
-    emptyState: "暂无 Agent，成为第一个创建者吧",
-    createAgentCardTitle: "创建 Agent",
-    createAgentCardDesc: "创建自定义 Agent",
+    keySkillCount: (count) => `${count} 项可调用能力`,
+    emptyState: "暂无角色，成为第一个创建者吧",
+    createAgentCardTitle: "创建角色",
+    createAgentCardDesc: "创建自定义角色",
     addAgent: "添加",
-    newAgent: "新建 Agent",
+    newAgent: "新建角色",
     importAgentPack: "导入 Agent Pack",
     importAgentPackDesc: "从本地 Claude / Codex plugin pack 预览并导入 Agent。",
     importAgentPackPlaceholder:
@@ -2788,8 +2825,8 @@ export const zhCN: Translations = {
     importSelectedAgent: "导入选中 Agent",
     noImportableAgents: "这个 pack 没有发现可导入的 agents/ Markdown Agent。",
     importedAgent: (name: string, path: string) => `已导入 ${name} · ${path}`,
-    discoverTagline: "浏览、配置和安装 Agent",
-    toastInstalled: (name: string) => `"${name}" 已安装`,
+    discoverTagline: "浏览、配置和召唤可协作的角色",
+    toastInstalled: (name: string) => `"${name}" 已加入角色库`,
     toastCapabilityPackInstalled: (name: string, count: number) =>
       `"${name}" 已安装，并装配 ${count} 项关键技能`,
     toastUninstalled: (name: string) => `"${name}" 已卸载`,
@@ -2837,7 +2874,7 @@ export const zhCN: Translations = {
     toggleDevice: "切换设备",
     deviceDesktop: "电脑视图",
     deviceTablet: "平板视图 · 768×1024",
-    deviceMobile: "手机视图 · 375×812",
+    deviceMobile: "手机视图 · 390×844",
     viewportHint: (label, w, h) =>
       `${label} · 视口 ${w}×${h} · 响应式 CSS 已生效;按 UA 切换的站点请用 Playwright 模式`,
     startBrowsingHint: "输入网址开始浏览",
@@ -4195,7 +4232,15 @@ export const zhCN: Translations = {
 
   // Team Input
   teamInput: {
-    placeholder: "描述你的任务，团队将协同完成...",
+    placeholder: "描述任务，可 @本地数据库 检索本机资料...",
+    assigneeAll: "全员",
+    assigneeCount: (count: number) => `${count} 人`,
+    assigneeHint: "选择本次任务先由谁执行，后续仍可加人",
+    assigneeMenuTitle: "本次任务先交给谁",
+    clearAssignee: "清空选择，交给全员判断",
+    localFileAgent: "本地数据库",
+    localFileAgentHint:
+      "召唤本地数据库：只检索本机授权资料，确认后再带入任务上下文",
   },
 
   fileTree: {
@@ -5162,7 +5207,8 @@ export const zhCN: Translations = {
       reviewCount > 0 ? `${reviewCount} 条需复盘` : "运行稳定",
     statReactTooltip: (attempts: number, reviewCount: number) =>
       `${attempts} 次深度任务进入过多步执行流程，其中 ${reviewCount} 次被标记为需复盘。`,
-    statReactValue: (attempts: number, reviewCount: number) => `${attempts} 次`,
+    statReactValue: (attempts: number, _reviewCount: number) =>
+      `${attempts} 次`,
     statReactDesc:
       "深度任务指进入多步推理、工具调用或较长执行链路的复杂任务。这个指标用于观察复杂任务的稳定度。",
     statReactPoints: (attempts: number, reviewCount: number) => [
@@ -5653,6 +5699,23 @@ export const zhCN: Translations = {
     rulesAndMemories: (rules, memories) => `${rules} 规则 · ${memories} 记忆`,
     deltaRules: (count) => `+${count}规`,
     deltaMemories: (count) => `+${count}记`,
+  },
+
+  evolutionExplain: {
+    fitnessTitle: "适应度",
+    noAgentSelected: "请选择 Agent 查看适应度",
+    loading: "加载中...",
+    noFitnessData: "暂无适应度数据",
+    driftTitle: "漂移检测",
+    noDriftData: "暂无漂移数据",
+    noDriftDetected: "未检测到漂移",
+    driftDetected: (maxSeverity: string) => `检测到漂移: ${maxSeverity}`,
+    variantTitle: "变体表现",
+    noVariantData: "暂无变体数据",
+    colName: "名称",
+    colUsage: "使用次数",
+    colSuccessRate: "成功率",
+    colStatus: "状态",
   },
 
   armsEditor: {

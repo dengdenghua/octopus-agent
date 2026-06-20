@@ -56,7 +56,10 @@ describe("wrapLines", () => {
   });
 
   it("greedily packs words within maxChars", () => {
-    expect(wrapLines("alpha beta gamma", 11, 5)).toEqual(["alpha beta", "gamma"]);
+    expect(wrapLines("alpha beta gamma", 11, 5)).toEqual([
+      "alpha beta",
+      "gamma",
+    ]);
   });
 
   it("truncates to maxLines with an ellipsis", () => {

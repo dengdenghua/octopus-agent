@@ -1,5 +1,11 @@
-
-import { GitBranchIcon, FolderIcon, ZapIcon, CircleDotIcon, LockIcon, LockOpenIcon } from "lucide-react";
+import {
+  GitBranchIcon,
+  FolderIcon,
+  ZapIcon,
+  CircleDotIcon,
+  LockIcon,
+  LockOpenIcon,
+} from "lucide-react";
 import { useState, useEffect } from "react";
 import { swallow } from "@/core/utils/log";
 import { authHeaders } from "@/core/auth/api";
@@ -76,7 +82,9 @@ export function CodeStatusBar({
             setGitBranch(branch);
             try {
               sessionStorage.setItem(`git-branch:${workDir}`, branch);
-            } catch (e) { swallow(e, "storage"); }
+            } catch (e) {
+              swallow(e, "storage");
+            }
           }
         })
         .catch(() => {
@@ -142,7 +150,9 @@ export function CodeStatusBar({
               <ZapIcon
                 className={cn("size-2.5", isLoading && "animate-pulse")}
               />
-              {isLoading ? t.codeMode.fastProgress(fastElapsedSec) : t.codeMode.fastDone(fastElapsedSec)}
+              {isLoading
+                ? t.codeMode.fastProgress(fastElapsedSec)
+                : t.codeMode.fastDone(fastElapsedSec)}
             </span>
             {onToggleFastHardTimeout && (
               <button
@@ -179,7 +189,9 @@ export function CodeStatusBar({
           <ZapIcon className="size-2.5" />
           {codeMode}
         </span>
-        <span className="text-muted-foreground/50">{modelName || t.codeMode.defaultModel}</span>
+        <span className="text-muted-foreground/50">
+          {modelName || t.codeMode.defaultModel}
+        </span>
       </div>
     </div>
   );

@@ -78,10 +78,7 @@ export function loadToolCallInfo({
   return null;
 }
 
-export async function loadOriginalFileContent(
-  path: string,
-  threadId?: string,
-) {
+export async function loadOriginalFileContent(path: string, threadId?: string) {
   const baseURL = getBackendBaseURL();
   const params = new URLSearchParams({
     path,
@@ -90,12 +87,9 @@ export async function loadOriginalFileContent(
   if (threadId) {
     params.set("thread_id", threadId);
   }
-  const response = await fetch(
-    `${baseURL}/api/fs/read?${params.toString()}`,
-  );
+  const response = await fetch(`${baseURL}/api/fs/read?${params.toString()}`);
   if (!response.ok) return null;
   const data = await response.json();
   if (data.binary) return null;
   return data.content as string;
 }
-

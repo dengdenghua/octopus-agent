@@ -28,8 +28,7 @@ export async function searchMemory(
     `${getBackendBaseURL()}/api/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`,
     { headers: authHeaders() },
   );
-  if (!res.ok)
-    throw new Error(`Failed to search memory: ${res.statusText}`);
+  if (!res.ok) throw new Error(`Failed to search memory: ${res.statusText}`);
   return (await res.json()) as MemorySearchResult[];
 }
 
@@ -85,7 +84,11 @@ export async function updateFact(
 ): Promise<MemoryData> {
   const res = await fetch(
     `${getBackendBaseURL()}/api/memory/facts/${encodeURIComponent(factId)}`,
-    { method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify(request) },
+    {
+      method: "PATCH",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify(request),
+    },
   );
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };

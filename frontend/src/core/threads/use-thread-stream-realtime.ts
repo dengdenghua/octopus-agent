@@ -32,7 +32,6 @@ import type {
   VerificationItem,
 } from "@/core/realtime/items";
 
-import type { Message } from "@/core/api/types";
 import type { BaseStream } from "@/core/api/use-stream-types";
 import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import type { LiveToolEvent } from "@/components/workspace/live-tool-timeline";
@@ -106,7 +105,8 @@ function reasoningEffortValue(value: unknown): ReasoningEffort | undefined {
     value === "low" ||
     value === "medium" ||
     value === "high" ||
-    value === "xhigh"
+    value === "xhigh" ||
+    value === "max"
   ) {
     return value;
   }
@@ -680,7 +680,12 @@ export function useThreadStreamRealtime(
       hasMoreTurns: state.hasMoreTurns,
       loadOlderTurns,
     }),
-    [state.pendingApprovals, resolveApproval, state.hasMoreTurns, loadOlderTurns],
+    [
+      state.pendingApprovals,
+      resolveApproval,
+      state.hasMoreTurns,
+      loadOlderTurns,
+    ],
   );
 
   const isLoading = useMemo(() => conversationIsLoading(state), [state]);
@@ -977,7 +982,10 @@ async function fallbackFileAttachmentsAsync(
 }
 
 function isImageMime(mediaType: string | undefined | null): boolean {
-  return typeof mediaType === "string" && mediaType.toLowerCase().startsWith("image/");
+  return (
+    typeof mediaType === "string" &&
+    mediaType.toLowerCase().startsWith("image/")
+  );
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {

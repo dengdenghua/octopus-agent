@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from runtime.platform.models import (
     BudgetSpec,
@@ -253,8 +253,8 @@ class StaticPlanner:
         )
 
 
-if False:
-    from runtime.safety.recovery import ApplyResult  # noqa: F401
+if TYPE_CHECKING:
+    from runtime.safety.recovery import ApplyResult
 
 
 

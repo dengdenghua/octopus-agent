@@ -1,4 +1,3 @@
-
 import {
   AlertCircleIcon,
   CheckCircle2Icon,
@@ -83,12 +82,16 @@ interface SearchResponse {
 
 const api = {
   async status(): Promise<IndexStatus> {
-    const res = await fetch(`${getBackendBaseURL()}/api/index/status`, { headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/index/status`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to fetch index status");
     return res.json();
   },
   async stats(): Promise<IndexStats> {
-    const res = await fetch(`${getBackendBaseURL()}/api/index/stats`, { headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/index/stats`, {
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to fetch stats");
     return res.json();
   },
@@ -104,14 +107,20 @@ const api = {
     }
   },
   async rebuild(): Promise<void> {
-    const res = await fetch(`${getBackendBaseURL()}/api/index/rebuild`, { method: "POST", headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/index/rebuild`, {
+      method: "POST",
+      headers: authHeaders(),
+    });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.detail || "Failed to start rebuild");
     }
   },
   async clearIndex(): Promise<void> {
-    const res = await fetch(`${getBackendBaseURL()}/api/index`, { method: "DELETE", headers: authHeaders() });
+    const res = await fetch(`${getBackendBaseURL()}/api/index`, {
+      method: "DELETE",
+      headers: authHeaders(),
+    });
     if (!res.ok) throw new Error("Failed to clear index");
   },
   async search(query: string, topK = 10): Promise<SearchResponse> {
@@ -142,7 +151,12 @@ function formatBytes(bytes: number): string {
 
 function ProgressBar({ pct, className }: { pct: number; className?: string }) {
   return (
-    <div className={cn("h-2 w-full overflow-hidden rounded-lg bg-muted", className)}>
+    <div
+      className={cn(
+        "h-2 w-full overflow-hidden rounded-lg bg-muted",
+        className,
+      )}
+    >
       <div
         className="h-full rounded-lg bg-primary transition-all duration-300"
         style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
@@ -182,7 +196,9 @@ function SearchResultCard({
           <CodeIcon className="mt-0.5 size-3 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium text-foreground">
-              {result.name !== "<module>" && result.name !== "<imports>" ? result.name : result.file_path.split("/").pop()}
+              {result.name !== "<module>" && result.name !== "<imports>"
+                ? result.name
+                : result.file_path.split("/").pop()}
             </div>
             <div className="truncate text-[10px] text-muted-foreground">
               {result.file_path}:{result.start_line}-{result.end_line}
@@ -196,7 +212,9 @@ function SearchResultCard({
           <span className="rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
             {result.language}
           </span>
-          <span className={cn("text-[10px] font-mono font-medium", similarityColor)}>
+          <span
+            className={cn("text-[10px] font-mono font-medium", similarityColor)}
+          >
             {(result.similarity * 100).toFixed(1)}%
           </span>
         </div>
@@ -229,24 +247,40 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
   const { t } = useI18n();
   if (!stats) return null;
 
-  const langEntries = Object.entries(stats.languages).sort(([, a], [, b]) => b - a);
-  const typeEntries = Object.entries(stats.chunk_types).sort(([, a], [, b]) => b - a);
+  const langEntries = Object.entries(stats.languages).sort(
+    ([, a], [, b]) => b - a,
+  );
+  const typeEntries = Object.entries(stats.chunk_types).sort(
+    ([, a], [, b]) => b - a,
+  );
 
   return (
     <div className="space-y-3 text-[11px]">
       {/* Summary row */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded border bg-card p-2 text-center">
-          <div className="text-lg font-bold text-primary">{stats.total_files.toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">{t.codebaseIndex.files}</div>
+          <div className="text-lg font-bold text-primary">
+            {stats.total_files.toLocaleString()}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            {t.codebaseIndex.files}
+          </div>
         </div>
         <div className="rounded border bg-card p-2 text-center">
-          <div className="text-lg font-bold text-primary">{stats.total_chunks.toLocaleString()}</div>
-          <div className="text-[10px] text-muted-foreground">{t.codebaseIndex.chunks}</div>
+          <div className="text-lg font-bold text-primary">
+            {stats.total_chunks.toLocaleString()}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            {t.codebaseIndex.chunks}
+          </div>
         </div>
         <div className="rounded border bg-card p-2 text-center">
-          <div className="text-lg font-bold text-primary">{formatBytes(stats.db_size_bytes)}</div>
-          <div className="text-[10px] text-muted-foreground">{t.codebaseIndex.dbSize}</div>
+          <div className="text-lg font-bold text-primary">
+            {formatBytes(stats.db_size_bytes)}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            {t.codebaseIndex.dbSize}
+          </div>
         </div>
       </div>
 
@@ -257,10 +291,32 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
             {t.codebaseIndex.configuration}
           </div>
           <div className="space-y-0.5 text-muted-foreground">
-            <div>{t.codebaseIndex.backend}: <span className="text-foreground">{stats.config.embedding_backend}</span></div>
-            <div>{t.codebaseIndex.model}: <span className="text-foreground">{stats.config.embedding_model}</span></div>
-            <div>{t.codebaseIndex.chunkSize}: <span className="text-foreground">{stats.config.chunk_max_tokens} tokens</span></div>
-            <div>{t.codebaseIndex.autoIndex}: <span className="text-foreground">{stats.config.auto_index ? t.codebaseIndex.on : t.codebaseIndex.off}</span></div>
+            <div>
+              {t.codebaseIndex.backend}:{" "}
+              <span className="text-foreground">
+                {stats.config.embedding_backend}
+              </span>
+            </div>
+            <div>
+              {t.codebaseIndex.model}:{" "}
+              <span className="text-foreground">
+                {stats.config.embedding_model}
+              </span>
+            </div>
+            <div>
+              {t.codebaseIndex.chunkSize}:{" "}
+              <span className="text-foreground">
+                {stats.config.chunk_max_tokens} tokens
+              </span>
+            </div>
+            <div>
+              {t.codebaseIndex.autoIndex}:{" "}
+              <span className="text-foreground">
+                {stats.config.auto_index
+                  ? t.codebaseIndex.on
+                  : t.codebaseIndex.off}
+              </span>
+            </div>
           </div>
         </div>
       )}
@@ -306,7 +362,8 @@ function StatsSection({ stats }: { stats: IndexStats | null }) {
       {/* Last indexed */}
       {stats.last_indexed_at && (
         <div className="text-center text-[10px] text-muted-foreground">
-          {t.codebaseIndex.lastIndexed}: {new Date(stats.last_indexed_at).toLocaleString()}
+          {t.codebaseIndex.lastIndexed}:{" "}
+          {new Date(stats.last_indexed_at).toLocaleString()}
         </div>
       )}
     </div>
@@ -329,7 +386,9 @@ export default function CodebaseIndexPanel({
   const [status, setStatus] = useState<IndexStatus | null>(null);
   const [stats, setStats] = useState<IndexStats | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<SearchResponse | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResponse | null>(
+    null,
+  );
   const [searching, setSearching] = useState(false);
   const [indexing, setIndexing] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -342,7 +401,9 @@ export default function CodebaseIndexPanel({
       setStatus(s);
       setStats(st);
       setIndexing(s.running);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, []);
 
   useEffect(() => {
@@ -363,7 +424,9 @@ export default function CodebaseIndexPanel({
             setStats(st);
             toast.success(t.codebaseIndex.indexingComplete);
           }
-        } catch (e) { swallow(e); }
+        } catch (e) {
+          swallow(e);
+        }
       }, 1500);
       return () => {
         if (pollRef.current) clearInterval(pollRef.current);
@@ -375,21 +438,32 @@ export default function CodebaseIndexPanel({
   }, [indexing, t.codebaseIndex.indexingComplete]);
 
   // --- Actions ---
-  const handleStartIndex = useCallback(async (force = false) => {
-    try {
-      if (force) {
-        await api.rebuild();
-        toast.info(t.codebaseIndex.toastFullReindexStarted);
-      } else {
-        await api.startIndex();
-        toast.info(t.codebaseIndex.toastIncrementalStarted);
+  const handleStartIndex = useCallback(
+    async (force = false) => {
+      try {
+        if (force) {
+          await api.rebuild();
+          toast.info(t.codebaseIndex.toastFullReindexStarted);
+        } else {
+          await api.startIndex();
+          toast.info(t.codebaseIndex.toastIncrementalStarted);
+        }
+        setIndexing(true);
+        setTab("status");
+      } catch (err: unknown) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : t.codebaseIndex.toastStartIndexingFailed,
+        );
       }
-      setIndexing(true);
-      setTab("status");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t.codebaseIndex.toastStartIndexingFailed);
-    }
-  }, [t.codebaseIndex.toastFullReindexStarted, t.codebaseIndex.toastIncrementalStarted, t.codebaseIndex.toastStartIndexingFailed]);
+    },
+    [
+      t.codebaseIndex.toastFullReindexStarted,
+      t.codebaseIndex.toastIncrementalStarted,
+      t.codebaseIndex.toastStartIndexingFailed,
+    ],
+  );
 
   const handleClear = useCallback(async () => {
     try {
@@ -397,9 +471,17 @@ export default function CodebaseIndexPanel({
       toast.success(t.codebaseIndex.toastIndexCleared);
       refreshStatus();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t.codebaseIndex.toastClearIndexFailed);
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : t.codebaseIndex.toastClearIndexFailed,
+      );
     }
-  }, [refreshStatus, t.codebaseIndex.toastIndexCleared, t.codebaseIndex.toastClearIndexFailed]);
+  }, [
+    refreshStatus,
+    t.codebaseIndex.toastIndexCleared,
+    t.codebaseIndex.toastClearIndexFailed,
+  ]);
 
   const handleSearch = useCallback(async () => {
     const q = searchQuery.trim();
@@ -504,7 +586,9 @@ export default function CodebaseIndexPanel({
                 placeholder={t.codebaseIndex.searchPlaceholder}
                 className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground/50"
               />
-              {searching && <Loader2Icon className="size-3 animate-spin text-primary" />}
+              {searching && (
+                <Loader2Icon className="size-3 animate-spin text-primary" />
+              )}
               {searchQuery && !searching && (
                 <button
                   onClick={() => {
@@ -524,10 +608,10 @@ export default function CodebaseIndexPanel({
               <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed p-4 text-center text-[11px] text-muted-foreground">
                 <FileSearchIcon className="size-8 text-muted-foreground/50" />
                 <div>
-                  <div className="font-medium text-foreground">{t.codebaseIndex.notIndexed}</div>
-                  <div className="mt-0.5">
-                    {t.codebaseIndex.notIndexedHint}
+                  <div className="font-medium text-foreground">
+                    {t.codebaseIndex.notIndexed}
                   </div>
+                  <div className="mt-0.5">{t.codebaseIndex.notIndexedHint}</div>
                 </div>
                 <button
                   onClick={() => handleStartIndex(false)}
@@ -543,7 +627,9 @@ export default function CodebaseIndexPanel({
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                   <span>
-                    {searchResults.total_results} result{searchResults.total_results !== 1 ? "s" : ""} for &quot;{searchResults.query}&quot;
+                    {searchResults.total_results} result
+                    {searchResults.total_results !== 1 ? "s" : ""} for &quot;
+                    {searchResults.query}&quot;
                   </span>
                   <span>{searchResults.elapsed_ms.toFixed(0)} ms</span>
                 </div>
@@ -574,7 +660,9 @@ export default function CodebaseIndexPanel({
               <>
                 <div className="text-center">
                   <Loader2Icon className="mx-auto mb-2 size-6 animate-spin text-primary" />
-                  <div className="font-medium">{t.codebaseIndex.indexingInProgress}</div>
+                  <div className="font-medium">
+                    {t.codebaseIndex.indexingInProgress}
+                  </div>
                   <div className="mt-0.5 text-muted-foreground">
                     {status.current_file || t.codebaseIndex.preparing}
                   </div>
@@ -582,36 +670,49 @@ export default function CodebaseIndexPanel({
                 <ProgressBar pct={status.progress_pct} />
                 <div className="grid grid-cols-2 gap-2 text-[10px]">
                   <div className="rounded border bg-card p-2">
-                    <div className="text-muted-foreground">{t.codebaseIndex.files}</div>
+                    <div className="text-muted-foreground">
+                      {t.codebaseIndex.files}
+                    </div>
                     <div className="font-medium">
                       {status.processed_files} / {status.total_files}
                     </div>
                   </div>
                   <div className="rounded border bg-card p-2">
-                    <div className="text-muted-foreground">{t.codebaseIndex.chunks}</div>
+                    <div className="text-muted-foreground">
+                      {t.codebaseIndex.chunks}
+                    </div>
                     <div className="font-medium">{status.total_chunks}</div>
                   </div>
                   <div className="rounded border bg-card p-2">
-                    <div className="text-muted-foreground">{t.codebaseIndex.embedded}</div>
+                    <div className="text-muted-foreground">
+                      {t.codebaseIndex.embedded}
+                    </div>
                     <div className="font-medium">{status.embedded_chunks}</div>
                   </div>
                   <div className="rounded border bg-card p-2">
-                    <div className="text-muted-foreground">{t.codebaseIndex.skipped}</div>
+                    <div className="text-muted-foreground">
+                      {t.codebaseIndex.skipped}
+                    </div>
                     <div className="font-medium">{status.skipped_files}</div>
                   </div>
                 </div>
                 <div className="text-center text-[10px] text-muted-foreground">
-                  Elapsed: {status.elapsed_seconds.toFixed(1)}s | Progress: {status.progress_pct.toFixed(1)}%
+                  Elapsed: {status.elapsed_seconds.toFixed(1)}s | Progress:{" "}
+                  {status.progress_pct.toFixed(1)}%
                 </div>
                 {status.errors.length > 0 && (
                   <div className="rounded border border-destructive/30 bg-destructive/5 p-2">
                     <div className="mb-1 flex items-center gap-1 text-destructive">
                       <AlertCircleIcon className="size-3" />
-                      <span className="font-medium">{t.codebaseIndex.errors(status.errors.length)}</span>
+                      <span className="font-medium">
+                        {t.codebaseIndex.errors(status.errors.length)}
+                      </span>
                     </div>
                     <div className="max-h-24 overflow-y-auto text-[10px] text-destructive/80">
                       {status.errors.slice(-5).map((e, i) => (
-                        <div key={i} className="truncate">{e}</div>
+                        <div key={i} className="truncate">
+                          {e}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -621,7 +722,9 @@ export default function CodebaseIndexPanel({
               <div className="flex flex-col items-center gap-2 py-4">
                 <CheckCircle2Icon className="size-8 text-green-500" />
                 <div className="text-center">
-                  <div className="font-medium text-foreground">{t.codebaseIndex.indexingComplete}</div>
+                  <div className="font-medium text-foreground">
+                    {t.codebaseIndex.indexingComplete}
+                  </div>
                   <div className="mt-0.5 text-muted-foreground">
                     {status.total_chunks} chunks from {status.total_files} files
                   </div>
@@ -635,7 +738,9 @@ export default function CodebaseIndexPanel({
                 <HardDriveIcon className="size-8 text-muted-foreground/50" />
                 <div className="text-center">
                   <div className="font-medium text-foreground">
-                    {isIndexed ? t.codebaseIndex.indexReady : t.codebaseIndex.noIndex}
+                    {isIndexed
+                      ? t.codebaseIndex.indexReady
+                      : t.codebaseIndex.noIndex}
                   </div>
                   <div className="mt-0.5">
                     {isIndexed
@@ -649,9 +754,7 @@ export default function CodebaseIndexPanel({
         )}
 
         {/* ---- STATS TAB ---- */}
-        {tab === "stats" && (
-          <StatsSection stats={stats} />
-        )}
+        {tab === "stats" && <StatsSection stats={stats} />}
       </div>
     </div>
   );

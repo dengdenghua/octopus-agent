@@ -65,9 +65,8 @@ def _public_symbols(path: Path) -> list[str]:
     # Fallback: top-level non-_ classes / funcs
     names: list[str] = []
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            if not node.name.startswith("_"):
-                names.append(node.name)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_"):
+            names.append(node.name)
     return names
 
 
@@ -144,9 +143,8 @@ def _load_catalog() -> dict[str, dict[str, Any]]:
     )
     tree = ast.parse(src)
     for node in tree.body:
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            if node.target.id == "_CATALOG" and node.value is not None:
-                return ast.literal_eval(node.value)
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "_CATALOG" and node.value is not None:
+            return ast.literal_eval(node.value)
         if isinstance(node, ast.Assign):
             for tgt in node.targets:
                 if isinstance(tgt, ast.Name) and tgt.id == "_CATALOG":
@@ -164,19 +162,18 @@ def _load_arm_skill_map() -> dict[str, list[str]]:
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
             tgt = node.targets[0]
-            if isinstance(tgt, ast.Name) and tgt.id.startswith("_") and tgt.id.isupper():
-                if isinstance(node.value, ast.List):
-                    skills: list[str] = []
-                    for elt in node.value.elts:
-                        if (
-                            isinstance(elt, ast.Call)
-                            and elt.args
-                            and isinstance(elt.args[0], ast.Constant)
-                            and isinstance(elt.args[0].value, str)
-                        ):
-                            skills.append(elt.args[0].value)
-                    if skills:
-                        group_lists[tgt.id] = skills
+            if isinstance(tgt, ast.Name) and tgt.id.startswith("_") and tgt.id.isupper() and isinstance(node.value, ast.List):
+                skills: list[str] = []
+                for elt in node.value.elts:
+                    if (
+                        isinstance(elt, ast.Call)
+                        and elt.args
+                        and isinstance(elt.args[0], ast.Constant)
+                        and isinstance(elt.args[0].value, str)
+                    ):
+                        skills.append(elt.args[0].value)
+                if skills:
+                    group_lists[tgt.id] = skills
     arm_to_skills: dict[str, list[str]] = {}
     for node in tree.body:
         if not (isinstance(node, ast.FunctionDef) and node.name.startswith("make_") and node.name.endswith("_arm")):
@@ -278,10 +275,7 @@ def _build_import_graph() -> dict[str, set[str]]:
                 # ``runtime.execution.tool_engine`` both attribute to the
                 # package ``runtime.execution.tool_engine``.
                 parts = target.split(".")
-                if len(parts) >= 3:
-                    key = ".".join(parts[:3])
-                else:
-                    key = target
+                key = ".".join(parts[:3]) if len(parts) >= 3 else target
                 graph.setdefault(key, set()).add(rel)
     return graph
 
@@ -702,7 +696,7 @@ def page_adr_anchors() -> str:
         entries.append((md.name, title, status, refs))
 
     file_to_adrs: dict[str, list[str]] = {}
-    for name, title, status, refs in entries:
+    for name, _title, _status, refs in entries:
         for ref in refs:
             file_to_adrs.setdefault(ref, []).append(name)
 
@@ -715,7 +709,7 @@ def page_adr_anchors() -> str:
         "## Per ADR",
         "",
     ]
-    for name, title, status, refs in entries:
+    for name, _title, _status, refs in entries:
         lines.append(f"### [{title}](../../adr/{name}) · *{status}*")
         lines.append("")
         if refs:
@@ -881,7 +875,7 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
     # ── index.json manifest ────────────────────────────────
     manifest = {
         "version": 2,
-        "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "generated_at": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
         "files_analyzed": len(out),
         "tree": [c.to_dict() for c in tree.children],
     }

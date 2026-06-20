@@ -102,7 +102,9 @@ export class OctopusClient {
         if (/^https?:\/\//i.test(this.baseUrl)) {
           return `${new URL(this.baseUrl).origin}${path}`;
         }
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
       return path;
     }
     return `${this.baseUrl}${path.startsWith("/") ? "" : "/"}${path}`;
@@ -123,7 +125,9 @@ export class OctopusClient {
     const resp = await fetch(this._resolveUrl(path), init);
     if (!resp.ok) {
       const text = await resp.text().catch(() => "");
-      throw new Error(`${method} ${path} failed: ${resp.status}${text ? ` - ${text}` : ""}`);
+      throw new Error(
+        `${method} ${path} failed: ${resp.status}${text ? ` - ${text}` : ""}`,
+      );
     }
     if (resp.status === 204) return undefined as T;
     // Return the raw JSON unmodified; call sites (e.g. the account hooks)
@@ -216,18 +220,13 @@ export class OctopusClient {
       threadId: string,
       params?: { limit?: number },
     ): Promise<ThreadState[]> => {
-      const resp = await fetch(
-        `${this.baseUrl}/threads/${threadId}/history`,
-        {
-          method: "POST",
-          headers: this._safeHeaders(true),
-          body: JSON.stringify(params ?? {}),
-        },
-      );
+      const resp = await fetch(`${this.baseUrl}/threads/${threadId}/history`, {
+        method: "POST",
+        headers: this._safeHeaders(true),
+        body: JSON.stringify(params ?? {}),
+      });
       if (!resp.ok) throw new Error(`Get history failed: ${resp.status}`);
       return resp.json();
     },
   };
-
-
 }

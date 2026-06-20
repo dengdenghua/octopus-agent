@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import {
   BarChart3Icon,
@@ -32,12 +31,18 @@ export function SkillPerformance({ className }: { className?: string }) {
     setLoading(true);
     try {
       const [statsRes, decliningRes] = await Promise.all([
-        fetch(`${getBackendBaseURL()}/api/skills/performance`, { headers: authHeaders() }),
-        fetch(`${getBackendBaseURL()}/api/skills/declining`, { headers: authHeaders() }),
+        fetch(`${getBackendBaseURL()}/api/skills/performance`, {
+          headers: authHeaders(),
+        }),
+        fetch(`${getBackendBaseURL()}/api/skills/declining`, {
+          headers: authHeaders(),
+        }),
       ]);
       if (statsRes.ok) setStats(await statsRes.json());
       if (decliningRes.ok) setDeclining(await decliningRes.json());
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
     setLoading(false);
   }, []);
 
@@ -51,7 +56,9 @@ export function SkillPerformance({ className }: { className?: string }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <BarChart3Icon className="text-primary size-4" />
-          <span className="text-sm font-semibold">{t.evolutionDashboard.skillPerformance}</span>
+          <span className="text-sm font-semibold">
+            {t.evolutionDashboard.skillPerformance}
+          </span>
         </div>
         <button
           onClick={() => void refresh()}
@@ -102,10 +109,18 @@ export function SkillPerformance({ className }: { className?: string }) {
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b bg-muted/30">
-                <th className="px-3 py-2 text-left font-medium">{t.evolutionDashboard.skillName}</th>
-                <th className="px-3 py-2 text-right font-medium">{t.evolutionDashboard.usageCount}</th>
-                <th className="px-3 py-2 text-right font-medium">{t.evolutionDashboard.successRate}</th>
-                <th className="px-3 py-2 text-right font-medium">{t.evolutionDashboard.avgDuration}</th>
+                <th className="px-3 py-2 text-left font-medium">
+                  {t.evolutionDashboard.skillName}
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  {t.evolutionDashboard.usageCount}
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  {t.evolutionDashboard.successRate}
+                </th>
+                <th className="px-3 py-2 text-right font-medium">
+                  {t.evolutionDashboard.avgDuration}
+                </th>
               </tr>
             </thead>
             <tbody>

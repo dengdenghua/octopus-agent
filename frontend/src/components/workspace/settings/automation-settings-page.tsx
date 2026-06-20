@@ -143,7 +143,8 @@ export default function AutomationSettingsPage() {
     return (
       <div className="space-y-6">
         <div className="py-6 text-sm text-destructive">
-          {t.settings.automation.loadFailed}: {error instanceof Error ? error.message : String(error)}
+          {t.settings.automation.loadFailed}:{" "}
+          {error instanceof Error ? error.message : String(error)}
         </div>
         <LocalToolsSection />
       </div>
@@ -162,7 +163,9 @@ export default function AutomationSettingsPage() {
       <Alert>
         <AlertTriangleIcon className="h-4 w-4" />
         <AlertDescription>
-          <span className="font-medium">{t.settings.automation.restartRequiredTitle}</span>
+          <span className="font-medium">
+            {t.settings.automation.restartRequiredTitle}
+          </span>
           · {t.settings.automation.restartRequiredBody}
         </AlertDescription>
       </Alert>
@@ -360,7 +363,11 @@ function CapabilityCard({
 function ApprovalRulesSection() {
   const { t } = useI18n();
   const qc = useQueryClient();
-  const { data: rules = [], isLoading, error } = useQuery({
+  const {
+    data: rules = [],
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["approval-rules"],
     queryFn: () => listPermissionRules(),
     staleTime: 30_000,
@@ -467,8 +474,12 @@ function ApprovalRulesSection() {
               isFirst={index === 0}
               isLast={index === rules.length - 1}
               onDelete={() => deleteMutation.mutate(index)}
-              onMoveUp={() => moveMutation.mutate({ from: index, to: index - 1 })}
-              onMoveDown={() => moveMutation.mutate({ from: index, to: index + 1 })}
+              onMoveUp={() =>
+                moveMutation.mutate({ from: index, to: index - 1 })
+              }
+              onMoveDown={() =>
+                moveMutation.mutate({ from: index, to: index + 1 })
+              }
               busy={rowBusy}
             />
           ))}
@@ -603,7 +614,8 @@ function RuleRow({
         <div className="font-mono text-xs break-all">{rule.tool}</div>
         {rule.args_contains ? (
           <div className="mt-0.5 text-[11px] text-muted-foreground">
-            args contains <span className="font-mono">{rule.args_contains}</span>
+            args contains{" "}
+            <span className="font-mono">{rule.args_contains}</span>
           </div>
         ) : null}
         {rule.reason ? (

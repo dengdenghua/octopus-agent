@@ -21,16 +21,18 @@ describe("withActionTimeout", () => {
   it("rejects a hung promise at the deadline with the action label", async () => {
     const hung = new Promise<never>(() => {});
     const raced = withActionTimeout(hung, "click", 5_000);
-    const settled = expect(raced).rejects.toThrow(/action timeout \(5s\): click/);
+    const settled = expect(raced).rejects.toThrow(
+      /action timeout \(5s\): click/,
+    );
     await vi.advanceTimersByTimeAsync(5_001);
     await settled;
   });
 
   it("propagates the underlying rejection before the deadline", async () => {
     const failing = Promise.reject(new Error("selector not found"));
-    await expect(
-      withActionTimeout(failing, "click", 5_000),
-    ).rejects.toThrow("selector not found");
+    await expect(withActionTimeout(failing, "click", 5_000)).rejects.toThrow(
+      "selector not found",
+    );
   });
 
   it("clears the timer when the promise settles first", async () => {

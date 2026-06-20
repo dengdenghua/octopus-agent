@@ -22,4 +22,3 @@ export const Image = ({
     src={`data:${mediaType};base64,${base64}`}
   />
 );
-

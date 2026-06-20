@@ -231,6 +231,12 @@ export function WorkDirSelector({
     [onWorkDirChange],
   );
 
+  const clearWorkDir = useCallback(() => {
+    onWorkDirChange?.("");
+    setManualPath("");
+    setShowMenu(false);
+  }, [onWorkDirChange]);
+
   const loadDirectories = useCallback(async (path: string) => {
     if (!path) {
       setBrowseLoading(true);
@@ -499,6 +505,21 @@ export function WorkDirSelector({
       {/* Primary entry point for adding a workspace. */}
       <div className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}>
         {folderPickerCta}
+        {workDir && (
+          <button
+            type="button"
+            onClick={clearWorkDir}
+            className={cn(
+              "mt-1.5 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground",
+              !isMutedVariant && "border border-border/50",
+            )}
+          >
+            <FolderIcon className="size-3.5 shrink-0" />
+            <span className="min-w-0 flex-1 truncate">
+              {t.codeMode.personalSpace}
+            </span>
+          </button>
+        )}
 
         {!isMutedVariant && (
           <form

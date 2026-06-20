@@ -56,9 +56,7 @@ function parseFrameHeader(buf: ArrayBuffer): {
   const frameType = view.getUint8(2);
   const flags = view.getUint8(3);
   const decoder = new TextDecoder();
-  const tentacleId = decoder.decode(
-    new Uint8Array(buf, 4, idLen),
-  );
+  const tentacleId = decoder.decode(new Uint8Array(buf, 4, idLen));
   const payload = buf.slice(4 + idLen);
   return { idLen, frameType, flags, tentacleId, payload };
 }
@@ -128,8 +126,7 @@ export function useScreenStream(
         objectUrlRef.current = null;
       }
 
-      const mime =
-        frameType === FRAME_TYPE_WEBP ? "image/webp" : "image/jpeg";
+      const mime = frameType === FRAME_TYPE_WEBP ? "image/webp" : "image/jpeg";
       const blob = new Blob([payload], { type: mime });
       const url = URL.createObjectURL(blob);
       objectUrlRef.current = url;
@@ -198,9 +195,7 @@ export function useScreenStream(
       const now = performance.now();
       fpsFramesRef.current.push(now);
       // Keep only frames from the last second
-      fpsFramesRef.current = fpsFramesRef.current.filter(
-        (t) => now - t < 1000,
-      );
+      fpsFramesRef.current = fpsFramesRef.current.filter((t) => now - t < 1000);
       setFps(fpsFramesRef.current.length);
     },
     [renderImageFrame],
@@ -296,9 +291,7 @@ export function useScreenStream(
 
     // Subscribe to new device
     if (tentacleId) {
-      ws.send(
-        JSON.stringify({ action: "subscribe", tentacle_id: tentacleId }),
-      );
+      ws.send(JSON.stringify({ action: "subscribe", tentacle_id: tentacleId }));
     }
 
     // Reset counters

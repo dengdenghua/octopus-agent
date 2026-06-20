@@ -64,7 +64,13 @@ export function ContextCompressor({
       setHasAutoCompressed(true);
       void onCompress();
     }
-  }, [progress, compressThreshold, hasAutoCompressed, isCompressing, onCompress]);
+  }, [
+    progress,
+    compressThreshold,
+    hasAutoCompressed,
+    isCompressing,
+    onCompress,
+  ]);
 
   useEffect(() => {
     if (progress < compressThreshold * 0.8) {
@@ -105,11 +111,7 @@ export function ContextCompressor({
           aria-valuemax={100}
           aria-valuenow={percentage}
         >
-          <svg
-            aria-hidden
-            viewBox="0 0 18 18"
-            className="size-4 -rotate-90"
-          >
+          <svg aria-hidden viewBox="0 0 18 18" className="size-4 -rotate-90">
             <circle
               cx="9"
               cy="9"
@@ -141,11 +143,10 @@ export function ContextCompressor({
       </TooltipTrigger>
       <TooltipContent side="top" align="center">
         <div className="space-y-1 text-xs">
-          <div className="font-medium">
-            {contextLabel}
-          </div>
+          <div className="font-medium">{contextLabel}</div>
           <div className="text-muted-foreground">
-            {t.contextCompressor?.clickToCompress ?? "Click to compress context"}
+            {t.contextCompressor?.clickToCompress ??
+              "Click to compress context"}
           </div>
           <div className="flex justify-between gap-4">
             <span className="text-muted-foreground">Tokens</span>

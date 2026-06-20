@@ -1,4 +1,3 @@
-
 import { SearchIcon, SparklesIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
@@ -239,9 +238,7 @@ function SkillSettingsList({
 
   const configurableSkills = useMemo(
     () =>
-      skills.filter(
-        (s) => Boolean(s.name) && typeof s.enabled === "boolean",
-      ),
+      skills.filter((s) => Boolean(s.name) && typeof s.enabled === "boolean"),
     [skills],
   );
 
@@ -359,9 +356,7 @@ function SkillSettingsList({
               {/* Category header */}
               <div className="mb-3 flex items-center gap-2">
                 <span className="text-base">{group.icon}</span>
-                <span className="text-sm font-semibold">
-                  {group.label}
-                </span>
+                <span className="text-sm font-semibold">{group.label}</span>
                 <span className="text-muted-foreground text-xs">
                   {group.skills.length}
                 </span>
@@ -402,7 +397,9 @@ function SkillCard({
 }) {
   return (
     <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors hover:bg-accent/30">
-      <span className="shrink-0 text-lg select-none">{getSkillIcon(skill.name)}</span>
+      <span className="shrink-0 text-lg select-none">
+        {getSkillIcon(skill.name)}
+      </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{skill.name}</p>
         {skill.description && (
@@ -444,4 +441,3 @@ function EmptySkill({ onCreateSkill }: { onCreateSkill: () => void }) {
     </Empty>
   );
 }
-

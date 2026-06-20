@@ -109,7 +109,7 @@ export class RealtimeClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   // Timestamp of the last pong (or open). Used by the heartbeat tick to
   // decide whether the connection should be considered dead.
-  private lastPongAt: number = 0;
+  private lastPongAt = 0;
 
   constructor(opts: RealtimeClientOptions) {
     this.opts = opts;
@@ -121,7 +121,11 @@ export class RealtimeClient {
 
   connect(): void {
     if (this.closed) return;
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
     const url = this.buildUrl();
@@ -143,17 +147,19 @@ export class RealtimeClient {
       this.startHeartbeat();
       this.opts.onOpen?.();
     };
-    ws.onmessage = ev => {
+    ws.onmessage = (ev) => {
       this.dispatch(typeof ev.data === "string" ? ev.data : "");
     };
-    ws.onerror = ev => {
+    ws.onerror = (ev) => {
       this.opts.onError?.(ev);
     };
-    ws.onclose = ev => {
+    ws.onclose = (ev) => {
       this.stopHeartbeat();
       this.flushDeltaBuffer();
       this.opts.onClose?.(ev.code, ev.reason);
-      this.failPending(new Error(`websocket closed (${ev.code} ${ev.reason || "no reason"})`));
+      this.failPending(
+        new Error(`websocket closed (${ev.code} ${ev.reason || "no reason"})`),
+      );
       // Clear the outbox on disconnect. Anything that was buffered
       // for "send on next open" was a request whose Promise has now
       // been rejected by failPending; replaying those frames after a
@@ -184,7 +190,10 @@ export class RealtimeClient {
 
   // ── Send paths ─────────────────────────────────────────────
 
-  request<R = unknown>(method: string, params: Record<string, unknown> = {}): Promise<R> {
+  request<R = unknown>(
+    method: string,
+    params: Record<string, unknown> = {},
+  ): Promise<R> {
     const id = this.nextId++;
     const envelope: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
     return new Promise<R>((resolve, reject) => {
@@ -265,8 +274,9 @@ export class RealtimeClient {
       // Server-initiated. Route to the caller and reply with the
       // decision. Errors are translated to a JSON-RPC error response so
       // the server's awaiting future doesn't hang.
-      this.opts.onIncomingRequest(env)
-        .then(result => this.reply(env.id, result))
+      this.opts
+        .onIncomingRequest(env)
+        .then((result) => this.reply(env.id, result))
         .catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
           this.reply(env.id, null, { code: -32603, message });
@@ -319,7 +329,10 @@ export class RealtimeClient {
       // socket to stay open but stopped responding (proxy half-open,
       // load-balancer ghost session). Force-close so onclose triggers
       // the reconnect path.
-      if (this.lastPongAt > 0 && Date.now() - this.lastPongAt > PONG_TIMEOUT_MS) {
+      if (
+        this.lastPongAt > 0 &&
+        Date.now() - this.lastPongAt > PONG_TIMEOUT_MS
+      ) {
         this.ws?.close(4000, "pong timeout");
         return;
       }
@@ -408,7 +421,8 @@ function coalesceDeltaNotifications(batch: Notification[]): Notification[] {
         ...last,
         params: {
           ...previousParams,
-          delta: String(previousParams.delta ?? "") + String(nextParams.delta ?? ""),
+          delta:
+            String(previousParams.delta ?? "") + String(nextParams.delta ?? ""),
         },
       };
       continue;
@@ -418,7 +432,10 @@ function coalesceDeltaNotifications(batch: Notification[]): Notification[] {
   return merged;
 }
 
-function canMergeDeltaNotifications(left: Notification, right: Notification): boolean {
+function canMergeDeltaNotifications(
+  left: Notification,
+  right: Notification,
+): boolean {
   if (left.method !== right.method) return false;
   // Only delta-style notifications carry appendable text. ``item/started``
   // / ``item/completed`` snapshots must never merge — they replace,

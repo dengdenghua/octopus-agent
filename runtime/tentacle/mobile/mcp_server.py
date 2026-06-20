@@ -660,7 +660,9 @@ class TentacleMcpServer:
                 return self._error_result("No device available for screen analysis")
 
             try:
-                from runtime.tentacle.mobile.vlm import VlmClient, VlmConfig
+                from runtime.tentacle.mobile.vlm import (
+                    VlmClient,  # noqa: F401 — VlmConfig used conditionally
+                )
 
                 # 尝试获取 VLM 客户端
                 vlm_client: VlmClient | None = getattr(self.coordinator, "_vlm_client", None)

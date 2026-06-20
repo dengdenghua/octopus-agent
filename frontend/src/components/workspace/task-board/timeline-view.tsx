@@ -9,16 +9,14 @@
  *   - Zoom in/out on timeline via buttons
  */
 
-import {
-  ClockIcon,
-  Loader2Icon,
-  ZoomInIcon,
-  ZoomOutIcon,
-} from "lucide-react";
+import { ClockIcon, Loader2Icon, ZoomInIcon, ZoomOutIcon } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import type { TaskBoardTimelineResponse, TimelineTask } from "@/core/task-board/types";
+import type {
+  TaskBoardTimelineResponse,
+  TimelineTask,
+} from "@/core/task-board/types";
 
 import { useI18n } from "@/core/i18n/hooks";
 import type { TaskType } from "@/core/task-board/types";
@@ -72,15 +70,47 @@ function computeTicks(
 
   // Choose tick interval based on range
   const intervals = [
-    { thresholdMs: 5 * 60_000, intervalMs: 60_000, majorEvery: 5, format: "mm:ss" },
-    { thresholdMs: 30 * 60_000, intervalMs: 5 * 60_000, majorEvery: 6, format: "HH:mm" },
-    { thresholdMs: 2 * 3_600_000, intervalMs: 15 * 60_000, majorEvery: 4, format: "HH:mm" },
-    { thresholdMs: 12 * 3_600_000, intervalMs: 3_600_000, majorEvery: 3, format: "HH:mm" },
-    { thresholdMs: 48 * 3_600_000, intervalMs: 6 * 3_600_000, majorEvery: 4, format: "HH:mm" },
-    { thresholdMs: Infinity, intervalMs: 24 * 3_600_000, majorEvery: 1, format: "MMM dd" },
+    {
+      thresholdMs: 5 * 60_000,
+      intervalMs: 60_000,
+      majorEvery: 5,
+      format: "mm:ss",
+    },
+    {
+      thresholdMs: 30 * 60_000,
+      intervalMs: 5 * 60_000,
+      majorEvery: 6,
+      format: "HH:mm",
+    },
+    {
+      thresholdMs: 2 * 3_600_000,
+      intervalMs: 15 * 60_000,
+      majorEvery: 4,
+      format: "HH:mm",
+    },
+    {
+      thresholdMs: 12 * 3_600_000,
+      intervalMs: 3_600_000,
+      majorEvery: 3,
+      format: "HH:mm",
+    },
+    {
+      thresholdMs: 48 * 3_600_000,
+      intervalMs: 6 * 3_600_000,
+      majorEvery: 4,
+      format: "HH:mm",
+    },
+    {
+      thresholdMs: Infinity,
+      intervalMs: 24 * 3_600_000,
+      majorEvery: 1,
+      format: "MMM dd",
+    },
   ];
 
-  const cfg = intervals.find((i) => rangeMs <= i.thresholdMs) ?? intervals[intervals.length - 1]!;
+  const cfg =
+    intervals.find((i) => rangeMs <= i.thresholdMs) ??
+    intervals[intervals.length - 1]!;
 
   const ticks: TickMark[] = [];
   const firstTick = Math.ceil(startMs / cfg.intervalMs) * cfg.intervalMs;
@@ -95,7 +125,20 @@ function computeTicks(
     } else if (cfg.format === "HH:mm") {
       label = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
     } else {
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
       label = `${months[d.getMonth()]} ${d.getDate()}`;
     }
 
@@ -144,8 +187,14 @@ export function TimelineView({
     intelligence: t.taskBoard.intelligence,
   };
 
-  const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z * 1.5, 8)), []);
-  const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z / 1.5, 0.5)), []);
+  const handleZoomIn = useCallback(
+    () => setZoom((z) => Math.min(z * 1.5, 8)),
+    [],
+  );
+  const handleZoomOut = useCallback(
+    () => setZoom((z) => Math.max(z / 1.5, 0.5)),
+    [],
+  );
   const handleZoomReset = useCallback(() => setZoom(1), []);
 
   const tasks = data.tasks;
@@ -165,9 +214,17 @@ export function TimelineView({
     const baseWidth = 800;
     const timelineWidth = Math.max(baseWidth * zoom, 400);
     const totalWidth = LABEL_WIDTH + timelineWidth + PADDING_RIGHT;
-    const totalHeight = PADDING_TOP + tasks.length * ROW_HEIGHT + PADDING_BOTTOM;
+    const totalHeight =
+      PADDING_TOP + tasks.length * ROW_HEIGHT + PADDING_BOTTOM;
 
-    return { startMs, endMs, rangeMs: endMs - startMs, timelineWidth, totalWidth, totalHeight };
+    return {
+      startMs,
+      endMs,
+      rangeMs: endMs - startMs,
+      timelineWidth,
+      totalWidth,
+      totalHeight,
+    };
   }, [tasks, data, zoom]);
 
   const ticks = useMemo(() => {
@@ -178,7 +235,10 @@ export function TimelineView({
   const msToX = useCallback(
     (ms: number) => {
       if (!layout) return 0;
-      return LABEL_WIDTH + ((ms - layout.startMs) / layout.rangeMs) * layout.timelineWidth;
+      return (
+        LABEL_WIDTH +
+        ((ms - layout.startMs) / layout.rangeMs) * layout.timelineWidth
+      );
     },
     [layout],
   );
@@ -204,7 +264,13 @@ export function TimelineView({
     <div className="space-y-3">
       {/* Zoom controls */}
       <div className="flex items-center justify-end gap-1">
-        <Button variant="outline" size="icon" className="size-7" onClick={handleZoomOut} title={t.taskBoard.zoomOut}>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-7"
+          onClick={handleZoomOut}
+          title={t.taskBoard.zoomOut}
+        >
           <ZoomOutIcon className="size-3.5" />
         </Button>
         <Button
@@ -215,7 +281,13 @@ export function TimelineView({
         >
           {Math.round(zoom * 100)}%
         </Button>
-        <Button variant="outline" size="icon" className="size-7" onClick={handleZoomIn} title={t.taskBoard.zoomIn}>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-7"
+          onClick={handleZoomIn}
+          title={t.taskBoard.zoomIn}
+        >
           <ZoomInIcon className="size-3.5" />
         </Button>
       </div>
@@ -328,8 +400,14 @@ export function TimelineView({
                   if (rect) {
                     setTooltip({
                       task,
-                      x: e.clientX - rect.left + (containerRef.current?.scrollLeft ?? 0),
-                      y: e.clientY - rect.top + (containerRef.current?.scrollTop ?? 0),
+                      x:
+                        e.clientX -
+                        rect.left +
+                        (containerRef.current?.scrollLeft ?? 0),
+                      y:
+                        e.clientY -
+                        rect.top +
+                        (containerRef.current?.scrollTop ?? 0),
                     });
                   }
                 }}
@@ -357,7 +435,9 @@ export function TimelineView({
                   <tspan className="fill-muted-foreground">
                     {TYPE_ICON_EMOJI[task.type] ?? ""}{" "}
                   </tspan>
-                  {task.name.length > 18 ? task.name.slice(0, 18) + "..." : task.name}
+                  {task.name.length > 18
+                    ? task.name.slice(0, 18) + "..."
+                    : task.name}
                 </text>
 
                 {/* Task bar */}
@@ -437,9 +517,14 @@ export function TimelineView({
                 {" -- "}
                 {tooltip.task.status}
               </p>
-              <p>{t.taskBoard.duration}: {formatDurationMs(tooltip.task.duration_ms)}</p>
+              <p>
+                {t.taskBoard.duration}:{" "}
+                {formatDurationMs(tooltip.task.duration_ms)}
+              </p>
               {tooltip.task.is_running && (
-                <p className="text-amber-500 font-medium">{t.taskBoard.inProgress}</p>
+                <p className="text-amber-500 font-medium">
+                  {t.taskBoard.inProgress}
+                </p>
               )}
             </div>
           </div>

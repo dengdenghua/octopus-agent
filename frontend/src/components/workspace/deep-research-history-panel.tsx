@@ -11,10 +11,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  listDeepResearchJobs,
-  type ResearchJob,
-} from "@/core/research/api";
+import { listDeepResearchJobs, type ResearchJob } from "@/core/research/api";
 import { cn } from "@/lib/utils";
 
 interface DeepResearchHistoryPanelProps {
@@ -40,7 +37,9 @@ export function DeepResearchHistoryPanel({
       setJobs(next);
     } catch (err) {
       swallow(err);
-      setError(err instanceof Error ? err.message : "Failed to load research history");
+      setError(
+        err instanceof Error ? err.message : "Failed to load research history",
+      );
     } finally {
       setLoading(false);
     }
@@ -127,8 +126,12 @@ export function DeepResearchHistoryPanel({
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
                       <span>{job.status}</span>
-                      {job.lead_agent_name && <span>{job.lead_agent_name}</span>}
-                      <span>{formatDate(job.completed_at ?? job.created_at)}</span>
+                      {job.lead_agent_name && (
+                        <span>{job.lead_agent_name}</span>
+                      )}
+                      <span>
+                        {formatDate(job.completed_at ?? job.created_at)}
+                      </span>
                     </div>
                   </div>
                   {job.final_report ? (
@@ -138,9 +141,21 @@ export function DeepResearchHistoryPanel({
                   )}
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-1.5 text-[10px] text-muted-foreground">
-                  <HistoryMetric icon={<FileTextIcon className="size-3" />} value={job.materials.length} label="materials" />
-                  <HistoryMetric icon={<SearchIcon className="size-3" />} value={job.evidence.length} label="evidence" />
-                  <HistoryMetric icon={<ClockIcon className="size-3" />} value={job.roles.length} label="roles" />
+                  <HistoryMetric
+                    icon={<FileTextIcon className="size-3" />}
+                    value={job.materials.length}
+                    label="materials"
+                  />
+                  <HistoryMetric
+                    icon={<SearchIcon className="size-3" />}
+                    value={job.evidence.length}
+                    label="evidence"
+                  />
+                  <HistoryMetric
+                    icon={<ClockIcon className="size-3" />}
+                    value={job.roles.length}
+                    label="roles"
+                  />
                 </div>
               </button>
             ))}

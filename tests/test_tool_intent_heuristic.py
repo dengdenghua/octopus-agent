@@ -57,6 +57,20 @@ def test_plain_chat_stays_plain() -> None:
     assert not looks_like_plain_chat("AI 家庭机器人（扫地/陪伴/安防）")
 
 
+def test_explicit_no_tool_short_reply_stays_plain() -> None:
+    goal = "普通模式回归：请只用一句话回复收到，不要调用工具。"
+
+    assert looks_like_plain_chat(goal)
+    assert not looks_like_tool_intent(goal)
+
+
+def test_explicit_no_tool_direct_writing_stays_plain() -> None:
+    goal = "请直接生成结构化文档，不需要调用桌面或浏览器工具。"
+
+    assert looks_like_plain_chat(goal)
+    assert not looks_like_tool_intent(goal)
+
+
 # ─── Extensionless project filenames ─────────────────────────
 
 @pytest.mark.parametrize("goal", [

@@ -67,6 +67,51 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _context_risk_level(context: dict[str, Any]) -> str:
+    for key in (
+        "task_risk_level",
+        "risk_level",
+        "approval_risk_level",
+        "quality_risk_level",
+    ):
+        value = context.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "low"
+
+
+def _route_decision(agent_id: str, context: dict[str, Any]) -> dict[str, Any]:
+    try:
+        from runtime.safety.evolution.subagent_routing import (
+            decide_subagent_route,
+        )
+        decision = decide_subagent_route(
+            role=agent_id,
+            risk_level=_context_risk_level(context),
+            review_queue_path=context.get("review_queue_path"),
+            subagent_policy_path=context.get("subagent_policy_path"),
+            enabled=bool(context.get("enable_subagent_fitness_routing", True)),
+        )
+        return decision.to_dict()
+    except Exception as exc:  # noqa: BLE001
+        _log.debug(
+            "parallel subagent fitness routing skipped · agent_id=%s error=%s",
+            agent_id,
+            exc,
+        )
+        return {
+            "schema": "octopus.subagent_route_decision.v1",
+            "role": agent_id,
+            "action": "allow",
+            "reason": "subagent fitness routing unavailable",
+            "risk_level": _context_risk_level(context),
+            "verdict": "unknown",
+            "score": None,
+            "confidence": 0.0,
+            "evidence_item_ids": [],
+        }
+
+
 
 
 @dataclass
@@ -87,6 +132,7 @@ class _TaskEntry:
     cancel_event: threading.Event = field(default_factory=threading.Event)
     future: Future | None = None
     work_contract: WorkContract | None = None
+    route_decision: dict[str, Any] | None = None
 
     def duration(self) -> float | None:
         if self.started_at and self.completed_at:
@@ -544,6 +590,29 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     self._maybe_close_batch_locked(batch)
             return
 
+        route_decision = _route_decision(entry.subagent_name, context)
+        with self._lock:
+            entry.route_decision = route_decision
+        if route_decision.get("action") == "block":
+            with self._lock:
+                if entry.status == "pending":
+                    entry.status = "failed"
+                    entry.started_at = _now()
+                    entry.completed_at = entry.started_at
+                    entry.error = (
+                        "subagent_route_blocked: "
+                        f"{route_decision.get('reason') or 'blocked by routing policy'}"
+                    )
+                    batch = self._batches[entry.batch_id]
+                    self._publish_task_update_locked(
+                        batch,
+                        entry,
+                        phase="subagent_route_blocked",
+                        message=f"{entry.subagent_name} blocked by fitness routing",
+                    )
+                    self._maybe_close_batch_locked(batch)
+            return
+
         with self._lock:
             entry.status = "running"
             entry.started_at = _now()
@@ -556,6 +625,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             )
 
         run_context = dict(context)
+        run_context["subagent_route_decision"] = route_decision
         with self._lock:
             batch = self._batches[entry.batch_id]
             run_context["runtime_session_metadata"] = batch.runtime_session_metadata
@@ -729,6 +799,10 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     if entry.work_contract is not None else [f"task:{entry.task_id}"]
                 ),
                 "write_paths": list(entry.write_paths),
+                **(
+                    {"subagent_route_decision": entry.route_decision}
+                    if entry.route_decision is not None else {}
+                ),
             },
             message=message,
             description=entry.description,
@@ -819,5 +893,3 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             batch.subscribers = [
                 x for x in batch.subscribers if x not in dead
             ]
-
-

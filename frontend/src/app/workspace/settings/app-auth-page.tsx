@@ -70,12 +70,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useProviders,
   useProviderTypes,
@@ -90,6 +85,16 @@ import {
   type Authorization,
 } from "@/core/integrations";
 import { cn } from "@/lib/utils";
+
+interface AuthConfig {
+  key_label?: string;
+  key_placeholder?: string;
+  token_label?: string;
+  token_placeholder?: string;
+  instructions?: string;
+  help_url?: string;
+  domain?: string;
+}
 
 // Icon mapping
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -153,10 +158,7 @@ function ProviderIcon({
       )}
       style={{ backgroundColor: color ? `${color}20` : undefined }}
     >
-      <Icon
-        className="h-5 w-5"
-        style={{ color: color || undefined }}
-      />
+      <Icon className="h-5 w-5" style={{ color: color || undefined }} />
     </div>
   );
 }
@@ -164,11 +166,36 @@ function ProviderIcon({
 function StatusBadge({ status }: { status: Authorization["status"] }) {
   const { t } = useI18n();
   const config = {
-    connected: { icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50", label: t.appAuth.statusConnected },
-    expired: { icon: Clock, color: "text-yellow-600", bg: "bg-yellow-50", label: t.appAuth.statusExpired },
-    revoked: { icon: XCircle, color: "text-gray-600", bg: "bg-gray-50", label: t.appAuth.statusRevoked },
-    error: { icon: AlertCircle, color: "text-red-600", bg: "bg-red-50", label: t.appAuth.statusError },
-    pending: { icon: Clock, color: "text-blue-600", bg: "bg-blue-50", label: t.appAuth.statusPending },
+    connected: {
+      icon: CheckCircle2,
+      color: "text-green-600",
+      bg: "bg-green-50",
+      label: t.appAuth.statusConnected,
+    },
+    expired: {
+      icon: Clock,
+      color: "text-yellow-600",
+      bg: "bg-yellow-50",
+      label: t.appAuth.statusExpired,
+    },
+    revoked: {
+      icon: XCircle,
+      color: "text-gray-600",
+      bg: "bg-gray-50",
+      label: t.appAuth.statusRevoked,
+    },
+    error: {
+      icon: AlertCircle,
+      color: "text-red-600",
+      bg: "bg-red-50",
+      label: t.appAuth.statusError,
+    },
+    pending: {
+      icon: Clock,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+      label: t.appAuth.statusPending,
+    },
   };
 
   const { icon: Icon, color, bg, label } = config[status];
@@ -196,8 +223,8 @@ function AuthCard({
   return (
     <div className="flex items-start gap-4 rounded-lg border p-4 hover:bg-muted/50 transition-colors">
       <ProviderIcon
-        icon={auth.icon_url || provider?.icon}
-        color={provider?.color}
+        icon={(auth.icon_url || provider?.icon) ?? null}
+        color={provider?.color ?? null}
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
@@ -211,13 +238,18 @@ function AuthCard({
           <p className="text-sm text-red-600 mt-1">{auth.last_error}</p>
         )}
         <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-          <span>{t.appAuth.typePrefix} {provider?.provider_type_label || auth.provider_type}</span>
           <span>
-            {t.appAuth.connectedAtPrefix} {new Date(auth.connected_at * 1000).toLocaleDateString()}
+            {t.appAuth.typePrefix}{" "}
+            {provider?.provider_type_label || auth.provider_type}
+          </span>
+          <span>
+            {t.appAuth.connectedAtPrefix}{" "}
+            {new Date(auth.connected_at * 1000).toLocaleDateString()}
           </span>
           {auth.last_used_at && (
             <span>
-              {t.appAuth.lastUsedAtPrefix} {new Date(auth.last_used_at * 1000).toLocaleDateString()}
+              {t.appAuth.lastUsedAtPrefix}{" "}
+              {new Date(auth.last_used_at * 1000).toLocaleDateString()}
             </span>
           )}
         </div>
@@ -295,7 +327,11 @@ function ConnectDialog({
   provider: ProviderInfo | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: { apiKey?: string; token?: string; cookie?: string }) => void;
+  onSubmit: (values: {
+    apiKey?: string;
+    token?: string;
+    cookie?: string;
+  }) => void;
 }) {
   const { t } = useI18n();
   const [apiKey, setApiKey] = useState("");
@@ -303,6 +339,8 @@ function ConnectDialog({
   const [cookie, setCookie] = useState("");
 
   if (!provider) return null;
+
+  const authConfig = provider.auth_config as AuthConfig;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,22 +365,23 @@ function ConnectDialog({
           {provider.auth_type === "api_key" && (
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                {provider.auth_config.key_label || t.appAuth.apiKeyLabelFallback}
+                {authConfig.key_label || t.appAuth.apiKeyLabelFallback}
               </label>
               <Input
                 type="password"
-                placeholder={provider.auth_config.key_placeholder}
+                placeholder={authConfig.key_placeholder}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />
-              {provider.auth_config.help_url && (
+              {authConfig.help_url && (
                 <a
-                  href={provider.auth_config.help_url as string}
+                  href={authConfig.help_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-primary flex items-center gap-1"
                 >
-                  {t.appAuth.howToGetApiKey} <ExternalLink className="h-3 w-3" />
+                  {t.appAuth.howToGetApiKey}{" "}
+                  <ExternalLink className="h-3 w-3" />
                 </a>
               )}
             </div>
@@ -351,17 +390,17 @@ function ConnectDialog({
           {provider.auth_type === "token" && (
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                {provider.auth_config.token_label || t.appAuth.tokenLabelFallback}
+                {authConfig.token_label || t.appAuth.tokenLabelFallback}
               </label>
               <Input
                 type="password"
-                placeholder={provider.auth_config.token_placeholder as string}
+                placeholder={authConfig.token_placeholder}
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
               />
-              {provider.auth_config.help_url && (
+              {authConfig.help_url && (
                 <p className="text-xs text-muted-foreground">
-                  {provider.auth_config.help_url as string}
+                  {authConfig.help_url}
                 </p>
               )}
             </div>
@@ -369,15 +408,17 @@ function ConnectDialog({
 
           {provider.auth_type === "cookie" && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t.appAuth.cookieLabel}</label>
+              <label className="text-sm font-medium">
+                {t.appAuth.cookieLabel}
+              </label>
               <textarea
                 className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                placeholder={provider.auth_config.instructions as string}
+                placeholder={authConfig.instructions}
                 value={cookie}
                 onChange={(e) => setCookie(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                {t.appAuth.cookieHint((provider.auth_config.domain as string) ?? "")}
+                {t.appAuth.cookieHint(authConfig.domain ?? "")}
               </p>
             </div>
           )}
@@ -391,7 +432,11 @@ function ConnectDialog({
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               {t.appAuth.dialogCancel}
             </Button>
             <Button type="submit" disabled={!apiKey && !token && !cookie}>
@@ -423,7 +468,8 @@ function BrowserCaptureDialog({
   if (!provider) return null;
 
   const status = session?.status ?? "running";
-  const isFinished = status === "success" || status === "failed" || status === "cancelled";
+  const isFinished =
+    status === "success" || status === "failed" || status === "cancelled";
 
   const StatusIcon =
     status === "success"
@@ -491,8 +537,18 @@ function BrowserCaptureDialog({
           )}
           {session && (status === "success" || status === "failed") && (
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>{t.appAuth.browserCookiesLabel} {session.cookies_captured ? t.appAuth.browserCaptured : t.appAuth.browserNotCaptured}</p>
-              <p>{t.appAuth.browserBearerLabel} {session.bearer_captured ? t.appAuth.browserCaptured : t.appAuth.browserNotCaptured}</p>
+              <p>
+                {t.appAuth.browserCookiesLabel}{" "}
+                {session.cookies_captured
+                  ? t.appAuth.browserCaptured
+                  : t.appAuth.browserNotCaptured}
+              </p>
+              <p>
+                {t.appAuth.browserBearerLabel}{" "}
+                {session.bearer_captured
+                  ? t.appAuth.browserCaptured
+                  : t.appAuth.browserNotCaptured}
+              </p>
             </div>
           )}
         </div>
@@ -515,8 +571,12 @@ export default function AppAuthPage() {
   const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
-  const [connectProvider, setConnectProvider] = useState<ProviderInfo | null>(null);
-  const [browserProvider, setBrowserProvider] = useState<ProviderInfo | null>(null);
+  const [connectProvider, setConnectProvider] = useState<ProviderInfo | null>(
+    null,
+  );
+  const [browserProvider, setBrowserProvider] = useState<ProviderInfo | null>(
+    null,
+  );
 
   const { data: providers, isLoading: providersLoading } = useProviders(
     selectedType === "all" ? undefined : selectedType,
@@ -537,7 +597,8 @@ export default function AppAuthPage() {
 
   const filteredProviders = useMemo(() => {
     if (!providers) return [];
-    if (!searchQuery) return providers.filter((p) => !connectedProviderIds.has(p.id));
+    if (!searchQuery)
+      return providers.filter((p) => !connectedProviderIds.has(p.id));
     return providers.filter(
       (p) =>
         !connectedProviderIds.has(p.id) &&
@@ -570,7 +631,11 @@ export default function AppAuthPage() {
     browserCapture.reset();
   };
 
-  const handleSubmitConnect = (values: { apiKey?: string; token?: string; cookie?: string }) => {
+  const handleSubmitConnect = (values: {
+    apiKey?: string;
+    token?: string;
+    cookie?: string;
+  }) => {
     if (!connectProvider) return;
 
     if (connectProvider.auth_type === "api_key" && values.apiKey) {
@@ -606,9 +671,7 @@ export default function AppAuthPage() {
       {/* Header */}
       <div>
         <h2 className="text-2xl font-semibold">{t.appAuth.pageTitle}</h2>
-        <p className="text-muted-foreground mt-1">
-          {t.appAuth.pageSubtitle}
-        </p>
+        <p className="text-muted-foreground mt-1">{t.appAuth.pageSubtitle}</p>
       </div>
 
       {/* Search and filter */}
@@ -665,7 +728,9 @@ export default function AppAuthPage() {
               {t.appAuth.availableSectionHeader(filteredProviders.length)}
             </h3>
             {providersLoading ? (
-              <div className="text-center py-8 text-muted-foreground">{t.appAuth.loadingText}</div>
+              <div className="text-center py-8 text-muted-foreground">
+                {t.appAuth.loadingText}
+              </div>
             ) : filteredProviders.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 {t.appAuth.noAvailableApps}

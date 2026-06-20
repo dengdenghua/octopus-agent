@@ -51,6 +51,8 @@ from runtime.sensing.gateway.realtime_turn_outcome import (
     _file_change_item_ids,
     _turn_has_failed_code_verification,
     _turn_has_unverified_code_changes,
+    _verification_plan_for_code_paths,
+    _verification_plan_stdout_tail,
 )
 
 if TYPE_CHECKING:
@@ -435,6 +437,43 @@ async def _start_turn(
             return turn
 
         if _turn_has_unverified_code_changes(turn):
+            code_change_paths = _code_change_paths(turn)
+            verification_plan = _verification_plan_for_code_paths(
+                code_change_paths,
+                intent,
+            )
+            try:
+                from runtime.safety.evolution.auto_verifier import (
+                    run_highest_priority_verification,
+                )
+
+                auto_item = run_highest_priority_verification(
+                    verification_plan,
+                    sandbox_policy=validated.sandbox_policy,
+                )
+            except Exception:  # noqa: BLE001 - auto verification is best-effort
+                auto_item = None
+            if auto_item is not None:
+                turn.items.append(auto_item)
+                await runtime._emit_item_started(turn, log, emitter, auto_item)
+                await runtime._emit_item_completed(turn, log, emitter, auto_item)
+                if auto_item.status == ItemStatus.COMPLETED:
+                    turn.status = TurnStatus.COMPLETED
+                    log.turn_completed(thread_id, turn.id, turn.status)
+                    runtime._record_successful_turn_example(turn, intent=intent)
+                    await runtime._maybe_compact(thread_id, log, emitter)
+                    runtime._snapshot_to_thread_store(thread_id, log, intent)
+                    return turn
+                turn.status = TurnStatus.FAILED
+                log.turn_completed(thread_id, turn.id, turn.status)
+                runtime._record_failed_turn_proposal(
+                    turn,
+                    intent=intent,
+                    failure_source="verification_failed",
+                )
+                runtime._snapshot_to_thread_store(thread_id, log, intent)
+                return turn
+
             verification_item = VerificationItem(
                 command="verification required",
                 kind="manual",
@@ -444,12 +483,9 @@ async def _start_turn(
                     "Code changes were produced but no verification step "
                     "was recorded before final answer."
                 ),
-                stdout_tail=(
-                    "Run an appropriate test, lint, typecheck, or build "
-                    "command and retry the final answer."
-                ),
+                stdout_tail=_verification_plan_stdout_tail(verification_plan),
                 stderr_tail=None,
-                related_files=_code_change_paths(turn),
+                related_files=code_change_paths,
                 related_change_item_ids=_file_change_item_ids(turn),
             )
             turn.items.append(verification_item)

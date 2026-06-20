@@ -72,6 +72,10 @@ async def _drive_team_topology(
     evolver to score next tick.
     """
     # ── PHASE 1 · topology resolution + fallback ────────────────
+    from runtime.safety.evolution.governance_audit import (
+        append_governance_audit_event,
+    )
+    from runtime.safety.evolution.subagent_policy import evaluate_agent_policy
     from runtime.safety.organization import TeamTopology
     from runtime.safety.organization.forge import load_registry
     from runtime.safety.organization.performance_log import record_run
@@ -80,24 +84,7 @@ async def _drive_team_topology(
         TeamRunResult,
     )
 
-    registry = load_registry()
-    topology: TeamTopology | None = registry.get(topology_id)
-    if topology is None:
-        # Allow name lookup as a convenience (UI users will refer
-        # to topologies by their human-readable name, not the
-        # fingerprint).
-        for t in registry.values():
-            if t.name == topology_id:
-                topology = t
-                break
-    if topology is None:
-        _logger.warning(
-            "topology_id %r not in registry · falling back to react",
-            topology_id,
-        )
-        # Build a provider / agent and run the single-agent path so
-        # the client never sees an empty turn just because of a
-        # stale id.
+    async def _fallback_to_react() -> None:
         loop = asyncio.get_running_loop()
         gateway_provider = GatewayApprovalProvider(
             emitter,
@@ -118,10 +105,57 @@ async def _drive_team_topology(
             _logger.debug("agent resolution failed, using default", exc_info=True)
             agent = None
         await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+
+    thread_id = turn.thread_id
+    registry = load_registry()
+    topology: TeamTopology | None = registry.get(topology_id)
+    if topology is None:
+        # Allow name lookup as a convenience (UI users will refer
+        # to topologies by their human-readable name, not the
+        # fingerprint).
+        for t in registry.values():
+            if t.name == topology_id:
+                topology = t
+                break
+    if topology is None:
+        _logger.warning(
+            "topology_id %r not in registry · falling back to react",
+            topology_id,
+        )
+        await _fallback_to_react()
+        return
+    policy_report = evaluate_agent_policy({
+        str(role): spec.agent_id
+        for role, spec in topology.agents.items()
+    })
+    if policy_report.get("blocked"):
+        _logger.warning(
+            "topology_id %r is blocked by operator subagent policy · "
+            "falling back to react",
+            topology_id,
+        )
+        with contextlib.suppress(Exception):
+            append_governance_audit_event(
+                event_type="topology_policy_block",
+                target="topology_policy",
+                status="blocked",
+                agent_id=str(intent.user_context.get("agent_id") or ""),
+                artifact={
+                    "topology_id": topology_id,
+                    "topology_name": topology.name,
+                    "topology_fingerprint": topology.fingerprint,
+                    "subagent_policy": policy_report,
+                },
+                decision_context={
+                    "thread_id": thread_id,
+                    "turn_id": turn.id,
+                    "source": "realtime_team_topology",
+                },
+            )
+        await _fallback_to_react()
         return
 
     # ── PHASE 2 · queue bridge setup ────────────────────────────
-    thread_id = turn.thread_id
     runner_timeout = int(runtime._max_iterations * 30)
 
     # Live-event bridge: TeamRunner -> emitter (this coroutine).

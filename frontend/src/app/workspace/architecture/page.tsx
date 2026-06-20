@@ -61,8 +61,7 @@ export default function ArchitecturePage() {
         if (!cancelled) setDocs(data.docs);
       } catch (e) {
         swallow(e);
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : "unknown");
+        if (!cancelled) setError(e instanceof Error ? e.message : "unknown");
       }
     })();
     return () => {
@@ -99,10 +98,7 @@ export default function ArchitecturePage() {
     };
   }, [activeId]);
 
-  const availableIds = useMemo(
-    () => new Set(docs.map((d) => d.id)),
-    [docs],
-  );
+  const availableIds = useMemo(() => new Set(docs.map((d) => d.id)), [docs]);
 
   return (
     <WorkspaceContainer>
@@ -143,11 +139,11 @@ export default function ArchitecturePage() {
                                 ? "bg-primary/10 text-foreground font-medium"
                                 : "text-muted-foreground",
                             )}
-                            title={
-                              docs.find((d) => d.id === id)?.path ?? id
-                            }
+                            title={docs.find((d) => d.id === id)?.path ?? id}
                           >
-                            {(t.architecture.docs as Record<string, string>)[id] ?? id}
+                            {(t.architecture.docs as Record<string, string>)[
+                              id
+                            ] ?? id}
                           </button>
                         </li>
                       ))}

@@ -6,7 +6,6 @@ import pytest
 
 from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.agents import (
-    AGENT_PRESET_FACTORIES,
     Agent,
     AgentRegistry,
     make_all_agent_presets,
@@ -26,6 +25,18 @@ class _FakeExecutor:
 
 def _fake_runtime():
     return GraphRuntime(executor=_FakeExecutor(), journal=None)
+
+
+# The default user-facing preset factories. desktop_operator and admin are
+# special personas excluded from the default roster (see presets.py), so they
+# are not listed here — mirrors the old _PRESET_FACTORIES, which the
+# preset refactor replaced with disk-driven make_all_agent_presets().
+_PRESET_FACTORIES = [
+    make_general_agent,
+    make_coder_agent,
+    make_vibe_selling_agent,
+    make_ecommerce_mind_agent,
+]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -66,7 +77,7 @@ class TestAgentConstructor:
 
 
 class TestPresetAgents:
-    @pytest.mark.parametrize("factory", AGENT_PRESET_FACTORIES)
+    @pytest.mark.parametrize("factory", _PRESET_FACTORIES)
     def test_all_fields_populated(self, factory):
         agent = factory(_fake_runtime())
         assert agent.agent_id
@@ -195,7 +206,7 @@ class TestAggregateViews:
 class TestAgentCanUse:
     def test_atomic_always_usable(self):
         """Implementation note."""
-        for factory in AGENT_PRESET_FACTORIES:
+        for factory in _PRESET_FACTORIES:
             agent = factory(_fake_runtime())
             for atomic in ["list_cwd", "read_file", "count_words", "hash_text"]:
                 assert agent.can_use(atomic), (

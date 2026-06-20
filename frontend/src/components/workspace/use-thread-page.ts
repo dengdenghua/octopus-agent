@@ -20,7 +20,9 @@ export function useRegenerateHandler(
       if (detail && detail.threadId && detail.threadId !== threadId) {
         return;
       }
-      const lastHuman = thread.messages.filter(m => m.type === "human").at(-1);
+      const lastHuman = thread.messages
+        .filter((m) => m.type === "human")
+        .at(-1);
       if (!lastHuman) return;
       const text = extractTextFromMessage(lastHuman);
       if (text) {
@@ -36,15 +38,21 @@ export function useRegenerateHandler(
 }
 
 export function usePlanActionHandler(
-  sendMessage: (threadId: string, message: PromptInputMessage, ...args: unknown[]) => void,
+  sendMessage: (
+    threadId: string,
+    message: PromptInputMessage,
+    ...args: unknown[]
+  ) => void,
   threadId: string,
 ) {
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as {
-        text: string;
-        additionalKwargs: Record<string, unknown>;
-      } | undefined;
+      const detail = (e as CustomEvent).detail as
+        | {
+            text: string;
+            additionalKwargs: Record<string, unknown>;
+          }
+        | undefined;
       if (detail) {
         void sendMessage(
           threadId,

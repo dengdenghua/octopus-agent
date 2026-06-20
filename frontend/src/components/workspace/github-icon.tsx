@@ -12,4 +12,3 @@ export function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-

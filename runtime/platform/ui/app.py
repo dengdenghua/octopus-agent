@@ -894,6 +894,10 @@ def create_app(
         jwt_secret=molili_jwt_secret,
     ))
 
+    from runtime.sensing.gateway.agent_modes_router import create_agent_modes_router
+
+    app.include_router(create_agent_modes_router())
+
     try:
         from runtime.platform.process.paths import app_paths as _workspace_app_paths
         from runtime.sensing.gateway.workspaces_router import create_workspaces_router
@@ -1202,6 +1206,11 @@ def create_app(
         app.include_router(create_agent_trace_router(
             store=getattr(state, "trace_store", None),
             db_path=trace_store_path,
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=molili_jwt_secret,
+            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
+            jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
         ))
     except Exception as _trace_exc:  # noqa: BLE001
         import logging as _logging

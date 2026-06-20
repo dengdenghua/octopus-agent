@@ -1,4 +1,3 @@
-﻿import { swallow } from "@/core/utils/log";
 import type { Message } from "@/core/api/types";
 import "katex/dist/katex.min.css";
 import {
@@ -20,7 +19,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ComponentProps,
   type ImgHTMLAttributes,
@@ -39,11 +37,7 @@ import {
   ReasoningTrigger,
   useReasoning,
 } from "@/components/ai-elements/reasoning";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { CollapsibleContent } from "@/components/ui/collapsible";
 import { Task, TaskTrigger } from "@/components/ai-elements/task";
 import { Badge } from "@/components/ui/badge";
 import { resolveArtifactURL } from "@/core/artifacts/utils";
@@ -115,9 +109,6 @@ function stringList(value: unknown): string[] {
 
 const INTERNAL_TRACE_DETAILS_RE =
   /^\s*<details\b[^>]*>\s*<summary\b[^>]*>\s*[^<]*(?:ReAct|\u8f68\u8ff9)[^<]*<\/summary>[\s\S]*?<\/details>\s*/i;
-
-const INLINE_THINKING_DETAILS_RE =
-  /^\s*<details\b[^>]*>\s*<summary\b[^>]*>\s*[^<]*(?:\u601d\u8003\u8fc7\u7a0b|Thinking)[^<]*<\/summary>[\s\S]*?<\/details>\s*/i;
 
 const INLINE_THINKING_DETAILS_CAPTURE_RE =
   /^\s*<details\b[^>]*>\s*<summary\b[^>]*>\s*[^<]*(?:\u601d\u8003\u8fc7\u7a0b|Thinking)[^<]*<\/summary>([\s\S]*?)<\/details>\s*/i;

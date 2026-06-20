@@ -36,13 +36,14 @@ interface ArtifactsProviderProps {
   threadId?: string | null;
 }
 
-export function ArtifactsProvider({ children, threadId }: ArtifactsProviderProps) {
+export function ArtifactsProvider({
+  children,
+  threadId,
+}: ArtifactsProviderProps) {
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<string | null>(null);
   const [autoSelect, setAutoSelect] = useState(true);
-  const [open, setOpen] = useState(
-    env.STATIC_WEBSITE_ONLY,
-  );
+  const [open, setOpen] = useState(env.STATIC_WEBSITE_ONLY);
   const [autoOpen, setAutoOpen] = useState(true);
   const { setOpen: setSidebarOpen } = useSidebar();
 

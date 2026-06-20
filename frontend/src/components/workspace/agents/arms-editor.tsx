@@ -13,12 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAgent } from "@/core/agents/hooks";
 import {
   useAgentToolRegistry,
@@ -53,13 +48,17 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
     budget.max_iterations != null;
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [selectedPrivateSkills, setSelectedPrivateSkills] = useState<Set<string>>(
-    new Set(),
-  );
+  const [selectedPrivateSkills, setSelectedPrivateSkills] = useState<
+    Set<string>
+  >(new Set());
   const [affinity, setAffinity] = useState("");
   const [skillQuery, setSkillQuery] = useState("");
-  const [armFilter, setArmFilter] = useState<"all" | "enabled" | "disabled">("all");
-  const [skillFilter, setSkillFilter] = useState<"all" | "selected" | "unselected">("all");
+  const [armFilter, setArmFilter] = useState<"all" | "enabled" | "disabled">(
+    "all",
+  );
+  const [skillFilter, setSkillFilter] = useState<
+    "all" | "selected" | "unselected"
+  >("all");
   const [skillSourceFilter, setSkillSourceFilter] = useState("all");
   const [tab, setTab] = useState<Props["initialTab"]>(initialTab);
   const [dirty, setDirty] = useState(false);
@@ -104,7 +103,10 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
   );
 
   const skillSources = useMemo(() => {
-    const counts = new Map<string, { id: string; label: string; count: number }>();
+    const counts = new Map<
+      string,
+      { id: string; label: string; count: number }
+    >();
     for (const skill of skillCatalog) {
       const id = skill.group || skill.category || "domain";
       const label = skill.category || skill.group || id;
@@ -145,18 +147,29 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
   const visibleSkills = useMemo(() => {
     const query = skillQuery.trim().toLowerCase();
     return skillCatalog.filter((skill) => {
-      if (skillFilter === "selected" && !selectedPrivateSkills.has(skill.name)) {
+      if (
+        skillFilter === "selected" &&
+        !selectedPrivateSkills.has(skill.name)
+      ) {
         return false;
       }
-      if (skillFilter === "unselected" && selectedPrivateSkills.has(skill.name)) {
+      if (
+        skillFilter === "unselected" &&
+        selectedPrivateSkills.has(skill.name)
+      ) {
         return false;
       }
       if (skillSourceFilter !== "all") {
         if (skillSourceFilter === "custom") {
-          if (skill.group || skill.trusted_source?.startsWith("skill://all_skills/")) {
+          if (
+            skill.group ||
+            skill.trusted_source?.startsWith("skill://all_skills/")
+          ) {
             return false;
           }
-        } else if ((skill.group || skill.category || "domain") !== skillSourceFilter) {
+        } else if (
+          (skill.group || skill.category || "domain") !== skillSourceFilter
+        ) {
           return false;
         }
       }
@@ -167,7 +180,13 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
         .toLowerCase()
         .includes(query);
     });
-  }, [selectedPrivateSkills, skillCatalog, skillFilter, skillQuery, skillSourceFilter]);
+  }, [
+    selectedPrivateSkills,
+    skillCatalog,
+    skillFilter,
+    skillQuery,
+    skillSourceFilter,
+  ]);
 
   const original = useMemo(
     () => ({
@@ -296,7 +315,9 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
     const err = armsQuery.error ?? registryQuery.error ?? skillsQuery.error;
     return (
       <div className="py-6 text-sm text-destructive">
-        {t.armsEditor.loadFailed(err instanceof Error ? err.message : String(err))}
+        {t.armsEditor.loadFailed(
+          err instanceof Error ? err.message : String(err),
+        )}
       </div>
     );
   }
@@ -384,7 +405,9 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         {arm.icon ? (
-                          <span className="text-base leading-none">{arm.icon}</span>
+                          <span className="text-base leading-none">
+                            {arm.icon}
+                          </span>
                         ) : null}
                         <div className="font-medium">
                           {arm.display_name || arm.arm_id}
@@ -475,36 +498,41 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                 {t.armsEditor.skillMarketplaceLabel}
               </div>
               <div className="font-mono text-[10px] text-muted-foreground">
-                {t.armsEditor.visibleSkillsCount(visibleSkills.length, skillCatalog.length)}
+                {t.armsEditor.visibleSkillsCount(
+                  visibleSkills.length,
+                  skillCatalog.length,
+                )}
               </div>
             </div>
             <div className="flex max-h-20 flex-wrap gap-1.5 overflow-y-auto pr-1">
-                {[
-                  ["all", t.armsEditor.skillCategoryAll, skillCatalog.length],
-                  ...skillSources.map((source) => [source.id, source.label, source.count] as const),
-                  [
-                    "custom",
-                    t.armsEditor.skillCategoryCustom,
-                    skillCatalog.filter(
-                      (skill) =>
-                        !skill.group &&
-                        !skill.trusted_source?.startsWith("skill://all_skills/"),
-                    ).length,
-                  ] as const,
-                ].map(([id, label, count]) => (
-                  <Button
-                    key={id}
-                    className="h-7 max-w-[180px] justify-between rounded-sm px-2 text-xs"
-                    size="sm"
-                    variant={skillSourceFilter === id ? "default" : "ghost"}
-                    onClick={() => setSkillSourceFilter(String(id))}
-                  >
-                    <span className="min-w-0 truncate">{label}</span>
-                    <span className="ml-2 font-mono text-[10px] opacity-75">
-                      {count}
-                    </span>
-                  </Button>
-                ))}
+              {[
+                ["all", t.armsEditor.skillCategoryAll, skillCatalog.length],
+                ...skillSources.map(
+                  (source) => [source.id, source.label, source.count] as const,
+                ),
+                [
+                  "custom",
+                  t.armsEditor.skillCategoryCustom,
+                  skillCatalog.filter(
+                    (skill) =>
+                      !skill.group &&
+                      !skill.trusted_source?.startsWith("skill://all_skills/"),
+                  ).length,
+                ] as const,
+              ].map(([id, label, count]) => (
+                <Button
+                  key={id}
+                  className="h-7 max-w-[180px] justify-between rounded-sm px-2 text-xs"
+                  size="sm"
+                  variant={skillSourceFilter === id ? "default" : "ghost"}
+                  onClick={() => setSkillSourceFilter(String(id))}
+                >
+                  <span className="min-w-0 truncate">{label}</span>
+                  <span className="ml-2 font-mono text-[10px] opacity-75">
+                    {count}
+                  </span>
+                </Button>
+              ))}
             </div>
             <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
               <div className="grid grid-cols-2 gap-2">
@@ -512,7 +540,9 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                   <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                     {t.armsEditor.filterAll}
                   </div>
-                  <div className="text-sm font-semibold">{skillCatalog.length}</div>
+                  <div className="text-sm font-semibold">
+                    {skillCatalog.length}
+                  </div>
                 </div>
                 <div className="rounded-sm border border-border bg-background/70 px-2.5 py-1.5">
                   <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
@@ -567,9 +597,12 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               visibleSkills.map((skill) => {
                 const isOn = selectedPrivateSkills.has(skill.name);
                 const permission = permissionBySkill.get(skill.name);
-                const source = skill.group || skill.category || skill.trusted_source || "";
+                const source =
+                  skill.group || skill.category || skill.trusted_source || "";
                 const skillLabel =
-                  skill.name === "*" ? t.agentConfig.allSkillsWildcard : skill.name;
+                  skill.name === "*"
+                    ? t.agentConfig.allSkillsWildcard
+                    : skill.name;
                 return (
                   <div
                     key={skill.name}
@@ -602,10 +635,13 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                           </Badge>
                           {permission ? (
                             <Badge
-                              variant={permission.enabled ? "outline" : "secondary"}
+                              variant={
+                                permission.enabled ? "outline" : "secondary"
+                              }
                               className={cn(
                                 "rounded-sm text-[10px]",
-                                !permission.enabled && "border-destructive/30 text-destructive",
+                                !permission.enabled &&
+                                  "border-destructive/30 text-destructive",
                               )}
                             >
                               {permission.id} ·{" "}
@@ -645,8 +681,9 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               </div>
             </div>
             <Badge variant="outline" className="text-[10px]">
-              {permissionsQuery.data?.filter((item) => item.enabled).length ?? 0}/
-              {permissionsQuery.data?.length ?? 0}
+              {permissionsQuery.data?.filter((item) => item.enabled).length ??
+                0}
+              /{permissionsQuery.data?.length ?? 0}
             </Badge>
           </div>
 
@@ -691,14 +728,19 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
                           {permission.id}
                         </div>
                         <Badge
-                          variant={permission.available ? "outline" : "secondary"}
+                          variant={
+                            permission.available ? "outline" : "secondary"
+                          }
                           className="rounded-sm text-[10px]"
                         >
                           {permission.available
                             ? t.armsEditor.permissionAvailable
                             : t.armsEditor.permissionUnavailable}
                         </Badge>
-                        <Badge variant="outline" className="rounded-sm text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className="rounded-sm text-[10px]"
+                        >
                           {permission.enabled
                             ? t.armsEditor.permissionEnabled
                             : t.armsEditor.permissionDisabled}
@@ -788,7 +830,9 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               <div>
                 <div className="text-muted-foreground">max_usd</div>
                 <div className="mt-0.5 font-mono">
-                  {budget.max_usd != null ? `$${budget.max_usd.toFixed(2)}` : "-"}
+                  {budget.max_usd != null
+                    ? `$${budget.max_usd.toFixed(2)}`
+                    : "-"}
                 </div>
               </div>
             </div>

@@ -34,7 +34,14 @@ function block(
 describe("buildReplayFromBlocks", () => {
   it("maps blocks into steps preserving kind/title/subtitle/status", () => {
     const data = buildReplayFromBlocks(
-      [block({ kind: "file", title: "edit auth.ts", subtitle: "src/auth.ts", status: "done" })],
+      [
+        block({
+          kind: "file",
+          title: "edit auth.ts",
+          subtitle: "src/auth.ts",
+          status: "done",
+        }),
+      ],
       { title: "Run" },
     );
     expect(data.title).toBe("Run");
@@ -65,8 +72,18 @@ describe("buildReplayFromBlocks", () => {
   it("drops sub-agent lifecycle blocks", () => {
     const data = buildReplayFromBlocks(
       [
-        block({ id: "a", kind: "agent", title: "spawn", event: { lifecycle: "spawned" } }),
-        block({ id: "b", kind: "terminal", title: "real step", outputText: "ok" }),
+        block({
+          id: "a",
+          kind: "agent",
+          title: "spawn",
+          event: { lifecycle: "spawned" },
+        }),
+        block({
+          id: "b",
+          kind: "terminal",
+          title: "real step",
+          outputText: "ok",
+        }),
       ],
       { title: "Run" },
     );
@@ -75,13 +92,25 @@ describe("buildReplayFromBlocks", () => {
 
   it("inlines a screenshot only when it is already a data-URL", () => {
     const withData = buildReplayFromBlocks(
-      [block({ kind: "browser", title: "shot", event: { output: { screenshot: "data:image/png;base64,AAA" } } })],
+      [
+        block({
+          kind: "browser",
+          title: "shot",
+          event: { output: { screenshot: "data:image/png;base64,AAA" } },
+        }),
+      ],
       { title: "Run" },
     );
     expect(withData.steps[0].image).toBe("data:image/png;base64,AAA");
 
     const withUrl = buildReplayFromBlocks(
-      [block({ kind: "browser", title: "shot", event: { output: { screenshot: "https://x/y.png" } } })],
+      [
+        block({
+          kind: "browser",
+          title: "shot",
+          event: { output: { screenshot: "https://x/y.png" } },
+        }),
+      ],
       { title: "Run" },
     );
     expect(withUrl.steps[0].image).toBeUndefined();
@@ -93,7 +122,13 @@ describe("buildReplayFromBlocks", () => {
         block({
           kind: "read",
           title: "read chart.png",
-          event: { output: { kind: "image", media_type: "image/png", data_base64: "AAAA" } },
+          event: {
+            output: {
+              kind: "image",
+              media_type: "image/png",
+              data_base64: "AAAA",
+            },
+          },
         }),
       ],
       { title: "Run" },
@@ -107,7 +142,13 @@ describe("buildReplayFromBlocks", () => {
         block({
           kind: "read",
           title: "huge",
-          event: { output: { kind: "image", media_type: "image/png", data_base64: "A".repeat(2_000_001) } },
+          event: {
+            output: {
+              kind: "image",
+              media_type: "image/png",
+              data_base64: "A".repeat(2_000_001),
+            },
+          },
         }),
       ],
       { title: "Run" },
@@ -119,7 +160,13 @@ describe("buildReplayFromBlocks", () => {
         block({
           kind: "read",
           title: "pdf",
-          event: { output: { kind: "image", media_type: "application/pdf", data_base64: "AAAA" } },
+          event: {
+            output: {
+              kind: "image",
+              media_type: "application/pdf",
+              data_base64: "AAAA",
+            },
+          },
         }),
       ],
       { title: "Run" },
@@ -130,7 +177,14 @@ describe("buildReplayFromBlocks", () => {
   it("truncates an overlong body", () => {
     const huge = "x".repeat(5000);
     const data = buildReplayFromBlocks(
-      [block({ kind: "terminal", title: "t", event: { input: { command: "echo" } }, outputText: huge })],
+      [
+        block({
+          kind: "terminal",
+          title: "t",
+          event: { input: { command: "echo" } },
+          outputText: huge,
+        }),
+      ],
       { title: "Run" },
     );
     expect(data.steps[0].body!.length).toBeLessThan(1300);
@@ -143,14 +197,22 @@ describe("buildReplayFromBlocks", () => {
       footer: "2026-06-13",
       brand: "Octopus",
     });
-    expect(data).toMatchObject({ title: "My run", footer: "2026-06-13", brand: "Octopus" });
+    expect(data).toMatchObject({
+      title: "My run",
+      footer: "2026-06-13",
+      brand: "Octopus",
+    });
   });
 });
 
 describe("redactSecrets", () => {
   it("scrubs api keys, bearer tokens, jwts and long hex", () => {
-    expect(redactSecrets("key sk-abcdefABCDEF0123456789")).toContain("«redacted-token»");
-    expect(redactSecrets("Authorization: Bearer abcdefghijklmnop")).toContain("«redacted-bearer»");
+    expect(redactSecrets("key sk-abcdefABCDEF0123456789")).toContain(
+      "«redacted-token»",
+    );
+    expect(redactSecrets("Authorization: Bearer abcdefghijklmnop")).toContain(
+      "«redacted-bearer»",
+    );
     expect(
       redactSecrets(
         "t=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36",

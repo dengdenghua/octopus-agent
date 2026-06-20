@@ -91,11 +91,13 @@ export const accountApi = {
   getUsageEvents: (params?: { limit?: number; event_type?: string }) => {
     const searchParams = new URLSearchParams();
     if (params?.limit) searchParams.append("limit", String(params.limit));
-    if (params?.event_type) searchParams.append("event_type", params.event_type);
+    if (params?.event_type)
+      searchParams.append("event_type", params.event_type);
     const query = searchParams.toString();
-    return apiClient.get<{ data: UsageEvent[]; pagination?: { total: number } }>(
-      `/api/account/usage/events${query ? `?${query}` : ""}`,
-    );
+    return apiClient.get<{
+      data: UsageEvent[];
+      pagination?: { total: number };
+    }>(`/api/account/usage/events${query ? `?${query}` : ""}`);
   },
 
   getUsageSummary: (period?: string) => {

@@ -33,7 +33,9 @@ export async function startRecording(
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Failed to start recording: ${res.statusText}`);
+    throw new Error(
+      err.detail ?? `Failed to start recording: ${res.statusText}`,
+    );
   }
   return (await res.json()) as StartRecordingResponse;
 }
@@ -48,7 +50,9 @@ export async function stopRecording(
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Failed to stop recording: ${res.statusText}`);
+    throw new Error(
+      err.detail ?? `Failed to stop recording: ${res.statusText}`,
+    );
   }
   return (await res.json()) as StopRecordingResponse;
 }
@@ -117,9 +121,7 @@ export async function deleteTemplate(id: string): Promise<void> {
   if (!res.ok) throw new Error(`Failed to delete template: ${res.statusText}`);
 }
 
-export async function duplicateTemplate(
-  id: string,
-): Promise<WorkflowTemplate> {
+export async function duplicateTemplate(id: string): Promise<WorkflowTemplate> {
   const res = await fetch(
     `${BASE()}/templates/${encodeURIComponent(id)}/duplicate`,
     { method: "POST", headers: authHeaders() },
@@ -147,7 +149,9 @@ export async function replayTemplate(
   );
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `Failed to replay template: ${res.statusText}`);
+    throw new Error(
+      err.detail ?? `Failed to replay template: ${res.statusText}`,
+    );
   }
   return (await res.json()) as ReplayResult;
 }

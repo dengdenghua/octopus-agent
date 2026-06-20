@@ -1,4 +1,3 @@
-
 import { ActivityIcon, AlertTriangleIcon } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { swallow } from "@/core/utils/log";
@@ -19,13 +18,17 @@ export function RateLimitBar({ className }: { className?: string }) {
 
   const fetchLimits = useCallback(async () => {
     try {
-      const res = await fetch(`${getBackendBaseURL()}/api/telemetry/stats`, { headers: authHeaders() });
+      const res = await fetch(`${getBackendBaseURL()}/api/telemetry/stats`, {
+        headers: authHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
         // Extract rate limit info if available
         setLimits(data.rate_limits || null);
       }
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, []);
 
   useEffect(() => {
@@ -60,17 +63,14 @@ export function RateLimitBar({ className }: { className?: string }) {
         )}
       </div>
       <div className="flex items-center gap-2">
-        {limits &&
-          limits.requests_used / limits.requests_limit > 0.8 && (
-            <span className="flex items-center gap-0.5 text-amber-500">
-              <AlertTriangleIcon className="size-2.5" />
-              Rate limit warning
-            </span>
-          )}
-        {limits?.reset_at && (
-          <span>
-            Resets: {new Date(limits.reset_at).toLocaleTimeString()}
+        {limits && limits.requests_used / limits.requests_limit > 0.8 && (
+          <span className="flex items-center gap-0.5 text-amber-500">
+            <AlertTriangleIcon className="size-2.5" />
+            Rate limit warning
           </span>
+        )}
+        {limits?.reset_at && (
+          <span>Resets: {new Date(limits.reset_at).toLocaleTimeString()}</span>
         )}
       </div>
     </div>

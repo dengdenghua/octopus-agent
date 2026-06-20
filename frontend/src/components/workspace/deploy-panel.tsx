@@ -34,12 +34,7 @@ import {
   ServerIcon,
   XIcon,
 } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -144,7 +139,10 @@ async function getDeployHistory(limit = 20): Promise<DeployRecord[]> {
   return resp.json();
 }
 
-async function generateConfig(workspace: string, target?: string): Promise<ConfigFile[]> {
+async function generateConfig(
+  workspace: string,
+  target?: string,
+): Promise<ConfigFile[]> {
   const resp = await fetch(`${BASE()}/api/deploy/generate-config`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -159,20 +157,42 @@ async function generateConfig(workspace: string, target?: string): Promise<Confi
 // Provider icons and labels
 // ---------------------------------------------------------------------------
 
-const PROVIDER_META: Record<string, { icon: React.ElementType; label: string; color: string }> = {
+const PROVIDER_META: Record<
+  string,
+  { icon: React.ElementType; label: string; color: string }
+> = {
   vercel: { icon: CloudIcon, label: "Vercel", color: "text-blue-500" },
   docker: { icon: ContainerIcon, label: "Docker", color: "text-cyan-500" },
   static: { icon: GlobeIcon, label: "Static Preview", color: "text-green-500" },
 };
 
-const STATE_DISPLAY: Record<string, { label: string; color: string; icon: React.ElementType }> = {
-  pending: { label: "Pending", color: "text-muted-foreground", icon: Loader2Icon },
-  detecting: { label: "Detecting...", color: "text-yellow-500", icon: Loader2Icon },
+const STATE_DISPLAY: Record<
+  string,
+  { label: string; color: string; icon: React.ElementType }
+> = {
+  pending: {
+    label: "Pending",
+    color: "text-muted-foreground",
+    icon: Loader2Icon,
+  },
+  detecting: {
+    label: "Detecting...",
+    color: "text-yellow-500",
+    icon: Loader2Icon,
+  },
   building: { label: "Building...", color: "text-blue-500", icon: Loader2Icon },
-  deploying: { label: "Deploying...", color: "text-blue-500", icon: Loader2Icon },
+  deploying: {
+    label: "Deploying...",
+    color: "text-blue-500",
+    icon: Loader2Icon,
+  },
   ready: { label: "Ready", color: "text-green-500", icon: CheckCircle2Icon },
   error: { label: "Error", color: "text-red-500", icon: AlertTriangleIcon },
-  cancelled: { label: "Cancelled", color: "text-muted-foreground", icon: XIcon },
+  cancelled: {
+    label: "Cancelled",
+    color: "text-muted-foreground",
+    icon: XIcon,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -191,7 +211,11 @@ function ProviderCard({
   onClick: () => void;
 }) {
   const { t } = useI18n();
-  const meta = PROVIDER_META[provider.id] || { icon: ServerIcon, label: provider.name, color: "text-muted-foreground" };
+  const meta = PROVIDER_META[provider.id] || {
+    icon: ServerIcon,
+    label: provider.name,
+    color: "text-muted-foreground",
+  };
   const Icon = meta.icon;
 
   return (
@@ -215,7 +239,9 @@ function ProviderCard({
           </span>
         )}
       </div>
-      <p className="text-muted-foreground text-[11px] leading-tight">{provider.description}</p>
+      <p className="text-muted-foreground text-[11px] leading-tight">
+        {provider.description}
+      </p>
       {!provider.configured && provider.requires.length > 0 && (
         <p className="text-destructive text-[10px]">
           {t.deploy.requires}: {provider.requires.join(", ")}
@@ -225,9 +251,17 @@ function ProviderCard({
   );
 }
 
-function ConfigPreview({ configs, onEdit }: { configs: ConfigFile[]; onEdit?: (index: number, content: string) => void }) {
+function ConfigPreview({
+  configs,
+  onEdit,
+}: {
+  configs: ConfigFile[];
+  onEdit?: (index: number, content: string) => void;
+}) {
   const { t } = useI18n();
-  const [expanded, setExpanded] = useState<number | null>(configs.length > 0 ? 0 : null);
+  const [expanded, setExpanded] = useState<number | null>(
+    configs.length > 0 ? 0 : null,
+  );
 
   if (configs.length === 0) return null;
 
@@ -242,10 +276,16 @@ function ConfigPreview({ configs, onEdit }: { configs: ConfigFile[]; onEdit?: (i
             onClick={() => setExpanded(expanded === i ? null : i)}
             className="flex w-full items-center gap-2 px-2 py-1.5 text-xs transition-colors hover:bg-accent/40"
           >
-            {expanded === i ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}
+            {expanded === i ? (
+              <ChevronDownIcon className="size-3" />
+            ) : (
+              <ChevronRightIcon className="size-3" />
+            )}
             <FileCodeIcon className="text-muted-foreground size-3" />
             <span className="font-medium">{cfg.filename}</span>
-            <span className="text-muted-foreground ml-auto text-[10px]">{cfg.description}</span>
+            <span className="text-muted-foreground ml-auto text-[10px]">
+              {cfg.description}
+            </span>
           </button>
           {expanded === i && (
             <div className="border-t">
@@ -286,8 +326,16 @@ function DeployLogViewer({ logs }: { logs: string[] }) {
 }
 
 function HistoryItem({ record }: { record: DeployRecord }) {
-  const defaultState = { label: "Unknown", color: "text-muted-foreground", icon: Loader2Icon };
-  const defaultProv = { icon: ServerIcon, label: "Unknown", color: "text-muted-foreground" };
+  const defaultState = {
+    label: "Unknown",
+    color: "text-muted-foreground",
+    icon: Loader2Icon,
+  };
+  const defaultProv = {
+    icon: ServerIcon,
+    label: "Unknown",
+    color: "text-muted-foreground",
+  };
   const stateInfo = STATE_DISPLAY[record.state] ?? defaultState;
   const StateIcon = stateInfo.icon;
   const provMeta = PROVIDER_META[record.provider] ?? defaultProv;
@@ -301,8 +349,16 @@ function HistoryItem({ record }: { record: DeployRecord }) {
       <ProvIcon className={cn("size-3.5 shrink-0", provMeta.color)} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
-          <span className="truncate font-medium">{record.project_name || "project"}</span>
-          <StateIcon className={cn("size-3 shrink-0", stateInfo.color, record.state === "deploying" && "animate-spin")} />
+          <span className="truncate font-medium">
+            {record.project_name || "project"}
+          </span>
+          <StateIcon
+            className={cn(
+              "size-3 shrink-0",
+              stateInfo.color,
+              record.state === "deploying" && "animate-spin",
+            )}
+          />
         </div>
         <p className="text-muted-foreground truncate text-[10px]">{timeStr}</p>
       </div>
@@ -332,7 +388,12 @@ interface DeployPanelProps {
   className?: string;
 }
 
-export function DeployPanel({ open, onClose, workspacePath, className }: DeployPanelProps) {
+export function DeployPanel({
+  open,
+  onClose,
+  workspacePath,
+  className,
+}: DeployPanelProps) {
   const { t } = useI18n();
   // State
   const [view, setView] = useState<"detect" | "deploy" | "history">("detect");
@@ -375,16 +436,23 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
     try {
       const records = await getDeployHistory(20);
       setHistory(records);
-    } catch (e) { swallow(e); }
+    } catch (e) {
+      swallow(e);
+    }
   }, []);
 
-  const handleProviderChange = useCallback(async (providerId: string) => {
-    setSelectedProvider(providerId);
-    try {
-      const configs = await generateConfig(workspacePath, providerId);
-      setConfigFiles(configs);
-    } catch (e) { swallow(e); }
-  }, [workspacePath]);
+  const handleProviderChange = useCallback(
+    async (providerId: string) => {
+      setSelectedProvider(providerId);
+      try {
+        const configs = await generateConfig(workspacePath, providerId);
+        setConfigFiles(configs);
+      } catch (e) {
+        swallow(e);
+      }
+    },
+    [workspacePath],
+  );
 
   const handleConfigEdit = useCallback((index: number, content: string) => {
     setConfigFiles((prev) => {
@@ -427,7 +495,9 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
               pollRef.current = null;
               loadHistory();
             }
-          } catch (e) { swallow(e); }
+          } catch (e) {
+            swallow(e);
+          }
         }, 2000);
       } else {
         loadHistory();
@@ -472,7 +542,9 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
             onClick={() => setView("detect")}
             className={cn(
               "rounded-lg px-2 py-0.5 text-[11px] transition-colors duration-200",
-              view === "detect" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              view === "detect"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
             )}
           >
             {t.deploy.setup}
@@ -481,17 +553,24 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
             onClick={() => setView("deploy")}
             className={cn(
               "rounded-lg px-2 py-0.5 text-[11px] transition-colors duration-200",
-              view === "deploy" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              view === "deploy"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
             )}
             disabled={!currentDeploy}
           >
             {t.deploy.title}
           </button>
           <button
-            onClick={() => { setView("history"); loadHistory(); }}
+            onClick={() => {
+              setView("history");
+              loadHistory();
+            }}
             className={cn(
               "rounded-lg px-2 py-0.5 text-[11px] transition-colors duration-200",
-              view === "history" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              view === "history"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
             )}
           >
             {t.deploy.history}
@@ -550,7 +629,10 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
                   {detection.build_command && (
                     <>
                       <span className="text-muted-foreground">Build:</span>
-                      <span className="font-mono truncate" title={detection.build_command}>
+                      <span
+                        className="font-mono truncate"
+                        title={detection.build_command}
+                      >
                         {detection.build_command}
                       </span>
                     </>
@@ -558,7 +640,9 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
                   {detection.output_directory && (
                     <>
                       <span className="text-muted-foreground">Output:</span>
-                      <span className="font-mono">{detection.output_directory}</span>
+                      <span className="font-mono">
+                        {detection.output_directory}
+                      </span>
                     </>
                   )}
                   {detection.port > 0 && (
@@ -588,7 +672,10 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
                 </div>
 
                 {/* Config preview */}
-                <ConfigPreview configs={configFiles} onEdit={handleConfigEdit} />
+                <ConfigPreview
+                  configs={configFiles}
+                  onEdit={handleConfigEdit}
+                />
 
                 {/* Deploy button */}
                 <button
@@ -605,7 +692,9 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
                   ) : (
                     <PlayIcon className="size-4" />
                   )}
-                  {t.deploy.deployTo(PROVIDER_META[selectedProvider]?.label || selectedProvider)}
+                  {t.deploy.deployTo(
+                    PROVIDER_META[selectedProvider]?.label || selectedProvider,
+                  )}
                 </button>
               </>
             ) : (
@@ -635,18 +724,37 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
               <>
                 {/* Status banner */}
                 {(() => {
-                  const fallbackState = { label: "Unknown", color: "text-muted-foreground", icon: Loader2Icon };
-                  const stateInfo = STATE_DISPLAY[currentDeploy.state] ?? fallbackState;
+                  const fallbackState = {
+                    label: "Unknown",
+                    color: "text-muted-foreground",
+                    icon: Loader2Icon,
+                  };
+                  const stateInfo =
+                    STATE_DISPLAY[currentDeploy.state] ?? fallbackState;
                   const StateIcon = stateInfo.icon;
                   return (
                     <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-card p-3">
-                      <StateIcon className={cn("size-5", stateInfo.color, (currentDeploy.state === "deploying" || currentDeploy.state === "building") && "animate-spin")} />
+                      <StateIcon
+                        className={cn(
+                          "size-5",
+                          stateInfo.color,
+                          (currentDeploy.state === "deploying" ||
+                            currentDeploy.state === "building") &&
+                            "animate-spin",
+                        )}
+                      />
                       <div className="flex-1">
-                        <p className={cn("text-sm font-medium", stateInfo.color)}>
-                          {(t.deploy as Record<string, unknown>)[currentDeploy.state] as string ?? stateInfo.label}
+                        <p
+                          className={cn("text-sm font-medium", stateInfo.color)}
+                        >
+                          {((t.deploy as Record<string, unknown>)[
+                            currentDeploy.state
+                          ] as string) ?? stateInfo.label}
                         </p>
                         <p className="text-muted-foreground text-[11px]">
-                          {currentDeploy.project_name} &rarr; {PROVIDER_META[currentDeploy.provider]?.label || currentDeploy.provider}
+                          {currentDeploy.project_name} &rarr;{" "}
+                          {PROVIDER_META[currentDeploy.provider]?.label ||
+                            currentDeploy.provider}
                         </p>
                       </div>
                     </div>
@@ -706,8 +814,12 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
                         .slice(0, 8)
                         .map(([k, v]) => (
                           <div key={k} className="contents">
-                            <span className="text-muted-foreground">{k.replace(/_/g, " ")}:</span>
-                            <span className="font-mono truncate">{String(v)}</span>
+                            <span className="text-muted-foreground">
+                              {k.replace(/_/g, " ")}:
+                            </span>
+                            <span className="font-mono truncate">
+                              {String(v)}
+                            </span>
                           </div>
                         ))}
                     </div>
@@ -715,9 +827,13 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
                 )}
 
                 {/* Deploy again */}
-                {(currentDeploy.state === "ready" || currentDeploy.state === "error") && (
+                {(currentDeploy.state === "ready" ||
+                  currentDeploy.state === "error") && (
                   <button
-                    onClick={() => { setView("detect"); setCurrentDeploy(null); }}
+                    onClick={() => {
+                      setView("detect");
+                      setCurrentDeploy(null);
+                    }}
                     className="text-primary hover:text-primary/80 w-full text-center text-xs underline"
                   >
                     {t.deploy.deployAgain}
@@ -750,7 +866,9 @@ export function DeployPanel({ open, onClose, workspacePath, className }: DeployP
                 </p>
               </div>
             ) : (
-              history.map((record) => <HistoryItem key={record.id} record={record} />)
+              history.map((record) => (
+                <HistoryItem key={record.id} record={record} />
+              ))
             )}
           </div>
         )}
@@ -769,7 +887,11 @@ interface DeployButtonProps {
   className?: string;
 }
 
-export function DeployButton({ onClick, isActive, className }: DeployButtonProps) {
+export function DeployButton({
+  onClick,
+  isActive,
+  className,
+}: DeployButtonProps) {
   const { t } = useI18n();
   return (
     <button

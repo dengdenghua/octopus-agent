@@ -280,7 +280,9 @@ function BudgetSection() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiGet<BudgetSnapshot>("/api/evolution/budget/snapshot");
+      const data = await apiGet<BudgetSnapshot>(
+        "/api/evolution/budget/snapshot",
+      );
       setSnap(data);
     } catch (e) {
       swallow(e);
@@ -383,10 +385,16 @@ function BudgetSection() {
               </div>
               <div className="flex min-w-[180px] flex-col gap-0.5 text-[10px] text-muted-foreground">
                 <span>
-                  {t.evolutionControl.budget.last24h(c.last_24h.success, c.last_24h.failure)}
+                  {t.evolutionControl.budget.last24h(
+                    c.last_24h.success,
+                    c.last_24h.failure,
+                  )}
                 </span>
                 <span>
-                  {t.evolutionControl.budget.rejected(c.last_24h.rejected_budget, c.last_24h.rejected_breaker)}
+                  {t.evolutionControl.budget.rejected(
+                    c.last_24h.rejected_budget,
+                    c.last_24h.rejected_breaker,
+                  )}
                 </span>
                 <span>
                   {t.evolutionControl.budget.dailyUsage(
@@ -589,7 +597,9 @@ function ModelProposalsSection() {
           onClick={runBenchmarks}
           className="rounded-lg border border-border/60 px-2 py-1 text-[10px] hover:bg-muted disabled:opacity-50"
         >
-          {running ? t.evolutionControl.models.runningBenchmarks : t.evolutionControl.models.runBenchmarks}
+          {running
+            ? t.evolutionControl.models.runningBenchmarks
+            : t.evolutionControl.models.runBenchmarks}
         </button>
       }
     >
@@ -710,7 +720,10 @@ function McpProposalsSection() {
       )}
       <div className="divide-y divide-border/60">
         {rows.map((p) => (
-          <div key={p.server_name} className="flex items-start justify-between py-3">
+          <div
+            key={p.server_name}
+            className="flex items-start justify-between py-3"
+          >
             <div className="flex flex-col gap-1">
               <span className="font-mono text-xs">{p.server_name}</span>
               {p.description && (
@@ -922,14 +935,21 @@ function FrameworkBenchmarksSection() {
                 #{b.id} {b.strategy_a} vs {b.strategy_b}
               </div>
               <div className="text-[10px] text-muted-foreground">
-                {t.evolutionControl.frameworks.baseModelPrefix}{b.base_model}
+                {t.evolutionControl.frameworks.baseModelPrefix}
+                {b.base_model}
               </div>
             </div>
             <div className="flex items-center gap-4 text-[10px] tabular-nums text-muted-foreground">
               <span>A: {b.a_wins}</span>
               <span>B: {b.b_wins}</span>
-              <span>{t.evolutionControl.frameworks.tiesPrefix}{b.ties}</span>
-              <span>{t.evolutionControl.frameworks.bWinRatePrefix}{fixed(numberOrZero(b.win_rate_b) * 100, 0)}%</span>
+              <span>
+                {t.evolutionControl.frameworks.tiesPrefix}
+                {b.ties}
+              </span>
+              <span>
+                {t.evolutionControl.frameworks.bWinRatePrefix}
+                {fixed(numberOrZero(b.win_rate_b) * 100, 0)}%
+              </span>
               <Pill
                 label={b.decision}
                 tone={
@@ -1180,8 +1200,12 @@ function DispatchSection() {
                 </div>
               </div>
               <div className="flex gap-4 text-[10px] tabular-nums text-muted-foreground">
-                <span>A: {b.a_assigned} ({b.a_reported})</span>
-                <span>B: {b.b_assigned} ({b.b_reported})</span>
+                <span>
+                  A: {b.a_assigned} ({b.a_reported})
+                </span>
+                <span>
+                  B: {b.b_assigned} ({b.b_reported})
+                </span>
               </div>
             </div>
             {Object.keys(b.outcomes).length > 0 && (

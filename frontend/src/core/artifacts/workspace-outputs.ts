@@ -1,10 +1,7 @@
 import { authHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
-import {
-  type WorkspaceOutputArea,
-  workspaceOutputRef,
-} from "./utils";
+import { type WorkspaceOutputArea, workspaceOutputRef } from "./utils";
 
 export interface WorkspaceOutputEntry {
   name: string;

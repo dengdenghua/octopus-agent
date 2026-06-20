@@ -8,7 +8,6 @@ from .groups import (
     effective_groups_for_agent,
 )
 from .presets import (
-    AGENT_PRESET_FACTORIES,
     make_admin_agent,
     make_all_agent_presets,
     make_coder_agent,
@@ -19,7 +18,6 @@ from .presets import (
 )
 
 __all__ = [
-    "AGENT_PRESET_FACTORIES",
     "Agent",
     "AgentGroup",
     "AgentGroupNotFound",

@@ -128,7 +128,10 @@ function isApprovalEvent(event: RunReviewEvent): boolean {
 }
 
 function isFileEvent(event: RunReviewEvent): boolean {
-  return Boolean(event.path) || /file_op|write_file|read_file|patch/i.test(eventKind(event));
+  return (
+    Boolean(event.path) ||
+    /file_op|write_file|read_file|patch/i.test(eventKind(event))
+  );
 }
 
 function isArtifactEvent(event: RunReviewEvent): boolean {
@@ -136,7 +139,10 @@ function isArtifactEvent(event: RunReviewEvent): boolean {
 }
 
 function isErrorEvent(event: RunReviewEvent): boolean {
-  return event.is_error === true || /error|failed|immune_reject|reject/i.test(eventKind(event));
+  return (
+    event.is_error === true ||
+    /error|failed|immune_reject|reject/i.test(eventKind(event))
+  );
 }
 
 function riskForEvent(event: RunReviewEvent): string | null {
@@ -173,8 +179,10 @@ export function deriveRunReviews(events: RunReviewEvent[]): RunReview[] {
       const kind = eventKind(event);
       const name = toolName(event);
       if (name) toolCounts.set(name, (toolCounts.get(name) ?? 0) + 1);
-      if (event.tool_call_id && /start/i.test(kind)) runningToolIds.add(event.tool_call_id);
-      if (event.tool_call_id && /end|done|finish/i.test(kind)) closedToolIds.add(event.tool_call_id);
+      if (event.tool_call_id && /start/i.test(kind))
+        runningToolIds.add(event.tool_call_id);
+      if (event.tool_call_id && /end|done|finish/i.test(kind))
+        closedToolIds.add(event.tool_call_id);
       if (isApprovalEvent(event)) approvalCount += 1;
       if (isFileEvent(event)) {
         fileCount += 1;
@@ -305,7 +313,9 @@ export function RunReviewPanel() {
       try {
         const event = JSON.parse(msg.data) as RunReviewEvent;
         setEvents((prev) => [...prev, event].slice(-600));
-      } catch (e) { swallow(e); }
+      } catch (e) {
+        swallow(e);
+      }
     };
     return () => es.close();
   }, [paused]);
@@ -344,7 +354,9 @@ export function RunReviewPanel() {
                     connected ? "bg-emerald-500" : "bg-muted",
                   )}
                 />
-                {connected ? t.observabilityPage.connected : t.observabilityPage.idle}
+                {connected
+                  ? t.observabilityPage.connected
+                  : t.observabilityPage.idle}
               </span>
               <Button
                 size="sm"
@@ -356,7 +368,9 @@ export function RunReviewPanel() {
                 ) : (
                   <PauseIcon className="mr-1.5 size-3" />
                 )}
-                {paused ? t.observabilityPage.resume : t.observabilityPage.pause}
+                {paused
+                  ? t.observabilityPage.resume
+                  : t.observabilityPage.pause}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setEvents([])}>
                 {t.observabilityPage.clear}
@@ -428,8 +442,15 @@ export function RunReviewPanel() {
                         {formatTime(run.startedAt)} ·{" "}
                         {formatDuration(run.startedAt, run.lastAt)}
                       </span>
-                      <span>{t.observabilityPage.runReviewEvents(run.eventCount)}</span>
-                      <span>{t.observabilityPage.runReviewCostLine(run.tokens, run.usd)}</span>
+                      <span>
+                        {t.observabilityPage.runReviewEvents(run.eventCount)}
+                      </span>
+                      <span>
+                        {t.observabilityPage.runReviewCostLine(
+                          run.tokens,
+                          run.usd,
+                        )}
+                      </span>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">

@@ -168,7 +168,8 @@ export default function ChannelsPage() {
         fetch(`${getBackendBaseURL()}/api/channels`),
         fetch(`${getBackendBaseURL()}/api/agents`),
       ]);
-      if (!chRes.ok) throw new Error(`Failed to load channels: ${chRes.status}`);
+      if (!chRes.ok)
+        throw new Error(`Failed to load channels: ${chRes.status}`);
       const ch = (await chRes.json()) as ChannelRow[];
       setRows(ch);
       if (agRes.ok) {
@@ -225,7 +226,9 @@ export default function ChannelsPage() {
       toast.success(t.channels.toastAgentUnbound);
       await loadAll();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : t.channels.toastUnbindFailed);
+      toast.error(
+        e instanceof Error ? e.message : t.channels.toastUnbindFailed,
+      );
     }
   }
 
@@ -251,7 +254,9 @@ export default function ChannelsPage() {
                     <div className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
                       Channel Ops
                     </div>
-                    <h1 className="text-xl font-semibold tracking-tight">{t.channels.title}</h1>
+                    <h1 className="text-xl font-semibold tracking-tight">
+                      {t.channels.title}
+                    </h1>
                   </div>
                 </div>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -264,15 +269,28 @@ export default function ChannelsPage() {
 
               <div className="grid min-w-[220px] grid-cols-2 gap-2 tabular-nums">
                 <div className="rounded-xl border border-border/60 bg-background/62 px-3 py-2">
-                  <div className="text-[11px] text-muted-foreground">{t.channels.channelCount(rows.length)}</div>
-                  <div className="mt-1 text-lg font-semibold">{rows.length}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {t.channels.channelCount(rows.length)}
+                  </div>
+                  <div className="mt-1 text-lg font-semibold">
+                    {rows.length}
+                  </div>
                 </div>
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-3 py-2">
                   <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                    <span className={cn("inline-block size-1.5 rounded-full", connectedCount > 0 ? "bg-emerald-500" : "bg-muted-foreground/40")} />
+                    <span
+                      className={cn(
+                        "inline-block size-1.5 rounded-full",
+                        connectedCount > 0
+                          ? "bg-emerald-500"
+                          : "bg-muted-foreground/40",
+                      )}
+                    />
                     {t.channels.connectedCount(connectedCount)}
                   </div>
-                  <div className="mt-1 text-lg font-semibold text-emerald-600 dark:text-emerald-400">{connectedCount}</div>
+                  <div className="mt-1 text-lg font-semibold text-emerald-600 dark:text-emerald-400">
+                    {connectedCount}
+                  </div>
                 </div>
               </div>
             </div>
@@ -296,45 +314,66 @@ export default function ChannelsPage() {
             </div>
           )}
 
-          {!loading && !error && rows.length > 0 && (() => {
-            const grouped: Record<string, ChannelRow[]> = {};
-            const otherRows: ChannelRow[] = [];
-            for (const row of rows) {
-              const cat = PLATFORM_CATEGORY_MAP[row.platform];
-              if (cat) {
-                if (!grouped[cat]) grouped[cat] = [];
-                grouped[cat].push(row);
-              } else {
-                otherRows.push(row);
+          {!loading &&
+            !error &&
+            rows.length > 0 &&
+            (() => {
+              const grouped: Record<string, ChannelRow[]> = {};
+              const otherRows: ChannelRow[] = [];
+              for (const row of rows) {
+                const cat = PLATFORM_CATEGORY_MAP[row.platform];
+                if (cat) {
+                  if (!grouped[cat]) grouped[cat] = [];
+                  grouped[cat].push(row);
+                } else {
+                  otherRows.push(row);
+                }
               }
-            }
-            const sections: { key: string; label: string; items: ChannelRow[] }[] = [];
-            for (const cat of CATEGORY_ORDER) {
-              if (grouped[cat] && grouped[cat].length > 0) {
-                sections.push({ key: cat, label: PLATFORM_CATEGORIES[cat] ?? cat, items: grouped[cat] });
+              const sections: {
+                key: string;
+                label: string;
+                items: ChannelRow[];
+              }[] = [];
+              for (const cat of CATEGORY_ORDER) {
+                if (grouped[cat] && grouped[cat].length > 0) {
+                  sections.push({
+                    key: cat,
+                    label: PLATFORM_CATEGORIES[cat] ?? cat,
+                    items: grouped[cat],
+                  });
+                }
               }
-            }
-            if (otherRows.length > 0) {
-              sections.push({ key: "other", label: "其他", items: otherRows });
-            }
-            return sections.map((section) => (
-              <div key={section.key}>
-                <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{section.label}</h2>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {section.items.map((row, index) => (
-                    <ChannelCard
-                      key={row.channel_id || `${row.platform}-${index}`}
-                      row={row}
-                      agents={agents}
-                      onRequestAssign={() => setAssigningId(row.channel_id)}
-                      onRequestCredential={() => setCredPlatform(row.platform)}
-                      onRequestPairings={() => setPairingsForId(row.channel_id)}
-                    />
-                  ))}
+              if (otherRows.length > 0) {
+                sections.push({
+                  key: "other",
+                  label: "其他",
+                  items: otherRows,
+                });
+              }
+              return sections.map((section) => (
+                <div key={section.key}>
+                  <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+                    {section.label}
+                  </h2>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {section.items.map((row, index) => (
+                      <ChannelCard
+                        key={row.channel_id || `${row.platform}-${index}`}
+                        row={row}
+                        agents={agents}
+                        onRequestAssign={() => setAssigningId(row.channel_id)}
+                        onRequestCredential={() =>
+                          setCredPlatform(row.platform)
+                        }
+                        onRequestPairings={() =>
+                          setPairingsForId(row.channel_id)
+                        }
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ));
-          })()}
+              ));
+            })()}
         </div>
       </WorkspaceBody>
 
@@ -397,14 +436,14 @@ export default function ChannelsPage() {
               <ul className="space-y-1">
                 {agents.map((a, index) => {
                   const isCurrent = assignRow?.assigned_agent_id === a.id;
-                  const agentKey = a.id?.trim() || `${a.display_name ?? "agent"}-${index}`;
+                  const agentKey =
+                    a.id?.trim() || `${a.display_name ?? "agent"}-${index}`;
                   return (
                     <li key={agentKey}>
                       <button
                         type="button"
                         onClick={() =>
-                          assigningId &&
-                          void assignAgent(assigningId, a.id)
+                          assigningId && void assignAgent(assigningId, a.id)
                         }
                         className={cn(
                           "w-full flex items-center gap-3 rounded-lg border border-border/40",
@@ -467,7 +506,11 @@ export default function ChannelsPage() {
 }
 
 function ChannelCard({
-  row, agents, onRequestAssign, onRequestCredential, onRequestPairings,
+  row,
+  agents,
+  onRequestAssign,
+  onRequestCredential,
+  onRequestPairings,
 }: {
   row: ChannelRow;
   agents: AgentLite[];
@@ -477,7 +520,7 @@ function ChannelCard({
 }) {
   const { t } = useI18n();
   const colorCls = row.connected
-    ? PLATFORM_COLORS[row.platform] ?? PLATFORM_COLORS.other
+    ? (PLATFORM_COLORS[row.platform] ?? PLATFORM_COLORS.other)
     : "bg-muted/70 text-muted-foreground";
   const icon = PLATFORM_ICONS[row.platform] ?? "•";
   const assignedAgent = agents.find((a) => a.id === row.assigned_agent_id);
@@ -508,7 +551,9 @@ function ChannelCard({
             <span>{icon}</span>
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-semibold leading-5">{row.display_name}</div>
+            <div className="text-sm font-semibold leading-5">
+              {row.display_name}
+            </div>
             <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
               {row.description}
               {row.help_url && !row.connected && (
@@ -584,9 +629,7 @@ function ChannelCard({
                 />
               ) : (
                 <div className="flex size-6 items-center justify-center rounded-md bg-primary/15 text-[10px] font-medium text-primary">
-                  {(
-                    assignedAgent?.display_name ?? row.assigned_agent_id
-                  )
+                  {(assignedAgent?.display_name ?? row.assigned_agent_id)
                     .charAt(0)
                     .toUpperCase()}
                 </div>
@@ -615,7 +658,9 @@ function ChannelCard({
             <div className="flex items-center gap-2">
               <PlusIcon className="size-3.5 text-muted-foreground" />
               <div>
-                <div className="text-[12px] font-medium">{t.channels.configureAgent}</div>
+                <div className="text-[12px] font-medium">
+                  {t.channels.configureAgent}
+                </div>
                 <div className="text-[10px] text-muted-foreground">
                   {t.channels.configureAgentHint}
                 </div>
@@ -655,7 +700,9 @@ function ChannelCard({
 }
 
 function Metric({
-  label, value, onClick,
+  label,
+  value,
+  onClick,
 }: {
   label: string;
   value: number;

@@ -1,4 +1,3 @@
-
 import MagicBento, { type BentoCardProps } from "@/components/ui/magic-bento";
 import { cn } from "@/lib/utils";
 
@@ -60,4 +59,3 @@ export function WhatsNewSection({ className }: { className?: string }) {
     </Section>
   );
 }
-

@@ -1,4 +1,3 @@
-
 import {
   Collapsible,
   CollapsibleContent,
@@ -74,4 +73,3 @@ export const Source = ({ href, title, children, ...props }: SourceProps) => (
     )}
   </a>
 );
-

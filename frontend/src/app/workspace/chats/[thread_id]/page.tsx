@@ -34,6 +34,11 @@ import {
   ChatInputBox,
   type DeepResearchComposerOptions,
 } from "@/components/workspace/chat-input-box";
+import type {
+  AgentModeName,
+  DetectResponse,
+  DetectionSignals,
+} from "@/components/workspace/mode-selector";
 import type { ReasoningMode } from "@/components/workspace/reasoning-mode";
 import type { PromptInputFilePart } from "@/core/uploads";
 import { ChatPageLayout } from "@/components/workspace/chat-page-layout";
@@ -42,6 +47,11 @@ import { AgentWelcome } from "@/components/workspace/agent-welcome";
 import { RealtimeApprovalToasts } from "@/components/workspace/realtime-approval-toasts";
 import { DeepResearchHistoryPanel } from "@/components/workspace/deep-research-history-panel";
 import { DeepResearchPanel } from "@/components/workspace/deep-research-panel";
+import {
+  FINAL_DELIVERABLE_PATTERN,
+  finalOutputArtifactEntries,
+  type DiffEntry,
+} from "@/components/workspace/agent-workbench-utils";
 import {
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
   MessageList,
@@ -113,7 +123,6 @@ type CompactableThread = {
 };
 
 const URL_PATTERN = /https?:\/\/[^\s，,]+/gi;
-
 const NEW_CHAT_STARTERS: Array<{
   label: string;
   prompt: string;
@@ -278,6 +287,41 @@ function RightPanelMenu({
   );
 }
 
+function FinalArtifactCompletionNotice({
+  entries,
+  onOpen,
+}: {
+  entries: DiffEntry[];
+  onOpen: () => void;
+}) {
+  const first = entries[0];
+  if (!first) return null;
+  const extraCount = Math.max(0, entries.length - 1);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="my-2 ml-11 flex max-w-full items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-left text-xs text-emerald-800 transition-colors hover:bg-emerald-500/15 dark:text-emerald-200"
+    >
+      <FileTextIcon className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="font-medium">最终报告已生成</span>
+        <span className="ml-2 font-mono text-[11px] text-emerald-700/80 dark:text-emerald-200/80">
+          {first.path || first.title}
+        </span>
+        {extraCount > 0 && (
+          <span className="ml-2 text-emerald-700/80 dark:text-emerald-200/80">
+            +{extraCount}
+          </span>
+        )}
+      </span>
+      <span className="shrink-0 text-[11px] text-emerald-700/75 dark:text-emerald-200/75">
+        查看
+      </span>
+    </button>
+  );
+}
+
 function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -348,9 +392,13 @@ function ChatsPageContent({
   const settledWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
-  // Work directory for code/research-flavored conversations. Empty by
-  // default — pure chat doesn't need a folder; the selector pill only
-  // appears for react/deep modes (see showWorkDirSelector below).
+  const [projectAgentMode, setProjectAgentMode] =
+    useState<AgentModeName>("coder");
+  const [projectDetection, setProjectDetection] =
+    useState<DetectResponse | null>(null);
+  // Work directory for Agent project/code state. Empty means personal
+  // Agent chat; selecting a local folder promotes this page into code
+  // mode without mixing it with the separate Team workspace.
   const [workDir, setWorkDir] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     try {
@@ -363,6 +411,7 @@ function ChatsPageContent({
     setWorkDir(dir);
     try {
       if (dir) window.localStorage.setItem("chat:workdir:lastUsed", dir);
+      else window.localStorage.removeItem("chat:workdir:lastUsed");
     } catch (e) {
       swallow(e);
     }
@@ -421,8 +470,33 @@ function ChatsPageContent({
   const activeAgentId = routeAgentName || bookmarkletAgent || "general";
   const { agent: activeAgent } = useAgent(activeAgentId);
   const routeMode = settings.context.mode;
-  const effectiveMode: ReasoningMode =
-    isAgentRoute && routeMode === "deep"
+  const projectWorkspacePath = workDir.trim();
+  const isProjectCodeMode = !!projectWorkspacePath;
+  const codeModeUnlocked = Boolean(activeAgent?.capabilities?.code_mode_unlock);
+  const projectSignals = useMemo(() => {
+    if (!isProjectCodeMode || !projectDetection) return undefined;
+    const signals = projectDetection.signals;
+    const compact: DetectionSignals = {
+      workspace_path: projectWorkspacePath,
+      exists: signals.exists,
+      file_count: signals.file_count,
+      manifests: signals.manifests?.slice(0, 8),
+      structure_dirs: signals.structure_dirs?.slice(0, 12),
+      git_commits: signals.git_commits,
+      has_readme: signals.has_readme,
+      lock_files: signals.lock_files?.slice(0, 8),
+      commands: signals.commands?.slice(0, 8),
+    };
+    return {
+      recommended_mode: projectDetection.recommended_mode,
+      confidence: projectDetection.confidence,
+      reason: projectDetection.reason,
+      signals: compact,
+    };
+  }, [isProjectCodeMode, projectDetection, projectWorkspacePath]);
+  const effectiveMode: ReasoningMode = isProjectCodeMode
+    ? "code"
+    : isAgentRoute && routeMode === "deep"
       ? routeMode
       : isAgentRoute
         ? "react"
@@ -521,49 +595,57 @@ function ChatsPageContent({
     [activeAgentId, navigate, qc],
   );
 
-  const [thread, sendMessage, , liveToolEvents, lastTurnToolEvents, realtimeApprovals] =
-    useThreadStream({
-      threadId,
-      // Spread settings.context FIRST so our agent_name wins. Otherwise any
-      // stale `agent_name` in the shared settings store (shared across
-      // threads) clobbers the current page's pick — which is how turn 2+
-      // started sending the wrong id before this fix.
-      context: {
-        ...settings.context,
-        mode: effectiveMode,
-        agent_name: activeAgentId,
-        interaction_mode:
-          effectiveMode === "react" || effectiveMode === "deep"
-            ? "office"
-            : undefined,
-      },
-      onStart: (startedThreadId) => {
-        setIsNewThread(false);
-        const targetPath = threadRouteFor(startedThreadId);
-        const currentPath =
-          typeof window === "undefined"
-            ? ""
-            : window.location.hash.replace(/^#/, "") ||
-              window.location.pathname;
-        if (currentPath !== targetPath && typeof window !== "undefined") {
-          // Avoid React Router remounting the page while the SSE stream is
-          // active. A remount aborts the stream and looks like a full reload.
-          window.history.replaceState(
-            window.history.state,
-            "",
-            `#${targetPath}`,
-          );
-          pendingRouteSyncRef.current = targetPath;
-        }
-      },
-      onFinish: () => {
-        const targetPath = pendingRouteSyncRef.current;
-        pendingRouteSyncRef.current = null;
-        if (targetPath) {
-          navigate(targetPath, { replace: true });
-        }
-      },
-    });
+  const [
+    thread,
+    sendMessage,
+    ,
+    liveToolEvents,
+    lastTurnToolEvents,
+    realtimeApprovals,
+  ] = useThreadStream({
+    threadId,
+    // Spread settings.context FIRST so our agent_name wins. Otherwise any
+    // stale `agent_name` in the shared settings store (shared across
+    // threads) clobbers the current page's pick — which is how turn 2+
+    // started sending the wrong id before this fix.
+    context: {
+      ...settings.context,
+      mode: effectiveMode,
+      workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
+      capability_mode: isProjectCodeMode ? "code" : undefined,
+      code_mode: isProjectCodeMode ? "solo" : undefined,
+      agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
+      project_signals: projectSignals,
+      agent_name: activeAgentId,
+      interaction_mode:
+        effectiveMode === "react" ||
+        effectiveMode === "deep" ||
+        effectiveMode === "code"
+          ? "office"
+          : undefined,
+    },
+    onStart: (startedThreadId) => {
+      setIsNewThread(false);
+      const targetPath = threadRouteFor(startedThreadId);
+      const currentPath =
+        typeof window === "undefined"
+          ? ""
+          : window.location.hash.replace(/^#/, "") || window.location.pathname;
+      if (currentPath !== targetPath && typeof window !== "undefined") {
+        // Avoid React Router remounting the page while the SSE stream is
+        // active. A remount aborts the stream and looks like a full reload.
+        window.history.replaceState(window.history.state, "", `#${targetPath}`);
+        pendingRouteSyncRef.current = targetPath;
+      }
+    },
+    onFinish: () => {
+      const targetPath = pendingRouteSyncRef.current;
+      pendingRouteSyncRef.current = null;
+      if (targetPath) {
+        navigate(targetPath, { replace: true });
+      }
+    },
+  });
   const [isCompressingContext, setIsCompressingContext] = useState(false);
   const selectedModel = useMemo(() => {
     const modelName = settings.context.model_name;
@@ -717,7 +799,9 @@ function ChatsPageContent({
     [agentDisplayEvents],
   );
   const isAgentWorkflowMode =
-    effectiveMode === "deep" || effectiveMode === "react";
+    effectiveMode === "deep" ||
+    effectiveMode === "react" ||
+    effectiveMode === "code";
   const tasks = useTasks("all");
   const hasRunningAgentEvents = lastTurnToolEvents.some(
     (event) =>
@@ -746,11 +830,17 @@ function ChatsPageContent({
   const hasReportArtifact = thread.messages.some(
     (message) =>
       isAIMessage(message) &&
-      /report|docx|pptx|pdf|xlsx|html|报告|调研|总结|交付|文档|方案/i.test(
+      FINAL_DELIVERABLE_PATTERN.test(
         extractTextFromMessage(message) || extractContentFromMessage(message),
       ),
   );
+  const finalArtifactEntries = useMemo(
+    () => finalOutputArtifactEntries(agentDisplayEvents),
+    [agentDisplayEvents],
+  );
+  const hasFinalArtifact = finalArtifactEntries.length > 0;
   const hasAgentAnswer = thread.messages.some((message) => {
+    if (hasFinalArtifact) return true;
     if (!isAIMessage(message)) return false;
     const text =
       extractTextFromMessage(message) || extractContentFromMessage(message);
@@ -758,18 +848,18 @@ function ChatsPageContent({
   });
   const canSettleStaleLiveEvents =
     !thread.isLoading &&
-    !thread.error &&
+    (!thread.error || hasFinalArtifact) &&
     hasAgentAnswer &&
-    (!requiresReportDeliverable || hasReportArtifact);
+    (!requiresReportDeliverable || hasReportArtifact || hasFinalArtifact);
   const agentRunSettled =
     !thread.isLoading &&
     (!hasRunningAgentEvents || canSettleStaleLiveEvents) &&
     !hasActiveBackgroundTask &&
     !hasPausedOrPendingBackgroundTask;
   const hasCompletedAgentOutput =
-    !thread.error &&
+    (!thread.error || hasFinalArtifact) &&
     agentRunSettled &&
-    (!requiresReportDeliverable || hasReportArtifact);
+    (!requiresReportDeliverable || hasReportArtifact || hasFinalArtifact);
   const agentRunFailed =
     agentRunSettled &&
     !hasCompletedAgentOutput &&
@@ -968,6 +1058,7 @@ function ChatsPageContent({
   const handleModeChange = useCallback(
     (mode: ReasoningMode, draft?: string) => {
       if (mode === effectiveMode) return;
+      if (mode === "code") return;
       if (!isAgentRoute) {
         setDiscussionOnly(mode === "chat");
         return;
@@ -1115,6 +1206,18 @@ function ChatsPageContent({
     setAgentWorkbenchTabTouched(true);
   }, [setArtifactsOpen]);
 
+  const openFinalArtifactPanel = useCallback(() => {
+    setArtifactsOpen(false);
+    setShowAgentPlan(false);
+    setAgentWorkbenchDismissed(false);
+    setAgentWorkbenchManuallyOpened(true);
+    setShowResearchHistory(false);
+    setShowResearch(false);
+    setShowPreview(false);
+    setAgentWorkbenchTab("files");
+    setAgentWorkbenchTabTouched(true);
+  }, [setArtifactsOpen]);
+
   const openAgentPlanPanel = useCallback(() => {
     setArtifactsOpen(false);
     setShowAgentPlan(true);
@@ -1222,7 +1325,9 @@ function ChatsPageContent({
                   {(thread?.values?.title || initialPrompt) && (
                     <ShareMenu
                       iconOnly
-                      title={thread?.values?.title || initialPrompt || "Octopus"}
+                      title={
+                        thread?.values?.title || initialPrompt || "Octopus"
+                      }
                       prompt={initialPrompt || undefined}
                       onExportReplay={
                         replayBlocks.length > 0 ? handleExportReplay : undefined
@@ -1267,6 +1372,7 @@ function ChatsPageContent({
                 mode={effectiveMode}
                 liveToolEvents={lastTurnToolEvents}
                 lastTurnToolEvents={lastTurnToolEvents}
+                completedAgentOutput={hasCompletedAgentOutput}
                 currentAgent={{
                   name: activeAgentId,
                   display_name: activeAgent?.display_name || activeAgentId,
@@ -1274,12 +1380,22 @@ function ChatsPageContent({
                   icon: activeAgent?.icon || null,
                 }}
                 footer={
-                  <ChatStreamingFooter
-                    thread={thread}
-                    liveToolEvents={lastTurnToolEvents}
-                    threadId={threadId}
-                    mode={effectiveMode}
-                  />
+                  <>
+                    <ChatStreamingFooter
+                      thread={thread}
+                      liveToolEvents={lastTurnToolEvents}
+                      threadId={threadId}
+                      mode={effectiveMode}
+                    />
+                    {hasCompletedAgentOutput &&
+                      hasFinalArtifact &&
+                      !hasReportArtifact && (
+                        <FinalArtifactCompletionNotice
+                          entries={finalArtifactEntries}
+                          onOpen={openFinalArtifactPanel}
+                        />
+                      )}
+                  </>
                 }
               />
             }
@@ -1325,7 +1441,7 @@ function ChatsPageContent({
                     <ChatInputBox
                       key={composerSeed || "empty-composer"}
                       status={
-                        thread.error
+                        thread.error && !hasCompletedAgentOutput
                           ? "error"
                           : thread.isLoading
                             ? "streaming"
@@ -1337,10 +1453,13 @@ function ChatsPageContent({
                       threadId={threadId}
                       disabled={researchLoading}
                       workDir={workDir}
-                      showWorkDirSelector={
-                        effectiveMode === "react" || effectiveMode === "deep"
-                      }
+                      showWorkDirSelector
                       onWorkDirChange={handleWorkDirChange}
+                      codeModeUnlocked={codeModeUnlocked}
+                      projectAgentMode={projectAgentMode}
+                      projectDetection={projectDetection}
+                      onProjectAgentModeChange={setProjectAgentMode}
+                      onProjectDetectionChange={setProjectDetection}
                       contextTokens={contextTokens}
                       maxContextTokens={maxContextTokens}
                       isCompressingContext={isCompressingContext}
@@ -1379,9 +1498,11 @@ function ChatsPageContent({
                       autoFocus={isNewThread}
                       defaultValue={composerSeed}
                       placeholder={
-                        isNewThread
-                          ? "描述任务、贴链接，或输入 / 选择命令..."
-                          : undefined
+                        isProjectCodeMode
+                          ? "描述要修改、排查或验证的项目任务..."
+                          : isNewThread
+                            ? "描述任务、贴链接，或输入 / 选择命令..."
+                            : undefined
                       }
                       className={cn(
                         isNewThread &&
@@ -1468,10 +1589,7 @@ function ChatsPageContent({
             }
           />
         </ChatBox>
-        <ChatsDrawer
-          open={chatsDrawerOpen}
-          onOpenChange={setChatsDrawerOpen}
-        />
+        <ChatsDrawer open={chatsDrawerOpen} onOpenChange={setChatsDrawerOpen} />
       </ThreadProviders>
     </SubtasksProvider>
   );

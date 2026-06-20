@@ -145,11 +145,36 @@ describe("message-list: process trace visibility", () => {
   });
 
   test("shows active or failed meta events", () => {
-    expect(shouldShowProcessTrace([toolEvent("todo_write", { status: "running" })], true)).toBe(true);
-    expect(shouldOpenProcessTraceByDefault([toolEvent("todo_write", { status: "running" })], true)).toBe(true);
-    expect(shouldShowProcessTrace([toolEvent("todo_write", { status: "error" })], true)).toBe(true);
-    expect(shouldOpenProcessTraceByDefault([toolEvent("todo_write", { status: "error" })], true)).toBe(false);
-    expect(shouldOpenProcessTraceByDefault([toolEvent("todo_write", { status: "error" })], false)).toBe(true);
+    expect(
+      shouldShowProcessTrace(
+        [toolEvent("todo_write", { status: "running" })],
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      shouldOpenProcessTraceByDefault(
+        [toolEvent("todo_write", { status: "running" })],
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      shouldShowProcessTrace(
+        [toolEvent("todo_write", { status: "error" })],
+        true,
+      ),
+    ).toBe(true);
+    expect(
+      shouldOpenProcessTraceByDefault(
+        [toolEvent("todo_write", { status: "error" })],
+        true,
+      ),
+    ).toBe(false);
+    expect(
+      shouldOpenProcessTraceByDefault(
+        [toolEvent("todo_write", { status: "error" })],
+        false,
+      ),
+    ).toBe(true);
   });
 });
 

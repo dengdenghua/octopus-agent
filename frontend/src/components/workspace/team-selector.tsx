@@ -1,4 +1,3 @@
-
 import { PlusIcon, ChevronDownIcon, UsersIcon, Trash2Icon } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { getBackendBaseURL } from "@/core/config";
@@ -30,7 +29,10 @@ export function TeamSelector({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -94,7 +96,7 @@ export function TeamSelector({
           "flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 transition-all text-left",
           isOpen
             ? "bg-accent border-accent shadow-sm"
-            : "border-border hover:bg-accent/50 hover:border-accent/50"
+            : "border-border hover:bg-accent/50 hover:border-accent/50",
         )}
       >
         {currentTeam && currentTeam.name ? (
@@ -109,13 +111,15 @@ export function TeamSelector({
             <div className="flex h-5 w-5 items-center justify-center rounded-lg bg-muted">
               <UsersIcon className="size-3 text-muted-foreground" />
             </div>
-            <span className="text-xs text-muted-foreground truncate flex-1">{t.teamSelector.selectTeam}</span>
+            <span className="text-xs text-muted-foreground truncate flex-1">
+              {t.teamSelector.selectTeam}
+            </span>
           </>
         )}
         <ChevronDownIcon
           className={cn(
             "size-3 text-muted-foreground transition-transform shrink-0",
-            isOpen && "rotate-180"
+            isOpen && "rotate-180",
           )}
         />
       </button>
@@ -133,7 +137,7 @@ export function TeamSelector({
                   key={team.id}
                   className={cn(
                     "group flex items-center gap-2 px-2 py-1.5 transition-colors hover:bg-accent",
-                    currentTeam?.id === team.id && "bg-accent/60"
+                    currentTeam?.id === team.id && "bg-accent/60",
                   )}
                 >
                   <button
@@ -147,7 +151,9 @@ export function TeamSelector({
                       {getTeamAvatar(team)}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium truncate">{team.name}</p>
+                      <p className="text-xs font-medium truncate">
+                        {team.name}
+                      </p>
                       <p className="text-muted-foreground text-[10px]">
                         {t.teamSelector.memberCount(team.members.length)}
                       </p>

@@ -299,21 +299,23 @@ def run_serve(
     channel_manager = None
     try:
         from runtime.execution.agents import (
-            AGENT_PRESET_FACTORIES,
             AgentGroupRegistry,
             AgentRegistry,
         )
+        from runtime.execution.agents.presets import (
+            make_admin_agent,
+            make_all_agent_presets,
+        )
 
         agent_registry = AgentRegistry()
-        for factory in AGENT_PRESET_FACTORIES:
+        for preset_agent in make_all_agent_presets(stack.runtime):
             try:
-                agent_registry.register(factory(stack.runtime))
+                agent_registry.register(preset_agent)
             except Exception as exc:
                 logging.getLogger(__name__).debug("agent preset registration failed: %s", exc)
                 continue
 
         try:
-            from runtime.execution.agents.presets import make_admin_agent
             agent_registry.register(make_admin_agent(stack.runtime))
         except Exception as exc:
             logging.getLogger(__name__).debug("admin agent registration failed: %s", exc)
@@ -386,7 +388,7 @@ def run_serve(
     runner.start()
     try:
         import logging as _logging
-        _NOISY_ROUTES = (
+        _NOISY_ROUTES = (  # noqa: N806
             "/api/agents",
             "/api/llm-models",
             "/api/files/stream",

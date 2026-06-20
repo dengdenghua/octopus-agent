@@ -12,7 +12,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +82,8 @@ type SubscriptionDraft = {
 
 const subscriptionsKey = ["intelligence", "subscriptions"] as const;
 const reportsKey = ["intelligence", "reports"] as const;
+const EMPTY_SUBSCRIPTIONS: IntelligenceSubscription[] = [];
+const EMPTY_REPORTS: IntelligenceReport[] = [];
 const CADENCE_OPTIONS = ["高频", "每天", "每周", "每月"] as const;
 const WEEKDAY_OPTIONS = [
   { value: "1", label: "周一" },
@@ -92,7 +94,9 @@ const WEEKDAY_OPTIONS = [
   { value: "6", label: "周六" },
   { value: "7", label: "周日" },
 ] as const;
-const MONTHDAY_OPTIONS = Array.from({ length: 31 }, (_, index) => String(index + 1));
+const MONTHDAY_OPTIONS = Array.from({ length: 31 }, (_, index) =>
+  String(index + 1),
+);
 
 function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
@@ -123,7 +127,9 @@ function inferScheduleFromGoal(goal: string): Partial<SubscriptionDraft> {
 
   if (/每周|周报|weekly/i.test(goal)) {
     patch.cadence = "每周";
-    const weekdayMatch = goal.match(/(?:周|星期|礼拜)\s*([一二三四五六日天1-7])/);
+    const weekdayMatch = goal.match(
+      /(?:周|星期|礼拜)\s*([一二三四五六日天1-7])/,
+    );
     const weekdayMap: Record<string, string> = {
       一: "1",
       "1": "1",
@@ -147,7 +153,9 @@ function inferScheduleFromGoal(goal: string): Partial<SubscriptionDraft> {
     patch.cadence = "每月";
     const monthDayMatch = goal.match(/(?:每月|月)\s*(\d{1,2})\s*(?:号|日)?/);
     if (monthDayMatch) {
-      patch.schedule_day = String(Math.max(1, Math.min(Number(monthDayMatch[1]), 31)));
+      patch.schedule_day = String(
+        Math.max(1, Math.min(Number(monthDayMatch[1]), 31)),
+      );
     }
   } else if (/高频|实时|hourly|real-time/i.test(goal)) {
     patch.cadence = "高频";
@@ -186,7 +194,9 @@ function safeDate(value?: string | null) {
 
 function reportDateParts(value?: string | null) {
   const d = safeDate(value);
-  const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][d.getDay()];
+  const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
+    d.getDay()
+  ];
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   const hours = String(d.getHours()).padStart(2, "0");
@@ -226,7 +236,12 @@ function reportPreview(report: IntelligenceReport) {
   return stripMd(text);
 }
 
-function scheduleText(item: Pick<IntelligenceSubscription, "cadence" | "schedule_time" | "schedule_day" | "timezone">) {
+function scheduleText(
+  item: Pick<
+    IntelligenceSubscription,
+    "cadence" | "schedule_time" | "schedule_day" | "timezone"
+  >,
+) {
   const cadence = item.cadence || "每天";
   const time = item.schedule_time || "09:00";
   const timezone = item.timezone || localTimezone();
@@ -235,8 +250,9 @@ function scheduleText(item: Pick<IntelligenceSubscription, "cadence" | "schedule
   }
   if (cadence.includes("周") || cadence.toLowerCase().includes("week")) {
     const weekday =
-      WEEKDAY_OPTIONS.find((option) => option.value === String(item.schedule_day || "1"))?.label ??
-      "周一";
+      WEEKDAY_OPTIONS.find(
+        (option) => option.value === String(item.schedule_day || "1"),
+      )?.label ?? "周一";
     return `每周 ${weekday} ${time} · ${timezone}`;
   }
   if (cadence.includes("月") || cadence.toLowerCase().includes("month")) {
@@ -250,10 +266,16 @@ function articleContent(report: IntelligenceReport) {
   const sections: string[] = [];
   if (report.summary) sections.push(report.summary);
   if (report.findings?.length) {
-    sections.push(["## 关键发现", ...report.findings.map((item) => `- ${item}`)].join("\n"));
+    sections.push(
+      ["## 关键发现", ...report.findings.map((item) => `- ${item}`)].join("\n"),
+    );
   }
   if (report.recommendations?.length) {
-    sections.push(["## 建议", ...report.recommendations.map((item) => `- ${item}`)].join("\n"));
+    sections.push(
+      ["## 建议", ...report.recommendations.map((item) => `- ${item}`)].join(
+        "\n",
+      ),
+    );
   }
   return sections.join("\n\n");
 }
@@ -309,8 +331,12 @@ function ReportTimelineItem({
   return (
     <div className="grid grid-cols-[3.75rem_minmax(0,1fr)] gap-2.5">
       <div className="relative flex flex-col items-center pt-1 text-center">
-        <div className="text-base font-semibold leading-none text-foreground">{date.time}</div>
-        <div className="mt-1 text-[11px] text-muted-foreground">{date.shortDate}</div>
+        <div className="text-base font-semibold leading-none text-foreground">
+          {date.time}
+        </div>
+        <div className="mt-1 text-[11px] text-muted-foreground">
+          {date.shortDate}
+        </div>
         <span className="mt-2 size-2.5 rounded-full bg-foreground" />
         <span className="mt-1 h-full min-h-10 w-px bg-border" />
       </div>
@@ -324,18 +350,36 @@ function ReportTimelineItem({
             : "border-border/70 bg-card/70 hover:border-border hover:bg-card",
         )}
       >
-        <div className={cn("grid gap-2.5", first ? "md:grid-cols-[10rem_minmax(0,1fr)]" : "grid-cols-[4.8rem_minmax(0,1fr)]")}>
+        <div
+          className={cn(
+            "grid gap-2.5",
+            first
+              ? "md:grid-cols-[10rem_minmax(0,1fr)]"
+              : "grid-cols-[4.8rem_minmax(0,1fr)]",
+          )}
+        >
           <ReportCover label={topic} compact={!first} />
           <div className="min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className={cn("line-clamp-2 font-semibold leading-6", first ? "text-base" : "text-sm")}>
+                <div
+                  className={cn(
+                    "line-clamp-2 font-semibold leading-6",
+                    first ? "text-base" : "text-sm",
+                  )}
+                >
                   {headline}
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                  <span>{date.monthDay} {date.weekday}</span>
-                  {typeof report.items_analyzed === "number" && <span>{report.items_analyzed} 条情报</span>}
-                  {typeof report.skills_created === "number" && <span>{report.skills_created} 个能力</span>}
+                  <span>
+                    {date.monthDay} {date.weekday}
+                  </span>
+                  {typeof report.items_analyzed === "number" && (
+                    <span>{report.items_analyzed} 条情报</span>
+                  )}
+                  {typeof report.skills_created === "number" && (
+                    <span>{report.skills_created} 个能力</span>
+                  )}
                 </div>
               </div>
               <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-muted px-2 text-[11px] text-muted-foreground transition-colors group-hover:text-foreground">
@@ -344,7 +388,12 @@ function ReportTimelineItem({
               </span>
             </div>
             {preview && (
-              <p className={cn("mt-2 text-xs leading-5 text-muted-foreground", first ? "line-clamp-3" : "line-clamp-2")}>
+              <p
+                className={cn(
+                  "mt-2 text-xs leading-5 text-muted-foreground",
+                  first ? "line-clamp-3" : "line-clamp-2",
+                )}
+              >
                 {preview}
               </p>
             )}
@@ -360,15 +409,15 @@ export function IntelligencePanel() {
   const queryClient = useQueryClient();
   const [goal, setGoal] = useState("");
   const [draft, setDraft] = useState<SubscriptionDraft | null>(null);
-  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderOpen, setBuilderOpen] = useState(true);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
 
   const subscriptionsQuery = useQuery({
     queryKey: subscriptionsKey,
     queryFn: async () => {
-      const data = await apiFetch<{ subscriptions?: IntelligenceSubscription[] }>(
-        "/api/intelligence/subscriptions",
-      );
+      const data = await apiFetch<{
+        subscriptions?: IntelligenceSubscription[];
+      }>("/api/intelligence/subscriptions");
       return data.subscriptions ?? [];
     },
   });
@@ -400,7 +449,9 @@ export function IntelligencePanel() {
         body: JSON.stringify({
           topic: payload.topic,
           display_name: payload.display_name ?? payload.topic,
-          keywords: payload.keywords?.length ? payload.keywords : [payload.topic],
+          keywords: payload.keywords?.length
+            ? payload.keywords
+            : [payload.topic],
           cadence: payload.cadence,
           schedule_time: payload.schedule_time,
           schedule_day: payload.schedule_day,
@@ -424,12 +475,17 @@ export function IntelligencePanel() {
 
   const draftSubscription = useMutation({
     mutationFn: (nextGoal: string) =>
-      apiFetch<{ draft: SubscriptionDraft }>("/api/intelligence/subscriptions/draft", {
-        method: "POST",
-        body: JSON.stringify({ goal: nextGoal }),
-      }),
+      apiFetch<{ draft: SubscriptionDraft }>(
+        "/api/intelligence/subscriptions/draft",
+        {
+          method: "POST",
+          body: JSON.stringify({ goal: nextGoal }),
+        },
+      ),
     onSuccess: (data, nextGoal) =>
-      setDraft(normalizeDraft({ ...data.draft, ...inferScheduleFromGoal(nextGoal) })),
+      setDraft(
+        normalizeDraft({ ...data.draft, ...inferScheduleFromGoal(nextGoal) }),
+      ),
     onError: () => toast.error(t.intelligence.addFailed),
   });
 
@@ -464,12 +520,18 @@ export function IntelligencePanel() {
 
   const runSubscription = useMutation({
     mutationFn: (id: string) =>
-      apiFetch<{ ok: boolean; subscription: IntelligenceSubscription; report: IntelligenceReport }>(
-        `/api/intelligence/subscriptions/${encodeURIComponent(id)}/run`,
-        { method: "POST", body: JSON.stringify({}) },
-      ),
+      apiFetch<{
+        ok: boolean;
+        subscription: IntelligenceSubscription;
+        report: IntelligenceReport;
+      }>(`/api/intelligence/subscriptions/${encodeURIComponent(id)}/run`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
     onSuccess: (data) => {
-      toast.success(t.intelligence.reportGenerated(data.report.items_analyzed ?? 0));
+      toast.success(
+        t.intelligence.reportGenerated(data.report.items_analyzed ?? 0),
+      );
       void queryClient.invalidateQueries({ queryKey: subscriptionsKey });
       void queryClient.invalidateQueries({ queryKey: reportsKey });
       if (data.report.id) setSelectedReportId(data.report.id);
@@ -479,10 +541,13 @@ export function IntelligencePanel() {
 
   const runAllSubscriptions = useMutation({
     mutationFn: () =>
-      apiFetch<{ ok: boolean; reports_count: number }>("/api/intelligence/run", {
-        method: "POST",
-        body: JSON.stringify({}),
-      }),
+      apiFetch<{ ok: boolean; reports_count: number }>(
+        "/api/intelligence/run",
+        {
+          method: "POST",
+          body: JSON.stringify({}),
+        },
+      ),
     onSuccess: (data) => {
       toast.success(t.intelligence.reportsGenerated(data.reports_count));
       void queryClient.invalidateQueries({ queryKey: subscriptionsKey });
@@ -491,17 +556,28 @@ export function IntelligencePanel() {
     onError: () => toast.error(t.intelligence.runAllSubscriptionsFailed),
   });
 
-  const subscriptions = subscriptionsQuery.data ?? [];
-  const reports = reportsQuery.data ?? [];
+  const subscriptions = subscriptionsQuery.data ?? EMPTY_SUBSCRIPTIONS;
+  const reports = reportsQuery.data ?? EMPTY_REPORTS;
   const loading = subscriptionsQuery.isLoading || reportsQuery.isLoading;
   const loadError = subscriptionsQuery.isError || reportsQuery.isError;
-  const enabledCount = subscriptions.filter((item) => item.enabled !== false).length;
+  const enabledCount = subscriptions.filter(
+    (item) => item.enabled !== false,
+  ).length;
+
+  useEffect(() => {
+    if (loading || loadError || subscriptions.length > 0) return;
+    setBuilderOpen(true);
+  }, [loadError, loading, subscriptions.length]);
 
   const selectedReport = useMemo(() => {
     if (!reports.length) return null;
-    return reports.find((report, index) => {
-      return reportKey(report, index) === selectedReportId;
-    }) ?? reports[0] ?? null;
+    return (
+      reports.find((report, index) => {
+        return reportKey(report, index) === selectedReportId;
+      }) ??
+      reports[0] ??
+      null
+    );
   }, [reports, selectedReportId]);
 
   const selectedReportKey = selectedReport
@@ -516,6 +592,12 @@ export function IntelligencePanel() {
   const handleCreateDraft = () => {
     if (!draft) return;
     createSubscription.mutate(draft);
+  };
+
+  const handleUseExample = (example: string) => {
+    setGoal(example);
+    setDraft(null);
+    setBuilderOpen(true);
   };
 
   if (loading) {
@@ -663,7 +745,7 @@ export function IntelligencePanel() {
                       className="h-7 bg-background/75 text-xs"
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-1.5">
+                  <div className="grid gap-1.5 sm:grid-cols-3">
                     <div className="space-y-1">
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <ClockIcon className="size-3" />
@@ -674,7 +756,12 @@ export function IntelligencePanel() {
                         value={draft.schedule_time}
                         onChange={(event) =>
                           setDraft((current) =>
-                            current ? { ...current, schedule_time: event.target.value } : current,
+                            current
+                              ? {
+                                  ...current,
+                                  schedule_time: event.target.value,
+                                }
+                              : current,
                           )
                         }
                         disabled={draft.cadence === "高频"}
@@ -690,7 +777,9 @@ export function IntelligencePanel() {
                           value={draft.schedule_day}
                           onValueChange={(value) =>
                             setDraft((current) =>
-                              current ? { ...current, schedule_day: value } : current,
+                              current
+                                ? { ...current, schedule_day: value }
+                                : current,
                             )
                           }
                         >
@@ -710,7 +799,9 @@ export function IntelligencePanel() {
                           value={draft.schedule_day}
                           onValueChange={(value) =>
                             setDraft((current) =>
-                              current ? { ...current, schedule_day: value } : current,
+                              current
+                                ? { ...current, schedule_day: value }
+                                : current,
                             )
                           }
                           disabled={draft.cadence !== "每周"}
@@ -720,7 +811,10 @@ export function IntelligencePanel() {
                           </SelectTrigger>
                           <SelectContent>
                             {WEEKDAY_OPTIONS.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
+                              <SelectItem
+                                key={option.value}
+                                value={option.value}
+                              >
                                 {option.label}
                               </SelectItem>
                             ))}
@@ -729,12 +823,16 @@ export function IntelligencePanel() {
                       )}
                     </div>
                     <div className="space-y-1">
-                      <div className="text-[10px] text-muted-foreground">时区</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        时区
+                      </div>
                       <Input
                         value={draft.timezone}
                         onChange={(event) =>
                           setDraft((current) =>
-                            current ? { ...current, timezone: event.target.value } : current,
+                            current
+                              ? { ...current, timezone: event.target.value }
+                              : current,
                           )
                         }
                         className="h-7 bg-background/75 text-xs"
@@ -748,7 +846,9 @@ export function IntelligencePanel() {
                     value={draft.instructions}
                     onChange={(event) =>
                       setDraft((current) =>
-                        current ? { ...current, instructions: event.target.value } : current,
+                        current
+                          ? { ...current, instructions: event.target.value }
+                          : current,
                       )
                     }
                     className="min-h-[4.5rem] resize-none bg-background/75 text-xs leading-5"
@@ -769,7 +869,9 @@ export function IntelligencePanel() {
                 </div>
               ) : (
                 <div className="flex h-full min-h-32 flex-col justify-center rounded-md border border-dashed border-border/60 px-4 py-3 text-sm text-muted-foreground">
-                  <div className="font-medium text-foreground">{t.intelligence.draftPlaceholder}</div>
+                  <div className="font-medium text-foreground">
+                    {t.intelligence.draftPlaceholder}
+                  </div>
                 </div>
               )}
             </div>
@@ -817,8 +919,35 @@ export function IntelligencePanel() {
           </div>
 
           {subscriptions.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
-              {t.intelligence.noSubscriptionsHint(t.intelligence.exampleKeyword)}
+            <div className="rounded-xl border border-dashed border-border/70 bg-card/50 p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <RadarIcon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">还没有自动订阅</div>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+                    {t.intelligence.noSubscriptionsHint(
+                      t.intelligence.exampleKeyword,
+                    )}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {t.intelligencePanel.examplePrompts
+                  .slice(0, 3)
+                  .map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => handleUseExample(example)}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-border/60 bg-background/70 px-2.5 py-1.5 text-left text-[11px] text-muted-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
+                    >
+                      <SparklesIcon className="size-3 shrink-0 text-primary/70" />
+                      <span className="truncate">{example}</span>
+                    </button>
+                  ))}
+              </div>
             </div>
           ) : (
             <div className="space-y-1.5">
@@ -826,7 +955,8 @@ export function IntelligencePanel() {
                 const enabled = item.enabled !== false;
                 const title = item.display_name || item.topic;
                 const reportCount = reports.filter(
-                  (report) => report.topic === item.topic || report.title === title,
+                  (report) =>
+                    report.topic === item.topic || report.title === title,
                 ).length;
                 return (
                   <div
@@ -834,19 +964,26 @@ export function IntelligencePanel() {
                     role="button"
                     tabIndex={0}
                     onClick={() => {
-                      const matched = reports.find((report) => report.topic === item.topic || report.title === title);
+                      const matched = reports.find(
+                        (report) =>
+                          report.topic === item.topic || report.title === title,
+                      );
                       setSelectedReportId(matched?.id ?? null);
                     }}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter" && event.key !== " ") return;
                       event.preventDefault();
-                      const matched = reports.find((report) => report.topic === item.topic || report.title === title);
+                      const matched = reports.find(
+                        (report) =>
+                          report.topic === item.topic || report.title === title,
+                      );
                       setSelectedReportId(matched?.id ?? null);
                     }}
                     className={cn(
                       "w-full cursor-pointer rounded-2xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
                       selectedReportKey &&
-                        (selectedReport?.topic === item.topic || selectedReport?.title === title)
+                        (selectedReport?.topic === item.topic ||
+                          selectedReport?.title === title)
                         ? "border-primary/30 bg-primary/5"
                         : "border-border/70 bg-card/60 hover:border-border hover:bg-card",
                     )}
@@ -857,21 +994,37 @@ export function IntelligencePanel() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <div className="truncate text-sm font-medium">{title}</div>
-                          <Badge variant={enabled ? "secondary" : "outline"} className="rounded-full px-2 py-0.5 text-[10px]">
-                            {enabled ? t.intelligence.enabled : t.intelligence.disabled}
+                          <div className="truncate text-sm font-medium">
+                            {title}
+                          </div>
+                          <Badge
+                            variant={enabled ? "secondary" : "outline"}
+                            className="rounded-full px-2 py-0.5 text-[10px]"
+                          >
+                            {enabled
+                              ? t.intelligence.enabled
+                              : t.intelligence.disabled}
                           </Badge>
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
                           <span>
                             {t.intelligence.keywordsPrefix}{" "}
-                            {(item.keywords?.length ? item.keywords : [item.topic]).filter(Boolean).join(", ")}
+                            {(item.keywords?.length
+                              ? item.keywords
+                              : [item.topic]
+                            )
+                              .filter(Boolean)
+                              .join(", ")}
                           </span>
                           <span>{scheduleText(item)}</span>
-                          <span>{reportCount} {t.intelligence.reports}</span>
+                          <span>
+                            {reportCount} {t.intelligence.reports}
+                          </span>
                           <span>
                             {item.last_run
-                              ? t.intelligence.lastRunPrefix(fmtDate(item.last_run))
+                              ? t.intelligence.lastRunPrefix(
+                                  fmtDate(item.last_run),
+                                )
                               : t.intelligence.neverRun}
                           </span>
                         </div>
@@ -904,15 +1057,22 @@ export function IntelligencePanel() {
                           size="sm"
                           className={cn(
                             "h-7 rounded-lg px-2 text-xs",
-                            enabled ? "border-emerald-500/30 text-emerald-600" : "text-muted-foreground",
+                            enabled
+                              ? "border-emerald-500/30 text-emerald-600"
+                              : "text-muted-foreground",
                           )}
                           disabled={updateSubscription.isPending}
                           onClick={(event) => {
                             event.stopPropagation();
-                            updateSubscription.mutate({ id: item.id, enabled: !enabled });
+                            updateSubscription.mutate({
+                              id: item.id,
+                              enabled: !enabled,
+                            });
                           }}
                         >
-                          {enabled ? t.intelligence.enabled : t.intelligence.disabled}
+                          {enabled
+                            ? t.intelligence.enabled
+                            : t.intelligence.disabled}
                         </Button>
                         <Button
                           variant="ghost"
@@ -947,19 +1107,48 @@ export function IntelligencePanel() {
                 {reports.length} {t.intelligence.reports} · 按订阅推送排序
               </div>
             </div>
-            <Badge variant="secondary" className="rounded-md px-2 py-0.5 text-[11px]">
+            <Badge
+              variant="secondary"
+              className="rounded-md px-2 py-0.5 text-[11px]"
+            >
               资讯流
             </Badge>
           </div>
 
           {reports.length === 0 ? (
-            <div className="m-3 rounded-lg border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
-              {t.intelligence.noReportsHint}
+            <div className="m-3 rounded-xl border border-dashed border-border/70 bg-background/45 p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                  <NewspaperIcon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold">暂无报告</div>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {t.intelligence.noReportsHint}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 h-7 gap-1.5 rounded-lg px-3"
+                disabled={enabledCount === 0 || runAllSubscriptions.isPending}
+                onClick={() => runAllSubscriptions.mutate()}
+              >
+                {runAllSubscriptions.isPending ? (
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCwIcon className="size-3.5" />
+                )}
+                {t.intelligence.runAll}
+              </Button>
             </div>
           ) : (
             <div className="space-y-2.5 px-3 py-3">
               <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2 text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">正在持续追踪</span>
+                <span className="font-medium text-foreground">
+                  正在持续追踪
+                </span>
                 <span className="mx-2 text-border">/</span>
                 有新报告时会进入时间线，点开卡片可阅读完整推送。
               </div>
@@ -991,14 +1180,22 @@ export function IntelligencePanel() {
                     <BellRingIcon className="size-3.5 text-primary" />
                     订阅主题
                   </span>
-                  <span>{selectedReport.topic || t.intelligence.topicReport}</span>
-                  {selectedReport.created_at && <span>{fmtDate(selectedReport.created_at)}</span>}
+                  <span>
+                    {selectedReport.topic || t.intelligence.topicReport}
+                  </span>
+                  {selectedReport.created_at && (
+                    <span>{fmtDate(selectedReport.created_at)}</span>
+                  )}
                   {typeof selectedReport.items_analyzed === "number" && (
-                    <span>{t.intelligence.itemsCount(selectedReport.items_analyzed)}</span>
+                    <span>
+                      {t.intelligence.itemsCount(selectedReport.items_analyzed)}
+                    </span>
                   )}
                 </div>
                 <div className="text-2xl font-semibold leading-tight">
-                  {selectedReport.title || selectedReport.topic || t.intelligence.topicReport}
+                  {selectedReport.title ||
+                    selectedReport.topic ||
+                    t.intelligence.topicReport}
                 </div>
                 {selectedReport.summary && (
                   <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -1009,9 +1206,16 @@ export function IntelligencePanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
                   <span>今日推送</span>
-                  <span>{reportDateParts(selectedReport.created_at).monthDay}</span>
+                  <span>
+                    {reportDateParts(selectedReport.created_at).monthDay}
+                  </span>
                 </div>
-                <ReportCover label={reportTopic(selectedReport, t.intelligence.topicReport)} />
+                <ReportCover
+                  label={reportTopic(
+                    selectedReport,
+                    t.intelligence.topicReport,
+                  )}
+                />
               </div>
             </div>
           </div>
@@ -1028,66 +1232,81 @@ export function IntelligencePanel() {
                     className="text-sm"
                   />
                 ) : (
-                  <div className="text-sm text-muted-foreground">{t.intelligence.noReportsHint}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {t.intelligence.noReportsHint}
+                  </div>
                 )}
               </div>
             </article>
 
             <aside className="space-y-4 bg-muted/15 px-4 py-5">
-              {Array.isArray(selectedReport.findings) && selectedReport.findings.length > 0 && (
-                <div>
-                  <div className="mb-2 text-sm font-medium">{t.intelligence.repoSpotlights}</div>
-                  <div className="space-y-2">
-                    {selectedReport.findings.slice(0, 5).map((finding, findingIndex) => (
-                      <div
-                        key={`${selectedReportKey}-finding-${findingIndex}`}
-                        className="rounded-xl border border-border/60 bg-background/80 px-3 py-2 text-sm leading-6"
-                      >
-                        {stripMd(finding)}
-                      </div>
-                    ))}
+              {Array.isArray(selectedReport.findings) &&
+                selectedReport.findings.length > 0 && (
+                  <div>
+                    <div className="mb-2 text-sm font-medium">
+                      {t.intelligence.repoSpotlights}
+                    </div>
+                    <div className="space-y-2">
+                      {selectedReport.findings
+                        .slice(0, 5)
+                        .map((finding, findingIndex) => (
+                          <div
+                            key={`${selectedReportKey}-finding-${findingIndex}`}
+                            className="rounded-xl border border-border/60 bg-background/80 px-3 py-2 text-sm leading-6"
+                          >
+                            {stripMd(finding)}
+                          </div>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {Array.isArray(selectedReport.items) && selectedReport.items.length > 0 && (
-                <div>
-                  <div className="mb-2 text-sm font-medium">{t.intelligence.source}</div>
-                  <div className="space-y-2">
-                    {selectedReport.items.slice(0, 6).map((source, sourceIndex) => (
-                      <div
-                        key={source.id ?? `${selectedReportKey}-source-${sourceIndex}`}
-                        className="rounded-xl border border-border/60 bg-background/80 p-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                            {source.source ?? t.intelligence.web}
-                          </span>
-                          {source.url ? (
-                            <a
-                              href={source.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="truncate text-sm font-medium text-foreground hover:underline"
-                            >
-                              {source.title || source.url}
-                            </a>
-                          ) : (
-                            <span className="truncate text-sm font-medium text-foreground">
-                              {source.title}
-                            </span>
-                          )}
-                        </div>
-                        {source.snippet && (
-                          <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
-                            {stripMd(source.snippet)}
-                          </p>
-                        )}
-                      </div>
-                    ))}
+              {Array.isArray(selectedReport.items) &&
+                selectedReport.items.length > 0 && (
+                  <div>
+                    <div className="mb-2 text-sm font-medium">
+                      {t.intelligence.source}
+                    </div>
+                    <div className="space-y-2">
+                      {selectedReport.items
+                        .slice(0, 6)
+                        .map((source, sourceIndex) => (
+                          <div
+                            key={
+                              source.id ??
+                              `${selectedReportKey}-source-${sourceIndex}`
+                            }
+                            className="rounded-xl border border-border/60 bg-background/80 p-3"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                {source.source ?? t.intelligence.web}
+                              </span>
+                              {source.url ? (
+                                <a
+                                  href={source.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="truncate text-sm font-medium text-foreground hover:underline"
+                                >
+                                  {source.title || source.url}
+                                </a>
+                              ) : (
+                                <span className="truncate text-sm font-medium text-foreground">
+                                  {source.title}
+                                </span>
+                              )}
+                            </div>
+                            {source.snippet && (
+                              <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                                {stripMd(source.snippet)}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </aside>
           </div>
         </section>

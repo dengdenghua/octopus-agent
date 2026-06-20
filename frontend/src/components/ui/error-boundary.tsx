@@ -115,9 +115,7 @@ export class ErrorBoundary extends Component<
       return (
         <I18nContext.Consumer>
           {(context) =>
-            this.renderErrorCard(
-              (context?.t ?? enUS).errorBoundary,
-            )
+            this.renderErrorCard((context?.t ?? enUS).errorBoundary)
           }
         </I18nContext.Consumer>
       );

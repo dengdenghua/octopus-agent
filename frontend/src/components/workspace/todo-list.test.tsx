@@ -22,7 +22,9 @@ describe("TodoList", () => {
 
   it("calls onToggle in controlled mode", () => {
     const onToggle = vi.fn();
-    renderWithProviders(<TodoList todos={todos} collapsed={true} onToggle={onToggle} />);
+    renderWithProviders(
+      <TodoList todos={todos} collapsed={true} onToggle={onToggle} />,
+    );
     fireEvent.click(screen.getByText("To-dos"));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
@@ -37,14 +39,18 @@ describe("TodoList", () => {
   });
 
   it("applies hidden styles when hidden is true", () => {
-    const { container } = renderWithProviders(<TodoList todos={todos} hidden />);
+    const { container } = renderWithProviders(
+      <TodoList todos={todos} hidden />,
+    );
     const root = container.firstElementChild as HTMLElement;
     expect(root.className).toContain("pointer-events-none");
     expect(root.className).toContain("opacity-0");
   });
 
   it("shows expanded state when collapsed is false", () => {
-    const { container } = renderWithProviders(<TodoList todos={todos} collapsed={false} />);
+    const { container } = renderWithProviders(
+      <TodoList todos={todos} collapsed={false} />,
+    );
     const main = container.querySelector("main");
     expect(main?.className).toContain("h-28");
   });

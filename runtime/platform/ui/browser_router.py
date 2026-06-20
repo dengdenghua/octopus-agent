@@ -1,4 +1,5 @@
 """Browser session and relay compatibility router for the UI app."""
+
 from __future__ import annotations
 
 import base64
@@ -21,8 +22,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
-from runtime.platform.process.paths import project_root
+from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.platform.process.paths import app_paths, project_root
 from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
+from runtime.safety.replay.browser_desktop_replay import browser_session_replay_identity
 
 # Written into the profile dir while a persistent browser context is
 # live; removed on clean shutdown. A leftover sentinel on the next
@@ -82,9 +85,14 @@ def create_browser_router(
 
     def _auth_dep(request: Request) -> None:
         from runtime.adapters.web_auth import _resolve_actor
+
         _resolve_actor(
-            request, identity_store, require_auth,
-            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer, jwt_audience=jwt_audience,
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
         )
 
     router = APIRouter(tags=["browser"], dependencies=[Depends(_auth_dep)])
@@ -132,10 +140,12 @@ def create_browser_router(
         if env_override:
             candidates.append(Path(env_override).expanduser())
         root = project_root()
-        candidates.extend([
-            root / "extensions" / "octopus-browser-relay",
-            root / ".octopus-browser-relay",
-        ])
+        candidates.extend(
+            [
+                root / "extensions" / "octopus-browser-relay",
+                root / ".octopus-browser-relay",
+            ]
+        )
         for candidate in candidates:
             if candidate.exists():
                 return candidate
@@ -157,15 +167,11 @@ def create_browser_router(
                 import ctypes
                 from ctypes import wintypes
 
-                size = ctypes.windll.version.GetFileVersionInfoSizeW(
-                    str(executable), None
-                )
+                size = ctypes.windll.version.GetFileVersionInfoSizeW(str(executable), None)
                 if not size:
                     return ""
                 buf = ctypes.create_string_buffer(size)
-                if not ctypes.windll.version.GetFileVersionInfoW(
-                    str(executable), 0, size, buf
-                ):
+                if not ctypes.windll.version.GetFileVersionInfoW(str(executable), 0, size, buf):
                     return ""
                 value = ctypes.c_void_p(0)
                 value_size = wintypes.UINT(0)
@@ -173,6 +179,7 @@ def create_browser_router(
                     buf, r"\\", ctypes.byref(value), ctypes.byref(value_size)
                 ):
                     return ""
+
                 # VS_FIXEDFILEINFO layout — dwFileVersionMS / dwFileVersionLS
                 class _FixedInfo(ctypes.Structure):
                     _fields_ = [
@@ -219,7 +226,16 @@ def create_browser_router(
                 "chrome",
                 "Google Chrome",
                 [
+                    "google-chrome",
+                    "google-chrome-stable",
+                    "chrome",
                     "chrome.exe",
+                    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                    "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+                    "/usr/bin/google-chrome",
+                    "/usr/bin/google-chrome-stable",
+                    "/usr/bin/chromium",
+                    "/usr/bin/chromium-browser",
                     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
                 ],
@@ -229,7 +245,12 @@ def create_browser_router(
                 "edge",
                 "Microsoft Edge",
                 [
+                    "microsoft-edge",
+                    "microsoft-edge-stable",
                     "msedge.exe",
+                    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                    "/usr/bin/microsoft-edge",
+                    "/usr/bin/microsoft-edge-stable",
                     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
                     r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
                 ],
@@ -239,7 +260,12 @@ def create_browser_router(
                 "chromium",
                 "Chromium",
                 [
+                    "chromium",
+                    "chromium-browser",
                     "chromium.exe",
+                    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                    "/usr/bin/chromium",
+                    "/usr/bin/chromium-browser",
                     r"C:\Program Files\Chromium\Application\chromium.exe",
                     r"C:\Program Files (x86)\Chromium\Application\chromium.exe",
                 ],
@@ -249,7 +275,11 @@ def create_browser_router(
                 "brave",
                 "Brave",
                 [
+                    "brave",
+                    "brave-browser",
                     "brave.exe",
+                    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                    "/usr/bin/brave-browser",
                     r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
                     r"C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe",
                 ],
@@ -259,7 +289,10 @@ def create_browser_router(
                 "firefox",
                 "Firefox",
                 [
+                    "firefox",
                     "firefox.exe",
+                    "/Applications/Firefox.app/Contents/MacOS/firefox",
+                    "/usr/bin/firefox",
                     r"C:\Program Files\Mozilla Firefox\firefox.exe",
                     r"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
                 ],
@@ -271,7 +304,11 @@ def create_browser_router(
         for name, display_name, candidates, chromium_based in candidates_by_browser:
             executable: Path | None = None
             for candidate in candidates:
-                resolved = shutil.which(candidate) if "\\" not in candidate and ":" not in candidate else candidate
+                resolved = (
+                    candidate
+                    if Path(candidate).is_absolute() or "\\" in candidate or ":" in candidate
+                    else shutil.which(candidate)
+                )
                 if not resolved:
                     continue
                 candidate_path = Path(resolved)
@@ -284,15 +321,17 @@ def create_browser_router(
             if normalized in seen:
                 continue
             seen.add(normalized)
-            browsers.append({
-                "name": name,
-                "display_name": display_name,
-                "version": _browser_version(executable),
-                "path": str(executable),
-                "chromium_based": chromium_based,
-                "cdp_supported": chromium_based,
-                "connection_modes": ["extension", "cdp"] if chromium_based else ["playwright"],
-            })
+            browsers.append(
+                {
+                    "name": name,
+                    "display_name": display_name,
+                    "version": _browser_version(executable),
+                    "path": str(executable),
+                    "chromium_based": chromium_based,
+                    "cdp_supported": chromium_based,
+                    "connection_modes": ["extension", "cdp"] if chromium_based else ["playwright"],
+                }
+            )
         return browsers
 
     def _playwright_runtime() -> Any | None:
@@ -301,6 +340,18 @@ def create_browser_router(
         except ImportError:
             return None
         return sync_playwright
+
+    def _browser_runtime_errors() -> tuple[type[BaseException], ...]:
+        try:
+            from playwright.sync_api import (  # type: ignore[import-not-found]
+                Error as PlaywrightError,
+            )
+            from playwright.sync_api import (
+                TimeoutError as PlaywrightTimeoutError,
+            )
+        except ImportError:
+            return (OSError, ImportError, RuntimeError)
+        return (OSError, ImportError, RuntimeError, PlaywrightError, PlaywrightTimeoutError)
 
     def _preferred_browser_executable() -> str | None:
         for browser in _detect_browsers():
@@ -316,10 +367,7 @@ def create_browser_router(
     def _session_project_id(session_id: str, body: dict[str, Any] | None = None) -> str:
         body = body or {}
         return str(
-            body.get("project_id")
-            or body.get("workspace_id")
-            or body.get("owner_id")
-            or session_id
+            body.get("project_id") or body.get("workspace_id") or body.get("owner_id") or session_id
         ).strip()
 
     def _session_profile_id(session_id: str, body: dict[str, Any] | None = None) -> str:
@@ -359,6 +407,15 @@ def create_browser_router(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
+    def _session_viewport(session: dict[str, Any]) -> tuple[int, int]:
+        width = int(session.get("viewport_width") or browser_config_state["viewport_width"])
+        height = int(session.get("viewport_height") or browser_config_state["viewport_height"])
+        width = max(240, min(4096, width))
+        height = max(160, min(4096, height))
+        session["viewport_width"] = width
+        session["viewport_height"] = height
+        return width, height
+
     def _ensure_real_browser_session(session: dict[str, Any]) -> bool:
         if session.get("page") is not None:
             return True
@@ -376,17 +433,18 @@ def create_browser_router(
             playwright = sync_playwright().start()
             profile_dir = _browser_profile_dir(session)
             session["recovered_from_crash"] = mark_session_active(profile_dir)
+            viewport_width, viewport_height = _session_viewport(session)
             context = playwright.chromium.launch_persistent_context(
                 user_data_dir=str(profile_dir),
                 executable_path=executable_path,
                 headless=bool(session.get("headless", True)),
                 viewport={
-                    "width": int(browser_config_state["viewport_width"]),
-                    "height": int(browser_config_state["viewport_height"]),
+                    "width": viewport_width,
+                    "height": viewport_height,
                 },
             )
             page = context.pages[0] if context.pages else context.new_page()
-        except (OSError, ImportError, RuntimeError):
+        except _browser_runtime_errors():
             with contextlib.suppress(Exception):
                 if context is not None:
                     context.close()
@@ -425,8 +483,104 @@ def create_browser_router(
         mark_session_closed(session.get("profile_dir"))
         session["mode"] = "mock"
 
-    def _record_browser_action(session: dict[str, Any], action: str, detail: str) -> None:
-        browser_session_center.record_action(session, action, detail)
+    def _record_browser_action(
+        session: dict[str, Any],
+        action: str,
+        detail: str,
+        *,
+        status: str = "ok",
+        error: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        browser_session_center.record_action(
+            session,
+            action,
+            detail,
+            status=status,
+            error=error,
+            metadata=metadata,
+        )
+
+    def _queue_browser_replay_case(
+        replay_case: dict[str, Any],
+        *,
+        reason: str = "",
+        priority: str = "",
+    ) -> dict[str, Any]:
+        session_id = str(replay_case.get("session_id") or "default")
+        health = replay_case.get("health")
+        health = health if isinstance(health, dict) else {}
+        last_action = replay_case.get("last_action")
+        last_action = last_action if isinstance(last_action, dict) else {}
+        issues = health.get("issues") if isinstance(health.get("issues"), list) else []
+        failed = str(last_action.get("status") or "") == "failed"
+        chosen_priority = priority or ("P0" if failed or not health.get("healthy") else "P1")
+        action_name = str(last_action.get("action") or "no action")
+        action_detail = str(last_action.get("detail") or "")
+        issue_text = ", ".join(str(issue) for issue in issues) or "none"
+        case_id = str(replay_case.get("case_id") or "")
+        fingerprint = str(replay_case.get("fingerprint") or "")
+        text = (
+            f"Browser session `{session_id}` replay case `{case_id}` captured for operator review.\n"
+            f"Last action: {action_name} {action_detail}".strip()
+            + f"\nHealth score: {health.get('score', 0)}; issues: {issue_text}."
+        )
+        if reason:
+            text += f"\nReason: {reason[:500]}"
+        queue = ReviewQueue(app_paths().review_queue_path)
+        return queue.upsert_item(
+            source="browser_session_replay",
+            source_kind="browser_desktop_replay",
+            candidate_kind="browser_session_replay_case",
+            priority=chosen_priority,
+            target_bucket="browser_desktop_replay",
+            title=f"Review browser replay case: {session_id}",
+            text=text,
+            metadata={
+                "schema": replay_case.get("schema"),
+                "case_id": case_id,
+                "fingerprint": fingerprint,
+                "session_id": session_id,
+                "replay_ready": bool(replay_case.get("replay_ready")),
+                "health": health,
+                "last_action": last_action,
+                "action_count": replay_case.get("action_count"),
+            },
+            tags=[
+                "browser",
+                "desktop",
+                "replay_case",
+                "review_queue",
+                "operator_review",
+            ],
+        )
+
+    def _browser_replay_evidence(
+        session_id: str,
+        session: dict[str, Any],
+        *,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        actions = [
+            action
+            for action in list(session.get("actions", []))[-limit:]
+            if isinstance(action, dict)
+        ]
+        health = browser_session_center.health_report(session_id, limit=min(limit, 100))
+        identity = browser_session_replay_identity(
+            session_id=session_id,
+            actions=actions,
+            health=health,
+        )
+        return {
+            "schema": "octopus.browser_replay_evidence_hint.v1",
+            "case_id": identity["case_id"],
+            "fingerprint": identity["fingerprint"],
+            "replay_ready": bool(actions),
+            "replay_case_url": f"/api/browser/session/replay-case?session_id={session_id}",
+            "queue_url": "/api/browser/session/replay-case/queue",
+            "queue_body": {"session_id": session_id},
+        }
 
     def _page_title_for_url(url: str) -> str:
         # SSRF + DNS-rebinding guard. ``safe_urlopen`` resolves once
@@ -435,11 +589,14 @@ def create_browser_router(
         # fetch.
         try:
             from runtime.safety.auth.url_guard import safe_urlopen
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort; fail-open
             return url
         try:
             raw, headers = safe_urlopen(
-                url, timeout=5.0, read_cap_bytes=32768, allow_private=False,
+                url,
+                timeout=5.0,
+                read_cap_bytes=32768,
+                allow_private=False,
             )
         except (ValueError, urllib.error.URLError, TimeoutError, OSError):
             return url
@@ -451,7 +608,7 @@ def create_browser_router(
         start = lower.find("<title>")
         end = lower.find("</title>")
         if start != -1 and end != -1 and end > start:
-            return text[start + 7:end].strip()
+            return text[start + 7 : end].strip()
         if "text/plain" in content_type:
             return url
         return url
@@ -475,7 +632,7 @@ def create_browser_router(
                     session["current_title"] = title
                     _record_browser_action(session, "navigate", final_url)
                     return {"url": final_url, "title": title}
-                except (OSError, ImportError, RuntimeError):
+                except _browser_runtime_errors():
                     _close_real_browser_session(session)
         title = _page_title_for_url(url)
         history = list(session.get("history", []))
@@ -504,7 +661,7 @@ def create_browser_router(
                     action_name = "back" if delta < 0 else "forward"
                     _record_browser_action(session, action_name, session["current_url"])
                     return {"url": session["current_url"], "title": session["current_title"]}
-                except (OSError, ImportError, RuntimeError):
+                except _browser_runtime_errors():
                     _close_real_browser_session(session)
         history = list(session.get("history", []))
         if not history:
@@ -529,7 +686,7 @@ def create_browser_router(
                     session["current_title"] = page.title()
                     _record_browser_action(session, "reload", session["current_url"])
                     return {"url": session["current_url"], "title": session["current_title"]}
-                except (OSError, ImportError, RuntimeError):
+                except _browser_runtime_errors():
                     _close_real_browser_session(session)
         url = str(session.get("current_url") or "")
         if not url:
@@ -545,6 +702,7 @@ def create_browser_router(
         return {"url": url, "title": title}
 
     def _browser_screenshot_payload(session: dict[str, Any]) -> dict[str, Any]:
+        width, height = _session_viewport(session)
         if _ensure_real_browser_session(session):
             page = session.get("page")
             if page is not None:
@@ -552,15 +710,15 @@ def create_browser_router(
                     image = page.screenshot(full_page=True, type="png")
                     return {
                         "base64": base64.b64encode(image).decode("ascii"),
-                        "width": int(browser_config_state["viewport_width"]),
-                        "height": int(browser_config_state["viewport_height"]),
+                        "width": width,
+                        "height": height,
                     }
-                except (OSError, ImportError, RuntimeError):
+                except _browser_runtime_errors():
                     _close_real_browser_session(session)
-        width = int(browser_config_state["viewport_width"])
-        height = int(browser_config_state["viewport_height"])
         title = html.escape(str(session.get("current_title") or "Octopus Browser Session"))
-        url = html.escape(str(session.get("current_url") or "Navigate to a URL to start browser automation"))
+        url = html.escape(
+            str(session.get("current_url") or "Navigate to a URL to start browser automation")
+        )
         action_count = int(session.get("action_count", 0))
         svg = f"""
 <svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
@@ -588,7 +746,6 @@ def create_browser_router(
             "width": width,
             "height": height,
         }
-
 
     # ─── Filesystem helpers for desktop workspace pages ───────────────
     @router.get("/api/browser/system-info")
@@ -629,6 +786,16 @@ def create_browser_router(
             raise HTTPException(400, str(exc)) from exc
         return {"exists": session is not None, "session": snapshot}
 
+    @router.get("/api/browser/session/health")
+    def api_browser_session_health(
+        session_id: str = Query(default="default"),
+        limit: int = Query(default=10, ge=1, le=100),
+    ) -> dict[str, Any]:
+        try:
+            return browser_session_center.health_report(session_id, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @router.post("/api/browser/session/ensure")
     def api_browser_session_ensure(body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "default").strip()
@@ -640,6 +807,50 @@ def create_browser_router(
         )
         browser_session_center.update_settings(session, body)
         return {"status": "ready", "session": browser_session_center.snapshot(session)}
+
+    @router.post("/api/browser/session/viewport")
+    def api_browser_session_viewport(body: dict[str, Any]) -> dict[str, Any]:
+        session_id = str(body.get("session_id") or "default").strip()
+        if not session_id:
+            raise HTTPException(400, "session_id is required")
+        session = _ensure_browser_session(
+            session_id,
+            headless=body.get("headless") if "headless" in body else None,
+            project_id=_session_project_id(session_id, body),
+            profile_id=_session_profile_id(session_id, body),
+        )
+        browser_session_center.update_settings(
+            session,
+            {
+                "viewport_width": body.get("width", body.get("viewport_width")),
+                "viewport_height": body.get("height", body.get("viewport_height")),
+            },
+        )
+        width, height = _session_viewport(session)
+        page = session.get("page")
+        if page is not None:
+            try:
+                page.set_viewport_size({"width": width, "height": height})
+            except _browser_runtime_errors() as exc:
+                _record_browser_action(
+                    session,
+                    "viewport",
+                    f"{width}x{height}",
+                    status="failed",
+                    error=str(exc),
+                    metadata={"width": width, "height": height},
+                )
+                raise HTTPException(500, f"browser viewport update failed: {exc}") from exc
+        _record_browser_action(
+            session,
+            "viewport",
+            f"{width}x{height}",
+            metadata={"width": width, "height": height},
+        )
+        return {
+            "ok": True,
+            "session": browser_session_center.snapshot(session),
+        }
 
     @router.post("/api/browser/session/reset")
     def api_browser_session_reset(body: dict[str, Any]) -> dict[str, Any]:
@@ -658,7 +869,11 @@ def create_browser_router(
                 profile_id=_session_profile_id(session_id, body),
             )
             browser_session_center.update_settings(session, body)
-            return {"ok": True, "status": "ready", "session": browser_session_center.snapshot(session)}
+            return {
+                "ok": True,
+                "status": "ready",
+                "session": browser_session_center.snapshot(session),
+            }
         return {
             "ok": True,
             "status": "closed",
@@ -717,6 +932,22 @@ def create_browser_router(
                         if not selector:
                             raise HTTPException(400, "selector is required for hover")
                         page.hover(selector, timeout=10_000)
+                    elif action == "click_at":
+                        try:
+                            x = int(body.get("x"))
+                            y = int(body.get("y"))
+                        except (TypeError, ValueError) as exc:
+                            raise HTTPException(400, "x and y are required for click_at") from exc
+                        page.mouse.click(x, y)
+                    elif action == "double_click_at":
+                        try:
+                            x = int(body.get("x"))
+                            y = int(body.get("y"))
+                        except (TypeError, ValueError) as exc:
+                            raise HTTPException(
+                                400, "x and y are required for double_click_at"
+                            ) from exc
+                        page.mouse.dblclick(x, y)
                     elif action == "wait":
                         selector = str(body.get("selector") or "").strip()
                         timeout = int(body.get("timeout") or 10_000)
@@ -739,7 +970,7 @@ def create_browser_router(
                         text = ""
                         try:
                             text = page.locator("body").inner_text(timeout=5000)
-                        except (OSError, ImportError, RuntimeError):
+                        except _browser_runtime_errors():
                             text = ""
                         snapshot = {
                             "role": "document",
@@ -761,7 +992,16 @@ def create_browser_router(
                         raise HTTPException(400, f"unsupported browser action: {action}")
                     session["current_url"] = page.url
                     session["current_title"] = page.title()
-                    detail = str(body.get("selector") or body.get("text") or body.get("y") or action)
+                    detail = str(
+                        body.get("selector")
+                        or body.get("text")
+                        or body.get("y")
+                        or (
+                            f"{body.get('x')},{body.get('y')}"
+                            if body.get("x") is not None and body.get("y") is not None
+                            else action
+                        )
+                    )
                     _record_browser_action(session, action, detail)
                     return {
                         "ok": True,
@@ -770,9 +1010,30 @@ def create_browser_router(
                     }
                 except HTTPException:
                     raise
-                except (OSError, ImportError, RuntimeError) as exc:
-                    raise HTTPException(500, f"browser action failed: {exc}") from exc
-        detail = str(body.get("selector") or body.get("text") or action)
+                except _browser_runtime_errors() as exc:
+                    _record_browser_action(
+                        session,
+                        action,
+                        str(body.get("selector") or body.get("text") or body.get("y") or action),
+                        status="failed",
+                        error=str(exc),
+                    )
+                    raise HTTPException(
+                        status_code=500,
+                        detail={
+                            "error": f"browser action failed: {exc}",
+                            "replay_evidence": _browser_replay_evidence(session_id, session),
+                        },
+                    ) from exc
+        detail = str(
+            body.get("selector")
+            or body.get("text")
+            or (
+                f"{body.get('x')},{body.get('y')}"
+                if body.get("x") is not None and body.get("y") is not None
+                else action
+            )
+        )
         _record_browser_action(session, action, detail)
         return {
             "ok": True,
@@ -815,7 +1076,7 @@ def create_browser_router(
                     text = page.locator("body").inner_text(timeout=5_000)
                     session["current_url"] = url
                     session["current_title"] = title
-                except (OSError, ImportError, RuntimeError):
+                except _browser_runtime_errors():
                     text = ""
         if not text and url:
             # SSRF + rebinding-proof fetch.
@@ -823,7 +1084,10 @@ def create_browser_router(
                 from runtime.safety.auth.url_guard import safe_urlopen
 
                 raw, _headers = safe_urlopen(
-                    url, timeout=8.0, read_cap_bytes=256_000, allow_private=False,
+                    url,
+                    timeout=8.0,
+                    read_cap_bytes=256_000,
+                    allow_private=False,
                 )
                 html_text = raw.decode("utf-8", errors="replace")
                 text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", html_text)
@@ -857,6 +1121,56 @@ def create_browser_router(
         actions = list(session.get("actions", []))[-limit:]
         return {"actions": actions}
 
+    @router.get("/api/browser/session/replay-case")
+    def api_browser_session_replay_case(
+        session_id: str,
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> dict[str, Any]:
+        session = browser_sessions.get(session_id)
+        if session is None:
+            raise HTTPException(404, f"browser session not found: {session_id}")
+        actions = list(session.get("actions", []))[-limit:]
+        health = browser_session_center.health_report(session_id, limit=min(limit, 100))
+        identity = browser_session_replay_identity(
+            session_id=session_id,
+            actions=[action for action in actions if isinstance(action, dict)],
+            health=health,
+        )
+        return {
+            "schema": "octopus.browser_session_replay_case.v1",
+            "case_id": identity["case_id"],
+            "fingerprint": identity["fingerprint"],
+            "session_id": session_id,
+            "replay_ready": bool(actions),
+            "health": health,
+            "session": browser_session_center.snapshot(session),
+            "actions": actions,
+            "action_count": len(actions),
+            "last_action": actions[-1] if actions else None,
+        }
+
+    @router.post("/api/browser/session/replay-case/queue")
+    def api_browser_session_replay_case_queue(body: dict[str, Any]) -> dict[str, Any]:
+        session_id = str(body.get("session_id") or "default").strip()
+        if not session_id:
+            raise HTTPException(400, "session_id is required")
+        limit = int(body.get("limit") or 100)
+        limit = max(1, min(500, limit))
+        replay_case = api_browser_session_replay_case(session_id=session_id, limit=limit)
+        if not replay_case.get("replay_ready"):
+            raise HTTPException(409, "browser replay case has no actions to review")
+        queued = _queue_browser_replay_case(
+            replay_case,
+            reason=str(body.get("reason") or ""),
+            priority=str(body.get("priority") or ""),
+        )
+        return {
+            "ok": True,
+            "schema": "octopus.browser_session_replay_case_queue.v1",
+            "replay_case": replay_case,
+            "queue": queued,
+        }
+
     @router.post("/api/browser/close")
     def api_browser_close(body: dict[str, Any]) -> dict[str, Any]:
         session_id = str(body.get("session_id") or "").strip()
@@ -889,7 +1203,9 @@ def create_browser_router(
         if "connection_mode" in body:
             mode = str(body["connection_mode"])
             if mode not in allowed_modes:
-                raise HTTPException(400, "connection_mode must be one of playwright, extension, cdp")
+                raise HTTPException(
+                    400, "connection_mode must be one of playwright, extension, cdp"
+                )
             browser_config_state["connection_mode"] = mode
         if "headless" in body:
             browser_config_state["headless"] = bool(body["headless"])
@@ -900,11 +1216,7 @@ def create_browser_router(
         extension_path = _resolve_browser_extension_path()
         manifest = extension_path / "manifest.json"
         last_seen = int(browser_relay_state.get("last_seen") or 0)
-        connected = bool(
-            manifest.exists()
-            and last_seen
-            and (_now_ts() - last_seen) <= 15
-        )
+        connected = bool(manifest.exists() and last_seen and (_now_ts() - last_seen) <= 15)
         browser_relay_state["connected"] = connected
         return {
             "connected": connected,
@@ -923,9 +1235,7 @@ def create_browser_router(
     def api_browser_relay_heartbeat(body: dict[str, Any]) -> dict[str, Any]:
         browser_relay_state["connected"] = True
         browser_relay_state["last_seen"] = _now_ts()
-        browser_relay_state["extension_version"] = str(
-            body.get("extension_version") or "local-dev"
-        )
+        browser_relay_state["extension_version"] = str(body.get("extension_version") or "local-dev")
         active_tab = body.get("active_tab")
         if isinstance(active_tab, dict):
             browser_relay_state["active_tab"] = {

@@ -466,7 +466,7 @@ export default function TeamPage() {
   const canRunTeamTask =
     !currentParticipantRemoved &&
     (participantRole === "owner" || participantRole === "member");
-  const canCreateTeamTask = isCoworkMode && canRunTeamTask;
+  const canCreateTeamTask = canRunTeamTask;
   const canInvite =
     !currentParticipantRemoved &&
     (participantRole === "owner" || participantRole === "member");
@@ -718,12 +718,11 @@ export default function TeamPage() {
       ),
     [lastTurnToolEvents, liveToolEvents],
   );
-  const teamInputStatus =
-    thread.error
-      ? "error"
-      : thread.isLoading && (thread.streamingMessage || hasActiveTeamToolEvent)
-        ? "streaming"
-        : "ready";
+  const teamInputStatus = thread.error
+    ? "error"
+    : thread.isLoading && (thread.streamingMessage || hasActiveTeamToolEvent)
+      ? "streaming"
+      : "ready";
 
   // See chats/[thread_id]/page.tsx for the rationale — if the first
   // stream fails before onStart fires, isNewThread can stay stuck at
@@ -776,6 +775,12 @@ export default function TeamPage() {
         kind: "agent",
         ref: agent.name,
       }));
+      const taskScope =
+        teamMode === "cowork"
+          ? "群任务"
+          : selectedTaskAgents.length > 1
+            ? "可升级群任务"
+            : "单人任务";
       try {
         await createTeamTask.mutateAsync({
           room_id: teamId,
@@ -786,6 +791,11 @@ export default function TeamPage() {
             source: "team_input",
             thread_id: isNewThread ? undefined : threadId,
             team_mode: teamMode,
+            task_scope: taskScope,
+            local_file_agent_enabled:
+              text.includes("@本地数据库") ||
+              text.includes("@本地资料官") ||
+              text.includes("@私域资料库"),
           },
         });
         setShowTeamWorkbench(true);
@@ -812,14 +822,28 @@ export default function TeamPage() {
       const taskAgentNames = selectedTaskAgents.map(
         (agent) => agent.display_name ?? agent.name,
       );
-      const text =
+      const modeLine =
+        teamMode === "cowork"
+          ? "任务模式：群任务，TL 负责拆解、分派、汇总。"
+          : "任务模式：单人任务，保留随时添加成员升级为群任务。";
+      const assigneeLine =
         taskAgentNames.length > 0
-          ? `本次任务优先交给：${taskAgentNames.join("、")}。\n\n${message.text}`
-          : message.text;
+          ? `本次任务优先交给：${taskAgentNames.join("、")}。`
+          : "本次任务未指定成员，由当前角色先判断。";
+      const hasLocalDatabaseMention =
+        message.text.includes("@本地数据库") ||
+        message.text.includes("@本地资料官") ||
+        message.text.includes("@私域资料库");
+      const localFileAgentLine = hasLocalDatabaseMention
+        ? "本地数据库只检索本机授权资料；未经确认不要把原文件或全量索引上传云端。"
+        : null;
+      const text = [modeLine, assigneeLine, localFileAgentLine, message.text]
+        .filter(Boolean)
+        .join("\n\n");
       void createTaskFromSubmit(message.text);
       void sendMessage(threadId, { text, files: [] });
     },
-    [createTaskFromSubmit, selectedTaskAgents, sendMessage, threadId],
+    [createTaskFromSubmit, selectedTaskAgents, sendMessage, teamMode, threadId],
   );
 
   const handleStop = useCallback(async () => {
@@ -885,7 +909,7 @@ export default function TeamPage() {
               refresh={thread.refresh}
               isLoading={thread.isLoading}
             />
-            <ChatBox threadId={threadId}>
+            <ChatBox threadId={threadId} artifactPanelMode="external">
               <ChatPageLayout
                 isNewThread={isNewThread}
                 headerClassName="pl-3"
@@ -982,7 +1006,10 @@ export default function TeamPage() {
                       <TokenUsageIndicator messages={thread.messages} />
                       {previewBlocks && (
                         <button
-                          onClick={() => setShowPreview((v) => !v)}
+                          onClick={() => {
+                            setShowPreview((v) => !v);
+                            setShowTeamWorkbench(false);
+                          }}
                           className={cn(
                             "flex size-8 items-center justify-center rounded-lg border border-transparent transition-all duration-200 hover:border-border/50 hover:bg-muted/50",
                             showPreview &&
@@ -1010,7 +1037,10 @@ export default function TeamPage() {
                         )}
                         onClick={() => {
                           setShowTeamWorkbench((open) => !open);
-                          if (!showTeamWorkbench) setTeamWorkbenchTab("tasks");
+                          if (!showTeamWorkbench) {
+                            setTeamWorkbenchTab("tasks");
+                            setShowPreview(false);
+                          }
                         }}
                         title={
                           showTeamWorkbench
@@ -1089,9 +1119,7 @@ export default function TeamPage() {
                           teamMembers={teamConfig?.members ?? []}
                           selectedAgentIds={selectedTaskAgentIds}
                           onSelectedAgentIdsChange={setSelectedTaskAgentIds}
-                          submitBehavior={
-                            canRunTeamTask ? "run" : "message"
-                          }
+                          submitBehavior={canRunTeamTask ? "run" : "message"}
                           onWorkDirChange={setWorkDir}
                           onTeamModeChange={setTeamMode}
                           onModelChange={(modelName) =>
@@ -1113,7 +1141,7 @@ export default function TeamPage() {
                   </div>
                 }
                 secondaryPanel={
-                  showPreview && previewBlocks ? (
+                  showPreview && !showTeamWorkbench && previewBlocks ? (
                     <div className="ml-3 hidden min-h-0 w-[min(420px,40vw)] shrink-0 flex-col overflow-hidden animate-in slide-in-from-right-2 fade-in duration-200 lg:flex workspace-panel-subtle">
                       <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
                         <div className="flex items-center gap-2">

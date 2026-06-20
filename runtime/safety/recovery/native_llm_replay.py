@@ -9,15 +9,15 @@ deterministic mock-tool set inside an isolated workspace and sends
 ``tool_result`` blocks back for another model turn.
 """
 
-import json
-import re
-import tempfile
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any
+import json  # noqa: E402
+import re  # noqa: E402
+import tempfile  # noqa: E402
+from dataclasses import asdict, dataclass, field  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from runtime.platform.models.llm import Message, ModelRequest, ToolSpec
-from runtime.safety.recovery.native_turn_replay import (
+from runtime.platform.models.llm import Message, ModelRequest, ToolSpec  # noqa: E402
+from runtime.safety.recovery.native_turn_replay import (  # noqa: E402
     TurnReplayCase,
     build_turn_replay_cases,
 )

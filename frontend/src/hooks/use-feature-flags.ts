@@ -85,9 +85,7 @@ export function useFeatureFlags(
         setFlags(Array.isArray(body.flags) ? body.flags : []);
       } catch (exc) {
         swallow(exc);
-        setError(
-          exc instanceof Error ? exc.message : String(exc),
-        );
+        setError(exc instanceof Error ? exc.message : String(exc));
         setFlags([]);
       } finally {
         setLoading(false);
@@ -106,14 +104,11 @@ export function useFeatureFlags(
     return Boolean(entry?.value);
   }, []);
 
-  const valueFn = useCallback(
-    function value<T>(name: string, fallback: T): T {
-      const entry = indexRef.current.get(name);
-      if (entry === undefined) return fallback;
-      return entry.value as T;
-    },
-    [],
-  );
+  const valueFn = useCallback(function value<T>(name: string, fallback: T): T {
+    const entry = indexRef.current.get(name);
+    if (entry === undefined) return fallback;
+    return entry.value as T;
+  }, []);
 
   const reload = useCallback(async () => {
     await fetchCatalog("POST");

@@ -26,6 +26,11 @@ TOPIC_ALERT_BUDGET = "alert.budget"
 TOPIC_ALERT_LOOP = "alert.loop"
 """死循环检测。payload 建议：{task_id, pattern}。"""
 
+TOPIC_ARM_MAILBOX = "arm.mailbox.*"
+"""Arm↔Arm 点对点消息（网状互通）。实际 topic 为 ``arm.mailbox.<arm_id>``，
+订阅方用 ``arm.mailbox.<self_arm_id>`` 收自己的信件，用 ``arm.mailbox.*``
+监听全部。payload 建议：{from, body, ts}。"""
+
 
 STANDARD_TOPICS: frozenset[str] = frozenset({
     TOPIC_ARM_BUSY,
@@ -33,6 +38,7 @@ STANDARD_TOPICS: frozenset[str] = frozenset({
     TOPIC_SUCKER_GRABBED,
     TOPIC_ALERT_BUDGET,
     TOPIC_ALERT_LOOP,
+    TOPIC_ARM_MAILBOX,
 })
 
 
@@ -112,6 +118,34 @@ class SignalBus:
                     self._errors.append(err_text)
 
         return event
+
+    # ─── send_to_arm (point-to-point convenience) ────────
+
+    def send_to_arm(
+        self,
+        target_arm_id: str,
+        body: dict,
+        *,
+        from_arm_id: str | None = None,
+    ) -> SignalEvent:
+        """Send a point-to-point message to a specific Arm's mailbox.
+
+        Wraps ``publish`` with the ``arm.mailbox.<arm_id>`` topic
+        convention. The target Arm must have subscribed to its own
+        mailbox topic (Worker does this automatically when constructed
+        with a signal_bus). Messages to an un-subscribed mailbox are
+        dropped (SignalBus doesn't buffer undelivered messages — only
+        history is kept).
+
+        This is the mesh-communication primitive that lets Arm₃ tell
+        Arm₇ "I've grabbed it" without routing through the Cerebrum
+        (architecture.md §"为什么比 Lead+Sub-agents 更进一步").
+        """
+        return self.publish(
+            topic=f"arm.mailbox.{target_arm_id}",
+            payload={"from": from_arm_id, "body": body},
+            publisher=from_arm_id or "arm",
+        )
 
     # ─── subscribe / unsubscribe ──────────────────────────
 

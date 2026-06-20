@@ -343,7 +343,7 @@ def call_subagent(
     # write-tools set and the call succeeded, we extract its path.
     _files_touched: list[str] = []
     _files_seen: set[str] = set()
-    _SUBAGENT_WRITE_TOOLS: frozenset[str] = frozenset({
+    _subagent_write_tools: frozenset[str] = frozenset({
         "write_text_file",
         "append_text_file",
         "edit_text_file",
@@ -443,7 +443,7 @@ def call_subagent(
                 and event.get("status") == "success"
             ):
                 name = event.get("skill") or event.get("name") or ""
-                if name in _SUBAGENT_WRITE_TOOLS:
+                if name in _subagent_write_tools:
                     args = event.get("args") or {}
                     path = args.get("path") if isinstance(args, dict) else None
                     if isinstance(path, str) and path and path not in _files_seen:
@@ -543,7 +543,7 @@ def call_subagent(
     # We do NOT retry generic failures (router error / tool exception)
     # because those are likely deterministic — retrying would just burn
     # more budget without changing the outcome.
-    _RETRY_DISABLED = bool(
+    _retry_disabled = bool(
         (context or {}).get("disable_auto_retry", False)
     )
 
@@ -553,7 +553,7 @@ def call_subagent(
             return first
         # Only retry round-cap exhaustion with partial work
         if (
-            _RETRY_DISABLED
+            _retry_disabled
             or not first.get("round_cap_exceeded")
             or not (first.get("output") or "").strip()
         ):

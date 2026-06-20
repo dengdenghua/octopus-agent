@@ -18,12 +18,9 @@ import { authHeaders } from "@/core/auth/api";
 // NEVER read. If a future feature needs markdown-companion fields,
 // add them to the backend pydantic model · they flow through here
 // automatically.
-export type UploadedFileInfo =
-  components["schemas"]["UploadFileMetadata"];
-export type UploadResponse =
-  components["schemas"]["UploadPostResponse"];
-export type ListFilesResponse =
-  components["schemas"]["UploadsListResponse"];
+export type UploadedFileInfo = components["schemas"]["UploadFileMetadata"];
+export type UploadResponse = components["schemas"]["UploadPostResponse"];
+export type ListFilesResponse = components["schemas"]["UploadsListResponse"];
 
 async function readErrorDetail(
   response: Response,
@@ -103,4 +100,3 @@ export async function deleteUploadedFile(
 
   return response.json();
 }
-

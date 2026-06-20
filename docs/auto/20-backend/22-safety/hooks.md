@@ -45,6 +45,6 @@ Agent runtime hooks · lifecycle events for the agent loop.
   - `runtime/execution/suckers/plan_mode.py`
   - `runtime/execution/tool_engine/executor.py`
 - **`runtime/sensing/`** · 2 file(s)
-  - `runtime/sensing/gateway/realtime_cerebrum.py`
+  - `runtime/sensing/gateway/realtime_turn_lifecycle.py`
   - `runtime/sensing/model_router/anthropic_router.py`
 

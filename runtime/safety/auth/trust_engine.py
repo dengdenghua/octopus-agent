@@ -94,6 +94,14 @@ class TrustEngine:
                     reason="quarantined: recent behavioural anomaly",
                 )
             predicted = call.predicted_cost
+            # Auto-fill predicted_cost from the sucker's baseline mean via
+            # adaptive.predict() when the caller doesn't supply one. Mature
+            # baselines get real pre-execute scoring; immature baselines
+            # (cold-start, predict() returns None) fall through with 0.0
+            # predicted cost — the adaptive tier still learns post-execute
+            # via the learn() method and can quarantine on observed anomalies.
+            if predicted is None:
+                predicted = self.adaptive.predict(sucker_str)
             score = self.adaptive.compute_risk(
                 sucker_str,
                 predicted_latency_ms=predicted.latency_ms if predicted else 0.0,

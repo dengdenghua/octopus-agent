@@ -28,8 +28,8 @@ function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: {
-        retry: false,      // don't retry in tests · keep errors deterministic
-        gcTime: Infinity,  // never GC during a single test render
+        retry: false, // don't retry in tests · keep errors deterministic
+        gcTime: Infinity, // never GC during a single test render
       },
       mutations: {
         retry: false,

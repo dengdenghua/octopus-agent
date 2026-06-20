@@ -71,7 +71,9 @@ export function rehypeSplitWordsIntoSpans() {
                 type: "element",
                 tagName: "span",
                 properties: {
-                  className: isLastTextNode ? "animate-fade-in inline" : "inline",
+                  className: isLastTextNode
+                    ? "animate-fade-in inline"
+                    : "inline",
                 },
                 children: [{ type: "text", value: text }],
               });
@@ -167,6 +169,8 @@ export function useChatRehypePlugins({
 }
 
 /** @deprecated Prefer ``useChatRehypePlugins({ splitWords: enabled })``. */
-export function useRehypeSplitWordsIntoSpans(enabled = true): StreamdownProps["rehypePlugins"] {
+export function useRehypeSplitWordsIntoSpans(
+  enabled = true,
+): StreamdownProps["rehypePlugins"] {
   return useChatRehypePlugins({ splitWords: enabled });
 }

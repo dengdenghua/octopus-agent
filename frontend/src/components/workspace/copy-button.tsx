@@ -1,5 +1,11 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ComponentProps } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentProps,
+} from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -53,4 +59,3 @@ export function CopyButton({
     </Tooltip>
   );
 }
-

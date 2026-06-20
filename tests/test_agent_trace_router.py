@@ -9,7 +9,16 @@ from runtime.memory.diagnostics.trace_store import AgentTraceStore
 from runtime.sensing.gateway.agent_trace_router import create_agent_trace_router
 
 
-def _client_with_trace(tmp_path: Path) -> TestClient:
+class _DenyIdentityStore:
+    def verify_api_key(self, token: str):
+        return None
+
+
+def _client_with_trace(
+    tmp_path: Path,
+    *,
+    include_write_diagnostic: bool = False,
+) -> TestClient:
     store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
     store.record_event(
         thread_id="thread-1",
@@ -125,6 +134,38 @@ def _client_with_trace(tmp_path: Path) -> TestClient:
         item_id="call-read-1",
         payload={"tool": "read_file", "tool_call_id": "call-read-1", "status": "success"},
     )
+    if include_write_diagnostic:
+        store.record_event(
+            thread_id="thread-1",
+            turn_id="turn-1",
+            task_id="turn-1",
+            agent_id="agent-a",
+            event_type="TOOL_CALL_START",
+            item_id="call-write-1",
+            payload={
+                "tool": "write_text_file",
+                "tool_call_id": "call-write-1",
+                "input_preview": {"path": "runtime/example.py"},
+            },
+        )
+        store.record_event(
+            thread_id="thread-1",
+            turn_id="turn-1",
+            task_id="turn-1",
+            agent_id="agent-a",
+            event_type="TOOL_CALL_END",
+            item_id="call-write-1",
+            payload={
+                "tool": "write_text_file",
+                "tool_call_id": "call-write-1",
+                "status": "success",
+                "output_preview": (
+                    "ok\n\n[post-write diagnostics]\n"
+                    "ruff diagnostics (example.py):\n"
+                    "E999 SyntaxError: expected ':'"
+                ),
+            },
+        )
     store.record_task_run_finished(
         task_id="turn-1",
         thread_id="thread-1",
@@ -144,6 +185,29 @@ def _client_with_trace(tmp_path: Path) -> TestClient:
         )
     )
     return TestClient(app)
+
+
+def test_trace_promotion_apply_requires_auth_when_identity_store_exists(
+    tmp_path: Path,
+) -> None:
+    store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    app = FastAPI()
+    app.include_router(
+        create_agent_trace_router(
+            store=store,
+            experience_ledger_path=tmp_path / "experience_ledger.json",
+            review_queue_path=tmp_path / "review_queue.json",
+            promotion_audit_path=tmp_path / "promotion_audit.json",
+            proposal_ledger_path=tmp_path / "proposal_ledger.jsonl",
+            identity_store=_DenyIdentityStore(),
+        )
+    )
+    client = TestClient(app)
+
+    response = client.post("/api/agent-trace/review-queue/promotions/apply", json={})
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "missing Authorization: Bearer <token>"
 
 
 def test_trace_stats_exposes_ledger_totals(tmp_path: Path) -> None:
@@ -216,14 +280,38 @@ def test_trace_task_run_review_endpoint_exposes_replay_and_candidates(
     client = _client_with_trace(tmp_path)
 
     response = client.get("/api/agent-trace/task-runs/turn-1/review")
+    replay_case_response = client.get("/api/agent-trace/task-runs/turn-1/replay-case")
+    replay_evaluation_response = client.get(
+        "/api/agent-trace/task-runs/turn-1/replay-evaluation",
+    )
+    replay_cases_response = client.get(
+        "/api/agent-trace/replay-cases",
+        params={"thread_id": "thread-1", "status": "completed"},
+    )
+    replay_evaluations_response = client.get(
+        "/api/agent-trace/replay-evaluations",
+        params={"thread_id": "thread-1", "status": "completed"},
+    )
+    replay_gate_response = client.get(
+        "/api/agent-trace/replay-gate",
+        params={"thread_id": "thread-1", "status": "completed"},
+    )
     missing = client.get("/api/agent-trace/task-runs/missing/review")
+    missing_replay_case = client.get("/api/agent-trace/task-runs/missing/replay-case")
+    missing_replay_evaluation = client.get(
+        "/api/agent-trace/task-runs/missing/replay-evaluation",
+    )
 
     assert response.status_code == 200
     review = response.json()["review"]
     assert review["schema"] == "octopus.task_run_review.v1"
     assert review["task_id"] == "turn-1"
     assert review["status"] == "completed"
+    assert review["replay"]["schema"] == "octopus.task_run_replay.v1"
+    assert len(review["replay"]["fingerprint"]) == 16
+    assert review["replay"]["case_id"] == f"task-run:{review['replay']['fingerprint']}"
     assert review["replay"]["replayable"] is True
+    assert review["resume"]["available"] is False
     assert review["summary"]["tool_calls_started"] == 1
     assert any(
         finding["type"] == "success_pattern"
@@ -233,7 +321,37 @@ def test_trace_task_run_review_endpoint_exposes_replay_and_candidates(
         item["kind"] == "success_pattern"
         for item in review["learning_candidates"]
     )
+    assert replay_case_response.status_code == 200
+    replay_case = replay_case_response.json()["replay_case"]
+    assert replay_case["schema"] == "octopus.task_run_replay_case.v1"
+    assert replay_case["case_id"] == review["replay"]["case_id"]
+    assert replay_case["expectations"]["status"] == "completed"
+    assert replay_case["safety"]["raw_checkpoint_state_included"] is False
+    assert replay_evaluation_response.status_code == 200
+    replay_evaluation = replay_evaluation_response.json()["evaluation"]
+    assert replay_evaluation["schema"] == "octopus.task_run_replay_evaluation.v1"
+    assert replay_evaluation["case_id"] == replay_case["case_id"]
+    assert replay_evaluation["passed"] is True
+    assert replay_evaluation["score"] == 1.0
+    assert replay_cases_response.status_code == 200
+    replay_cases = replay_cases_response.json()
+    assert replay_cases["schema"] == "octopus.task_run_replay_case_corpus.v1"
+    assert replay_cases["total"] == 1
+    assert replay_cases["cases"][0]["case_id"] == replay_case["case_id"]
+    assert replay_evaluations_response.status_code == 200
+    replay_evaluations = replay_evaluations_response.json()
+    assert replay_evaluations["schema"] == "octopus.task_run_replay_evaluation_corpus.v1"
+    assert replay_evaluations["passed"] == 1
+    assert replay_evaluations["failed"] == 0
+    assert replay_evaluations["evaluations"][0]["case_id"] == replay_case["case_id"]
+    assert replay_gate_response.status_code == 200
+    replay_gate = replay_gate_response.json()
+    assert replay_gate["schema"] == "octopus.replay_gate.v1"
+    assert replay_gate["passed"] is True
+    assert replay_gate["summary"]["total"] == 1
     assert missing.status_code == 404
+    assert missing_replay_case.status_code == 404
+    assert missing_replay_evaluation.status_code == 404
 
 
 def test_trace_task_run_review_can_commit_to_experience_ledger(
@@ -252,6 +370,7 @@ def test_trace_task_run_review_can_commit_to_experience_ledger(
         "/api/agent-trace/experience-ledger/weekly-summary",
         params={"week_start": today_iso},
     )
+    quality = client.get("/api/agent-trace/experience-ledger/quality-summary")
     missing = client.post("/api/agent-trace/task-runs/missing/review/commit")
 
     assert committed.status_code == 200
@@ -262,8 +381,28 @@ def test_trace_task_run_review_can_commit_to_experience_ledger(
         "success_pattern",
         "backlog_candidate",
     }
+    assert all(
+        record["metadata"]["replay"]["case_id"].startswith("task-run:")
+        for record in records
+    )
+    assert all(
+        len(record["metadata"]["replay"]["fingerprint"]) == 16
+        for record in records
+    )
+    assert all(
+        record["metadata"]["citation"]["schema"]
+        == "octopus.experience_replay_citation.v1"
+        for record in records
+    )
+    assert all(
+        record["metadata"]["citation"]["replay_case_id"].startswith("task-run:")
+        for record in records
+    )
     assert summary.status_code == 200
     assert summary.json()["record_count"] == 2
+    assert quality.status_code == 200
+    assert quality.json()["schema"] == "octopus.experience_memory_quality_summary.v1"
+    assert quality.json()["active_count"] == 2
     assert missing.status_code == 404
 
 
@@ -286,6 +425,11 @@ def test_trace_task_run_review_can_enter_review_queue(
         "experience",
         "experiment_backlog",
     }
+    assert all(
+        item["metadata"]["replay"]["case_id"].startswith("task-run:")
+        for item in items
+    )
+    assert all(item["metadata"]["resume"]["available"] is False for item in items)
     assert summary.status_code == 200
     assert summary.json()["pending_count"] == 2
     assert missing.status_code == 404
@@ -350,8 +494,12 @@ def test_trace_review_queue_promotions_can_plan_apply_and_audit(
     assert plan.status_code == 200
     assert plan.json()["dry_run"] is True
     assert plan.json()["applicable"] == 1
+    assert plan.json()["replay_gate"]["schema"] == "octopus.replay_gate.v1"
+    assert plan.json()["replay_gate"]["passed"] is True
     assert applied.status_code == 200
     assert applied.json()["applied"] == 1
+    assert applied.json()["replay_gate"]["passed"] is True
+    assert applied.json()["override_replay_gate"] is False
     assert audit.status_code == 200
     assert audit.json()["total"] == 1
     assert audit.json()["records"][0]["review_queue_item_id"] == item_id
@@ -359,12 +507,284 @@ def test_trace_review_queue_promotions_can_plan_apply_and_audit(
     assert second_plan.json()["skipped"] == 1
     assert ledger.status_code == 200
     assert ledger.json()["total"] == 1
+    promoted_record = ledger.json()["records"][0]
+    assert promoted_record["metadata"]["replay"]["case_id"].startswith("task-run:")
+    assert len(promoted_record["metadata"]["replay"]["fingerprint"]) == 16
+
+
+def test_trace_review_queue_promotion_apply_requires_replay_gate_or_override(
+    tmp_path: Path,
+) -> None:
+    client = _client_with_trace(tmp_path)
+    client.post("/api/agent-trace/task-runs/turn-1/review/queue")
+    items = client.get("/api/agent-trace/review-queue").json()["items"]
+    item_id = items[0]["id"]
+    client.post(
+        f"/api/agent-trace/review-queue/{item_id}/decision",
+        json={
+            "action": "promoted",
+            "reason": "Ready to apply.",
+            "promoted_to": "experience",
+        },
+    )
+
+    blocked = client.post(
+        "/api/agent-trace/review-queue/promotions/apply",
+        json={"min_replay_cases": 2},
+    )
+    audit_after_block = client.get("/api/agent-trace/review-queue/promotions/audit")
+    override_missing_reason = client.post(
+        "/api/agent-trace/review-queue/promotions/apply",
+        json={"min_replay_cases": 2, "override_replay_gate": True},
+    )
+    overridden = client.post(
+        "/api/agent-trace/review-queue/promotions/apply",
+        json={
+            "min_replay_cases": 2,
+            "override_replay_gate": True,
+            "override_reason": "Reviewed blocked replay gate and accepting risk.",
+            "override_actor": "operator-test",
+        },
+    )
+    audit_after_override = client.get("/api/agent-trace/review-queue/promotions/audit")
+    audit_summary = client.get("/api/agent-trace/review-queue/promotions/audit/summary")
+
+    assert blocked.status_code == 409
+    detail = blocked.json()["detail"]
+    assert detail["message"] == "replay gate did not pass"
+    assert detail["replay_gate"]["passed"] is False
+    assert detail["replay_gate"]["reason"] == "insufficient_cases:1<2"
+    assert audit_after_block.json()["total"] == 0
+    assert override_missing_reason.status_code == 400
+    assert (
+        override_missing_reason.json()["detail"]["message"]
+        == "override_reason is required when replay gate is blocked"
+    )
+    assert overridden.status_code == 200
+    assert overridden.json()["applied"] == 1
+    assert overridden.json()["replay_gate"]["passed"] is False
+    assert overridden.json()["override_replay_gate"] is True
+    override_audit = audit_after_override.json()["records"][0]
+    assert override_audit["decision_context"]["replay_gate"]["passed"] is False
+    assert override_audit["decision_context"]["override_replay_gate"] is True
+    assert (
+        override_audit["decision_context"]["override_reason"]
+        == "Reviewed blocked replay gate and accepting risk."
+    )
+    assert override_audit["decision_context"]["override_actor"] == "local_operator"
+    assert override_audit["agent_id"] == "agent-a"
+    assert audit_summary.status_code == 200
+    assert audit_summary.json()["override_count"] == 1
+    assert audit_summary.json()["gate_blocked_override_count"] == 1
+    assert audit_summary.json()["gate_failed_count"] == 1
+
+
+def test_policy_review_promotion_cannot_override_missing_replay_evidence(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.learning.review_queue import ReviewQueue
+
+    store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    review_queue_path = tmp_path / "review_queue.json"
+    queue = ReviewQueue(review_queue_path)
+    queued = queue.upsert_item(
+        source="trust_denials",
+        source_kind="tool_policy_denial",
+        candidate_kind="policy_review",
+        priority="P1",
+        target_bucket="policy_review",
+        title="Review repeated denials for exec_shell",
+        text="Tool exec_shell was denied repeatedly.",
+        source_task_ids=["missing-task"],
+    )
+    queue.decide(
+        queued["items"][0]["id"],
+        action="promoted",
+        promoted_to="policy_review",
+    )
+    app = FastAPI()
+    app.include_router(
+        create_agent_trace_router(
+            store=store,
+            review_queue_path=review_queue_path,
+            promotion_audit_path=tmp_path / "promotion_audit.json",
+            proposal_ledger_path=tmp_path / "proposal_ledger.jsonl",
+        )
+    )
+    client = TestClient(app)
+
+    try:
+        response = client.post(
+            "/api/agent-trace/review-queue/promotions/apply",
+            json={
+                "override_replay_gate": True,
+                "override_reason": "Accepting the policy risk.",
+            },
+        )
+    finally:
+        store.close()
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["message"] == "policy_review promotion requires replay evidence"
+    assert detail["replay_gate"]["passed"] is False
+
+
+def test_policy_review_rule_drafts_endpoint_returns_verified_drafts(
+    tmp_path: Path,
+) -> None:
+    from runtime.safety.evolution.proposal_ledger import ProposalLedger
+
+    proposal_ledger_path = tmp_path / "proposal_ledger.jsonl"
+    ProposalLedger(proposal_ledger_path).propose(
+        kind="review_queue_policy_review",
+        description="Review repeated denials for exec_shell",
+        metadata={
+            "review_queue_item_id": "rq_1",
+            "item": {
+                "title": "Review repeated denials for exec_shell",
+                "text": "Tool exec_shell was denied repeatedly.",
+                "metadata": {
+                    "tool_name": "exec_shell",
+                    "latest_denial": {
+                        "tool_name": "exec_shell",
+                        "reason": "no destructive shell",
+                    },
+                },
+            },
+            "evidence": {
+                "schema": "octopus.policy_review_promotion_evidence.v1",
+                "replay": {
+                    "case_id": "task-run:abc123",
+                    "fingerprint": "abc123",
+                    "replayable": True,
+                },
+                "replay_gate": {"passed": True},
+            },
+        },
+    )
+    app = FastAPI()
+    app.include_router(
+        create_agent_trace_router(
+            store=AgentTraceStore(tmp_path / "agent_trace.sqlite"),
+            proposal_ledger_path=proposal_ledger_path,
+        )
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/agent-trace/policy-review/rule-drafts")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema"] == "octopus.policy_review_rule_drafts.v1"
+    assert body["total"] == 1
+    assert body["verified"] == 1
+    draft = body["drafts"][0]
+    assert draft["signed_payload"]["rule"]["tool"] == "exec_shell"
+    assert draft["signed_payload"]["rule"]["reason"] == "no destructive shell"
+
+
+def test_policy_review_rule_draft_install_endpoint_requires_confirmation_and_audits(
+    tmp_path: Path,
+) -> None:
+    from runtime.safety.approval.approval_policy_store import load_policy
+    from runtime.safety.evolution.proposal_ledger import ProposalLedger
+
+    proposal_ledger_path = tmp_path / "proposal_ledger.jsonl"
+    approval_policy_path = tmp_path / "permissions.json"
+    audit_path = tmp_path / "promotion_audit.json"
+    ProposalLedger(proposal_ledger_path).propose(
+        kind="review_queue_policy_review",
+        description="Review repeated denials for exec_shell",
+        metadata={
+            "review_queue_item_id": "rq_1",
+            "item": {
+                "title": "Review repeated denials for exec_shell",
+                "text": "Tool exec_shell was denied repeatedly.",
+                "metadata": {
+                    "tool_name": "exec_shell",
+                    "latest_denial": {
+                        "tool_name": "exec_shell",
+                        "reason": "no destructive shell",
+                    },
+                },
+            },
+            "evidence": {
+                "schema": "octopus.policy_review_promotion_evidence.v1",
+                "replay_gate": {"passed": True},
+            },
+        },
+    )
+    app = FastAPI()
+    app.include_router(
+        create_agent_trace_router(
+            store=AgentTraceStore(tmp_path / "agent_trace.sqlite"),
+            proposal_ledger_path=proposal_ledger_path,
+            approval_policy_path=approval_policy_path,
+            promotion_audit_path=audit_path,
+        )
+    )
+    client = TestClient(app)
+    draft_id = client.get(
+        "/api/agent-trace/policy-review/rule-drafts",
+    ).json()["drafts"][0]["draft_id"]
+
+    missing_confirm = client.post(
+        "/api/agent-trace/policy-review/rule-drafts/install",
+        json={"draft_id": draft_id},
+    )
+    installed = client.post(
+        "/api/agent-trace/policy-review/rule-drafts/install",
+        json={"draft_id": draft_id, "confirm_install": True},
+    )
+    audit = client.get("/api/agent-trace/review-queue/promotions/audit")
+
+    assert missing_confirm.status_code == 400
+    assert missing_confirm.json()["detail"] == "confirm_install=true is required"
+    assert installed.status_code == 200
+    assert installed.json()["installed"] is True
+    assert installed.json()["rule"]["tool"] == "exec_shell"
+    rules = load_policy(approval_policy_path).rules
+    assert len(rules) == 1
+    assert rules[0].effect == "deny"
+    assert rules[0].tool == "exec_shell"
+    assert audit.json()["total"] == 1
+    assert audit.json()["records"][0]["event_type"] == "policy_review_rule_install"
+    assert audit.json()["records"][0]["target"] == "approval_policy"
+
+
+def test_trace_promotion_audit_export_includes_verified_chain(
+    tmp_path: Path,
+) -> None:
+    from runtime.safety.evolution.governance_audit import (
+        append_governance_audit_event,
+    )
+
+    audit_path = tmp_path / "promotion_audit.json"
+    append_governance_audit_event(
+        event_type="topology_policy_block",
+        target="topology_policy",
+        status="blocked",
+        artifact={"topology_id": "team-a"},
+        decision_context={"turn_id": "turn-1"},
+        audit_path=audit_path,
+    )
+    client = _client_with_trace(tmp_path)
+
+    response = client.get("/api/agent-trace/review-queue/promotions/audit/export")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["schema"] == "octopus.governance_audit_export.v1"
+    assert body["integrity"]["ok"] is True
+    assert body["chain"]["line_count"] == 1
+    assert body["audit"]["records"][0]["event_type"] == "topology_policy_block"
 
 
 def test_trace_task_run_process_timeline_merges_review_and_ledger(
     tmp_path: Path,
 ) -> None:
-    client = _client_with_trace(tmp_path)
+    client = _client_with_trace(tmp_path, include_write_diagnostic=True)
 
     client.post("/api/agent-trace/task-runs/turn-1/review/commit")
     response = client.get("/api/agent-trace/task-runs/turn-1/process-timeline")
@@ -377,12 +797,21 @@ def test_trace_task_run_process_timeline_merges_review_and_ledger(
     assert timeline["overview"]["status"] == "completed"
     assert timeline["overview"]["approval_count"] == 1
     assert timeline["overview"]["experience_record_count"] == 2
+    assert timeline["overview"]["post_write_diagnostic_count"] == 1
     lanes = {node["lane"] for node in timeline["timeline"]}
-    assert {"execution", "permission", "review", "learning"}.issubset(lanes)
+    assert {"execution", "permission", "verification", "review", "learning"}.issubset(lanes)
     kinds = {node["kind"] for node in timeline["timeline"]}
     assert "approval" in kinds
+    assert "post_write_diagnostic" in kinds
     assert "success_pattern" in kinds
     assert "experience_record" in kinds
+    diagnostic = next(
+        node for node in timeline["timeline"]
+        if node["kind"] == "post_write_diagnostic"
+    )
+    assert diagnostic["status"] == "failed"
+    assert diagnostic["tool"] == "write_text_file"
+    assert "ruff diagnostics" in diagnostic["summary"]
     read_file = next(item for item in timeline["capabilities"] if item["tool"] == "read_file")
     assert read_file["risk"]["level"] == "low"
     assert timeline["safety"]["raw_messages_included"] is False
@@ -410,6 +839,121 @@ def test_trace_approvals_tokens_and_latest_checkpoint_are_readable(tmp_path: Pat
     assert checkpoint.status_code == 200
     assert checkpoint.json()["checkpoint"]["state"]["current_phase"] == "implementation"
     assert missing.status_code == 404
+
+
+def test_trace_trust_denials_summary_is_readable(tmp_path: Path) -> None:
+    store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    store.record_approval(
+        thread_id="thread-1",
+        turn_id="turn-deny",
+        task_id="task-1",
+        agent_id="agent-a",
+        tool_name="exec_shell",
+        tool_call_id="call-deny",
+        decision="rejected",
+        reason="no destructive shell",
+        metadata={
+            "trust_gateway": {
+                "schema": "octopus.trust_decision.v1",
+                "tool_name": "exec_shell",
+                "source": "static_policy",
+                "action": "deny",
+                "reason": "no destructive shell",
+                "risk": {"level": "critical"},
+                "risk_policy": {},
+                "static_decision": "deny",
+            }
+        },
+    )
+    app = FastAPI()
+    app.include_router(create_agent_trace_router(store=store))
+    client = TestClient(app)
+
+    try:
+        response = client.get(
+            "/api/agent-trace/trust-denials/summary",
+            params={"thread_id": "thread-1"},
+        )
+    finally:
+        store.close()
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema"] == "octopus.trust_denial_summary.v1"
+    assert data["total"] == 1
+    assert data["by_tool"] == {"exec_shell": 1}
+    assert data["by_action"] == {"deny": 1}
+    assert data["recent"][0]["reason"] == "no destructive shell"
+
+
+def test_repeated_trust_denials_can_enter_review_queue(tmp_path: Path) -> None:
+    store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    for call_id in ("call-deny-1", "call-deny-2"):
+        store.record_approval(
+            thread_id="thread-1",
+            turn_id=f"turn-{call_id}",
+            task_id="task-1",
+            agent_id="agent-a",
+            tool_name="exec_shell",
+            tool_call_id=call_id,
+            decision="rejected",
+            reason="no destructive shell",
+            metadata={
+                "trust_gateway": {
+                    "schema": "octopus.trust_decision.v1",
+                    "tool_name": "exec_shell",
+                    "source": "static_policy",
+                    "action": "deny",
+                    "reason": "no destructive shell",
+                    "risk": {"level": "critical"},
+                    "risk_policy": {},
+                    "static_decision": "deny",
+                }
+            },
+        )
+    review_queue_path = tmp_path / "review_queue.json"
+    app = FastAPI()
+    app.include_router(
+        create_agent_trace_router(
+            store=store,
+            review_queue_path=review_queue_path,
+        )
+    )
+    client = TestClient(app)
+
+    try:
+        first = client.get(
+            "/api/agent-trace/trust-denials/summary",
+            params={
+                "thread_id": "thread-1",
+                "queue_repeated": "true",
+                "min_occurrences": 2,
+            },
+        )
+        second = client.get(
+            "/api/agent-trace/trust-denials/summary",
+            params={
+                "thread_id": "thread-1",
+                "queue_repeated": "true",
+                "min_occurrences": 2,
+            },
+        )
+        listed = client.get(
+            "/api/agent-trace/review-queue",
+            params={"target_bucket": "policy_review"},
+        )
+    finally:
+        store.close()
+
+    assert first.status_code == 200
+    assert first.json()["queue"]["created"] == 1
+    assert second.json()["queue"]["updated"] == 1
+    items = listed.json()["items"]
+    assert len(items) == 1
+    assert items[0]["source"] == "trust_denials"
+    assert items[0]["candidate_kind"] == "policy_review"
+    assert items[0]["title"] == "Review repeated denials for exec_shell"
+    assert items[0]["occurrences"] == 2
 
 
 def test_trace_resume_proposal_is_sanitized(tmp_path: Path) -> None:

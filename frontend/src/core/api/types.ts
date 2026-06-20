@@ -35,7 +35,16 @@ export interface SystemMessage extends BaseMessage {
   type: "system";
 }
 
-export type Message = HumanMessage | AIMessage | ToolMessage | SystemMessage | (BaseMessage & { type: string; tool_calls?: ToolCall[]; tool_call_id?: string });
+export type Message =
+  | HumanMessage
+  | AIMessage
+  | ToolMessage
+  | SystemMessage
+  | (BaseMessage & {
+      type: string;
+      tool_calls?: ToolCall[];
+      tool_call_id?: string;
+    });
 
 export interface ToolCall {
   name: string;
@@ -72,8 +81,14 @@ export function isAIMessage(msg: Message): msg is AIMessage {
   return msg.type === "ai";
 }
 
-export function hasToolCalls(msg: Message): msg is AIMessage & { tool_calls: ToolCall[] } {
-  return isAIMessage(msg) && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0;
+export function hasToolCalls(
+  msg: Message,
+): msg is AIMessage & { tool_calls: ToolCall[] } {
+  return (
+    isAIMessage(msg) &&
+    Array.isArray(msg.tool_calls) &&
+    msg.tool_calls.length > 0
+  );
 }
 
 export function isHumanMessage(msg: Message): msg is HumanMessage {
@@ -83,4 +98,3 @@ export function isHumanMessage(msg: Message): msg is HumanMessage {
 export function isToolMessage(msg: Message): msg is ToolMessage {
   return msg.type === "tool";
 }
-

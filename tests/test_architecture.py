@@ -11,16 +11,16 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE))
 
-import pytest
+import pytest  # noqa: E402
 
-from runtime.platform.plugins.plugin_loader import (
+from runtime.platform.plugins.plugin_loader import (  # noqa: E402
     OctopusPlugin,
     PluginContext,
     PluginLoader,
     PluginManifest,
     PluginState,
 )
-from runtime.platform.process.eventbus import (
+from runtime.platform.process.eventbus import (  # noqa: E402
     ALL_DOMAIN_EVENTS,
     EVOLUTION_EVENTS,
     PLATFORM_EVENTS,
@@ -43,7 +43,7 @@ from runtime.platform.process.eventbus import (
     StateChanged,
     ToolCallBlocked,
 )
-from runtime.platform.process.state import (
+from runtime.platform.process.state import (  # noqa: E402
     FileBackend,
     MemoryBackend,
     SQLiteBackend,
@@ -60,8 +60,11 @@ class TestDomainEvent:
         assert e.payload == {}
 
     def test_domain_event_frozen(self):
+        from pydantic import ValidationError
+
         e = DomainEvent(event_type="test.event")
-        with pytest.raises(Exception):
+        # pydantic v2 frozen models raise ValidationError on attribute mutation.
+        with pytest.raises((AttributeError, TypeError, ValidationError)):
             e.event_type = "changed"
 
     def test_typed_events_have_correct_type(self):

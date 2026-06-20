@@ -1,4 +1,3 @@
-
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { authHeaders, jsonAuthHeaders } from "../auth/api";
@@ -110,4 +109,3 @@ export function useThreadMap() {
     },
   });
 }
-

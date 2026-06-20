@@ -1,4 +1,7 @@
-
+# Prompt Evolver — the evolution engine for prompt variants.
+# Implements mutation, crossover, pareto frontier selection, and retirement.
+# The configuration snapshots that evolution may modify are stored separately
+# in runtime.safety.recovery.genome_registry (versioned JSON + git commits).
 from __future__ import annotations
 
 from collections.abc import Callable

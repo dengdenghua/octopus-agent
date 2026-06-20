@@ -77,6 +77,7 @@ export interface AgentTraceResumeProposal {
     message_count: number;
     step_count: number;
     working_set: string[];
+    recent_tool_calls?: AgentTraceRecentToolCall[];
   };
   recoveryHints?: {
     phase: string | null;
@@ -84,6 +85,7 @@ export interface AgentTraceResumeProposal {
     messageCount: number;
     stepCount: number;
     workingSet: string[];
+    recentToolCalls?: AgentTraceRecentToolCall[];
   };
   resume_plan?: {
     title: string;
@@ -99,6 +101,15 @@ export interface AgentTraceResumeProposal {
     rawStateIncluded?: boolean;
     rawMessageSnapshotsIncluded?: boolean;
   };
+}
+
+export interface AgentTraceRecentToolCall {
+  iteration: number;
+  tool: string;
+  input_preview?: string;
+  inputPreview?: string;
+  observation_preview?: string;
+  observationPreview?: string;
 }
 
 export interface AgentTraceResumeRequest {
@@ -120,6 +131,8 @@ export interface AgentTraceResumeRequest {
     continue_from_iteration?: number;
     phase?: string | null;
     working_set?: string[];
+    resume_plan?: string[];
+    recent_tool_calls?: AgentTraceRecentToolCall[];
     safety?: {
       raw_state_included?: boolean;
       raw_message_snapshots_included?: boolean;
@@ -225,6 +238,42 @@ export interface AgentTraceReviewQueueSummary {
   }>;
 }
 
+export interface BrowserReplayQueueResult {
+  ok: boolean;
+  schema: string;
+  queue: {
+    created: number;
+    updated: number;
+    total: number;
+    items: AgentTraceReviewQueueItem[];
+  };
+}
+
+export interface ReplayEvidenceHint {
+  schema?: string;
+  case_id?: string;
+  fingerprint?: string;
+  replay_ready?: boolean;
+  replay_case_url?: string;
+  queue_url?: string;
+  queue_body?: Record<string, unknown>;
+}
+
+export interface AgentScorecardGapQueueResult {
+  ok: boolean;
+  schema: "octopus.agent_scorecard_gap_queue.v1" | string;
+  created: number;
+  updated: number;
+  total: number;
+  items: AgentTraceReviewQueueItem[];
+  scorecard?: {
+    overall?: Record<string, number>;
+    verdict?: string;
+    evidence_adjusted_overall?: Record<string, number>;
+    below_target_count?: number;
+  };
+}
+
 export interface AgentTracePromotionApplyResult {
   schema: string;
   dry_run: boolean;
@@ -232,6 +281,617 @@ export interface AgentTracePromotionApplyResult {
   failed: number;
   skipped: number;
   results: Array<Record<string, unknown>>;
+  replay_gate?: AgentTraceReplayGate;
+  override_replay_gate?: boolean;
+}
+
+export interface AgentTraceReplayGate {
+  schema: string;
+  passed: boolean;
+  reason: string;
+  thresholds: {
+    min_cases: number;
+    min_score: number;
+  };
+  summary: {
+    total: number;
+    passed: number;
+    failed: number;
+    below_min_score: number;
+  };
+  failing_cases: Array<Record<string, unknown>>;
+  filters?: Record<string, unknown>;
+}
+
+export interface AgentTracePromotionAuditSummary {
+  schema: string;
+  total: number;
+  by_status: Record<string, number>;
+  by_target: Record<string, number>;
+  by_event_type?: Record<string, number>;
+  integrity?: {
+    schema: string;
+    path: string;
+    ok: boolean;
+    entries_checked: number;
+    broken_at?: number | null;
+    error?: string;
+    details?: string[];
+  };
+  override_count: number;
+  gate_failed_count: number;
+  gate_blocked_override_count: number;
+  topology_policy_block_count?: number;
+  latest: Array<Record<string, unknown>>;
+}
+
+export interface AgentTraceExperienceQualitySummary {
+  schema: string;
+  total: number;
+  active_count: number;
+  contradicted_count: number;
+  stale_count: number;
+  low_reliability_count: number;
+  avg_reliability: number;
+  by_bucket: Record<string, number>;
+  top_risks: Array<Record<string, unknown>>;
+  next_actions: string[];
+}
+
+export interface AgentTraceTrustDenialItem {
+  id?: number | string | null;
+  ts?: string | null;
+  thread_id?: string | null;
+  turn_id?: string | null;
+  task_id?: string | null;
+  agent_id?: string | null;
+  tool_name: string;
+  decision: string;
+  action: string;
+  reason?: string | null;
+  risk_level?: string | null;
+}
+
+export interface AgentTraceTrustDenialSummary {
+  schema: "octopus.trust_denial_summary.v1" | string;
+  total: number;
+  by_tool: Record<string, number>;
+  by_action: Record<string, number>;
+  recent: AgentTraceTrustDenialItem[];
+  queue?: {
+    schema: string;
+    min_occurrences: number;
+    created: number;
+    updated: number;
+    items: AgentTraceReviewQueueItem[];
+  };
+}
+
+export interface AgentTracePolicyReviewRuleDraft {
+  schema: "octopus.policy_review_rule_draft.v1" | string;
+  draft_id: string;
+  signed_payload: {
+    schema?: string;
+    proposal_id?: string;
+    proposal_kind?: string;
+    review_queue_item_id?: string;
+    rule?: {
+      effect?: string;
+      tool?: string;
+      args_contains?: string;
+      reason?: string;
+    };
+    evidence?: Record<string, unknown>;
+    review_required?: boolean;
+  };
+  signature: {
+    schema?: string;
+    algorithm?: string;
+    digest?: string;
+  };
+}
+
+export interface AgentTracePolicyReviewRuleDrafts {
+  schema: "octopus.policy_review_rule_drafts.v1" | string;
+  total: number;
+  verified: number;
+  drafts: AgentTracePolicyReviewRuleDraft[];
+}
+
+export interface AgentTracePolicyReviewRuleInstallResult {
+  schema: "octopus.policy_review_rule_install.v1" | string;
+  installed: boolean;
+  draft_id?: string;
+  rule: {
+    effect: string;
+    tool: string;
+    args_contains: string;
+    reason: string;
+  };
+  policy_rule_count: number;
+  signature?: Record<string, unknown>;
+}
+
+export interface SubagentFitnessRole {
+  role: string;
+  score: number;
+  confidence: number;
+  sample_count: number;
+  by_status: Record<string, number>;
+  promoted_count: number;
+  rejected_count: number;
+  pending_count: number;
+  routing_evidence_count?: number;
+  by_evidence_source?: Record<string, number>;
+  verdict: "strong" | "developing" | "watch" | "retire_candidate" | string;
+  recommendation: string;
+  evidence_item_ids: string[];
+}
+
+export interface SubagentFitnessReport {
+  schema: "octopus.subagent_fitness.v1" | string;
+  role?: string | null;
+  roles: SubagentFitnessRole[];
+  role_count: number;
+  top_risks: SubagentFitnessRole[];
+  next_actions: Array<{
+    role: string;
+    verdict: string;
+    action: string;
+  }>;
+}
+
+export interface SubagentPolicyDecisionResult {
+  schema: "octopus.subagent_policy.v1" | string;
+  role: string;
+  action: "watch" | "retire" | "clear" | string;
+  policy: Record<string, unknown> | null;
+  summary: {
+    schema: string;
+    policies: Record<string, Record<string, unknown>>;
+    policy_count: number;
+    retired_count: number;
+    watch_count: number;
+    lastUpdated: string;
+  };
+}
+
+export interface SubagentPolicyImpactItem {
+  role: string;
+  agent_id: string;
+  status: string;
+  reason?: string;
+  actor?: string;
+  updated_at?: string;
+  evidence_item_ids?: string[];
+}
+
+export interface SubagentPolicyImpact {
+  status: "blocked" | "watch" | "clear" | string;
+  blocked: boolean;
+  retired: SubagentPolicyImpactItem[];
+  watch: SubagentPolicyImpactItem[];
+  retired_count: number;
+  watch_count: number;
+  policy_count: number;
+  lastUpdated: string;
+}
+
+export interface OrganizationTopology {
+  name: string;
+  protocol: string;
+  task_bucket: string;
+  fingerprint: string;
+  agents: Record<string, { agent_id: string } & Record<string, unknown>>;
+  subagent_policy?: SubagentPolicyImpact;
+  metadata?: Record<string, unknown>;
+}
+
+export interface OrganizationTopologyProposal {
+  kind: string;
+  base_topology: string;
+  bucket: string;
+  detail: Record<string, unknown> & {
+    historical_lift?: {
+      matched_promotions: number;
+      improved_count: number;
+      regressed_count: number;
+      avg_success_rate_delta?: number | null;
+      avg_quality_score_delta?: number | null;
+      rank_adjustment: number;
+    };
+  };
+  confidence: number;
+  rank_score?: number;
+  rationale: string;
+}
+
+export interface OrganizationTopologyProposalsReport {
+  schema: string;
+  count: number;
+  persisted_count: number;
+  subagent_promotion_count: number;
+  proposals: OrganizationTopologyProposal[];
+  subagent_promotion?: Record<string, unknown>;
+}
+
+export interface OrganizationTopologyLiftReport {
+  schema: string;
+  count: number;
+  reports: Array<{
+    topology: string;
+    fingerprint: string;
+    base_fingerprint: string;
+    bucket: string;
+    mutation: string;
+    promotion_source: string;
+    before: Record<string, unknown>;
+    after: Record<string, unknown>;
+    lift: Record<string, unknown>;
+    verdict: string;
+  }>;
+}
+
+export interface AutoVerifierFamilySummary {
+  family: string;
+  total: number;
+  pass_count: number;
+  fail_count: number;
+  pass_rate: number;
+  avg_duration_ms: number;
+  latest_ts?: string;
+  commands: Array<{
+    command: string;
+    count: number;
+  }>;
+}
+
+export interface AutoVerifierDecisionCandidate {
+  rank: number;
+  command: string;
+  kind: string;
+  priority: number;
+  family: string;
+  history_count: number;
+  pass_rate: number;
+  avg_duration_ms: number;
+  reason: string;
+  original_index?: number;
+}
+
+export interface AutoVerifierDecision {
+  schema: "octopus.auto_verifier_decision.v1" | string;
+  ts: string;
+  selected_command: string;
+  candidates: AutoVerifierDecisionCandidate[];
+}
+
+export interface AutoVerifierAlert {
+  family: string;
+  severity: "warning" | "critical" | string;
+  total: number;
+  fail_count: number;
+  pass_rate: number;
+  latest_ts?: string;
+  top_command?: string;
+  message: string;
+}
+
+export interface AutoVerifierMetricsReport {
+  ok?: boolean;
+  schema: "octopus.auto_verifier_metrics.v1" | string;
+  total: number;
+  pass_count: number;
+  fail_count: number;
+  pass_rate: number;
+  avg_duration_ms: number;
+  families: AutoVerifierFamilySummary[];
+  alerts?: AutoVerifierAlert[];
+  top_failures: Array<{
+    command: string;
+    count: number;
+  }>;
+  recent_decisions: AutoVerifierDecision[];
+}
+
+export interface RepairRoutePromotionCandidate {
+  schema: "octopus.repair_route_promotion_candidate.v1" | string;
+  route: string;
+  priority: "P0" | "P1" | "P2" | string;
+  status: string;
+  evidence: {
+    count: number;
+    share: number;
+    failed_verification_count: number;
+    unverified_code_changes: number;
+    failure_sources?: Array<Record<string, unknown>>;
+    recommended_commands?: Array<{ command: string; count: number }>;
+    example_proposal_ids?: string[];
+  };
+  promotion_gate: {
+    schema: "octopus.repair_route_promotion_gate.v1" | string;
+    requires_operator_review: boolean;
+    requires_passing_rerun: boolean;
+    blocks_auto_promotion: boolean;
+  };
+}
+
+export interface RepairRouteQualityReport {
+  ok?: boolean;
+  schema: "octopus.repair_route_quality.v1" | string;
+  score: number;
+  ready: boolean;
+  quality_gate: {
+    schema: "octopus.repair_route_quality_gate.v1" | string;
+    score: number;
+    ready: boolean;
+    blockers: string[];
+    signals: Record<string, unknown>;
+  };
+  total_failures: number;
+  route_count: number;
+  routes: Array<Record<string, unknown>>;
+  promotion_candidates: RepairRoutePromotionCandidate[];
+  summary: Record<string, unknown>;
+  recommendations: string[];
+}
+
+export interface RepairRoutePromotionQueueResult {
+  ok?: boolean;
+  schema: "octopus.repair_route_promotion_queue.v1" | string;
+  created: number;
+  updated: number;
+  candidates: RepairRoutePromotionCandidate[];
+  items: AgentTraceReviewQueueItem[];
+  summary?: Record<string, unknown>;
+}
+
+export interface BrowserDesktopQualityReport {
+  ok?: boolean;
+  schema: "octopus.browser_desktop_quality.v1" | string;
+  score: number;
+  passed: number;
+  total: number;
+  ready: boolean;
+  checks: Array<Record<string, unknown>>;
+  replay_trends: {
+    schema: "octopus.browser_desktop_replay_trends.v1" | string;
+    total: number;
+    pending_count: number;
+    reviewed_count: number;
+    promoted_count: number;
+    rejected_count: number;
+    review_rate: number;
+    stale_source_artifact_count?: number;
+    by_status: Record<string, number>;
+    by_candidate_kind: Record<string, number>;
+    repair_recipe_summary?: Record<string, unknown>;
+    latest: Array<Record<string, unknown>>;
+    next_actions: string[];
+  };
+  next_actions: string[];
+}
+
+export interface BrowserDesktopRepairRecipe {
+  schema: "octopus.browser_desktop_repair_recipe.v1" | string;
+  recipe_id: string;
+  cluster_key: string;
+  candidate_kind: string;
+  title: string;
+  priority: "P0" | "P1" | "P2" | string;
+  occurrences: number;
+  source_item_ids: string[];
+  case_ids: string[];
+  fingerprints: string[];
+  evidence_summary: Record<string, unknown>;
+  recommended_steps: string[];
+  verification_plan: Record<string, unknown>;
+  promotion_gate: Record<string, unknown>;
+}
+
+export interface BrowserDesktopRepairRecipesReport {
+  ok?: boolean;
+  schema: "octopus.browser_desktop_repair_recipes.v1" | string;
+  total_pending_cases: number;
+  recipe_count: number;
+  recipes: BrowserDesktopRepairRecipe[];
+  ready: boolean;
+  next_actions: string[];
+}
+
+export interface BrowserDesktopRepairRecipeQueueResult {
+  ok?: boolean;
+  schema: "octopus.browser_desktop_repair_recipe_queue.v1" | string;
+  created: number;
+  updated: number;
+  recipes: BrowserDesktopRepairRecipe[];
+  items: AgentTraceReviewQueueItem[];
+  summary?: Record<string, unknown>;
+}
+
+export interface BrowserDesktopStaleArtifactRejectionResult {
+  ok?: boolean;
+  schema: "octopus.browser_desktop_stale_replay_artifact_rejection.v1" | string;
+  inspected: number;
+  rejected_count: number;
+  archived_recipe_count?: number;
+  skipped_count: number;
+  rejected: Array<Record<string, unknown>>;
+  archived_recipes?: Array<Record<string, unknown>>;
+}
+
+export interface BrowserDesktopRepairRecipeVerificationsReport {
+  ok?: boolean;
+  schema: "octopus.browser_desktop_repair_recipe_verifications.v1" | string;
+  total: number;
+  verified_count: number;
+  blocked_count: number;
+  ready: boolean;
+  verifications: Array<{
+    schema: "octopus.browser_desktop_repair_recipe_verification.v1" | string;
+    item_id?: string;
+    recipe_id?: string;
+    title?: string;
+    priority?: string;
+    status: "verified" | "needs_rerun_evidence" | string;
+    blockers: string[];
+    source_status_counts: Record<string, number>;
+    missing_evidence: string[];
+    verification_evidence: Record<string, unknown>;
+  }>;
+  next_actions: string[];
+}
+
+export interface BrowserDesktopRepairRecipeEvidenceAttachment {
+  ok?: boolean;
+  schema:
+    | "octopus.browser_desktop_repair_recipe_evidence_attachment.v1"
+    | string;
+  item: AgentTraceReviewQueueItem;
+  evidence: {
+    schema: "octopus.browser_desktop_repair_recipe_evidence.v1" | string;
+    attached_at: string;
+    actor: string;
+    passed: boolean;
+    provided: string[];
+    artifacts: Array<Record<string, unknown>>;
+    notes: string;
+  };
+  verification?:
+    | BrowserDesktopRepairRecipeVerificationsReport["verifications"][number]
+    | null;
+}
+
+export interface BrowserDesktopRepairRecipeRerunResult {
+  ok?: boolean;
+  schema: "octopus.browser_desktop_repair_recipe_rerun.v1" | string;
+  item_id: string;
+  passed: boolean;
+  provided: string[];
+  missing: string[];
+  promoted_source_count: number;
+  artifacts: Array<Record<string, unknown>>;
+  attachment: BrowserDesktopRepairRecipeEvidenceAttachment;
+}
+
+export interface BrowserDesktopRepairRecipeRerunBatchResult {
+  ok?: boolean;
+  schema: "octopus.browser_desktop_repair_recipe_rerun_batch.v1" | string;
+  attempted: number;
+  passed: number;
+  failed: number;
+  results: BrowserDesktopRepairRecipeRerunResult[];
+}
+
+export interface AgentCompetitorScorecardDimension {
+  id: string;
+  title: string;
+  weight: number;
+  why: string;
+  scores: Record<string, number>;
+  evidence_adjusted_scores?: Record<string, number>;
+  leader: string;
+  octopus_gap_to_target: number;
+  octopus_baseline_score?: number;
+  octopus_score_source?: string;
+  octopus_evidence_adjusted_score?: number;
+  octopus_evidence_adjusted_gap_to_target?: number;
+  octopus_evidence_adjusted_score_source?: string;
+  octopus_certified_score_floor?: number;
+  octopus_certification_score_applied?: boolean;
+  octopus_certification_adjustment_available?: boolean;
+  octopus_certification_evidence?: Array<{
+    id?: string;
+    title?: string;
+    score_floor?: number;
+  }>;
+  octopus_evidence_readiness: number;
+  octopus_evidence: Array<{
+    id?: string;
+    title?: string;
+    score?: number;
+    status?: string;
+  }>;
+  octopus_evidence_checklist?: Array<{
+    id?: string;
+    title?: string;
+    score?: number;
+    status?: string;
+    implementation: {
+      present: number;
+      total: number;
+      missing_count: number;
+      missing: string[];
+      coverage: number;
+    };
+    tests: {
+      present: number;
+      total: number;
+      missing_count: number;
+      missing: string[];
+      coverage: number;
+    };
+    next_actions: string[];
+  }>;
+  octopus_missing_evidence_count?: number;
+  octopus_ecosystem_readiness?: AgentEcosystemReadiness;
+  octopus_next_actions: string[];
+}
+
+export interface AgentEcosystemReadiness {
+  schema: "octopus.ecosystem_readiness.v1" | string;
+  score: number;
+  passed: number;
+  total: number;
+  missing_count: number;
+  topics: Array<Record<string, unknown>>;
+  next_actions: string[];
+}
+
+export interface AgentCompetitorScorecard {
+  ok?: boolean;
+  schema: "octopus.agent_competitor_scorecard.v1" | string;
+  target_score: number;
+  competitors: string[];
+  overall: Record<string, number>;
+  ranking: Array<{ competitor: string; score: number }>;
+  verdict: "leading" | "competitive" | "near_parity" | "behind" | string;
+  evidence_adjusted_overall?: Record<string, number>;
+  evidence_adjusted_ranking?: Array<{ competitor: string; score: number }>;
+  evidence_adjusted_verdict?:
+    | "leading"
+    | "competitive"
+    | "near_parity"
+    | "behind"
+    | string;
+  scorecard_policy?: {
+    schema?: string;
+    overall?: string;
+    evidence_adjusted_overall?: string;
+    certification_floors_do_not_change_overall?: boolean;
+  };
+  dimensions: AgentCompetitorScorecardDimension[];
+  octopus_below_target: AgentCompetitorScorecardDimension[];
+  octopus_strengths: AgentCompetitorScorecardDimension[];
+  next_focus: string[];
+  ecosystem_readiness?: AgentEcosystemReadiness;
+  parity_certification?: {
+    schema: "octopus.parity_certification.v1" | string;
+    passed: number;
+    total: number;
+    ready: boolean;
+    by_kind?: Record<string, { passed: number; total: number }>;
+    requirements: Array<Record<string, unknown>>;
+    dimension_score_floors: Record<string, number>;
+    dimension_evidence: Record<string, Array<Record<string, unknown>>>;
+    next_actions: string[];
+  };
+  codex_gap?: {
+    schema?: string;
+    combined_score?: number;
+    verdict?: string;
+    next_focus?: string[];
+  };
 }
 
 export interface AgentTraceScope {
@@ -239,6 +899,18 @@ export interface AgentTraceScope {
   taskId?: string | null;
   agentId?: string | null;
   turnId?: string | null;
+}
+
+export class AgentTraceRequestError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(status: number, detail: unknown) {
+    super(`Agent trace request failed: ${status}`);
+    this.name = "AgentTraceRequestError";
+    this.status = status;
+    this.detail = detail;
+  }
 }
 
 function appendScope(params: URLSearchParams, scope?: AgentTraceScope) {
@@ -253,7 +925,7 @@ async function fetchJson<T>(path: string): Promise<T> {
     headers: authHeaders(),
   });
   if (!res.ok) {
-    throw new Error(`Agent trace request failed: ${res.status}`);
+    throw new AgentTraceRequestError(res.status, await readErrorDetail(res));
   }
   return (await res.json()) as T;
 }
@@ -268,9 +940,20 @@ async function postJson<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`Agent trace request failed: ${res.status}`);
+    throw new AgentTraceRequestError(res.status, await readErrorDetail(res));
   }
   return (await res.json()) as T;
+}
+
+async function readErrorDetail(res: Response): Promise<unknown> {
+  try {
+    const body = await res.json();
+    return body && typeof body === "object" && "detail" in body
+      ? (body as { detail?: unknown }).detail
+      : body;
+  } catch {
+    return await res.text().catch(() => "");
+  }
 }
 
 export async function fetchAgentTraceStats(
@@ -327,9 +1010,7 @@ export async function fetchAgentTraceProcessTimeline(
   return data.timeline;
 }
 
-export async function queueAgentTraceTaskRunReview(
-  taskId: string,
-): Promise<{
+export async function queueAgentTraceTaskRunReview(taskId: string): Promise<{
   created: number;
   updated: number;
   total: number;
@@ -342,10 +1023,200 @@ export async function queueAgentTraceTaskRunReview(
       total: number;
       items: AgentTraceReviewQueueItem[];
     };
-  }>(
-    `/api/agent-trace/task-runs/${encodeURIComponent(taskId)}/review/queue`,
-  );
+  }>(`/api/agent-trace/task-runs/${encodeURIComponent(taskId)}/review/queue`);
   return data.queue;
+}
+
+export async function queueLatestBrowserSessionReplayCase(
+  reason = "operator panel browser replay capture",
+): Promise<BrowserReplayQueueResult> {
+  const sessions = await fetchJson<{
+    sessions: Array<{
+      session_id: string;
+      action_count?: number;
+      last_activity?: number;
+    }>;
+  }>("/api/browser/sessions");
+  const latest = sessions.sessions
+    .filter((session) => (session.action_count ?? 0) > 0)
+    .sort((lhs, rhs) => (rhs.last_activity ?? 0) - (lhs.last_activity ?? 0))[0];
+  if (!latest?.session_id) {
+    throw new AgentTraceRequestError(409, {
+      detail: "No browser session with replay actions is available.",
+    });
+  }
+  return postJson<BrowserReplayQueueResult>(
+    "/api/browser/session/replay-case/queue",
+    {
+      session_id: latest.session_id,
+      reason,
+    },
+  );
+}
+
+export async function queueComputerActivityReplayCase(
+  reason = "operator panel desktop replay capture",
+): Promise<BrowserReplayQueueResult> {
+  return postJson<BrowserReplayQueueResult>(
+    "/api/computer/activity/replay-case/queue",
+    { reason },
+  );
+}
+
+export async function queueReplayEvidenceHint(
+  evidence: ReplayEvidenceHint,
+  reason = "operator panel replay evidence drill-down",
+): Promise<BrowserReplayQueueResult> {
+  const queueUrl = String(evidence.queue_url || "");
+  if (!queueUrl.startsWith("/api/")) {
+    throw new AgentTraceRequestError(400, {
+      detail: "Replay evidence is missing a trusted queue URL.",
+    });
+  }
+  return postJson<BrowserReplayQueueResult>(queueUrl, {
+    ...(evidence.queue_body ?? {}),
+    reason,
+  });
+}
+
+export async function queueAgentScorecardGaps(options?: {
+  targetScore?: number;
+  limit?: number;
+  reason?: string;
+  dimensionId?: string;
+}): Promise<AgentScorecardGapQueueResult> {
+  return postJson<AgentScorecardGapQueueResult>(
+    "/api/evolution/agent-scorecard/gaps/queue",
+    {
+      target_score: options?.targetScore ?? 90,
+      limit: options?.limit ?? 10,
+      reason: options?.reason ?? "operator panel real score gap review",
+      dimension_id: options?.dimensionId ?? "",
+    },
+  );
+}
+
+export async function fetchRepairRouteQuality(
+  limit = 1000,
+): Promise<RepairRouteQualityReport> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return fetchJson<RepairRouteQualityReport>(
+    `/api/evolution/repair-route-quality?${params.toString()}`,
+  );
+}
+
+export async function queueRepairRoutePromotionCandidates(
+  limit = 1000,
+): Promise<RepairRoutePromotionQueueResult> {
+  return postJson<RepairRoutePromotionQueueResult>(
+    "/api/evolution/repair-route-quality/promotions/queue",
+    { limit },
+  );
+}
+
+export async function fetchBrowserDesktopQuality(): Promise<BrowserDesktopQualityReport> {
+  return fetchJson<BrowserDesktopQualityReport>(
+    "/api/evolution/browser-desktop-quality",
+  );
+}
+
+export async function fetchBrowserDesktopRepairRecipes(
+  limit = 1000,
+  minOccurrences = 1,
+): Promise<BrowserDesktopRepairRecipesReport> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    min_occurrences: String(minOccurrences),
+  });
+  return fetchJson<BrowserDesktopRepairRecipesReport>(
+    `/api/evolution/browser-desktop-repair-recipes?${params.toString()}`,
+  );
+}
+
+export async function queueBrowserDesktopRepairRecipes(
+  limit = 1000,
+  minOccurrences = 1,
+): Promise<BrowserDesktopRepairRecipeQueueResult> {
+  return postJson<BrowserDesktopRepairRecipeQueueResult>(
+    "/api/evolution/browser-desktop-repair-recipes/queue",
+    {
+      limit,
+      min_occurrences: minOccurrences,
+    },
+  );
+}
+
+export async function rejectStaleBrowserDesktopReplayArtifacts(
+  limit = 1000,
+): Promise<BrowserDesktopStaleArtifactRejectionResult> {
+  return postJson<BrowserDesktopStaleArtifactRejectionResult>(
+    "/api/evolution/browser-desktop-repair-recipes/stale-artifacts/reject",
+    { limit },
+  );
+}
+
+export async function fetchBrowserDesktopRepairRecipeVerifications(
+  limit = 1000,
+): Promise<BrowserDesktopRepairRecipeVerificationsReport> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return fetchJson<BrowserDesktopRepairRecipeVerificationsReport>(
+    `/api/evolution/browser-desktop-repair-recipes/verifications?${params.toString()}`,
+  );
+}
+
+export async function attachBrowserDesktopRepairRecipeEvidence(options: {
+  itemId: string;
+  passed: boolean;
+  provided?: string[];
+  artifacts?: Array<Record<string, unknown>>;
+  notes?: string;
+  actor?: string;
+}): Promise<BrowserDesktopRepairRecipeEvidenceAttachment> {
+  return postJson<BrowserDesktopRepairRecipeEvidenceAttachment>(
+    "/api/evolution/browser-desktop-repair-recipes/verifications/evidence",
+    {
+      item_id: options.itemId,
+      passed: options.passed,
+      provided: options.provided ?? [],
+      artifacts: options.artifacts ?? [],
+      notes: options.notes ?? "",
+      actor: options.actor ?? "operator_panel",
+    },
+  );
+}
+
+export async function rerunBrowserDesktopRepairRecipeEvidence(options: {
+  itemId: string;
+  apiBaseUrl?: string;
+  promoteSourceCases?: boolean;
+  actor?: string;
+}): Promise<BrowserDesktopRepairRecipeRerunResult> {
+  return postJson<BrowserDesktopRepairRecipeRerunResult>(
+    "/api/evolution/browser-desktop-repair-recipes/verifications/rerun",
+    {
+      item_id: options.itemId,
+      api_base_url: options.apiBaseUrl ?? "http://127.0.0.1:8000",
+      promote_source_cases: options.promoteSourceCases ?? false,
+      actor: options.actor ?? "operator_panel",
+    },
+  );
+}
+
+export async function rerunBrowserDesktopRepairRecipeEvidenceBatch(options?: {
+  apiBaseUrl?: string;
+  promoteSourceCases?: boolean;
+  actor?: string;
+  limit?: number;
+}): Promise<BrowserDesktopRepairRecipeRerunBatchResult> {
+  return postJson<BrowserDesktopRepairRecipeRerunBatchResult>(
+    "/api/evolution/browser-desktop-repair-recipes/verifications/rerun-batch",
+    {
+      api_base_url: options?.apiBaseUrl ?? "http://127.0.0.1:8000",
+      promote_source_cases: options?.promoteSourceCases ?? false,
+      actor: options?.actor ?? "operator_panel",
+      limit: options?.limit ?? 20,
+    },
+  );
 }
 
 export async function fetchAgentTraceReviewQueue(
@@ -397,20 +1268,164 @@ export async function decideAgentTraceReviewQueueItem(
   return data.item;
 }
 
-export async function applyAgentTraceReviewQueuePromotions(
-  options?: {
-    itemId?: string;
-    target?: string;
-    limit?: number;
-  },
-): Promise<AgentTracePromotionApplyResult> {
+export async function applyAgentTraceReviewQueuePromotions(options?: {
+  itemId?: string;
+  target?: string;
+  limit?: number;
+  overrideReplayGate?: boolean;
+  overrideReason?: string;
+  minReplayCases?: number;
+  minReplayScore?: number;
+}): Promise<AgentTracePromotionApplyResult> {
   return postJson<AgentTracePromotionApplyResult>(
     "/api/agent-trace/review-queue/promotions/apply",
     {
       item_id: options?.itemId,
       target: options?.target,
       limit: options?.limit ?? 50,
+      override_replay_gate: options?.overrideReplayGate,
+      override_reason: options?.overrideReason,
+      min_replay_cases: options?.minReplayCases,
+      min_replay_score: options?.minReplayScore,
     },
+  );
+}
+
+export async function fetchAgentTraceReplayGate(
+  scope?: Pick<AgentTraceScope, "threadId" | "turnId" | "agentId"> & {
+    status?: string;
+    minCases?: number;
+    minScore?: number;
+    limit?: number;
+  },
+): Promise<AgentTraceReplayGate> {
+  const params = new URLSearchParams({
+    min_cases: String(scope?.minCases ?? 1),
+    min_score: String(scope?.minScore ?? 1),
+    limit: String(scope?.limit ?? 100),
+  });
+  appendScope(params, scope);
+  if (scope?.status) params.set("status", scope.status);
+  return fetchJson<AgentTraceReplayGate>(
+    `/api/agent-trace/replay-gate?${params.toString()}`,
+  );
+}
+
+export async function fetchAgentTracePromotionAuditSummary(): Promise<AgentTracePromotionAuditSummary> {
+  return fetchJson<AgentTracePromotionAuditSummary>(
+    "/api/agent-trace/review-queue/promotions/audit/summary",
+  );
+}
+
+export async function fetchAgentTraceExperienceQualitySummary(): Promise<AgentTraceExperienceQualitySummary> {
+  return fetchJson<AgentTraceExperienceQualitySummary>(
+    "/api/agent-trace/experience-ledger/quality-summary",
+  );
+}
+
+export async function fetchAgentTraceTrustDenialSummary(
+  limit = 1000,
+  options?: {
+    queueRepeated?: boolean;
+    minOccurrences?: number;
+  },
+): Promise<AgentTraceTrustDenialSummary> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (options?.queueRepeated) params.set("queue_repeated", "true");
+  if (options?.minOccurrences) {
+    params.set("min_occurrences", String(options.minOccurrences));
+  }
+  return fetchJson<AgentTraceTrustDenialSummary>(
+    `/api/agent-trace/trust-denials/summary?${params.toString()}`,
+  );
+}
+
+export async function fetchAgentTracePolicyReviewRuleDrafts(
+  limit = 100,
+): Promise<AgentTracePolicyReviewRuleDrafts> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return fetchJson<AgentTracePolicyReviewRuleDrafts>(
+    `/api/agent-trace/policy-review/rule-drafts?${params.toString()}`,
+  );
+}
+
+export async function installAgentTracePolicyReviewRuleDraft(
+  draftId: string,
+): Promise<AgentTracePolicyReviewRuleInstallResult> {
+  return postJson<AgentTracePolicyReviewRuleInstallResult>(
+    "/api/agent-trace/policy-review/rule-drafts/install",
+    {
+      draft_id: draftId,
+      confirm_install: true,
+    },
+  );
+}
+
+export async function fetchSubagentFitness(
+  limit = 2000,
+): Promise<SubagentFitnessReport> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  const data = await fetchJson<SubagentFitnessReport & { ok?: boolean }>(
+    `/api/evolution/subagent-fitness?${params.toString()}`,
+  );
+  return data;
+}
+
+export async function decideSubagentPolicy(
+  role: string,
+  decision: {
+    action: "watch" | "retire" | "clear";
+    reason?: string;
+    evidenceItemIds?: string[];
+  },
+): Promise<SubagentPolicyDecisionResult> {
+  return postJson<SubagentPolicyDecisionResult>(
+    `/api/evolution/subagent-policy/${encodeURIComponent(role)}/decision`,
+    {
+      action: decision.action,
+      reason: decision.reason ?? "",
+      evidence_item_ids: decision.evidenceItemIds ?? [],
+      actor: "operator_panel",
+    },
+  );
+}
+
+export async function fetchOrganizationTopologies(): Promise<
+  OrganizationTopology[]
+> {
+  const data = await fetchJson<{ topologies: OrganizationTopology[] }>(
+    "/api/organizations/topologies",
+  );
+  return data.topologies;
+}
+
+export async function fetchOrganizationTopologyProposals(): Promise<OrganizationTopologyProposalsReport> {
+  return fetchJson<OrganizationTopologyProposalsReport>(
+    "/api/organizations/topology-proposals",
+  );
+}
+
+export async function fetchOrganizationTopologyLift(): Promise<OrganizationTopologyLiftReport> {
+  return fetchJson<OrganizationTopologyLiftReport>(
+    "/api/organizations/topology-promotion-lift",
+  );
+}
+
+export async function fetchAutoVerifierMetrics(
+  limit = 20,
+): Promise<AutoVerifierMetricsReport> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return fetchJson<AutoVerifierMetricsReport>(
+    `/api/evolution/auto-verifier-metrics?${params.toString()}`,
+  );
+}
+
+export async function fetchAgentCompetitorScorecard(
+  targetScore = 90,
+): Promise<AgentCompetitorScorecard> {
+  const params = new URLSearchParams({ target_score: String(targetScore) });
+  return fetchJson<AgentCompetitorScorecard>(
+    `/api/evolution/agent-scorecard?${params.toString()}`,
   );
 }
 

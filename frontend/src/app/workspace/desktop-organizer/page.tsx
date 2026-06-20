@@ -22,7 +22,8 @@ export default function DesktopOrganizerPage() {
   const [enabled, setEnabled] = useState(false);
   const [busy, setBusy] = useState<"install" | "remove" | null>(null);
   const [contextMenuMessage, setContextMenuMessage] = useState("");
-  const isElectron = typeof window !== "undefined" && !!window.octopus?.isElectron;
+  const isElectron =
+    typeof window !== "undefined" && !!window.octopus?.isElectron;
 
   useEffect(() => {
     setEnabled(localStorage.getItem(DESKTOP_ORGANIZER_ENABLED_KEY) === "true");
@@ -38,7 +39,11 @@ export default function DesktopOrganizerPage() {
     setContextMenuMessage("");
     const result = await window.octopus?.desktop?.installContextMenu?.();
     setBusy(null);
-    setContextMenuMessage(result?.ok ? "系统右键命令已安装。" : result?.error || "当前环境不支持安装。");
+    setContextMenuMessage(
+      result?.ok
+        ? "系统右键命令已安装。"
+        : result?.error || "当前环境不支持安装。",
+    );
   };
 
   const removeContextMenu = async () => {
@@ -46,7 +51,11 @@ export default function DesktopOrganizerPage() {
     setContextMenuMessage("");
     const result = await window.octopus?.desktop?.removeContextMenu?.();
     setBusy(null);
-    setContextMenuMessage(result?.ok ? "系统右键命令已移除。" : result?.error || "当前环境不支持移除。");
+    setContextMenuMessage(
+      result?.ok
+        ? "系统右键命令已移除。"
+        : result?.error || "当前环境不支持移除。",
+    );
   };
 
   return (
@@ -61,7 +70,9 @@ export default function DesktopOrganizerPage() {
                   <FolderKanbanIcon className="size-5" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-semibold tracking-tight">桌面助手</h1>
+                  <h1 className="text-xl font-semibold tracking-tight">
+                    桌面助手
+                  </h1>
                   <p className="text-sm text-muted-foreground">
                     默认启动进入工作区；需要处理系统桌面文件时，再开启透明桌面助手。
                   </p>
@@ -128,7 +139,9 @@ export default function DesktopOrganizerPage() {
                 </div>
               </div>
               {contextMenuMessage && (
-                <p className="mt-3 text-sm text-muted-foreground">{contextMenuMessage}</p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {contextMenuMessage}
+                </p>
               )}
             </div>
 

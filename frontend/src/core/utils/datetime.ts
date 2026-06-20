@@ -27,12 +27,13 @@ export function formatTimeAgo(date: Date | string | number, locale?: Locale) {
   });
 }
 
-export function formatDate(date: Date | string | number, locale?: Locale): string {
+export function formatDate(
+  date: Date | string | number,
+  locale?: Locale,
+): string {
   const d = typeof date === "string" ? new Date(date) : date;
   const effectiveLocale =
-    locale ??
-    (getLocaleFromCookie() as Locale | null) ??
-    detectLocale();
+    locale ?? (getLocaleFromCookie() as Locale | null) ?? detectLocale();
 
   if (effectiveLocale === "zh-CN") {
     return format(d, "yyyy年MM月dd日");
@@ -47,9 +48,7 @@ export function formatRelativeTimestamp(
 ): string {
   const d = typeof date === "string" ? new Date(date) : new Date(date);
   const effectiveLocale =
-    locale ??
-    (getLocaleFromCookie() as Locale | null) ??
-    detectLocale();
+    locale ?? (getLocaleFromCookie() as Locale | null) ?? detectLocale();
 
   const deltaSec = Math.max(0, (Date.now() - d.getTime()) / 1000);
   const isZh = effectiveLocale === "zh-CN";
@@ -69,15 +68,20 @@ export function formatRelativeTimestamp(
   return formatDate(d, effectiveLocale);
 }
 
-export function formatCurrency(amount: string | number, currency = "USD", locale?: Locale): string {
+export function formatCurrency(
+  amount: string | number,
+  currency = "USD",
+  locale?: Locale,
+): string {
   const value = typeof amount === "string" ? parseFloat(amount) : amount;
   const effectiveLocale =
-    locale ??
-    (getLocaleFromCookie() as Locale | null) ??
-    detectLocale();
+    locale ?? (getLocaleFromCookie() as Locale | null) ?? detectLocale();
 
-  return new Intl.NumberFormat(effectiveLocale === "zh-CN" ? "zh-CN" : "en-US", {
-    style: "currency",
-    currency,
-  }).format(Math.abs(value));
+  return new Intl.NumberFormat(
+    effectiveLocale === "zh-CN" ? "zh-CN" : "en-US",
+    {
+      style: "currency",
+      currency,
+    },
+  ).format(Math.abs(value));
 }

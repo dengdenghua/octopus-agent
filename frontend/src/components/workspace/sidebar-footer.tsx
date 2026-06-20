@@ -1,21 +1,20 @@
 import {
+  CheckIcon,
   CoinsIcon,
   LogOutIcon,
+  MessageCircleIcon,
   PlusIcon,
   SettingsIcon,
   ShieldCheckIcon,
   Trash2Icon,
+  UsersRoundIcon,
   UserCircleIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { swallow } from "@/core/utils/log";
 import { ACTIVE_AGENT_KEY, ROUTE_LOCKS } from "@/core/agents/active";
-import {
-  eventBus,
-  emitAgentChanged,
-  emitOpenSettings,
-} from "@/core/events";
+import { eventBus, emitAgentChanged, emitOpenSettings } from "@/core/events";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +29,7 @@ import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
+  createTeam,
   deleteTeam as deleteTeamRoom,
   dispatchTeamUpdated,
   fetchTeams,
@@ -183,7 +183,7 @@ export function AgentFooter() {
   const { agents } = useAgents();
   const { user, isGuest, logout } = useAuth();
   const _navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const moliliLink = useMoliliLink();
   const { t } = useI18n();
   const credits = moliliLink.data?.credits?.surplusCredits;
@@ -206,16 +206,20 @@ export function AgentFooter() {
   const moliliEnabled = authProviders.includes("molili");
 
   const lock = ROUTE_LOCKS.find((r) => pathname.startsWith(r.prefix));
+  const surfaceParam = new URLSearchParams(search).get("surface");
+  const agentLibrarySurface = surfaceParam === "company" ? "company" : "chat";
+  const agentLibraryHref = (tab?: string) => {
+    const params = new URLSearchParams({
+      hud: "1",
+      surface: agentLibrarySurface,
+    });
+    if (tab) params.set("tab", tab);
+    return `/workspace/agents?${params.toString()}`;
+  };
   const footerAgents = useMemo(() => {
-    const general =
-      agents.find((a) => a.name === "general") ??
-      agents.find((a) => a.display_name?.toLowerCase().includes("octopus")) ??
-      agents[0];
-    return general ? [general] : [];
+    return agents;
   }, [agents]);
-  const effectiveName =
-    lock?.agent ??
-    (activeName === "general" || activeName === null ? activeName : "general");
+  const effectiveName = lock?.agent ?? activeName ?? "general";
 
   const active: Agent | undefined =
     (effectiveName && footerAgents.find((a) => a.name === effectiveName)) ||
@@ -238,6 +242,7 @@ export function AgentFooter() {
   const selectAgent = (name: string) => {
     setActiveName(name);
     emitAgentChanged(name);
+    _navigate(`/workspace/agents/${encodeURIComponent(name)}/chats/new`);
   };
 
   const displayAgent = lockedAgent ?? active;
@@ -297,9 +302,9 @@ export function AgentFooter() {
           side="top"
           align="start"
           sideOffset={6}
-          className="w-60 p-1"
+          className="w-72 rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10"
         >
-          <DropdownMenuLabel className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/70">
+          <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
             {t.sidebar.switchAgentLabel}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
@@ -315,53 +320,41 @@ export function AgentFooter() {
                   key={a.name}
                   onSelect={() => selectAgent(a.name)}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs",
-                    "opacity-80 focus:opacity-100 focus:bg-muted/50",
-                    isActive && "opacity-100 font-medium",
+                    "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs",
+                    "opacity-85 transition-colors focus:bg-muted/60 focus:text-foreground focus:opacity-100",
+                    isActive && "bg-muted/35 opacity-100",
                   )}
                 >
-                  <AgentAvatar agent={a} className="size-5 text-[10px]" />
-                  <span className="min-w-0 flex-1 truncate">
-                    {a.display_name || a.name}
+                  <AgentAvatar
+                    agent={a}
+                    className="size-8 rounded-lg text-[11px]"
+                  />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate font-medium leading-none">
+                      {a.display_name || a.name}
+                    </span>
+                    <span className="truncate text-[10px] font-normal leading-tight text-muted-foreground">
+                      {isActive ? "当前 Agent" : a.description || "单人对话"}
+                    </span>
                   </span>
                   {isActive && (
-                    <span className="size-1 shrink-0 rounded-full bg-primary/70" />
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <CheckIcon className="size-3" />
+                    </span>
                   )}
                 </DropdownMenuItem>
               );
             })
           )}
-          <DropdownMenuItem
-            onSelect={() => _navigate("/workspace/agents?tab=digital-twins")}
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs",
-              "opacity-80 focus:opacity-100 focus:bg-muted/50",
-            )}
-          >
-            <AgentAvatar
-              agent={{
-                name: "digital-twin",
-                display_name: "数字分身",
-                description: "真人数字分身",
-                avatar_url: null,
-                icon: null,
-                model: null,
-                tool_groups: [],
-              }}
-              className="size-5 text-[10px]"
-            />
-            <span className="min-w-0 flex-1 truncate">数字分身</span>
-          </DropdownMenuItem>
-
           <DropdownMenuSeparator />
           {displayAgent ? (
             <>
               <DropdownMenuItem
-                onSelect={() => _navigate("/workspace/agents")}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs focus:bg-muted/50"
+                onSelect={() => _navigate(agentLibraryHref())}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-muted-foreground focus:bg-muted/60 focus:text-foreground"
               >
-                <PlusIcon className="size-4 shrink-0 opacity-70" />
-                <span>新建 Agent</span>
+                <UsersRoundIcon className="size-4 shrink-0" />
+                <span>切换 Agent</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
@@ -371,20 +364,20 @@ export function AgentFooter() {
               onSelect={() => {
                 _navigate("/login");
               }}
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs opacity-80 focus:opacity-100 focus:bg-muted/50"
+              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs opacity-80 focus:bg-muted/60 focus:opacity-100"
             >
               <ShieldCheckIcon className="size-4 shrink-0 text-muted-foreground" />
               <span>{t.sidebar.loginMolili}</span>
             </DropdownMenuItem>
           ) : isGuest ? null : (
             <>
-              <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-muted-foreground">
                 <UserCircleIcon className="size-4 shrink-0 opacity-70" />
                 <span className="min-w-0 flex-1 truncate">{accountName}</span>
               </div>
               <DropdownMenuItem
                 onSelect={() => emitOpenSettings("account")}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs focus:bg-muted/50"
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
               >
                 <CoinsIcon className="size-4 shrink-0 opacity-70" />
                 <span className="min-w-0 flex-1 truncate">
@@ -397,7 +390,7 @@ export function AgentFooter() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => void logout()}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs focus:bg-muted/50"
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs focus:bg-muted/60"
               >
                 <LogOutIcon className="size-4 shrink-0 opacity-70" />
                 <span>{t.sidebar.logout}</span>
@@ -428,6 +421,10 @@ export function AgentFooter() {
 export function TeamFooter() {
   const { agents } = useAgents();
   const { t } = useI18n();
+  const navigate = useNavigate();
+  const [activeName, setActiveName] = useState<string | null>(() =>
+    readActiveAgentName(),
+  );
   const [teams, setTeams] = useState<SidebarTeam[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(() =>
     readPreferredTeamId(),
@@ -441,7 +438,7 @@ export function TeamFooter() {
       const nextId =
         preferred && remote.some((team) => team.id === preferred)
           ? preferred
-          : (remote[0]?.id ?? null);
+          : null;
       const nextTeam = nextId
         ? (remote.find((team) => team.id === nextId) ?? null)
         : null;
@@ -467,7 +464,13 @@ export function TeamFooter() {
     };
   }, [refreshTeams]);
 
-  const current = teams.find((t) => t.id === currentId) ?? teams[0] ?? null;
+  const current = currentId
+    ? (teams.find((t) => t.id === currentId) ?? null)
+    : null;
+  const activeAgent =
+    agents.find((agent) => agent.name === activeName) ??
+    agents.find((agent) => agent.name === current?.leaderId) ??
+    agents[0];
 
   const agentByName = useMemo(() => {
     const map = new Map<string, Agent>();
@@ -482,6 +485,31 @@ export function TeamFooter() {
       new CustomEvent("octopus:select-team", { detail: team }),
     );
     dispatchTeamUpdated(team);
+    navigate("/workspace/team/new");
+  };
+
+  const selectSoloAgent = async (agent: Agent) => {
+    const existing = teams.find(
+      (team) =>
+        team.members.length === 1 && team.members[0]?.name === agent.name,
+    );
+    const soloTeam =
+      existing ??
+      (await createTeam({
+        name: agent.display_name || agent.name,
+        members: [agent],
+        leaderId: agent.name,
+      }));
+    setTeams((prev) => [
+      soloTeam,
+      ...prev.filter((team) => team.id !== soloTeam.id),
+    ]);
+    setCurrentId(soloTeam.id);
+    writePreferredTeam(soloTeam);
+    dispatchTeamUpdated(soloTeam);
+    setActiveName(agent.name);
+    emitAgentChanged(agent.name);
+    navigate("/workspace/team/new");
   };
 
   const deleteTeam = async (team: SidebarTeam) => {
@@ -524,12 +552,13 @@ export function TeamFooter() {
                 agentByName={agentByName}
               />
             ) : (
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-dashed border-border bg-muted text-[11px] text-muted-foreground">
-                +
-              </span>
+              <AgentAvatar agent={activeAgent} />
             )}
             <span className="min-w-0 flex-1 truncate text-xs font-medium leading-tight group-data-[collapsible=icon]:hidden">
-              {current?.name || t.sidebar.selectTeam}
+              {current?.name ||
+                activeAgent?.display_name ||
+                activeAgent?.name ||
+                t.sidebar.selectTeam}
             </span>
             <span className="shrink-0 text-muted-foreground/60 group-hover/team:text-muted-foreground group-data-[collapsible=icon]:hidden">
               <svg
@@ -551,8 +580,49 @@ export function TeamFooter() {
           side="top"
           align="start"
           sideOffset={6}
-          className="w-64 p-1"
+          className="max-h-[72vh] w-72 overflow-y-auto p-1"
         >
+          <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            单人任务
+          </DropdownMenuLabel>
+          {agents.length === 0 ? (
+            <div className="px-2 py-3 text-center text-[11px] text-muted-foreground">
+              {t.sidebar.noAgents}
+            </div>
+          ) : (
+            agents.map((agent) => {
+              const isActive = agent.name === activeAgent?.name && !current;
+              return (
+                <DropdownMenuItem
+                  key={agent.name}
+                  onSelect={() => void selectSoloAgent(agent)}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2 py-1.5 text-xs",
+                    isActive && "bg-muted/40",
+                  )}
+                >
+                  <AgentAvatar agent={agent} className="size-7 rounded-lg" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium leading-tight">
+                      {agent.display_name || agent.name}
+                    </span>
+                    <span className="line-clamp-1 text-[10px] leading-tight text-muted-foreground/70">
+                      {agent.description || "一对一任务"}
+                    </span>
+                  </span>
+                  {isActive ? (
+                    <CheckIcon className="size-3.5 shrink-0 text-primary" />
+                  ) : (
+                    <MessageCircleIcon className="size-3.5 shrink-0 text-muted-foreground/55" />
+                  )}
+                </DropdownMenuItem>
+              );
+            })
+          )}
+          <DropdownMenuSeparator className="my-1" />
+          <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            群聊任务
+          </DropdownMenuLabel>
           {teams.length === 0 ? (
             <div className="px-2 py-3 text-center text-[11px] text-muted-foreground">
               {t.sidebar.noTeams}

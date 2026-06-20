@@ -1,5 +1,6 @@
 import { PlugZapIcon, ServerIcon } from "lucide-react";
 
+import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import { McpSettingsPage } from "@/components/workspace/settings/mcp-settings-page";
 import {
   WorkspaceBody,
@@ -15,6 +16,7 @@ export default function McpPage() {
       <WorkspaceHeader />
       <WorkspaceBody>
         <div className="ui-density-stack mx-auto flex w-full max-w-(--container-width-md) flex-col py-2">
+          <CapabilityQualityStrip surface="integrations" />
           <section className="workspace-panel ui-density-panel flex flex-col gap-4 rounded-[1.75rem]">
             <div className="space-y-1">
               <div className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">

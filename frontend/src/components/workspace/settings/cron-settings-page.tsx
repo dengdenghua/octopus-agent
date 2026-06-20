@@ -1,4 +1,11 @@
-import { AlertCircleIcon, Loader2Icon, PlusIcon, RefreshCwIcon, Trash2Icon, ClockIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  Loader2Icon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  ClockIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -49,13 +56,17 @@ export function CronSettingsPage() {
       setLoadError(null);
     } catch (error) {
       console.error(error);
-      setLoadError(error instanceof Error ? error.message : t.cronSettings.loadFailed);
+      setLoadError(
+        error instanceof Error ? error.message : t.cronSettings.loadFailed,
+      );
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchJobs(); }, [fetchJobs]);
+  useEffect(() => {
+    fetchJobs();
+  }, [fetchJobs]);
 
   const handleAdd = async () => {
     if (!newName || !newCommand) return;
@@ -64,7 +75,11 @@ export function CronSettingsPage() {
         method: "POST",
         headers: jsonAuthHeaders(),
         credentials: "include",
-        body: JSON.stringify({ name: newName, command: newCommand, cron_expression: newCron }),
+        body: JSON.stringify({
+          name: newName,
+          command: newCommand,
+          cron_expression: newCron,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -77,7 +92,9 @@ export function CronSettingsPage() {
       toast.success(t.cronSettings.createSuccess);
       void fetchJobs();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.cronSettings.createFailed);
+      toast.error(
+        error instanceof Error ? error.message : t.cronSettings.createFailed,
+      );
     }
   };
 
@@ -95,13 +112,18 @@ export function CronSettingsPage() {
       toast.success(t.cronSettings.deleteSuccess);
       void fetchJobs();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.cronSettings.deleteFailed);
+      toast.error(
+        error instanceof Error ? error.message : t.cronSettings.deleteFailed,
+      );
     }
   };
 
   return (
     <div className="space-y-4">
-      <SettingsSection title={t.cronSettings.title} description={t.cronSettings.description}>
+      <SettingsSection
+        title={t.cronSettings.title}
+        description={t.cronSettings.description}
+      >
         <div className="mb-3 flex items-center justify-end">
           <Button
             variant="outline"
@@ -144,40 +166,85 @@ export function CronSettingsPage() {
               </Button>
             </div>
           ) : (
-            jobs.map(job => (
-              <div key={job.name} className="flex items-center justify-between rounded-lg border p-3">
+            jobs.map((job) => (
+              <div
+                key={job.name}
+                className="flex items-center justify-between rounded-lg border p-3"
+              >
                 <div>
                   <div className="flex items-center gap-2">
                     <ClockIcon className="size-4 text-muted-foreground" />
                     <span className="font-medium">{job.name}</span>
-                    {job.cron_expression && <code className="text-xs text-muted-foreground">{job.cron_expression}</code>}
+                    {job.cron_expression && (
+                      <code className="text-xs text-muted-foreground">
+                        {job.cron_expression}
+                      </code>
+                    )}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1 pl-6">{job.command}</div>
-                  {job.last_status && <div className="text-xs text-muted-foreground mt-0.5 pl-6">{t.cronSettings.last}: {job.last_status}</div>}
+                  <div className="text-xs text-muted-foreground mt-1 pl-6">
+                    {job.command}
+                  </div>
+                  {job.last_status && (
+                    <div className="text-xs text-muted-foreground mt-0.5 pl-6">
+                      {t.cronSettings.last}: {job.last_status}
+                    </div>
+                  )}
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => handleDelete(job.name)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDelete(job.name)}
+                >
                   <Trash2Icon className="size-4 text-destructive" />
                 </Button>
               </div>
             ))
           )}
           {!loading && !needsAuth && !loadError && jobs.length === 0 && (
-            <div className="text-sm text-muted-foreground text-center py-4">{t.cronSettings.noTasks}</div>
+            <div className="text-sm text-muted-foreground text-center py-4">
+              {t.cronSettings.noTasks}
+            </div>
           )}
         </div>
 
         {showAdd ? (
           <div className="space-y-2 rounded-lg border p-3 mt-3">
-            <Input placeholder={t.cronSettings.jobName} value={newName} onChange={e => setNewName(e.target.value)} />
-            <Input placeholder={t.cronSettings.commandToRun} value={newCommand} onChange={e => setNewCommand(e.target.value)} />
-            <Input placeholder={t.cronSettings.cronExpression} value={newCron} onChange={e => setNewCron(e.target.value)} />
+            <Input
+              placeholder={t.cronSettings.jobName}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <Input
+              placeholder={t.cronSettings.commandToRun}
+              value={newCommand}
+              onChange={(e) => setNewCommand(e.target.value)}
+            />
+            <Input
+              placeholder={t.cronSettings.cronExpression}
+              value={newCron}
+              onChange={(e) => setNewCron(e.target.value)}
+            />
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd}>{t.cronSettings.create}</Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)}>{t.cronSettings.cancel}</Button>
+              <Button size="sm" onClick={handleAdd}>
+                {t.cronSettings.create}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowAdd(false)}
+              >
+                {t.cronSettings.cancel}
+              </Button>
             </div>
           </div>
         ) : (
-          <Button variant="outline" size="sm" className="mt-2" disabled={needsAuth} onClick={() => setShowAdd(true)}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            disabled={needsAuth}
+            onClick={() => setShowAdd(true)}
+          >
             <PlusIcon className="size-4 mr-1" /> {t.cronSettings.addTask}
           </Button>
         )}

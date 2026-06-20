@@ -1,9 +1,15 @@
-
 import type { Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { CheckIcon, SaveIcon, RotateCcwIcon, SearchIcon } from "lucide-react";
 import { useTheme } from "next-themes";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -39,16 +45,15 @@ async function saveFile(
     }),
   });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Save failed" }));
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Save failed" }));
     throw new Error(error.detail ?? "Save failed");
   }
   return response.json();
 }
 
-async function runDiagnostics(
-  path: string,
-  workspacePath?: string,
-) {
+async function runDiagnostics(path: string, workspacePath?: string) {
   const baseURL = getBackendBaseURL();
   const response = await fetch(`${baseURL}/api/lsp/diagnostics`, {
     method: "POST",
@@ -56,7 +61,9 @@ async function runDiagnostics(
     body: JSON.stringify({ path, workspace: workspacePath }),
   });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Diagnostics failed" }));
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Diagnostics failed" }));
     throw new Error(error.detail ?? "Diagnostics failed");
   }
   return response.json();
@@ -74,7 +81,9 @@ async function runReferences(
     body: JSON.stringify({ path, symbol, workspace: workspacePath }),
   });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "References failed" }));
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "References failed" }));
     throw new Error(error.detail ?? "References failed");
   }
   return response.json();
@@ -92,13 +101,19 @@ async function runDefinition(
     body: JSON.stringify({ path, symbol, workspace: workspacePath }),
   });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: "Definition failed" }));
+    const error = await response
+      .json()
+      .catch(() => ({ detail: "Definition failed" }));
     throw new Error(error.detail ?? "Definition failed");
   }
   return response.json();
 }
 
-function extractSymbolAtSelection(text: string, from: number, to: number): string | null {
+function extractSymbolAtSelection(
+  text: string,
+  from: number,
+  to: number,
+): string | null {
   const ident = /^[A-Za-z_][A-Za-z0-9_]*$/;
   if (to > from) {
     const selected = text.slice(from, to).trim();
@@ -170,7 +185,9 @@ export function CodeEditor({
         try {
           const { inlineCompletion } = await import("./inline-completion");
           loaded = [...loaded, inlineCompletion(filePath)];
-        } catch (e) { swallow(e); }
+        } catch (e) {
+          swallow(e);
+        }
       }
       setExtensions(loaded);
     });
@@ -213,7 +230,9 @@ export function CodeEditor({
       toast.success(t.codeEditor.fileSaved);
       setTimeout(() => setIsSaved(false), 2000);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.codeEditor.fileSaveFailed);
+      toast.error(
+        error instanceof Error ? error.message : t.codeEditor.fileSaveFailed,
+      );
     } finally {
       setIsSaving(false);
     }
@@ -236,7 +255,10 @@ export function CodeEditor({
       } else {
         const firstFew = result.errors
           .slice(0, 3)
-          .map((e: { line?: number; message?: string }) => `L${e.line ?? 0}: ${e.message ?? ""}`)
+          .map(
+            (e: { line?: number; message?: string }) =>
+              `L${e.line ?? 0}: ${e.message ?? ""}`,
+          )
           .join("\n");
         toast.error(`${count} ${t.codeEditor.diagnosticsIssues}`, {
           description: firstFew,
@@ -254,11 +276,18 @@ export function CodeEditor({
   const handleGoToDefinition = useCallback(async () => {
     if (!filePath || !currentSymbol) return;
     try {
-      const result = await runDefinition(filePath, currentSymbol, workspacePath);
+      const result = await runDefinition(
+        filePath,
+        currentSymbol,
+        workspacePath,
+      );
       if (result.found) {
-        toast.success(t.codeEditor.definitionFound(currentSymbol, result.file, result.line), {
-          description: result.context,
-        });
+        toast.success(
+          t.codeEditor.definitionFound(currentSymbol, result.file, result.line),
+          {
+            description: result.context,
+          },
+        );
         if (onOpenLocation && result.file) {
           onOpenLocation(result.file, result.line);
         }
@@ -266,36 +295,61 @@ export function CodeEditor({
         toast.info(t.codeEditor.definitionNotFound(currentSymbol));
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.codeEditor.definitionLookupFailed);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t.codeEditor.definitionLookupFailed,
+      );
     }
   }, [filePath, currentSymbol, workspacePath, onOpenLocation, t.codeEditor]);
 
   const handleFindReferences = useCallback(async () => {
     if (!filePath || !currentSymbol) return;
     try {
-      const result = await runReferences(filePath, currentSymbol, workspacePath);
+      const result = await runReferences(
+        filePath,
+        currentSymbol,
+        workspacePath,
+      );
       if (result.found && result.count > 0) {
-        const firstFew = (result.references as { file: string; line: number; context: string }[])
+        const firstFew = (
+          result.references as { file: string; line: number; context: string }[]
+        )
           .slice(0, 5)
           .map((r) => `L${r.line}: ${r.context}`)
           .join("\n");
-        toast.success(t.codeEditor.referencesFound(result.count, currentSymbol), {
-          description: firstFew,
-        });
+        toast.success(
+          t.codeEditor.referencesFound(result.count, currentSymbol),
+          {
+            description: firstFew,
+          },
+        );
       } else {
         toast.info(t.codeEditor.referencesNotFound(currentSymbol));
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t.codeEditor.referencesLookupFailed);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t.codeEditor.referencesLookupFailed,
+      );
     }
   }, [filePath, currentSymbol, workspacePath, t.codeEditor]);
 
-  const handleEditorUpdate = useCallback((viewUpdate: { state: { doc: { toString: () => string }; selection: { main: { from: number; to: number } } } }) => {
-    const { from, to } = viewUpdate.state.selection.main;
-    const text = viewUpdate.state.doc.toString();
-    const sym = extractSymbolAtSelection(text, from, to);
-    setCurrentSymbol(sym);
-  }, []);
+  const handleEditorUpdate = useCallback(
+    (viewUpdate: {
+      state: {
+        doc: { toString: () => string };
+        selection: { main: { from: number; to: number } };
+      };
+    }) => {
+      const { from, to } = viewUpdate.state.selection.main;
+      const text = viewUpdate.state.doc.toString();
+      const sym = extractSymbolAtSelection(text, from, to);
+      setCurrentSymbol(sym);
+    },
+    [],
+  );
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -306,11 +360,15 @@ export function CodeEditor({
       if (!line || line < 1) return;
       const view = editorViewRef.current;
       const lineInfo = view.state.doc.line(line);
-      view.dispatch({ selection: { anchor: lineInfo.from }, scrollIntoView: true });
+      view.dispatch({
+        selection: { anchor: lineInfo.from },
+        scrollIntoView: true,
+      });
       view.focus();
     };
     window.addEventListener("octopus:editor-go-to-line", handler);
-    return () => window.removeEventListener("octopus:editor-go-to-line", handler);
+    return () =>
+      window.removeEventListener("octopus:editor-go-to-line", handler);
   }, [filePath]);
 
   const handleKeyDown = useCallback(
@@ -364,7 +422,9 @@ export function CodeEditor({
             title={t.codeEditor.diagnose}
           >
             <SearchIcon className="size-3" />
-            {diagnosticCount !== null && diagnosticCount > 0 ? `${diagnosticCount}` : t.codeEditor.diagnose}
+            {diagnosticCount !== null && diagnosticCount > 0
+              ? `${diagnosticCount}`
+              : t.codeEditor.diagnose}
           </Button>
         </div>
       )}
@@ -395,7 +455,11 @@ export function CodeEditor({
               ) : (
                 <SaveIcon className="size-3" />
               )}
-              {isSaving ? t.codeEditor.saving : isSaved ? t.codeEditor.saved : t.codeEditor.save}
+              {isSaving
+                ? t.codeEditor.saving
+                : isSaved
+                  ? t.codeEditor.saved
+                  : t.codeEditor.save}
             </Button>
           </div>
         </div>
@@ -423,7 +487,9 @@ export function CodeEditor({
               "h-full overflow-auto font-mono [&_.cm-editor]:h-full [&_.cm-focused]:outline-none!",
               "px-2 py-0! [&_.cm-line]:px-2! [&_.cm-line]:py-0!",
             )}
-            theme={resolvedTheme === "dark" ? customDarkTheme : customLightTheme}
+            theme={
+              resolvedTheme === "dark" ? customDarkTheme : customLightTheme
+            }
             extensions={extensions}
             basicSetup={{
               foldGutter:

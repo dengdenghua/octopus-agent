@@ -368,6 +368,13 @@ class RegenerationScheduler:
                 "l1_score": report.l1.score,
                 "l1_trend": report.l1.trend,
                 "l2_score": report.l2.score if report.l2 else None,
+                "governance_score": report.governance.score if report.governance else None,
+                "governance_penalty": (
+                    report.governance.penalty if report.governance else None
+                ),
+                "governance_reasons": (
+                    report.governance.reasons if report.governance else []
+                ),
                 "combined": report.combined,
                 "verdict": report.verdict,
             }

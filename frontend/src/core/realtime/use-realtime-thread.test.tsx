@@ -19,7 +19,10 @@ interface FakeClientHandles {
 function makeFakeClientFactory(handles: FakeClientHandles[]) {
   return (deps: {
     onIncomingRequest: IncomingRequestFn;
-    onNotification: (n: { method: string; params: Record<string, unknown> }) => void;
+    onNotification: (n: {
+      method: string;
+      params: Record<string, unknown>;
+    }) => void;
     onOpen?: () => void;
     onClose?: (code: number, reason: string) => void;
   }) => {

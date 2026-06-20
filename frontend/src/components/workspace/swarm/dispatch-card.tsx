@@ -107,9 +107,7 @@ function DispatchRow({
                   isDone ? "bg-emerald-500" : "animate-pulse",
                 )}
                 style={{
-                  background: isDone
-                    ? undefined
-                    : `hsl(${agent.hue} 70% 50%)`,
+                  background: isDone ? undefined : `hsl(${agent.hue} 70% 50%)`,
                 }}
               />
               <span
@@ -152,7 +150,13 @@ function DispatchRow({
   );
 }
 
-function AgentAvatar({ agent, size = 32 }: { agent: SwarmAgent; size?: number }) {
+function AgentAvatar({
+  agent,
+  size = 32,
+}: {
+  agent: SwarmAgent;
+  size?: number;
+}) {
   return (
     <div
       className="flex shrink-0 items-center justify-center rounded-lg"
@@ -180,9 +184,7 @@ function AgentPopoverContent({ agent }: { agent: SwarmAgent }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold">{agent.name}</span>
-            <span className="text-muted-foreground text-xs">
-              {agent.role}
-            </span>
+            <span className="text-muted-foreground text-xs">{agent.role}</span>
           </div>
           <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs italic">
             "{agent.motto}"
@@ -190,7 +192,9 @@ function AgentPopoverContent({ agent }: { agent: SwarmAgent }) {
         </div>
       </div>
       <div className="border-b border-border/60 px-4 py-2 text-xs">
-        <div className="text-muted-foreground mb-1">{t.dispatchCard.researchFocus}</div>
+        <div className="text-muted-foreground mb-1">
+          {t.dispatchCard.researchFocus}
+        </div>
         <ol className="list-decimal space-y-0.5 pl-4 text-foreground/80">
           {(agent.details ?? [agent.task]).map((d, i) => (
             <li key={i}>{d}</li>
@@ -201,7 +205,9 @@ function AgentPopoverContent({ agent }: { agent: SwarmAgent }) {
         <div className="space-y-1.5 px-4 py-2 text-[11px]">
           {agent.skills.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
-              <span className="text-muted-foreground">{t.dispatchCard.equipment}</span>
+              <span className="text-muted-foreground">
+                {t.dispatchCard.equipment}
+              </span>
               {agent.skills.map((s) => (
                 <span
                   key={s}
@@ -214,7 +220,9 @@ function AgentPopoverContent({ agent }: { agent: SwarmAgent }) {
           )}
           {agent.personality && agent.personality.length > 0 && (
             <div className="flex flex-wrap items-center gap-1">
-              <span className="text-muted-foreground">{t.dispatchCard.personalityLabel}</span>
+              <span className="text-muted-foreground">
+                {t.dispatchCard.personalityLabel}
+              </span>
               {agent.personality.map((p) => (
                 <span
                   key={p}
@@ -228,7 +236,9 @@ function AgentPopoverContent({ agent }: { agent: SwarmAgent }) {
           {agent.stats && (
             <div className="text-muted-foreground">
               {t.dispatchCard.battleRecord(agent.stats.taskCount ?? 0)}
-              {agent.stats.rating ? t.dispatchCard.ratingSuffix(agent.stats.rating.toFixed(1)) : ""}
+              {agent.stats.rating
+                ? t.dispatchCard.ratingSuffix(agent.stats.rating.toFixed(1))
+                : ""}
             </div>
           )}
         </div>

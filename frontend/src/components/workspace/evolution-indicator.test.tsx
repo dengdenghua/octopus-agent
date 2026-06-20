@@ -17,9 +17,8 @@ vi.mock("@/core/observability/api", async () => {
   };
 });
 
- 
 import { getEvolutionStatus } from "@/core/observability/api";
- 
+
 import { EvolutionIndicator } from "./evolution-indicator";
 
 const mockedGetStatus = vi.mocked(getEvolutionStatus);
@@ -51,7 +50,9 @@ describe("EvolutionIndicator", () => {
     );
     // Wait for the query to settle · disabled → returns null
     await waitFor(() => expect(mockedGetStatus).toHaveBeenCalled());
-    expect(container.querySelector("[data-testid=evolution-indicator]")).toBeNull();
+    expect(
+      container.querySelector("[data-testid=evolution-indicator]"),
+    ).toBeNull();
   });
 
   test("renders nothing when both counters are 0 and showWhenEmpty is false", async () => {
@@ -64,7 +65,9 @@ describe("EvolutionIndicator", () => {
       </AllProviders>,
     );
     await waitFor(() => expect(mockedGetStatus).toHaveBeenCalled());
-    expect(container.querySelector("[data-testid=evolution-indicator]")).toBeNull();
+    expect(
+      container.querySelector("[data-testid=evolution-indicator]"),
+    ).toBeNull();
   });
 
   test("renders 0/0 when showWhenEmpty=true", async () => {
@@ -106,7 +109,9 @@ describe("EvolutionIndicator", () => {
     );
     const trigger = await screen.findByTestId("evolution-indicator");
     expect(trigger.getAttribute("title")).toContain("3 rules");
-    expect(trigger.querySelector(".sr-only")?.textContent).toContain("7 memories");
+    expect(trigger.querySelector(".sr-only")?.textContent).toContain(
+      "7 memories",
+    );
     expect(trigger.textContent).toContain("10");
   });
 

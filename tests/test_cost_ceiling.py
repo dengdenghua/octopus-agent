@@ -10,11 +10,9 @@ Covers:
 """
 from __future__ import annotations
 
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # ── Fixture: reset UsagePricing singleton between tests ──────────────────────
 
@@ -69,7 +67,7 @@ def test_is_over_budget_returns_false_when_no_ceiling(monkeypatch):
 
 def test_is_over_budget_true_when_ceiling_exceeded(monkeypatch):
     monkeypatch.setenv("OCTOPUS_MAX_COST_USD", "0.01")
-    from runtime.platform.budget.usage_pricing import UsagePricing, price
+    from runtime.platform.budget.usage_pricing import UsagePricing
     p = UsagePricing.get()
     # Record enough spend to exceed $0.01
     p.record("claude-sonnet-4-6", 1_000_000, 1_000_000)  # ~$18

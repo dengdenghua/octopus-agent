@@ -13,7 +13,6 @@ import {
   useFitness,
   useDrift,
   useSkillPerformance,
-  useRecommendations,
 } from "@/core/evolution/hooks";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -105,9 +104,12 @@ function statusLabel(rate: number): string {
 }
 
 function statusStyle(rate: number): string {
-  if (rate >= 0.8) return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
-  if (rate >= 0.6) return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
-  if (rate >= 0.4) return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
+  if (rate >= 0.8)
+    return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30";
+  if (rate >= 0.6)
+    return "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30";
+  if (rate >= 0.4)
+    return "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30";
   return "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30";
 }
 
@@ -135,7 +137,9 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <ActivityIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.fitnessTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.fitnessTitle}
+          </span>
         </div>
         <p className="text-xs text-muted-foreground italic">
           {t.evolutionExplain.noAgentSelected}
@@ -149,10 +153,14 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <ActivityIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.fitnessTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.fitnessTitle}
+          </span>
         </div>
         <div className="flex h-24 items-center justify-center">
-          <span className="text-xs text-muted-foreground">{t.evolutionExplain.loading}</span>
+          <span className="text-xs text-muted-foreground">
+            {t.evolutionExplain.loading}
+          </span>
         </div>
       </div>
     );
@@ -163,7 +171,9 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <ActivityIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.fitnessTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.fitnessTitle}
+          </span>
         </div>
         <p className="text-xs text-muted-foreground italic">
           {t.evolutionExplain.noFitnessData}
@@ -181,7 +191,9 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
     <div className="rounded-lg border bg-card p-4">
       <div className="flex items-center gap-2 mb-3">
         <ActivityIcon className="size-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{t.evolutionExplain.fitnessTitle}</span>
+        <span className="text-sm font-medium">
+          {t.evolutionExplain.fitnessTitle}
+        </span>
       </div>
 
       {l1 && (
@@ -189,7 +201,12 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
           <div className="flex items-center justify-between">
             <span className="text-xs text-muted-foreground">L1 Score</span>
             <div className="flex items-center gap-1.5">
-              <span className={cn("text-sm font-semibold tabular-nums", l1ScoreColor(l1Score))}>
+              <span
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  l1ScoreColor(l1Score),
+                )}
+              >
                 {l1Pct}%
               </span>
               {trendIcon(l1.trend)}
@@ -197,8 +214,15 @@ export function FitnessExplainCard({ agentId }: { agentId?: string }) {
           </div>
           <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
             <div
-              className={cn("h-full rounded-full transition-all", l1BarColor(l1Score))}
-              style={{ width: `${l1Pct}%`, backgroundColor: "currentColor", opacity: 0.7 }}
+              className={cn(
+                "h-full rounded-full transition-all",
+                l1BarColor(l1Score),
+              )}
+              style={{
+                width: `${l1Pct}%`,
+                backgroundColor: "currentColor",
+                opacity: 0.7,
+              }}
             />
           </div>
         </div>
@@ -260,7 +284,9 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <ShieldIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.driftTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.driftTitle}
+          </span>
         </div>
         <p className="text-xs text-muted-foreground italic">
           {t.evolutionExplain.noAgentSelected}
@@ -274,10 +300,14 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <ShieldIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.driftTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.driftTitle}
+          </span>
         </div>
         <div className="flex h-24 items-center justify-center">
-          <span className="text-xs text-muted-foreground">{t.evolutionExplain.loading}</span>
+          <span className="text-xs text-muted-foreground">
+            {t.evolutionExplain.loading}
+          </span>
         </div>
       </div>
     );
@@ -288,7 +318,9 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <ShieldIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.driftTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.driftTitle}
+          </span>
         </div>
         <p className="text-xs text-muted-foreground italic">
           {t.evolutionExplain.noDriftData}
@@ -302,28 +334,35 @@ export function DriftExplainCard({ agentId }: { agentId?: string }) {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <ShieldIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.driftTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.driftTitle}
+          </span>
         </div>
         <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
           <ShieldIcon className="size-4" />
-          <span className="text-xs font-medium">{t.evolutionExplain.noDriftDetected}</span>
+          <span className="text-xs font-medium">
+            {t.evolutionExplain.noDriftDetected}
+          </span>
         </div>
       </div>
     );
   }
 
   const maxSeverity = data.max_severity;
-  const bannerStyle = maxSeverity === "critical"
-    ? "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30"
-    : maxSeverity === "warning"
-      ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
-      : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30";
+  const bannerStyle =
+    maxSeverity === "critical"
+      ? "bg-red-500/10 text-red-700 dark:text-red-300 border-red-500/30"
+      : maxSeverity === "warning"
+        ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30"
+        : "bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30";
 
   return (
     <div className="rounded-lg border bg-card p-4">
       <div className="flex items-center gap-2 mb-3">
         <ShieldIcon className="size-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{t.evolutionExplain.driftTitle}</span>
+        <span className="text-sm font-medium">
+          {t.evolutionExplain.driftTitle}
+        </span>
       </div>
 
       <div
@@ -376,7 +415,9 @@ export function VariantComparisonTable() {
 
   const sorted = useMemo(() => {
     if (!data) return [];
-    return [...data].sort((a, b) => numberOrZero(a.success_rate) - numberOrZero(b.success_rate));
+    return [...data].sort(
+      (a, b) => numberOrZero(a.success_rate) - numberOrZero(b.success_rate),
+    );
   }, [data]);
 
   if (isLoading) {
@@ -384,10 +425,14 @@ export function VariantComparisonTable() {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <BrainCircuitIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.variantTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.variantTitle}
+          </span>
         </div>
         <div className="flex h-24 items-center justify-center">
-          <span className="text-xs text-muted-foreground">{t.evolutionExplain.loading}</span>
+          <span className="text-xs text-muted-foreground">
+            {t.evolutionExplain.loading}
+          </span>
         </div>
       </div>
     );
@@ -398,7 +443,9 @@ export function VariantComparisonTable() {
       <div className="rounded-lg border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <BrainCircuitIcon className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t.evolutionExplain.variantTitle}</span>
+          <span className="text-sm font-medium">
+            {t.evolutionExplain.variantTitle}
+          </span>
         </div>
         <p className="text-xs text-muted-foreground italic">
           {t.evolutionExplain.noVariantData}
@@ -411,16 +458,26 @@ export function VariantComparisonTable() {
     <div className="rounded-lg border bg-card p-4">
       <div className="flex items-center gap-2 mb-3">
         <BrainCircuitIcon className="size-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{t.evolutionExplain.variantTitle}</span>
+        <span className="text-sm font-medium">
+          {t.evolutionExplain.variantTitle}
+        </span>
       </div>
       <div className="rounded-md border border-border/40 overflow-hidden">
         <table className="w-full text-[11px]">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
-              <th className="text-left px-2 py-1">{t.evolutionExplain.colName}</th>
-              <th className="text-right px-2 py-1">{t.evolutionExplain.colUsage}</th>
-              <th className="text-left px-2 py-1">{t.evolutionExplain.colSuccessRate}</th>
-              <th className="text-right px-2 py-1">{t.evolutionExplain.colStatus}</th>
+              <th className="text-left px-2 py-1">
+                {t.evolutionExplain.colName}
+              </th>
+              <th className="text-right px-2 py-1">
+                {t.evolutionExplain.colUsage}
+              </th>
+              <th className="text-left px-2 py-1">
+                {t.evolutionExplain.colSuccessRate}
+              </th>
+              <th className="text-right px-2 py-1">
+                {t.evolutionExplain.colStatus}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -430,12 +487,17 @@ export function VariantComparisonTable() {
               return (
                 <tr key={s.name} className="border-t border-border/30">
                   <td className="px-2 py-1 font-medium">{s.name}</td>
-                  <td className="px-2 py-1 text-right tabular-nums">{s.usage_count}</td>
+                  <td className="px-2 py-1 text-right tabular-nums">
+                    {s.usage_count}
+                  </td>
                   <td className="px-2 py-1">
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
                         <div
-                          className={cn("h-full rounded-full", successRateBarColor(successRate))}
+                          className={cn(
+                            "h-full rounded-full",
+                            successRateBarColor(successRate),
+                          )}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
@@ -465,8 +527,6 @@ export function VariantComparisonTable() {
 }
 
 export function EvolutionExplain({ agentId }: { agentId?: string }) {
-  const { t } = useI18n();
-
   return (
     <div className="space-y-4">
       <FitnessExplainCard agentId={agentId} />

@@ -193,17 +193,27 @@ function recomputePhaseReports(
     const failed = handoffs.filter((handoff) =>
       ["failed", "cancelled", "timed_out"].includes(handoff.status),
     ).length;
-    return [{
-      phaseIndex: 0,
-      nodeIds: [...new Set(handoffs.flatMap((handoff) => handoff.nodeIds))],
-      assignmentCount: handoffs.length,
-      handoffCount: handoffs.length,
-      succeeded,
-      failed,
-      status: succeeded === handoffs.length ? "success" : failed === handoffs.length ? "failed" : "partial",
-      wallMs: 0,
-      costUsd: handoffs.reduce((total, handoff) => total + handoff.costUsd, 0),
-    }];
+    return [
+      {
+        phaseIndex: 0,
+        nodeIds: [...new Set(handoffs.flatMap((handoff) => handoff.nodeIds))],
+        assignmentCount: handoffs.length,
+        handoffCount: handoffs.length,
+        succeeded,
+        failed,
+        status:
+          succeeded === handoffs.length
+            ? "success"
+            : failed === handoffs.length
+              ? "failed"
+              : "partial",
+        wallMs: 0,
+        costUsd: handoffs.reduce(
+          (total, handoff) => total + handoff.costUsd,
+          0,
+        ),
+      },
+    ];
   }
 
   return phases.map((phase) => {
@@ -232,8 +242,13 @@ function recomputePhaseReports(
       succeeded,
       failed,
       status,
-      wallMs: session.phaseReports?.find((r) => r.phaseIndex === phase.phaseIndex)?.wallMs ?? 0,
-      costUsd: phaseHandoffs.reduce((total, handoff) => total + handoff.costUsd, 0),
+      wallMs:
+        session.phaseReports?.find((r) => r.phaseIndex === phase.phaseIndex)
+          ?.wallMs ?? 0,
+      costUsd: phaseHandoffs.reduce(
+        (total, handoff) => total + handoff.costUsd,
+        0,
+      ),
     };
   });
 }
@@ -317,9 +332,9 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
           allDone = false;
           const nextStatus =
             Math.random() < 0.15
-              ? ACTIVE_STATUSES[
+              ? (ACTIVE_STATUSES[
                   Math.floor(Math.random() * ACTIVE_STATUSES.length)
-                ] ?? a.status
+                ] ?? a.status)
               : a.status;
           return { ...a, progress: next, status: nextStatus };
         });
@@ -356,8 +371,9 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
       if (live) {
         setSession(live);
         if (live.agents.length > 0) {
-          setSelectedAgentId((id) =>
-            live.agents.find((a) => a.id === id)?.id ?? live.agents[0]!.id,
+          setSelectedAgentId(
+            (id) =>
+              live.agents.find((a) => a.id === id)?.id ?? live.agents[0]!.id,
           );
         }
       }
@@ -413,8 +429,11 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
                 kind: "tool",
                 title: event.tool_name
                   ? `Tool: ${event.tool_name}`
-                  : event.message ?? "Tool call",
-                detail: event.tool_output_preview ?? event.tool_input_preview ?? event.message,
+                  : (event.message ?? "Tool call"),
+                detail:
+                  event.tool_output_preview ??
+                  event.tool_input_preview ??
+                  event.message,
                 sequence: event.sequence ?? undefined,
                 toolName: event.tool_name,
                 inputPreview: event.tool_input_preview,
@@ -437,7 +456,12 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
               id: `t-${Date.now().toString(36)}-${++traceSeqRef.current}`,
               agentId,
               timestamp: eventTimestamp(event),
-              kind: event.status === "running" ? "think" : isTerminal ? "write" : "tool",
+              kind:
+                event.status === "running"
+                  ? "think"
+                  : isTerminal
+                    ? "write"
+                    : "tool",
               title: event.subagent_name
                 ? `${event.subagent_name}: ${event.status}`
                 : `Task ${event.task_id}: ${event.status}`,
@@ -456,13 +480,16 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
                       status: agentStatus,
                       progress,
                       ...(event.duration_seconds != null
-                        ? { tokenUsed: Math.round(event.duration_seconds * 100) }
+                        ? {
+                            tokenUsed: Math.round(event.duration_seconds * 100),
+                          }
                         : {}),
                     }
                   : a,
               );
             } else {
-              const name = event.subagent_name ?? `Agent-${prev.agents.length + 1}`;
+              const name =
+                event.subagent_name ?? `Agent-${prev.agents.length + 1}`;
               agents = [
                 ...prev.agents,
                 {

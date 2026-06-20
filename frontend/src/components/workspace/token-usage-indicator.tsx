@@ -1,4 +1,3 @@
-
 import type { Message } from "@/core/api/types";
 import { CoinsIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, memo } from "react";
@@ -96,9 +95,7 @@ export const TokenUsageIndicator = memo(function TokenUsageIndicator({
           {tokensPerSec !== null && tokensPerSec > 0 && (
             <div className="flex justify-between gap-4">
               <span>{t.tokenUsage.speed}</span>
-              <span className="font-mono">
-                {tokensPerSec} tok/s
-              </span>
+              <span className="font-mono">{tokensPerSec} tok/s</span>
             </div>
           )}
           {usage && (
@@ -113,10 +110,15 @@ export const TokenUsageIndicator = memo(function TokenUsageIndicator({
                 <div
                   className={cn(
                     "h-full rounded-lg transition-all",
-                    usage.totalTokens > 80000 ? "bg-red-500 dark:bg-red-400" :
-                    usage.totalTokens > 50000 ? "bg-amber-500 dark:bg-amber-400" : "bg-green-500 dark:bg-green-400"
+                    usage.totalTokens > 80000
+                      ? "bg-red-500 dark:bg-red-400"
+                      : usage.totalTokens > 50000
+                        ? "bg-amber-500 dark:bg-amber-400"
+                        : "bg-green-500 dark:bg-green-400",
                   )}
-                  style={{ width: `${Math.min(100, (usage.totalTokens / 100000) * 100)}%` }}
+                  style={{
+                    width: `${Math.min(100, (usage.totalTokens / 100000) * 100)}%`,
+                  }}
                 />
               </div>
             </div>
@@ -126,4 +128,3 @@ export const TokenUsageIndicator = memo(function TokenUsageIndicator({
     </Tooltip>
   );
 });
-

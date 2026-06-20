@@ -130,7 +130,7 @@ export function useRefreshMoliliCredits() {
  * Today's daily-claim status from Molili. Only enabled when the user
  * actually has a Molili link (otherwise we'd 404 every mount).
  */
-export function useDailyClaimInfo(enabled: boolean = true) {
+export function useDailyClaimInfo(enabled = true) {
   return useQuery<MoliliDailyClaimInfo | null>({
     queryKey: dailyClaimKey,
     enabled,
@@ -177,7 +177,7 @@ export function useClaimDailyCredits() {
  * actually linked to Molili — otherwise we'd 404 every mount and
  * pollute query devtools with errors for non-linked users.
  */
-export function useMoliliGoods(enabled: boolean = true) {
+export function useMoliliGoods(enabled = true) {
   return useQuery<MoliliGoods[]>({
     queryKey: goodsKey,
     enabled,
@@ -208,7 +208,8 @@ export function useMoliliGoods(enabled: boolean = true) {
  */
 export function useCreatePaymentLink() {
   return useMutation<MoliliPaymentLinkResponse, Error, number>({
-    mutationFn: (goodsId: number) => moliliApi.orders.createPaymentLink(goodsId),
+    mutationFn: (goodsId: number) =>
+      moliliApi.orders.createPaymentLink(goodsId),
   });
 }
 

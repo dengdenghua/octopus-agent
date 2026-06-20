@@ -67,7 +67,12 @@ export function LocalAgentConnectDialog({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [aliases, setAliases] = useState<Record<string, string>>({});
 
-  const { data: partners = [], isLoading, isError, refetch } = useQuery({
+  const {
+    data: partners = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
     queryKey: ["agents", "local-partners"],
     queryFn: ({ signal }) => listLocalAgentPartners({ signal }),
     enabled: open,
@@ -79,7 +84,9 @@ export function LocalAgentConnectDialog({
     onSuccess: async (result) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["agents"] }),
-        queryClient.invalidateQueries({ queryKey: ["agents", "local-partners"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["agents", "local-partners"],
+        }),
       ]);
 
       if (result.registered_count > 0) {
@@ -88,7 +95,7 @@ export function LocalAgentConnectDialog({
         return;
       }
       if (result.already_exists_count > 0) {
-        toast.success("这些本地伙伴已经在人力池里了");
+        toast.success("这些本地伙伴已经在智能体库里了");
         onOpenChange(false);
         return;
       }
@@ -153,7 +160,8 @@ export function LocalAgentConnectDialog({
             接入本地伙伴
           </DialogTitle>
           <DialogDescription className="text-xs">
-            自动检测本机已安装的 Agent 工具，注册到人力池后就可以在团队任务里直接指派。
+            自动检测本机已安装的 Agent
+            工具，注册到智能体库后就可以在团队任务里直接指派。
           </DialogDescription>
         </DialogHeader>
 
@@ -167,7 +175,11 @@ export function LocalAgentConnectDialog({
             <div className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-xs text-muted-foreground">
               <AlertCircleIcon className="size-4 text-destructive" />
               本地伙伴检测失败
-              <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void refetch()}
+              >
                 重新检测
               </Button>
             </div>
@@ -176,7 +188,9 @@ export function LocalAgentConnectDialog({
               const Icon = PARTNER_ICONS[partner.id] ?? BotIcon;
               const checked = selectedSet.has(partner.id);
               const disabled =
-                !partner.detected || partner.registered || registerMutation.isPending;
+                !partner.detected ||
+                partner.registered ||
+                registerMutation.isPending;
               const badge = partnerBadge(partner);
               return (
                 <button
@@ -206,7 +220,9 @@ export function LocalAgentConnectDialog({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">{partner.name}</span>
+                      <span className="text-sm font-semibold">
+                        {partner.name}
+                      </span>
                       <Badge
                         variant="secondary"
                         className={cn(

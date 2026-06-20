@@ -36,7 +36,9 @@ const TOOL_COLORS: Record<string, string> = {
   fetch: "text-cyan-500",
 };
 
-function getToolLabels(t: { executionPanel: Record<string, string | undefined> }): Record<string, string> {
+function getToolLabels(t: {
+  executionPanel: Record<string, string | undefined>;
+}): Record<string, string> {
   return {
     read_file: t.executionPanel.readFile ?? "Read File",
     glob: t.executionPanel.searchFiles ?? "Search Files",
@@ -110,16 +112,16 @@ export function ExecutionPanel({
 
       <div className="flex items-center gap-2">
         {hasMetrics ? (
-        <div className="flex items-center gap-1">
-          <ActivityIcon className="size-3" />
-          <span>{t.streaming.iteration(metrics!.iteration!)}</span>
-        </div>
+          <div className="flex items-center gap-1">
+            <ActivityIcon className="size-3" />
+            <span>{t.streaming.iteration(metrics!.iteration!)}</span>
+          </div>
         ) : isLoading && showPrimaryStatus ? (
-        // Localized + single-source — the message body also renders a
-        // reasoning spinner in its header, so we don't want a second
-        // English "Thinking..." duplicate. Using i18n keeps this label
-        // in sync with the streaming indicator next to us.
-        <span className="text-muted-foreground">{t.streaming.thinking}</span>
+          // Localized + single-source — the message body also renders a
+          // reasoning spinner in its header, so we don't want a second
+          // English "Thinking..." duplicate. Using i18n keeps this label
+          // in sync with the streaming indicator next to us.
+          <span className="text-muted-foreground">{t.streaming.thinking}</span>
         ) : null}
 
         {(metrics?.tool_calls_count ?? 0) > 0 && (

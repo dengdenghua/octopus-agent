@@ -6,8 +6,19 @@ function sample(overrides: Partial<ReplayData> = {}): ReplayData {
   return {
     title: "Refactor the auth module",
     steps: [
-      { kind: "terminal", title: "run tests", subtitle: "pnpm test", body: "12 passed", status: "done" },
-      { kind: "file", title: "edit auth.ts", subtitle: "src/auth.ts", status: "done" },
+      {
+        kind: "terminal",
+        title: "run tests",
+        subtitle: "pnpm test",
+        body: "12 passed",
+        status: "done",
+      },
+      {
+        kind: "file",
+        title: "edit auth.ts",
+        subtitle: "src/auth.ts",
+        status: "done",
+      },
     ],
     footer: "2026-06-13",
     ...overrides,
@@ -47,7 +58,9 @@ describe("buildReplayHtml", () => {
 
   it("inlines an optional screenshot data-url", () => {
     const img = "data:image/png;base64,AAAA";
-    const html = buildReplayHtml(sample({ steps: [{ title: "shot", image: img }] }));
+    const html = buildReplayHtml(
+      sample({ steps: [{ title: "shot", image: img }] }),
+    );
     expect(html).toContain(img);
   });
 
@@ -71,14 +84,18 @@ describe("buildReplayHtml", () => {
   });
 
   it("escapes the title in page chrome (no markup injection)", () => {
-    const html = buildReplayHtml(sample({ title: "</title><img src=x onerror=alert(1)>" }));
+    const html = buildReplayHtml(
+      sample({ title: "</title><img src=x onerror=alert(1)>" }),
+    );
     expect(html).not.toContain("<img src=x onerror=alert(1)>");
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
   });
 
   it("neutralises step content that tries to close the script early", () => {
     const html = buildReplayHtml(
-      sample({ steps: [{ title: "x", body: "</script><script>alert(1)</script>" }] }),
+      sample({
+        steps: [{ title: "x", body: "</script><script>alert(1)</script>" }],
+      }),
     );
     expect(html).not.toContain("</script><script>alert(1)");
     expect(html).toContain("<\\/script>");

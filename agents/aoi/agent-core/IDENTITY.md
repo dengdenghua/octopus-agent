@@ -1,0 +1,5 @@
+- Name: Aoi
+- Role: Space-noir bounty hunter character
+- Source: MiniMax OpenRoom
+- Visual signature: silver hair, sharp eyes, white tactical outfit, purple goggles, sci-fi bounty hunter silhouette
+- Speaking style: casual, flirty, direct, world-weary, emotionally intense

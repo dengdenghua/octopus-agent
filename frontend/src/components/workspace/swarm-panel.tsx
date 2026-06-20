@@ -36,7 +36,8 @@ interface SwarmState {
 }
 
 function authHeaders(): Record<string, string> {
-  if (typeof window === "undefined" || import.meta.env.MODE === "test") return {};
+  if (typeof window === "undefined" || import.meta.env.MODE === "test")
+    return {};
   const token = window.localStorage.getItem("octopus:token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -76,7 +77,8 @@ export function SwarmPanel() {
   );
   const statusConfig = useCallback(
     (status: string): StatusEntry =>
-      (STATUS_CONFIG as Record<string, StatusEntry>)[status] ?? STATUS_CONFIG.pending,
+      (STATUS_CONFIG as Record<string, StatusEntry>)[status] ??
+      STATUS_CONFIG.pending,
     [STATUS_CONFIG],
   );
 
@@ -210,7 +212,9 @@ export function SwarmPanel() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <BotIcon className="h-4 w-4 text-muted-foreground" />
-                    <CardTitle className="text-base">{task.agent_name}</CardTitle>
+                    <CardTitle className="text-base">
+                      {task.agent_name}
+                    </CardTitle>
                   </div>
                   {(() => {
                     const sc = statusConfig(task.status);
@@ -224,7 +228,9 @@ export function SwarmPanel() {
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground mb-2">{task.goal}</p>
+                <p className="text-sm text-muted-foreground mb-2">
+                  {task.goal}
+                </p>
                 {task.progress !== undefined && (
                   <Progress value={task.progress} className="h-2" />
                 )}

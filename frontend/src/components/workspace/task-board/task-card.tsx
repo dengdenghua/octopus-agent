@@ -26,7 +26,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useI18n } from "@/core/i18n/hooks";
-import type { BoardStatus, TaskType, UnifiedTask } from "@/core/task-board/types";
+import type {
+  BoardStatus,
+  TaskType,
+  UnifiedTask,
+} from "@/core/task-board/types";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -53,32 +57,38 @@ const STATUS_STYLE: Record<
 > = {
   queued: {
     dotColor: "bg-slate-400",
-    badgeClass: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+    badgeClass:
+      "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
     icon: <ClockIcon className="size-3" />,
   },
   running: {
     dotColor: "bg-amber-500",
-    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    badgeClass:
+      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
     icon: <Loader2Icon className="size-3 animate-spin" />,
   },
   paused: {
     dotColor: "bg-amber-400",
-    badgeClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    badgeClass:
+      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
     icon: <PauseIcon className="size-3" />,
   },
   completed: {
     dotColor: "bg-emerald-500",
-    badgeClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    badgeClass:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
     icon: <CheckCircle2Icon className="size-3" />,
   },
   failed: {
     dotColor: "bg-red-500",
-    badgeClass: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+    badgeClass:
+      "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
     icon: <AlertCircleIcon className="size-3" />,
   },
   cancelled: {
     dotColor: "bg-gray-400",
-    badgeClass: "bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20",
+    badgeClass:
+      "bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20",
     icon: <XIcon className="size-3" />,
   },
 };
@@ -97,7 +107,12 @@ export function formatDurationMs(ms: number): string {
 
 export function formatRelativeTime(
   isoString: string,
-  translations?: { justNow: string; minutesAgo: string; hoursAgo: string; daysAgo: string },
+  translations?: {
+    justNow: string;
+    minutesAgo: string;
+    hoursAgo: string;
+    daysAgo: string;
+  },
 ): string {
   if (!isoString) return "";
   const now = Date.now();
@@ -105,8 +120,10 @@ export function formatRelativeTime(
   const diff = now - ts;
   if (diff < 0) return translations?.justNow ?? "just now";
   if (diff < 60_000) return translations?.justNow ?? "just now";
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}${translations?.minutesAgo ?? "m ago"}`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}${translations?.hoursAgo ?? "h ago"}`;
+  if (diff < 3_600_000)
+    return `${Math.floor(diff / 60_000)}${translations?.minutesAgo ?? "m ago"}`;
+  if (diff < 86_400_000)
+    return `${Math.floor(diff / 3_600_000)}${translations?.hoursAgo ?? "h ago"}`;
   return `${Math.floor(diff / 86_400_000)}${translations?.daysAgo ?? "d ago"}`;
 }
 
@@ -229,7 +246,9 @@ export function TaskCard({
         {isRunning && task.progress_pct > 0 && (
           <div className="mt-2">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-muted-foreground">{t.taskBoard.progress}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {t.taskBoard.progress}
+              </span>
               <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">
                 {Math.round(task.progress_pct)}%
               </span>
@@ -258,16 +277,22 @@ export function TaskCard({
           <div className="mt-3 space-y-1.5 border-t pt-2 text-xs text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-200">
             <div className="flex justify-between">
               <span>{t.taskBoard.type}</span>
-              <span className="font-medium text-foreground">{TYPE_LABELS[task.type]}</span>
+              <span className="font-medium text-foreground">
+                {TYPE_LABELS[task.type]}
+              </span>
             </div>
             <div className="flex justify-between">
               <span>{t.taskBoard.status}</span>
-              <span className="font-medium text-foreground">{STATUS_LABELS[task.status]}</span>
+              <span className="font-medium text-foreground">
+                {STATUS_LABELS[task.status]}
+              </span>
             </div>
             {task.phase && (
               <div className="flex justify-between">
                 <span>{t.taskBoard.phase}</span>
-                <span className="font-medium text-foreground">{task.phase}</span>
+                <span className="font-medium text-foreground">
+                  {task.phase}
+                </span>
               </div>
             )}
             {task.duration_ms > 0 && (

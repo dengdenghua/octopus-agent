@@ -1,4 +1,5 @@
 """Shared browser session state for UI preview and automation surfaces."""
+
 from __future__ import annotations
 
 import time
@@ -10,7 +11,15 @@ _SETTING_KEYS = {
     "browser_regression_mode",
     "browser_regression_preview_url",
     "browser_regression_requires_visible_cursor",
+    "viewport_width",
+    "viewport_height",
 }
+
+_DEFAULT_VIEWPORT_WIDTH = 1440
+_DEFAULT_VIEWPORT_HEIGHT = 900
+_MIN_VIEWPORT_WIDTH = 240
+_MIN_VIEWPORT_HEIGHT = 160
+_MAX_VIEWPORT_SIZE = 4096
 
 
 class BrowserSessionCenter:
@@ -61,6 +70,8 @@ class BrowserSessionCenter:
                 "last_activity": now,
                 "action_count": 0,
                 "headless": self._config_state["headless"] if headless is None else bool(headless),
+                "viewport_width": self._default_viewport_width(),
+                "viewport_height": self._default_viewport_height(),
                 "current_url": "",
                 "current_title": "",
                 "history": [],
@@ -89,6 +100,8 @@ class BrowserSessionCenter:
             session.setdefault("uses_system_mouse", False)
             session.setdefault("desktop_lease_required", False)
             session.setdefault("profile_dir", "")
+            session.setdefault("viewport_width", self._default_viewport_width())
+            session.setdefault("viewport_height", self._default_viewport_height())
         return session
 
     def get(self, session_id: str) -> dict[str, Any] | None:
@@ -108,15 +121,86 @@ class BrowserSessionCenter:
                 session[key] = str(value or "off")
             elif key == "browser_regression_preview_url":
                 session[key] = str(value or "")
+            elif key == "viewport_width":
+                session[key] = self._coerce_viewport_int(
+                    value,
+                    minimum=_MIN_VIEWPORT_WIDTH,
+                    fallback=self._default_viewport_width(),
+                )
+            elif key == "viewport_height":
+                session[key] = self._coerce_viewport_int(
+                    value,
+                    minimum=_MIN_VIEWPORT_HEIGHT,
+                    fallback=self._default_viewport_height(),
+                )
 
-    def record_action(self, session: dict[str, Any], action: str, detail: str) -> None:
+    def record_action(
+        self,
+        session: dict[str, Any],
+        action: str,
+        detail: str,
+        *,
+        status: str = "ok",
+        error: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         session["last_activity"] = self.now()
         session["action_count"] = int(session.get("action_count", 0)) + 1
-        session.setdefault("actions", []).append({
-            "action": action,
-            "detail": detail,
-            "timestamp": session["last_activity"],
-        })
+        session.setdefault("actions", []).append(
+            {
+                "action": action,
+                "detail": detail,
+                "status": status,
+                "error": error,
+                "timestamp": session["last_activity"],
+                "metadata": metadata or {},
+            }
+        )
+        if len(session["actions"]) > 500:
+            session["actions"] = session["actions"][-500:]
+
+    def health_report(self, session_id: str, *, limit: int = 10) -> dict[str, Any]:
+        normalized = self._normalize_session_id(session_id)
+        session = self.get(normalized)
+        if session is None:
+            return {
+                "schema": "octopus.browser_session_health.v1",
+                "exists": False,
+                "healthy": False,
+                "score": 0.0,
+                "issues": ["session_missing"],
+                "session": self.missing_snapshot(normalized),
+                "recent_actions": [],
+                "replay_ready": False,
+            }
+        snapshot = self.snapshot(session)
+        actions = list(session.get("actions") or [])
+        recent = actions[-max(1, limit) :]
+        now = self.now()
+        stale_seconds = max(0, now - int(snapshot.get("last_activity") or now))
+        issues: list[str] = []
+        if not snapshot["healthy"]:
+            issues.append("session_unhealthy")
+        if bool(session.get("recovered_from_crash")):
+            issues.append("recovered_from_crash")
+        if not actions:
+            issues.append("no_actions_recorded")
+        elif str(actions[-1].get("status") or "ok") != "ok":
+            issues.append("last_action_failed")
+        if stale_seconds > 300:
+            issues.append("stale_session")
+        score = max(0.0, round(1.0 - (0.2 * len(issues)), 3))
+        return {
+            "schema": "octopus.browser_session_health.v1",
+            "exists": True,
+            "healthy": not issues,
+            "score": score,
+            "issues": issues,
+            "session": snapshot,
+            "recent_actions": recent,
+            "stale_seconds": stale_seconds,
+            "replay_ready": bool(actions),
+        }
 
     def snapshot(self, session: dict[str, Any]) -> dict[str, Any]:
         page = session.get("page")
@@ -134,6 +218,10 @@ class BrowserSessionCenter:
             "last_activity": int(session.get("last_activity") or 0),
             "action_count": int(session.get("action_count") or 0),
             "headless": bool(session.get("headless")),
+            "viewport_width": int(session.get("viewport_width") or self._default_viewport_width()),
+            "viewport_height": int(
+                session.get("viewport_height") or self._default_viewport_height()
+            ),
             "mode": mode,
             "runtime": mode,
             "has_page": page is not None,
@@ -142,7 +230,9 @@ class BrowserSessionCenter:
             "current_title": str(session.get("current_title") or ""),
             "browser_regression_enabled": bool(session.get("browser_regression_enabled")),
             "browser_regression_mode": str(session.get("browser_regression_mode") or "off"),
-            "browser_regression_preview_url": str(session.get("browser_regression_preview_url") or ""),
+            "browser_regression_preview_url": str(
+                session.get("browser_regression_preview_url") or ""
+            ),
             "browser_regression_requires_visible_cursor": bool(
                 session.get("browser_regression_requires_visible_cursor")
             ),
@@ -162,6 +252,8 @@ class BrowserSessionCenter:
             "last_activity": 0,
             "action_count": 0,
             "headless": bool(self._config_state["headless"]),
+            "viewport_width": self._default_viewport_width(),
+            "viewport_height": self._default_viewport_height(),
             "mode": "closed",
             "runtime": "closed",
             "has_page": False,
@@ -197,3 +289,25 @@ class BrowserSessionCenter:
         safe = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "-" for ch in raw)
         safe = "-".join(part for part in safe.split("-") if part)
         return safe[:80] or "default"
+
+    def _default_viewport_width(self) -> int:
+        return self._coerce_viewport_int(
+            self._config_state.get("viewport_width"),
+            minimum=_MIN_VIEWPORT_WIDTH,
+            fallback=_DEFAULT_VIEWPORT_WIDTH,
+        )
+
+    def _default_viewport_height(self) -> int:
+        return self._coerce_viewport_int(
+            self._config_state.get("viewport_height"),
+            minimum=_MIN_VIEWPORT_HEIGHT,
+            fallback=_DEFAULT_VIEWPORT_HEIGHT,
+        )
+
+    @staticmethod
+    def _coerce_viewport_int(value: Any, *, minimum: int, fallback: int) -> int:
+        try:
+            coerced = int(value)
+        except (TypeError, ValueError):
+            return fallback
+        return max(minimum, min(_MAX_VIEWPORT_SIZE, coerced))
