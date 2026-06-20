@@ -446,15 +446,26 @@ class TestHealthCheck:
             time.sleep(0.05)
             return True
 
-        reg = HealthRegistry(parallel=True)
-        for i in range(5):
-            reg.register(HealthCheck(name=f"s{i}", check=slow, timeout_seconds=2))
-        started = time.time()
-        result = reg.probe()
-        elapsed = time.time() - started
-        assert result["status"] == "pass"
-        # Parallel: ~0.05s not ~0.25s.
-        assert elapsed < 0.2
+        def _timed_probe(*, parallel: bool) -> float:
+            reg = HealthRegistry(parallel=parallel)
+            for i in range(5):
+                reg.register(
+                    HealthCheck(name=f"s{i}", check=slow, timeout_seconds=2)
+                )
+            started = time.time()
+            result = reg.probe()
+            assert result["status"] == "pass"
+            return time.time() - started
+
+        # Compare parallel vs sequential RELATIVELY rather than against a
+        # fixed wall-clock budget. Under full-suite CPU contention an
+        # absolute threshold (e.g. ``< 0.2s``) flakes; the ratio is robust
+        # because both modes inflate proportionally. 5×50ms checks:
+        # parallel ~50ms vs sequential ~250ms, so a 0.6 ceiling keeps a
+        # comfortable ~3× margin while still proving concurrency happened.
+        parallel_elapsed = _timed_probe(parallel=True)
+        sequential_elapsed = _timed_probe(parallel=False)
+        assert parallel_elapsed < sequential_elapsed * 0.6
 
     def test_unregister_removes_check(self):
         from runtime.platform.observability.health import HealthCheck, HealthRegistry
