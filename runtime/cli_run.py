@@ -20,6 +20,7 @@ from runtime.core.graph_runtime import GraphRuntime
 from runtime.execution.arms import Arm, ArmPool
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.swarm import SwarmResult, SwarmRuntime
+from runtime.execution.swarm.drive import run_swarm
 from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.journal import InMemoryJournal, Journal, JSONLJournal
 from runtime.platform.i18n import _
@@ -35,7 +36,7 @@ from runtime.platform.models import (
     TaskNode,
 )
 from runtime.safety.auth import TrustEngine
-from runtime.safety.chromatophores import BoidsArbitrator, SignalBus
+from runtime.safety.chromatophores import SignalBus
 
 
 def run_goal(
@@ -136,19 +137,17 @@ def run_goal(
 
         runtime = GraphRuntime(executor=executor, journal=journal)
         signal_bus = SignalBus()
-        boids = BoidsArbitrator(signal_bus=signal_bus)
         pool = _build_arm_pool(runtime, signal_bus=signal_bus)
-        swarm_runtime = SwarmRuntime(
-            arm_pool=pool,
-            signal_bus=signal_bus,
-            boids=boids,
-            journal=journal,
-            max_workers=max_workers,
-        )
 
         t_exec_start = time.monotonic()
-        result: SwarmResult = swarm_runtime.run(
-            graph=graph, budget=budget, split_strategy=strategy
+        result: SwarmResult = run_swarm(
+            graph,
+            budget,
+            arm_pool=pool,
+            signal_bus=signal_bus,
+            journal=journal,
+            max_workers=max_workers,
+            split_strategy=strategy,
         )
         total_exec_ms = (time.monotonic() - t_exec_start) * 1000
 
