@@ -188,51 +188,75 @@ def create_mcp_router(
             return {"ok": False, "error": "registry not ready"}
         try:
             from runtime.adapters.mcp_client import (
+                HttpMCPClient,
                 MCPServerConfig,
                 PersistentStdioMCPClient,
                 register_mcp_tools_as_skills,
             )
-            from runtime.adapters.mcp_client.client import STDIO_AVAILABLE
+            from runtime.adapters.mcp_client.client import (
+                HTTP_AVAILABLE,
+                STDIO_AVAILABLE,
+            )
         except ImportError as e:
             return {"ok": False, "error": f"mcp_client import failed: {e}"}
-        if not STDIO_AVAILABLE:
-            return {"ok": False, "error": "mcp SDK not installed (pip install mcp)"}
 
         preset = MCP_PRESETS.get(name, {})
-        command = entry.get("command") or preset.get("command")
-        args = entry.get("args") or preset.get("args", [])
-        # env layers (later wins): preset → molili bridge → user env.
-        bridge_env: dict[str, str] = {}
-        if entry.get("bridge") == "molili" or preset.get("bridge") == "molili":
-            bridge_env = _resolve_molili_bridge_env(request)
-        env = {
-            **preset.get("env", {}),
-            **bridge_env,
-            **(entry.get("env") or {}),
-        }
+        transport = str(entry.get("transport") or preset.get("transport") or "stdio")
+        url = str(entry.get("url") or preset.get("url") or "")
+        is_remote = transport in ("http", "sse") or bool(url)
         name_prefix = (
-            entry.get("name_prefix")
-            or preset.get("name_prefix")
-            or name
+            entry.get("name_prefix") or preset.get("name_prefix") or name
         )
-        if not command:
-            return {
-                "ok": False,
-                "error": (
-                    f"no command configured for {name!r} "
-                    "(not a known preset)"
-                ),
+
+        if is_remote:
+            # Remote (streamable-http / SSE) server.
+            if not HTTP_AVAILABLE:
+                return {"ok": False, "error": "mcp SDK not installed (pip install mcp)"}
+            if not url:
+                return {"ok": False, "error": f"no url configured for remote MCP {name!r}"}
+            config = MCPServerConfig(
+                name=name,
+                transport=transport if transport in ("http", "sse") else "http",
+                url=url,
+                headers=dict(entry.get("headers") or {}),
+            )
+            summary: dict[str, Any] = {"transport": transport, "url": url}
+        else:
+            # Local stdio (subprocess) server.
+            if not STDIO_AVAILABLE:
+                return {"ok": False, "error": "mcp SDK not installed (pip install mcp)"}
+            command = entry.get("command") or preset.get("command")
+            args = entry.get("args") or preset.get("args", [])
+            # env layers (later wins): preset → molili bridge → user env.
+            bridge_env: dict[str, str] = {}
+            if entry.get("bridge") == "molili" or preset.get("bridge") == "molili":
+                bridge_env = _resolve_molili_bridge_env(request)
+            env = {
+                **preset.get("env", {}),
+                **bridge_env,
+                **(entry.get("env") or {}),
             }
+            if not command:
+                return {
+                    "ok": False,
+                    "error": (
+                        f"no command configured for {name!r} "
+                        "(not a known preset)"
+                    ),
+                }
+            config = MCPServerConfig(
+                name=name, command=command, args=list(args), env=dict(env),
+            )
+            summary = {"command": command, "args": list(args), "env": dict(env)}
 
         before = set(registry.all_names())
         client = None
         try:
-            client = PersistentStdioMCPClient(MCPServerConfig(
-                name=name,
-                command=command,
-                args=list(args),
-                env=dict(env),
-            ))
+            client = (
+                HttpMCPClient(config)
+                if is_remote
+                else PersistentStdioMCPClient(config)
+            )
             # Production path · enforce user trust approval. The
             # frontend Settings → MCP page surfaces an "Approve" CTA
             # that calls ``/api/mcp/trust``; until then the bridge
@@ -242,11 +266,10 @@ def create_mcp_router(
                 require_trust=True, server_name=name,
             )
         except Exception as e:  # noqa: BLE001
-            # MCP subprocess spawn can fail in dozens of ways
-            # (missing binary, network error to npm, permission
-            # denied on the spawn, server handshake timeout) · we
-            # bundle them all into the UI-visible error string
-            # rather than fail the whole PUT.
+            # Spawn / connection can fail in dozens of ways (missing
+            # binary, npm network error, bad url, handshake timeout) ·
+            # bundle them into the UI-visible error string rather than
+            # fail the whole PUT.
             if client is not None:
                 with contextlib.suppress(Exception):
                     client.close()
@@ -255,11 +278,9 @@ def create_mcp_router(
         added = sorted(after - before)
         mcp_runtime[name] = {
             "skills": added,
-            "command": command,
-            "args": list(args),
-            "env": dict(env),
             "name_prefix": name_prefix,
             "client": client,
+            **summary,
         }
         return {"ok": True, "registered": added}
 
@@ -308,8 +329,12 @@ def create_mcp_router(
                     or ""
                 ),
             }
-            # Pass-through known fields.
-            for key in ("command", "args", "env", "name_prefix", "bridge"):
+            # Pass-through known fields (stdio: command/args/env;
+            # remote: transport/url/headers).
+            for key in (
+                "command", "args", "env", "name_prefix", "bridge",
+                "transport", "url", "headers",
+            ):
                 if key in payload:
                     entry[key] = payload[key]
             normalized[name] = entry
