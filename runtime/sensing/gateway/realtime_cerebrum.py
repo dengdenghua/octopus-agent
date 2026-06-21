@@ -110,6 +110,9 @@ from runtime.sensing.gateway.realtime_react_stream import (
     _try_reflex_reply as _try_reflex_reply,
 )
 from runtime.sensing.gateway.realtime_team_stream import (
+    _drive_swarm_mesh as _drive_swarm_mesh,
+)
+from runtime.sensing.gateway.realtime_team_stream import (
     _drive_team_topology as _drive_team_topology,
 )
 from runtime.sensing.gateway.realtime_thread_history import (
@@ -870,6 +873,17 @@ class CerebrumRuntime:
         await _drive_team_topology(
             self, turn, log, emitter, intent, text=text, topology_id=topology_id
         )
+
+    async def _drive_swarm_mesh(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        intent: ParsedIntent,
+        *,
+        text: str,
+    ) -> None:
+        await _drive_swarm_mesh(self, turn, log, emitter, intent, text=text)
 
     async def _drive_react(
         self,

@@ -611,3 +611,114 @@ async def _drive_team_topology(
                 "turn_id": turn.id,
             },
         )
+
+
+async def _drive_swarm_mesh(
+    runtime: Any,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    intent: ParsedIntent,
+    *,
+    text: str,
+) -> None:
+    """Drive a swarm-mode turn through the boids/SignalBus MESH swarm.
+
+    The serve "swarm mode" normally runs the sequential ``TeamRunner``; with
+    ``OCTOPUS_SERVE_MESH`` on it routes here instead, into ``SwarmRuntime`` —
+    parallel arms over a registry-derived pool, with boids arbitration and
+    live Arm-to-Arm ``SignalBus`` coordination. Falls back to single-agent
+    react on ANY error so a mesh problem never takes down the turn.
+    """
+    import asyncio
+
+    async def _emit(body: str) -> None:
+        item = AgentMessageItem(text=body, status=ItemStatus.COMPLETED)
+        turn.items.append(item)
+        with contextlib.suppress(Exception):
+            log.item_started(turn.thread_id, turn.id, item)
+            log.item_completed(turn.thread_id, turn.id, item)
+        payload = {
+            "threadId": turn.thread_id,
+            "turnId": turn.id,
+            "item": item.model_dump(by_alias=True, mode="json"),
+        }
+        with contextlib.suppress(Exception):
+            await emitter.notify(ServerMethod.ITEM_STARTED, payload)
+            await emitter.notify(ServerMethod.ITEM_COMPLETED, payload)
+
+    async def _fallback_to_react() -> None:
+        loop = asyncio.get_running_loop()
+        gateway_provider = GatewayApprovalProvider(
+            emitter,
+            loop,
+            thread_id=intent.user_context.get("thread_id", turn.thread_id),
+            turn_id=turn.id,
+            trace_store=runtime._trace_store,
+        )
+        provider = runtime._wrap_with_policy(gateway_provider)
+        from runtime.protocol.items import TurnParams
+
+        agent = None
+        with contextlib.suppress(Exception):
+            agent = runtime._resolve_agent(
+                TurnParams(threadId=turn.thread_id, input=[]),  # type: ignore[call-arg]
+            )
+        await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+
+    def _producer() -> Any:
+        from runtime.core.graph_runtime import GraphRuntime
+        from runtime.execution.swarm.drive import (
+            build_arm_pool_from_registry,
+            run_swarm,
+        )
+        from runtime.memory.journal.journal_context import journal_context
+        from runtime.platform.models import Budget, BudgetLimits
+        from runtime.platform.process.session import Session, session_scope
+        from runtime.safety.chromatophores import SignalBus
+
+        stack = runtime._stack
+        turn_session = Session(
+            agent=None,
+            thread_id=turn.thread_id,
+            conversation_id=turn.thread_id,
+            turn_id=turn.id,
+            metadata=dict(intent.user_context or {}),
+        )
+        with session_scope(turn_session), journal_context(conversation_id=turn.thread_id):
+            graph = stack.planner.plan(intent)
+            grt = GraphRuntime(executor=stack.executor, journal=stack.journal)
+            sb = SignalBus()
+            pool = build_arm_pool_from_registry(stack.registry, grt, signal_bus=sb)
+            budget = Budget(
+                task_id=graph.task_id,
+                limits=BudgetLimits(tokens=200_000, usd=2.0),
+            )
+            strategy = "topo_layers" if getattr(graph, "edges", None) else "per_node"
+            signals: list[Any] = []
+            result = run_swarm(
+                graph, budget, arm_pool=pool, signal_bus=sb,
+                journal=stack.journal, split_strategy=strategy,
+                on_signal=signals.append,
+            )
+            return result, len(signals)
+
+    try:
+        result, signal_count = await asyncio.to_thread(_producer)
+        arms = list(getattr(result, "arm_results", []) or [])
+        for arm in arms:
+            reason = str(getattr(arm, "reason", "") or "")[:4000]
+            await _emit(
+                f"[{getattr(arm, 'arm_id', 'arm')}] "
+                f"{getattr(arm, 'status', '?')} · {reason}"
+            )
+        await _emit(
+            f"mesh swarm complete · {len(arms)} arm(s) · "
+            f"{signal_count} coordination signal(s)"
+        )
+    except Exception as exc:  # noqa: BLE001 — never break the turn on a mesh fault
+        _logger.warning(
+            "mesh swarm failed (%s: %s) — falling back to react",
+            type(exc).__name__, exc,
+        )
+        await _fallback_to_react()
