@@ -1404,15 +1404,13 @@ export const jaJP: Translations = {
     },
     events: {
       runStarted: "Task started",
-      roleStarted: (role) =>
-        role ? `${role} started` : "Role started",
+      roleStarted: (role) => (role ? `${role} started` : "Role started"),
       roleCompleted: (role) =>
         role ? `${role} completed` : "A role completed",
       runDone: "Task completed, artifacts written back",
       runFailed: "Task failed",
       runCancelled: "Task cancelled",
-      fallback: (role) =>
-        role ? `${role} updated` : "Task updated",
+      fallback: (role) => (role ? `${role} updated` : "Task updated"),
     },
     roles: {
       planner: "Planner",
@@ -2942,130 +2940,135 @@ export const jaJP: Translations = {
       selectFree: "Select Free",
       subscribe: "Subscribe",
     },
-  },
-
-  modelSettings: {
-    title: "Models",
-    customModels: "Custom Models",
-    addCustomModel: "Add Custom Model",
-    emptyCustomModels: "No custom models configured yet.",
-    externalModelRisk:
-      "Adding an external model means you understand and agree to assume the associated risks.",
-    provider: "Provider",
-    modelId: "Model ID",
-    modelIdPlaceholder: "e.g. gpt-4o-mini",
-    displayName: "Display Name",
-    displayNamePlaceholder: "e.g. My Model",
-    providerLabel: "プロバイダ",
-    providerAutoHint: "Base URL から自動検出",
-    apiKey: "API Key",
-    apiKeyPlaceholder: "Enter API key",
-    getApiKey: "Get API Key →",
-    customModel: "Custom",
-    fillModelId: "Fill this Model ID",
-    apiProtocol: "API Protocol",
-    baseUrlLabel: "Base URL",
-    baseUrlPlaceholder: "https://api.openai.com/v1",
-    extraHeadersTitle: "Custom HTTP Headers (optional)",
-    extraHeadersPlaceholder:
-      "User-Agent: claude-cli/1.0.0 (external, cli)\nX-Custom-Key: value",
-    extraHeadersHint:
-      "One per line as Header-Name: value. Needed for APIs that gate on User-Agent (e.g. Kimi Coding).",
-    requiredFields: "Model ID, API Key, and Base URL are required",
-    fillRequiredBeforeTest: "Fill in Model ID, API Key, and Base URL first",
-    testEndpointHint: "Sends a real request to verify the endpoint.",
-    taglineCostBalance: "Balanced effect and cost",
-    taglineBestEffect: "Best effect",
-    taglineBestValue: "Best value",
-    taglineGoodValue: "Good value",
-    updateFailed: "Failed to update",
-    networkError: "Network error",
-    editModelTitle: (name: string) => `Edit: ${name}`,
-    keepApiKeyHint: "API Key (leave empty to keep current value)",
-    saveSuccess: "Saved successfully",
-    testSuccess: "Connection test succeeded",
-    testFailed: "Connection test failed",
-    diagnoseHealthy: "Diagnosis complete: all services are healthy.",
-    diagnoseIssues: (issues: string) => `Diagnosis found issues: ${issues}`,
-    deleteConfirm: (name: string) => `モデル「${name}」は完全に削除されます。`,
-    deleteModelTitle: "モデルを削除",
-    gatewayReturned: (status: number) => `Gateway returned ${status}`,
-    cannotReachGateway: "Cannot reach Gateway API",
-    current: "Current",
-    setDefault: "Set Default",
-    edit: "Edit",
-    gatewayUrl: "Gateway URL",
-    connected: "Connected",
-    disconnected: "Disconnected",
-    reconnect: "Reconnect",
-    maxTokensLabel: "Max Tokens",
-    thinkingLabel: "Thinking",
-    visionLabel: "Vision",
-    resetConnection: "Reset Connection",
-    diagnose: "Diagnose",
-    port: "Port",
-    portDescription:
-      "Changing the port will restart the Gateway automatically. If the default port is occupied, the system will try adjacent ports.",
-    connectionHelp: "If the connection is abnormal, try the following:",
-    connectionHelpReconnect:
-      "Reconnect — Lightest option. Disconnects and reconnects without affecting any settings.",
-    connectionHelpReset:
-      "Reset Connection — Clears connection state and restarts the service. Active conversations will be interrupted.",
-    connectionHelpDiagnose:
-      "Diagnose — Detects and repairs configuration issues. May clear manually added custom model configurations during repair.",
-    // Additional fields for model settings page
-    loadFailed: "Failed to load models",
-    setDefaultSuccess: "Set as system default",
-    setDefaultFailed: "Failed to set default",
-    deleteSuccess: "Model deleted",
-    deleteFailed: "Failed to delete model",
-    systemDefault: "System Default",
-    setAsDefault: "Set as Default",
-    backendUrlHint:
-      "Current gateway URL. Use VITE_BACKEND_BASE_URL env var to change.",
-    setDefaultHint:
-      "Click 'Set as Default' in the custom models list to switch system default.",
-    noOfficialModels: "No official models found",
-    moliliHosted: "Hosted by the official model gateway",
-    notBound: "Not logged in",
-    gatewayDisabled: "Official model gateway disabled",
-    moliliNotLinked: "Account not linked",
-    moliliNotEnabled: "Official model gateway not enabled",
-    officialModels: "公式モデル",
-    officialModelsHint:
-      "公式モデルはシステム側でホスティングされており、APIキーの設定は不要です",
-    // Count label shown next to each custom model row.
-    modelCount: (count: number) => `${count} 個のモデル`,
-    // Open-ended model id list · index 0 = picker default, index -1 =
-    // strongest slot for Auto mode's performance verdict.
-    modelList: {
-      label: "モデル一覧",
-      hint: "先頭のエントリが選択ツールの既定値、末尾のエントリが Auto モードの高性能ティアで使用されます。「Model list」形式で自由に追加・削除できます。",
-      addButton: "モデル ID を追加",
-      removeTooltip: "このモデル ID を削除",
-      empty: "モデル ID は1つ以上必要です",
-    },
-    localModels: {
-      title: "ローカルモデル",
-      subtitle:
-        "本機の Ollama / LM Studio / vLLM / llama.cpp などをワンクリックで検出します。検出した行をインポートすれば、Auto モードの「local」ティアが base URL を手入力することなくそちらへルーティングします。",
-      scanButton: "ローカルサービスをスキャン",
-      scanButtonScanning: "スキャン中…",
-      empty: "ローカルサービスが見つかりません",
-      emptyHint:
-        "先に Ollama / LM Studio / vLLM / llama.cpp を起動し、もう一度「ローカルサービスをスキャン」をクリックしてください。",
-      modelsCount: (n: number) => `${n} モデル`,
-      importButton: "インポート",
-      importingButton: "インポート中…",
-      imported: "カスタムモデルにインポートしました",
-      importFailed: "インポートに失敗しました",
-      serviceStatus: {
-        ok: "オンライン",
-        empty: "オンライン · モデル未検出",
-        error: "エラー",
+    model: {
+      title: "Models",
+      customModels: "Custom Models",
+      addCustomModel: "Add Custom Model",
+      emptyCustomModels: "No custom models configured yet.",
+      externalModelRisk:
+        "Adding an external model means you understand and agree to assume the associated risks.",
+      provider: "Provider",
+      modelIdPlaceholder: "e.g. gpt-4o-mini",
+      displayName: "Display Name",
+      displayNamePlaceholder: "e.g. My Model",
+      providerLabel: "プロバイダ",
+      providerAutoHint: "Base URL から自動検出",
+      apiKey: "API Key",
+      apiKeyPlaceholder: "Enter API key",
+      getApiKey: "Get API Key →",
+      fillModelId: "Fill this Model ID",
+      apiProtocol: "API Protocol",
+      baseUrlLabel: "Base URL",
+      baseUrlPlaceholder: "https://api.openai.com/v1",
+      extraHeadersTitle: "Custom HTTP Headers (optional)",
+      extraHeadersPlaceholder:
+        "User-Agent: claude-cli/1.0.0 (external, cli)\nX-Custom-Key: value",
+      extraHeadersHint:
+        "One per line as Header-Name: value. Needed for APIs that gate on User-Agent (e.g. Kimi Coding).",
+      requiredFields: "Model ID, API Key, and Base URL are required",
+      fillRequiredBeforeTest: "Fill in Model ID, API Key, and Base URL first",
+      testEndpointHint: "Sends a real request to verify the endpoint.",
+      updateFailed: "Failed to update",
+      networkError: "Network error",
+      editModelTitle: (name: string) => `Edit: ${name}`,
+      keepApiKeyHint: "API Key (leave empty to keep current value)",
+      saveSuccess: "Saved successfully",
+      testFailed: "Connection test failed",
+      diagnoseHealthy: "Diagnosis complete: all services are healthy.",
+      diagnoseIssues: (issues: string) => `Diagnosis found issues: ${issues}`,
+      deleteConfirm: (name: string) => `モデル「${name}」は完全に削除されます。`,
+      deleteModelTitle: "モデルを削除",
+      gatewayReturned: (status: number) => `Gateway returned ${status}`,
+      cannotReachGateway: "Cannot reach Gateway API",
+      gatewayUrl: "Gateway URL",
+      connected: "Connected",
+      disconnected: "Disconnected",
+      reconnect: "Reconnect",
+      diagnose: "Diagnose",
+      port: "Port",
+      thinkingLabel: "Thinking",
+      visionLabel: "Vision",
+      backendUrlHint:
+        "Current gateway URL. Use VITE_BACKEND_BASE_URL env var to change.",
+      connectionHelp: "If the connection is abnormal, try the following:",
+      connectionHelpReconnect:
+        "Reconnect — Lightest option. Disconnects and reconnects without affecting any settings.",
+      setDefaultHint:
+        "Click 'Set as Default' in the custom models list to switch system default.",
+      connectionHelpDiagnose:
+        "Diagnose — Detects and repairs configuration issues. May clear manually added custom model configurations during repair.",
+      loadFailed: "Failed to load models",
+      setDefaultSuccess: "Set as system default",
+      setDefaultFailed: "Failed to set default",
+      deleteSuccess: "Model deleted",
+      deleteFailed: "Failed to delete model",
+      systemDefault: "System Default",
+      setAsDefault: "Set as Default",
+      noOfficialModels: "No official models found",
+      moliliHosted: "Hosted by the official model gateway",
+      moliliNotLinked: "Account not linked",
+      moliliNotEnabled: "Official model gateway not enabled",
+      officialModels: "公式モデル",
+      officialModelsHint:
+        "公式モデルはシステム側でホスティングされており、APIキーの設定は不要です",
+      modelCount: (count: number) => `${count} 個のモデル`,
+      modelList: {
+        label: "モデル一覧",
+        hint: "先頭のエントリが選択ツールの既定値、末尾のエントリが Auto モードの高性能ティアで使用されます。「Model list」形式で自由に追加・削除できます。",
+        addButton: "モデル ID を追加",
+        removeTooltip: "このモデル ID を削除",
+        empty: "モデル ID は1つ以上必要です",
       },
-      providerHint: "OpenAI 互換",
-      collapseToggle: "展開 / 折りたたみ",
+      localModels: {
+        title: "ローカルモデル",
+        subtitle:
+          "本機の Ollama / LM Studio / vLLM / llama.cpp などをワンクリックで検出します。検出した行をインポートすれば、Auto モードの「local」ティアが base URL を手入力することなくそちらへルーティングします。",
+        scanButton: "ローカルサービスをスキャン",
+        scanButtonScanning: "スキャン中…",
+        empty: "ローカルサービスが見つかりません",
+        emptyHint:
+          "先に Ollama / LM Studio / vLLM / llama.cpp を起動し、もう一度「ローカルサービスをスキャン」をクリックしてください。",
+        modelsCount: (n: number) => `${n} モデル`,
+        importButton: "インポート",
+        importingButton: "インポート中…",
+        imported: "カスタムモデルにインポートしました",
+        importFailed: "インポートに失敗しました",
+        serviceStatus: {
+          ok: "オンライン",
+          empty: "オンライン · モデル未検出",
+          error: "エラー",
+        },
+        providerHint: "OpenAI 互換",
+      },
+      providers: {
+        zhipu: "Zhipu · GLM",
+        aliyun: "Alibaba Cloud · Tongyi Qwen (Qwen)",
+        tencent: "Tencent Cloud · Hunyuan",
+        volcengine: "Volcano Engine · Doubao (Ark)",
+      },
+    },
+    dialog: {
+      dragToResize: "Drag to resize",
+      searchPlaceholder: "Search settings",
+      clearSearch: "Clear search",
+      sectionsLabel: "Sections",
+      resultsCount: (count) => `${count} result${count === 1 ? "" : "s"}`,
+      noSearchResultsTitle: "No matching settings",
+      noSearchResultsDescription:
+        "Try another keyword, such as models, permissions, theme, or MCP.",
+      sectionKeywords: {
+        account: [],
+        subscription: [],
+        appearance: [],
+        models: [],
+        notification: [],
+        memory: [],
+        automation: [],
+        mcp: [],
+        privacy: [],
+        observability: [],
+        about: [],
+      },
     },
   },
 
@@ -3455,7 +3458,10 @@ export const jaJP: Translations = {
     viewportHint: (label, w, h) =>
       `${label} · viewport ${w}×${h} · responsive CSS active; use Playwright mode for UA-sniffing sites`,
     startBrowsingHint: "Enter a URL to start browsing",
+    loadingPage: "Loading page...",
     embeddedBlocked: "This website does not support embedded display",
+    embeddedBlockedDescription:
+      "Open it externally, or switch to desktop browser mode to continue.",
     copilot: {
       stopAgent: "Stop",
       stopAgentTooltip: "Stop agent auto-operation",
@@ -3832,7 +3838,8 @@ Strategy:
     modeStrict: "Strict",
     strictHint: "Strictly blocks non-compliant self-modifications",
     relaxedHint: "Relaxed mode only warns about risks",
-    modeDescription: "Relaxed mode only warns about risks; strict mode actually blocks non-compliant self-modifications.",
+    modeDescription:
+      "Relaxed mode only warns about risks; strict mode actually blocks non-compliant self-modifications.",
     evolutionPaused: "Autonomous changes paused",
     settingsTitle: "Gene Lock Settings",
     settingsDescription:
@@ -5096,22 +5103,16 @@ Strategy:
       running ? "Browsing directory" : "Browsed directory",
     searchingFiles: (running) =>
       running ? "Searching files" : "Searched files",
-    searchingText: (running) =>
-      running ? "Searching text" : "Searched text",
-    runningCommand: (running) =>
-      running ? "Running command" : "Ran command",
-    creatingFile: (running) =>
-      running ? "Creating file" : "Created file",
-    writingFile: (running) =>
-      running ? "Writing file" : "Wrote file",
-    editingFile: (running) =>
-      running ? "Editing file" : "Edited file",
+    searchingText: (running) => (running ? "Searching text" : "Searched text"),
+    runningCommand: (running) => (running ? "Running command" : "Ran command"),
+    creatingFile: (running) => (running ? "Creating file" : "Created file"),
+    writingFile: (running) => (running ? "Writing file" : "Wrote file"),
+    editingFile: (running) => (running ? "Editing file" : "Edited file"),
     readingGitStatus: (running) =>
       running ? "Reading Git status" : "Read Git status",
     readingGitDiff: (running) =>
       running ? "Reading Git diff" : "Read Git diff",
-    committingGit: (running) =>
-      running ? "Committing Git" : "Committed Git",
+    committingGit: (running) => (running ? "Committing Git" : "Committed Git"),
   },
 
   // Store utilities
@@ -6515,18 +6516,6 @@ Strategy:
     },
   },
 
-  // Settings Dialog
-  settingsDialog: {
-    dragToResize: "Drag to resize",
-    searchPlaceholder: "Search settings",
-    clearSearch: "Clear search",
-    sectionsLabel: "Sections",
-    resultsCount: (count) => `${count} result${count === 1 ? "" : "s"}`,
-    noSearchResultsTitle: "No matching settings",
-    noSearchResultsDescription:
-      "Try another keyword, such as models, permissions, theme, or MCP.",
-  },
-
   // Skill Categories
   skillCategories: {
     ecommerce: "E-commerce & Supply Chain",
@@ -6574,10 +6563,13 @@ Strategy:
 
   channelPairings: {
     loadFailed: "Load failed",
+    retry: "Retry",
     loading: "Loading...",
     users: "Users",
     groups: "Groups",
     pending: "Pending",
+    emptyListTitle: "No pairings yet",
+    noPendingTitle: "No pending requests",
     noUsers: "No users have sent messages to this channel yet",
     noGroups: "No groups have been identified in this channel yet",
     noPending:
@@ -6662,6 +6654,9 @@ Strategy:
     title: "Execution timeline",
     loading: "Loading timeline...",
     empty: "No execution records yet",
+    loadFailed: "Failed to load execution timeline",
+    noMatches: "No matching tasks",
+    noMatchesDescription: "Try another task_id keyword, or clear the search.",
     searchPlaceholder: "Search task_id...",
     refresh: "Refresh",
     noTask: "(No task)",

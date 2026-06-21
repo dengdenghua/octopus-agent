@@ -2506,125 +2506,124 @@ export interface Translations {
       selectFree: string;
       subscribe: string;
     };
-  };
-
-  // Model Settings
-  modelSettings: {
-    title: string;
-    customModels: string;
-    addCustomModel: string;
-    emptyCustomModels: string;
-    externalModelRisk: string;
-    provider: string;
-    modelId: string;
-    modelIdPlaceholder: string;
-    displayName: string;
-    displayNamePlaceholder: string;
-    providerLabel: string;
-    providerAutoHint: string;
-    apiKey: string;
-    apiKeyPlaceholder: string;
-    getApiKey: string;
-    customModel: string;
-    fillModelId: string;
-    apiProtocol: string;
-    baseUrlLabel: string;
-    baseUrlPlaceholder: string;
-    extraHeadersTitle: string;
-    extraHeadersPlaceholder: string;
-    extraHeadersHint: string;
-    requiredFields: string;
-    fillRequiredBeforeTest: string;
-    testEndpointHint: string;
-    taglineCostBalance: string;
-    taglineBestEffect: string;
-    taglineBestValue: string;
-    taglineGoodValue: string;
-    updateFailed: string;
-    networkError: string;
-    editModelTitle: (name: string) => string;
-    keepApiKeyHint: string;
-    saveSuccess: string;
-    testSuccess: string;
-    testFailed: string;
-    diagnoseHealthy: string;
-    diagnoseIssues: (issues: string) => string;
-    deleteConfirm: (name: string) => string;
-    deleteModelTitle: string;
-    gatewayReturned: (status: number) => string;
-    cannotReachGateway: string;
-    current: string;
-    setDefault: string;
-    edit: string;
-    gatewayUrl: string;
-    connected: string;
-    disconnected: string;
-    reconnect: string;
-    maxTokensLabel: string;
-    thinkingLabel: string;
-    visionLabel: string;
-    resetConnection: string;
-    diagnose: string;
-    port: string;
-    portDescription: string;
-    connectionHelp: string;
-    connectionHelpReconnect: string;
-    connectionHelpReset: string;
-    connectionHelpDiagnose: string;
-    // Additional fields for model settings page
-    loadFailed: string;
-    setDefaultSuccess: string;
-    setDefaultFailed: string;
-    deleteSuccess: string;
-    deleteFailed: string;
-    systemDefault: string;
-    setAsDefault: string;
-    backendUrlHint: string;
-    setDefaultHint: string;
-    noOfficialModels: string;
-    moliliHosted: string;
-    notBound: string;
-    gatewayDisabled: string;
-    moliliNotLinked: string;
-    moliliNotEnabled: string;
-    officialModels: string;
-    officialModelsHint: string;
-    // Count label shown next to each custom model row.
-    modelCount: (count: number) => string;
-    // Open-ended model id list · one custom-model row now holds an
-    // arbitrary number of upstream model ids. Index 0 is the picker
-    // default; index -1 is the strongest slot for Auto mode's
-    // performance verdict.
-    modelList: {
-      label: string;
-      hint: string;
-      addButton: string;
-      removeTooltip: string;
-      empty: string;
-    };
-    // Local-model scan + one-click import. The collapsible in the
-    // settings page probes Ollama / LM Studio / vLLM / llama.cpp
-    // defaults and lets the operator import a discovered row with
-    // one click (no need to hand-fill base_url).
-    localModels: {
+    model: {
       title: string;
-      subtitle: string;
-      scanButton: string;
-      scanButtonScanning: string;
-      empty: string;
-      emptyHint: string;
-      modelsCount: (n: number) => string;
-      importButton: string;
-      importingButton: string;
-      imported: string;
-      importFailed: string;
-      serviceStatus: {
-        ok: string;
+      customModels: string;
+      addCustomModel: string;
+      emptyCustomModels: string;
+      externalModelRisk: string;
+      provider: string;
+      modelIdPlaceholder: string;
+      displayName: string;
+      displayNamePlaceholder: string;
+      providerLabel: string;
+      providerAutoHint: string;
+      apiKey: string;
+      apiKeyPlaceholder: string;
+      getApiKey: string;
+      fillModelId: string;
+      apiProtocol: string;
+      baseUrlLabel: string;
+      baseUrlPlaceholder: string;
+      extraHeadersTitle: string;
+      extraHeadersPlaceholder: string;
+      extraHeadersHint: string;
+      requiredFields: string;
+      fillRequiredBeforeTest: string;
+      testEndpointHint: string;
+      updateFailed: string;
+      networkError: string;
+      editModelTitle: (name: string) => string;
+      keepApiKeyHint: string;
+      saveSuccess: string;
+      testFailed: string;
+      diagnoseHealthy: string;
+      diagnoseIssues: (issues: string) => string;
+      deleteConfirm: (name: string) => string;
+      deleteModelTitle: string;
+      gatewayReturned: (status: number) => string;
+      cannotReachGateway: string;
+      gatewayUrl: string;
+      connected: string;
+      disconnected: string;
+      reconnect: string;
+      diagnose: string;
+      port: string;
+      thinkingLabel: string;
+      visionLabel: string;
+      backendUrlHint: string;
+      connectionHelp: string;
+      connectionHelpReconnect: string;
+      setDefaultHint: string;
+      connectionHelpDiagnose: string;
+      loadFailed: string;
+      setDefaultSuccess: string;
+      setDefaultFailed: string;
+      deleteSuccess: string;
+      deleteFailed: string;
+      systemDefault: string;
+      setAsDefault: string;
+      noOfficialModels: string;
+      moliliHosted: string;
+      moliliNotLinked: string;
+      moliliNotEnabled: string;
+      officialModels: string;
+      officialModelsHint: string;
+      modelCount: (count: number) => string;
+      modelList: {
+        label: string;
+        hint: string;
+        addButton: string;
+        removeTooltip: string;
         empty: string;
-        error: string;
       };
-      providerHint: string;
-      collapseToggle: string;
+      localModels: {
+        title: string;
+        subtitle: string;
+        scanButton: string;
+        scanButtonScanning: string;
+        empty: string;
+        providerHint: string;
+        modelsCount: (n: number) => string;
+        emptyHint: string;
+        importButton: string;
+        importingButton: string;
+        imported: string;
+        importFailed: string;
+        serviceStatus: {
+          ok: string;
+          empty: string;
+          error: string;
+        };
+      };
+      providers: {
+        zhipu: string;
+        aliyun: string;
+        tencent: string;
+        volcengine: string;
+      };
+    };
+    dialog: {
+      dragToResize: string;
+      searchPlaceholder: string;
+      clearSearch: string;
+      sectionsLabel: string;
+      resultsCount: (count: number) => string;
+      noSearchResultsTitle: string;
+      noSearchResultsDescription: string;
+      sectionKeywords: {
+        account: string[];
+        subscription: string[];
+        appearance: string[];
+        models: string[];
+        notification: string[];
+        memory: string[];
+        automation: string[];
+        mcp: string[];
+        privacy: string[];
+        observability: string[];
+        about: string[];
+      };
     };
   };
 
@@ -2967,7 +2966,9 @@ export interface Translations {
     deviceMobile: string;
     viewportHint: (label: string, w: number, h: number) => string;
     startBrowsingHint: string;
+    loadingPage: string;
     embeddedBlocked: string;
+    embeddedBlockedDescription: string;
     copilot: {
       stopAgent: string;
       stopAgentTooltip: string;
@@ -5712,17 +5713,6 @@ export interface Translations {
     };
   };
 
-  // Settings Dialog
-  settingsDialog: {
-    dragToResize: string;
-    searchPlaceholder: string;
-    clearSearch: string;
-    sectionsLabel: string;
-    resultsCount: (count: number) => string;
-    noSearchResultsTitle: string;
-    noSearchResultsDescription: string;
-  };
-
   // Skill Categories
   skillCategories: {
     ecommerce: string;
@@ -5771,10 +5761,13 @@ export interface Translations {
   // Channel Pairings
   channelPairings: {
     loadFailed: string;
+    retry: string;
     loading: string;
     users: string;
     groups: string;
     pending: string;
+    emptyListTitle: string;
+    noPendingTitle: string;
     noUsers: string;
     noGroups: string;
     noPending: string;
@@ -5844,6 +5837,9 @@ export interface Translations {
     title: string;
     loading: string;
     empty: string;
+    loadFailed: string;
+    noMatches: string;
+    noMatchesDescription: string;
     searchPlaceholder: string;
     refresh: string;
     noTask: string;

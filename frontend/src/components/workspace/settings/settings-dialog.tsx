@@ -12,12 +12,22 @@ import {
   CreditCardIcon,
   ServerIcon,
   SettingsIcon,
+  SearchIcon,
+  XIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -277,6 +287,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       id: SettingsSection;
       label: string;
       icon: React.ComponentType<{ className?: string }>;
+      keywords: string[];
       disabled?: boolean;
       disabledReason?: string;
     };
@@ -286,6 +297,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
         id: "account",
         label: t.settings.sections.account,
         icon: SettingsIcon,
+        keywords: ["account", "user", "login", "profile", ...t.settings.dialog.sectionKeywords.account],
         disabled: isGuest,
         disabledReason: t.auth.guestMode.title,
       },
@@ -293,6 +305,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
         id: "subscription",
         label: t.settings.sections.subscription,
         icon: CreditCardIcon,
+        keywords: ["subscription", "billing", "plan", "usage", ...t.settings.dialog.sectionKeywords.subscription],
         disabled: isGuest,
         disabledReason: t.auth.guestMode.title,
       },
@@ -300,39 +313,69 @@ export function SettingsDialog(props: SettingsDialogProps) {
         id: "appearance",
         label: t.settings.sections.appearance,
         icon: PaletteIcon,
+        keywords: [
+          "appearance",
+          "theme",
+          "material",
+          "glass",
+          "density",
+          "language",
+          ...t.settings.dialog.sectionKeywords.appearance,
+        ],
       },
       {
         id: "models",
-        label: t.modelSettings.title,
+        label: t.settings.model.title,
         icon: CpuIcon,
+        keywords: ["model", "llm", "api", "provider", ...t.settings.dialog.sectionKeywords.models],
       },
       {
         id: "notification",
         label: t.settings.sections.notification,
         icon: BellIcon,
+        keywords: ["notification", "alert", ...t.settings.dialog.sectionKeywords.notification],
       },
       {
         id: "memory",
         label: t.settings.sections.memory,
         icon: BrainIcon,
+        keywords: ["memory", "knowledge", ...t.settings.dialog.sectionKeywords.memory],
       },
       {
         id: "automation",
         label: t.settings.sections.automation,
         icon: ZapIcon,
+        keywords: ["automation", "schedule", "cron", ...t.settings.dialog.sectionKeywords.automation],
       },
-      { id: "mcp", label: t.mcpSettings.title, icon: ServerIcon },
+      {
+        id: "mcp",
+        label: t.mcpSettings.title,
+        icon: ServerIcon,
+        keywords: ["mcp", "tool", "server", ...t.settings.dialog.sectionKeywords.mcp],
+      },
       {
         id: "privacy",
         label: t.settings.sections.privacy,
         icon: ShieldIcon,
+        keywords: ["privacy", "permission", "security", ...t.settings.dialog.sectionKeywords.privacy],
       },
       {
         id: "observability",
         label: t.settings.sections.observability,
         icon: ActivityIcon,
+        keywords: [
+          "observability",
+          "diagnostics",
+          "logs",
+          ...t.settings.dialog.sectionKeywords.observability,
+        ],
       },
-      { id: "about", label: t.settings.sections.about, icon: InfoIcon },
+      {
+        id: "about",
+        label: t.settings.sections.about,
+        icon: InfoIcon,
+        keywords: ["about", "version", "help", ...t.settings.dialog.sectionKeywords.about],
+      },
     ];
 
     return all;
@@ -342,7 +385,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
     t.settings.sections.account,
     t.settings.sections.subscription,
     t.settings.sections.appearance,
-    t.modelSettings.title,
+    t.settings.model.title,
     t.settings.sections.memory,
     t.settings.sections.automation,
     t.mcpSettings.title,
@@ -350,7 +393,38 @@ export function SettingsDialog(props: SettingsDialogProps) {
     t.settings.sections.about,
     t.settings.sections.observability,
     t.settings.sections.privacy,
+    t.settings.dialog.sectionKeywords,
   ]);
+  const [settingsQuery, setSettingsQuery] = useState("");
+  const normalizedSettingsQuery = settingsQuery.trim().toLowerCase();
+  const visibleSections = useMemo(() => {
+    if (!normalizedSettingsQuery) return sections;
+    return sections.filter((section) =>
+      [section.id, section.label, ...section.keywords]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedSettingsQuery),
+    );
+  }, [normalizedSettingsQuery, sections]);
+  const hasSettingsResults = visibleSections.length > 0;
+
+  useEffect(() => {
+    if (!dialogProps.open || !normalizedSettingsQuery || !hasSettingsResults) {
+      return;
+    }
+    if (visibleSections.some((section) => section.id === activeSection)) {
+      return;
+    }
+    const next = visibleSections.find((section) => !section.disabled);
+    if (next) setActiveSection(next.id);
+  }, [
+    activeSection,
+    dialogProps.open,
+    hasSettingsResults,
+    normalizedSettingsQuery,
+    visibleSections,
+  ]);
+
   return (
     <Dialog
       {...dialogProps}
@@ -432,48 +506,85 @@ export function SettingsDialog(props: SettingsDialogProps) {
           ) : null}
         </DialogHeader>
         <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[220px_1fr]">
-          <nav className="bg-sidebar min-h-0 overflow-y-auto rounded-lg border p-2">
-            <ul className="space-y-1 pr-1">
-              {sections.map(
-                ({ id, label, icon: Icon, disabled, disabledReason }) => {
-                  const active = activeSection === id;
-                  return (
-                    <li key={id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (disabled) return;
-                          setActiveSection(id as SettingsSection);
-                        }}
-                        disabled={disabled}
-                        title={disabled ? disabledReason : undefined}
-                        aria-disabled={disabled || undefined}
-                        className={cn(
-                          // Match sidebar NavRow: opacity + leading 2px
-                          // accent bar instead of a full primary fill.
-                          "group/sec relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] duration-150",
-                          disabled
-                            ? "cursor-not-allowed opacity-40"
-                            : "opacity-75 hover:opacity-100 hover:bg-muted/50",
-                          active &&
-                            "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_70%,transparent)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r before:bg-primary/70",
-                        )}
-                      >
-                        <Icon className="size-4" />
-                        <span className="flex-1 truncate text-left">
-                          {label}
-                        </span>
-                        {disabled && (
-                          <span className="rounded border border-border/60 px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground">
-                            {t.common.guest}
+          <nav className="bg-sidebar flex min-h-0 flex-col overflow-hidden rounded-lg border p-2">
+            <div className="relative mb-2">
+              <SearchIcon className="text-muted-foreground pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2" />
+              <Input
+                value={settingsQuery}
+                onChange={(event) => setSettingsQuery(event.target.value)}
+                placeholder={t.settings.dialog.searchPlaceholder}
+                aria-label={t.settings.dialog.searchPlaceholder}
+                className="h-8 rounded-md pl-8 pr-8 text-xs"
+              />
+              {settingsQuery ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute right-0.5 top-1/2 size-7 -translate-y-1/2 opacity-60 hover:opacity-100"
+                  onClick={() => setSettingsQuery("")}
+                  aria-label={t.settings.dialog.clearSearch}
+                >
+                  <XIcon className="size-3.5" />
+                </Button>
+              ) : null}
+            </div>
+            <div className="text-muted-foreground mb-1 flex items-center justify-between px-1.5 text-[10px] font-medium uppercase">
+              <span>{t.settings.dialog.sectionsLabel}</span>
+              {normalizedSettingsQuery ? (
+                <span>
+                  {t.settings.dialog.resultsCount(visibleSections.length)}
+                </span>
+              ) : null}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ul className="space-y-1 pr-1">
+                {visibleSections.map(
+                  ({ id, label, icon: Icon, disabled, disabledReason }) => {
+                    const active = activeSection === id;
+                    return (
+                      <li key={id}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (disabled) return;
+                            setActiveSection(id as SettingsSection);
+                          }}
+                          disabled={disabled}
+                          title={disabled ? disabledReason : undefined}
+                          aria-disabled={disabled || undefined}
+                          className={cn(
+                            // Match sidebar NavRow: opacity + leading 2px
+                            // accent bar instead of a full primary fill.
+                            "group/sec relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-[opacity,background-color] duration-150",
+                            disabled
+                              ? "cursor-not-allowed opacity-40"
+                              : "opacity-75 hover:opacity-100 hover:bg-muted/50",
+                            active &&
+                              "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_70%,transparent)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-r before:bg-primary/70",
+                          )}
+                        >
+                          <Icon className="size-4" />
+                          <span className="flex-1 truncate text-left">
+                            {label}
                           </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                },
-              )}
-            </ul>
+                          {disabled && (
+                            <span className="rounded border border-border/60 px-1 py-0.5 text-[9px] font-medium leading-none text-muted-foreground">
+                              {t.common.guest}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    );
+                  },
+                )}
+              </ul>
+              {!hasSettingsResults ? (
+                <div className="text-muted-foreground px-2 py-8 text-center text-xs">
+                  {t.settings.dialog.noSearchResultsTitle}
+                </div>
+              ) : null}
+            </div>
           </nav>
           <ScrollArea className="h-full min-h-0 rounded-lg border">
             <div className="space-y-8 p-6">
@@ -482,52 +593,67 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   mounted one. Combined with preloadSettingsPages() this
                   effectively removes the "every tab reloads" flicker
                   users were seeing. */}
-              {activeSection === "account" && (
+              {!hasSettingsResults ? (
+                <Empty className="min-h-[420px] border-0">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <SearchIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>
+                      {t.settings.dialog.noSearchResultsTitle}
+                    </EmptyTitle>
+                    <EmptyDescription>
+                      {t.settings.dialog.noSearchResultsDescription}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : null}
+              {hasSettingsResults && activeSection === "account" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <AccountSettingsPage />
                 </Suspense>
               )}
-              {activeSection === "subscription" && (
+              {hasSettingsResults && activeSection === "subscription" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <SubscriptionSettingsPage />
                 </Suspense>
               )}
-              {activeSection === "appearance" && (
+              {hasSettingsResults && activeSection === "appearance" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <AppearanceSettingsPage />
                 </Suspense>
               )}
-              {activeSection === "models" && (
+              {hasSettingsResults && activeSection === "models" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <ModelSettingsPage />
                 </Suspense>
               )}
-              {activeSection === "memory" && (
+              {hasSettingsResults && activeSection === "memory" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <MemorySettingsPage />
                 </Suspense>
               )}
-              {activeSection === "automation" && (
+              {hasSettingsResults && activeSection === "automation" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <AutomationSettingsPage />
                 </Suspense>
               )}
-              {activeSection === "mcp" && (
+              {hasSettingsResults && activeSection === "mcp" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <McpSettingsPage />
                 </Suspense>
               )}
-              {activeSection === "privacy" && (
+              {hasSettingsResults && activeSection === "privacy" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <PrivacySettingsPage />
                 </Suspense>
               )}
-              {activeSection === "notification" && (
+              {hasSettingsResults && activeSection === "notification" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <NotificationSettingsPage />
                 </Suspense>
               )}
-              {activeSection === "observability" && (
+              {hasSettingsResults && activeSection === "observability" && (
                 <div className="flex flex-col items-center gap-4 py-12 text-center">
                   <ActivityIcon className="size-10 text-muted-foreground/50" />
                   <p className="text-sm text-muted-foreground">
@@ -543,7 +669,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                   </Button>
                 </div>
               )}
-              {activeSection === "about" && (
+              {hasSettingsResults && activeSection === "about" && (
                 <Suspense fallback={<SettingsPageSkeleton />}>
                   <AboutSettingsPage />
                 </Suspense>
@@ -607,13 +733,13 @@ export function SettingsDialog(props: SettingsDialogProps) {
           }}
           role="separator"
           aria-orientation="vertical"
-          aria-label={t.settingsDialog.dragToResize}
+          aria-label={t.settings.dialog.dragToResize}
           aria-valuenow={size ? Math.round(size.w) : undefined}
           aria-valuemin={MIN_W}
           aria-valuemax={
             typeof window !== "undefined" ? window.innerWidth - 32 : undefined
           }
-          title={t.settingsDialog.dragToResize}
+          title={t.settings.dialog.dragToResize}
           tabIndex={0}
           className="absolute bottom-0 right-0 z-50 flex size-5 cursor-nwse-resize items-end justify-end rounded-sm p-1 text-muted-foreground/40 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
         >

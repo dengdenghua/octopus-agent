@@ -116,7 +116,7 @@ const PROVIDERS: readonly ProviderPreset[] = [
     ],
   },
   {
-    label: "智谱 · GLM",
+    label: "Zhipu · GLM",
     value: "zhipu",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     protocol: "openai",
@@ -133,7 +133,7 @@ const PROVIDERS: readonly ProviderPreset[] = [
     suggestedModels: ["MiniMax-M2", "abab7-chat-preview"],
   },
   {
-    label: "阿里云 · 通义千问 (Qwen)",
+    label: "Alibaba Cloud · Tongyi Qwen (Qwen)",
     value: "aliyun",
     // NB · must be ``compatible-mode`` · DashScope native proto
     // does not support the standard ``tools`` field shape.
@@ -149,7 +149,7 @@ const PROVIDERS: readonly ProviderPreset[] = [
     ],
   },
   {
-    label: "腾讯云 · 混元",
+    label: "Tencent Cloud · Hunyuan",
     value: "tencent",
     baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
     protocol: "openai",
@@ -157,7 +157,7 @@ const PROVIDERS: readonly ProviderPreset[] = [
     suggestedModels: ["hunyuan-turbos-latest", "hunyuan-large", "hunyuan-lite"],
   },
   {
-    label: "火山 · 豆包 (Ark)",
+    label: "Volcano Engine · Doubao (Ark)",
     value: "volcengine",
     baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     protocol: "openai",
@@ -256,6 +256,33 @@ function parseHeadersText(text: string): Record<string, string> {
   return out;
 }
 
+// Mirror of the backend base_url guard (config_router._validate_base_url)
+// for instant feedback before the network round-trip. Loopback / private
+// hosts stay allowed (local servers like Ollama / LM Studio); only
+// non-http(s) schemes and link-local / cloud-metadata endpoints are
+// rejected. Returns an error reason, or null when acceptable (empty
+// included — the backend owns the per-provider "required" check).
+function validateBaseUrl(url: string): string | null {
+  if (!url) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return "invalid base_url: unparseable URL";
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return `invalid base_url: scheme must be http/https (got ${parsed.protocol.replace(":", "")})`;
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "metadata.google.internal" || host === "metadata.goog") {
+    return "invalid base_url: blocked cloud-metadata host";
+  }
+  if (/^169\.254\./.test(host) || host.startsWith("fe80:")) {
+    return "invalid base_url: blocked link-local address";
+  }
+  return null;
+}
+
 // ── Main page ──────────────────────────────────────────────────
 export default function ModelSettingsPage() {
   const { t } = useI18n();
@@ -290,11 +317,11 @@ export default function ModelSettingsPage() {
       setModels(list);
     } catch (error) {
       console.error(error);
-      toast.error(t.modelSettings.loadFailed);
+      toast.error(t.settings.model.loadFailed);
     } finally {
       setLoading(false);
     }
-  }, [t.modelSettings.loadFailed]);
+  }, [t.settings.model.loadFailed]);
 
   const checkGateway = useCallback(async () => {
     setGatewayStatus("checking");
@@ -329,13 +356,13 @@ export default function ModelSettingsPage() {
           model_name: name,
         },
       });
-      toast.success(t.modelSettings.setDefaultSuccess);
+      toast.success(t.settings.model.setDefaultSuccess);
       await fetchModels();
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : t.modelSettings.setDefaultFailed,
+          : t.settings.model.setDefaultFailed,
       );
     }
   };
@@ -356,11 +383,11 @@ export default function ModelSettingsPage() {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Delete failed: ${res.status}`);
       }
-      toast.success(t.modelSettings.deleteSuccess);
+      toast.success(t.settings.model.deleteSuccess);
       await fetchModels();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t.modelSettings.deleteFailed,
+        error instanceof Error ? error.message : t.settings.model.deleteFailed,
       );
     } finally {
       setDeletingModel(false);
@@ -385,17 +412,17 @@ export default function ModelSettingsPage() {
           signal: AbortSignal.timeout(5000),
         },
       );
-      if (!res.ok) issues.push(t.modelSettings.gatewayReturned(res.status));
+      if (!res.ok) issues.push(t.settings.model.gatewayReturned(res.status));
     } catch (e) {
       swallow(e);
-      issues.push(t.modelSettings.cannotReachGateway);
+      issues.push(t.settings.model.cannotReachGateway);
     }
 
     if (issues.length === 0) {
-      toast.success(t.modelSettings.diagnoseHealthy);
+      toast.success(t.settings.model.diagnoseHealthy);
     } else {
       toast.error(
-        t.modelSettings.diagnoseIssues(issues.map((i) => `• ${i}`).join(" ")),
+        t.settings.model.diagnoseIssues(issues.map((i) => `• ${i}`).join(" ")),
       );
     }
   };
@@ -573,7 +600,7 @@ export default function ModelSettingsPage() {
       <SettingsSection
         title={
           <div className="flex items-center justify-between w-full">
-            <span>{t.modelSettings.customModels}</span>
+            <span>{t.settings.model.customModels}</span>
             {!showAdd && !editingModel && (
               <Button
                 variant="outline"
@@ -581,7 +608,7 @@ export default function ModelSettingsPage() {
                 onClick={() => setShowAdd(true)}
               >
                 <PlusIcon className="mr-1 h-3 w-3" />{" "}
-                {t.modelSettings.addCustomModel}
+                {t.settings.model.addCustomModel}
               </Button>
             )}
           </div>
@@ -609,9 +636,9 @@ export default function ModelSettingsPage() {
                         </div>
                         <span
                           className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-400"
-                          title={t.modelSettings.modelList.hint}
+                          title={t.settings.model.modelList.hint}
                         >
-                          {t.modelSettings.modelCount(list.length)}
+                          {t.settings.model.modelCount(list.length)}
                         </span>
                       </div>
                       <div className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -642,14 +669,14 @@ export default function ModelSettingsPage() {
                     <div className="flex shrink-0 items-center gap-3">
                       {defaultModelName === m.name ? (
                         <span className="inline-flex items-center rounded-lg bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-500/20 dark:text-green-400">
-                          {t.modelSettings.systemDefault}
+                          {t.settings.model.systemDefault}
                         </span>
                       ) : (
                         <button
                           className="text-xs font-medium text-muted-foreground hover:text-foreground"
                           onClick={() => handleSetDefault(m.name)}
                         >
-                          {t.modelSettings.setAsDefault}
+                          {t.settings.model.setAsDefault}
                         </button>
                       )}
                       <button
@@ -674,7 +701,7 @@ export default function ModelSettingsPage() {
               })}
               {models.length === 0 && (
                 <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                  {t.modelSettings.emptyCustomModels}
+                  {t.settings.model.emptyCustomModels}
                 </div>
               )}
             </div>
@@ -718,22 +745,22 @@ export default function ModelSettingsPage() {
       <LocalModelsSection onImported={fetchModels} />
 
       {/* ── Gateway Connection Section ── */}
-      <SettingsSection title={t.modelSettings.gatewayUrl}>
+      <SettingsSection title={t.settings.model.gatewayUrl}>
         <div className="space-y-4">
           {/* Status bar */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium">
-                {t.modelSettings.gatewayUrl}
+                {t.settings.model.gatewayUrl}
               </span>
               {gatewayStatus === "connected" && (
                 <span className="inline-flex items-center rounded-lg bg-green-100 dark:bg-green-500/20 px-3 py-1 text-xs font-medium text-green-700 dark:text-green-400">
-                  {t.modelSettings.connected}
+                  {t.settings.model.connected}
                 </span>
               )}
               {gatewayStatus === "disconnected" && (
                 <span className="inline-flex items-center rounded-lg bg-red-100 dark:bg-red-500/20 px-3 py-1 text-xs font-medium text-red-700 dark:text-red-400">
-                  {t.modelSettings.disconnected}
+                  {t.settings.model.disconnected}
                 </span>
               )}
               {gatewayStatus === "checking" && (
@@ -746,11 +773,11 @@ export default function ModelSettingsPage() {
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={handleReconnect}>
                 <RefreshCwIcon className="mr-1 h-3 w-3" />{" "}
-                {t.modelSettings.reconnect}
+                {t.settings.model.reconnect}
               </Button>
               <Button variant="outline" size="sm" onClick={handleDiagnose}>
                 <SearchIcon className="mr-1 h-3 w-3" />{" "}
-                {t.modelSettings.diagnose}
+                {t.settings.model.diagnose}
               </Button>
             </div>
           </div>
@@ -760,10 +787,10 @@ export default function ModelSettingsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium">
-                  {t.modelSettings.port}
+                  {t.settings.model.port}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1">
-                  {t.modelSettings.backendUrlHint}
+                  {t.settings.model.backendUrlHint}
                 </div>
               </div>
               <Input
@@ -777,12 +804,12 @@ export default function ModelSettingsPage() {
           {/* Troubleshooting tips */}
           <div className="rounded-lg bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 p-4 text-sm">
             <div className="font-medium text-blue-800 dark:text-blue-300 mb-2">
-              {t.modelSettings.connectionHelp}
+              {t.settings.model.connectionHelp}
             </div>
             <ul className="space-y-1 text-blue-700 dark:text-blue-400 text-xs">
-              <li>{t.modelSettings.connectionHelpReconnect}</li>
-              <li>{t.modelSettings.setDefaultHint}</li>
-              <li>{t.modelSettings.connectionHelpDiagnose}</li>
+              <li>{t.settings.model.connectionHelpReconnect}</li>
+              <li>{t.settings.model.setDefaultHint}</li>
+              <li>{t.settings.model.connectionHelpDiagnose}</li>
             </ul>
           </div>
         </div>
@@ -800,11 +827,11 @@ export default function ModelSettingsPage() {
         >
           <DialogHeader className="gap-1 text-left">
             <DialogTitle className="text-[15px]">
-              {t.modelSettings.deleteModelTitle}
+              {t.settings.model.deleteModelTitle}
             </DialogTitle>
             <DialogDescription className="text-[12.5px] leading-5">
               {modelToDelete
-                ? t.modelSettings.deleteConfirm(modelToDelete)
+                ? t.settings.model.deleteConfirm(modelToDelete)
                 : ""}
             </DialogDescription>
           </DialogHeader>
@@ -876,12 +903,12 @@ function OfficialModelsSection() {
         );
         if (cancelled) return;
         if (r.status === 404) {
-          setUnavailableReason(t.modelSettings.moliliNotLinked);
+          setUnavailableReason(t.settings.model.moliliNotLinked);
           setModels([]);
           return;
         }
         if (r.status === 503) {
-          setUnavailableReason(t.modelSettings.moliliNotEnabled);
+          setUnavailableReason(t.settings.model.moliliNotEnabled);
           setModels([]);
           return;
         }
@@ -907,11 +934,11 @@ function OfficialModelsSection() {
     return () => {
       cancelled = true;
     };
-  }, [t.modelSettings.moliliNotEnabled, t.modelSettings.moliliNotLinked]);
+  }, [t.settings.model.moliliNotEnabled, t.settings.model.moliliNotLinked]);
 
   if (loading) {
     return (
-      <SettingsSection title={t.modelSettings.officialModels}>
+      <SettingsSection title={t.settings.model.officialModels}>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2Icon className="size-4 animate-spin" /> {t.common.loading}
         </div>
@@ -932,11 +959,11 @@ function OfficialModelsSection() {
     .map((m) => ({ upstream: m }));
 
   return (
-    <SettingsSection title={t.modelSettings.officialModels}>
+    <SettingsSection title={t.settings.model.officialModels}>
       <div className="rounded-lg border border-border divide-y divide-border">
         {rows.length === 0 && (
           <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-            {t.modelSettings.noOfficialModels}
+            {t.settings.model.noOfficialModels}
           </div>
         )}
         {rows.map(({ upstream }) => (
@@ -962,14 +989,14 @@ function OfficialModelsSection() {
                 {upstream.multiplier ?? "1.0x"}
               </span>
               <span className="text-[10px] text-muted-foreground">
-                {t.modelSettings.moliliHosted}
+                {t.settings.model.moliliHosted}
               </span>
             </div>
           </div>
         ))}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        {t.modelSettings.officialModelsHint}
+        {t.settings.model.officialModelsHint}
       </p>
     </SettingsSection>
   );
@@ -1001,7 +1028,7 @@ function EditModelForm({
   const [models, setModels] = useState<string[]>([""]);
   const [apiKey, setApiKey] = useState("");
   const [apiKeyPlaceholder, setApiKeyPlaceholder] = useState(
-    t.modelSettings.apiKeyPlaceholder,
+    t.settings.model.apiKeyPlaceholder,
   );
   const [baseUrl, setBaseUrl] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -1062,14 +1089,14 @@ function EditModelForm({
         setShowHeaders(false);
         setApiKeyPlaceholder(
           d.has_api_key
-            ? `••• · ${t.modelSettings.keepApiKeyHint}`
-            : t.modelSettings.apiKeyPlaceholder,
+            ? `••• · ${t.settings.model.keepApiKeyHint}`
+            : t.settings.model.apiKeyPlaceholder,
         );
       } catch (e) {
         swallow(e);
         if (!cancelled)
           setError(
-            e instanceof Error ? e.message : t.modelSettings.networkError,
+            e instanceof Error ? e.message : t.settings.model.networkError,
           );
       } finally {
         if (!cancelled) setLoading(false);
@@ -1080,9 +1107,9 @@ function EditModelForm({
     };
   }, [
     modelName,
-    t.modelSettings.apiKeyPlaceholder,
-    t.modelSettings.keepApiKeyHint,
-    t.modelSettings.networkError,
+    t.settings.model.apiKeyPlaceholder,
+    t.settings.model.keepApiKeyHint,
+    t.settings.model.networkError,
   ]);
 
   const handleModelChange = (idx: number, value: string) => {
@@ -1107,7 +1134,13 @@ function EditModelForm({
       .map((m) => m.trim())
       .filter((m) => m.length > 0);
     if (cleanedModels.length === 0) {
-      setError(t.modelSettings.modelList.empty);
+      setError(t.settings.model.modelList.empty);
+      setSaving(false);
+      return;
+    }
+    const baseUrlErr = validateBaseUrl(baseUrl);
+    if (baseUrlErr) {
+      setError(baseUrlErr);
       setSaving(false);
       return;
     }
@@ -1141,13 +1174,13 @@ function EditModelForm({
       );
       if (!res.ok) {
         const data = await res.json();
-        setError(data.detail || t.modelSettings.updateFailed);
+        setError(data.detail || t.settings.model.updateFailed);
         return;
       }
-      toast.success(t.modelSettings.saveSuccess);
+      toast.success(t.settings.model.saveSuccess);
       onSaved();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t.modelSettings.networkError);
+      setError(e instanceof Error ? e.message : t.settings.model.networkError);
     } finally {
       setSaving(false);
     }
@@ -1156,7 +1189,13 @@ function EditModelForm({
   const handleTest = async () => {
     if (!baseUrl) {
       setTestStatus("fail");
-      setTestMessage(t.modelSettings.fillRequiredBeforeTest);
+      setTestMessage(t.settings.model.fillRequiredBeforeTest);
+      return;
+    }
+    const baseUrlErr = validateBaseUrl(baseUrl);
+    if (baseUrlErr) {
+      setTestStatus("fail");
+      setTestMessage(baseUrlErr);
       return;
     }
     setTestStatus("testing");
@@ -1193,12 +1232,12 @@ function EditModelForm({
         setTestMessage(data.error || `HTTP ${res.status}`);
       } else {
         setTestStatus("success");
-        setTestMessage(data.message || t.modelSettings.saveSuccess);
+        setTestMessage(data.message || t.settings.model.saveSuccess);
       }
     } catch (e: unknown) {
       setTestStatus("fail");
       setTestMessage(
-        e instanceof Error ? e.message : t.modelSettings.networkError,
+        e instanceof Error ? e.message : t.settings.model.networkError,
       );
     }
   };
@@ -1206,7 +1245,7 @@ function EditModelForm({
   return (
     <div className="rounded-lg border border-border p-4 space-y-3">
       <div className="text-sm font-medium">
-        {t.modelSettings.editModelTitle(modelName)}
+        {t.settings.model.editModelTitle(modelName)}
       </div>
       {loading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1218,18 +1257,18 @@ function EditModelForm({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-muted-foreground">
-                {t.modelSettings.providerLabel}
+                {t.settings.model.providerLabel}
               </label>
               <div className="flex h-9 items-center rounded-md border border-input bg-muted/40 px-3 text-sm">
                 <span className="font-mono">{detectedProvider}</span>
                 <span className="ml-2 text-[10px] text-muted-foreground/70">
-                  {t.modelSettings.providerAutoHint}
+                  {t.settings.model.providerAutoHint}
                 </span>
               </div>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">
-                {t.modelSettings.keepApiKeyHint}
+                {t.settings.model.keepApiKeyHint}
               </label>
               <div className="relative">
                 <Input
@@ -1255,10 +1294,10 @@ function EditModelForm({
           </div>
           <div>
             <label className="text-xs text-muted-foreground">
-              {t.modelSettings.baseUrlLabel}
+              {t.settings.model.baseUrlLabel}
             </label>
             <Input
-              placeholder={t.modelSettings.baseUrlPlaceholder}
+              placeholder={t.settings.model.baseUrlPlaceholder}
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
             />
@@ -1267,10 +1306,10 @@ function EditModelForm({
           <div>
             <div className="mb-1.5 flex items-baseline justify-between">
               <label className="text-xs text-muted-foreground">
-                {t.modelSettings.modelList.label}
+                {t.settings.model.modelList.label}
               </label>
               <span className="text-[10px] text-muted-foreground/70">
-                {t.modelSettings.modelList.hint}
+                {t.settings.model.modelList.hint}
               </span>
             </div>
             <ul className="space-y-1.5">
@@ -1283,9 +1322,9 @@ function EditModelForm({
                     className="w-4 shrink-0 text-right text-[11px] text-muted-foreground/60 tabular-nums"
                     title={
                       idx === 0
-                        ? t.modelSettings.modelList.label
+                        ? t.settings.model.modelList.label
                         : idx === models.length - 1
-                          ? t.modelSettings.modelList.label
+                          ? t.settings.model.modelList.label
                           : ""
                     }
                   >
@@ -1293,7 +1332,7 @@ function EditModelForm({
                   </span>
                   <Input
                     className="flex-1 font-mono text-xs"
-                    placeholder={t.modelSettings.modelList.label}
+                    placeholder={t.settings.model.modelList.label}
                     value={id}
                     onChange={(e) => handleModelChange(idx, e.target.value)}
                     disabled={loading}
@@ -1307,8 +1346,8 @@ function EditModelForm({
                     )}
                     onClick={() => handleModelRemove(idx)}
                     disabled={loading || models.length <= 1}
-                    title={t.modelSettings.modelList.removeTooltip}
-                    aria-label={t.modelSettings.modelList.removeTooltip}
+                    title={t.settings.model.modelList.removeTooltip}
+                    aria-label={t.settings.model.modelList.removeTooltip}
                   >
                     <XCircleIcon className="size-4" />
                   </button>
@@ -1324,7 +1363,7 @@ function EditModelForm({
               disabled={loading}
             >
               <PlusIcon className="mr-1 h-3 w-3" />{" "}
-              {t.modelSettings.modelList.addButton}
+              {t.settings.model.modelList.addButton}
             </Button>
           </div>
 
@@ -1335,7 +1374,7 @@ function EditModelForm({
               className="flex w-full items-center justify-between px-3 py-2 text-xs font-medium hover:bg-muted/40"
             >
               <span>
-                {t.modelSettings.extraHeadersTitle}
+                {t.settings.model.extraHeadersTitle}
                 {(() => {
                   const n = Object.keys(parseHeadersText(headersText)).length;
                   return n > 0 ? ` (${n})` : "";
@@ -1350,13 +1389,13 @@ function EditModelForm({
                 <textarea
                   value={headersText}
                   onChange={(e) => setHeadersText(e.target.value)}
-                  placeholder={t.modelSettings.extraHeadersPlaceholder}
+                  placeholder={t.settings.model.extraHeadersPlaceholder}
                   spellCheck={false}
                   rows={3}
                   className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  {t.modelSettings.extraHeadersHint}
+                  {t.settings.model.extraHeadersHint}
                 </p>
               </div>
             )}
@@ -1365,11 +1404,11 @@ function EditModelForm({
           <div className="grid grid-cols-3 gap-3">
             <div className="flex items-center gap-2 pt-5">
               <Switch checked={thinking} onCheckedChange={setThinking} />{" "}
-              <span className="text-xs">{t.modelSettings.thinkingLabel}</span>
+              <span className="text-xs">{t.settings.model.thinkingLabel}</span>
             </div>
             <div className="flex items-center gap-2 pt-5">
               <Switch checked={vision} onCheckedChange={setVision} />{" "}
-              <span className="text-xs">{t.modelSettings.visionLabel}</span>
+              <span className="text-xs">{t.settings.model.visionLabel}</span>
             </div>
           </div>
 
@@ -1380,7 +1419,7 @@ function EditModelForm({
                 <>
                   <div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" />
                   <span className="text-muted-foreground">
-                    {t.modelSettings.testFailed}
+                    {t.settings.model.testFailed}
                   </span>
                 </>
               )}
@@ -1406,7 +1445,7 @@ function EditModelForm({
                 </>
               )}
               <span className="text-xs text-muted-foreground ml-2">
-                {t.modelSettings.testEndpointHint}
+                {t.settings.model.testEndpointHint}
               </span>
             </div>
             <div className="flex gap-2">
@@ -1416,7 +1455,7 @@ function EditModelForm({
                 onClick={handleTest}
                 disabled={testStatus === "testing" || loading}
               >
-                <WifiIcon className="mr-1 h-3 w-3" /> {t.modelSettings.diagnose}
+                <WifiIcon className="mr-1 h-3 w-3" /> {t.settings.model.diagnose}
               </Button>
             </div>
           </div>
@@ -1449,6 +1488,20 @@ function AddModelForm({
   onSaved: () => void;
 }) {
   const { t } = useI18n();
+  const getProviderLabel = (value: string): string => {
+    switch (value) {
+      case "zhipu":
+        return t.settings.model.providers.zhipu;
+      case "aliyun":
+        return t.settings.model.providers.aliyun;
+      case "tencent":
+        return t.settings.model.providers.tencent;
+      case "volcengine":
+        return t.settings.model.providers.volcengine;
+      default:
+        return PROVIDERS.find((p) => p.value === value)?.label ?? value;
+    }
+  };
   const [provider, setProvider] = useState("openai");
   const [protocol, setProtocol] = useState("openai");
   // Open-ended list of upstream model ids — matches the edit form
@@ -1496,7 +1549,13 @@ function AddModelForm({
     const firstModel = models.map((m) => m.trim()).find((m) => m.length > 0);
     if (!apiKey || !baseUrl || !firstModel) {
       setTestStatus("fail");
-      setTestMessage(t.modelSettings.fillRequiredBeforeTest);
+      setTestMessage(t.settings.model.fillRequiredBeforeTest);
+      return;
+    }
+    const baseUrlErr = validateBaseUrl(baseUrl);
+    if (baseUrlErr) {
+      setTestStatus("fail");
+      setTestMessage(baseUrlErr);
       return;
     }
     setTestStatus("testing");
@@ -1527,12 +1586,12 @@ function AddModelForm({
         setTestMessage(data.error || `HTTP ${res.status}`);
       } else {
         setTestStatus("success");
-        setTestMessage(data.message || t.modelSettings.saveSuccess);
+        setTestMessage(data.message || t.settings.model.saveSuccess);
       }
     } catch (e: unknown) {
       setTestStatus("fail");
       setTestMessage(
-        e instanceof Error ? e.message : t.modelSettings.networkError,
+        e instanceof Error ? e.message : t.settings.model.networkError,
       );
     }
   };
@@ -1544,13 +1603,19 @@ function AddModelForm({
     if (!apiKey || !baseUrl || cleanedModels.length === 0) {
       setError(
         cleanedModels.length === 0
-          ? t.modelSettings.modelList.empty
-          : t.modelSettings.requiredFields,
+          ? t.settings.model.modelList.empty
+          : t.settings.model.requiredFields,
       );
       return;
     }
     setSaving(true);
     setError("");
+    const baseUrlErr = validateBaseUrl(baseUrl);
+    if (baseUrlErr) {
+      setError(baseUrlErr);
+      setSaving(false);
+      return;
+    }
     // The first non-empty model id doubles as the entry id, since
     // ids have to be filename-safe and the picker shows the model
     // name the user just typed. Same convention as the previous
@@ -1579,13 +1644,13 @@ function AddModelForm({
       );
       if (!res.ok) {
         const data = await res.json();
-        setError(data.detail || t.modelSettings.updateFailed);
+        setError(data.detail || t.settings.model.updateFailed);
         return;
       }
-      toast.success(t.modelSettings.saveSuccess);
+      toast.success(t.settings.model.saveSuccess);
       onSaved();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t.modelSettings.networkError);
+      setError(e instanceof Error ? e.message : t.settings.model.networkError);
     } finally {
       setSaving(false);
     }
@@ -1595,12 +1660,12 @@ function AddModelForm({
     <div className="rounded-lg border border-border p-5 space-y-4">
       <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-sm text-amber-600 dark:text-amber-400">
         <AlertTriangleIcon className="h-4 w-4 shrink-0" />
-        <span>{t.modelSettings.externalModelRisk}</span>
+        <span>{t.settings.model.externalModelRisk}</span>
       </div>
 
       <div>
         <label className="text-sm font-medium">
-          <span className="text-destructive">*</span> {t.modelSettings.provider}
+          <span className="text-destructive">*</span> {t.settings.model.provider}
         </label>
         <select
           className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -1609,7 +1674,7 @@ function AddModelForm({
         >
           {PROVIDERS.map((p) => (
             <option key={p.value} value={p.value}>
-              {p.label}
+              {getProviderLabel(p.value)}
             </option>
           ))}
         </select>
@@ -1618,10 +1683,10 @@ function AddModelForm({
       <div>
         <label className="text-sm font-medium">
           <span className="text-destructive">*</span>{" "}
-          {t.modelSettings.modelList.label}
+          {t.settings.model.modelList.label}
         </label>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {t.modelSettings.modelList.hint}
+          {t.settings.model.modelList.hint}
         </p>
         <ul className="mt-2 space-y-1.5">
           {models.map((id, idx) => (
@@ -1633,8 +1698,8 @@ function AddModelForm({
                 className="flex-1 font-mono text-xs"
                 placeholder={
                   idx === 0
-                    ? t.modelSettings.modelIdPlaceholder
-                    : t.modelSettings.modelIdPlaceholder
+                    ? t.settings.model.modelIdPlaceholder
+                    : t.settings.model.modelIdPlaceholder
                 }
                 value={id}
                 onChange={(e) => handleModelChange(idx, e.target.value)}
@@ -1648,8 +1713,8 @@ function AddModelForm({
                 )}
                 onClick={() => handleModelRemove(idx)}
                 disabled={models.length <= 1}
-                title={t.modelSettings.modelList.removeTooltip}
-                aria-label={t.modelSettings.modelList.removeTooltip}
+                title={t.settings.model.modelList.removeTooltip}
+                aria-label={t.settings.model.modelList.removeTooltip}
               >
                 <XCircleIcon className="size-4" />
               </button>
@@ -1664,7 +1729,7 @@ function AddModelForm({
           onClick={handleModelAdd}
         >
           <PlusIcon className="mr-1 h-3 w-3" />{" "}
-          {t.modelSettings.modelList.addButton}
+          {t.settings.model.modelList.addButton}
         </Button>
         {/* Click-to-fill suggested model IDs · lets users skip
             "go look up the exact model name" · each chip populates
@@ -1681,7 +1746,7 @@ function AddModelForm({
                   type="button"
                   onClick={() => handleModelChange(0, m)}
                   className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  title={t.modelSettings.fillModelId ?? "Fill this model ID"}
+                  title={t.settings.model.fillModelId ?? "Fill this model ID"}
                 >
                   {m}
                 </button>
@@ -1693,11 +1758,11 @@ function AddModelForm({
 
       <div>
         <label className="text-sm font-medium">
-          {t.modelSettings.displayName}
+          {t.settings.model.displayName}
         </label>
         <Input
           className="mt-1"
-          placeholder={t.modelSettings.displayNamePlaceholder}
+          placeholder={t.settings.model.displayNamePlaceholder}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
         />
@@ -1707,9 +1772,8 @@ function AddModelForm({
         <div>
           <label className="text-sm font-medium flex items-center justify-between gap-2">
             <span>
-              {PROVIDERS.find((p) => p.value === provider)?.label ||
-                t.modelSettings.provider}{" "}
-              {t.modelSettings.apiKey}
+              {getProviderLabel(provider) || t.settings.model.provider}{" "}
+              {t.settings.model.apiKey}
             </span>
             {/* Console link · opens the provider's dashboard in a
                 new tab so users don't have to hunt for the API
@@ -1724,7 +1788,7 @@ function AddModelForm({
                   rel="noopener noreferrer"
                   className="text-[11px] text-primary hover:underline font-normal"
                 >
-                  {t.modelSettings.getApiKey}
+                  {t.settings.model.getApiKey}
                 </a>
               );
             })()}
@@ -1733,7 +1797,7 @@ function AddModelForm({
             <Input
               className="pr-10"
               type={showKey ? "text" : "password"}
-              placeholder={t.modelSettings.apiKeyPlaceholder}
+              placeholder={t.settings.model.apiKeyPlaceholder}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
             />
@@ -1752,7 +1816,7 @@ function AddModelForm({
         </div>
         <div>
           <label className="text-sm font-medium">
-            {t.modelSettings.apiProtocol}
+            {t.settings.model.apiProtocol}
           </label>
           <select
             className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -1770,11 +1834,11 @@ function AddModelForm({
 
       <div>
         <label className="text-sm font-medium">
-          {t.modelSettings.baseUrlLabel}
+          {t.settings.model.baseUrlLabel}
         </label>
         <Input
           className="mt-1"
-          placeholder={t.modelSettings.baseUrlPlaceholder}
+          placeholder={t.settings.model.baseUrlPlaceholder}
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
         />
@@ -1790,7 +1854,7 @@ function AddModelForm({
           className="flex w-full items-center justify-between px-3 py-2 text-sm font-medium hover:bg-muted/40"
         >
           <span>
-            {t.modelSettings.extraHeadersTitle}
+            {t.settings.model.extraHeadersTitle}
             {(() => {
               const n = Object.keys(parseHeadersText(headersText)).length;
               return n > 0 ? ` (${n})` : "";
@@ -1805,13 +1869,13 @@ function AddModelForm({
             <textarea
               value={headersText}
               onChange={(e) => setHeadersText(e.target.value)}
-              placeholder={t.modelSettings.extraHeadersPlaceholder}
+              placeholder={t.settings.model.extraHeadersPlaceholder}
               spellCheck={false}
               rows={3}
               className="w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             />
             <p className="text-[11px] text-muted-foreground">
-              {t.modelSettings.extraHeadersHint}
+              {t.settings.model.extraHeadersHint}
             </p>
           </div>
         )}
@@ -1820,11 +1884,11 @@ function AddModelForm({
       <div className="grid grid-cols-3 gap-4">
         <div className="flex items-center gap-2 pt-6">
           <Switch checked={thinking} onCheckedChange={setThinking} />{" "}
-          <span className="text-sm">{t.modelSettings.thinkingLabel}</span>
+          <span className="text-sm">{t.settings.model.thinkingLabel}</span>
         </div>
         <div className="flex items-center gap-2 pt-6">
           <Switch checked={vision} onCheckedChange={setVision} />{" "}
-          <span className="text-sm">{t.modelSettings.visionLabel}</span>
+          <span className="text-sm">{t.settings.model.visionLabel}</span>
         </div>
       </div>
 
@@ -1835,7 +1899,7 @@ function AddModelForm({
             <>
               <div className="h-2.5 w-2.5 rounded-lg bg-muted-foreground/40" />
               <span className="text-muted-foreground">
-                {t.modelSettings.testFailed}
+                {t.settings.model.testFailed}
               </span>
             </>
           )}
@@ -1861,7 +1925,7 @@ function AddModelForm({
             </>
           )}
           <span className="text-xs text-muted-foreground ml-2">
-            {t.modelSettings.testEndpointHint}
+            {t.settings.model.testEndpointHint}
           </span>
         </div>
         <div className="flex gap-2">
@@ -1879,7 +1943,7 @@ function AddModelForm({
             onClick={handleTest}
             disabled={testStatus === "testing"}
           >
-            <WifiIcon className="mr-1 h-3 w-3" /> {t.modelSettings.diagnose}
+            <WifiIcon className="mr-1 h-3 w-3" /> {t.settings.model.diagnose}
           </Button>
         </div>
       </div>
@@ -1977,17 +2041,17 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) {
           toast.error(
-            `${t.modelSettings.localModels.importFailed}: ${
+            `${t.settings.model.localModels.importFailed}: ${
               data.error || `HTTP ${res.status}`
             }`,
           );
           return;
         }
-        toast.success(t.modelSettings.localModels.imported);
+        toast.success(t.settings.model.localModels.imported);
         onImported?.();
       } catch (e) {
         swallow(e);
-        toast.error(t.modelSettings.localModels.importFailed);
+        toast.error(t.settings.model.localModels.importFailed);
       } finally {
         setImporting((prev) => {
           const next = { ...prev };
@@ -1998,15 +2062,15 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
     },
     [
       onImported,
-      t.modelSettings.localModels.importFailed,
-      t.modelSettings.localModels.imported,
+      t.settings.model.localModels.importFailed,
+      t.settings.model.localModels.imported,
     ],
   );
 
   return (
     <SettingsSection
-      title={t.modelSettings.localModels.title}
-      description={t.modelSettings.localModels.subtitle}
+      title={t.settings.model.localModels.title}
+      description={t.settings.model.localModels.subtitle}
     >
       <div className="rounded-lg border border-border overflow-hidden">
         {/* Header bar · scan button + live status badge. Lives
@@ -2016,24 +2080,24 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">
-              {t.modelSettings.localModels.providerHint}
+              {t.settings.model.localModels.providerHint}
             </span>
             {scanStatus === "scanning" && (
               <Loader2Icon className="size-3.5 animate-spin text-blue-500" />
             )}
             {scanStatus === "done" && services.length > 0 && (
               <span className="inline-flex items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
-                {t.modelSettings.localModels.modelsCount(services.length)}
+                {t.settings.model.localModels.modelsCount(services.length)}
               </span>
             )}
             {scanStatus === "done" && services.length === 0 && (
               <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-400">
-                {t.modelSettings.localModels.empty}
+                {t.settings.model.localModels.empty}
               </span>
             )}
             {scanStatus === "error" && (
               <span className="inline-flex items-center rounded-md border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
-                {t.modelSettings.localModels.serviceStatus.error}
+                {t.settings.model.localModels.serviceStatus.error}
               </span>
             )}
           </div>
@@ -2049,8 +2113,8 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
               <RefreshCwIcon className="mr-1.5 size-3.5" />
             )}
             {scanStatus === "scanning"
-              ? t.modelSettings.localModels.scanButtonScanning
-              : t.modelSettings.localModels.scanButton}
+              ? t.settings.model.localModels.scanButtonScanning
+              : t.settings.model.localModels.scanButton}
           </Button>
         </div>
 
@@ -2061,7 +2125,7 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
           <div className="border-t border-border divide-y divide-border">
             {services.length === 0 ? (
               <div className="px-4 py-6 text-sm text-muted-foreground">
-                {t.modelSettings.localModels.emptyHint}
+                {t.settings.model.localModels.emptyHint}
               </div>
             ) : (
               services.map((svc) => {
@@ -2080,29 +2144,29 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
                         </code>
                         {svc.status === "ok" && (
                           <span className="inline-flex shrink-0 items-center rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 dark:border-green-500/40 dark:bg-green-500/10 dark:text-green-400">
-                            {t.modelSettings.localModels.serviceStatus.ok}
+                            {t.settings.model.localModels.serviceStatus.ok}
                           </span>
                         )}
                         {svc.status === "empty" && (
                           <span className="inline-flex shrink-0 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
-                            {t.modelSettings.localModels.serviceStatus.empty}
+                            {t.settings.model.localModels.serviceStatus.empty}
                           </span>
                         )}
                         {svc.status === "error" && (
                           <span className="inline-flex shrink-0 items-center rounded-md border border-destructive/30 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
-                            {t.modelSettings.localModels.serviceStatus.error}
+                            {t.settings.model.localModels.serviceStatus.error}
                           </span>
                         )}
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">
                         {svc.status === "ok" &&
-                          t.modelSettings.localModels.modelsCount(
+                          t.settings.model.localModels.modelsCount(
                             svc.models.length,
                           )}
                         {svc.status === "empty" &&
-                          t.modelSettings.localModels.serviceStatus.empty}
+                          t.settings.model.localModels.serviceStatus.empty}
                         {svc.error &&
-                          `${t.modelSettings.localModels.serviceStatus.error}: ${svc.error}`}
+                          `${t.settings.model.localModels.serviceStatus.error}: ${svc.error}`}
                       </div>
                     </div>
                     <Button
@@ -2112,8 +2176,8 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
                       disabled={!canImport}
                     >
                       {busy
-                        ? t.modelSettings.localModels.importingButton
-                        : t.modelSettings.localModels.importButton}
+                        ? t.settings.model.localModels.importingButton
+                        : t.settings.model.localModels.importButton}
                     </Button>
                   </div>
                 );
