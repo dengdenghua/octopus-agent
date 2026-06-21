@@ -41,14 +41,23 @@ export function McpSettingsPage() {
       setRawConfig(data);
       const mcpServers = data.mcp_servers || {};
       setServers(
-        Object.entries(mcpServers).map(([name, cfg]: [string, any]) => ({
-          name,
-          type: cfg.type || "stdio",
-          enabled: cfg.enabled !== false,
-          command: cfg.command,
-          url: cfg.url,
-          description: cfg.description || "",
-        })),
+        Object.entries(mcpServers).map(([name, cfg]) => {
+          const c = cfg as Partial<{
+            type: string;
+            command: string;
+            url: string;
+            enabled: boolean;
+            description: string;
+          }>;
+          return {
+            name,
+            type: c.type || "stdio",
+            enabled: c.enabled !== false,
+            command: c.command,
+            url: c.url,
+            description: c.description || "",
+          };
+        }),
       );
     } catch (error) {
       console.error(error);

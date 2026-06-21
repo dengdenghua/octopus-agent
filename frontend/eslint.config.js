@@ -70,4 +70,13 @@ export default tseslint.config(
       "@typescript-eslint/no-base-to-string": "off",
     },
   },
+  {
+    // Test files legitimately reach for `any` in partial mocks and
+    // fixtures; the rule is noise there (it accounted for ~35 of the
+    // warnings). Keep it on for production code.
+    files: ["**/*.test.ts", "**/*.test.tsx", "src/test/**"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 );
