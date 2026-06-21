@@ -15,9 +15,14 @@ import pytest
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.suckers.computer_use_record import (
     loop_result_to_trajectory,
+    record_failed_loop,
     record_successful_loop,
 )
 from runtime.memory.journal import InMemoryJournal
+from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.safety.evolution.browser_desktop_repair_recipes import (
+    compute_browser_desktop_repair_recipes,
+)
 from runtime.safety.recovery import ForgeConfig, SkillForge
 
 
@@ -155,6 +160,76 @@ def test_recorded_gui_macro_is_quarantined_not_promoted() -> None:
     ]
     assert decisions, "a quarantine decision should be journaled for approval"
     assert "mouse_click" in (decisions[0].details or {}).get("dangerous_underlying", [])
+
+
+# ── failure side: loop failure → review queue → repair recipe ────────
+
+
+def _failure(status: str, actions: list[dict[str, Any]], *, reason: str = "") -> dict[str, Any]:
+    return {"status": status, "goal": "demo", "reason": reason, "actions_taken": actions}
+
+
+def test_record_failed_loop_ignores_success_and_garbage(tmp_path: Any) -> None:
+    rq = str(tmp_path / "rq.json")
+    assert record_failed_loop(
+        _success([{"action": "click", "x": 1, "y": 2}]), review_queue_path=rq
+    ) is None
+    assert record_failed_loop("nope", review_queue_path=rq) is None
+    assert record_failed_loop({"status": ""}, review_queue_path=rq) is None
+
+
+def test_record_failed_loop_files_a_review_case(tmp_path: Any) -> None:
+    rq = str(tmp_path / "rq.json")
+    res = record_failed_loop(
+        _failure("max_iterations", [{"action": "click", "x": 5, "y": 6}], reason="stuck"),
+        review_queue_path=rq,
+    )
+    assert res is not None
+    items = ReviewQueue(rq).items(
+        status="pending", target_bucket="browser_desktop_replay",
+    )["items"]
+    assert len(items) == 1
+    assert items[0]["candidate_kind"] == "computer_activity_replay_case"
+    assert items[0]["metadata"]["last_activity"]["event"] == "max_iterations"
+    assert items[0]["metadata"]["last_activity"]["action"]["action"] == "click"
+
+
+def test_repeated_failures_cluster_into_one_p0_repair_recipe(tmp_path: Any) -> None:
+    rq = str(tmp_path / "rq.json")
+    # three independent "max_iterations while clicking" failures
+    for i in range(3):
+        record_failed_loop(
+            _failure("max_iterations", [
+                {"action": "move", "x": i, "y": i},
+                {"action": "click", "x": i, "y": i},
+            ]),
+            review_queue_path=rq,
+        )
+
+    report = compute_browser_desktop_repair_recipes(review_queue_path=rq)
+    assert report["recipe_count"] == 1
+    recipe = report["recipes"][0]
+    assert recipe["candidate_kind"] == "computer_activity_replay_case"
+    assert recipe["occurrences"] == 3          # distinct rows, one cluster
+    assert recipe["priority"] == "P0"          # engine escalates >= 3
+
+
+def test_distinct_failure_patterns_do_not_merge(tmp_path: Any) -> None:
+    rq = str(tmp_path / "rq.json")
+    record_failed_loop(_failure("max_iterations", [{"action": "click", "x": 1, "y": 1}]), review_queue_path=rq)
+    record_failed_loop(_failure("error", [{"action": "type", "text": "x"}]), review_queue_path=rq)
+    report = compute_browser_desktop_repair_recipes(review_queue_path=rq)
+    assert report["recipe_count"] == 2  # (max_iterations,click) vs (error,type)
+
+
+def test_record_failed_loop_is_best_effort(tmp_path: Any) -> None:
+    # parent path is a file → write fails → swallowed, returns None, no raise
+    blocker = tmp_path / "blocker"
+    blocker.write_text("x")
+    assert record_failed_loop(
+        _failure("error", [{"action": "click", "x": 1, "y": 2}]),
+        review_queue_path=str(blocker / "rq.json"),
+    ) is None
 
 
 if __name__ == "__main__":  # pragma: no cover

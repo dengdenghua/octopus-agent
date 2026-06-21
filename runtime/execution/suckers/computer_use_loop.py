@@ -400,15 +400,20 @@ def make_computer_use_loop_skill(
             wait_between_ms=wait_between_ms,
             stop_on_error=stop_on_error,
         )
-        # Record → skill: a successful run becomes a journal Trajectory so
-        # SkillForge can distil a reusable (immune-gated) macro. Best-effort;
-        # never let recording break the live loop.
+        # Record loop outcomes (best-effort; never break the live loop).
+        # Success → a journal Trajectory SkillForge can distil into an
+        # (immune-gated) macro. Failure → a review-queue case the
+        # browser-desktop repair-recipe pipeline clusters into a repair.
         if journal is not None:
             from runtime.execution.suckers.computer_use_record import (
+                record_failed_loop,
                 record_successful_loop,
             )
 
-            record_successful_loop(journal, result)
+            if result.get("status") == "success":
+                record_successful_loop(journal, result)
+            else:
+                record_failed_loop(result)
         return result
 
     return Skill(

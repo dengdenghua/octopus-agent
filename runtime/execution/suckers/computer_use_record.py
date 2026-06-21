@@ -117,3 +117,94 @@ def record_successful_loop(journal: Any, loop_result: Any) -> Trajectory | None:
     except Exception:  # noqa: BLE001 — recording must never break the loop
         return None
     return traj
+
+
+# A non-success loop end. ``max_iterations`` / ``planner_gave_up`` / ``error``
+# all mean the loop failed to reach the goal — exactly the cases the
+# browser-desktop repair-recipe pipeline turns into deterministic repairs.
+_FAILURE_STATUSES = frozenset(
+    {"planner_gave_up", "error", "max_iterations", "timeout"}
+)
+
+
+def record_failed_loop(loop_result: Any, *, review_queue_path: Any = None) -> Any:
+    """Capture a *failed* computer-use loop into the review queue.
+
+    The symmetric twin of :func:`record_successful_loop`: a successful run is
+    forged into a skill, a failed run is filed so the existing browser-desktop
+    repair-recipe pipeline (``compute_browser_desktop_repair_recipes``) can
+    cluster repeated failures of the same pattern into a deterministic repair
+    recipe. We reuse the already-handled ``computer_activity_replay_case`` kind
+    and the ``browser_desktop_replay`` bucket, so the 1200-line repair engine
+    needs **no changes**.
+
+    Each failure is a distinct queue row (unique fingerprint in the text), but
+    rows with the same ``(status, last-action)`` share a cluster key, so three
+    "max_iterations while clicking" failures cluster into one recipe with
+    ``occurrences == 3`` (which the engine escalates to P0).
+
+    Best-effort: returns the queue ``upsert_item`` result, or ``None`` if the
+    run did not fail or anything went wrong — recording never breaks the loop.
+    """
+    if not isinstance(loop_result, dict):
+        return None
+    status = str(loop_result.get("status") or "")
+    if status not in _FAILURE_STATUSES:
+        return None
+
+    actions = loop_result.get("actions_taken") or []
+    last_kind = "none"
+    for action in reversed(actions):
+        if isinstance(action, dict) and action.get("action"):
+            last_kind = str(action.get("action"))
+            break
+    goal = str(loop_result.get("goal") or "")[:200]
+    reason = str(loop_result.get("reason") or "")[:300]
+
+    try:
+        from runtime.memory.learning.review_queue import ReviewQueue
+        from runtime.platform.process.paths import app_paths
+
+        fingerprint = f"culoop:{status}:{last_kind}:{new_id().hex[:12]}"
+        queue = ReviewQueue(
+            review_queue_path
+            if review_queue_path is not None
+            else app_paths().review_queue_path
+        )
+        return queue.upsert_item(
+            source="computer_use_loop_failure",
+            source_kind="browser_desktop_replay",
+            candidate_kind="computer_activity_replay_case",
+            priority="P0",
+            target_bucket="browser_desktop_replay",
+            title="Review computer-use loop failure",
+            text=(
+                f"Autonomous computer-use loop ended `{status}` for goal "
+                f"`{goal or 'n/a'}` after attempting `{last_kind}`.\n"
+                f"Reason: {reason or 'n/a'}.\nRef: {fingerprint}."
+            ),
+            metadata={
+                "case_id": fingerprint,
+                "fingerprint": fingerprint,
+                "pending_count": 0,
+                # Shape consumed by _cluster_key for computer_activity_replay_case:
+                # groups failures by (event, action) so the same failure mode
+                # clusters across runs.
+                "last_activity": {
+                    "event": status,
+                    "action": {"action": last_kind},
+                },
+                "goal": goal,
+                "reason": reason,
+                "iterations": loop_result.get("iterations"),
+            },
+            tags=[
+                "computer",
+                "desktop",
+                "computer_use_loop",
+                "failure",
+                "review_queue",
+            ],
+        )
+    except Exception:  # noqa: BLE001 — recording must never break the loop
+        return None
