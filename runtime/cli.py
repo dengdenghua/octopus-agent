@@ -871,8 +871,21 @@ def main(argv: list[str] | None = None) -> int:
     skills_search = skills_sub.add_parser("search", help="Search skill marketplace.")
     skills_search.add_argument("query", help="search query")
     skills_search.add_argument("--limit", type=int, default=20)
-    skills_install = skills_sub.add_parser("install", help="Install a skill from marketplace.")
-    skills_install.add_argument("name", help="skill name to install")
+    skills_install = skills_sub.add_parser(
+        "install", help="Install a skill from the marketplace, a local dir, or a GitHub URL.",
+    )
+    skills_install.add_argument(
+        "name",
+        help="marketplace skill name, OR a local skill dir / GitHub URL (agentskills.io standard)",
+    )
+    skills_install.add_argument(
+        "--allow-dangerous", action="store_true",
+        help="Install an agentskills.io skill even if the safety scan flags it.",
+    )
+    skills_install.add_argument(
+        "--overwrite", action="store_true",
+        help="Replace an existing skill of the same name.",
+    )
     skills_uninstall = skills_sub.add_parser("uninstall", help="Uninstall a skill.")
     skills_uninstall.add_argument("name", help="skill name to uninstall")
     skills_info = skills_sub.add_parser("info", help="Show skill details.")
@@ -1291,6 +1304,34 @@ def run_skills(args: argparse.Namespace, *, color: bool = True) -> int:
         return 0
 
     if op == "install":
+        src = str(args.name)
+        # An agentskills.io source (local dir or GitHub URL) installs via the
+        # standard installer behind the safety gate; a bare name is a
+        # marketplace skill.
+        is_standard = (
+            src.startswith(("http://", "https://"))
+            or src.endswith(".git")
+            or Path(src).expanduser().is_dir()
+        )
+        if is_standard:
+            from runtime.memory.skills_lib.agentskills import install_from_source
+
+            r = install_from_source(
+                src,
+                allow_dangerous=bool(getattr(args, "allow_dangerous", False)),
+                overwrite=bool(getattr(args, "overwrite", False)),
+            )
+            if r.ok:
+                note = (
+                    f" (⚠ {len(r.findings)} safety finding(s), via --allow-dangerous)"
+                    if r.dangerous else ""
+                )
+                print(f"  ✓ installed '{r.name}'{note}")
+                return 0
+            print(f"  ✗ {r.error}")
+            for f in r.findings:
+                print(f"      ! {f.file}:{f.line} — {f.reason}")
+            return 1
         result = market.install(args.name)
         icon = "✓" if result.status in ("installed", "updated") else "✗"
         print(f"  {icon} {result.message}")

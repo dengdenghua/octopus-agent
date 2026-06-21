@@ -163,6 +163,95 @@ def install_skill(
     )
 
 
+def default_catalog_dir() -> Path:
+    """The default skill catalog Octopus auto-merges (``all_skills/``)."""
+    return Path(__file__).resolve().parents[2] / "execution" / "all_skills"
+
+
+_GH_TREE_RE = re.compile(
+    r"^https?://github\.com/([^/]+)/([^/]+)/tree/([^/]+)/(.+?)/?$"
+)
+_GH_REPO_RE = re.compile(r"^https?://github\.com/[^/]+/[^/]+?(?:\.git)?/?$")
+
+
+def _git_clone(url: str, branch: str | None, dest: Path) -> None:
+    import subprocess
+
+    cmd = ["git", "clone", "--depth", "1"]
+    if branch:
+        cmd += ["--branch", branch]
+    cmd += [url, str(dest)]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    except FileNotFoundError as exc:  # git not installed
+        raise RuntimeError("git is not installed") from exc
+    if proc.returncode != 0:
+        raise RuntimeError(f"git clone failed: {proc.stderr.strip()[:300]}")
+
+
+def resolve_skill_source(source: str, workdir: Path) -> Path:
+    """Resolve a skill source to a local folder containing ``SKILL.md``.
+
+    Accepts:
+    * a local directory path;
+    * a GitHub *tree* URL pointing at a skill subfolder
+      (``.../tree/<branch>/<path>``);
+    * a plain GitHub repo or ``.git`` URL (clones, then finds the skill).
+
+    Clones into ``workdir`` (caller owns its lifetime). Raises on failure.
+    """
+    p = Path(source).expanduser()
+    if p.is_dir():
+        return p
+
+    m = _GH_TREE_RE.match(source)
+    if m:
+        owner, repo, branch, subpath = m.groups()
+        _git_clone(f"https://github.com/{owner}/{repo}.git", branch, workdir)
+        target = workdir / subpath
+        if not (target / "SKILL.md").is_file():
+            raise ValueError(f"no SKILL.md at '{subpath}' in {owner}/{repo}")
+        return target
+
+    if _GH_REPO_RE.match(source) or source.endswith(".git"):
+        url = source if source.endswith(".git") else source.rstrip("/") + ".git"
+        _git_clone(url, None, workdir)
+        if (workdir / "SKILL.md").is_file():
+            return workdir
+        found = next(iter(sorted(workdir.rglob("SKILL.md"))), None)
+        if found is None:
+            raise ValueError(f"no SKILL.md found in {source}")
+        return found.parent
+
+    raise ValueError(
+        f"unrecognized skill source: {source!r} "
+        "(use a local directory or a GitHub URL)"
+    )
+
+
+def install_from_source(
+    source: str,
+    dest_root: Path | None = None,
+    *,
+    allow_dangerous: bool = False,
+    overwrite: bool = False,
+) -> InstallResult:
+    """Resolve a skill source (local dir or GitHub URL) and install it into
+    the catalog behind the safety gate. Temp clones are cleaned up."""
+    import tempfile
+
+    root = Path(dest_root) if dest_root is not None else default_catalog_dir()
+    with tempfile.TemporaryDirectory(prefix="octopus-skill-") as td:
+        try:
+            skill_dir = resolve_skill_source(source, Path(td) / "clone")
+        except (ValueError, RuntimeError, OSError) as exc:
+            return InstallResult(ok=False, error=f"fetch failed: {exc}")
+        return install_skill(
+            skill_dir, root,
+            allow_dangerous=allow_dangerous, overwrite=overwrite,
+        )
+
+
 def to_payload(result: InstallResult) -> dict[str, Any]:
     """Serialise an InstallResult for an API/CLI response."""
     return {
