@@ -369,26 +369,14 @@ async def _start_turn(
                 )
 
             if topology_id:
-                import os
-
-                _mesh = os.environ.get("OCTOPUS_SERVE_MESH", "").strip().lower()
-                if _mesh in {"1", "true", "yes", "on"}:
-                    # Route swarm mode through the boids/SignalBus MESH swarm
-                    # (parallel arms + stigmergic coordination) instead of the
-                    # sequential TeamRunner. Opt-in; falls back to react on any
-                    # mesh fault so the turn never breaks.
-                    await runtime._drive_swarm_mesh(
-                        turn, log, emitter, intent, text=text,
-                    )
-                else:
-                    await runtime._drive_team_topology(
-                        turn,
-                        log,
-                        emitter,
-                        intent,
-                        text=text,
-                        topology_id=topology_id,
-                    )
+                # Swarm mode: auto-select the engine by the planned graph's
+                # shape — a parallel graph runs on the boids/SignalBus mesh
+                # swarm, a small/sequential one on the sequential TeamRunner.
+                # _drive_swarm_mesh plans, decides, and delegates to the team
+                # itself (OCTOPUS_SERVE_MESH=1/0 can still force the choice).
+                await runtime._drive_swarm_mesh(
+                    turn, log, emitter, intent, text=text, topology_id=topology_id,
+                )
             elif runtime._should_use_reflection_fast_path(
                 text,
                 validated,

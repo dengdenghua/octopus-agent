@@ -882,8 +882,11 @@ class CerebrumRuntime:
         intent: ParsedIntent,
         *,
         text: str,
+        topology_id: str = "",
     ) -> None:
-        await _drive_swarm_mesh(self, turn, log, emitter, intent, text=text)
+        await _drive_swarm_mesh(
+            self, turn, log, emitter, intent, text=text, topology_id=topology_id,
+        )
 
     async def _drive_react(
         self,

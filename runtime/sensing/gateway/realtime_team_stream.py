@@ -613,6 +613,28 @@ async def _drive_team_topology(
         )
 
 
+def _graph_favors_mesh(graph: Any) -> bool:
+    """Decide whether the parallel mesh swarm is worth it for this graph.
+
+    Mesh only beats the sequential team when there is real parallelism to
+    exploit — several nodes AND a topo-layer with independent siblings. A small
+    or strictly-sequential graph runs no faster on the mesh (and the mesh skips
+    the team's curated topologies), so those go to the team. This is what lets
+    the engine be auto-selected instead of toggled by hand.
+    """
+    nodes = getattr(graph, "nodes", None) or []
+    if len(nodes) < 3:
+        return False
+    try:
+        from runtime.execution.swarm.runtime import _split_topo_layers
+
+        layers = _split_topo_layers(graph)
+    except Exception:  # noqa: BLE001 — undecidable → let the team handle it
+        return False
+    widest = max((len(layer) for layer in layers), default=1)
+    return widest >= 2
+
+
 async def _drive_swarm_mesh(
     runtime: Any,
     turn: Turn,
@@ -621,14 +643,17 @@ async def _drive_swarm_mesh(
     intent: ParsedIntent,
     *,
     text: str,
+    topology_id: str = "",
 ) -> None:
-    """Drive a swarm-mode turn through the boids/SignalBus MESH swarm.
+    """Run a swarm-mode turn on the best engine for the task — auto-selected.
 
-    The serve "swarm mode" normally runs the sequential ``TeamRunner``; with
-    ``OCTOPUS_SERVE_MESH`` on it routes here instead, into ``SwarmRuntime`` —
-    parallel arms over a registry-derived pool, with boids arbitration and
-    live Arm-to-Arm ``SignalBus`` coordination. Falls back to single-agent
-    react on ANY error so a mesh problem never takes down the turn.
+    Plans the graph, then: a parallel graph (>=3 nodes, a layer with
+    independent siblings) runs on the boids/SignalBus MESH swarm
+    (``SwarmRuntime`` — parallel arms over a registry-derived pool with live
+    Arm-to-Arm coordination); a small or sequential graph runs on the
+    sequential ``TeamRunner`` (``topology_id``). ``OCTOPUS_SERVE_MESH=1``/``0``
+    forces mesh/team; unset = auto. Any mesh fault falls back to react, so a
+    swarm problem never takes down the turn.
     """
     import asyncio
 
@@ -666,18 +691,10 @@ async def _drive_swarm_mesh(
             )
         await runtime._drive_react(turn, log, emitter, intent, provider, agent)
 
-    def _producer() -> Any:
-        from runtime.core.graph_runtime import GraphRuntime
-        from runtime.execution.swarm.drive import (
-            build_arm_pool_from_registry,
-            run_swarm,
-        )
+    def _session():
         from runtime.memory.journal.journal_context import journal_context
-        from runtime.platform.models import Budget, BudgetLimits
         from runtime.platform.process.session import Session, session_scope
-        from runtime.safety.chromatophores import SignalBus
 
-        stack = runtime._stack
         turn_session = Session(
             agent=None,
             thread_id=turn.thread_id,
@@ -685,8 +702,27 @@ async def _drive_swarm_mesh(
             turn_id=turn.id,
             metadata=dict(intent.user_context or {}),
         )
-        with session_scope(turn_session), journal_context(conversation_id=turn.thread_id):
-            graph = stack.planner.plan(intent)
+        return session_scope(turn_session), journal_context(
+            conversation_id=turn.thread_id,
+        )
+
+    def _plan() -> Any:
+        scope, jctx = _session()
+        with scope, jctx:
+            return runtime._stack.planner.plan(intent)
+
+    def _run(graph: Any) -> Any:
+        from runtime.core.graph_runtime import GraphRuntime
+        from runtime.execution.swarm.drive import (
+            build_arm_pool_from_registry,
+            run_swarm,
+        )
+        from runtime.platform.models import Budget, BudgetLimits
+        from runtime.safety.chromatophores import SignalBus
+
+        stack = runtime._stack
+        scope, jctx = _session()
+        with scope, jctx:
             grt = GraphRuntime(executor=stack.executor, journal=stack.journal)
             sb = SignalBus()
             pool = build_arm_pool_from_registry(stack.registry, grt, signal_bus=sb)
@@ -703,8 +739,30 @@ async def _drive_swarm_mesh(
             )
             return result, len(signals)
 
+    import os
+
+    force = os.environ.get("OCTOPUS_SERVE_MESH", "").strip().lower()
+    forced_off = force in {"0", "false", "no", "off"}
+    forced_on = force in {"1", "true", "yes", "on"}
+
+    graph: Any = None
+    with contextlib.suppress(Exception):
+        graph = await asyncio.to_thread(_plan)
+
+    use_mesh = (
+        graph is not None
+        and not forced_off
+        and (forced_on or _graph_favors_mesh(graph))
+    )
+    if not use_mesh:
+        # small / sequential / planning failed / forced off → sequential team
+        await _drive_team_topology(
+            runtime, turn, log, emitter, intent, text=text, topology_id=topology_id,
+        )
+        return
+
     try:
-        result, signal_count = await asyncio.to_thread(_producer)
+        result, signal_count = await asyncio.to_thread(_run, graph)
         arms = list(getattr(result, "arm_results", []) or [])
         for arm in arms:
             reason = str(getattr(arm, "reason", "") or "")[:4000]
