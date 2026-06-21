@@ -27,18 +27,18 @@ import { cn } from "@/lib/utils";
 import type { BrowserExtensionInfo } from "@/types/electron";
 
 type ExtensionCategory =
-  | "精选"
-  | "效率"
-  | "研究"
-  | "安全"
-  | "开发"
-  | "即将推出";
+  | "featured"
+  | "efficiency"
+  | "research"
+  | "security"
+  | "development"
+  | "comingSoon";
 
 type ExtensionListing = {
   id: string;
   name: string;
   tagline: string;
-  category: Exclude<ExtensionCategory, "精选">;
+  category: Exclude<ExtensionCategory, "featured">;
   icon: typeof Sparkles;
   accent: string;
   rating: string;
@@ -50,92 +50,92 @@ type ExtensionListing = {
 const STORAGE_KEY = "octopus-browser-extension-marketplace";
 
 const categories: ExtensionCategory[] = [
-  "精选",
-  "效率",
-  "研究",
-  "安全",
-  "开发",
-  "即将推出",
+  "featured",
+  "efficiency",
+  "research",
+  "security",
+  "development",
+  "comingSoon",
 ];
 
 const catalog: ExtensionListing[] = [
   {
     id: "octopus-page-agent",
     name: "Page Agent",
-    tagline: "把当前网页变成可执行任务上下文",
-    category: "效率",
+    tagline: "Turn the current page into executable task context",
+    category: "efficiency",
     icon: Wand2,
     accent: "from-sky-400 to-blue-600",
     rating: "4.9",
     installs: "12K",
-    tags: ["自动化", "网页操作", "AI"],
+    tags: ["Automation", "Web Operation", "AI"],
   },
   {
     id: "research-clipper",
     name: "Research Clipper",
-    tagline: "收集网页片段、来源和截图",
-    category: "研究",
+    tagline: "Collect web snippets, sources, and screenshots",
+    category: "research",
     icon: BookOpen,
     accent: "from-emerald-400 to-teal-600",
     rating: "4.8",
     installs: "8.4K",
-    tags: ["资料库", "引用", "截图"],
+    tags: ["Library", "Citation", "Screenshot"],
   },
   {
     id: "shield-lite",
     name: "Shield Lite",
-    tagline: "轻量拦截干扰元素和追踪脚本",
-    category: "安全",
+    tagline: "Lightweight blocking of intrusive elements and tracking scripts",
+    category: "security",
     icon: ShieldCheck,
     accent: "from-rose-400 to-red-600",
     rating: "4.7",
     installs: "18K",
-    tags: ["隐私", "拦截", "安全"],
+    tags: ["Privacy", "Blocking", "Security"],
   },
   {
     id: "cookie-vault",
     name: "Cookie Vault",
-    tagline: "为测试账号保存隔离会话",
-    category: "安全",
+    tagline: "Save isolated sessions for test accounts",
+    category: "security",
     icon: LockKeyhole,
     accent: "from-amber-300 to-orange-500",
     rating: "4.6",
     installs: "5.2K",
-    tags: ["会话", "测试", "隔离"],
+    tags: ["Session", "Testing", "Isolation"],
   },
   {
     id: "translator-lens",
     name: "Translator Lens",
-    tagline: "悬浮翻译选中文本和页面区域",
-    category: "效率",
+    tagline: "Hover-translate selected text and page regions",
+    category: "efficiency",
     icon: Languages,
     accent: "from-violet-400 to-fuchsia-600",
     rating: "4.8",
     installs: "21K",
-    tags: ["翻译", "阅读", "悬浮窗"],
+    tags: ["Translation", "Reading", "Hover"],
   },
   {
     id: "dom-inspector",
     name: "DOM Inspector",
-    tagline: "直接查看元素、选择器和可访问树",
-    category: "开发",
+    tagline: "Directly inspect elements, selectors, and accessibility tree",
+    category: "development",
     icon: Code2,
     accent: "from-slate-500 to-zinc-800",
     rating: "4.9",
     installs: "9.1K",
-    tags: ["调试", "选择器", "可访问性"],
+    tags: ["Debug", "Selector", "Accessibility"],
   },
   {
     id: "visual-recorder",
     name: "Visual Recorder",
-    tagline: "录制点击路径并生成自动化步骤",
-    category: "即将推出",
+    tagline: "Record click paths and generate automation steps",
+    category: "comingSoon",
     icon: Sparkles,
     accent: "from-cyan-400 to-indigo-600",
     rating: "New",
     installs: "Beta",
     status: "coming-soon",
-    tags: ["录制", "回放", "流程"],
+    tags: ["Recording", "Playback", "Workflow"],
   },
 ];
 
@@ -165,12 +165,12 @@ export function ExtensionMarketplace({
 
   const categoryLabels = useMemo<Record<ExtensionCategory, string>>(
     () => ({
-      精选: em.categoryFeatured,
-      效率: em.categoryEfficiency,
-      研究: em.categoryResearch,
-      安全: em.categorySecurity,
-      开发: em.categoryDevelopment,
-      即将推出: em.categoryComingSoon,
+      featured: em.categoryFeatured,
+      efficiency: em.categoryEfficiency,
+      research: em.categoryResearch,
+      security: em.categorySecurity,
+      development: em.categoryDevelopment,
+      comingSoon: em.categoryComingSoon,
     }),
     [em],
   );
@@ -202,7 +202,7 @@ export function ExtensionMarketplace({
   );
 
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<ExtensionCategory>("精选");
+  const [category, setCategory] = useState<ExtensionCategory>("featured");
   const [selectedId, setSelectedId] = useState(featuredListing.id);
   const [installed, setInstalled] = useState<Set<string>>(() =>
     readInstalled(),
@@ -287,9 +287,9 @@ export function ExtensionMarketplace({
     const normalizedQuery = query.trim().toLowerCase();
     return catalog.filter((item) => {
       const matchesCategory =
-        category === "精选" ||
+        category === "featured" ||
         item.category === category ||
-        (category === "即将推出" && item.status === "coming-soon");
+        (category === "comingSoon" && item.status === "coming-soon");
       const matchesQuery =
         !normalizedQuery ||
         [item.name, item.tagline, item.category, ...item.tags]

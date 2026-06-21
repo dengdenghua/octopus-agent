@@ -19,6 +19,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
 } from "react";
 
@@ -45,6 +46,7 @@ import {
   type ActionResult,
 } from "./agentic-actions";
 import { useBrowserStore } from "./browser-store";
+import { liquidGlassClass } from "./liquid-glass";
 import type { WebviewTabHandle } from "./webview-tab";
 
 interface Props {
@@ -74,41 +76,6 @@ interface ResearchLogEntry {
   url?: string;
 }
 
-const RESEARCH_PLATFORMS: ResearchPlatform[] = [
-  {
-    name: "Gemini",
-    url: "https://gemini.google.com/app",
-    hint: "综合搜索、长问题、多轮分析",
-  },
-  {
-    name: "NotebookLM",
-    url: "https://notebooklm.google.com/",
-    hint: "资料库、引用、文档内研究",
-  },
-  {
-    name: "豆包",
-    url: "https://www.doubao.com/chat/",
-    hint: "中文调研、中文改写、国内语境",
-  },
-  {
-    name: "Perplexity",
-    url: "https://www.perplexity.ai/",
-    hint: "网页检索、来源线索、事实核查",
-  },
-];
-
-const RECORDER_PROTOCOL = `\
-[外部 AI 调研 · 记录员模式]
-目标: 尽量少消耗本地模型 token。你是浏览器调度员和记录员,不是主研究模型。
-策略:
-1. 优先打开/操控外部 AI 平台完成重推理,例如 Gemini、NotebookLM、豆包、Perplexity。
-2. 本地只做短步骤规划、页面操作、等待结果、摘录关键结论、保存证据日志。
-3. 不要把整页长文本回灌给本地模型;只抽取标题、URL、3-8 条关键结论、明显引用和待核查点。
-4. 每个平台输出后,记录: 平台、使用的 prompt、结果摘要、URL、时间、证据/截图线索。
-5. 遇到登录、上传文件、发送敏感数据、发帖/提交表单/付费操作,必须停下请用户确认。
-6. 最终报告只基于各平台结果做合并、去重、冲突标注和下一步建议。\
-`;
-
 export function CopilotPanel({ webviewHandle }: Props) {
   const { t } = useI18n();
   const { activeTab, state, setCopilotOpen, setCopilotWidth } =
@@ -137,6 +104,32 @@ export function CopilotPanel({ webviewHandle }: Props) {
   });
   const [briefCopied, setBriefCopied] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const researchPlatforms = useMemo<ResearchPlatform[]>(
+    () => [
+      {
+        name: "Gemini",
+        url: "https://gemini.google.com/app",
+        hint: t.browser.copilot.researchPlatformHintGemini,
+      },
+      {
+        name: "NotebookLM",
+        url: "https://notebooklm.google.com/",
+        hint: t.browser.copilot.researchPlatformHintNotebookLM,
+      },
+      {
+        name: t.browser.copilot.researchPlatformNameDoubao,
+        url: "https://www.doubao.com/chat/",
+        hint: t.browser.copilot.researchPlatformHintDoubao,
+      },
+      {
+        name: "Perplexity",
+        url: "https://www.perplexity.ai/",
+        hint: t.browser.copilot.researchPlatformHintPerplexity,
+      },
+    ],
+    [t],
+  );
 
   // Implementation note.
   // Implementation note.
@@ -224,10 +217,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
     setAgentLoopActive(false);
     // Implementation note.
     void sendMessage(threadId, {
-      text: "[用户已手动停止 agent · 不再继续自动操作]",
+      text: t.browser.copilot.stopAgentMessage,
       files: [],
     });
-  }, [sendMessage, threadId]);
+  }, [sendMessage, threadId, t]);
 
   const addPendingConfirmation = useCallback(
     (action: AgentAction, result: ActionResult) => {
@@ -296,7 +289,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     if (webviewHandle && !window.octopus) {
       if (loopCountRef.current >= MAX_AGENT_LOOP) {
         void sendMessage(threadId, {
-          text: `[已达到最大 agent 循环 ${MAX_AGENT_LOOP} 次,自动停止防止失控]`,
+          text: t.browser.copilot.maxLoopReached(MAX_AGENT_LOOP),
           files: [],
         });
         loopCountRef.current = 0;
@@ -361,7 +354,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     const wcId = webviewHandle?.getWebContentsId();
     if (!api || wcId == null) {
       void sendMessage(threadId, {
-        text: "[执行失败:webview 没准备好(可能在浏览器里跑而不是 Electron)]",
+        text: t.browser.copilot.webviewNotReadyError,
         files: [],
       });
       return;
@@ -369,7 +362,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
 
     if (loopCountRef.current >= MAX_AGENT_LOOP) {
       void sendMessage(threadId, {
-        text: `[已达到最大 agent 循环 ${MAX_AGENT_LOOP} 次,自动停止防止失控]`,
+        text: t.browser.copilot.maxLoopReached(MAX_AGENT_LOOP),
         files: [],
       });
       loopCountRef.current = 0;
@@ -466,7 +459,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
               pageAgent: pageInfo.pageAgent,
             }
           : undefined;
-        const summary = `[用户已确认高风险操作]\n${formatResults([result], pageInfoLite)}`;
+        const summary = `${t.browser.copilot.confirmedRiskyOperation}\n${formatResults([result], pageInfoLite)}`;
         void sendMessage(threadId, { text: summary, files: [] });
       } catch (err) {
         swallow(err);
@@ -475,7 +468,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         setBusy(false);
       }
     },
-    [sendMessage, threadId, webviewHandle],
+    [sendMessage, threadId, webviewHandle, t],
   );
 
   const dismissPendingAction = useCallback((id: string) => {
@@ -487,14 +480,14 @@ export function CopilotPanel({ webviewHandle }: Props) {
   const buildOutgoingText = useCallback(
     (raw: string): string => {
       const recorderHeader = recorderMode
-        ? `${RECORDER_PROTOCOL}\n\n---\n\n`
+        ? `${t.browser.copilot.recorderProtocol}\n\n---\n\n`
         : "";
       if (!autoBrowse) return `${recorderHeader}${raw}`;
       if (protocolInjectedRef.current.has(threadId)) return raw;
       protocolInjectedRef.current.add(threadId);
       return `${recorderHeader}${BROWSER_ACTION_PROTOCOL}\n\n---\n\n${raw}`;
     },
-    [autoBrowse, recorderMode, threadId],
+    [autoBrowse, recorderMode, threadId, t],
   );
 
   const send = useCallback(
@@ -518,48 +511,51 @@ export function CopilotPanel({ webviewHandle }: Props) {
   );
 
   const researchBrief = useMemo(
-    () => buildResearchBrief(researchLog),
-    [researchLog],
+    () => buildResearchBrief(researchLog, t),
+    [researchLog, t],
   );
 
-  const buildRecorderTask = useCallback((goal: string) => {
-    const trimmed = goal.trim();
-    const platforms = RESEARCH_PLATFORMS;
-    return [
-      RECORDER_PROTOCOL,
-      "",
-      "[本次调研任务]",
-      trimmed,
-      "",
-      "[外部平台分工]",
-      ...platforms.map(
-        (platform, index) =>
-          `${index + 1}. ${platform.name}: ${platform.hint} (${platform.url})`,
-      ),
-      "",
-      "[执行要求]",
-      "- 先打开第一个平台并输入适合该平台的 prompt。",
-      "- 每个平台只摘录高密度结果: 结论、来源线索、争议点、下一步。",
-      "- 不要把外部平台完整长回答反复喂回本地模型。",
-      "- 每个平台完成后,用一条简短研究日志汇报: 平台 / URL / 5 条以内要点 / 待核查。",
-      "- 需要登录、上传文件、提交敏感信息时暂停并请用户确认。",
-    ].join("\n");
-  }, []);
+  const buildRecorderTask = useCallback(
+    (goal: string) => {
+      const trimmed = goal.trim();
+      const c = t.browser.copilot;
+      return [
+        c.recorderProtocol,
+        "",
+        c.researchMissionLabel,
+        trimmed,
+        "",
+        c.researchPlatformDivisionLabel,
+        ...researchPlatforms.map(
+          (platform, index) =>
+            `${index + 1}. ${platform.name}: ${platform.hint} (${platform.url})`,
+        ),
+        "",
+        c.researchExecutionRequirementsLabel,
+        c.researchRequirementOpenFirstPlatform,
+        c.researchRequirementExtractHighDensity,
+        c.researchRequirementDoNotFeedBack,
+        c.researchRequirementLogPerPlatform,
+        c.researchRequirementPauseForSensitive,
+      ].join("\n");
+    },
+    [t, researchPlatforms],
+  );
 
   const startRecorderResearch = useCallback(() => {
     const goal = researchGoal.trim() || input.trim();
     if (!goal) return;
     setRecorderMode(true);
     setAutoBrowse(true);
-    const platforms = RESEARCH_PLATFORMS;
+    const c = t.browser.copilot;
     setResearchLog((prev) =>
       [
         {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           createdAt: Date.now(),
-          platform: "调度",
-          title: "开始外部 AI 调研",
-          note: `${goal}\n平台: ${platforms.map((p) => p.name).join(", ")}`,
+          platform: c.researchLogDispatchLabel,
+          title: c.researchStartTitle,
+          note: `${goal}\n${c.researchPlatformsPrefix} ${researchPlatforms.map((p) => p.name).join(", ")}`,
           url: activeTab?.url,
         },
         ...prev,
@@ -568,14 +564,15 @@ export function CopilotPanel({ webviewHandle }: Props) {
     send(buildRecorderTask(goal));
     setResearchGoal("");
     setInput("");
-  }, [activeTab?.url, buildRecorderTask, input, researchGoal, send]);
+  }, [activeTab?.url, buildRecorderTask, input, researchGoal, send, t, researchPlatforms]);
 
   const addPageToResearchLog = useCallback(async () => {
     setBusy(true);
     setErrorMsg(null);
+    const c = t.browser.copilot;
     try {
       const page = webviewHandle ? await webviewHandle.extractText() : null;
-      const title = page?.title || activeTab?.title || "当前页面";
+      const title = page?.title || activeTab?.title || c.currentPageFallback;
       const url = page?.url || activeTab?.url;
       const text = page?.text ?? "";
       setResearchLog((prev) =>
@@ -583,9 +580,9 @@ export function CopilotPanel({ webviewHandle }: Props) {
           {
             id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             createdAt: Date.now(),
-            platform: guessPlatformName(url),
+            platform: guessPlatformName(url, t),
             title,
-            note: text ? text.slice(0, 600) : "已记录当前页面。",
+            note: text ? text.slice(0, 600) : c.recordedPageNote,
             url,
           },
           ...prev,
@@ -597,7 +594,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     } finally {
       setBusy(false);
     }
-  }, [activeTab?.title, activeTab?.url, webviewHandle]);
+  }, [activeTab?.title, activeTab?.url, webviewHandle, t]);
 
   const copyResearchBrief = useCallback(async () => {
     if (!researchBrief) return;
@@ -628,15 +625,16 @@ export function CopilotPanel({ webviewHandle }: Props) {
   // Implementation note.
   const askWithPage = useCallback(
     async (instruction: string) => {
+      const c = t.browser.copilot;
       if (webviewHandle && !window.octopus) {
         setBusy(true);
         setErrorMsg(null);
         try {
           const page = await webviewHandle.extractText();
           const pageAgent = page.pageAgent
-            ? `\n\n[页面语义能力 pageAgent]\n${JSON.stringify(page.pageAgent).slice(0, 12000)}`
+            ? `\n\n${c.pageAgentCapabilityLabel}\n${JSON.stringify(page.pageAgent).slice(0, 12000)}`
             : "";
-          const prefix = `[当前页面]\nURL: ${page.url}\n标题: ${page.title}\n\n${page.text}${pageAgent}\n${page.truncated ? `\n[已截断 · 完整 ${page.textLength} 字符]` : ""}`;
+          const prefix = `${c.currentPageLabel}\n${c.urlLabel} ${page.url}\n${c.titleLabel} ${page.title}\n\n${page.text}${pageAgent}\n${page.truncated ? `\n${c.truncatedSuffix(page.textLength ?? 0)}` : ""}`;
           send(`${prefix}\n\n${instruction}`);
         } catch (err) {
           swallow(err);
@@ -647,19 +645,19 @@ export function CopilotPanel({ webviewHandle }: Props) {
         return;
       }
       if (!webviewHandle || !window.octopus) {
-        setErrorMsg("Need Electron · 当前在浏览器(非 Electron)里运行");
+        setErrorMsg(c.needElectronError);
         return;
       }
       const wcId = webviewHandle.getWebContentsId();
       if (wcId == null) {
-        setErrorMsg("当前 tab 没准备好");
+        setErrorMsg(c.tabNotReadyError);
         return;
       }
       setBusy(true);
       setErrorMsg(null);
       try {
         const page = await window.octopus.browser.extractText(wcId);
-        const prefix = `[当前页面]\nURL: ${page.url}\n标题: ${page.title}\n\n${page.text}\n${page.truncated ? `\n[已截断 · 完整 ${page.textLength} 字符]` : ""}`;
+        const prefix = `${c.currentPageLabel}\n${c.urlLabel} ${page.url}\n${c.titleLabel} ${page.title}\n\n${page.text}\n${page.truncated ? `\n${c.truncatedSuffix(page.textLength ?? 0)}` : ""}`;
         send(`${prefix}\n\n${instruction}`);
       } catch (err) {
         swallow(err);
@@ -668,7 +666,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         setBusy(false);
       }
     },
-    [send, webviewHandle],
+    [send, webviewHandle, t],
   );
 
   // Implementation note.
@@ -700,7 +698,18 @@ export function CopilotPanel({ webviewHandle }: Props) {
       // Implementation note.
       // Implementation note.
       // Implementation note.
-      className="relative flex h-full w-full min-w-[280px] flex-1 flex-col border-r bg-background"
+      className={cn(
+        "relative flex h-full w-full min-w-[280px] flex-1 flex-col border-r border-white/24 bg-transparent",
+        liquidGlassClass("sheet"),
+      )}
+      style={
+        {
+          "--glass-blur": "40px",
+          "--glass-saturate": 1.78,
+          "--glass-depth": 1.18,
+          "--glass-displacement": "2px",
+        } as CSSProperties
+      }
     >
       {/* Implementation note. */}
       <div
@@ -709,7 +718,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
       />
 
       {/* Implementation note. */}
-      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b px-3">
+      <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-white/24 bg-white/[0.06] px-3">
         <AgentPicker
           activeAgent={activeAgent}
           agents={agents}
@@ -741,7 +750,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
             "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
             autoBrowse
               ? "bg-primary/10 text-primary"
-              : "border border-border text-muted-foreground hover:bg-muted",
+              : "border border-white/28 text-muted-foreground hover:bg-white/18",
           )}
           title={
             autoBrowse
@@ -757,7 +766,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
             "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors",
             recorderMode
               ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "border border-border text-muted-foreground hover:bg-muted",
+              : "border border-white/28 text-muted-foreground hover:bg-white/18",
           )}
           title={t.browser.copilot.recorderTitle}
         >
@@ -765,7 +774,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
         </button>
         <button
           onClick={() => setCopilotOpen(false)}
-          className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="grid size-7 shrink-0 place-items-center rounded text-muted-foreground hover:bg-white/18 hover:text-foreground"
           title={t.common.close}
         >
           <XIcon className="size-4" />
@@ -773,33 +782,29 @@ export function CopilotPanel({ webviewHandle }: Props) {
       </div>
 
       {/* quick actions */}
-      <div className="flex shrink-0 flex-wrap gap-1.5 border-b bg-muted/30 px-3 py-2">
+      <div className="flex shrink-0 flex-wrap gap-1.5 border-b border-white/20 bg-white/[0.05] px-3 py-2">
         <QuickAction
           icon={FileTextIcon}
           label={t.browser.copilot.summarizePage}
-          onClick={() =>
-            askWithPage("请用中文简明总结这个页面的核心内容,3-5 个要点。")
-          }
+          onClick={() => askWithPage(t.browser.copilot.summarizePagePrompt)}
           disabled={busy}
         />
         <QuickAction
           icon={ListIcon}
           label={t.browser.copilot.extractKeyPoints}
-          onClick={() =>
-            askWithPage("从这个页面提取所有事实性要点,以有序列表给出。")
-          }
+          onClick={() => askWithPage(t.browser.copilot.extractKeyPointsPrompt)}
           disabled={busy}
         />
         <QuickAction
           icon={LanguagesIcon}
           label={t.browser.copilot.translateToChinese}
-          onClick={() => askWithPage("把这个页面的主要内容完整翻译成中文。")}
+          onClick={() => askWithPage(t.browser.copilot.translateToChinesePrompt)}
           disabled={busy}
         />
       </div>
 
       {recorderMode && (
-        <div className="shrink-0 border-b bg-emerald-500/[0.04] px-3 py-2">
+        <div className="shrink-0 border-b border-white/20 bg-emerald-500/[0.04] px-3 py-2">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
@@ -815,7 +820,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
               value={researchGoal}
               onChange={(e) => setResearchGoal(e.target.value)}
               placeholder={t.browser.copilot.researchGoalPlaceholder}
-              className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-500/40"
+              className={cn(
+                "min-w-0 flex-1 rounded px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-500/40",
+                liquidGlassClass("input", true),
+              )}
             />
             <button
               type="button"
@@ -835,7 +843,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
               type="button"
               onClick={() => void addPageToResearchLog()}
               disabled={busy}
-              className="rounded border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted disabled:opacity-40"
+              className={cn(
+                "rounded px-2 py-1 text-[10px] text-muted-foreground disabled:opacity-40",
+                liquidGlassClass("thin", true),
+              )}
             >
               {t.browser.copilot.recordCurrentPage}
             </button>
@@ -854,7 +865,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
               <button
                 type="button"
                 onClick={() => void copyResearchBrief()}
-                className="inline-flex items-center justify-center gap-1 rounded border border-border bg-background px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted"
+                className={cn(
+                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-muted-foreground",
+                  liquidGlassClass("thin", true),
+                )}
               >
                 <ClipboardCheckIcon className="size-3" />
                 {briefCopied
@@ -864,7 +878,10 @@ export function CopilotPanel({ webviewHandle }: Props) {
               <button
                 type="button"
                 onClick={downloadResearchBrief}
-                className="inline-flex items-center justify-center gap-1 rounded border border-border bg-background px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted"
+                className={cn(
+                  "inline-flex items-center justify-center gap-1 rounded px-2 py-1 text-[10px] font-medium text-muted-foreground",
+                  liquidGlassClass("thin", true),
+                )}
               >
                 <DownloadIcon className="size-3" />
                 {t.browser.copilot.exportMd}
@@ -872,9 +889,14 @@ export function CopilotPanel({ webviewHandle }: Props) {
             </div>
           )}
           {researchLog.length > 0 && (
-            <div className="mt-2 max-h-28 space-y-1 overflow-y-auto rounded border border-border/60 bg-background/70 p-1.5">
+            <div
+              className={cn(
+                "mt-2 max-h-28 space-y-1 overflow-y-auto rounded p-1.5",
+                liquidGlassClass("card"),
+              )}
+            >
               {researchLog.slice(0, 5).map((entry) => (
-                <div key={entry.id} className="rounded bg-muted/40 px-2 py-1">
+                <div key={entry.id} className="rounded bg-white/18 px-2 py-1">
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate text-[10px] font-medium">
                       {entry.platform} · {entry.title}
@@ -894,20 +916,23 @@ export function CopilotPanel({ webviewHandle }: Props) {
       )}
 
       {errorMsg && (
-        <div className="shrink-0 border-b bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
+        <div className="shrink-0 border-b border-white/20 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
           {errorMsg}
         </div>
       )}
 
       {pendingConfirmations.length > 0 && (
-        <div className="shrink-0 space-y-2 border-b bg-amber-500/10 px-3 py-2">
+        <div className="shrink-0 space-y-2 border-b border-white/20 bg-amber-500/10 px-3 py-2">
           {pendingConfirmations.map((pending) => (
             <div
               key={pending.id}
-              className="rounded-md border border-amber-500/30 bg-background/70 p-2 text-[11px]"
+              className={cn(
+                "rounded-md border-amber-500/30 p-2 text-[11px]",
+                liquidGlassClass("card"),
+              )}
             >
               <div className="font-medium text-amber-700 dark:text-amber-300">
-                需要用户确认
+                {t.browser.copilot.needsUserConfirmationTitle}
               </div>
               <div className="mt-1 text-muted-foreground">
                 {describePendingAction(pending)}
@@ -923,14 +948,14 @@ export function CopilotPanel({ webviewHandle }: Props) {
                   disabled={busy}
                   className="rounded bg-amber-600 px-2 py-1 font-medium text-white hover:bg-amber-700 disabled:opacity-50"
                 >
-                  确认执行
+                  {t.browser.copilot.confirmExecute}
                 </button>
                 <button
                   onClick={() => dismissPendingAction(pending.id)}
                   disabled={busy}
-                  className="rounded border border-border px-2 py-1 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                  className="rounded border border-white/28 px-2 py-1 text-muted-foreground hover:bg-white/18 disabled:opacity-50"
                 >
-                  取消
+                  {t.common.cancel}
                 </button>
               </div>
             </div>
@@ -969,8 +994,8 @@ export function CopilotPanel({ webviewHandle }: Props) {
               className={cn(
                 "rounded-lg px-3 py-2 text-[13px] leading-relaxed",
                 isUser
-                  ? "ml-6 bg-primary/10 text-foreground"
-                  : "mr-6 bg-muted/60 text-foreground",
+                  ? cn("ml-6 text-foreground", liquidGlassClass("input"))
+                  : cn("mr-6 text-foreground", liquidGlassClass("thin")),
               )}
             >
               {/* Implementation note. */}
@@ -981,7 +1006,12 @@ export function CopilotPanel({ webviewHandle }: Props) {
           );
         })}
         {thread.isLoading && (
-          <div className="mr-6 flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-[13px] text-muted-foreground">
+          <div
+            className={cn(
+              "mr-6 flex items-center gap-2 rounded-lg px-3 py-2 text-[13px] text-muted-foreground",
+              liquidGlassClass("thin"),
+            )}
+          >
             <Loader2Icon className="size-3.5 animate-spin" />
             {t.browser.copilot.thinking}
           </div>
@@ -989,8 +1019,13 @@ export function CopilotPanel({ webviewHandle }: Props) {
       </div>
 
       {/* input */}
-      <div className="shrink-0 border-t p-2">
-        <div className="flex items-end gap-2 rounded-lg border bg-muted/40 p-2 focus-within:ring-2 focus-within:ring-primary/30">
+      <div className="shrink-0 border-t border-white/20 p-2">
+        <div
+          className={cn(
+            "flex items-end gap-2 rounded-lg p-2 focus-within:ring-2 focus-within:ring-primary/30",
+            liquidGlassClass("input", true),
+          )}
+        >
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -1243,7 +1278,10 @@ function QuickAction({
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center gap-1 rounded-full border bg-background px-2.5 py-1 text-[11px] text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+      className={cn(
+        "flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] text-foreground disabled:opacity-50",
+        liquidGlassClass("thin", true),
+      )}
     >
       <Icon className="size-3" />
       {label}
@@ -1251,24 +1289,28 @@ function QuickAction({
   );
 }
 
-function buildResearchBrief(entries: ResearchLogEntry[]): string {
+function buildResearchBrief(
+  entries: ResearchLogEntry[],
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   if (entries.length === 0) return "";
+  const c = t.browser.copilot;
   const ordered = [...entries].reverse();
   const lines = [
-    "# 外部 AI 调研简报",
+    c.researchBriefTitle,
     "",
-    `生成时间: ${new Date().toLocaleString()}`,
-    `记录数量: ${entries.length}`,
+    c.researchBriefGeneratedAt(new Date().toLocaleString()),
+    c.researchBriefRecordCount(entries.length),
     "",
-    "## 摘要记录",
+    c.researchBriefAbstractRecords,
     "",
   ];
 
   for (const entry of ordered) {
     lines.push(`### ${entry.platform} · ${entry.title}`);
-    lines.push(`- 时间: ${new Date(entry.createdAt).toLocaleString()}`);
+    lines.push(c.researchBriefEntryTime(new Date(entry.createdAt).toLocaleString()));
     if (entry.url) lines.push(`- URL: ${entry.url}`);
-    lines.push("- 记录:");
+    lines.push(c.researchBriefEntryRecordLabel);
     for (const line of entry.note
       .split(/\r?\n/)
       .map((item) => item.trim())
@@ -1278,26 +1320,30 @@ function buildResearchBrief(entries: ResearchLogEntry[]): string {
     lines.push("");
   }
 
-  lines.push("## 待核查");
-  lines.push("- 对不同平台结论做交叉验证。");
-  lines.push("- 保留原始页面 URL 或截图作为证据线索。");
-  lines.push("- 对需要登录、上传、提交、付费的动作单独确认。");
+  lines.push(c.researchBriefPendingVerification);
+  lines.push(c.researchBriefVerifyCrossPlatform);
+  lines.push(c.researchBriefKeepEvidence);
+  lines.push(c.researchBriefConfirmSensitive);
   return lines.join("\n");
 }
 
-function guessPlatformName(url?: string | null): string {
-  if (!url) return "页面";
+function guessPlatformName(
+  url: string | null | undefined,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  const c = t.browser.copilot;
+  if (!url) return c.unknownPlatform;
   try {
     const host = new URL(url).hostname.toLowerCase();
     if (host.includes("gemini.google")) return "Gemini";
     if (host.includes("notebooklm.google")) return "NotebookLM";
-    if (host.includes("doubao")) return "豆包";
+    if (host.includes("doubao")) return c.researchPlatformNameDoubao;
     if (host.includes("perplexity")) return "Perplexity";
     if (host.includes("chatgpt") || host.includes("openai")) return "ChatGPT";
     return host.replace(/^www\./, "");
   } catch (e) {
     swallow(e);
-    return "页面";
+    return c.unknownPlatform;
   }
 }
 
@@ -1352,7 +1398,7 @@ function AgentPicker({
     <div ref={ref} className="relative shrink-0">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-semibold transition-colors hover:bg-muted"
+        className="flex items-center gap-1.5 rounded-md px-1.5 py-1 text-sm font-semibold transition-colors hover:bg-white/18"
       >
         {activeAgent?.icon ? (
           <span className="text-base leading-none">{activeAgent.icon}</span>
@@ -1368,7 +1414,12 @@ function AgentPicker({
         />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-md border bg-popover p-1 shadow-lg">
+        <div
+          className={cn(
+            "absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-y-auto rounded-md p-1",
+            liquidGlassClass("sheet"),
+          )}
+        >
           {agents.length === 0 ? (
             <div className="px-2 py-1.5 text-xs text-muted-foreground">
               {t.browser.copilot.noAgents}
@@ -1381,8 +1432,8 @@ function AgentPicker({
                   key={a.name}
                   onClick={() => select(a.name)}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted",
-                    active && "bg-muted font-semibold",
+                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/18",
+                    active && "bg-white/24 font-semibold",
                   )}
                 >
                   {a.icon ? (
