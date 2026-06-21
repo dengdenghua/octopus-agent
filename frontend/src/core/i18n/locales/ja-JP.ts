@@ -425,6 +425,42 @@ export const jaJP: Translations = {
     create: "Create project",
   },
 
+  // Application Registry
+  applicationRegistry: {
+    loading: "Loading plugins",
+    errorTitle: "Plugin list unavailable",
+    retryLabel: "Reload",
+    title: "Plugins",
+    refreshAria: "Refresh plugins",
+    createPlugin: "Create plugin",
+    searchAria: "Search plugins",
+    searchPlaceholder: "Search plugins, capabilities or actions",
+    enabled: "enabled",
+    capabilities: "capabilities",
+    actions: "actions",
+    all: "All",
+    pluginPackageOnly: "Plugin package only",
+    enabledStatus: "Enabled",
+    disabledStatus: "Disabled",
+    entries: "entries",
+    permissions: "permissions",
+    open: "Open",
+    registered: "Registered",
+    noMatches: "No matching plugins",
+  },
+
+  // Clarification Questionnaire
+  clarificationQuestionnaire: {
+    title: "Please answer the following questions",
+    recommended: "Recommended",
+    previous: "Previous",
+    cancel: "Cancel",
+    continueLabel: "Continue",
+    completedHeader: "Requirements clarified:",
+    continuePrompt:
+      "Please continue based on the above choices; if critical conditions are still missing, ask 1-2 more necessary questions at most, otherwise start directly.",
+  },
+
   // Dispatch Card
   dispatchCard: {
     agentSwarmTitle: "Agent collaboration",
@@ -3254,6 +3290,13 @@ export const jaJP: Translations = {
     relationshipsHeader: "Relationships",
     loadFailed: "Load failed",
     pageSubtitle: "Memory, documents, graph & file management",
+    startTask: "Start a task",
+    refresh: "Refresh",
+    foundEntities: (found: number, total: number) => `${found} / ${total} entities found`,
+    totalEntitiesCount: (total: number) => `${total} entities in total`,
+    clearSearch: "Clear search",
+    noMatchingEntities: "No matching entities",
+    noMatchingEntitiesHint: "Try a different keyword, or clear the search to view all knowledge entities.",
   },
 
   // Background Tasks

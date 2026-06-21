@@ -411,6 +411,42 @@ export const zhCN: Translations = {
     create: "创建项目",
   },
 
+  // Application Registry
+  applicationRegistry: {
+    loading: "正在读取插件",
+    errorTitle: "插件列表暂时不可用",
+    retryLabel: "重新加载",
+    title: "插件",
+    refreshAria: "刷新插件",
+    createPlugin: "新建插件",
+    searchAria: "搜索插件",
+    searchPlaceholder: "搜索插件、能力或动作",
+    enabled: "启用",
+    capabilities: "能力",
+    actions: "动作",
+    all: "全部",
+    pluginPackageOnly: "仅插件包",
+    enabledStatus: "启用",
+    disabledStatus: "停用",
+    entries: "入口",
+    permissions: "权限",
+    open: "打开",
+    registered: "已注册",
+    noMatches: "没有匹配的插件",
+  },
+
+  // Clarification Questionnaire
+  clarificationQuestionnaire: {
+    title: "请回答以下问题",
+    recommended: "推荐选项",
+    previous: "上一步",
+    cancel: "取消",
+    continueLabel: "继续",
+    completedHeader: "已完成需求澄清：",
+    continuePrompt:
+      "请按以上选择继续；如果仍缺少关键条件，最多再问 1-2 个必要问题，否则直接开始。",
+  },
+
   // Dispatch Card
   dispatchCard: {
     agentSwarmTitle: "Agent 协作",
@@ -3063,6 +3099,13 @@ export const zhCN: Translations = {
     relationshipsHeader: "关系",
     loadFailed: "加载失败",
     pageSubtitle: "记忆、文档、图谱与文件管理",
+    startTask: "开始一次任务",
+    refresh: "刷新",
+    foundEntities: (found: number, total: number) => `找到 ${found} / ${total} 个实体`,
+    totalEntitiesCount: (total: number) => `共 ${total} 个实体`,
+    clearSearch: "清除搜索",
+    noMatchingEntities: "没有匹配的实体",
+    noMatchingEntitiesHint: "换一个关键词，或清除搜索查看全部知识实体。",
   },
 
   // Background Tasks

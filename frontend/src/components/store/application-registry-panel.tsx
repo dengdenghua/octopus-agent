@@ -168,7 +168,7 @@ export function ApplicationRegistryPanel() {
     return (
       <div className="flex min-h-[360px] items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="mr-2 size-4 animate-spin" />
-        正在读取插件
+        {t.applicationRegistry.loading}
       </div>
     );
   }
@@ -176,9 +176,9 @@ export function ApplicationRegistryPanel() {
   if (error) {
     return (
       <StoreErrorState
-        title="插件列表暂时不可用"
+        title={t.applicationRegistry.errorTitle}
         detail={error}
-        retryLabel="重新加载"
+        retryLabel={t.applicationRegistry.retryLabel}
         retrying={loading}
         onRetry={() => void refresh()}
       />
@@ -190,10 +190,10 @@ export function ApplicationRegistryPanel() {
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <Package className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">插件</h3>
+          <h3 className="text-sm font-semibold">{t.applicationRegistry.title}</h3>
           <Badge variant="secondary">{registryItems.length}</Badge>
           <Button
-            aria-label="刷新插件"
+            aria-label={t.applicationRegistry.refreshAria}
             disabled={loading}
             size="icon-sm"
             variant="ghost"
@@ -210,14 +210,14 @@ export function ApplicationRegistryPanel() {
             onClick={openCreatePluginChat}
           >
             <Plus className="mr-1 size-4" />
-            新建插件
+            {t.applicationRegistry.createPlugin}
           </Button>
           <div className="relative w-full md:w-[300px]">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              aria-label="搜索插件"
+              aria-label={t.applicationRegistry.searchAria}
               className="h-9 rounded-full pl-9"
-              placeholder="搜索插件、能力或动作"
+              placeholder={t.applicationRegistry.searchPlaceholder}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -227,13 +227,13 @@ export function ApplicationRegistryPanel() {
 
       <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
         <Badge variant="outline" className="rounded-lg">
-          {enabledCount} 启用
+          {enabledCount} {t.applicationRegistry.enabled}
         </Badge>
         <Badge variant="outline" className="rounded-lg">
-          {capabilityCount} 能力
+          {capabilityCount} {t.applicationRegistry.capabilities}
         </Badge>
         <Badge variant="outline" className="rounded-lg">
-          {actionCount} 动作
+          {actionCount} {t.applicationRegistry.actions}
         </Badge>
       </div>
 
@@ -244,7 +244,7 @@ export function ApplicationRegistryPanel() {
           className="h-8 shrink-0 rounded-full px-3 text-xs"
           onClick={() => setCategory("all")}
         >
-          全部
+          {t.applicationRegistry.all}
           <span className="ml-1 text-muted-foreground">
             {registryItems.length}
           </span>
@@ -335,7 +335,7 @@ export function ApplicationRegistryPanel() {
                   </p>
                 ) : (
                   <div className="mt-2 min-h-8 text-xs leading-4 text-muted-foreground/70">
-                    仅插件包
+                    {t.applicationRegistry.pluginPackageOnly}
                   </div>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -350,7 +350,7 @@ export function ApplicationRegistryPanel() {
                       variant={plugin.enabled ? "secondary" : "outline"}
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {plugin.enabled ? "启用" : "停用"}
+                      {plugin.enabled ? t.applicationRegistry.enabledStatus : t.applicationRegistry.disabledStatus}
                     </Badge>
                   )}
                   {item.apps.length > 0 && (
@@ -358,7 +358,7 @@ export function ApplicationRegistryPanel() {
                       variant="outline"
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {item.apps.length} 入口
+                      {item.apps.length} {t.applicationRegistry.entries}
                     </Badge>
                   )}
                   {itemActionCount > 0 && (
@@ -366,7 +366,7 @@ export function ApplicationRegistryPanel() {
                       variant="outline"
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {itemActionCount} 动作
+                      {itemActionCount} {t.applicationRegistry.actions}
                     </Badge>
                   )}
                   {plugin && plugin.capabilities.length > 0 && (
@@ -374,7 +374,7 @@ export function ApplicationRegistryPanel() {
                       variant="outline"
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {plugin.capabilities.length} 能力
+                      {plugin.capabilities.length} {t.applicationRegistry.capabilities}
                     </Badge>
                   )}
                   {primaryApp && (primaryApp.permissions?.length ?? 0) > 0 && (
@@ -382,7 +382,7 @@ export function ApplicationRegistryPanel() {
                       variant="outline"
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {primaryApp!.permissions!.length} 权限
+                      {primaryApp!.permissions!.length} {t.applicationRegistry.permissions}
                     </Badge>
                   )}
                 </div>
@@ -406,12 +406,12 @@ export function ApplicationRegistryPanel() {
                         : target;
                     }}
                   >
-                    打开
+                    {t.applicationRegistry.open}
                     <ExternalLink className="ml-1 size-3.5" />
                   </Button>
                 ) : (
                   <div className="mt-2 text-xs text-muted-foreground/70">
-                    已注册
+                    {t.applicationRegistry.registered}
                   </div>
                 )}
                 {plugin?.error && (
@@ -425,7 +425,7 @@ export function ApplicationRegistryPanel() {
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-8 text-center text-sm text-muted-foreground">
-          没有匹配的插件
+          {t.applicationRegistry.noMatches}
         </div>
       )}
     </div>

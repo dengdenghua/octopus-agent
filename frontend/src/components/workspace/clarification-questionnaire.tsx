@@ -2,6 +2,7 @@ import { MessageSquareTextIcon, SparklesIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 const QUESTIONNAIRE_TYPE = "clarification_questionnaire";
@@ -212,31 +213,6 @@ function findOption(
   return question.options.find((option) => option.value === value);
 }
 
-function buildClarificationReply({
-  answers,
-  payload,
-}: {
-  answers: Record<string, string>;
-  payload: ClarificationQuestionnairePayload;
-}) {
-  const lines = payload.questions
-    .map((question) => {
-      const option = findOption(question, answers[question.id]);
-      if (!option) return null;
-      return `- ${question.title.replace(/[?？]$/, "")}: ${option.label}`;
-    })
-    .filter((line): line is string => Boolean(line));
-
-  return [
-    "已完成需求澄清：",
-    ...lines,
-    "",
-    "请按以上选择继续；如果仍缺少关键条件，最多再问 1-2 个必要问题，否则直接开始。",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 function submitQuickReply(text: string, sourceMessageId?: string) {
   window.dispatchEvent(
     new CustomEvent("octopus:quick-reply", {
@@ -262,13 +238,14 @@ export function ClarificationQuestionnaire({
   payload: ClarificationQuestionnairePayload;
   sourceMessageId?: string;
 }) {
+  const { t } = useI18n();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [dismissed, setDismissed] = useState(false);
   const current = payload.questions[step] ?? payload.questions[0];
   const selected = current ? answers[current.id] : undefined;
   const isLast = step >= payload.questions.length - 1;
-  const submitLabel = payload.submitLabel ?? "继续";
+  const submitLabel = payload.submitLabel ?? t.clarificationQuestionnaire.continueLabel;
 
   useEffect(() => {
     if (!active) return;
@@ -278,6 +255,25 @@ export function ClarificationQuestionnaire({
   }, [active, payload]);
 
   if (!active || dismissed || !current) return null;
+
+  const buildClarificationReply = () => {
+    const lines = payload.questions
+      .map((question) => {
+        const option = findOption(question, answers[question.id]);
+        if (!option) return null;
+        return `- ${question.title.replace(/[?？]$/, "")}: ${option.label}`;
+      })
+      .filter((line): line is string => Boolean(line));
+
+    return [
+      t.clarificationQuestionnaire.completedHeader,
+      ...lines,
+      "",
+      t.clarificationQuestionnaire.continuePrompt,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
 
   const sendText = (text: string) => {
     if (onSubmitText) {
@@ -290,7 +286,7 @@ export function ClarificationQuestionnaire({
 
   const submit = () => {
     if (!selected) return;
-    sendText(buildClarificationReply({ answers, payload }));
+    sendText(buildClarificationReply());
   };
 
   const continueOrSubmit = () => {
@@ -304,7 +300,7 @@ export function ClarificationQuestionnaire({
 
   return (
     <div
-      aria-label="请回答以下问题"
+      aria-label={t.clarificationQuestionnaire.title}
       role="region"
       className={cn(
         "mt-4 flex min-h-[330px] w-full flex-col rounded-xl border border-border/70 bg-background px-4 py-4 shadow-[0_10px_34px_rgba(15,23,42,0.08)] sm:min-h-[360px] sm:px-6 sm:py-5",
@@ -315,7 +311,7 @@ export function ClarificationQuestionnaire({
         <div className="flex min-w-0 items-center gap-3">
           <MessageSquareTextIcon className="size-5 shrink-0 text-muted-foreground" />
           <h3 className="truncate text-base font-medium tracking-normal text-foreground">
-            请回答以下问题
+            {t.clarificationQuestionnaire.title}
           </h3>
         </div>
         {payload.questions.length > 1 && (
@@ -383,7 +379,7 @@ export function ClarificationQuestionnaire({
       <div className="mt-auto flex flex-col gap-3 pt-8 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
           <SparklesIcon className="size-4 text-foreground" />
-          <span>推荐选项</span>
+          <span>{t.clarificationQuestionnaire.recommended}</span>
         </div>
         <div className="flex items-center justify-end gap-2">
           {step > 0 && (
@@ -394,7 +390,7 @@ export function ClarificationQuestionnaire({
               className="px-2 text-sm text-muted-foreground"
               onClick={() => setStep((value) => Math.max(0, value - 1))}
             >
-              上一步
+              {t.clarificationQuestionnaire.previous}
             </Button>
           )}
           <Button
@@ -404,7 +400,7 @@ export function ClarificationQuestionnaire({
             className="px-2 text-sm text-muted-foreground hover:text-foreground"
             onClick={() => setDismissed(true)}
           >
-            取消
+            {t.clarificationQuestionnaire.cancel}
           </Button>
           <Button
             type="button"
@@ -413,7 +409,7 @@ export function ClarificationQuestionnaire({
             className="h-8 rounded-md px-3 text-sm"
             onClick={continueOrSubmit}
           >
-            {isLast ? submitLabel : "继续"}
+            {isLast ? submitLabel : t.clarificationQuestionnaire.continueLabel}
           </Button>
         </div>
       </div>

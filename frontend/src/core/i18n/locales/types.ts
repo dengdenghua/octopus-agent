@@ -354,6 +354,41 @@ export interface Translations {
     create: string;
   };
 
+  // Application Registry
+  applicationRegistry: {
+    loading: string;
+    errorTitle: string;
+    retryLabel: string;
+    title: string;
+    refreshAria: string;
+    createPlugin: string;
+    searchAria: string;
+    searchPlaceholder: string;
+    enabled: string;
+    capabilities: string;
+    actions: string;
+    all: string;
+    pluginPackageOnly: string;
+    enabledStatus: string;
+    disabledStatus: string;
+    entries: string;
+    permissions: string;
+    open: string;
+    registered: string;
+    noMatches: string;
+  };
+
+  // Clarification Questionnaire
+  clarificationQuestionnaire: {
+    title: string;
+    recommended: string;
+    previous: string;
+    cancel: string;
+    continueLabel: string;
+    completedHeader: string;
+    continuePrompt: string;
+  };
+
   // Dispatch Card (swarm)
   dispatchCard: {
     agentSwarmTitle: string;
@@ -2802,6 +2837,13 @@ export interface Translations {
     relationshipsHeader: string;
     loadFailed: string;
     pageSubtitle: string;
+    startTask: string;
+    refresh: string;
+    foundEntities: (found: number, total: number) => string;
+    totalEntitiesCount: (total: number) => string;
+    clearSearch: string;
+    noMatchingEntities: string;
+    noMatchingEntitiesHint: string;
   };
 
   // Background Tasks

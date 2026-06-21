@@ -118,7 +118,7 @@ export function KnowledgeGraphPanel() {
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           <Button asChild size="sm">
-            <Link to="/workspace/realtime/new">开始一次任务</Link>
+            <Link to="/workspace/realtime/new">{t.knowledgeGraph.startTask}</Link>
           </Button>
           <Button
             type="button"
@@ -127,7 +127,7 @@ export function KnowledgeGraphPanel() {
             onClick={() => void loadData()}
           >
             <RefreshCwIcon className="mr-1.5 h-3.5 w-3.5" />
-            刷新
+            {t.knowledgeGraph.refresh}
           </Button>
         </div>
       </div>
@@ -223,8 +223,8 @@ export function KnowledgeGraphPanel() {
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
               {trimmedSearchQuery
-                ? `找到 ${filteredEntities.length} / ${entities.length} 个实体`
-                : `共 ${entities.length} 个实体`}
+                ? t.knowledgeGraph.foundEntities(filteredEntities.length, entities.length)
+                : t.knowledgeGraph.totalEntitiesCount(entities.length)}
             </span>
             {trimmedSearchQuery && (
               <Button
@@ -234,7 +234,7 @@ export function KnowledgeGraphPanel() {
                 className="h-7 px-2 text-xs"
                 onClick={() => setSearchQuery("")}
               >
-                清除搜索
+                {t.knowledgeGraph.clearSearch}
               </Button>
             )}
           </div>
@@ -261,12 +261,12 @@ export function KnowledgeGraphPanel() {
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
-              <SearchIcon className="mx-auto mb-2 size-5 text-muted-foreground/50" />
-              <div className="text-sm font-medium">没有匹配的实体</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                换一个关键词，或清除搜索查看全部知识实体。
-              </p>
-            </div>
+            <SearchIcon className="mx-auto mb-2 size-5 text-muted-foreground/50" />
+            <div className="text-sm font-medium">{t.knowledgeGraph.noMatchingEntities}</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t.knowledgeGraph.noMatchingEntitiesHint}
+            </p>
+          </div>
           )}
 
           {/* Implementation note. */}
