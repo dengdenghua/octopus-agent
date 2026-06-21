@@ -275,11 +275,8 @@ export const zhCN: Translations = {
     thinkingForSeconds: (seconds: number) => `思考 ${seconds} 秒`,
     planningNSteps: (n: number) => `规划 ${n} 步`,
     fileOperationsCount: (n: number) => `操作文件 ${n} 次`,
-    fileOperationsCountWithDiff: (
-      n: number,
-      added: number,
-      removed: number,
-    ) => `操作文件 ${n} 次 (+${added} / -${removed})`,
+    fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
+      `操作文件 ${n} 次 (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `工具调用 ${n} 次`,
     loadOlderTurns: "加载更早的对话",
     loadingOlderTurns: "正在加载更早的对话…",
@@ -369,7 +366,8 @@ export const zhCN: Translations = {
     send: "发送",
     stop: "停止",
     projectModeLabel: "项目代码模式",
-    projectModeHint: "已绑定本地目录，当前 Agent 会读取项目上下文并按代码任务执行。",
+    projectModeHint:
+      "已绑定本地目录，当前 Agent 会读取项目上下文并按代码任务执行。",
     projectStatusTitle: "项目上下文已绑定",
     projectStatusDescUnlocked:
       "当前 Agent 已解锁代码能力，会按理解、修改、验证的闭环执行。",
@@ -1020,6 +1018,49 @@ export const zhCN: Translations = {
       "还没有定位到工作目录。Agent 读取或写入文件后，这里会自动关联项目文件。",
     noDiffEntriesDescription:
       "还没有捕获到可展示的 diff。文件编辑工具返回补丁后会显示在这里。",
+    filesTab: "文件",
+    diffTab: "Diff",
+    terminalTab: "终端",
+    browserTab: "浏览器",
+  },
+
+  // Agent workbench panel (kanban / screen timeline)
+  agentWorkbenchPanel: {
+    noOperationRecords: "暂无操作记录",
+    noCurrentOperation: "暂无当前操作",
+    processFrames: "过程帧",
+    frameCount: (count) => `${count} 帧`,
+    frameLabel: (current, total) => `帧 ${current}/${total}`,
+    currentFrameLabel: (current, total) => `当前帧 ${current}/${total}`,
+    phaseStatusRunning: "进行中",
+    phaseStatusError: "异常",
+    phaseStatusDone: "已完成",
+    phaseStatusPending: "待开始",
+    robot: "机器人",
+    noRunningRobotProcess: "当前没有正在运行的机器人过程。",
+    tabList: "标签页列表",
+    summaryLabel: "概要",
+    agentStatusRunning: "运行中",
+    agentStatusError: "异常",
+    agentStatusDone: "已结束",
+    agentStatusPending: "等待中",
+    mainController: "主控",
+    currentConversation: "当前对话",
+    workbenchSlots: "工位",
+    viewMainAgentSlot: "查看主 Agent 工位",
+    mainAgentProcessTitle: "主 Agent: 当前对话主进程",
+    dockStatusRunning: "运行中",
+    dockStatusError: "异常",
+    dockStatusDone: "已完成",
+    dockStatusPending: "等待中",
+    viewAgentProcess: (label) => `查看 ${label} 独立进程`,
+    agentClusterIndependentProcess: "Agent 集群 - 独立进程",
+    subAgent: "子智能体",
+    noTaskDescription: "暂无任务说明。",
+    waitingForSubagentOutput: "等待子智能体开始输出",
+    processReplay: "过程回放",
+    processRecords: (count) => `${count} 条过程记录`,
+    iterationRounds: (count) => `${count} 轮`,
   },
 
   diagnosticsPage: {
@@ -2431,6 +2472,13 @@ export const zhCN: Translations = {
       lightDescription: "明亮的界面,适合日间使用",
       darkDescription: "深色界面,减轻眼睛疲劳",
       appleDescription: "现代简约,清晰通透的苹果设计风格",
+      materialTitle: "界面材质",
+      materialDescription:
+        "在当前主题上叠加材质效果，保留原有配色，同时增强玻璃层次。",
+      materialStandard: "标准",
+      materialStandardDescription: "保持原有表面质感",
+      materialLiquid: "液态玻璃",
+      materialLiquidDescription: "全局高斯模糊与动态折射",
       languageTitle: "语言",
       languageDescription: "选择界面显示语言",
       languageEnglish: "English",
@@ -3118,8 +3166,10 @@ export const zhCN: Translations = {
       confirmSensitiveClick: "点击目标看起来像敏感操作",
       confirmSensitiveAction: "页面语义动作看起来像敏感操作",
       stopAgentMessage: "[用户已手动停止 agent · 不再继续自动操作]",
-      maxLoopReached: (count) => `[已达到最大 agent 循环 ${count} 次,自动停止防止失控]`,
-      webviewNotReadyError: "[执行失败:webview 没准备好(可能在浏览器里跑而不是 Electron)]",
+      maxLoopReached: (count) =>
+        `[已达到最大 agent 循环 ${count} 次,自动停止防止失控]`,
+      webviewNotReadyError:
+        "[执行失败:webview 没准备好(可能在浏览器里跑而不是 Electron)]",
       confirmedRiskyOperation: "[用户已确认高风险操作]",
       recorderProtocol: `[外部 AI 调研 · 记录员模式]
 目标: 尽量少消耗本地模型 token。你是浏览器调度员和记录员,不是主研究模型。
@@ -3133,11 +3183,16 @@ export const zhCN: Translations = {
       researchMissionLabel: "[本次调研任务]",
       researchPlatformDivisionLabel: "[外部平台分工]",
       researchExecutionRequirementsLabel: "[执行要求]",
-      researchRequirementOpenFirstPlatform: "- 先打开第一个平台并输入适合该平台的 prompt。",
-      researchRequirementExtractHighDensity: "- 每个平台只摘录高密度结果: 结论、来源线索、争议点、下一步。",
-      researchRequirementDoNotFeedBack: "- 不要把外部平台完整长回答反复喂回本地模型。",
-      researchRequirementLogPerPlatform: "- 每个平台完成后,用一条简短研究日志汇报: 平台 / URL / 5 条以内要点 / 待核查。",
-      researchRequirementPauseForSensitive: "- 需要登录、上传文件、提交敏感信息时暂停并请用户确认。",
+      researchRequirementOpenFirstPlatform:
+        "- 先打开第一个平台并输入适合该平台的 prompt。",
+      researchRequirementExtractHighDensity:
+        "- 每个平台只摘录高密度结果: 结论、来源线索、争议点、下一步。",
+      researchRequirementDoNotFeedBack:
+        "- 不要把外部平台完整长回答反复喂回本地模型。",
+      researchRequirementLogPerPlatform:
+        "- 每个平台完成后,用一条简短研究日志汇报: 平台 / URL / 5 条以内要点 / 待核查。",
+      researchRequirementPauseForSensitive:
+        "- 需要登录、上传文件、提交敏感信息时暂停并请用户确认。",
       researchPlatformHintGemini: "综合搜索、长问题、多轮分析",
       researchPlatformHintNotebookLM: "资料库、引用、文档内研究",
       researchPlatformNameDoubao: "豆包",
@@ -3169,7 +3224,8 @@ export const zhCN: Translations = {
       researchBriefPendingVerification: "## 待核查",
       researchBriefVerifyCrossPlatform: "- 对不同平台结论做交叉验证。",
       researchBriefKeepEvidence: "- 保留原始页面 URL 或截图作为证据线索。",
-      researchBriefConfirmSensitive: "- 对需要登录、上传、提交、付费的动作单独确认。",
+      researchBriefConfirmSensitive:
+        "- 对需要登录、上传、提交、付费的动作单独确认。",
       unknownPlatform: "页面",
     },
     extensionMarketplace: {
@@ -4245,7 +4301,11 @@ export const zhCN: Translations = {
     disabled: "已禁用",
     of100: "/ 100",
     recentEvolutionTitle: "这段时间它进化了什么",
-    growthSummary: (totalMemories: number, totalSkills: number, learningEvents: number) =>
+    growthSummary: (
+      totalMemories: number,
+      totalSkills: number,
+      learningEvents: number,
+    ) =>
       `它已经沉淀了 ${totalMemories} 条记忆、${totalSkills} 个技能，并从 ${learningEvents} 次学习事件里提炼经验。`,
     noEvidenceDescription:
       "还没有足够的进化证据。跑过更多任务后，这里会自动变成可读的成长记录。",
@@ -4596,8 +4656,7 @@ export const zhCN: Translations = {
     createFailed: "创建定时任务失败",
     deleteSuccess: "定时任务已删除",
     deleteFailed: "删除定时任务失败",
-    needsAuth:
-      "定时任务涉及本机命令执行，需要登录或授权后管理。",
+    needsAuth: "定时任务涉及本机命令执行，需要登录或授权后管理。",
     nameRequired: "任务名称不能为空",
     commandRequired: "执行命令不能为空",
     cronRequired: "Cron 表达式不能为空",
@@ -5672,7 +5731,8 @@ export const zhCN: Translations = {
     // AI 模式（效率 / 隐私）
     aiModeTitle: "AI 模式",
     aiModeDescScanning: "正在检测设备配置…",
-    aiModeRecommended: (label: string) => `根据本机设备配置，推荐使用：${label}`,
+    aiModeRecommended: (label: string) =>
+      `根据本机设备配置，推荐使用：${label}`,
     efficiencyMode: "效率模式",
     efficiencyModeDesc: "优先使用云端高性能模型，响应更快、能力更强。",
     privacyMode: "隐私模式",
@@ -5685,11 +5745,9 @@ export const zhCN: Translations = {
     toastAiModeSwitchFailed: (msg: string) => `切换 AI 模式失败：${msg}`,
     // 路径黑名单
     pathDenyTitle: "不可读取文件夹",
-    pathDenyDesc:
-      "添加后，Agent 将拒绝读取或写入这些路径下的任何文件。",
+    pathDenyDesc: "添加后，Agent 将拒绝读取或写入这些路径下的任何文件。",
     addPathButton: "新增",
-    pathDenyEmpty:
-      "暂无 — 默认黑名单（.vscode / AppData / .cache 等）已生效",
+    pathDenyEmpty: "暂无 — 默认黑名单（.vscode / AppData / .cache 等）已生效",
     pathActionAria: (path: string) => `操作 ${path}`,
     pathDeleteButton: "删除",
     addPathDialogTitle: "新增不可读取文件夹",

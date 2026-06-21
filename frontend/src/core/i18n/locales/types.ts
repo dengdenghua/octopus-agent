@@ -195,10 +195,7 @@ export interface Translations {
     reviewTeam: string;
     reviewSecurity: string;
     artifactsCreated: (n: number) => string;
-    artifactsCreatedAndFilesEdited: (
-      created: number,
-      edited: number,
-    ) => string;
+    artifactsCreatedAndFilesEdited: (created: number, edited: number) => string;
     filesEdited: (n: number) => string;
     revertSuccess: (n: number) => string;
     revertFailed: string;
@@ -885,6 +882,49 @@ export interface Translations {
     iterationRound: (count: number) => string;
     noWorkDirDescription: string;
     noDiffEntriesDescription: string;
+    filesTab: string;
+    diffTab: string;
+    terminalTab: string;
+    browserTab: string;
+  };
+
+  // Agent workbench panel (kanban / screen timeline)
+  agentWorkbenchPanel: {
+    noOperationRecords: string;
+    noCurrentOperation: string;
+    processFrames: string;
+    frameCount: (count: number) => string;
+    frameLabel: (current: number, total: number) => string;
+    currentFrameLabel: (current: number, total: number) => string;
+    phaseStatusRunning: string;
+    phaseStatusError: string;
+    phaseStatusDone: string;
+    phaseStatusPending: string;
+    robot: string;
+    noRunningRobotProcess: string;
+    tabList: string;
+    summaryLabel: string;
+    agentStatusRunning: string;
+    agentStatusError: string;
+    agentStatusDone: string;
+    agentStatusPending: string;
+    mainController: string;
+    currentConversation: string;
+    workbenchSlots: string;
+    viewMainAgentSlot: string;
+    mainAgentProcessTitle: string;
+    dockStatusRunning: string;
+    dockStatusError: string;
+    dockStatusDone: string;
+    dockStatusPending: string;
+    viewAgentProcess: (label: string) => string;
+    agentClusterIndependentProcess: string;
+    subAgent: string;
+    noTaskDescription: string;
+    waitingForSubagentOutput: string;
+    processReplay: string;
+    processRecords: (count: number) => string;
+    iterationRounds: (count: number) => string;
   };
 
   // Diagnostics page
@@ -2200,6 +2240,12 @@ export interface Translations {
       lightDescription: string;
       darkDescription: string;
       appleDescription: string;
+      materialTitle: string;
+      materialDescription: string;
+      materialStandard: string;
+      materialStandardDescription: string;
+      materialLiquid: string;
+      materialLiquidDescription: string;
       languageTitle: string;
       languageDescription: string;
       languageEnglish: string;

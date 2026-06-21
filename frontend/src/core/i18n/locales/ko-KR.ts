@@ -282,11 +282,8 @@ export const koKR: Translations = {
     thinkingForSeconds: (seconds: number) => `${seconds}초 동안 생각 중`,
     planningNSteps: (n: number) => `${n}단계 계획`,
     fileOperationsCount: (n: number) => `파일 작업 ${n}회`,
-    fileOperationsCountWithDiff: (
-      n: number,
-      added: number,
-      removed: number,
-    ) => `파일 작업 ${n}회 (+${added} / -${removed})`,
+    fileOperationsCountWithDiff: (n: number, added: number, removed: number) =>
+      `파일 작업 ${n}회 (+${added} / -${removed})`,
     toolCallsCount: (n: number) => `도구 호출 ${n}회`,
     loadOlderTurns: "이전 턴 불러오기",
     loadingOlderTurns: "이전 턴 불러오는 중…",
@@ -653,7 +650,8 @@ export const koKR: Translations = {
     terminalPlaceholder: "질문, 계획 또는 코드...",
     terminalRestart: "셸 다시 시작",
     terminalClose: "터미널 닫기",
-    terminalConnectionFailed: "터미널 연결에 실패했습니다. 다시 시작하여 재연결하세요.",
+    terminalConnectionFailed:
+      "터미널 연결에 실패했습니다. 다시 시작하여 재연결하세요.",
     terminalConnectedHint: "터미널에 연결되었습니다. 명령을 입력하세요.",
     terminalConnecting: "터미널 연결 중...",
     stop: "중지",
@@ -1057,6 +1055,50 @@ export const koKR: Translations = {
       "No working directory located yet. It will be linked automatically after the Agent reads or writes files.",
     noDiffEntriesDescription:
       "No diffs captured yet. Edits returned by file tools will appear here.",
+    filesTab: "Files",
+    diffTab: "Diff",
+    terminalTab: "Terminal",
+    browserTab: "Browser",
+  },
+
+  // Agent workbench panel (kanban / screen timeline)
+  agentWorkbenchPanel: {
+    noOperationRecords: "No operation records",
+    noCurrentOperation: "No current operation",
+    processFrames: "Process frames",
+    frameCount: (count) => `${count} frame${count === 1 ? "" : "s"}`,
+    frameLabel: (current, total) => `Frame ${current}/${total}`,
+    currentFrameLabel: (current, total) => `Current frame ${current}/${total}`,
+    phaseStatusRunning: "Running",
+    phaseStatusError: "Error",
+    phaseStatusDone: "Completed",
+    phaseStatusPending: "Pending",
+    robot: "Robot",
+    noRunningRobotProcess: "No robot process is currently running.",
+    tabList: "Tab list",
+    summaryLabel: "Summary",
+    agentStatusRunning: "Running",
+    agentStatusError: "Error",
+    agentStatusDone: "Finished",
+    agentStatusPending: "Waiting",
+    mainController: "Main",
+    currentConversation: "Current conversation",
+    workbenchSlots: "Slots",
+    viewMainAgentSlot: "View main agent slot",
+    mainAgentProcessTitle: "Main Agent: current conversation main process",
+    dockStatusRunning: "Running",
+    dockStatusError: "Error",
+    dockStatusDone: "Completed",
+    dockStatusPending: "Waiting",
+    viewAgentProcess: (label) => `View ${label} independent process`,
+    agentClusterIndependentProcess: "Agent Cluster - Independent Process",
+    subAgent: "Subagent",
+    noTaskDescription: "No task description yet.",
+    waitingForSubagentOutput: "Waiting for subagent output",
+    processReplay: "Process replay",
+    processRecords: (count) =>
+      `${count} process record${count === 1 ? "" : "s"}`,
+    iterationRounds: (count) => `${count} round${count === 1 ? "" : "s"}`,
   },
 
   diagnosticsPage: {
@@ -2560,6 +2602,13 @@ export const koKR: Translations = {
       lightDescription: "Bright palette with higher contrast for daytime.",
       darkDescription: "Dim palette that reduces glare for focus.",
       appleDescription: "Modern, crisp, and clean Apple-inspired design.",
+      materialTitle: "Interface material",
+      materialDescription:
+        "Layer material effects over the current theme while preserving its color system.",
+      materialStandard: "Standard",
+      materialStandardDescription: "Keep the original surface treatment",
+      materialLiquid: "Liquid Glass",
+      materialLiquidDescription: "Global blur, depth, and dynamic refraction",
       languageTitle: "Language",
       languageDescription: "Switch between languages.",
       languageEnglish: "English",
@@ -3268,9 +3317,12 @@ export const koKR: Translations = {
       confirmSubmitForm: "May submit the current form",
       confirmSensitiveClick: "Click target appears to be a sensitive action",
       confirmSensitiveAction: "Page semantic action appears to be sensitive",
-      stopAgentMessage: "[User stopped agent manually · no further auto actions]",
-      maxLoopReached: (count) => `[Max agent loop ${count} reached, auto-stopped to prevent runaway]`,
-      webviewNotReadyError: "[Execution failed: webview not ready (possibly running in browser rather than Electron)]",
+      stopAgentMessage:
+        "[User stopped agent manually · no further auto actions]",
+      maxLoopReached: (count) =>
+        `[Max agent loop ${count} reached, auto-stopped to prevent runaway]`,
+      webviewNotReadyError:
+        "[Execution failed: webview not ready (possibly running in browser rather than Electron)]",
       confirmedRiskyOperation: "[User confirmed high-risk operation]",
       recorderProtocol: `[External AI Research · Recorder Mode]
 Goal: minimize local model token usage. You are a browser dispatcher and recorder, not the main research model.
@@ -3284,26 +3336,39 @@ Strategy:
       researchMissionLabel: "[Research Mission]",
       researchPlatformDivisionLabel: "[External Platform Division]",
       researchExecutionRequirementsLabel: "[Execution Requirements]",
-      researchRequirementOpenFirstPlatform: "- Open the first platform and enter a prompt suitable for that platform.",
-      researchRequirementExtractHighDensity: "- Extract only high-density results from each platform: conclusions, source clues, controversies, next steps.",
-      researchRequirementDoNotFeedBack: "- Do not feed the full long answer from external platforms back into the local model repeatedly.",
-      researchRequirementLogPerPlatform: "- After each platform, report with a short research log: platform / URL / up to 5 key points / pending verification.",
-      researchRequirementPauseForSensitive: "- Pause and ask the user for confirmation when login, upload, or submitting sensitive information is required.",
-      researchPlatformHintGemini: "General search, long questions, multi-turn analysis",
-      researchPlatformHintNotebookLM: "Knowledge base, citations, in-document research",
+      researchRequirementOpenFirstPlatform:
+        "- Open the first platform and enter a prompt suitable for that platform.",
+      researchRequirementExtractHighDensity:
+        "- Extract only high-density results from each platform: conclusions, source clues, controversies, next steps.",
+      researchRequirementDoNotFeedBack:
+        "- Do not feed the full long answer from external platforms back into the local model repeatedly.",
+      researchRequirementLogPerPlatform:
+        "- After each platform, report with a short research log: platform / URL / up to 5 key points / pending verification.",
+      researchRequirementPauseForSensitive:
+        "- Pause and ask the user for confirmation when login, upload, or submitting sensitive information is required.",
+      researchPlatformHintGemini:
+        "General search, long questions, multi-turn analysis",
+      researchPlatformHintNotebookLM:
+        "Knowledge base, citations, in-document research",
       researchPlatformNameDoubao: "Doubao",
-      researchPlatformHintDoubao: "Chinese research, Chinese rewriting, domestic context",
-      researchPlatformHintPerplexity: "Web retrieval, source clues, fact checking",
+      researchPlatformHintDoubao:
+        "Chinese research, Chinese rewriting, domestic context",
+      researchPlatformHintPerplexity:
+        "Web retrieval, source clues, fact checking",
       researchLogDispatchLabel: "Dispatch",
       researchStartTitle: "Start external AI research",
       researchPlatformsPrefix: "Platforms:",
       currentPageFallback: "Current page",
       recordedPageNote: "Current page recorded.",
-      needElectronError: "Need Electron · currently running in browser (not Electron)",
+      needElectronError:
+        "Need Electron · currently running in browser (not Electron)",
       tabNotReadyError: "Current tab is not ready",
-      summarizePagePrompt: "Please briefly summarize the core content of this page in Chinese, 3-5 key points.",
-      extractKeyPointsPrompt: "Extract all factual points from this page as an ordered list.",
-      translateToChinesePrompt: "Translate the main content of this page into Chinese completely.",
+      summarizePagePrompt:
+        "Please briefly summarize the core content of this page in Chinese, 3-5 key points.",
+      extractKeyPointsPrompt:
+        "Extract all factual points from this page as an ordered list.",
+      translateToChinesePrompt:
+        "Translate the main content of this page into Chinese completely.",
       currentPageLabel: "[Current page]",
       urlLabel: "URL:",
       titleLabel: "Title:",
@@ -3318,9 +3383,12 @@ Strategy:
       researchBriefEntryTime: (time) => `- Time: ${time}`,
       researchBriefEntryRecordLabel: "- Record:",
       researchBriefPendingVerification: "## Pending Verification",
-      researchBriefVerifyCrossPlatform: "- Cross-validate conclusions from different platforms.",
-      researchBriefKeepEvidence: "- Keep the original page URL or screenshot as an evidence clue.",
-      researchBriefConfirmSensitive: "- Confirm actions requiring login, upload, submission, or payment separately.",
+      researchBriefVerifyCrossPlatform:
+        "- Cross-validate conclusions from different platforms.",
+      researchBriefKeepEvidence:
+        "- Keep the original page URL or screenshot as an evidence clue.",
+      researchBriefConfirmSensitive:
+        "- Confirm actions requiring login, upload, submission, or payment separately.",
       unknownPlatform: "page",
     },
     extensionMarketplace: {
@@ -3613,7 +3681,8 @@ Strategy:
     switchSearchEngine: "Switch search engine",
     commonCategories: "Common categories",
     bookmarksLabel: "Bookmarks",
-    bookmarkCount: (count: number) => `${count} bookmark${count !== 1 ? "s" : ""}`,
+    bookmarkCount: (count: number) =>
+      `${count} bookmark${count !== 1 ? "s" : ""}`,
     recentVisits: "Recent visits",
     commonEntries: "Common entries",
     addToDock: "Add to Dock",
@@ -4419,19 +4488,26 @@ Strategy:
     disabled: "Disabled",
     of100: "/ 100",
     recentEvolutionTitle: "What has evolved recently",
-    growthSummary: (totalMemories: number, totalSkills: number, learningEvents: number) =>
+    growthSummary: (
+      totalMemories: number,
+      totalSkills: number,
+      learningEvents: number,
+    ) =>
       `It has accumulated ${totalMemories} memories, ${totalSkills} skills, and distilled experience from ${learningEvents} learning events.`,
     noEvidenceDescription:
       "Not enough evolution evidence yet. After running more tasks, this will automatically become a readable growth record.",
     overallImprovementLabel: "Overall improvement",
     observeTasks: "Observe tasks",
-    observeTasksDescription: "Find experience from real conversations and execution.",
+    observeTasksDescription:
+      "Find experience from real conversations and execution.",
     accumulateMemories: "Accumulate memories",
-    accumulateMemoriesDescription: "Store reusable facts, preferences, and rules.",
+    accumulateMemoriesDescription:
+      "Store reusable facts, preferences, and rules.",
     formSkills: "Form skills",
     formSkillsDescription: "Turn stable practices into reusable capabilities.",
     proposeImprovements: "Propose improvements",
-    proposeImprovementsDescription: "Leave clear directions for the next round of optimization.",
+    proposeImprovementsDescription:
+      "Leave clear directions for the next round of optimization.",
     unitTimes: "times",
     unitItems: "items",
     unitSkills: "skills",
@@ -4440,8 +4516,10 @@ Strategy:
     autoExtractedSkillsShare: (percent: string) => `${percent} of all skills`,
     waitingForSkillAccumulation: "Waiting for skills to accumulate",
     reusableMemoryLibrary: "Reusable experience library",
-    ruleMemoryCount: (count: number) => `${count} are rules / pitfalls to avoid`,
-    memoryDetailDefault: "Remember facts, preferences, and execution experience",
+    ruleMemoryCount: (count: number) =>
+      `${count} are rules / pitfalls to avoid`,
+    memoryDetailDefault:
+      "Remember facts, preferences, and execution experience",
     nextSteps: "Next steps",
     nextStepsAvailable: "You can click to view more",
     nextStepsNone: "No actionable suggestions for now",
@@ -5928,7 +6006,8 @@ Strategy:
     judgeTitle: "LLM 의미 검토(judge)",
     judgeDesc:
       "각 출력 메시지에 추가 모델 호출을 수행하여 피싱 및 무단 스크래핑과 같은 의미 위반을 검토합니다. 기본적으로 비활성화되어 있습니다(비용 발생).",
-    judgeUnavailable: " 현재 모델 경로를 사용할 수 없습니다. 활성화할 수 없습니다.",
+    judgeUnavailable:
+      " 현재 모델 경로를 사용할 수 없습니다. 활성화할 수 없습니다.",
     toastJudgeEnabled: "LLM 의미 검토를 활성화했습니다",
     toastJudgeDisabled: "LLM 의미 검토를 비활성화했습니다",
     toastJudgeToggleFailed: (msg: string) => `전환 실패: ${msg}`,
@@ -6810,10 +6889,10 @@ Strategy:
     },
     widget: {
       today: "오늘",
-      date: (year, month, _date, weekday) => `${year}년 ${month}월 · ${weekday}`,
+      date: (year, month, _date, weekday) =>
+        `${year}년 ${month}월 · ${weekday}`,
     },
-    searchPlaceholder:
-      "작업, 파일, 앱을 검색하거나 작업 공간 열기",
+    searchPlaceholder: "작업, 파일, 앱을 검색하거나 작업 공간 열기",
     open: "열기",
     drawer: {
       title: "데스크톱 도우미",
@@ -6906,7 +6985,8 @@ Strategy:
       undone: (undone) => `${undone}개 파일 이동을 취소했습니다`,
       noUndoOperations: "취소할 작업이 없습니다",
       fileMoved: "파일을 이동했습니다",
-      fileArchived: (name, folder) => `"${name}"을(를) ${folder}(으)로 보관했습니다`,
+      fileArchived: (name, folder) =>
+        `"${name}"을(를) ${folder}(으)로 보관했습니다`,
     },
   },
 };

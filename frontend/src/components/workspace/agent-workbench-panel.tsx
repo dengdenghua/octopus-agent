@@ -1,4 +1,4 @@
-﻿import {
+import {
   BotIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales/types";
 import { TerminalPanel } from "@/components/workspace/terminal-panel";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import {
@@ -49,10 +50,6 @@ import {
   commandForBlock,
   repairMojibakeText,
   __testing,
-  FILES_TAB_LABEL,
-  DIFF_TAB_LABEL,
-  TERMINAL_TAB_LABEL,
-  BROWSER_TAB_LABEL,
 } from "./agent-workbench-utils";
 import { useAgentWorkbenchI18n } from "./use-agent-workbench-i18n";
 import {
@@ -104,9 +101,10 @@ function MainProcessPhaseTimeline({
   selectedBlockId: string | null;
   onSelectBlock: (blockId: string, phaseId: string | null) => void;
 }) {
+  const { t } = useI18n();
   const groups = useMemo(
-    () => buildScreenPhaseGroups(phases, screenBlocks, currentPhaseId),
-    [currentPhaseId, phases, screenBlocks],
+    () => buildScreenPhaseGroups(phases, screenBlocks, currentPhaseId, t),
+    [currentPhaseId, phases, screenBlocks, t],
   );
   const currentBlockId = screenFrame.block?.id ?? null;
   const currentGroupId = useMemo(() => {
@@ -135,7 +133,7 @@ function MainProcessPhaseTimeline({
   if (screenBlocks.length === 0) {
     return (
       <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">
-        暂无操作记录
+        {t.agentWorkbenchPanel.noOperationRecords}
       </div>
     );
   }
@@ -143,7 +141,7 @@ function MainProcessPhaseTimeline({
   if (!screenFrame.block) {
     return (
       <div className="flex min-h-32 items-center justify-center px-4 text-xs text-muted-foreground">
-        暂无当前操作
+        {t.agentWorkbenchPanel.noCurrentOperation}
       </div>
     );
   }
@@ -190,15 +188,15 @@ function MainProcessPhaseTimeline({
               )}
               <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                 {group.blocks.length > 0
-                  ? `${group.blocks.length} 帧`
-                  : phaseStatusLabel(group.status)}
+                  ? t.agentWorkbenchPanel.frameCount(group.blocks.length)
+                  : phaseStatusLabel(group.status, t)}
               </span>
             </button>
             {open && (
               <div className="border-t border-border/30">
                 {group.blocks.length === 0 ? (
                   <div className="px-3 py-2 text-[11px] text-muted-foreground">
-                    {phaseStatusLabel(group.status)}
+                    {phaseStatusLabel(group.status, t)}
                   </div>
                 ) : (
                   <div className="divide-y divide-border/30">
@@ -247,6 +245,7 @@ function ScreenFrameRow({
   onSelect: () => void;
   total: number;
 }) {
+  const { t } = useI18n();
   const Icon = blockIcon(block.kind);
   const cmd = block.kind === "terminal" ? commandForBlock(block) : null;
   const cwd =
@@ -269,7 +268,9 @@ function ScreenFrameRow({
         )}
       >
         <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-          {isCurrent ? "当前帧" : "帧"} {frameIndex + 1}/{total}
+          {isCurrent
+            ? t.agentWorkbenchPanel.currentFrameLabel(frameIndex + 1, total)
+            : t.agentWorkbenchPanel.frameLabel(frameIndex + 1, total)}
         </span>
         <StatusGlyph status={block.status} />
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -320,12 +321,13 @@ function buildScreenPhaseGroups(
   phases: AgentPhase[],
   screenBlocks: WorkBlock[],
   currentPhaseId: string | null,
+  t: Translations,
 ): ScreenPhaseGroup[] {
   if (phases.length === 0) {
     return [
       {
         id: "screen:all",
-        title: "过程帧",
+        title: t.agentWorkbenchPanel.processFrames,
         status: statusFromBlocks(screenBlocks),
         blocks: screenBlocks,
       },
@@ -391,11 +393,14 @@ function statusFromBlocks(blocks: WorkBlock[]): AgentPhase["status"] {
   return blocks.length > 0 ? "done" : "pending";
 }
 
-function phaseStatusLabel(status: AgentPhase["status"]) {
-  if (status === "running") return "进行中";
-  if (status === "error") return "异常";
-  if (status === "done") return "已完成";
-  return "待开始";
+function phaseStatusLabel(
+  status: AgentPhase["status"],
+  t: Translations,
+) {
+  if (status === "running") return t.agentWorkbenchPanel.phaseStatusRunning;
+  if (status === "error") return t.agentWorkbenchPanel.phaseStatusError;
+  if (status === "done") return t.agentWorkbenchPanel.phaseStatusDone;
+  return t.agentWorkbenchPanel.phaseStatusPending;
 }
 
 export function AgentWorkbenchPanel({
@@ -612,22 +617,22 @@ export function AgentWorkbenchPanel({
     // Sort by expected usage frequency and priority.
     {
       id: "files",
-      label: FILES_TAB_LABEL,
+      label: t.agentWorkbenchPages.filesTab,
       Icon: FolderIcon,
     },
     {
       id: "diff",
-      label: DIFF_TAB_LABEL,
+      label: t.agentWorkbenchPages.diffTab,
       Icon: ChevronRightIcon,
     },
     {
       id: "terminal",
-      label: TERMINAL_TAB_LABEL,
+      label: t.agentWorkbenchPages.terminalTab,
       Icon: TerminalIcon,
     },
     {
       id: "browser",
-      label: BROWSER_TAB_LABEL,
+      label: t.agentWorkbenchPages.browserTab,
       Icon: GlobeIcon,
     },
   ];
@@ -706,8 +711,8 @@ export function AgentWorkbenchPanel({
         )
       ) : (
         <WorkbenchEmptyPage
-          title="机器人"
-          description="当前没有正在运行的机器人过程。"
+          title={t.agentWorkbenchPanel.robot}
+          description={t.agentWorkbenchPanel.noRunningRobotProcess}
         />
       );
 
@@ -724,14 +729,14 @@ export function AgentWorkbenchPanel({
               type="button"
               onClick={() => onSelectTab?.("agent")}
               className="relative flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background font-mono shadow-sm transition-colors hover:bg-muted"
-              aria-label="机器人"
-              title="机器人"
+              aria-label={t.agentWorkbenchPanel.robot}
+              title={t.agentWorkbenchPanel.robot}
             >
               <BotIcon className="size-4 text-muted-foreground" />
             </button>
             <div
               role="tablist"
-              aria-label="看板"
+              aria-label={t.agentWorkbench.agentComputer}
               className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               {visibleTabs.map((tab) => {
@@ -799,8 +804,8 @@ export function AgentWorkbenchPanel({
       {/* View switch tabs */}
       <div className="flex items-center gap-0.5 border-b border-border/45 px-2 py-1">
         {[
-          { id: "summary" as const, label: "概要" },
-          { id: "screen" as const, label: "电脑视图" },
+          { id: "summary" as const, label: t.agentWorkbenchPanel.summaryLabel },
+          { id: "screen" as const, label: t.agentWorkbench.computerView },
         ].map((view) => (
           <button
             key={view.id}
@@ -860,7 +865,7 @@ export function AgentWorkbenchPanel({
                         : "bg-amber-400",
                 )}
               />
-              当前进度{" "}
+              {t.agentWorkbench.currentProgress}{" "}
               {screenProgress.total > 0
                 ? `${screenProgress.current}/${screenProgress.total}`
                 : phases.length > 0
@@ -877,21 +882,21 @@ export function AgentWorkbenchPanel({
                       ? ` · ${repairMojibakeText(selectedAgent.role)}`
                       : ""
                   }`
-                : (currentPhase?.title ?? "电脑视图")}
+                : (currentPhase?.title ?? t.agentWorkbench.computerView)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
               <span>
                 {selectedAgent
                   ? selectedAgent.status === "running"
-                    ? "运行中"
+                    ? t.agentWorkbenchPanel.agentStatusRunning
                     : selectedAgent.status === "error"
-                      ? "异常"
+                      ? t.agentWorkbenchPanel.agentStatusError
                       : selectedAgent.status === "done"
-                        ? "已结束"
-                        : "等待中"
+                        ? t.agentWorkbenchPanel.agentStatusDone
+                        : t.agentWorkbenchPanel.agentStatusPending
                   : phases.some((p) => p.status === "running")
-                    ? "运行中"
-                    : "已结束"}
+                    ? t.agentWorkbenchPanel.agentStatusRunning
+                    : t.agentWorkbenchPanel.agentStatusDone}
               </span>
             </span>
           </div>
@@ -946,7 +951,7 @@ export function AgentWorkbenchPanel({
                 )}
               >
                 <MonitorIcon className="size-3" />
-                主控
+                {t.agentWorkbenchPanel.mainController}
               </button>
               {/* Subagents */}
               {agentTiles.map((tile) => {
@@ -1126,8 +1131,8 @@ export function AgentWorkbenchPanel({
               <button
                 type="button"
                 className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground transition-colors hover:bg-muted/55 hover:text-foreground"
-                title="标签页列表"
-                aria-label="标签页列表"
+                title={t.agentWorkbenchPanel.tabList}
+                aria-label={t.agentWorkbenchPanel.tabList}
               >
                 <LayoutGridIcon className="size-3.5" />
               </button>
@@ -1242,8 +1247,8 @@ export function AgentWorkbenchPanel({
                 </section>
               ) : (
                 <WorkbenchEmptyPage
-                  title="机器人"
-                  description="当前没有正在运行的机器人过程。"
+                  title={t.agentWorkbenchPanel.robot}
+                  description={t.agentWorkbenchPanel.noRunningRobotProcess}
                 />
               )}
 
@@ -1353,7 +1358,7 @@ export function AgentWorkbenchPanel({
                             agentStatusClass(agent.status),
                           )}
                         >
-                          {dockAgentStatusLabel(agent.status)}
+                          {dockAgentStatusLabel(agent.status, t)}
                         </div>
                         <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
                           <div
@@ -1397,19 +1402,20 @@ function SubagentDock({
   onSelectMain: () => void;
   onSelectAgent: (agentId: string) => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="shrink-0 border-t border-border/45 bg-background/95 px-3 py-2">
       <div className="flex items-center gap-2">
         <span className="flex shrink-0 items-center gap-1 rounded-md bg-muted/35 px-2 py-1 text-[11px] font-medium text-muted-foreground">
           <BotIcon className="size-3.5" aria-hidden="true" />
-          工位
+          {t.agentWorkbenchPanel.workbenchSlots}
         </span>
         <div className="flex min-w-0 flex-1 items-stretch gap-2 overflow-x-auto pb-0.5">
           <button
             type="button"
             onClick={onSelectMain}
-            aria-label="查看主 Agent 工位"
-            title="主 Agent: 当前对话主进程"
+            aria-label={t.agentWorkbenchPanel.viewMainAgentSlot}
+            title={t.agentWorkbenchPanel.mainAgentProcessTitle}
             className={cn(
               "relative flex min-w-28 shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
               selectedAgentId === null
@@ -1421,9 +1427,11 @@ function SubagentDock({
               <BotIcon className="size-4" aria-hidden="true" />
             </span>
             <span className="min-w-0">
-              <span className="block truncate text-xs font-medium">主控</span>
+              <span className="block truncate text-xs font-medium">
+                {t.agentWorkbenchPanel.mainController}
+              </span>
               <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                当前对话
+                {t.agentWorkbenchPanel.currentConversation}
               </span>
             </span>
             <span className="ml-auto size-2 rounded-full bg-emerald-500" />
@@ -1438,7 +1446,7 @@ function SubagentDock({
                 key={agent.id}
                 type="button"
                 onClick={() => onSelectAgent(agent.id)}
-                aria-label={`查看 ${label} 独立进程`}
+                aria-label={t.agentWorkbenchPanel.viewAgentProcess(label)}
                 title={`${label}: ${agent.task}`}
                 className={cn(
                   "relative flex min-w-32 shrink-0 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
@@ -1464,7 +1472,7 @@ function SubagentDock({
                     </span>
                   </span>
                   <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
-                    {dockAgentStatusLabel(agent.status)}
+                    {dockAgentStatusLabel(agent.status, t)}
                   </span>
                   <DotProgress
                     progress={progress}
@@ -1486,11 +1494,14 @@ function SubagentDock({
   );
 }
 
-function dockAgentStatusLabel(status: AgentTile["status"]): string {
-  if (status === "running") return "运行中";
-  if (status === "error") return "异常";
-  if (status === "done") return "已完成";
-  return "等待中";
+function dockAgentStatusLabel(
+  status: AgentTile["status"],
+  t: Translations,
+): string {
+  if (status === "running") return t.agentWorkbenchPanel.dockStatusRunning;
+  if (status === "error") return t.agentWorkbenchPanel.dockStatusError;
+  if (status === "done") return t.agentWorkbenchPanel.dockStatusDone;
+  return t.agentWorkbenchPanel.dockStatusPending;
 }
 
 function SubagentProcessView({
@@ -1504,6 +1515,7 @@ function SubagentProcessView({
   currentBlockId: string | null;
   onSelectBlock: (blockId: string) => void;
 }) {
+  const { t } = useI18n();
   const label = repairMojibakeText(agent.codename ?? agent.name ?? agent.label);
   const progress = agentProgressPercent(agent.status) / 100;
   const hue = agent.status === "error" ? 8 : 118;
@@ -1516,7 +1528,7 @@ function SubagentProcessView({
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 p-3">
         <section className="overflow-hidden rounded-xl border border-border/55 bg-background/90 shadow-sm">
           <div className="flex items-center justify-center border-b border-border/40 px-3 py-2 text-sm font-medium text-muted-foreground">
-            Agent 集群 - 独立进程
+            {t.agentWorkbenchPanel.agentClusterIndependentProcess}
           </div>
           <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
             <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
@@ -1545,7 +1557,7 @@ function SubagentProcessView({
                   </div>
                   <div className="mt-1 truncate text-sm text-muted-foreground">
                     {repairMojibakeText(
-                      agent.role ?? agent.taskLabel ?? "子智能体",
+                      agent.role ?? agent.taskLabel ?? t.agentWorkbenchPanel.subAgent,
                     )}
                   </div>
                 </div>
@@ -1570,7 +1582,7 @@ function SubagentProcessView({
                       agent.status === "pending" && "bg-amber-400",
                     )}
                   />
-                  {dockAgentStatusLabel(agent.status)}
+                  {dockAgentStatusLabel(agent.status, t)}
                 </span>
               </div>
               <div className="mt-4 flex items-center gap-3">
@@ -1582,16 +1594,16 @@ function SubagentProcessView({
                   className={cn(agent.status === "running" && "animate-pulse")}
                 />
                 <span className="text-xs text-muted-foreground">
-                  {agent.eventCount} 条过程记录
+                  {t.agentWorkbenchPanel.processRecords(agent.eventCount)}
                 </span>
                 {agent.iterationCount !== undefined && (
                   <span className="text-xs text-muted-foreground">
-                    {agent.iterationCount} 轮
+                    {t.agentWorkbenchPanel.iterationRounds(agent.iterationCount)}
                   </span>
                 )}
               </div>
               <div className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/35 px-3 py-2 text-sm leading-6 text-foreground">
-                {brief || "暂无任务说明。"}
+                {brief || t.agentWorkbenchPanel.noTaskDescription}
               </div>
             </div>
           </div>
@@ -1599,15 +1611,15 @@ function SubagentProcessView({
 
         {blocks.length === 0 ? (
           <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-border/55 bg-muted/20 px-4 text-sm text-muted-foreground">
-            等待子智能体开始输出
+            {t.agentWorkbenchPanel.waitingForSubagentOutput}
           </div>
         ) : (
           <section className="rounded-xl border border-border/50 bg-background/80 p-2 shadow-sm">
             <div className="flex items-center gap-2 px-2 pb-2 text-sm font-medium text-muted-foreground">
               <MonitorIcon className="size-4" aria-hidden="true" />
-              过程回放
+              {t.agentWorkbenchPanel.processReplay}
               <span className="ml-auto text-xs font-normal">
-                {blocks.length} 步
+                {t.agentWorkbench.stepCount(blocks.length)}
               </span>
             </div>
             <div className="space-y-2">
