@@ -28,7 +28,6 @@ export function ChatStreamingFooter({
   mode = "chat",
 }: ChatStreamingFooterProps) {
   const { t } = useI18n();
-  const events = liveToolEvents ?? [];
   const normalizedMode =
     mode === "thinking" || mode === "flash" ? "chat" : mode;
   const isDeepMode = normalizedMode === "deep";
@@ -38,7 +37,7 @@ export function ChatStreamingFooter({
     normalizedMode === "deep" ||
     normalizedMode === "team" ||
     normalizedMode === "code";
-  const displayEvents = useMemo(() => events, [events]);
+  const displayEvents = useMemo(() => liveToolEvents ?? [], [liveToolEvents]);
   const semanticWorkEvents = useMemo(
     () => getProcessTraceEvents(displayEvents),
     [displayEvents],

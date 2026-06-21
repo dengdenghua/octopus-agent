@@ -350,7 +350,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
         return { ...prev, agents, trace: combinedTrace };
       });
     }, 400);
-  }, [clearTicker, clearSSE]);
+  }, [clearTicker, clearSSE, traceLabels]);
 
   const resetSimulation = useCallback(() => {
     clearTicker();

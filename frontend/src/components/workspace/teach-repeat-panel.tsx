@@ -227,7 +227,10 @@ function ReplayDialog({
 }) {
   const { t } = useI18n();
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
-  const params: WorkflowParam[] = template.params ?? [];
+  const params = useMemo<WorkflowParam[]>(
+    () => template.params ?? [],
+    [template.params],
+  );
 
   // Pre-fill defaults
   useEffect(() => {

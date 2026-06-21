@@ -9,6 +9,14 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
@@ -33,6 +41,37 @@ export function CronSettingsPage() {
   const [newName, setNewName] = useState("");
   const [newCommand, setNewCommand] = useState("");
   const [newCron, setNewCron] = useState("0 * * * *");
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    command?: string;
+    cron?: string;
+  }>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const validate = useCallback(
+    (values: { name: string; command: string; cron: string }) => {
+      const errors: { name?: string; command?: string; cron?: string } = {};
+      const name = values.name.trim();
+      const command = values.command.trim();
+      const cron = values.cron.trim();
+      if (!name) errors.name = t.cronSettings.nameRequired;
+      if (!command) errors.command = t.cronSettings.commandRequired;
+      if (!cron) {
+        errors.cron = t.cronSettings.cronRequired;
+      } else if (!/^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/.test(cron)) {
+        errors.cron = t.cronSettings.cronInvalid;
+      }
+      return errors;
+    },
+    [
+      t.cronSettings.commandRequired,
+      t.cronSettings.cronInvalid,
+      t.cronSettings.cronRequired,
+      t.cronSettings.nameRequired,
+    ],
+  );
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -62,23 +101,28 @@ export function CronSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t.cronSettings.loadFailed]);
 
   useEffect(() => {
     fetchJobs();
   }, [fetchJobs]);
 
   const handleAdd = async () => {
-    if (!newName || !newCommand) return;
+    const values = { name: newName, command: newCommand, cron: newCron };
+    const errors = validate(values);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setSubmitting(true);
     try {
       const res = await fetch(`${getBackendBaseURL()}/api/cron/`, {
         method: "POST",
         headers: jsonAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({
-          name: newName,
-          command: newCommand,
-          cron_expression: newCron,
+          name: values.name.trim(),
+          command: values.command.trim(),
+          cron_expression: values.cron.trim(),
         }),
       });
       if (!res.ok) {
@@ -88,6 +132,7 @@ export function CronSettingsPage() {
       setNewName("");
       setNewCommand("");
       setNewCron("0 * * * *");
+      setFieldErrors({});
       setShowAdd(false);
       toast.success(t.cronSettings.createSuccess);
       void fetchJobs();
@@ -95,10 +140,13 @@ export function CronSettingsPage() {
       toast.error(
         error instanceof Error ? error.message : t.cronSettings.createFailed,
       );
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleDelete = async (name: string) => {
+  const doDeleteTask = async (name: string) => {
+    setDeleting(true);
     try {
       const res = await fetch(`${getBackendBaseURL()}/api/cron/${name}`, {
         method: "DELETE",
@@ -115,7 +163,13 @@ export function CronSettingsPage() {
       toast.error(
         error instanceof Error ? error.message : t.cronSettings.deleteFailed,
       );
+    } finally {
+      setDeleting(false);
     }
+  };
+
+  const handleDelete = (name: string) => {
+    setTaskToDelete(name);
   };
 
   return (
@@ -150,7 +204,7 @@ export function CronSettingsPage() {
           ) : needsAuth ? (
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-3 text-sm text-amber-700 dark:text-amber-300">
               <AlertCircleIcon className="mr-2 inline-block size-4" />
-              定时任务涉及本机命令执行，需要登录或授权后管理。
+              {t.cronSettings.needsAuth}
             </div>
           ) : loadError ? (
             <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-3 text-sm text-destructive">
@@ -209,29 +263,72 @@ export function CronSettingsPage() {
 
         {showAdd ? (
           <div className="space-y-2 rounded-lg border p-3 mt-3">
-            <Input
-              placeholder={t.cronSettings.jobName}
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-            />
-            <Input
-              placeholder={t.cronSettings.commandToRun}
-              value={newCommand}
-              onChange={(e) => setNewCommand(e.target.value)}
-            />
-            <Input
-              placeholder={t.cronSettings.cronExpression}
-              value={newCron}
-              onChange={(e) => setNewCron(e.target.value)}
-            />
+            <div>
+              <Input
+                placeholder={t.cronSettings.jobName}
+                value={newName}
+                onChange={(e) => {
+                  setNewName(e.target.value);
+                  if (fieldErrors.name) {
+                    setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                  }
+                }}
+                aria-invalid={!!fieldErrors.name}
+              />
+              {fieldErrors.name && (
+                <p className="mt-1 text-xs text-destructive">
+                  {fieldErrors.name}
+                </p>
+              )}
+            </div>
+            <div>
+              <Input
+                placeholder={t.cronSettings.commandToRun}
+                value={newCommand}
+                onChange={(e) => {
+                  setNewCommand(e.target.value);
+                  if (fieldErrors.command) {
+                    setFieldErrors((prev) => ({ ...prev, command: undefined }));
+                  }
+                }}
+                aria-invalid={!!fieldErrors.command}
+              />
+              {fieldErrors.command && (
+                <p className="mt-1 text-xs text-destructive">
+                  {fieldErrors.command}
+                </p>
+              )}
+            </div>
+            <div>
+              <Input
+                placeholder={t.cronSettings.cronExpression}
+                value={newCron}
+                onChange={(e) => {
+                  setNewCron(e.target.value);
+                  if (fieldErrors.cron) {
+                    setFieldErrors((prev) => ({ ...prev, cron: undefined }));
+                  }
+                }}
+                aria-invalid={!!fieldErrors.cron}
+              />
+              {fieldErrors.cron && (
+                <p className="mt-1 text-xs text-destructive">
+                  {fieldErrors.cron}
+                </p>
+              )}
+            </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={handleAdd}>
-                {t.cronSettings.create}
+              <Button size="sm" onClick={handleAdd} disabled={submitting}>
+                {submitting ? (
+                  <Loader2Icon className="mr-1.5 size-3.5 animate-spin" />
+                ) : null}
+                {submitting ? t.common.loading : t.cronSettings.create}
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() => setShowAdd(false)}
+                disabled={submitting}
               >
                 {t.cronSettings.cancel}
               </Button>
@@ -249,6 +346,57 @@ export function CronSettingsPage() {
           </Button>
         )}
       </SettingsSection>
+
+      <Dialog
+        open={taskToDelete !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setTaskToDelete(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
+        >
+          <DialogHeader className="gap-1 text-left">
+            <DialogTitle className="text-[15px]">
+              {t.cronSettings.deleteConfirmTitle}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-5">
+              {taskToDelete
+                ? t.cronSettings.deleteConfirmDescription(taskToDelete)
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => setTaskToDelete(null)}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+            >
+              {t.common.cancel}
+            </button>
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => {
+                if (!taskToDelete) return;
+                const target = taskToDelete;
+                setTaskToDelete(null);
+                void doDeleteTask(target);
+              }}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+            >
+              {deleting ? (
+                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+              ) : (
+                <Trash2Icon className="size-3.5" />
+              )}
+              {t.common.delete}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

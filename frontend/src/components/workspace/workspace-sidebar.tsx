@@ -767,7 +767,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     ? (pathname.split("/").filter(Boolean)[2] ?? null)
     : null;
   const activeTeamTasksQuery = useTeamTasks(activeTeamThreadId ?? null);
-  const activeTeamTasks = activeTeamTasksQuery.data ?? [];
+  const activeTeamTasks = useMemo(
+    () => activeTeamTasksQuery.data ?? [],
+    [activeTeamTasksQuery.data],
+  );
   const ongoingWorkItems = useMemo(
     () =>
       buildOngoingWorkItems({
@@ -1659,13 +1662,13 @@ function ProjectGroup({
   const [threadToDelete, setThreadToDelete] = useState<ThreadSummary | null>(
     null,
   );
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const deleteThread = useDeleteThread();
   const navigate = useNavigate();
-  const deleteProject = () => {
-    if (!window.confirm(t.sidebar.confirmDeleteProject(project))) {
-      return;
-    }
-    void onDeleteProject(project);
+  const confirmDeleteProject = () => {
+    if (!projectToDelete) return;
+    void onDeleteProject(projectToDelete);
+    setProjectToDelete(null);
   };
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -1698,7 +1701,7 @@ function ProjectGroup({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                deleteProject();
+                setProjectToDelete(project);
               }}
               className={cn(
                 "absolute right-1 top-1/2 -translate-y-1/2 flex size-5 items-center justify-center rounded-md text-muted-foreground/60 opacity-0 transition-opacity duration-150 group-hover/project:opacity-100 hover:bg-destructive/10 hover:text-destructive",
@@ -1778,6 +1781,51 @@ function ProjectGroup({
           }
         }}
       />
+      <Dialog
+        open={projectToDelete !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setProjectToDelete(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
+        >
+          <DialogHeader className="gap-1 text-left">
+            <DialogTitle className="text-[15px]">
+              {t.sidebar.confirmDeleteProjectTitle}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-5">
+              {projectToDelete
+                ? t.sidebar.confirmDeleteProject(projectToDelete)
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={() => setProjectToDelete(null)}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+            >
+              {t.common.cancel}
+            </button>
+            <button
+              type="button"
+              disabled={deleting}
+              onClick={confirmDeleteProject}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+            >
+              {deleting ? (
+                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+              ) : (
+                <Trash2Icon className="size-3.5" />
+              )}
+              {t.common.delete}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Collapsible>
   );
 }
@@ -2221,8 +2269,10 @@ function ChatsSection({
               })}
               {hiddenThreadCount > 0 && (
                 <li className="px-2 pt-1 text-[10px] leading-4 text-muted-foreground/55">
-                  最近 {displayedThreads.length} 条 · 其余 {hiddenThreadCount}{" "}
-                  条在历史抽屉
+                  {tr.sidebar.recentThreadsSummary(
+                    displayedThreads.length,
+                    hiddenThreadCount,
+                  )}
                 </li>
               )}
             </ul>

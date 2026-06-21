@@ -132,29 +132,30 @@ export function LivePreviewPanel({
     }
   }, [previewContent, previewUrl, iframeSrcDoc]);
 
-  const resetDiagnostics = () => {
+  const resetDiagnostics = useCallback(() => {
     setDiagnostics([]);
     onDiagnosticsChange?.([]);
-  };
+  }, [onDiagnosticsChange]);
 
-  const addDiagnostic = (
-    diagnostic: Omit<PreviewDiagnostic, "id" | "timestamp">,
-  ) => {
-    setDiagnostics((prev) => {
-      const nextDiagnostic: PreviewDiagnostic = {
-        ...diagnostic,
-        id: `${Date.now()}:${prev.length}:${diagnostic.source}`,
-        timestamp: Date.now(),
-      };
-      const next = [...prev, nextDiagnostic].slice(-20);
-      onDiagnosticsChange?.(next);
-      return next;
-    });
-  };
+  const addDiagnostic = useCallback(
+    (diagnostic: Omit<PreviewDiagnostic, "id" | "timestamp">) => {
+      setDiagnostics((prev) => {
+        const nextDiagnostic: PreviewDiagnostic = {
+          ...diagnostic,
+          id: `${Date.now()}:${prev.length}:${diagnostic.source}`,
+          timestamp: Date.now(),
+        };
+        const next = [...prev, nextDiagnostic].slice(-20);
+        onDiagnosticsChange?.(next);
+        return next;
+      });
+    },
+    [onDiagnosticsChange],
+  );
 
   useEffect(() => {
     resetDiagnostics();
-  }, [previewUrl, htmlContent, cssContent, jsContent, reloadNonce]);
+  }, [previewUrl, htmlContent, cssContent, jsContent, reloadNonce, resetDiagnostics]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -176,7 +177,7 @@ export function LivePreviewPanel({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
+  }, [addDiagnostic]);
 
   const handleIframeLoad = () => {
     window.setTimeout(() => {
@@ -241,7 +242,7 @@ export function LivePreviewPanel({
     // window. Future work could promote the preview to a <webview> for
     // a per-iframe inspector.
     void window.octopus?.window?.openDevTools?.();
-  }, [isElectronEnv, t]);
+  }, [isElectronEnv, t, addDiagnostic]);
 
   const combinedCode = `<!DOCTYPE html>
 <html>

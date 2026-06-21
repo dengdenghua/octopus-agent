@@ -570,7 +570,7 @@ function ChatsPageContent({
       ...settings.context,
       page_agent_memory_mode: memoryMode,
     } as Partial<typeof settings.context>);
-  }, [memoryMode, setSettings, settings.context]);
+  }, [memoryMode, setSettings, settings, settings.context]);
   useEffect(() => {
     const prev = prevAgentRef.current;
     prevAgentRef.current = activeAgentId;
@@ -1078,7 +1078,6 @@ function ChatsPageContent({
     [
       effectiveMode,
       isAgentRoute,
-      location.pathname,
       navigate,
       newThreadRouteForMode,
       setSettings,
@@ -1167,7 +1166,7 @@ function ChatsPageContent({
         swallow(e);
       }
     }
-  }, [thread, threadId, tasks.data, pauseTask]);
+  }, [thread, threadId, tasks.data, pauseTask, t.chatPage.stopNote]);
 
   const hasResearchPanel = showResearch && (!!researchJob || !!researchError);
   const activeRightPanel: RightPanelPage | null = showAgentWorkbench

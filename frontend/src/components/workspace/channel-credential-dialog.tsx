@@ -859,7 +859,7 @@ function WeChatQRForm({
       cancelled = true;
       clearInterval(id);
     };
-  }, [qrCode, status, displayName, onConfirmed]);
+  }, [qrCode, status, displayName, onConfirmed, t]);
 
   if (!qrCode) {
     return (

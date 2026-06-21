@@ -188,7 +188,9 @@ export function SkillSettingsPage({ onClose }: { onClose?: () => void } = {}) {
       {isLoading ? (
         <div className="text-muted-foreground text-sm">{t.common.loading}</div>
       ) : error ? (
-        <div>Error: {error.message}</div>
+        <div>
+          {t.common.error}: {error.message}
+        </div>
       ) : (
         <SkillSettingsList skills={skills} onClose={onClose} />
       )}
@@ -331,7 +333,7 @@ function SkillSettingsList({
         <SearchIcon className="text-muted-foreground absolute left-2.5 top-2.5 size-4" />
         <Input
           className="pl-9"
-          placeholder={t.common.search + "..."}
+          placeholder={t.settings.skills.searchPlaceholder}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />

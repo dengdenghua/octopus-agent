@@ -204,7 +204,7 @@ export function ProcessTrace({
             />
             <span className="font-medium">{t.message.processDetails}</span>
             <span className="ml-auto tabular-nums">
-              {visibleEvents.length} 项
+              {t.message.processRecords(visibleEvents.length)}
             </span>
           </button>
           {rawDetailsOpen && (
@@ -225,12 +225,17 @@ function AgentClusterCard({
   agents: MessageAgentRow[];
   statusLabels: Record<MessageAgentRow["status"], string>;
 }) {
+  const { t } = useI18n();
   return (
     <div className="rounded-xl border border-border/55 bg-background/85 px-3 py-2.5 shadow-sm">
       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
         <NetworkIcon className="size-4 shrink-0 text-sky-500" />
-        <span className="font-medium text-foreground">Agent 集群</span>
-        <span className="ml-auto tabular-nums">{agents.length} 个并行任务</span>
+        <span className="font-medium text-foreground">
+          {t.message.agentCluster}
+        </span>
+        <span className="ml-auto tabular-nums">
+          {t.dispatchCard.parallelTasks(agents.length)}
+        </span>
       </div>
       <div className="space-y-2">
         {agents.map((agent) => (
@@ -351,7 +356,8 @@ function AgentHoverPreview({
   agent: MessageAgentRow;
   statusLabel: string;
 }) {
-  const body = agent.prompt || agent.task || "暂无任务说明";
+  const { t } = useI18n();
+  const body = agent.prompt || agent.task || t.message.noTaskDescription;
   return (
     <div
       className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-xl border border-border/60 bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl group-hover/agent-row:block"
@@ -368,7 +374,7 @@ function AgentHoverPreview({
                 {agent.name}
               </div>
               <div className="truncate text-sm text-muted-foreground">
-                {agent.role || "Subagent"}
+                {agent.role || t.message.assistant}
               </div>
             </div>
             <span className="font-mono text-sm text-foreground">
@@ -378,11 +384,13 @@ function AgentHoverPreview({
           <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span>{statusLabel}</span>
             <span>·</span>
-            <span>{agent.eventCount} 条过程记录</span>
+            <span>{t.message.processRecords(agent.eventCount)}</span>
             {agent.currentTool && (
               <>
                 <span>·</span>
-                <span className="truncate">最近工具：{agent.currentTool}</span>
+                <span className="truncate">
+                  {t.message.latestTool}: {agent.currentTool}
+                </span>
               </>
             )}
           </div>
@@ -573,8 +581,8 @@ function buildTraceSections(
   if (action.length > 0) {
     sections.push({
       kind: "action",
-      title: "执行",
-      summary: `${action.length} 项动作`,
+      title: t.message.execution,
+      summary: t.message.actionCount(action.length),
       events: action,
       openByDefault: true,
     });
@@ -582,8 +590,8 @@ function buildTraceSections(
   if (verification.length > 0) {
     sections.push({
       kind: "verification",
-      title: "验证",
-      summary: `${verification.length} 项检查`,
+      title: t.message.verification,
+      summary: t.message.checkCount(verification.length),
       events: verification,
       openByDefault: false,
     });
@@ -591,8 +599,8 @@ function buildTraceSections(
   if (sections.length === 0 && remainder.length > 0) {
     sections.push({
       kind: "action",
-      title: "过程",
-      summary: `${remainder.length} 项记录`,
+      title: t.message.process,
+      summary: t.message.processRecords(remainder.length),
       events: remainder,
       openByDefault: true,
     });

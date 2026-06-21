@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 export type ActivityKind = "think" | "plan" | "file_ops" | "tool_calls";
@@ -71,6 +72,7 @@ function sumMeta(items: ActivityItem[], key: string): number {
 export function buildHeaderSummary(
   kind: ActivityKind,
   items: ActivityItem[],
+  t: ReturnType<typeof useI18n>["t"],
 ): string | null {
   if (kind === "think") {
     if (items.length === 0) return null;
@@ -78,21 +80,25 @@ export function buildHeaderSummary(
       1,
       Math.round(sumMeta(items, "duration_seconds")),
     );
-    return `🧠 思考 ${totalSeconds} 秒`;
+    return `🧠 ${t.message.thinkingForSeconds(totalSeconds)}`;
   }
   if (kind === "plan") {
-    return `📋 规划 ${items.length} 步`;
+    return `📋 ${t.message.planningNSteps(items.length)}`;
   }
   if (kind === "file_ops") {
     const added = sumMeta(items, "lines_added");
     const removed = sumMeta(items, "lines_removed");
     if (added === 0 && removed === 0) {
-      return `✏️ 操作文件 ${items.length} 次`;
+      return `✏️ ${t.message.fileOperationsCount(items.length)}`;
     }
-    return `✏️ 操作文件 ${items.length} 次 (+${added} / -${removed})`;
+    return `✏️ ${t.message.fileOperationsCountWithDiff(
+      items.length,
+      added,
+      removed,
+    )}`;
   }
   // tool_calls
-  return `🔧 工具调用 ${items.length} 次`;
+  return `🔧 ${t.message.toolCallsCount(items.length)}`;
 }
 
 // -------------------------------------------------------------------------
@@ -120,9 +126,13 @@ export function CollapsibleActivityGroup({
   defaultOpen = false,
   className,
 }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(defaultOpen);
 
-  const header = useMemo(() => buildHeaderSummary(kind, items), [kind, items]);
+  const header = useMemo(
+    () => buildHeaderSummary(kind, items, t),
+    [kind, items, t],
+  );
   const KindIcon = KIND_ICON[kind];
   const latest = items[items.length - 1];
 

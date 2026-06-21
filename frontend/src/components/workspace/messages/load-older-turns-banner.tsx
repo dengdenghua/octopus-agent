@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { HistoryIcon, Loader2Icon } from "lucide-react";
 
+import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 
 export function LoadOlderTurnsBanner({
@@ -13,6 +14,7 @@ export function LoadOlderTurnsBanner({
 }: {
   onLoad: () => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
 
   const handleClick = async () => {
@@ -40,7 +42,7 @@ export function LoadOlderTurnsBanner({
         ) : (
           <HistoryIcon className="size-3.5" />
         )}
-        {loading ? "正在加载更早的对话…" : "加载更早的对话"}
+        {loading ? t.message.loadingOlderTurns : t.message.loadOlderTurns}
       </button>
     </div>
   );

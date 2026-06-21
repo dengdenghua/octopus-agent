@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Loader2, Package, Puzzle, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,7 @@ export function BrowserPluginPanel() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const next = await listPlugins();
@@ -31,11 +31,11 @@ export function BrowserPluginPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     void refresh();
-  }, []);
+  }, [refresh]);
 
   const enabledCount = plugins.filter((plugin) => plugin.enabled).length;
   const errorCount = plugins.filter((plugin) => plugin.error).length;

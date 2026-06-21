@@ -334,7 +334,7 @@ export function AgentFooter() {
                       {a.display_name || a.name}
                     </span>
                     <span className="truncate text-[10px] font-normal leading-tight text-muted-foreground">
-                      {isActive ? "当前 Agent" : a.description || "单人对话"}
+                      {isActive ? t.sidebar.currentAgent : a.description || t.sidebar.soloChat}
                     </span>
                   </span>
                   {isActive && (
@@ -354,7 +354,7 @@ export function AgentFooter() {
                 className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-muted-foreground focus:bg-muted/60 focus:text-foreground"
               >
                 <UsersRoundIcon className="size-4 shrink-0" />
-                <span>切换 Agent</span>
+                <span>{t.sidebar.switchAgent}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
@@ -583,7 +583,7 @@ export function TeamFooter() {
           className="max-h-[72vh] w-72 overflow-y-auto p-1"
         >
           <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            单人任务
+            {t.sidebar.soloTasks}
           </DropdownMenuLabel>
           {agents.length === 0 ? (
             <div className="px-2 py-3 text-center text-[11px] text-muted-foreground">
@@ -607,7 +607,7 @@ export function TeamFooter() {
                       {agent.display_name || agent.name}
                     </span>
                     <span className="line-clamp-1 text-[10px] leading-tight text-muted-foreground/70">
-                      {agent.description || "一对一任务"}
+                      {agent.description || t.sidebar.oneOnOneTask}
                     </span>
                   </span>
                   {isActive ? (
@@ -621,7 +621,7 @@ export function TeamFooter() {
           )}
           <DropdownMenuSeparator className="my-1" />
           <DropdownMenuLabel className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            群聊任务
+            {t.sidebar.groupTasks}
           </DropdownMenuLabel>
           {teams.length === 0 ? (
             <div className="px-2 py-3 text-center text-[11px] text-muted-foreground">

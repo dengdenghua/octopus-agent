@@ -412,9 +412,9 @@ function OfficialPricingSection() {
       <p className="text-muted-foreground text-center text-xs">
         {t.subscriptionSettings.contactUs}
         <span className="text-foreground font-medium">
-          support@octopus.local
+          {t.subscriptionSettings.supportEmail}
         </span>
-        ，{t.subscriptionSettings.invoiceHint}
+        {t.subscriptionSettings.invoiceHint}
       </p>
 
       <PayOrderDialog

@@ -302,16 +302,15 @@ export function PlanPanel({
   const { t } = useI18n();
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
 
-  const planLabels = {
-    completed: t.planPanel.completed,
-    inProgress: t.planPanel.inProgress,
-    pending: t.planPanel.pending,
-  };
-
   // Extract plan steps from messages and/or todos
   const steps = useMemo(
-    () => computePlanSteps(messages, todos, planLabels),
-    [messages, todos, t],
+    () =>
+      computePlanSteps(messages, todos, {
+        completed: t.planPanel.completed,
+        inProgress: t.planPanel.inProgress,
+        pending: t.planPanel.pending,
+      }),
+    [messages, todos, t.planPanel.completed, t.planPanel.inProgress, t.planPanel.pending],
   );
 
   const completedCount = steps.filter((s) => s.status === "completed").length;

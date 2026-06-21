@@ -431,6 +431,7 @@ export function CopilotPanel({ webviewHandle }: Props) {
     autoBrowse,
     busy,
     sendMessage,
+    t,
     thread.isLoading,
     thread.messages,
     threadId,

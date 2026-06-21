@@ -406,16 +406,6 @@ export function DeployPanel({
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Detect on open
-  useEffect(() => {
-    if (!open || !workspacePath) return;
-    handleDetect();
-    loadHistory();
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [open, workspacePath]);
-
   const handleDetect = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -440,6 +430,16 @@ export function DeployPanel({
       swallow(e);
     }
   }, []);
+
+  // Detect on open
+  useEffect(() => {
+    if (!open || !workspacePath) return;
+    handleDetect();
+    loadHistory();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [open, workspacePath, handleDetect, loadHistory]);
 
   const handleProviderChange = useCallback(
     async (providerId: string) => {

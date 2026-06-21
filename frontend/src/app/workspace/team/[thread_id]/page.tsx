@@ -766,7 +766,7 @@ export default function TeamPage() {
 
   useEffect(() => {
     if (previewBlocks && !showPreview) setShowPreview(true);
-  }, [previewBlocks]);
+  }, [previewBlocks, showPreview]);
 
   const createTaskFromSubmit = useCallback(
     async (text: string) => {

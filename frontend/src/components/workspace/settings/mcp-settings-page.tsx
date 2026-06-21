@@ -2,6 +2,7 @@ import { ServerIcon, ShieldCheckIcon, ShieldAlertIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -29,6 +30,10 @@ export function McpSettingsPage() {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [rawConfig, setRawConfig] = useState<MCPConfig | null>(null);
   const [trustEntries, setTrustEntries] = useState<MCPTrustEntry[]>([]);
+  const [addName, setAddName] = useState("");
+  const [addUrl, setAddUrl] = useState("");
+  const [addAuth, setAddAuth] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const fetchServers = useCallback(async () => {
     try {
@@ -103,6 +108,40 @@ export function McpSettingsPage() {
     } catch {
       fetchServers();
       toast.error(t.mcpSettings.toastUpdateFailed);
+    }
+  };
+
+  const addServer = async () => {
+    const name = addName.trim();
+    const url = addUrl.trim();
+    if (!name || !url) {
+      toast.error(t.mcpSettings.toastAddInvalid);
+      return;
+    }
+    setAdding(true);
+    try {
+      const data = rawConfig ?? (await loadMCPConfig());
+      const token = addAuth.trim();
+      const mcpServers = {
+        ...data.mcp_servers,
+        [name]: {
+          enabled: true,
+          description: "",
+          transport: "http",
+          url,
+          ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+        },
+      };
+      await updateMCPConfig({ mcp_servers: mcpServers });
+      toast.success(t.mcpSettings.toastAddSuccess(name));
+      setAddName("");
+      setAddUrl("");
+      setAddAuth("");
+      fetchServers();
+    } catch {
+      toast.error(t.mcpSettings.toastAddFailed);
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -189,6 +228,32 @@ export function McpSettingsPage() {
               {t.mcpSettings.noServers}
             </div>
           )}
+        </div>
+      </SettingsSection>
+      <SettingsSection title={t.mcpSettings.addRemoteTitle}>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            placeholder={t.mcpSettings.addNamePlaceholder}
+            value={addName}
+            onChange={(e) => setAddName(e.target.value)}
+            className="sm:w-40"
+          />
+          <Input
+            placeholder={t.mcpSettings.addUrlPlaceholder}
+            value={addUrl}
+            onChange={(e) => setAddUrl(e.target.value)}
+            className="flex-1"
+          />
+          <Input
+            type="password"
+            placeholder={t.mcpSettings.addAuthPlaceholder}
+            value={addAuth}
+            onChange={(e) => setAddAuth(e.target.value)}
+            className="sm:w-48"
+          />
+          <Button onClick={addServer} disabled={adding}>
+            {t.mcpSettings.addButton}
+          </Button>
         </div>
       </SettingsSection>
     </div>

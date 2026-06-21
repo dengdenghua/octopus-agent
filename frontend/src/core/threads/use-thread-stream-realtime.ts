@@ -886,6 +886,8 @@ export function useThreadStreamRealtime(
       model,
       context,
       permissionRuntime.mode,
+      permissionRuntime.planningMode,
+      permissionRuntime.sandbox_mode,
       permissionRuntime.execution_environment,
       threadId,
     ],

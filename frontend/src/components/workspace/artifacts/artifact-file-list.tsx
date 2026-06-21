@@ -61,7 +61,7 @@ export function ArtifactFileList({
         setInstallingFile(null);
       }
     },
-    [threadId, installingFile],
+    [threadId, installingFile, t],
   );
 
   return (

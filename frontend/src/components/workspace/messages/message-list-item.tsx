@@ -1,17 +1,12 @@
 import type { Message } from "@/core/api/types";
 import "katex/dist/katex.min.css";
 import {
-  BrainIcon,
-  CheckCircle2Icon,
-  CircleIcon,
   FileIcon,
   Loader2Icon,
   PencilIcon,
   RefreshCwIcon,
-  SearchIcon,
   ThumbsDownIcon,
   ThumbsUpIcon,
-  UsersIcon,
 } from "lucide-react";
 import { useParams } from "react-router-dom";
 import {
@@ -76,35 +71,8 @@ import { useThreadStreaming, useThreadValues } from "./context";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
 
-type ThinkingPlanStepStatus = "pending" | "in_progress" | "completed";
-
-interface ThinkingPlanStepSnapshot {
-  title: string;
-  detail?: string;
-  status?: ThinkingPlanStepStatus;
-}
-
-interface ThinkingPlanSnapshot {
-  mode?: string;
-  goal?: string;
-  assumptions: string[];
-  risks: string[];
-  steps: ThinkingPlanStepSnapshot[];
-  needs_search?: boolean;
-  suggest_deep_research?: boolean;
-  progress?: number;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function stringList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item): item is string =>
-      typeof item === "string" && item.trim().length > 0,
-  );
 }
 
 const INTERNAL_TRACE_DETAILS_RE =
@@ -236,54 +204,6 @@ function buildPublicThinkingSummary(message: Message): string | null {
   return getPublicReasoningSummary(message);
 }
 
-function getThinkingPlanFromMessage(
-  message: Message,
-): ThinkingPlanSnapshot | null {
-  const additional = message.additional_kwargs;
-  if (!isRecord(additional)) return null;
-  const octopus = additional.octopus;
-  if (!isRecord(octopus)) return null;
-  const plan = octopus.thinking_plan;
-  if (!isRecord(plan)) return null;
-  const rawSteps = Array.isArray(plan.steps) ? plan.steps : [];
-  const steps = rawSteps.filter(isRecord).map(
-    (step): ThinkingPlanStepSnapshot => ({
-      title:
-        typeof step.title === "string" && step.title.trim()
-          ? step.title
-          : "Step",
-      detail: typeof step.detail === "string" ? step.detail : undefined,
-      status:
-        step.status === "in_progress" || step.status === "completed"
-          ? step.status
-          : "pending",
-    }),
-  );
-  if (steps.length === 0) return null;
-  return {
-    mode: typeof plan.mode === "string" ? plan.mode : undefined,
-    goal: typeof plan.goal === "string" ? plan.goal : undefined,
-    assumptions: stringList(plan.assumptions),
-    risks: stringList(plan.risks),
-    steps,
-    needs_search: plan.needs_search === true,
-    suggest_deep_research: plan.suggest_deep_research === true,
-    progress: typeof plan.progress === "number" ? plan.progress : undefined,
-  };
-}
-
-function ThinkingStepIcon({ status }: { status?: ThinkingPlanStepStatus }) {
-  if (status === "completed") {
-    return <CheckCircle2Icon className="mt-0.5 size-3.5 text-green-500" />;
-  }
-  if (status === "in_progress") {
-    return (
-      <Loader2Icon className="mt-0.5 size-3.5 animate-spin text-muted-foreground" />
-    );
-  }
-  return <CircleIcon className="mt-0.5 size-3.5 text-muted-foreground/60" />;
-}
-
 type MarkdownRenderProps = Pick<
   ComponentProps<typeof MarkdownContent>,
   "components" | "rehypePlugins" | "chatFontSize"
@@ -321,6 +241,7 @@ function SegmentedReasoningPanel({
   publicThinkingSummary?: string | null;
   isLoading: boolean;
 }) {
+  const { t } = useI18n();
   const replyThinking = publicThinkingSummary?.trim() || null;
   if (!replyThinking) return null;
 
@@ -332,7 +253,7 @@ function SegmentedReasoningPanel({
     >
       <ReasoningTrigger
         className="px-2 py-1.5"
-        getThinkingMessage={() => <span>思考过程</span>}
+        getThinkingMessage={() => <span>{t.message.thinkingProcess}</span>}
       />
       <SegmentedReasoningContent>
         <div className="space-y-2">
@@ -366,113 +287,6 @@ function SegmentedReasoningContent({ children }: { children: ReactNode }) {
     >
       {children}
     </CollapsibleContent>
-  );
-}
-
-function _ThinkingPlanCard({
-  plan,
-  threadId,
-}: {
-  plan: ThinkingPlanSnapshot;
-  threadId?: string | null;
-}) {
-  const flags = [
-    plan.needs_search ? "source check" : null,
-    plan.suggest_deep_research ? "cowork fit" : null,
-  ].filter((flag): flag is string => Boolean(flag));
-  const steps = Array.isArray(plan.steps) ? plan.steps : [];
-  const assumptions = Array.isArray(plan.assumptions) ? plan.assumptions : [];
-  const risks = Array.isArray(plan.risks) ? plan.risks : [];
-  const completed = steps.filter((step) => step.status === "completed").length;
-  const progress =
-    typeof plan.progress === "number"
-      ? Math.max(0, Math.min(1, plan.progress))
-      : completed / Math.max(1, steps.length);
-  const canEscalateToDeepResearch =
-    plan.suggest_deep_research === true && !!plan.goal?.trim();
-
-  return (
-    <div className="mb-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-xs">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-          <BrainIcon className="size-3.5" />
-          Thinking plan
-        </span>
-        <span className="text-[10px] text-muted-foreground">
-          {completed}/{steps.length}
-        </span>
-        {flags.map((flag) => (
-          <span
-            key={flag}
-            className="inline-flex items-center gap-1 rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-          >
-            {flag === "source check" && <SearchIcon className="size-3" />}
-            {flag}
-          </span>
-        ))}
-        {canEscalateToDeepResearch && (
-          <button
-            type="button"
-            onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("octopus:start-deep-research", {
-                  detail: {
-                    threadId,
-                    topic: plan.goal,
-                  },
-                }),
-              );
-            }}
-            className="ml-auto inline-flex items-center gap-1 rounded-md border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary transition-colors hover:bg-primary/15"
-            title="Use this topic in Agent"
-          >
-            <UsersIcon className="size-3" />
-            Agent
-          </button>
-        )}
-      </div>
-      <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-background/70">
-        <div
-          className="h-full rounded-full bg-foreground/60 transition-all duration-300"
-          style={{ width: `${Math.round(progress * 100)}%` }}
-        />
-      </div>
-      <ol className="space-y-1.5">
-        {steps.map((step, index) => (
-          <li key={`${step.title}-${index}`} className="flex gap-2">
-            <ThinkingStepIcon status={step.status} />
-            <div className="min-w-0 flex-1">
-              <div className="font-medium text-foreground">{step.title}</div>
-              {step.detail && (
-                <div className="mt-0.5 line-clamp-2 text-muted-foreground">
-                  {step.detail}
-                </div>
-              )}
-            </div>
-          </li>
-        ))}
-      </ol>
-      {(assumptions.length > 0 || risks.length > 0) && (
-        <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-muted-foreground">
-          {assumptions.slice(0, 2).map((item) => (
-            <span
-              key={item}
-              className="max-w-full rounded-full bg-background/70 px-1.5 py-0.5 break-words"
-            >
-              {item}
-            </span>
-          ))}
-          {risks.slice(0, 1).map((item) => (
-            <span
-              key={item}
-              className="max-w-full rounded-full bg-background/70 px-1.5 py-0.5 break-words"
-            >
-              {item}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -784,8 +598,6 @@ function MessageContent_({
     publicThinkingSummary ||
     (files?.length ?? 0) > 0,
   );
-  const _thinkingPlan = !isHuman ? getThinkingPlanFromMessage(message) : null;
-
   const filesList =
     files && files.length > 0 && thread_id ? (
       <RichFilesList files={files} threadId={thread_id} />
@@ -814,7 +626,7 @@ function MessageContent_({
             >
               <img
                 src={src}
-                alt={att.filename ?? "attachment"}
+                alt={att.filename ?? t.message.attachmentFallback}
                 className="h-32 w-auto max-w-60 object-cover"
               />
             </a>
@@ -822,7 +634,7 @@ function MessageContent_({
         })}
       </div>
     );
-  }, [attachments]);
+  }, [attachments, t.message.attachmentFallback]);
 
   // Status-strip visibility · hoisted here (BEFORE any early
   // returns below) so the hook is called in every render.
@@ -1041,7 +853,7 @@ function MessageContent_({
         (message.additional_kwargs as { run_status?: unknown } | undefined)
           ?.run_status === "streaming" && (
           <div className="mt-2 text-xs text-muted-foreground italic">
-            âš ï¸ {t.conversation.interruptedMessage}
+            ⚠️ {t.conversation.interruptedMessage}
           </div>
         )}
       {/* Strategy badge · reveals which reply path produced this
@@ -1188,9 +1000,9 @@ const FILE_TYPE_MAP: Record<string, string> = {
 
 const IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"];
 
-function getFileTypeLabel(filename: string): string {
+function getFileTypeLabel(filename: string, fileFallback: string): string {
   const ext = getFileExt(filename);
-  return FILE_TYPE_MAP[ext] ?? (ext.toUpperCase() || "FILE");
+  return FILE_TYPE_MAP[ext] ?? (ext.toUpperCase() || fileFallback);
 }
 
 function isImageFile(filename: string): boolean {
@@ -1200,11 +1012,14 @@ function isImageFile(filename: string): boolean {
 /**
  * Format bytes to human-readable size string
  */
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
+function formatBytes(
+  bytes: number,
+  units: { b: string; kb: string; mb: string },
+): string {
+  if (bytes === 0) return `0 ${units.b}`;
   const kb = bytes / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  return `${(kb / 1024).toFixed(1)} MB`;
+  if (kb < 1024) return `${kb.toFixed(1)} ${units.kb}`;
+  return `${(kb / 1024).toFixed(1)} ${units.mb}`;
 }
 
 /**
@@ -1262,7 +1077,7 @@ function RichFileCard({
             variant="secondary"
             className="rounded px-1.5 py-0.5 text-[10px] font-normal"
           >
-            {getFileTypeLabel(file.filename)}
+            {getFileTypeLabel(file.filename, t.messageGrouping.fileFallback)}
           </Badge>
           <span className="text-muted-foreground text-[10px]">
             {t.uploads.uploading}
@@ -1309,10 +1124,14 @@ function RichFileCard({
           variant="secondary"
           className="rounded px-1.5 py-0.5 text-[10px] font-normal"
         >
-          {getFileTypeLabel(file.filename)}
+          {getFileTypeLabel(file.filename, t.messageGrouping.fileFallback)}
         </Badge>
         <span className="text-muted-foreground text-[10px]">
-          {formatBytes(file.size)}
+          {formatBytes(file.size, {
+            b: t.common.fileSizeB,
+            kb: t.common.fileSizeKB,
+            mb: t.common.fileSizeMB,
+          })}
         </span>
       </div>
     </div>
@@ -1337,7 +1156,7 @@ function TypingCursor({ visible }: { visible: boolean }) {
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [visible]);
+  }, [visible, show]);
 
   if (!show) return null;
 

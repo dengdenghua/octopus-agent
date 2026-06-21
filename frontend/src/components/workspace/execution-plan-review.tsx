@@ -325,7 +325,10 @@ export function ExecutionPlanReview({
   className,
 }: ExecutionPlanReviewProps) {
   const { t } = useI18n();
-  const steps = Array.isArray(plan.steps) ? plan.steps : [];
+  const steps = useMemo(
+    () => (Array.isArray(plan.steps) ? plan.steps : []),
+    [plan.steps],
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [editableSteps, setEditableSteps] = useState<ExecutionPlanStep[]>([]);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());

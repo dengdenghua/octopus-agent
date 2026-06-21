@@ -109,7 +109,7 @@ export function SwarmPanel() {
   // render the memo was skipped, on the second (loading=false) it
   // ran, and React threw "Rendered more hooks than during the
   // previous render". Hoisting the memo fixes the crash.
-  const tasks = swarmState?.tasks ?? [];
+  const tasks = useMemo(() => swarmState?.tasks ?? [], [swarmState]);
   const stats = useMemo(
     () => ({
       total: tasks.length,

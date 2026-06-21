@@ -36,6 +36,7 @@ export const enUS: Translations = {
     custom: "Custom",
     notAvailableInDemoMode: "Not available in demo mode",
     loading: "Loading...",
+    error: "Error",
     copy: "Copy",
     copied: "Copied",
     version: "Version",
@@ -56,6 +57,13 @@ export const enUS: Translations = {
     unlink: "Unlink",
     guest: "Guest",
     confirm: "Confirm",
+    stop: "Stop",
+    step: "Step",
+    revert: "Revert",
+    review: "Review",
+    fileSizeB: "B",
+    fileSizeKB: "KB",
+    fileSizeMB: "MB",
     timeAgo: (value: number, unit: string) => `${value}${unit} ago`,
     stubResponseTitle: "Simulated backend response",
     stubResponseDescription: (method: string, path: string) =>
@@ -123,7 +131,7 @@ export const enUS: Translations = {
     ephemeralModeDescription: "No memory read, no memory written (incognito)",
     reasoningMode: "Think",
     reasoningModeDescription: "ReAct reasoning",
-    reasoningEffort: "Reasoning Effort",
+    reasoningEffort: "Reasoning effort",
     reasoningEffortMinimal: "Minimal",
     reasoningEffortMinimalDescription: "Retrieval + Direct Output",
     reasoningEffortLow: "Low",
@@ -134,6 +142,9 @@ export const enUS: Translations = {
     reasoningEffortHigh: "High",
     reasoningEffortHighDescription:
       "Full-dimensional Logic Deduction + Multi-path Verification + Backward Check",
+    reasoningEffortXHigh: "Ultra",
+    reasoningEffortMax: "Max",
+    reasoningEffortCurrent: (label) => `Current ${label}`,
     searchModels: "Search models...",
     surpriseMe: "Surprise",
     surpriseMePrompt: "Surprise me",
@@ -215,6 +226,71 @@ export const enUS: Translations = {
     statusCompleted: "Completed",
     statusError: "Error",
     statusWaiting: "Waiting",
+    assistant: "Assistant",
+    turnLabel: (n: number) => `Turn ${n}`,
+    turnNumberLabel: (n: number, label: string) => `Turn ${n}: ${label}`,
+    phaseTask: "phase task",
+    turnLocator: "Turn locator",
+    jumpToFirstTurn: "Jump to first turn",
+    jumpToLastTurn: "Jump to last turn",
+    backToLatest: "Back to latest message",
+    latest: "Latest",
+    timeoutWarning: (seconds: number) =>
+      `No progress for ${seconds}s; it may be stuck`,
+    thinkingPlan: "Thinking plan",
+    thinkingPlanSourceCheck: "source check",
+    thinkingPlanCoworkFit: "cowork fit",
+    agent: "Agent",
+    noTaskDescription: "No task description",
+    processRecords: (n: number) => `${n} process records`,
+    latestTool: "Latest tool",
+    execution: "Execution",
+    verification: "Verification",
+    process: "Process",
+    actionCount: (n: number) => `${n} action${n === 1 ? "" : "s"}`,
+    checkCount: (n: number) => `${n} check${n === 1 ? "" : "s"}`,
+    reviewSelf: "Review myself",
+    reviewTeam: "Assign to team",
+    reviewSecurity: "Security review",
+    artifactsCreated: (n: number) => `${n} artifact${n === 1 ? "" : "s"} created`,
+    artifactsCreatedAndFilesEdited: (created: number, edited: number) =>
+      `${created} artifact${created === 1 ? "" : "s"} created, ${edited} file${edited === 1 ? "" : "s"} edited`,
+    filesEdited: (n: number) => `${n} file${n === 1 ? "" : "s"} edited`,
+    revertSuccess: (n: number) => `Reverted ${n} change${n === 1 ? "" : "s"}`,
+    revertFailed: "Failed to revert",
+    reviewAssigned: (label: string) => `Review assigned to: ${label}`,
+    artifactsSummary: "Artifacts summary",
+    changesSummary: "File changes summary",
+    auditActions: "Audit actions",
+    assignReviewTo: "Assign review to",
+    moreFiles: (n: number) => `${n} more file${n === 1 ? "" : "s"}, expand to view`,
+    downloadStillInArtifactsPanel:
+      "Download entry is still available in the right artifacts panel",
+    fileCreated: "created",
+    fileEdited: "edited",
+    diffTruncated: "diff truncated",
+    diffTruncatedTooltip:
+      "Diff was truncated by the server output limit; line counts are incomplete and full revert is unavailable",
+    hunkReverted: "Hunk reverted",
+    hunkRevertFailed: "Failed to revert hunk",
+    accept: "Accept",
+    reject: "Reject",
+    accepted: "Accepted",
+    rejected: "Reverted",
+    useTopicInAgent: "Use this topic in Agent",
+    actionLabel: (action: string) => `Action: ${action}`,
+    attachmentFallback: "attachment",
+    thinkingForSeconds: (seconds: number) => `${seconds}s thinking`,
+    planningNSteps: (n: number) => `${n} planning step${n === 1 ? "" : "s"}`,
+    fileOperationsCount: (n: number) => `${n} file operation${n === 1 ? "" : "s"}`,
+    fileOperationsCountWithDiff: (
+      n: number,
+      added: number,
+      removed: number,
+    ) => `${n} file operation${n === 1 ? "" : "s"} (+${added} / -${removed})`,
+    toolCallsCount: (n: number) => `${n} tool call${n === 1 ? "" : "s"}`,
+    loadOlderTurns: "Load older turns",
+    loadingOlderTurns: "Loading older turns…",
   },
 
   // Execution Checklist
@@ -304,6 +380,23 @@ export const enUS: Translations = {
     seedScheduledTask: "Create a scheduled task: ",
     seedWorkflow: "Create or run a workflow: ",
     seedProjectFiles: "Based on project files, help me: ",
+    send: "Send",
+    stop: "Stop",
+    projectModeLabel: "Project code",
+    projectModeHint:
+      "A local folder is bound; this agent will use project context for code tasks.",
+    projectStatusTitle: "Project context bound",
+    projectStatusDescUnlocked:
+      "This agent can use code mode and will work through inspect, edit, and verify.",
+    projectStatusDescLocked:
+      "This agent has not declared code write access; the backend will downgrade the write scope. Switch to Coder or enable code_mode_unlock.",
+    projectVerificationLabel: "Verify",
+    permissionFullAccess: "Full access",
+    permissionAcceptEdits: "Accept edits",
+    permissionConfirm: "Confirm",
+    addImage: "Add image (paste / drag / select)",
+    removeImage: "Remove",
+    readme: "README",
   },
 
   // Team Mode
@@ -391,6 +484,24 @@ export const enUS: Translations = {
     executeCommandWith: (cmd: string) => `Run ${cmd}`,
     planStep: "Plan step",
     think: "Thinking",
+    hideProcessReplay: "Hide process replay",
+    processReplay: "Process replay",
+    replayNSteps: (n: number) => `Replay ${n} previous steps`,
+    hideSavedSteps: "Hide saved steps",
+    viewProcessSummary: "View process summary",
+    viewNSavedSteps: (n: number) => `View ${n} saved steps`,
+    countItems: (n: number) => `${n} items`,
+    reasoningFallback: "Synthesize reasoning",
+    callTeammate: "Call teammate",
+    searchSources: "Search sources",
+    readWebpage: "Read webpage",
+    readFile: "Read file",
+    updateFile: "Update file",
+    runAction: "Run action",
+    teammateTimeout: "Teammate did not return in time; Octopus took over",
+    clarifyTaskDirection: "Clarify task direction",
+    synthesizeFindings: "Synthesize findings",
+    planNextStep: "Plan next step",
   },
 
   // Trace generator labels
@@ -1041,7 +1152,8 @@ export const enUS: Translations = {
     switchAgent: "Switch Agent",
     selectAgent: "Select Agent",
     confirmDeleteProject: (project: string) =>
-      `Delete project "${project}"?\n(Threads in this project will not be deleted, only unclassified.)`,
+      `Threads in project "${project}" will be unclassified but not deleted.`,
+    confirmDeleteProjectTitle: "Delete project",
     confirmDeleteThread: (title: string) => `Delete conversation "${title}"?`,
     tools: "Tools",
     navigate: "Navigate",
@@ -1104,6 +1216,13 @@ export const enUS: Translations = {
     lockedAgentTooltip: (name: string) => `This page is locked to ${name}`,
     adminAgentName: "Admin",
     switchAgentLabel: "Switch agent",
+    currentAgent: "Current agent",
+    soloChat: "Solo chat",
+    oneOnOneTask: "One-on-one task",
+    soloTasks: "Solo tasks",
+    groupTasks: "Group tasks",
+    recentThreadsSummary: (recent, hidden) =>
+      `Recent ${recent} · ${hidden} more in history`,
     // Header/footer tooltips
     newChatTooltip: "New chat",
     searchTooltip: "Search (⌘K)",
@@ -2374,6 +2493,8 @@ export const enUS: Translations = {
       appleDescription: "Modern, crisp, and clean Apple-inspired design.",
       languageTitle: "Language",
       languageDescription: "Switch between languages.",
+      languageEnglish: "English",
+      languageChineseSimplified: "Chinese (Simplified)",
       chatFontSizeTitle: "Chat font size",
       chatFontSizeDescription:
         "Scale the text size of chat messages. Applies immediately to every conversation.",
@@ -2410,6 +2531,7 @@ export const enUS: Translations = {
       enabledDescription:
         "Enabled skills enter the Agent tool catalog. Disabled skills are hidden from models and cannot be executed.",
       noMatch: (query) => `No skills match "${query}"`,
+      searchPlaceholder: "Search skills...",
       tabMarket: "Skills Market",
       tabInstalled: "Installed",
       tabPerformance: "Performance",
@@ -2582,7 +2704,8 @@ export const enUS: Translations = {
     testFailed: "Connection test failed",
     diagnoseHealthy: "Diagnosis complete: all services are healthy.",
     diagnoseIssues: (issues: string) => `Diagnosis found issues: ${issues}`,
-    deleteConfirm: (name: string) => `Delete model "${name}"?`,
+    deleteConfirm: (name: string) => `Model "${name}" will be permanently deleted.`,
+    deleteModelTitle: "Delete model",
     gatewayReturned: (status: number) => `Gateway returned ${status}`,
     cannotReachGateway: "Cannot reach Gateway API",
     current: "Current",
@@ -2628,6 +2751,8 @@ export const enUS: Translations = {
     officialModels: "Official Models",
     officialModelsHint:
       "Official models are hosted by the system, no API key required",
+    // Count label shown next to each custom model row.
+    modelCount: (count: number) => `${count} ${count === 1 ? "model" : "models"}`,
     // Open-ended model id list · index 0 = picker default, index -1 =
     // strongest slot for Auto mode's performance verdict.
     modelList: {
@@ -3923,6 +4048,14 @@ export const enUS: Translations = {
     toastToggleSuccess: (name: string, enabled: boolean) =>
       `MCP server ${name} ${enabled ? "enabled" : "disabled"}`,
     toastUpdateFailed: "Failed to update MCP config",
+    addRemoteTitle: "Add remote MCP server",
+    addNamePlaceholder: "name (e.g. github)",
+    addUrlPlaceholder: "https://server/mcp",
+    addAuthPlaceholder: "auth token (optional)",
+    addButton: "Add",
+    toastAddSuccess: (name: string) => `Added MCP server ${name}`,
+    toastAddFailed: "Failed to add MCP server",
+    toastAddInvalid: "Name and URL are required",
   },
 
   intelligence: {
@@ -4437,6 +4570,15 @@ export const enUS: Translations = {
     createFailed: "Failed to create scheduled task",
     deleteSuccess: "Scheduled task deleted",
     deleteFailed: "Failed to delete scheduled task",
+    needsAuth:
+      "Scheduled tasks involve local command execution and require login or authorization to manage.",
+    nameRequired: "Job name is required",
+    commandRequired: "Command is required",
+    cronRequired: "Cron expression is required",
+    cronInvalid: "Invalid cron expression (expected 5 fields, e.g. 0 * * * *)",
+    deleteConfirmTitle: "Delete scheduled task",
+    deleteConfirmDescription: (name: string) =>
+      `Delete scheduled task "${name}"? This action cannot be undone.`,
   },
 
   // Team Input
@@ -4557,6 +4699,7 @@ export const enUS: Translations = {
     currentPlan: "Current Plan",
     upgradeNow: "Upgrade Now",
     contactUs: "Contact us: ",
+    supportEmail: "support@octopus.local",
     invoiceHint: ", invoices available after purchase",
     totalCredits: (total) => `Total ${total} credits`,
     plans: {
@@ -5531,6 +5674,48 @@ export const enUS: Translations = {
     toastLockOn: "Identity lock enabled",
     toastLockOff: "Identity lock disabled (dev mode)",
     toastToggleFailed: (msg: string) => `Toggle failed: ${msg}`,
+    // AI mode (efficiency / privacy)
+    aiModeTitle: "AI Mode",
+    aiModeDescScanning: "Detecting device configuration…",
+    aiModeRecommended: (label: string) =>
+      `Recommended for this device: ${label}`,
+    efficiencyMode: "Efficiency",
+    efficiencyModeDesc:
+      "Prefer cloud high-performance models for faster, stronger responses.",
+    privacyMode: "Privacy",
+    privacyModeDesc: "Prefer local models; data stays on this device.",
+    detectButton: "Detect",
+    recommendedTag: "Recommended",
+    enabledTag: "Enabled",
+    deviceLabel: "Device:",
+    toastAiModeSwitched: (label: string) => `Switched to ${label}`,
+    toastAiModeSwitchFailed: (msg: string) => `Failed to switch AI mode: ${msg}`,
+    // Path denylist
+    pathDenyTitle: "Unreadable Folders",
+    pathDenyDesc:
+      "Once added, the agent will refuse to read or write any files under these paths.",
+    addPathButton: "Add",
+    pathDenyEmpty:
+      "None yet — the default denylist (.vscode / AppData / .cache etc.) is active",
+    pathActionAria: (path: string) => `Actions for ${path}`,
+    pathDeleteButton: "Delete",
+    addPathDialogTitle: "Add Unreadable Folder",
+    addPathDialogDesc:
+      "Enter an absolute path (e.g. C:\\Users\\you\\secrets or /home/you/.ssh). The agent will refuse to read or write any files under this directory.",
+    pathLabel: "Path",
+    toastInvalidPath: "Please enter a valid path",
+    toastPathAdded: (path: string) => `Added: ${path}`,
+    toastPathAddFailed: (msg: string) => `Failed to add: ${msg}`,
+    toastPathRemoved: (path: string) => `Removed: ${path}`,
+    toastPathRemoveFailed: (msg: string) => `Failed to remove: ${msg}`,
+    // LLM judge
+    judgeTitle: "LLM Semantic Review (judge)",
+    judgeDesc:
+      "Each outbound message triggers an extra model call to review semantic violations such as phishing or unauthorized scraping. Off by default (has cost).",
+    judgeUnavailable: " No model route currently available; cannot enable.",
+    toastJudgeEnabled: "LLM semantic review enabled",
+    toastJudgeDisabled: "LLM semantic review disabled",
+    toastJudgeToggleFailed: (msg: string) => `Toggle failed: ${msg}`,
   },
 
   // Login page

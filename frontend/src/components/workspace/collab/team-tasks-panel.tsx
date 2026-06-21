@@ -92,7 +92,7 @@ export function TeamTasksPanel({
   const deleteTask = useDeleteTeamTask();
   const collab = useOptionalCollab();
 
-  const tasks = tasksQuery.data ?? [];
+  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const latestEventByTask = useMemo(() => {
     const byTask = new Map<string, TeamTaskProgressEvent>();
     for (const event of collab?.taskEvents ?? []) {

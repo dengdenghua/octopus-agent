@@ -151,7 +151,7 @@ export default function ReflexMonitorPage() {
       swallow(e);
       setError(e instanceof Error ? e.message : t.reflexPage.fetchFailed);
     }
-  }, []);
+  }, [t.reflexPage.fetchFailed]);
 
   useEffect(() => {
     void fetchAll();

@@ -7,6 +7,7 @@ import {
   PlusIcon,
   RefreshCwIcon,
   SearchIcon,
+  Trash2Icon,
   WifiIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -14,6 +15,14 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -254,6 +263,7 @@ export default function ModelSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingModel, setEditingModel] = useState<string | null>(null);
+  const [modelToDelete, setModelToDelete] = useState<string | null>(null);
 
   // Gateway connection state
   const [gatewayStatus, setGatewayStatus] = useState<
@@ -284,7 +294,7 @@ export default function ModelSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t.modelSettings.loadFailed]);
 
   const checkGateway = useCallback(async () => {
     setGatewayStatus("checking");
@@ -330,8 +340,10 @@ export default function ModelSettingsPage() {
     }
   };
 
-  const handleDelete = async (name: string) => {
-    if (!confirm(t.modelSettings.deleteConfirm(name))) return;
+  const [deletingModel, setDeletingModel] = useState(false);
+
+  const doDeleteModel = async (name: string) => {
+    setDeletingModel(true);
     try {
       const res = await fetch(
         `${getBackendBaseURL()}/api/config/custom-models/${encodeURIComponent(name)}`,
@@ -350,7 +362,13 @@ export default function ModelSettingsPage() {
       toast.error(
         error instanceof Error ? error.message : t.modelSettings.deleteFailed,
       );
+    } finally {
+      setDeletingModel(false);
     }
+  };
+
+  const handleDelete = (name: string) => {
+    setModelToDelete(name);
   };
 
   const handleReconnect = () => {
@@ -593,7 +611,7 @@ export default function ModelSettingsPage() {
                           className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-400"
                           title={t.modelSettings.modelList.hint}
                         >
-                          {list.length} {list.length === 1 ? "model" : "models"}
+                          {t.modelSettings.modelCount(list.length)}
                         </span>
                       </div>
                       <div className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -769,6 +787,57 @@ export default function ModelSettingsPage() {
           </div>
         </div>
       </SettingsSection>
+
+      <Dialog
+        open={modelToDelete !== null}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setModelToDelete(null);
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="w-[min(360px,calc(100vw-2rem))] gap-3 rounded-lg p-4 shadow-xl sm:max-w-[360px]"
+        >
+          <DialogHeader className="gap-1 text-left">
+            <DialogTitle className="text-[15px]">
+              {t.modelSettings.deleteModelTitle}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] leading-5">
+              {modelToDelete
+                ? t.modelSettings.deleteConfirm(modelToDelete)
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-1 flex-row justify-end gap-2">
+            <button
+              type="button"
+              disabled={deletingModel}
+              onClick={() => setModelToDelete(null)}
+              className="inline-flex h-8 items-center justify-center rounded-md border border-border bg-background px-3 text-[12.5px] font-medium text-foreground/80 transition-colors hover:bg-muted disabled:pointer-events-none disabled:opacity-60"
+            >
+              {t.common.cancel}
+            </button>
+            <button
+              type="button"
+              disabled={deletingModel}
+              onClick={() => {
+                if (!modelToDelete) return;
+                const target = modelToDelete;
+                setModelToDelete(null);
+                void doDeleteModel(target);
+              }}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border border-destructive/25 bg-destructive/[0.07] px-3 text-[12.5px] font-medium text-destructive transition-colors hover:border-destructive/35 hover:bg-destructive/[0.11] disabled:pointer-events-none disabled:opacity-60"
+            >
+              {deletingModel ? (
+                <span className="size-3 animate-spin rounded-full border border-current border-t-transparent" />
+              ) : (
+                <Trash2Icon className="size-3.5" />
+              )}
+              {t.common.delete}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -838,7 +907,7 @@ function OfficialModelsSection() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t.modelSettings.moliliNotEnabled, t.modelSettings.moliliNotLinked]);
 
   if (loading) {
     return (

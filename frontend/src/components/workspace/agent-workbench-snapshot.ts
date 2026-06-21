@@ -58,8 +58,23 @@ export function useAgentWorkbenchSnapshot(
   options: AgentWorkbenchSnapshotOptions,
 ): AgentWorkbenchSnapshot {
   const previousRef = useRef<AgentWorkbenchSnapshot | null>(null);
+  const {
+    deriveAgentTiles,
+    hasAnswer,
+    paused,
+    runFailed,
+    runSettled,
+    workDir,
+  } = options;
   return useMemo(() => {
-    const candidate = buildAgentWorkbenchSnapshot(events, options);
+    const candidate = buildAgentWorkbenchSnapshot(events, {
+      deriveAgentTiles,
+      hasAnswer,
+      paused,
+      runFailed,
+      runSettled,
+      workDir,
+    });
     const previous = previousRef.current;
     if (previous && previous.fingerprint === candidate.fingerprint) {
       return previous;
@@ -72,12 +87,12 @@ export function useAgentWorkbenchSnapshot(
     return next;
   }, [
     events,
-    options.deriveAgentTiles,
-    options.hasAnswer,
-    options.paused,
-    options.runFailed,
-    options.runSettled,
-    options.workDir,
+    deriveAgentTiles,
+    hasAnswer,
+    paused,
+    runFailed,
+    runSettled,
+    workDir,
   ]);
 }
 

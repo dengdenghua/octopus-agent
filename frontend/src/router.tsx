@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { useI18n } from "@/core/i18n/hooks";
 
 /**
  * Any direct link to ``/realtime/:threadId`` (old bookmarks, external
@@ -104,9 +105,10 @@ const ReflexEditorPage = lazy(() => import("./app/workspace/reflex/edit/page"));
 const RealtimeIndexPage = lazy(() => import("./app/realtime/page"));
 
 function PageLoading() {
+  const { t } = useI18n();
   return (
     <div className="flex h-screen items-center justify-center">
-      <div className="text-muted-foreground text-sm">Loading...</div>
+      <div className="text-muted-foreground text-sm">{t.common.loading}</div>
     </div>
   );
 }

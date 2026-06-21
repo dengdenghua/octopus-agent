@@ -124,7 +124,9 @@ function SubtaskHoverPreview({
   task: Subtask;
   statusLabel: string;
 }) {
-  const body = task.prompt || task.description || task.result || "暂无任务说明";
+  const { t } = useI18n();
+  const body =
+    task.prompt || task.description || task.result || t.message.noTaskDescription;
   return (
     <div
       className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-xl border border-border/60 bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl group-hover/subtask-row:block"
@@ -141,7 +143,7 @@ function SubtaskHoverPreview({
                 {task.name ?? task.description}
               </div>
               <div className="truncate text-sm text-muted-foreground">
-                {task.role ?? task.subagent_type ?? "Subagent"}
+                {task.role ?? task.subagent_type ?? t.message.assistant}
               </div>
             </div>
             <span className="font-mono text-sm text-foreground">
@@ -151,7 +153,9 @@ function SubtaskHoverPreview({
           <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span>{statusLabel}</span>
             <span>·</span>
-            <span>{task.messages?.length ?? 0} 条过程记录</span>
+            <span>
+              {t.message.processRecords(task.messages?.length ?? 0)}
+            </span>
             {task.tokenUsed !== undefined && (
               <>
                 <span>·</span>

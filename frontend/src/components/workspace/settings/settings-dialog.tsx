@@ -348,6 +348,8 @@ export function SettingsDialog(props: SettingsDialogProps) {
     t.mcpSettings.title,
     t.settings.sections.notification,
     t.settings.sections.about,
+    t.settings.sections.observability,
+    t.settings.sections.privacy,
   ]);
   return (
     <Dialog

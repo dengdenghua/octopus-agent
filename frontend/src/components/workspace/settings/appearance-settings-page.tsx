@@ -23,10 +23,14 @@ import { cn } from "@/lib/utils";
 
 import { SettingsSection } from "./settings-section";
 
-const languageOptions: { value: Locale; label: string }[] = [
-  { value: "en-US", label: "English" },
-  { value: "zh-CN", label: "Chinese (Simplified)" },
-];
+function useLanguageOptions(
+  t: ReturnType<typeof useI18n>["t"],
+): { value: Locale; label: string }[] {
+  return [
+    { value: "en-US", label: t.settings.appearance.languageEnglish },
+    { value: "zh-CN", label: t.settings.appearance.languageChineseSimplified },
+  ];
+}
 
 function AppleIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -137,7 +141,7 @@ export default function AppearanceSettingsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {languageOptions.map((item) => (
+            {useLanguageOptions(t).map((item) => (
               <SelectItem key={item.value} value={item.value}>
                 {item.label}
               </SelectItem>

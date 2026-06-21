@@ -76,7 +76,7 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
     }
   }, [registryQuery.data]);
 
-  const arms = armsQuery.data ?? [];
+  const arms = useMemo(() => armsQuery.data ?? [], [armsQuery.data]);
   const skillCatalog = useMemo(() => {
     const byName = new Map<string, SkillInfo>();
     for (const skill of skillsQuery.skills) {

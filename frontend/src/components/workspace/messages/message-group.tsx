@@ -65,7 +65,6 @@ import {
   actionStateLabel,
   inferToolActionKind,
   inferToolActionKindFromText,
-  isChineseText,
   reasoningStateLabel,
 } from "../tool-action-kind";
 
@@ -160,14 +159,6 @@ function isTeamCallToolName(name: string): boolean {
   );
 }
 
-function publicTimelineLabel(
-  zh: boolean,
-  zhLabel: string,
-  enLabel: string,
-): string {
-  return zh ? zhLabel : enLabel;
-}
-
 function extractTraceToolName(text: string): string | null {
   const functionMatch = text.match(/function=([A-Za-z0-9_-]+)/i);
   if (functionMatch?.[1]) return functionMatch[1];
@@ -206,60 +197,43 @@ function extractTraceTarget(text: string, name: string): string | undefined {
 function publicActionTextFromTraceTool(
   name: string,
   target: string | undefined,
-  languageProbe: string,
+  t: ReturnType<typeof useI18n>["t"] | undefined,
 ): string | null {
-  if (isHiddenTimelineToolName(name)) return null;
-  const zh = isChineseText(languageProbe);
+  if (!t || isHiddenTimelineToolName(name)) return null;
   const normalized = name.toLowerCase();
   const withTarget = (label: string) =>
-    target ? `${label}${zh ? "\uff1a" : ": "}${target}` : label;
+    target ? `${label}: ${target}` : label;
   if (isTeamCallToolName(normalized)) {
-    return withTarget(
-      publicTimelineLabel(
-        zh,
-        "\u53ec\u5524\u56e2\u961f\u6210\u5458",
-        "Call teammate",
-      ),
-    );
+    return withTarget(t.messageGrouping.callTeammate);
   }
   if (normalized.includes("search") || normalized.includes("glob")) {
-    return withTarget(
-      publicTimelineLabel(zh, "\u641c\u7d22\u8d44\u6599", "Search sources"),
-    );
+    return withTarget(t.messageGrouping.searchSources);
   }
   if (normalized.includes("fetch") || normalized.includes("web_fetch")) {
-    return withTarget(
-      publicTimelineLabel(zh, "\u8bfb\u53d6\u7f51\u9875", "Read webpage"),
-    );
+    return withTarget(t.messageGrouping.readWebpage);
   }
   if (
     normalized.includes("read") ||
     normalized === "ls" ||
     normalized === "list_cwd"
   ) {
-    return withTarget(
-      publicTimelineLabel(zh, "\u67e5\u770b\u6587\u4ef6", "Read file"),
-    );
+    return withTarget(t.messageGrouping.readFile);
   }
   if (
     normalized.includes("write") ||
     normalized.includes("edit") ||
     normalized.includes("replace")
   ) {
-    return withTarget(
-      publicTimelineLabel(zh, "\u66f4\u65b0\u6587\u4ef6", "Update file"),
-    );
+    return withTarget(t.messageGrouping.updateFile);
   }
-  return withTarget(
-    publicTimelineLabel(zh, "\u6267\u884c\u52a8\u4f5c", "Run action"),
-  );
+  return withTarget(t.messageGrouping.runAction);
 }
 
 function publicStatusFromPrivateReasoning(
   text: string,
-  languageProbe: string,
+  t: ReturnType<typeof useI18n>["t"] | undefined,
 ): string | null {
-  const zh = isChineseText(languageProbe);
+  if (!t) return null;
   if (
     /SOUL\.md|hard system rule|system prompt|hidden chain-of-thought/i.test(
       text,
@@ -270,65 +244,37 @@ function publicStatusFromPrivateReasoning(
   if (
     /sub-?agent.*(?:round cap|timeout|exceeded)|round cap|timeout/i.test(text)
   ) {
-    return publicTimelineLabel(
-      zh,
-      "\u56e2\u961f\u6210\u5458\u6682\u672a\u8fd4\u56de\uff0cOctopus \u63a5\u7ba1",
-      "Teammate did not return in time; Octopus took over",
-    );
+    return t.messageGrouping.teammateTimeout;
   }
   if (/\u5b50\s*agent.*\u8d85\u65f6|\u8d85\u65f6.*\u63a5\u7ba1/.test(text)) {
-    return publicTimelineLabel(
-      zh,
-      "\u56e2\u961f\u6210\u5458\u6682\u672a\u8fd4\u56de\uff0cOctopus \u63a5\u7ba1",
-      "Teammate did not return in time; Octopus took over",
-    );
+    return t.messageGrouping.teammateTimeout;
   }
   if (/\b(?:the user|user asks|request|objective)\b/i.test(text)) {
-    return publicTimelineLabel(
-      zh,
-      "\u786e\u8ba4\u4efb\u52a1\u65b9\u5411",
-      "Clarify task direction",
-    );
+    return t.messageGrouping.clarifyTaskDirection;
   }
   if (
     /\b(?:write|draft|synthesize|compile|report)\b/i.test(text) ||
     /\u62a5\u544a|\u64b0\u5199|\u6574\u7406/.test(text)
   ) {
-    return publicTimelineLabel(
-      zh,
-      "\u6574\u7406\u8c03\u7814\u7ed3\u679c",
-      "Synthesize findings",
-    );
+    return t.messageGrouping.synthesizeFindings;
   }
   if (
     /\b(?:search|query|look up|fetch|source)\b/i.test(text) ||
     /\u641c\u7d22|\u8d44\u6599|\u7f51\u9875/.test(text)
   ) {
-    return publicTimelineLabel(
-      zh,
-      "\u641c\u7d22\u8d44\u6599",
-      "Search sources",
-    );
+    return t.messageGrouping.searchSources;
   }
   if (
     /\b(?:plan|todo|next step)\b/i.test(text) ||
     /\u8ba1\u5212|\u4e0b\u4e00\u6b65|\u89c4\u5212/.test(text)
   ) {
-    return publicTimelineLabel(
-      zh,
-      "\u89c4\u5212\u4e0b\u4e00\u6b65",
-      "Plan next step",
-    );
+    return t.messageGrouping.planNextStep;
   }
   if (
     /\b(?:call_agent|teammate|colleague|Market Researcher)\b/i.test(text) ||
     /\u53ec\u5524|\u56e2\u961f|\u540c\u4e8b/.test(text)
   ) {
-    return publicTimelineLabel(
-      zh,
-      "\u53ec\u5524\u56e2\u961f\u6210\u5458",
-      "Call teammate",
-    );
+    return t.messageGrouping.callTeammate;
   }
   return null;
 }
@@ -346,9 +292,10 @@ function looksLikePrivateReasoningText(text: string): boolean {
 
 function normalizePublicTimelineChunk(
   chunk: string,
-  languageProbe: string,
+  t: ReturnType<typeof useI18n>["t"] | undefined,
   options: { allowPlainThoughts: boolean },
 ): string | null {
+  if (!t) return null;
   const stripped = stripTraceLabelPrefixes(
     chunk
       .replace(/<\/?(?:tool|tool_call|function|thought|thinking)[^>]*>/gi, " ")
@@ -364,15 +311,12 @@ function normalizePublicTimelineChunk(
     const actionText = publicActionTextFromTraceTool(
       toolName,
       extractTraceTarget(chunk, toolName),
-      languageProbe,
+      t,
     );
-    return actionText ? `Action: ${actionText}` : null;
+    return actionText ? t.message.actionLabel(actionText) : null;
   }
   if (!options.allowPlainThoughts) {
-    const publicStatus = publicStatusFromPrivateReasoning(
-      stripped,
-      languageProbe,
-    );
+    const publicStatus = publicStatusFromPrivateReasoning(stripped, t);
     if (publicStatus) return publicStatus;
   }
   if (
@@ -428,8 +372,8 @@ export function MessageGroup({
     Record<string, boolean>
   >({});
   const steps = useMemo(
-    () => convertToSteps(messages, t.taor.think),
-    [messages, t.taor.think],
+    () => convertToSteps(messages, t),
+    [messages, t],
   );
   const clarificationContent = useMemo(
     () =>
@@ -498,31 +442,18 @@ export function MessageGroup({
     ? replayOnlySteps.length
     : steps.length;
   const showTimelineToggle = replayStepCount > 0;
-  const isZh = /[\u4e00-\u9fff]/.test(t.taor.think);
   const useCompactToggleLabel = replayStepCount > 12;
   const timelineToggleLabel = isLiveTimeline
     ? showSteps
-      ? isZh
-        ? "\u6536\u8d77\u8fc7\u7a0b\u56de\u653e"
-        : "Hide process replay"
-      : isZh
-        ? useCompactToggleLabel
-          ? "\u8fc7\u7a0b\u56de\u653e"
-          : `\u8fc7\u7a0b\u56de\u653e ${replayStepCount} \u6b65`
-        : useCompactToggleLabel
-          ? "Process replay"
-          : `Replay ${replayStepCount} previous steps`
+      ? t.messageGrouping.hideProcessReplay
+      : useCompactToggleLabel
+        ? t.messageGrouping.processReplay
+        : t.messageGrouping.replayNSteps(replayStepCount)
     : showSteps
-      ? isZh
-        ? "\u9690\u85cf\u5386\u53f2\u6b65\u9aa4"
-        : "Hide saved steps"
-      : isZh
-        ? useCompactToggleLabel
-          ? "\u67e5\u770b\u8fc7\u7a0b\u6458\u8981"
-          : `\u67e5\u770b ${steps.length} \u4e2a\u5386\u53f2\u6b65\u9aa4`
-        : useCompactToggleLabel
-          ? "View process summary"
-          : `View ${steps.length} saved steps`;
+      ? t.messageGrouping.hideSavedSteps
+      : useCompactToggleLabel
+        ? t.messageGrouping.viewProcessSummary
+        : t.messageGrouping.viewNSavedSteps(steps.length);
 
   useEffect(() => {
     setShowSteps(false);
@@ -727,8 +658,9 @@ function ReasoningStepGroup({
   renderIterationDivider: () => ReactNode;
 }) {
   const { t } = useI18n();
-  const summary = summarizeReasoningGroup(group);
-  const countLabel = group.steps.length > 1 ? `${group.steps.length} 条` : "";
+  const summary = summarizeReasoningGroup(group, t);
+  const countLabel =
+    group.steps.length > 1 ? t.messageGrouping.countItems(group.steps.length) : "";
   const onlyStep = group.steps[0];
   if (!onlyStep) return null;
   return (
@@ -805,8 +737,9 @@ function ActionCallbackGroup({
   renderIterationDivider: () => ReactNode;
 }) {
   const { t } = useI18n();
-  const summary = summarizeActionGroup(group);
-  const countLabel = group.steps.length > 1 ? `${group.steps.length} 条` : "";
+  const summary = summarizeActionGroup(group, t);
+  const countLabel =
+    group.steps.length > 1 ? t.messageGrouping.countItems(group.steps.length) : "";
   const onlyStep = group.steps[0];
   if (!onlyStep) return null;
   const labelStep = active ? group.steps[group.steps.length - 1] : onlyStep;
@@ -1449,9 +1382,7 @@ function ToolCall({
     );
   } else if (isTeamCallToolName(name)) {
     const target = extractTeamCallTarget(args);
-    const description = isChineseText(t.taor.think)
-      ? "\u53ec\u5524\u56e2\u961f\u6210\u5458"
-      : "Call teammate";
+    const description = t.messageGrouping.callTeammate;
     return (
       <ChainOfThoughtStep
         key={id}
@@ -1783,8 +1714,11 @@ type TimelineItem =
   | ActionCallbackGroupItem
   | ToolCallTimelineItem;
 
-export function hasVisibleMessageGroupContent(messages: Message[]): boolean {
-  return convertToSteps(messages).length > 0;
+export function hasVisibleMessageGroupContent(
+  messages: Message[],
+  t?: ReturnType<typeof useI18n>["t"],
+): boolean {
+  return convertToSteps(messages, t).length > 0;
 }
 
 function groupConsecutiveReasoningSteps(steps: CoTStep[]): TimelineItem[] {
@@ -1894,31 +1828,44 @@ function stepText(step: CoTStep): string {
   return `${step.name}\n${argsText}`;
 }
 
-function summarizeReasoningGroup(group: ReasoningStepGroupItem): string {
+function summarizeReasoningGroup(
+  group: ReasoningStepGroupItem,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   const text = group.steps
     .map((step) => step.reasoning ?? "")
     .find((value) => value.trim());
-  return compactReasoningSummary(stripTraceLabelPrefixes(text));
+  return compactReasoningSummary(stripTraceLabelPrefixes(text), 120, t);
 }
 
-function summarizeActionGroup(group: ActionCallbackGroupItem): string {
+function summarizeActionGroup(
+  group: ActionCallbackGroupItem,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
   const text = group.steps
     .map((step) => step.actionText)
     .find((value) => value.trim());
-  return compactReasoningSummary(stripTraceLabelPrefixes(text), 96);
+  return compactReasoningSummary(stripTraceLabelPrefixes(text), 96, t);
 }
 
-function compactReasoningSummary(value: string, max = 120): string {
+function compactReasoningSummary(
+  value: string,
+  max = 120,
+  t?: ReturnType<typeof useI18n>["t"],
+): string {
   const normalized = value
     .replace(/\s+/g, " ")
     .replace(/^\s*[-*•]\s+/, "")
     .trim();
-  if (!normalized) return "整理思考过程";
+  if (!normalized) return t?.messageGrouping.reasoningFallback ?? "整理思考过程";
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max).trimEnd()}...`;
 }
 
-function convertToSteps(messages: Message[], languageProbe = ""): CoTStep[] {
+function convertToSteps(
+  messages: Message[],
+  t?: ReturnType<typeof useI18n>["t"],
+): CoTStep[] {
   const steps: CoTStep[] = [];
   let iteration = 1;
   let lastStepType: "reasoning" | "toolCall" | null = null;
@@ -1999,7 +1946,7 @@ function convertToSteps(messages: Message[], languageProbe = ""): CoTStep[] {
         reasoningText
           ? splitReasoningIntoTimelineChunks(reasoningText)
               .map((chunk) =>
-                normalizePublicTimelineChunk(chunk, languageProbe, {
+                normalizePublicTimelineChunk(chunk, t, {
                   allowPlainThoughts: !hasExplicitReasoningContent,
                 }),
               )

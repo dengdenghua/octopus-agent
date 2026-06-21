@@ -526,12 +526,12 @@ describe("MessageList stalled-run warning", () => {
       act(() => {
         vi.advanceTimersByTime(MESSAGE_LIST_TIMEOUT_WARNING_MS - 1_000);
       });
-      expect(screen.queryByText(/没有新进展/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No progress for/)).not.toBeInTheDocument();
 
       act(() => {
         vi.advanceTimersByTime(2_000);
       });
-      expect(screen.getByText(/没有新进展/)).toBeInTheDocument();
+      expect(screen.getByText(/No progress for/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -570,7 +570,7 @@ describe("MessageList stalled-run warning", () => {
       act(() => {
         vi.advanceTimersByTime(60_000);
       });
-      expect(screen.queryByText(/没有新进展/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No progress for/)).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

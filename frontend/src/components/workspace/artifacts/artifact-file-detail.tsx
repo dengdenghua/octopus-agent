@@ -162,7 +162,7 @@ export function ArtifactFileDetail({
     } finally {
       setIsInstalling(false);
     }
-  }, [threadId, filepath, isInstalling]);
+  }, [threadId, filepath, isInstalling, t]);
 
   const effectiveContent = isWriteFile ? newContent : displayContent;
 

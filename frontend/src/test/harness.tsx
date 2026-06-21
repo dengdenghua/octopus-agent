@@ -61,6 +61,11 @@ export function AllProviders({
   // initialTranslations) but async-loaded child views silently
   // race back to en-US, giving confusing mixed-language DOM.
   if (typeof document !== "undefined") {
+    // Clear any stale locale cookie from previous tests before seeding the
+    // expected locale, so ``getLocaleFromCookie()`` always reads the value
+    // we intend for this render.
+    document.cookie =
+      "locale=; path=/; max-age=0; SameSite=Lax";
     document.cookie = `locale=${encodeURIComponent(locale)}; path=/`;
   }
   return (

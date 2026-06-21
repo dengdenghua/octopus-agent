@@ -25,6 +25,7 @@ export interface Translations {
     custom: string;
     notAvailableInDemoMode: string;
     loading: string;
+    error: string;
     copy: string;
     copied: string;
     version: string;
@@ -45,6 +46,13 @@ export interface Translations {
     unlink: string;
     guest: string;
     confirm: string;
+    stop: string;
+    step: string;
+    revert: string;
+    review: string;
+    fileSizeB: string;
+    fileSizeKB: string;
+    fileSizeMB: string;
     timeAgo: (value: number, unit: string) => string;
     stubResponseTitle: string;
     stubResponseDescription: (method: string, path: string) => string;
@@ -114,6 +122,9 @@ export interface Translations {
     reasoningEffortMediumDescription: string;
     reasoningEffortHigh: string;
     reasoningEffortHighDescription: string;
+    reasoningEffortXHigh: string;
+    reasoningEffortMax: string;
+    reasoningEffortCurrent: (label: string) => string;
     searchModels: string;
     surpriseMe: string;
     surpriseMePrompt: string;
@@ -158,6 +169,70 @@ export interface Translations {
     statusCompleted: string;
     statusError: string;
     statusWaiting: string;
+    assistant: string;
+    turnLabel: (n: number) => string;
+    turnNumberLabel: (n: number, label: string) => string;
+    phaseTask: string;
+    turnLocator: string;
+    jumpToFirstTurn: string;
+    jumpToLastTurn: string;
+    backToLatest: string;
+    latest: string;
+    timeoutWarning: (seconds: number) => string;
+    thinkingPlan: string;
+    thinkingPlanSourceCheck: string;
+    thinkingPlanCoworkFit: string;
+    agent: string;
+    noTaskDescription: string;
+    processRecords: (n: number) => string;
+    latestTool: string;
+    execution: string;
+    verification: string;
+    process: string;
+    actionCount: (n: number) => string;
+    checkCount: (n: number) => string;
+    reviewSelf: string;
+    reviewTeam: string;
+    reviewSecurity: string;
+    artifactsCreated: (n: number) => string;
+    artifactsCreatedAndFilesEdited: (
+      created: number,
+      edited: number,
+    ) => string;
+    filesEdited: (n: number) => string;
+    revertSuccess: (n: number) => string;
+    revertFailed: string;
+    reviewAssigned: (label: string) => string;
+    artifactsSummary: string;
+    changesSummary: string;
+    auditActions: string;
+    assignReviewTo: string;
+    moreFiles: (n: number) => string;
+    downloadStillInArtifactsPanel: string;
+    fileCreated: string;
+    fileEdited: string;
+    diffTruncated: string;
+    diffTruncatedTooltip: string;
+    hunkReverted: string;
+    hunkRevertFailed: string;
+    accept: string;
+    reject: string;
+    accepted: string;
+    rejected: string;
+    useTopicInAgent: string;
+    actionLabel: (action: string) => string;
+    attachmentFallback: string;
+    thinkingForSeconds: (seconds: number) => string;
+    planningNSteps: (n: number) => string;
+    fileOperationsCount: (n: number) => string;
+    fileOperationsCountWithDiff: (
+      n: number,
+      added: number,
+      removed: number,
+    ) => string;
+    toolCallsCount: (n: number) => string;
+    loadOlderTurns: string;
+    loadingOlderTurns: string;
   };
 
   // Execution Checklist
@@ -239,6 +314,20 @@ export interface Translations {
     seedScheduledTask: string;
     seedWorkflow: string;
     seedProjectFiles: string;
+    send: string;
+    stop: string;
+    projectModeLabel: string;
+    projectModeHint: string;
+    projectStatusTitle: string;
+    projectStatusDescUnlocked: string;
+    projectStatusDescLocked: string;
+    projectVerificationLabel: string;
+    permissionFullAccess: string;
+    permissionAcceptEdits: string;
+    permissionConfirm: string;
+    addImage: string;
+    removeImage: string;
+    readme: string;
   };
 
   // Team Mode
@@ -319,6 +408,24 @@ export interface Translations {
     executeCommandWith: (cmd: string) => string;
     planStep: string;
     think: string;
+    hideProcessReplay: string;
+    processReplay: string;
+    replayNSteps: (n: number) => string;
+    hideSavedSteps: string;
+    viewProcessSummary: string;
+    viewNSavedSteps: (n: number) => string;
+    countItems: (n: number) => string;
+    reasoningFallback: string;
+    callTeammate: string;
+    searchSources: string;
+    readWebpage: string;
+    readFile: string;
+    updateFile: string;
+    runAction: string;
+    teammateTimeout: string;
+    clarifyTaskDirection: string;
+    synthesizeFindings: string;
+    planNextStep: string;
   };
 
   // Trace generator (swarm simulation label bag)
@@ -876,6 +983,7 @@ export interface Translations {
     switchAgent: string;
     selectAgent: string;
     confirmDeleteProject: (project: string) => string;
+    confirmDeleteProjectTitle: string;
     confirmDeleteThread: (title: string) => string;
     tools: string;
     navigate: string;
@@ -937,6 +1045,12 @@ export interface Translations {
     lockedAgentTooltip: (name: string) => string;
     adminAgentName: string;
     switchAgentLabel: string;
+    currentAgent: string;
+    soloChat: string;
+    oneOnOneTask: string;
+    soloTasks: string;
+    groupTasks: string;
+    recentThreadsSummary: (recent: number, hidden: number) => string;
     // Header/footer tooltips
     newChatTooltip: string;
     searchTooltip: string;
@@ -2022,6 +2136,8 @@ export interface Translations {
       appleDescription: string;
       languageTitle: string;
       languageDescription: string;
+      languageEnglish: string;
+      languageChineseSimplified: string;
       chatFontSizeTitle: string;
       chatFontSizeDescription: string;
       chatFontSizeSmall: string;
@@ -2052,6 +2168,7 @@ export interface Translations {
       emptyButton: string;
       enabledDescription: string;
       noMatch: (query: string) => string;
+      searchPlaceholder: string;
       tabMarket: string;
       tabInstalled: string;
       tabPerformance: string;
@@ -2213,6 +2330,7 @@ export interface Translations {
     diagnoseHealthy: string;
     diagnoseIssues: (issues: string) => string;
     deleteConfirm: (name: string) => string;
+    deleteModelTitle: string;
     gatewayReturned: (status: number) => string;
     cannotReachGateway: string;
     current: string;
@@ -2251,6 +2369,8 @@ export interface Translations {
     moliliNotEnabled: string;
     officialModels: string;
     officialModelsHint: string;
+    // Count label shown next to each custom model row.
+    modelCount: (count: number) => string;
     // Open-ended model id list · one custom-model row now holds an
     // arbitrary number of upstream model ids. Index 0 is the picker
     // default; index -1 is the strongest slot for Auto mode's
@@ -3451,6 +3571,14 @@ export interface Translations {
     toastRevokeFailed: string;
     toastToggleSuccess: (name: string, enabled: boolean) => string;
     toastUpdateFailed: string;
+    addRemoteTitle: string;
+    addNamePlaceholder: string;
+    addUrlPlaceholder: string;
+    addAuthPlaceholder: string;
+    addButton: string;
+    toastAddSuccess: (name: string) => string;
+    toastAddFailed: string;
+    toastAddInvalid: string;
   };
 
   // Intelligence
@@ -3917,6 +4045,13 @@ export interface Translations {
     createFailed: string;
     deleteSuccess: string;
     deleteFailed: string;
+    needsAuth: string;
+    nameRequired: string;
+    commandRequired: string;
+    cronRequired: string;
+    cronInvalid: string;
+    deleteConfirmTitle: string;
+    deleteConfirmDescription: (name: string) => string;
   };
 
   // Team Input
@@ -4028,6 +4163,7 @@ export interface Translations {
     currentPlan: string;
     upgradeNow: string;
     contactUs: string;
+    supportEmail: string;
     invoiceHint: string;
     totalCredits: (total: string) => string;
     plans: {
@@ -4952,6 +5088,42 @@ export interface Translations {
     toastLockOn: string;
     toastLockOff: string;
     toastToggleFailed: (msg: string) => string;
+    // AI mode (efficiency / privacy)
+    aiModeTitle: string;
+    aiModeDescScanning: string;
+    aiModeRecommended: (label: string) => string;
+    efficiencyMode: string;
+    efficiencyModeDesc: string;
+    privacyMode: string;
+    privacyModeDesc: string;
+    detectButton: string;
+    recommendedTag: string;
+    enabledTag: string;
+    deviceLabel: string;
+    toastAiModeSwitched: (label: string) => string;
+    toastAiModeSwitchFailed: (msg: string) => string;
+    // Path denylist
+    pathDenyTitle: string;
+    pathDenyDesc: string;
+    addPathButton: string;
+    pathDenyEmpty: string;
+    pathActionAria: (path: string) => string;
+    pathDeleteButton: string;
+    addPathDialogTitle: string;
+    addPathDialogDesc: string;
+    pathLabel: string;
+    toastInvalidPath: string;
+    toastPathAdded: (path: string) => string;
+    toastPathAddFailed: (msg: string) => string;
+    toastPathRemoved: (path: string) => string;
+    toastPathRemoveFailed: (msg: string) => string;
+    // LLM judge
+    judgeTitle: string;
+    judgeDesc: string;
+    judgeUnavailable: string;
+    toastJudgeEnabled: string;
+    toastJudgeDisabled: string;
+    toastJudgeToggleFailed: (msg: string) => string;
   };
 
   auth: {

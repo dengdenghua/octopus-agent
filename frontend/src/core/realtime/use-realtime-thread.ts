@@ -138,6 +138,8 @@ export function useRealtimeThread(
   useEffect(() => {
     setState(emptyConversation(args.threadId));
     stateRef.current = emptyConversation(args.threadId);
+    const resolvers = approvalResolvers.current;
+    const timers = approvalTimers.current;
 
     const onIncomingRequest = async (req: JsonRpcRequest): Promise<unknown> =>
       new Promise((resolve) => {
@@ -349,11 +351,11 @@ export function useRealtimeThread(
       cancelled = true;
       client.close();
       clientRef.current = null;
-      approvalResolvers.current.clear();
-      for (const timer of approvalTimers.current.values()) {
+      resolvers.clear();
+      for (const timer of timers.values()) {
         clearTimeout(timer);
       }
-      approvalTimers.current.clear();
+      timers.clear();
       setConnected(false);
     };
   }, [args.threadId, args.clientFactory, applyEvent]);

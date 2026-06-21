@@ -3,6 +3,7 @@ import type { FileHunk } from "@/core/realtime";
 import { singleHunkDiff } from "@/components/realtime/item-views/file-change-view";
 import { artifactDisplayPath } from "@/core/artifacts/utils";
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 import {
   getFileExtensionDisplayName,
@@ -53,11 +54,7 @@ type OutputSummary = {
   changes: OutputChange[];
 };
 
-const REVIEW_ASSIGNEES = [
-  { value: "self", label: "我来审核" },
-  { value: "team", label: "交给团队" },
-  { value: "security", label: "安全审计" },
-];
+
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
@@ -223,11 +220,20 @@ export function MessageOutputSummary({
   threadId?: string;
   className?: string;
 }) {
+  const { t } = useI18n();
   const { select, setOpen } = useArtifacts();
   const summary = useMemo(() => summarizeOutputs(messages), [messages]);
   const [changesOpen, setChangesOpen] = useState(summary.changes.length <= 3);
+  const reviewAssignees = useMemo(
+    () => [
+      { value: "self", label: t.message.reviewSelf },
+      { value: "team", label: t.message.reviewTeam },
+      { value: "security", label: t.message.reviewSecurity },
+    ],
+    [t.message],
+  );
   const [reviewAssignee, setReviewAssignee] = useState(
-    REVIEW_ASSIGNEES[0]!.value,
+    reviewAssignees[0]!.value,
   );
   const [reverting, setReverting] = useState(false);
 
@@ -250,10 +256,13 @@ export function MessageOutputSummary({
   const hasOnlyCreatedChanges =
     createdChanges.length > 0 && editedChanges.length === 0;
   const changeSummaryLabel = hasOnlyCreatedChanges
-    ? `已生成 ${createdChanges.length} 个产物`
+    ? t.message.artifactsCreated(createdChanges.length)
     : createdChanges.length > 0
-      ? `已生成 ${createdChanges.length} 个产物，已编辑 ${editedChanges.length} 个文件`
-      : `已编辑 ${editedChanges.length} 个文件`;
+      ? t.message.artifactsCreatedAndFilesEdited(
+          createdChanges.length,
+          editedChanges.length,
+        )
+      : t.message.filesEdited(editedChanges.length);
   const ChangeSummaryIcon = hasOnlyCreatedChanges
     ? FilePlus2Icon
     : FileCheck2Icon;
@@ -288,9 +297,11 @@ export function MessageOutputSummary({
         }
       }
       notifyWorkspaceChanged();
-      toast.success(`已撤销 ${revertableChanges.length} 个变更`);
+      toast.success(t.message.revertSuccess(revertableChanges.length));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "撤销失败");
+      toast.error(
+        error instanceof Error ? error.message : t.message.revertFailed,
+      );
     } finally {
       setReverting(false);
     }
@@ -299,15 +310,17 @@ export function MessageOutputSummary({
   const handleReviewAssigneeChange = (value: string) => {
     setReviewAssignee(value);
     const label =
-      REVIEW_ASSIGNEES.find((item) => item.value === value)?.label ?? value;
-    toast.info(`审核交给：${label}`);
+      reviewAssignees.find((item) => item.value === value)?.label ?? value;
+    toast.info(t.message.reviewAssigned(label));
   };
 
   return (
     <div className={cn("mt-4 flex w-full flex-col gap-2", className)}>
       {summary.artifacts.length > 0 && (
-        <section aria-label="产物汇总" className="space-y-2">
-          <div className="text-sm font-semibold text-foreground">产物汇总</div>
+        <section aria-label={t.message.artifactsSummary} className="space-y-2">
+          <div className="text-sm font-semibold text-foreground">
+            {t.message.artifactsSummary}
+          </div>
           <div className="flex flex-col gap-2">
             {summary.artifacts.map((artifact) => (
               <button
@@ -344,7 +357,7 @@ export function MessageOutputSummary({
       {summary.changes.length > 0 && (
         <Collapsible open={changesOpen} onOpenChange={setChangesOpen}>
           <section
-            aria-label="文件变更汇总"
+            aria-label={t.message.changesSummary}
             className="overflow-hidden rounded-lg border border-border/70 bg-muted/25"
           >
             <div className="flex flex-wrap items-start gap-2 px-3 py-2.5 sm:flex-nowrap sm:items-center">
@@ -373,7 +386,7 @@ export function MessageOutputSummary({
               </CollapsibleTrigger>
               {showAuditActions && (
                 <div
-                  aria-label="审计操作"
+                  aria-label={t.message.auditActions}
                   className="ml-auto flex shrink-0 items-center gap-1.5"
                 >
                   <button
@@ -390,21 +403,21 @@ export function MessageOutputSummary({
                     ) : (
                       <RotateCcwIcon className="size-3 text-muted-foreground/70" />
                     )}
-                    撤销
+                    {t.common.revert}
                   </button>
                   <label className="relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 overflow-hidden rounded-md border border-border/70 bg-transparent px-2 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/60">
                     <UserCheckIcon className="size-3 text-muted-foreground/70" />
-                    审核
+                    {t.common.review}
                     <ChevronDownIcon className="size-3 text-muted-foreground/55" />
                     <select
-                      aria-label="审核交给"
+                      aria-label={t.message.assignReviewTo}
                       value={reviewAssignee}
                       onChange={(event) =>
                         handleReviewAssigneeChange(event.target.value)
                       }
                       className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                     >
-                      {REVIEW_ASSIGNEES.map((item) => (
+                      {reviewAssignees.map((item) => (
                         <option key={item.value} value={item.value}>
                           {item.label}
                         </option>
@@ -425,7 +438,7 @@ export function MessageOutputSummary({
                 ))}
                 {!changesOpen && summary.changes.length > 3 && (
                   <li className="px-3 py-2 text-xs text-muted-foreground">
-                    还有 {summary.changes.length - 3} 个文件，展开查看
+                    {t.message.moreFiles(summary.changes.length - 3)}
                   </li>
                 )}
               </ul>
@@ -433,7 +446,7 @@ export function MessageOutputSummary({
             {summary.artifacts.length > 0 && (
               <div className="border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">
                 <DownloadIcon className="mr-1 inline size-3.5 align-[-2px]" />
-                下载入口仍在右侧产物面板保留
+                {t.message.downloadStillInArtifactsPanel}
               </div>
             )}
           </section>
@@ -458,6 +471,7 @@ function ChangeRow({
   change: OutputChange;
   threadId?: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [decisions, setDecisions] = useState<
     Record<string, "accepted" | "rejected">
@@ -485,9 +499,11 @@ function ChangeRow({
       }
       setDecisions((prev) => ({ ...prev, [hunk.id]: "rejected" }));
       notifyWorkspaceChanged();
-      toast.success("已撤销该改动块");
+      toast.success(t.message.hunkReverted);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "撤销失败");
+      toast.error(
+        error instanceof Error ? error.message : t.message.hunkRevertFailed,
+      );
     } finally {
       setRejecting(null);
     }
@@ -518,17 +534,17 @@ function ChangeRow({
               : "bg-muted text-muted-foreground",
           )}
         >
-          {change.created ? "新建" : "编辑"}
+          {change.created ? t.message.fileCreated : t.message.fileEdited}
         </span>
         <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
           {change.path}
         </span>
         {change.diffTruncated && (
           <span
-            title="diff 超过服务端输出上限被截断，行数统计不完整，且不可整体撤销"
+            title={t.message.diffTruncatedTooltip}
             className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-400"
           >
-            diff 已截断
+            {t.message.diffTruncated}
           </span>
         )}
         <span className="shrink-0 font-mono text-xs">
@@ -574,6 +590,7 @@ function HunkDecisionRow({
   onAccept: () => void;
   onReject: () => void;
 }) {
+  const { t } = useI18n();
   const header = `@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`;
   return (
     <div
@@ -592,7 +609,7 @@ function HunkDecisionRow({
                 onClick={onAccept}
                 className="inline-flex h-6 items-center rounded-md border border-border/70 px-2 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 dark:text-emerald-400"
               >
-                接受
+                {t.message.accept}
               </button>
               <button
                 type="button"
@@ -603,7 +620,7 @@ function HunkDecisionRow({
                 {rejecting && (
                   <Loader2Icon className="size-3 animate-spin text-muted-foreground/70" />
                 )}
-                拒绝
+                {t.message.reject}
               </button>
             </>
           ) : (
@@ -615,7 +632,7 @@ function HunkDecisionRow({
                   : "bg-red-500/15 text-red-700 dark:text-red-400",
               )}
             >
-              {decision === "accepted" ? "已接受" : "已撤销"}
+              {decision === "accepted" ? t.message.accepted : t.message.rejected}
             </span>
           )}
         </div>

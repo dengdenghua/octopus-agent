@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   listSlashCommands,
@@ -67,19 +67,27 @@ export function SlashCommandPicker({
     };
   }, []);
 
-  const matches = catalog
-    .filter((c) =>
-      filter ? c.name.toLowerCase().startsWith(filter.toLowerCase()) : true,
-    )
-    .slice(0, 8);
+  const matches = useMemo(
+    () =>
+      catalog
+        .filter((c) =>
+          filter ? c.name.toLowerCase().startsWith(filter.toLowerCase()) : true,
+        )
+        .slice(0, 8),
+    [catalog, filter],
+  );
+
+  // Keep the latest callback in a ref so the notification effect does
+  // not need to depend on an unstable parent callback.
+  const onMatchesChangeRef = useRef(onMatchesChange);
+  useEffect(() => {
+    onMatchesChangeRef.current = onMatchesChange;
+  }, [onMatchesChange]);
 
   // Notify parent so it can clamp activeIndex without us owning it.
-  // Deps intentionally use primitive proxies (filter + length) rather
-  // than the derived `matches` array identity (new reference every
-  // render would cause an infinite update loop).
   useEffect(() => {
-    onMatchesChange?.(matches);
-  }, [filter, catalog.length, matches.length]);
+    onMatchesChangeRef.current?.(matches);
+  }, [matches]);
 
   if (matches.length === 0) return null;
 

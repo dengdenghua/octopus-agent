@@ -334,15 +334,12 @@ export function MessageList({
   const errorBannerText =
     thread.error && !thread.isLoading
       ? isNetworkError
-        ? t.streaming.networkLost ||
-          "Network connection was interrupted. Send a message to resume from the checkpoint."
+        ? t.streaming.networkLost
         : isVerificationRequiredError
           ? t.streaming.verificationRequired
           : /^turn failed$/i.test(threadErrorMessage)
             ? t.streaming.turnFailed
-            : threadErrorMessage ||
-              t.streaming.connectionLost ||
-              "This reply was interrupted. Continue the chat or retry."
+            : threadErrorMessage || t.streaming.connectionLost
       : null;
   const verificationAuditNotice =
     isVerificationRequiredError && errorBannerText ? errorBannerText : null;
@@ -401,7 +398,7 @@ export function MessageList({
           | undefined) ||
         currentAgent?.display_name ||
         currentAgent?.name ||
-        "Assistant";
+        t.message.assistant;
       const agentAvatar =
         (turnAiMessage?.additional_kwargs?.agent_avatar_url as
           | string
@@ -421,12 +418,12 @@ export function MessageList({
         agentName,
         key: `${group.type}:${group.id ?? `idx-${index}`}`,
         kind: turnMarkerKindFromMessages(turnMessages),
-        label: rawLabel || `第 ${markers.length + 1} 轮对话`,
+        label: rawLabel || t.message.turnLabel(markers.length + 1),
         number: markers.length + 1,
       });
     }
     return markers;
-  }, [currentAgent, groupedMessages]);
+  }, [currentAgent, groupedMessages, t.message]);
   const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -610,7 +607,7 @@ export function MessageList({
     agentIcon?: string | null;
     children: ReactNode;
   }) => {
-    const displayName = agentName || "Assistant";
+    const displayName = agentName || t.message.assistant;
     return (
       <div key={key} className="flex w-full items-start gap-3">
         <AgentAvatar
@@ -662,7 +659,7 @@ export function MessageList({
     enableClarificationActions = false,
     keepOpen = false,
   ) => {
-    if (!hasVisibleMessageGroupContent(group.messages)) return null;
+    if (!hasVisibleMessageGroupContent(group.messages, t)) return null;
     const aiMessage = group.messages.find(
       (message): message is AIMessage => message.type === "ai",
     );
@@ -938,25 +935,25 @@ export function MessageList({
       />
 
       <ConversationScrollButton
-        aria-label="回到最新消息"
-        title="回到最新"
+        aria-label={t.message.backToLatest}
+        title={t.message.backToLatest}
         style={{ bottom: `${Math.max(12, paddingBottom + 12)}px` }}
       >
-        最新
+        {t.message.latest}
       </ConversationScrollButton>
 
       {showTimeoutWarning && !thread.error && (
         <div className="absolute top-4 left-[50%] z-10 -translate-x-1/2 flex items-center gap-3 rounded-lg border border-amber-300/70 bg-amber-50/95 px-4 py-2 text-xs text-amber-900 shadow-sm backdrop-blur-sm dark:border-amber-700/50 dark:bg-amber-950/90 dark:text-amber-200">
           <AlertTriangleIcon className="size-4 shrink-0 text-amber-600" />
           <span>
-            {`已 ${Math.floor(loadingAgeMs / 1000)} 秒没有新进展，可能卡住了`}
+            {t.message.timeoutWarning(Math.floor(loadingAgeMs / 1000))}
           </span>
           <button
             type="button"
             onClick={() => void thread.stop()}
             className="rounded-md border border-amber-300/80 px-2 py-1 text-[11px] font-medium text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-700/60 dark:text-amber-200 dark:hover:bg-amber-900/70"
           >
-            停止
+            {t.common.stop}
           </button>
         </div>
       )}
@@ -975,6 +972,7 @@ function TurnLocatorRail({
   onSelect: (key: string) => void;
   runState: TurnLocatorRunState;
 }) {
+  const { t } = useI18n();
   if (markers.length <= 1) return null;
   const visibleMarkers = visibleTurnMarkerWindow(markers, activeKey);
   const firstMarker = markers[0]!;
@@ -982,23 +980,24 @@ function TurnLocatorRail({
 
   return (
     <nav
-      aria-label={"\u5bf9\u8bdd\u5b9a\u4f4d"}
+      aria-label={t.message.turnLocator}
       className="absolute top-1/2 left-0 z-20 block -translate-y-1/2"
     >
       <div className="relative flex max-h-[82vh] flex-col items-center gap-1 overflow-hidden px-1 py-1.5">
         <TurnLocatorLimitButton
           active={visibleMarkers[0]?.key === firstMarker.key}
           direction="up"
-          label={"\u8df3\u5230\u7b2c\u4e00\u8f6e\u5bf9\u8bdd"}
+          label={t.message.jumpToFirstTurn}
           onClick={() => onSelect(firstMarker.key)}
         />
         {visibleMarkers.map((marker) => {
           const active = marker.key === activeKey;
-          const label = `\u7b2c ${marker.number} \u8f6e${
-            marker.kind === "phase"
-              ? "\uff08\u9636\u6bb5\u4efb\u52a1\uff09"
-              : ""
-          }\uff1a${marker.label}`;
+          const phaseMarker =
+            marker.kind === "phase" ? `（${t.message.phaseTask}）` : "";
+          const label = t.message.turnNumberLabel(
+            marker.number,
+            `${phaseMarker}${marker.label}`,
+          );
           return (
             <button
               key={marker.key}
@@ -1038,7 +1037,7 @@ function TurnLocatorRail({
             visibleMarkers[visibleMarkers.length - 1]?.key === lastMarker.key
           }
           direction="down"
-          label={"\u8df3\u5230\u6700\u540e\u4e00\u8f6e\u5bf9\u8bdd"}
+          label={t.message.jumpToLastTurn}
           onClick={() => onSelect(lastMarker.key)}
         />
       </div>
@@ -1053,13 +1052,14 @@ function TurnMarkerAvatar({
   marker: TurnMarker;
   runState: TurnLocatorRunState;
 }) {
+  const { t } = useI18n();
   const backendBase = getBackendBaseURL();
   const avatarUrl = marker.agentAvatar
     ? marker.agentAvatar.startsWith("http")
       ? marker.agentAvatar
       : `${backendBase}${marker.agentAvatar}`
     : null;
-  const agentName = marker.agentName ?? "Assistant";
+  const agentName = marker.agentName ?? t.message.assistant;
   const icon = marker.agentIcon?.trim();
   const initial = agentName.trim().charAt(0).toUpperCase() || "?";
   const knockOutWhite = /octopus|\u7ae0\u9c7c/i.test(

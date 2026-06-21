@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   BookOpen,
@@ -215,7 +215,7 @@ export function ExtensionMarketplace({
   const isElectron =
     typeof window !== "undefined" && window.octopus?.isElectron === true;
 
-  const refreshBrowserExtensions = async () => {
+  const refreshBrowserExtensions = useCallback(async () => {
     if (!window.octopus?.extensions) {
       setBrowserExtensions([]);
       return;
@@ -227,7 +227,7 @@ export function ExtensionMarketplace({
     } else {
       setExtensionError(result.error || em.errorListFailed);
     }
-  };
+  }, [em]);
 
   const installBrowserExtension = async () => {
     if (!window.octopus?.extensions) return;
@@ -272,7 +272,7 @@ export function ExtensionMarketplace({
     if (!open) return;
     setInstalled(readInstalled());
     void refreshBrowserExtensions();
-  }, [open]);
+  }, [open, refreshBrowserExtensions]);
 
   useEffect(() => {
     if (!open) return;

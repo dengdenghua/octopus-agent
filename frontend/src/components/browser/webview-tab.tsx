@@ -525,6 +525,7 @@ function BackendBrowserTab({
       },
       runAction,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- imperative handle exposes local async helpers that depend on session/tab state; stabilizing them all would require extensive restructuring
     [sessionId, tab.url, relayStatus?.connected],
   );
 
@@ -532,6 +533,7 @@ function BackendBrowserTab({
     if (!active) return;
     void navigate(tab.url);
     // The tab URL is the source of truth; URL-bar navigation updates it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- navigate is a local async helper tied to this tab instance; active/tab.id are the intended triggers
   }, [active, tab.id]);
 
   useEffect(() => {

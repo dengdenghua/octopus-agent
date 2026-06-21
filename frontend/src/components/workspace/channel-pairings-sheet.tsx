@@ -74,7 +74,7 @@ export function ChannelPairingsSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, channelId]);
+  }, [open, channelId, t]);
 
   const users = data?.users ?? [];
   const groups = data?.groups ?? [];

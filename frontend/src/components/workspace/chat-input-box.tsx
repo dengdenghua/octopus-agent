@@ -9,6 +9,7 @@ import {
   ImageIcon,
   LinkIcon,
   LightbulbIcon,
+  Loader2Icon,
   LockIcon,
   ZapIcon,
   PaperclipIcon,
@@ -207,7 +208,7 @@ export function ChatInputBox({
   onStop,
   className,
 }: ChatInputBoxProps) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const { models } = useModels();
   const [draft, setDraft] = useState(defaultValue);
   const [researchUrlText, setResearchUrlText] = useState("");
@@ -280,46 +281,32 @@ export function ChatInputBox({
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
   const isProjectMode = mode === "code" && !!workDir?.trim();
   const isBusy = disabled || uploadingMaterials;
-  const sendLabel = locale === "zh-CN" ? "发送" : "Send";
-  const stopLabel = locale === "zh-CN" ? "停止" : "Stop";
-  const projectModeLabel = locale === "zh-CN" ? "项目代码模式" : "Project code";
-  const projectModeHint =
-    locale === "zh-CN"
-      ? "已绑定本地目录，当前 Agent 会读取项目上下文并按代码任务执行。"
-      : "A local folder is bound; this agent will use project context for code tasks.";
-  const projectStatusTitle =
-    locale === "zh-CN" ? "项目上下文已绑定" : "Project context bound";
+  const sendLabel = t.chatInputBox.send;
+  const stopLabel = t.chatInputBox.stop;
+  const projectModeLabel = t.chatInputBox.projectModeLabel;
+  const projectModeHint = t.chatInputBox.projectModeHint;
+  const projectStatusTitle = t.chatInputBox.projectStatusTitle;
   const projectStatusDesc = codeModeUnlocked
-    ? locale === "zh-CN"
-      ? "当前 Agent 已解锁代码能力，会按理解、修改、验证的闭环执行。"
-      : "This agent can use code mode and will work through inspect, edit, and verify."
-    : locale === "zh-CN"
-      ? "当前 Agent 未声明代码写入能力，后端会降级为只读/对话范围。建议切换 Coder 或给该角色开启 code_mode_unlock。"
-      : "This agent has not declared code write access; the backend will downgrade the write scope. Switch to Coder or enable code_mode_unlock.";
+    ? t.chatInputBox.projectStatusDescUnlocked
+    : t.chatInputBox.projectStatusDescLocked;
   const projectSignalBadges = projectDetection
     ? [
         ...(projectDetection.signals.manifests ?? []).slice(0, 3),
         ...(projectDetection.signals.lock_files ?? []).slice(0, 2),
         ...(projectDetection.signals.has_readme
-          ? [locale === "zh-CN" ? "README" : "README"]
+          ? [t.chatInputBox.readme]
           : []),
       ]
     : [];
   const projectVerificationCommands =
     projectDetection?.signals.commands?.slice(0, 4) ?? [];
-  const projectVerificationLabel = locale === "zh-CN" ? "验证命令" : "Verify";
+  const projectVerificationLabel = t.chatInputBox.projectVerificationLabel;
   const permissionLabel =
     resolvedPermissionMode === "bypassPermissions"
-      ? locale === "zh-CN"
-        ? "完全访问"
-        : "Full access"
+      ? t.chatInputBox.permissionFullAccess
       : resolvedPermissionMode === "acceptEdits"
-        ? locale === "zh-CN"
-          ? "自动接受编辑"
-          : "Accept edits"
-        : locale === "zh-CN"
-          ? "确认后执行"
-          : "Confirm";
+        ? t.chatInputBox.permissionAcceptEdits
+        : t.chatInputBox.permissionConfirm;
   const parsedResearchUrls = useMemo(
     () => parseComposerUrls(researchUrlText),
     [researchUrlText],
@@ -467,6 +454,7 @@ export function ChatInputBox({
     onModelChange,
     onPermissionModeChange,
     onCompressContext,
+    pendingImages,
   ]);
 
   const addMaterial = useCallback((material: Partial<ResearchMaterial>) => {
@@ -731,7 +719,7 @@ export function ChatInputBox({
                     type="button"
                     onClick={() => removePendingImage(index)}
                     className="absolute right-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-background/80 text-muted-foreground opacity-0 backdrop-blur-sm transition-opacity hover:text-foreground group-hover:opacity-100"
-                    title="Remove"
+                    title={t.chatInputBox.removeImage}
                   >
                     ×
                   </button>
@@ -1011,7 +999,7 @@ export function ChatInputBox({
                   className="gap-2 rounded-lg text-[13px]"
                 >
                   <ImageIcon className="size-4" />
-                  添加图片（粘贴 / 拖拽 / 选择）
+                  {t.chatInputBox.addImage}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => seedDraft(t.chatInputBox.seedWebSearch)}
@@ -1156,7 +1144,11 @@ export function ChatInputBox({
                 title={sendLabel}
                 aria-label={sendLabel}
               >
-                <ArrowUpIcon className="size-3.5" />
+                {isBusy ? (
+                  <Loader2Icon className="size-3.5 animate-spin" />
+                ) : (
+                  <ArrowUpIcon className="size-3.5" />
+                )}
               </button>
             )}
           </div>

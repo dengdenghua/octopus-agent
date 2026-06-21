@@ -76,7 +76,7 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     });
 
     // The "3 models" count chip surfaces in the row.
-    expect(screen.getByText("3 models")).toBeInTheDocument();
+    expect(screen.getByText("3 个模型")).toBeInTheDocument();
     // All three model ids are visible inline.
     expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
     expect(screen.getByText("gpt-4o")).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     });
 
     // Singular "1 model" form is rendered.
-    expect(screen.getByText("1 model")).toBeInTheDocument();
+    expect(screen.getByText("1 个模型")).toBeInTheDocument();
     expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
   });
 });

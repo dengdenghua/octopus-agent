@@ -71,16 +71,21 @@ export function PausedTasksBanner({ className }: Props) {
   // (fully checkpointed). Pending is usually short-lived but surfacing
   // it avoids a dead-ack UI gap. Dedup by task_id so a request that
   // transitions pending→paused in one poll cycle doesn't flash twice.
-  const pending = tasks.data?.pending ?? [];
-  const paused = tasks.data?.paused ?? [];
-  const active = tasks.data?.active ?? [];
-  const byId = new Map<string, (typeof pending)[0] & { confirmed: boolean }>();
-  for (const p of pending) byId.set(p.task_id, { ...p, confirmed: false });
-  for (const p of paused) byId.set(p.task_id, { ...p, confirmed: true });
-  // Implementation note.
-  // Implementation note.
-  const activeVisible = active.filter((a) => !byId.has(a.task_id));
-  const entries = [...byId.values()];
+  const { entries, activeVisible } = useMemo(() => {
+    const pending = tasks.data?.pending ?? [];
+    const paused = tasks.data?.paused ?? [];
+    const active = tasks.data?.active ?? [];
+    const byId = new Map<
+      string,
+      (typeof pending)[0] & { confirmed: boolean }
+    >();
+    for (const p of pending) byId.set(p.task_id, { ...p, confirmed: false });
+    for (const p of paused) byId.set(p.task_id, { ...p, confirmed: true });
+    return {
+      entries: [...byId.values()],
+      activeVisible: active.filter((a) => !byId.has(a.task_id)),
+    };
+  }, [tasks.data]);
   const budgetEntries = useMemo(
     () => entries.filter((entry) => entry.reason === "budget_near_limit"),
     [entries],

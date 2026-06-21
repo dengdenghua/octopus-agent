@@ -70,18 +70,22 @@ interface PathDenylistStatus {
 
 // Static fallback so the AI-mode cards still render before the
 // initial GET resolves (or if the endpoint is briefly unavailable).
-const defaultAiModeOptions: AiModeOption[] = [
-  {
-    id: "efficiency",
-    label: "效率模式",
-    description: "优先使用云端高性能模型，响应更快、能力更强。",
-  },
-  {
-    id: "privacy",
-    label: "隐私模式",
-    description: "优先使用本地模型，数据不离开本机。",
-  },
-];
+function getDefaultAiModeOptions(
+  t: ReturnType<typeof useI18n>["t"],
+): AiModeOption[] {
+  return [
+    {
+      id: "efficiency",
+      label: t.privacySettings.efficiencyMode,
+      description: t.privacySettings.efficiencyModeDesc,
+    },
+    {
+      id: "privacy",
+      label: t.privacySettings.privacyMode,
+      description: t.privacySettings.privacyModeDesc,
+    },
+  ];
+}
 
 // Pulled from the auto-generated OpenAPI types so backend changes
 // to the ``IdentityLockResponse`` pydantic model propagate here
@@ -196,11 +200,13 @@ export default function PrivacySettingsPage() {
       const next = (await res.json()) as AiModeStatus;
       setAiMode(next);
       const label = next.modes.find((m) => m.id === mode)?.label ?? mode;
-      toast.success(`已切换到${label}`);
+      toast.success(t.privacySettings.toastAiModeSwitched(label));
     } catch (e) {
       setAiMode(prev);
       toast.error(
-        `切换 AI 模式失败：${e instanceof Error ? e.message : String(e)}`,
+        t.privacySettings.toastAiModeSwitchFailed(
+          e instanceof Error ? e.message : String(e),
+        ),
       );
     } finally {
       setAiModeBusy(false);
@@ -210,7 +216,7 @@ export default function PrivacySettingsPage() {
   async function addDenylistPath() {
     const path = newPath.trim();
     if (!path) {
-      toast.error("请输入有效路径");
+      toast.error(t.privacySettings.toastInvalidPath);
       return;
     }
     setDenylistBusy(true);
@@ -221,12 +227,16 @@ export default function PrivacySettingsPage() {
         body: JSON.stringify({ path }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success(`已添加：${path}`);
+      toast.success(t.privacySettings.toastPathAdded(path));
       setNewPath("");
       setShowAddPathDialog(false);
       await fetchDenylist();
     } catch (e) {
-      toast.error(`添加失败：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        t.privacySettings.toastPathAddFailed(
+          e instanceof Error ? e.message : String(e),
+        ),
+      );
     } finally {
       setDenylistBusy(false);
     }
@@ -242,10 +252,14 @@ export default function PrivacySettingsPage() {
         body: JSON.stringify({ path }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toast.success(`已移除：${path}`);
+      toast.success(t.privacySettings.toastPathRemoved(path));
       await fetchDenylist();
     } catch (e) {
-      toast.error(`移除失败：${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        t.privacySettings.toastPathRemoveFailed(
+          e instanceof Error ? e.message : String(e),
+        ),
+      );
     } finally {
       setDenylistBusy(false);
     }
@@ -290,10 +304,16 @@ export default function PrivacySettingsPage() {
       const next: JudgeStatus = await res.json();
       setJudge(next);
       toast.success(
-        next.enabled ? "已开启 LLM 语义审查" : "已关闭 LLM 语义审查",
+        next.enabled
+          ? t.privacySettings.toastJudgeEnabled
+          : t.privacySettings.toastJudgeDisabled,
       );
     } catch (e) {
-      toast.error(`切换失败:${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        t.privacySettings.toastJudgeToggleFailed(
+          e instanceof Error ? e.message : String(e),
+        ),
+      );
     } finally {
       setJudgeBusy(false);
     }
@@ -440,17 +460,19 @@ export default function PrivacySettingsPage() {
       <div className="rounded-lg border border-border/50 bg-card/50 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
-            <h3 className="text-base font-semibold text-foreground">AI 模式</h3>
+            <h3 className="text-base font-semibold text-foreground">
+              {t.privacySettings.aiModeTitle}
+            </h3>
             <p className="mt-1 text-xs text-muted-foreground">
               {(() => {
-                if (!aiMode) return "正在检测设备配置…";
+                if (!aiMode) return t.privacySettings.aiModeDescScanning;
                 const recLabel =
                   aiMode.modes.find((m) => m.id === aiMode.recommended)
                     ?.label ??
                   (aiMode.recommended === "efficiency"
-                    ? "效率模式"
-                    : "隐私模式");
-                return `根据本机设备配置，推荐使用：${recLabel}`;
+                    ? t.privacySettings.efficiencyMode
+                    : t.privacySettings.privacyMode);
+                return t.privacySettings.aiModeRecommended(recLabel);
               })()}
             </p>
           </div>
@@ -461,12 +483,13 @@ export default function PrivacySettingsPage() {
             onClick={fetchAiMode}
             disabled={aiModeBusy}
           >
-            <RefreshCwIcon className="mr-1 h-3 w-3" /> 检测
+            <RefreshCwIcon className="mr-1 h-3 w-3" />{" "}
+            {t.privacySettings.detectButton}
           </Button>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {(aiMode?.modes ?? defaultAiModeOptions).map((opt) => {
+          {(aiMode?.modes ?? getDefaultAiModeOptions(t)).map((opt) => {
             const active = aiMode?.mode === opt.id;
             const recommended =
               !!opt.recommended_default || aiMode?.recommended === opt.id;
@@ -490,12 +513,12 @@ export default function PrivacySettingsPage() {
                   <div className="flex items-center gap-1.5">
                     {recommended && (
                       <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
-                        推荐
+                        {t.privacySettings.recommendedTag}
                       </span>
                     )}
                     {active && (
                       <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
-                        已启用
+                        {t.privacySettings.enabledTag}
                       </span>
                     )}
                   </div>
@@ -509,7 +532,7 @@ export default function PrivacySettingsPage() {
         </div>
         {aiMode?.device && (
           <div className="mt-3 text-[11px] text-muted-foreground/80">
-            设备：<code>{aiMode.device}</code>
+            {t.privacySettings.deviceLabel} <code>{aiMode.device}</code>
           </div>
         )}
       </div>
@@ -519,10 +542,10 @@ export default function PrivacySettingsPage() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <h3 className="text-base font-semibold text-foreground">
-              不可读取文件夹
+              {t.privacySettings.pathDenyTitle}
             </h3>
             <p className="mt-1 text-xs text-muted-foreground">
-              添加后，Agent 将拒绝读取或写入这些路径下的任何文件。
+              {t.privacySettings.pathDenyDesc}
             </p>
           </div>
           <Button
@@ -534,14 +557,15 @@ export default function PrivacySettingsPage() {
               setShowAddPathDialog(true);
             }}
           >
-            <PlusIcon className="mr-1 h-3 w-3" /> 新增
+            <PlusIcon className="mr-1 h-3 w-3" />{" "}
+            {t.privacySettings.addPathButton}
           </Button>
         </div>
 
         <div className="mt-4 rounded-lg border border-border/40 divide-y divide-border/40">
           {(denylist?.paths ?? []).length === 0 ? (
             <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-              暂无 — 默认黑名单（.vscode / AppData / .cache 等）已生效
+              {t.privacySettings.pathDenyEmpty}
             </div>
           ) : (
             (denylist?.paths ?? []).map((p) => (
@@ -555,7 +579,7 @@ export default function PrivacySettingsPage() {
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    aria-label={`操作 ${p}`}
+                    aria-label={t.privacySettings.pathActionAria(p)}
                     className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                     onClick={() =>
                       setDenylistMenuOpen((cur) => (cur === p ? null : p))
@@ -576,7 +600,8 @@ export default function PrivacySettingsPage() {
                         onClick={() => removeDenylistPath(p)}
                         disabled={denylistBusy}
                       >
-                        <TrashIcon className="h-3 w-3" /> 删除
+                        <TrashIcon className="h-3 w-3" />{" "}
+                        {t.privacySettings.pathDeleteButton}
                       </button>
                     </div>
                   )}
@@ -649,11 +674,12 @@ export default function PrivacySettingsPage() {
             judge 命中是硬拦截(strict)还是仅审计(normal/lax)。 */}
         <div className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border/50 p-3">
           <div className="min-w-0">
-            <div className="text-sm font-medium">LLM 语义审查 (judge)</div>
+            <div className="text-sm font-medium">
+              {t.privacySettings.judgeTitle}
+            </div>
             <div className="text-[11px] text-muted-foreground leading-snug">
-              每条出口消息多一次模型调用,审查诱导钓鱼 /
-              越权抓取等语义违规。默认关(有成本)。
-              {judge && !judge.available && " 当前无模型路由,不可开启。"}
+              {t.privacySettings.judgeDesc}
+              {judge && !judge.available && t.privacySettings.judgeUnavailable}
             </div>
           </div>
           <Switch
@@ -715,16 +741,14 @@ export default function PrivacySettingsPage() {
       <Dialog open={showAddPathDialog} onOpenChange={setShowAddPathDialog}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>新增不可读取文件夹</DialogTitle>
+            <DialogTitle>{t.privacySettings.addPathDialogTitle}</DialogTitle>
             <DialogDescription>
-              输入绝对路径（例如 <code>C:\\Users\\you\\secrets</code> 或{" "}
-              <code>/home/you/.ssh</code>）。Agent
-              将拒绝读写该目录下的任何文件。
+              {t.privacySettings.addPathDialogDesc}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-4">
             <Label htmlFor="denylist-path-input" className="text-sm">
-              路径
+              {t.privacySettings.pathLabel}
             </Label>
             <Input
               id="denylist-path-input"
@@ -747,7 +771,7 @@ export default function PrivacySettingsPage() {
               onClick={addDenylistPath}
               disabled={denylistBusy || !newPath.trim()}
             >
-              {denylistBusy ? t.common.loading : "确认"}
+              {denylistBusy ? t.common.loading : t.common.confirm}
             </Button>
           </DialogFooter>
         </DialogContent>

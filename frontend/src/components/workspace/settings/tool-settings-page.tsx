@@ -24,7 +24,9 @@ export default function ToolSettingsPage() {
       {isLoading ? (
         <div className="text-muted-foreground text-sm">{t.common.loading}</div>
       ) : error ? (
-        <div>Error: {error.message}</div>
+        <div>
+          {t.common.error}: {error.message}
+        </div>
       ) : (
         config && <MCPServerList servers={config.mcp_servers} />
       )}

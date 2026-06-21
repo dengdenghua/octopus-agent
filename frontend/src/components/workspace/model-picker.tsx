@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales/types";
 import { useMoliliLink } from "@/core/molili";
 import type { ReasoningEffort } from "@/core/threads";
 import { cn } from "@/lib/utils";
@@ -90,45 +91,38 @@ const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
   "max",
 ];
 
-function reasoningEffortLabel(effort: ReasoningEffort, locale: string): string {
-  const zh = locale === "zh-CN";
+function reasoningEffortLabel(
+  effort: ReasoningEffort,
+  t: Translations,
+): string {
   switch (effort) {
     case "minimal":
-      return zh ? "极低" : "Minimal";
+      return t.inputBox.reasoningEffortMinimal;
     case "low":
-      return zh ? "低" : "Low";
+      return t.inputBox.reasoningEffortLow;
     case "medium":
-      return zh ? "中" : "Medium";
+      return t.inputBox.reasoningEffortMedium;
     case "high":
-      return zh ? "高" : "High";
+      return t.inputBox.reasoningEffortHigh;
     case "xhigh":
-      return zh ? "超高" : "Ultra";
+      return t.inputBox.reasoningEffortXHigh;
     case "max":
-      return zh ? "最高" : "Max";
+      return t.inputBox.reasoningEffortMax;
   }
-}
-
-function currentReasoningEffortLabel(
-  effort: ReasoningEffort,
-  locale: string,
-): string {
-  const label = reasoningEffortLabel(effort, locale);
-  return locale === "zh-CN" ? `当前 ${label}` : `Current ${label}`;
 }
 
 function ReasoningEffortSetting({
   value,
-  locale,
   disabled,
   onChange,
 }: {
   value?: ReasoningEffort;
-  locale: string;
   disabled?: boolean;
   onChange: (effort: ReasoningEffort) => void;
 }) {
+  const { t } = useI18n();
   const current = value ?? "medium";
-  const title = locale === "zh-CN" ? "推理等级" : "Reasoning effort";
+  const title = t.inputBox.reasoningEffort;
 
   return (
     <div className="mx-1 mt-1 border-t border-border/60 pt-1">
@@ -137,7 +131,7 @@ function ReasoningEffortSetting({
           {title}
         </span>
         <span className="text-[10px] text-muted-foreground">
-          {currentReasoningEffortLabel(current, locale)}
+          {t.inputBox.reasoningEffortCurrent(reasoningEffortLabel(current, t))}
         </span>
       </div>
       <div
@@ -166,7 +160,7 @@ function ReasoningEffortSetting({
                 "disabled:cursor-not-allowed disabled:opacity-45",
               )}
             >
-              {reasoningEffortLabel(effort, locale)}
+              {reasoningEffortLabel(effort, t)}
             </button>
           );
         })}
@@ -252,7 +246,7 @@ export function ModelPicker({
   // stays visible and fully functional so guests can BYOK against
   // OpenAI / Kimi / any OpenAI-compat endpoint.
   const { isGuest } = useAuth();
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
   const setOpen = onOpenChange ?? setUncontrolledOpen;
@@ -261,17 +255,22 @@ export function ModelPicker({
   // ModelRouter middleware pick per-task". We resolve it to a synthetic
   // PickerModel so the trigger + highlighted row can render a label.
   const isAutoMode = (value ?? "").trim().toLowerCase() === "auto";
-  const AUTO_MODEL: PickerModel = {
-    name: "auto",
-    display_name: t.modelPicker.autoModelLabel,
-    description: t.modelPicker.autoModelDescription,
-  };
   const selected = useMemo(
     () =>
       isAutoMode
-        ? AUTO_MODEL
+        ? {
+            name: "auto",
+            display_name: t.modelPicker.autoModelLabel,
+            description: t.modelPicker.autoModelDescription,
+          }
         : (models.find((m) => m.name === value) ?? models[0]),
-    [isAutoMode, value, models],
+    [
+      isAutoMode,
+      value,
+      models,
+      t.modelPicker.autoModelLabel,
+      t.modelPicker.autoModelDescription,
+    ],
   );
 
   const [moliliPack, setMoliliPack] = useState<OfficialCatalogModel[]>([]);
@@ -537,7 +536,6 @@ export function ModelPicker({
         {onReasoningEffortChange && (
           <ReasoningEffortSetting
             value={reasoningEffort}
-            locale={locale}
             disabled={reasoningEffortDisabled}
             onChange={onReasoningEffortChange}
           />

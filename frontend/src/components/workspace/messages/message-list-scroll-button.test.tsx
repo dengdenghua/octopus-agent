@@ -117,8 +117,8 @@ describe("MessageList scroll-to-latest affordance", () => {
     );
 
     const button = screen.getByTestId("scroll-to-latest");
-    expect(button).toHaveTextContent("最新");
-    expect(button).toHaveAccessibleName("回到最新消息");
+    expect(button).toHaveTextContent("Latest");
+    expect(button).toHaveAccessibleName("Back to latest message");
     expect(button).toHaveStyle({ bottom: "192px" });
   });
 
@@ -141,26 +141,26 @@ describe("MessageList scroll-to-latest affordance", () => {
     );
 
     const rail = screen.getByRole("navigation", {
-      name: "\u5bf9\u8bdd\u5b9a\u4f4d",
+      name: "Turn locator",
     });
     expect(rail).toHaveClass("block");
     expect(rail).not.toHaveClass("hidden");
     expect(
-      within(rail).getByRole("button", { name: /\u7b2c 1 \u8f6e/ }),
+      within(rail).getByRole("button", { name: /Turn 1/ }),
     ).toHaveAccessibleName(/first request/);
     expect(
       within(rail).getByRole("button", {
-        name: "\u8df3\u5230\u7b2c\u4e00\u8f6e\u5bf9\u8bdd",
+        name: "Jump to first turn",
       }),
     ).toBeInTheDocument();
     expect(
       within(rail).getByRole("button", {
-        name: "\u8df3\u5230\u6700\u540e\u4e00\u8f6e\u5bf9\u8bdd",
+        name: "Jump to last turn",
       }),
     ).toBeInTheDocument();
 
     fireEvent.click(
-      within(rail).getByRole("button", { name: /\u7b2c 2 \u8f6e/ }),
+      within(rail).getByRole("button", { name: /Turn 2/ }),
     );
 
     expect(scrollIntoViewMock).toHaveBeenCalledWith({
@@ -195,13 +195,13 @@ describe("MessageList scroll-to-latest affordance", () => {
     );
 
     const rail = screen.getByRole("navigation", {
-      name: "\u5bf9\u8bdd\u5b9a\u4f4d",
+      name: "Turn locator",
     });
     const phasedTurn = within(rail).getByRole("button", {
-      name: /\u7b2c 1 \u8f6e/,
+      name: /Turn 1/,
     });
     const shortTurn = within(rail).getByRole("button", {
-      name: /\u7b2c 2 \u8f6e/,
+      name: /Turn 2/,
     });
 
     expect(phasedTurn).toHaveAttribute("data-turn-marker-kind", "phase");
@@ -252,13 +252,13 @@ describe("MessageList scroll-to-latest affordance", () => {
     );
 
     const rail = screen.getByRole("navigation", {
-      name: "\u5bf9\u8bdd\u5b9a\u4f4d",
+      name: "Turn locator",
     });
     const firstTurn = within(rail).getByRole("button", {
-      name: /\u7b2c 1 \u8f6e/,
+      name: /Turn 1/,
     });
     const latestTurn = within(rail).getByRole("button", {
-      name: /\u7b2c 2 \u8f6e/,
+      name: /Turn 2/,
     });
 
     expect(firstTurn.querySelector("[data-turn-marker-status]")).toBeNull();
