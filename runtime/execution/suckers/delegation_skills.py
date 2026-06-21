@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from collections import OrderedDict
@@ -1746,9 +1747,8 @@ def _run_orchestration(
             ),
             "collected": [], "confirmed": [], "count": 0,
         }
-    _record_delegation(
-        turn_id, _compute_fingerprint("run_orchestration", goal), succeeded=True,
-    )
+    fingerprint = _compute_fingerprint("run_orchestration", goal)
+    _record_delegation(turn_id, fingerprint, succeeded=True)
 
     ballot = _coerce_vote_choices(choices) or ["keep", "drop"]
     seen_norms: set[str] = set()
@@ -1756,6 +1756,36 @@ def _run_orchestration(
     per_round: list[int] = []
     dry = 0
     stopped = "rounds"
+
+    # Blackboard coordination: publish the evolving findings to the turn's
+    # shared blackboard so sibling agents — and a later orchestration on the
+    # same goal — build on them instead of re-discovering. Stigmergic
+    # coordination the harness ENFORCES (the orchestrator reads/publishes),
+    # not something the model must remember to do. No turn / no board (unit
+    # tests) → a no-op; best-effort throughout, never breaks the run.
+    from runtime.memory.runtime_state.blackboard import get_blackboard
+
+    board = get_blackboard(turn_id)
+    bb_key = f"orchestration.findings.{fingerprint}"
+    inherited = 0
+    if board is not None:
+        try:
+            prior = board.read(bb_key, None)
+            if isinstance(prior, list) and prior:
+                seed = [str(x) for x in prior if str(x).strip()]
+                seed = seed[:_ORCH_MAX_FINDINGS_TOTAL]
+                _dedupe_findings(seed, seen_norms)  # seed the dedup set
+                collected.extend(seed)
+                inherited = len(seed)
+        except Exception:  # noqa: BLE001 — sharing must never break the run
+            pass
+
+    def _publish(findings: list[str]) -> None:
+        if board is None:
+            return
+        # Sharing must never break the run.
+        with contextlib.suppress(Exception):
+            board.write(bb_key, list(findings), writer="run_orchestration")
 
     with _orchestration_budget_scope(int(max_spawns)) as budget:
         for _ in range(int(rounds)):
@@ -1786,6 +1816,7 @@ def _run_orchestration(
                 continue
             dry = 0
             collected.extend(fresh)
+            _publish(collected)  # share this round's progress on the blackboard
             if len(collected) >= _ORCH_MAX_FINDINGS_TOTAL:
                 del collected[_ORCH_MAX_FINDINGS_TOTAL:]
                 stopped = "cap"
@@ -1859,6 +1890,9 @@ def _run_orchestration(
             synth_succ = synth_env.get("successes", [])
             if synth_succ:
                 synthesis = str(synth_succ[0].get("output") or "").strip()
+        # Publish the verified set so the shared pool reflects confirmed (not
+        # just collected) findings for the rest of the turn.
+        _publish(confirmed)
         budget_used = budget.used
 
     return {
@@ -1872,6 +1906,8 @@ def _run_orchestration(
         "verified": verified,
         "unverified": unverified,
         "synthesis": synthesis,
+        "shared": board is not None,
+        "inherited": inherited,
         "stopped_reason": stopped,
         "budget_used": budget_used,
         "max_spawns": int(max_spawns),
@@ -2355,8 +2391,15 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "\n"
         "Returns: {ok, goal, collected:[...], confirmed:[...] (== collected "
         "unless verify), count, rounds_run, fresh_per_round:[...], verified, "
-        "unverified, synthesis (str, '' unless synthesize), stopped_reason "
+        "unverified, synthesis (str, '' unless synthesize), shared (bool — "
+        "findings published to the turn blackboard), inherited (int — findings "
+        "seeded from siblings' blackboard entries), stopped_reason "
         "(rounds|dry|budget), budget_used, max_spawns}.\n"
+        "\n"
+        "Coordination: findings are auto-shared on the turn's blackboard, so a "
+        "sibling agent or a later orchestration on the same goal builds on "
+        "them instead of re-discovering — enforced by the harness, no manual "
+        "bb_write needed.\n"
         "\n"
         "Budget: one orchestration costs ONE against the 5/turn delegation "
         "cap; its internal fan-outs/votes draw from the bounded spawn budget, "

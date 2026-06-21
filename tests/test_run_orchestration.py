@@ -434,3 +434,50 @@ def test_synthesize_skipped_when_nothing_confirmed(monkeypatch):
     assert r["confirmed"] == []
     assert fake.state["synth_calls"] == 0
     assert r["synthesis"] == ""
+
+
+# ── blackboard coordination (harness-enforced stigmergy) ──────────
+
+
+def test_orchestration_seeds_and_publishes_on_blackboard(monkeypatch):
+    from runtime.memory.runtime_state.blackboard import get_blackboard
+
+    turn = "turn-bb-coord-1"
+    monkeypatch.setattr(ds, "_resolve_session_and_turn", lambda: (None, turn))
+    fp = ds._compute_fingerprint("run_orchestration", "g")
+    key = f"orchestration.findings.{fp}"
+    get_blackboard(turn).write(key, ["prior-finding"], writer="sibling")
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", _fake_parallel_seq([["new-finding"]]))
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, patience=2)
+
+    assert r["shared"] is True
+    assert r["inherited"] == 1
+    assert "prior-finding" in r["collected"]  # seeded from the shared board
+    assert "new-finding" in r["collected"]    # newly discovered
+    # the union is republished for the rest of the turn
+    assert set(get_blackboard(turn).read(key)) >= {"prior-finding", "new-finding"}
+
+
+def test_second_orchestration_builds_on_the_first(monkeypatch):
+    turn = "turn-bb-coord-2"
+    monkeypatch.setattr(ds, "_resolve_session_and_turn", lambda: (None, turn))
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", _fake_parallel_seq([["A"]]))
+    r1 = ds._run_orchestration(goal="shared-goal", n=1, rounds=1, patience=2)
+    assert r1["inherited"] == 0 and "A" in r1["collected"]
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", _fake_parallel_seq([["B"]]))
+    r2 = ds._run_orchestration(goal="shared-goal", n=1, rounds=1, patience=2)
+    assert r2["inherited"] == 1               # inherited A from the first run
+    assert "A" in r2["collected"] and "B" in r2["collected"]
+
+
+def test_no_blackboard_outside_a_turn_is_a_noop(monkeypatch):
+    # no Session → no turn → no board; behaviour identical to before
+    monkeypatch.setattr(ds, "_resolve_session_and_turn", lambda: (None, None))
+    monkeypatch.setattr(ds, "_call_agent_parallel", _fake_parallel_seq([["x"]]))
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, patience=2)
+    assert r["shared"] is False
+    assert r["inherited"] == 0
+    assert r["collected"] == ["x"]
