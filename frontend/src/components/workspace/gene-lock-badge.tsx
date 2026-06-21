@@ -17,6 +17,7 @@
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 import { DnaIcon, SirenIcon, ShieldCheckIcon, ShieldIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -38,17 +39,11 @@ type LockStatus = {
   cooldowns_seconds?: Record<string, number>;
 };
 
-const LEVEL_NAMES = ["初生", "幼年", "成长期", "成熟", "完全成熟"];
 
-const LEVEL_DESCRIPTIONS = [
-  "所有自主进化禁用",
-  "允许应用变更，但需要人工确认",
-  "允许调整权重",
-  "允许自动晋升",
-  "除不可变字段外不再限制",
-];
 
 export function GeneLockBadge() {
+  const { t } = useI18n();
+  const g = t.geneLockBadge;
   const [status, setStatus] = useState<LockStatus | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -157,7 +152,7 @@ export function GeneLockBadge() {
           "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border px-2 text-xs font-medium transition-colors",
           levelColor,
         )}
-        title="基因锁治理状态 · 点击调整"
+        title={g.badgeTitle}
       >
         {panic ? (
           <SirenIcon className="size-3 animate-pulse" />
@@ -166,14 +161,14 @@ export function GeneLockBadge() {
         ) : (
           <DnaIcon className="size-3" />
         )}
-        <span>基因锁</span>
+        <span>{g.badgeLabel}</span>
         <span className="tabular-nums">Lv {lvl}</span>
         <span className="text-[10px] opacity-75">
-          {panic ? "紧急锁定" : (LEVEL_NAMES[lvl] ?? "?")}
+          {panic ? g.panicBadge : (g.levelNames[lvl] ?? "?")}
         </span>
         {status.mode === "production" && (
           <Badge className="ml-1 h-4 bg-slate-900/40 px-1 text-[9px] uppercase tracking-wider text-slate-300">
-            生产
+            {g.productionBadge}
           </Badge>
         )}
       </button>
@@ -182,28 +177,30 @@ export function GeneLockBadge() {
         <div className="absolute right-0 top-full z-30 mt-1 w-72 rounded-lg border border-border/60 bg-background/95 p-3 text-xs shadow-xl backdrop-blur">
           <div className="mb-2 flex items-center gap-2 font-medium">
             <ShieldIcon className="size-3.5" />
-            基因锁 · 自进化治理
+            {g.dropdownTitle}
           </div>
           <div className="space-y-1 text-muted-foreground">
             <div>
-              模式: <span className="text-foreground">{status.mode}</span>
+              {g.modeLabel}: <span className="text-foreground">{status.mode}</span>
             </div>
             <div>
-              成熟度:{" "}
+              {g.maturityLabel}:{" "}
               <span className="text-foreground">
-                Lv {lvl} · {LEVEL_NAMES[lvl]}
+                Lv {lvl} · {g.levelNames[lvl]}
               </span>
             </div>
             {panic && (
               <div className="rounded bg-rose-500/10 px-2 py-1 text-rose-300">
-                <div className="font-medium">紧急锁定中</div>
+                <div className="font-medium">{g.panicActive}</div>
                 <div className="text-[10px]">
-                  开始于{" "}
+                  {g.panicStartedAt}{" "}
                   {status.panic.since
                     ? new Date(status.panic.since * 1000).toLocaleString()
                     : "?"}
                 </div>
-                <div className="text-[10px]">原因: {status.panic.reason}</div>
+                <div className="text-[10px]">
+                  {g.panicReason}: {status.panic.reason}
+                </div>
               </div>
             )}
           </div>
@@ -236,7 +233,7 @@ export function GeneLockBadge() {
                 disabled={busy}
               >
                 <ShieldCheckIcon className="mr-1 size-3" />
-                解除锁定
+                {g.unlockButton}
               </Button>
             ) : (
               <Button
@@ -247,7 +244,7 @@ export function GeneLockBadge() {
                 disabled={busy}
               >
                 <SirenIcon className="mr-1 size-3" />
-                紧急锁定
+                {g.panicButton}
               </Button>
             )}
           </div>
@@ -255,15 +252,15 @@ export function GeneLockBadge() {
             <div className="mt-2 text-xs text-muted-foreground">{msg}</div>
           )}
           <div className="mt-2 border-t border-border/30 pt-2 text-[10px] text-muted-foreground">
-            Lv 0 初生 · 所有自主进化禁用
+            {g.levelSummary(0, g.levelNames[0] ?? "", g.levelDescriptions[0] ?? "")}
             <br />
-            Lv 1 幼年 · 允许应用变更，但需要人工确认
+            {g.levelSummary(1, g.levelNames[1] ?? "", g.levelDescriptions[1] ?? "")}
             <br />
-            Lv 2 成长期 · 允许调整权重
+            {g.levelSummary(2, g.levelNames[2] ?? "", g.levelDescriptions[2] ?? "")}
             <br />
-            Lv 3 成熟 · 允许自动晋升
+            {g.levelSummary(3, g.levelNames[3] ?? "", g.levelDescriptions[3] ?? "")}
             <br />
-            Lv 4 完全成熟 · 除不可变字段外不再限制
+            {g.levelSummary(4, g.levelNames[4] ?? "", g.levelDescriptions[4] ?? "")}
           </div>
         </div>
       )}
@@ -278,6 +275,8 @@ export function GeneLockControlCard({
   compact?: boolean;
   className?: string;
 } = {}) {
+  const { t } = useI18n();
+  const g = t.geneLockBadge;
   const [status, setStatus] = useState<LockStatus | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -307,9 +306,9 @@ export function GeneLockControlCard({
         const r = await action();
         const body = await r.json().catch(() => ({}));
         if (body?.ok === false) {
-          setMsg(body.message ?? body.error ?? "操作未生效");
+          setMsg(body.message ?? body.error ?? g.operationFailed);
         } else {
-          setMsg("已更新");
+          setMsg(g.updateSuccess);
         }
         await reload();
       } finally {
@@ -317,7 +316,7 @@ export function GeneLockControlCard({
         window.setTimeout(() => setMsg(null), 3500);
       }
     },
-    [reload],
+    [reload, g.operationFailed, g.updateSuccess],
   );
 
   const setMode = useCallback(
@@ -386,12 +385,12 @@ export function GeneLockControlCard({
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <DnaIcon className="size-3.5 shrink-0 text-primary" />
-            <span className="text-xs font-semibold">基因锁</span>
+            <span className="text-xs font-semibold">{g.compactTitle}</span>
             <Badge
               variant={panic ? "destructive" : "outline"}
               className="h-5 rounded-md px-1.5 text-[11px]"
             >
-              {panic ? "紧急锁定" : `Lv ${lvl} · ${LEVEL_NAMES[lvl]}`}
+              {panic ? g.panicBadge : `Lv ${lvl} · ${g.levelNames[lvl]}`}
             </Badge>
           </div>
 
@@ -399,8 +398,8 @@ export function GeneLockControlCard({
 
           <div className="flex items-center rounded-md bg-muted/45 p-0.5">
             {[
-              ["dev", "宽松"],
-              ["production", "严格"],
+              ["dev", g.modeRelaxed],
+              ["production", g.modeStrict],
             ].map(([mode, label]) => {
               const selected =
                 (mode === "production" && strict) ||
@@ -426,13 +425,13 @@ export function GeneLockControlCard({
           </div>
 
           <div className="flex items-center rounded-md bg-muted/45 p-0.5">
-            {LEVEL_NAMES.map((name, index) => (
+            {g.levelNames.map((name, index) => (
               <button
                 key={name}
                 type="button"
                 disabled={busy !== null || panic}
                 onClick={() => setLevel(index)}
-                title={`${name} · ${LEVEL_DESCRIPTIONS[index]}`}
+                title={`${name} · ${g.levelDescriptions[index]}`}
                 className={cn(
                   "h-6 rounded-[5px] px-2 font-mono text-[11px] transition-colors",
                   index === lvl
@@ -457,12 +456,12 @@ export function GeneLockControlCard({
             {panic ? (
               <>
                 <ShieldCheckIcon className="mr-1 size-3" />
-                解锁
+                {g.unlockButton}
               </>
             ) : (
               <>
                 <SirenIcon className="mr-1 size-3" />
-                锁定
+                {g.panicButton}
               </>
             )}
           </Button>
@@ -472,10 +471,10 @@ export function GeneLockControlCard({
           ) : null}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] leading-5 text-muted-foreground">
-          <span>{strict ? "严格拦截不合规自修改" : "宽松模式只提示风险"}</span>
-          <span>{LEVEL_DESCRIPTIONS[lvl]}</span>
+          <span>{strict ? g.strictHint : g.relaxedHint}</span>
+          <span>{g.levelDescriptions[lvl]}</span>
           {panic ? (
-            <span className="text-destructive">自主变更已暂停</span>
+            <span className="text-destructive">{g.evolutionPaused}</span>
           ) : null}
         </div>
       </div>
@@ -491,9 +490,9 @@ export function GeneLockControlCard({
               <DnaIcon className="size-4" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold">基因锁设置</h2>
+              <h2 className="text-sm font-semibold">{g.settingsTitle}</h2>
               <p className="text-xs text-muted-foreground">
-                控制系统能不能自主修改配置、技能权重和进化结果。
+                {g.settingsDescription}
               </p>
             </div>
           </div>
@@ -501,7 +500,7 @@ export function GeneLockControlCard({
 
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={panic ? "destructive" : "outline"} className="h-7">
-            {panic ? "紧急锁定中" : `Lv ${lvl} · ${LEVEL_NAMES[lvl]}`}
+            {panic ? g.panicActive : `Lv ${lvl} · ${g.levelNames[lvl]}`}
           </Badge>
           {msg ? (
             <span className="text-xs text-muted-foreground">{msg}</span>
@@ -511,7 +510,7 @@ export function GeneLockControlCard({
 
       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1.4fr_1fr]">
         <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-          <div className="text-xs font-medium">开启方式</div>
+          <div className="text-xs font-medium">{g.openModeLabel}</div>
           <div className="mt-2 grid grid-cols-2 gap-1">
             <Button
               type="button"
@@ -521,7 +520,7 @@ export function GeneLockControlCard({
               disabled={busy !== null}
               onClick={() => setMode("dev")}
             >
-              宽松
+              {g.modeRelaxed}
             </Button>
             <Button
               type="button"
@@ -531,23 +530,23 @@ export function GeneLockControlCard({
               disabled={busy !== null}
               onClick={() => setMode("production")}
             >
-              严格
+              {g.modeStrict}
             </Button>
           </div>
           <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-            宽松模式只提示风险；严格模式会真正拦截不合规自修改。
+            {g.modeDescription}
           </p>
         </div>
 
         <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs font-medium">进化档位</div>
+            <div className="text-xs font-medium">{g.levelLabel}</div>
             <span className="text-[11px] text-muted-foreground">
-              {LEVEL_DESCRIPTIONS[lvl]}
+              {g.levelDescriptions[lvl]}
             </span>
           </div>
           <div className="mt-2 grid grid-cols-5 gap-1">
-            {LEVEL_NAMES.map((name, index) => (
+            {g.levelNames.map((name, index) => (
               <Button
                 key={name}
                 type="button"
@@ -556,7 +555,7 @@ export function GeneLockControlCard({
                 className="h-auto min-h-10 flex-col gap-0.5 px-1 py-1 text-[11px]"
                 disabled={busy !== null || panic}
                 onClick={() => setLevel(index)}
-                title={LEVEL_DESCRIPTIONS[index]}
+                title={g.levelDescriptions[index]}
               >
                 <span className="font-mono">Lv {index}</span>
                 <span className="truncate">{name}</span>
@@ -566,7 +565,7 @@ export function GeneLockControlCard({
         </div>
 
         <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-          <div className="text-xs font-medium">总开关</div>
+          <div className="text-xs font-medium">{g.masterSwitchLabel}</div>
           <Button
             type="button"
             size="sm"
@@ -578,17 +577,17 @@ export function GeneLockControlCard({
             {panic ? (
               <>
                 <ShieldCheckIcon className="mr-1 size-3.5" />
-                解除锁定
+                {g.unlockButton}
               </>
             ) : (
               <>
                 <SirenIcon className="mr-1 size-3.5" />
-                关闭自主进化
+                {g.disableEvolutionButton}
               </>
             )}
           </Button>
           <p className="mt-2 text-[11px] leading-5 text-muted-foreground">
-            关闭后会进入紧急锁定，所有自主变更都会被挡住。
+            {g.disabledHint}
           </p>
         </div>
       </div>

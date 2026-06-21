@@ -95,7 +95,7 @@ interface BrowserSessionHealth {
 
 const DEVICE_PREVIEW_PRESETS = {
   desktop: {
-    label: "桌面",
+    label: "Desktop",
     width: 1440,
     height: 900,
     Icon: MonitorIcon,
@@ -500,10 +500,10 @@ function ActionIcon({ action }: { action: string }) {
   }
 }
 
-function actionStatusLabel(entry: ActionLogEntry): string {
-  if (!entry.status) return "待确认";
-  if (entry.status === "ok") return "成功";
-  if (entry.status === "error") return "失败";
+function actionStatusLabel(entry: ActionLogEntry, t: { actionPending: string; actionSuccess: string; actionFailed: string }): string {
+  if (!entry.status) return t.actionPending;
+  if (entry.status === "ok") return t.actionSuccess;
+  if (entry.status === "error") return t.actionFailed;
   return entry.status;
 }
 
@@ -532,11 +532,14 @@ function actionCoordinatePoint(
   return match ? { x: Number(match[1]), y: Number(match[2]) } : null;
 }
 
-function actionDetailLabel(entry: ActionLogEntry): string {
+function actionDetailLabel(
+  entry: ActionLogEntry,
+  t: { coordinateLabel: (coord: string) => string; noDetail: string },
+): string {
   if (entry.error) return entry.error;
   if (entry.detail) return entry.detail;
   const coord = actionCoordinateLabel(entry);
-  return coord ? `坐标 ${coord}` : "无详情";
+  return coord ? t.coordinateLabel(coord) : t.noDetail;
 }
 
 function actionEntryKey(entry: ActionLogEntry, absoluteIndex: number): string {
@@ -559,6 +562,7 @@ export function BrowserPreviewPanel({
   className,
 }: BrowserPreviewPanelProps) {
   const { t } = useI18n();
+  const bp = t.browserPreviewPanel;
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [pageInfo, setPageInfo] = useState<PageInfo>({ url: "", title: "" });
   const [screenshot, setScreenshot] = useState<string>("");
@@ -606,7 +610,7 @@ export function BrowserPreviewPanel({
   const [liveTab, setLiveTab] = useState<BrowserTab>(() => ({
     id: `agent-live-${Date.now().toString(36)}`,
     url: "about:blank",
-    title: "实时预览",
+    title: bp.livePreviewTitle,
     isLoading: false,
     device: "desktop",
   }));
@@ -1257,14 +1261,16 @@ export function BrowserPreviewPanel({
               : "text-muted-foreground hover:border-border/60 hover:bg-muted/65 hover:text-foreground",
             !canLivePreview && "pointer-events-none opacity-35",
           )}
-          title="切换截图/实时预览"
+          title={bp.toggleSurfaceMode}
         >
           {effectiveSurfaceMode === "live" ? (
             <MonitorIcon className="size-3" />
           ) : (
             <ImageIcon className="size-3" />
           )}
-          {effectiveSurfaceMode === "live" ? "实时" : "截图"}
+          {effectiveSurfaceMode === "live"
+            ? bp.surfaceModeLive
+            : bp.surfaceModeScreenshot}
         </button>
 
         <select
@@ -1276,14 +1282,14 @@ export function BrowserPreviewPanel({
           }
           disabled={viewportChanging}
           className="hidden h-7 max-w-[112px] shrink-0 rounded-md border border-border/50 bg-background/70 px-1.5 text-[10px] font-medium text-muted-foreground outline-none hover:text-foreground md:block"
-          title="选择设备预设"
+          title={bp.selectDevicePreset}
         >
           {(Object.keys(DEVICE_PREVIEW_PRESETS) as DevicePreviewPreset[]).map(
             (preset) => {
               const device = DEVICE_PREVIEW_PRESETS[preset];
               return (
                 <option key={preset} value={preset}>
-                  {device.label}
+                  {preset === "desktop" ? bp.desktopLabel : device.label}
                 </option>
               );
             },
@@ -1330,10 +1336,10 @@ export function BrowserPreviewPanel({
           type="button"
           onClick={openInFullBrowser}
           className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary/15 bg-primary/10 px-2 text-[10px] font-medium text-primary shadow-sm transition-colors hover:bg-primary/15"
-          title="在完整浏览器中继续"
+          title={bp.continueInFullBrowser}
         >
           <ExternalLinkIcon className="size-3" />
-          <span>接管</span>
+          <span>{bp.takeoverButton}</span>
         </button>
 
         <button
@@ -1351,14 +1357,14 @@ export function BrowserPreviewPanel({
             <span className="size-1.5 rounded-full bg-destructive" />
           </span>
           <span className="min-w-0 flex-1 truncate">
-            浏览器会话需要关注：{sessionIssues.join(" · ")}
+            {bp.sessionNeedsAttention(sessionIssues.join(" · "))}
           </span>
           <button
             type="button"
             onClick={() => void handleLaunch()}
             className="h-5 shrink-0 rounded border border-destructive/25 px-1.5 text-[10px] font-medium transition-colors hover:bg-destructive/10"
           >
-            重连
+            {bp.reconnectButton}
           </button>
         </div>
       )}
@@ -1368,24 +1374,26 @@ export function BrowserPreviewPanel({
           <div className="mb-1 flex items-center gap-2">
             <FileTextIcon className="size-3.5 text-primary" />
             <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-foreground">
-              {semanticSnapshot.name || semanticSnapshot.url || "页面语义快照"}
+              {semanticSnapshot.name ||
+                semanticSnapshot.url ||
+                bp.semanticSnapshotFallback}
             </span>
             {semanticSnapshot.truncated && (
               <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600">
-                已截断
+                {bp.truncatedBadge}
               </span>
             )}
             <button
               type="button"
               onClick={() => setSemanticOpen(false)}
               className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              title="关闭语义快照"
+              title={bp.closeSemanticSnapshot}
             >
               <XIcon className="size-3" />
             </button>
           </div>
           <pre className="max-h-28 overflow-auto whitespace-pre-wrap rounded-md bg-muted/45 p-2 text-[10px] leading-relaxed text-muted-foreground">
-            {(semanticSnapshot.text || "暂无可读取文本").slice(0, 3000)}
+            {(semanticSnapshot.text || bp.noReadableText).slice(0, 3000)}
           </pre>
         </div>
       )}
@@ -1424,7 +1432,7 @@ export function BrowserPreviewPanel({
                 <div className="absolute inset-0 z-10 grid place-items-center bg-background/70">
                   <div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-[11px] text-muted-foreground shadow-sm">
                     <Loader2Icon className="size-3.5 animate-spin text-primary" />
-                    加载实时页面
+                    {bp.loadingLivePage}
                   </div>
                 </div>
               )}
@@ -1493,7 +1501,10 @@ export function BrowserPreviewPanel({
                 onError={() => setScreenshot("")}
                 onMouseMove={handleScreenshotHover}
                 onMouseLeave={() => setHoverPoint(null)}
-                title={`点击截图执行${pointerMode === "double" ? "双击" : "单击"} · ${currentViewportLabel}`}
+                title={bp.screenshotClickTitle(
+                  pointerMode === "double" ? bp.doubleClickMode : bp.clickMode,
+                  currentViewportLabel,
+                )}
                 style={{ cursor: "crosshair" }}
               />
               {hoverPoint && screenshotSize.width > 0 && (
@@ -1527,7 +1538,7 @@ export function BrowserPreviewPanel({
                     <ServerIcon className="size-3.5" />
                   </div>
                   <span className="text-[11px] font-semibold text-foreground">
-                    本地服务
+                    {bp.localServices}
                   </span>
                   <button
                     onClick={handleRescanPorts}
@@ -1539,7 +1550,7 @@ export function BrowserPreviewPanel({
                     ) : (
                       <RefreshCwIcon className="size-3" />
                     )}
-                    扫描
+                    {bp.scanButton}
                   </button>
                 </div>
                 <div className="space-y-1.5">
@@ -1580,10 +1591,10 @@ export function BrowserPreviewPanel({
                         )}
                       >
                         {svc.type === "frontend"
-                          ? "前端"
-                          : svc.type === "backend"
-                            ? "后端"
-                            : "服务"}
+                        ? bp.serviceTypeFrontend
+                        : svc.type === "backend"
+                          ? bp.serviceTypeBackend
+                          : bp.serviceTypeOther}
                       </span>
                     </button>
                   ))}
@@ -1607,7 +1618,7 @@ export function BrowserPreviewPanel({
                   ) : (
                     <RefreshCwIcon className="size-3" />
                   )}
-                  扫描本地服务
+                  {bp.scanLocalServices}
                 </button>
               </div>
             )}
@@ -1646,9 +1657,11 @@ export function BrowserPreviewPanel({
           </span>
           <span className="text-muted-foreground/60 shrink-0 text-[10px]">
             {t.browser.actions(actionLog.length)}
-            {actionFailureCount > 0 ? ` · ${actionFailureCount} 失败` : ""}
+            {actionFailureCount > 0
+              ? ` · ${bp.failureCount(actionFailureCount)}`
+              : ""}
             {actionCoordinateCount > 0
-              ? ` · ${actionCoordinateCount} 坐标`
+              ? ` · ${bp.coordinateCount(actionCoordinateCount)}`
               : ""}
           </span>
         </button>
@@ -1657,7 +1670,7 @@ export function BrowserPreviewPanel({
             <div className="flex min-w-0 items-center gap-1.5">
               <ActionIcon action={selectedAction.entry.action} />
               <span className="shrink-0 font-semibold text-foreground/85">
-                已选中 {selectedAction.entry.action}
+                {bp.selectedAction(selectedAction.entry.action)}
               </span>
               <span
                 className={cn(
@@ -1665,7 +1678,7 @@ export function BrowserPreviewPanel({
                   actionStatusClass(selectedAction.entry),
                 )}
               >
-                {actionStatusLabel(selectedAction.entry)}
+                {actionStatusLabel(selectedAction.entry, bp)}
               </span>
               {actionCoordinateLabel(selectedAction.entry) && (
                 <button
@@ -1674,7 +1687,7 @@ export function BrowserPreviewPanel({
                     focusActionEntry(selectedAction.entry, selectedAction.index)
                   }
                   className="shrink-0 rounded-full border border-primary/25 bg-background/80 px-1.5 py-0.5 font-mono text-[9px] text-primary transition-colors hover:bg-primary/10"
-                  title="在截图上定位该动作"
+                  title={bp.locateActionTitle}
                 >
                   {actionCoordinateLabel(selectedAction.entry)}
                 </button>
@@ -1683,13 +1696,13 @@ export function BrowserPreviewPanel({
                 type="button"
                 onClick={() => setSelectedActionKey(null)}
                 className="ml-auto grid size-5 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title="取消选中"
+                title={bp.deselectTitle}
               >
                 <XIcon className="size-3" />
               </button>
             </div>
             <div className="mt-1 truncate text-muted-foreground">
-              {actionDetailLabel(selectedAction.entry)}
+              {actionDetailLabel(selectedAction.entry, bp)}
             </div>
           </div>
         )}
@@ -1732,7 +1745,7 @@ export function BrowserPreviewPanel({
                               actionStatusClass(entry),
                             )}
                           >
-                            {actionStatusLabel(entry)}
+                            {actionStatusLabel(entry, bp)}
                           </span>
                           {coordinateLabel && (
                             <span className="shrink-0 rounded-full bg-background/75 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
@@ -1755,7 +1768,7 @@ export function BrowserPreviewPanel({
                             failed && "text-destructive/85",
                           )}
                         >
-                          {actionDetailLabel(entry)}
+                          {actionDetailLabel(entry, bp)}
                         </div>
                       </div>
                     </button>

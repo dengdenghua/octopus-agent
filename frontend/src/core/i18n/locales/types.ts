@@ -3251,6 +3251,79 @@ export interface Translations {
     };
   };
 
+  // Gene Lock Badge
+  geneLockBadge: {
+    levelNames: string[];
+    levelDescriptions: string[];
+    badgeTitle: string;
+    badgeLabel: string;
+    panicBadge: string;
+    productionBadge: string;
+    dropdownTitle: string;
+    modeLabel: string;
+    maturityLabel: string;
+    panicActive: string;
+    panicStartedAt: string;
+    panicReason: string;
+    unlockButton: string;
+    panicButton: string;
+    levelSummary: (level: number, name: string, description: string) => string;
+    compactTitle: string;
+    modeRelaxed: string;
+    modeStrict: string;
+    strictHint: string;
+    relaxedHint: string;
+    modeDescription: string;
+    evolutionPaused: string;
+    settingsTitle: string;
+    settingsDescription: string;
+    openModeLabel: string;
+    levelLabel: string;
+    masterSwitchLabel: string;
+    disableEvolutionButton: string;
+    disabledHint: string;
+    updateSuccess: string;
+    operationFailed: string;
+  };
+
+  // Browser Preview Panel
+  browserPreviewPanel: {
+    desktopLabel: string;
+    actionPending: string;
+    actionSuccess: string;
+    actionFailed: string;
+    coordinateLabel: (coord: string) => string;
+    noDetail: string;
+    livePreviewTitle: string;
+    toggleSurfaceMode: string;
+    surfaceModeLive: string;
+    surfaceModeScreenshot: string;
+    selectDevicePreset: string;
+    continueInFullBrowser: string;
+    takeoverButton: string;
+    sessionNeedsAttention: (issues: string) => string;
+    reconnectButton: string;
+    semanticSnapshotFallback: string;
+    truncatedBadge: string;
+    closeSemanticSnapshot: string;
+    noReadableText: string;
+    loadingLivePage: string;
+    screenshotClickTitle: (mode: string, viewport: string) => string;
+    clickMode: string;
+    doubleClickMode: string;
+    localServices: string;
+    scanButton: string;
+    serviceTypeFrontend: string;
+    serviceTypeBackend: string;
+    serviceTypeOther: string;
+    scanLocalServices: string;
+    selectedAction: (action: string) => string;
+    locateActionTitle: string;
+    deselectTitle: string;
+    failureCount: (count: number) => string;
+    coordinateCount: (count: number) => string;
+  };
+
   // Browser Home
   browserHome: {
     appNameDoubao: string;

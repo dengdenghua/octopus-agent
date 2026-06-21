@@ -141,62 +141,62 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://gemini.google.com/app",
     icon: SparklesIcon,
     color: "from-blue-500 to-cyan-400",
-    description: "综合搜索、多轮分析",
+    description: "comprehensiveSearch",
   },
   {
     name: "NotebookLM",
     url: "https://notebooklm.google.com/",
     icon: BookOpenIcon,
     color: "from-amber-500 to-orange-400",
-    description: "资料库、引用、文档研究",
+    description: "researchDocs",
   },
   {
-    name: "豆包",
+    name: "Doubao",
     url: "https://www.doubao.com/chat/",
     icon: MessageCircleIcon,
     color: "from-emerald-500 to-teal-400",
-    description: "中文调研、中文改写",
+    description: "chineseResearch",
   },
   {
     name: "Perplexity",
     url: "https://www.perplexity.ai/",
     icon: SearchIcon,
     color: "from-sky-500 to-indigo-500",
-    description: "网页检索、来源线索",
+    description: "webSearch",
   },
   {
     name: "ChatGPT",
     url: "https://chatgpt.com/",
     icon: BotIcon,
     color: "from-zinc-700 to-zinc-500",
-    description: "通用对话、代码辅助",
+    description: "generalChat",
   },
   {
     name: "Claude",
     url: "https://claude.ai/",
     icon: BrainCircuitIcon,
     color: "from-stone-600 to-rose-400",
-    description: "长文分析、写作整理",
+    description: "longTextAnalysis",
   },
   {
     name: "Kimi",
     url: "https://www.kimi.com/",
     icon: GraduationCapIcon,
     color: "from-violet-500 to-fuchsia-500",
-    description: "长上下文、中文资料",
+    description: "longContext",
   },
 ];
 
 const DESKTOP_WIDGETS: BrowserDesktopWidget[] = [
   {
-    title: "调研记录",
-    subtitle: "REC 模式会把外部 AI 结果沉淀为简报",
+    title: "research",
+    subtitle: "researchSubtitle",
     icon: FileTextIcon,
     color: "from-slate-700 to-slate-500",
   },
   {
-    title: "今日任务",
-    subtitle: "打开平台、收集结论、核查来源",
+    title: "todayTasks",
+    subtitle: "todayTasksSubtitle",
     icon: LayoutGridIcon,
     color: "from-indigo-500 to-blue-400",
   },
@@ -209,11 +209,11 @@ const DESKTOP_SIDE_NAV: Array<{
   label: string;
   icon: LucideIcon;
 }> = [
-  { id: "home", label: "桌面", icon: HomeIcon },
-  { id: "theme", label: "主题", icon: PaletteIcon },
-  { id: "widgets", label: "小组件", icon: PanelLeftIcon },
-  { id: "wallpaper", label: "壁纸", icon: ImageIcon },
-  { id: "games", label: "娱乐", icon: Gamepad2Icon },
+  { id: "home", label: "home", icon: HomeIcon },
+  { id: "theme", label: "theme", icon: PaletteIcon },
+  { id: "widgets", label: "widgets", icon: PanelLeftIcon },
+  { id: "wallpaper", label: "wallpaper", icon: ImageIcon },
+  { id: "games", label: "games", icon: Gamepad2Icon },
 ];
 
 function labelFromMap(map: Record<string, string>, key: string): string {
@@ -747,21 +747,22 @@ function BrowserDesktopHome({
     () => ({
       "Cocoloop 社区": wt.appNameCocoloopCommunity,
       "Cocoloop 市场": wt.appNameCocoloopMarket,
+      Doubao: wt.appNameDoubao,
     }),
-    [wt.appNameCocoloopCommunity, wt.appNameCocoloopMarket],
+    [wt.appNameCocoloopCommunity, wt.appNameCocoloopMarket, wt.appNameDoubao],
   );
 
   const appDescMap = useMemo<Record<string, string>>(
     () => ({
       "Cocoloop 社区": wt.appDescCocoloopCommunity,
       "Cocoloop 市场": wt.appDescCocoloopMarket,
-      Gemini: wt.appDescGemini,
-      NotebookLM: wt.appDescNotebookLM,
-      豆包: wt.appDescDoubao,
-      Perplexity: wt.appDescPerplexity,
-      ChatGPT: wt.appDescChatGPT,
-      Claude: wt.appDescClaude,
-      Kimi: wt.appDescKimi,
+      comprehensiveSearch: wt.appDescGemini,
+      researchDocs: wt.appDescNotebookLM,
+      chineseResearch: wt.appDescDoubao,
+      webSearch: wt.appDescPerplexity,
+      generalChat: wt.appDescChatGPT,
+      longTextAnalysis: wt.appDescClaude,
+      longContext: wt.appDescKimi,
     }),
     [
       wt.appDescCocoloopCommunity,
@@ -778,27 +779,27 @@ function BrowserDesktopHome({
 
   const widgetTitleMap = useMemo<Record<string, string>>(
     () => ({
-      调研记录: wt.widgetTitleResearch,
-      今日任务: wt.widgetTitleTodayTasks,
+      research: wt.widgetTitleResearch,
+      todayTasks: wt.widgetTitleTodayTasks,
     }),
     [wt.widgetTitleResearch, wt.widgetTitleTodayTasks],
   );
 
   const widgetSubtitleMap = useMemo<Record<string, string>>(
     () => ({
-      调研记录: wt.widgetSubtitleResearch,
-      今日任务: wt.widgetSubtitleTodayTasks,
+      researchSubtitle: wt.widgetSubtitleResearch,
+      todayTasksSubtitle: wt.widgetSubtitleTodayTasks,
     }),
     [wt.widgetSubtitleResearch, wt.widgetSubtitleTodayTasks],
   );
 
   const navLabelMap = useMemo<Record<string, string>>(
     () => ({
-      桌面: wt.navHome,
-      主题: wt.navTheme,
-      小组件: wt.navWidgets,
-      壁纸: wt.navWallpaper,
-      娱乐: wt.navGames,
+      home: wt.navHome,
+      theme: wt.navTheme,
+      widgets: wt.navWidgets,
+      wallpaper: wt.navWallpaper,
+      games: wt.navGames,
     }),
     [wt.navHome, wt.navTheme, wt.navWidgets, wt.navWallpaper, wt.navGames],
   );
@@ -1272,8 +1273,9 @@ function DesktopControlPanel({
     () => ({
       "Cocoloop 社区": wt.appNameCocoloopCommunity,
       "Cocoloop 市场": wt.appNameCocoloopMarket,
+      Doubao: wt.appNameDoubao,
     }),
-    [wt.appNameCocoloopCommunity, wt.appNameCocoloopMarket],
+    [wt.appNameCocoloopCommunity, wt.appNameCocoloopMarket, wt.appNameDoubao],
   );
   const title =
     panel === "theme"
