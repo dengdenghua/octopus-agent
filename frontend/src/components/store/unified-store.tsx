@@ -21,7 +21,6 @@ export {
   type SkillCategory,
   LOCAL_SKILL_CATEGORIES,
   APP_CATEGORIES,
-  APP_CATEGORY_LABELS,
   StoreErrorState,
   pluginImageUrl,
   appIconUrl,
@@ -36,7 +35,6 @@ export {
   searchablePluginBundleText,
   searchablePluginItemText,
   classifyPluginItem,
-  openCreatePluginChat,
 } from "./store-utils";
 
 // ── Skill Store Panel (thin wrapper) ───────────────────────────────────

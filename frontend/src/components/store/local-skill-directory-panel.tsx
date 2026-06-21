@@ -194,9 +194,9 @@ export function LocalSkillDirectoryPanel({
   if (error) {
     return (
       <StoreErrorState
-        title="技能目录暂时不可用"
+        title={t.localSkillDirectory.errorTitle}
         detail={error.message}
-        retryLabel="重新加载"
+        retryLabel={t.localSkillDirectory.retryLabel}
         retrying={isFetching}
         onRetry={() => void refetch()}
       />
@@ -289,8 +289,8 @@ export function LocalSkillDirectoryPanel({
                   onClick={() => setShowInternalSkills((value) => !value)}
                 >
                   {showInternalSkills
-                    ? "隐藏内部技能"
-                    : `显示内部 ${hiddenSkillCount}`}
+                    ? t.localSkillDirectory.hideInternalSkills
+                    : t.localSkillDirectory.showInternalSkills(hiddenSkillCount)}
                 </button>
               )}
             </div>
@@ -333,7 +333,7 @@ export function LocalSkillDirectoryPanel({
                           {skill.has_tests && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300">
                               <ShieldCheck className="size-3" />
-                              已验证
+                              {t.localSkillDirectory.verified}
                             </span>
                           )}
                           {(skill.market_visibility ?? "market") !==
@@ -341,18 +341,18 @@ export function LocalSkillDirectoryPanel({
                             <span
                               title={
                                 skill.canonical_skill
-                                  ? `${skill.market_reason ?? "归并展示"}：${skill.canonical_skill}`
-                                  : (skill.market_reason ?? "内部技能")
+                                  ? `${skill.market_reason ?? t.localSkillDirectory.marketReasonMerged}：${skill.canonical_skill}`
+                                  : (skill.market_reason ?? t.localSkillDirectory.internalSkill)
                               }
                               className="rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-300"
                             >
                               {skill.market_visibility === "duplicate"
-                                ? "重复"
+                                ? t.localSkillDirectory.visibilityDuplicate
                                 : skill.market_visibility === "provider"
-                                  ? "后端"
+                                  ? t.localSkillDirectory.visibilityProvider
                                   : skill.market_visibility === "deprecated"
-                                    ? "弃用"
-                                    : "内部"}
+                                    ? t.localSkillDirectory.visibilityDeprecated
+                                    : t.localSkillDirectory.visibilityInternal}
                             </span>
                           )}
                         </div>
@@ -366,7 +366,9 @@ export function LocalSkillDirectoryPanel({
                         title={skill.trusted_source ?? undefined}
                         className="truncate text-[11px] text-muted-foreground"
                       >
-                        {skill.has_tests ? "已验证" : "本地能力"}
+                        {skill.has_tests
+                          ? t.localSkillDirectory.verified
+                          : t.localSkillDirectory.localCapability}
                       </span>
                       <button
                         type="button"
@@ -391,12 +393,12 @@ export function LocalSkillDirectoryPanel({
                         {skill.enabled ? (
                           <>
                             <CheckCircle2 className="size-3.5" />
-                            已启用
+                            {t.localSkillDirectory.enabled}
                           </>
                         ) : (
                           <>
                             <Plus className="size-3.5" />
-                            启用
+                            {t.localSkillDirectory.enable}
                           </>
                         )}
                       </button>

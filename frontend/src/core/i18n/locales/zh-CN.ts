@@ -4818,6 +4818,72 @@ export const zhCN: Translations = {
     demandLeads: "已补到需求侧线索，下一步应把用户痛点和消费趋势并入结论。",
     roundResultsRead:
       "已读取这一轮结果，下一步会据此调整口径、补查缺口并进入综合分析。",
+    detailTitles: {
+      input: "输入",
+      thought: "思考",
+      publicReasoning: "可见推理",
+      result: "结果",
+      observation: "观察",
+      preview: "内容预览",
+    },
+    statusRunning: "进行中",
+    statusDone: "已完成",
+    statusFailed: "失败",
+    statusWaitingApproval: "等待审批",
+    showMoreResults: (count) => `展开其余 ${count} 条`,
+    collapseResults: "收起结果",
+    applyingSkill: (running) => (running ? "正在应用技能" : "已应用技能"),
+    planningNextStep: (running) => (running ? "正在规划下一步" : "已规划下一步"),
+    readingFile: (running) => (running ? "正在读取" : "已读取"),
+    browsingDirectory: (running) => (running ? "正在浏览目录" : "已浏览目录"),
+    searchingFiles: (running) => (running ? "正在搜索文件" : "已搜索文件"),
+    searchingText: (running) => (running ? "正在搜索文本" : "已搜索文本"),
+    runningCommand: (running) => (running ? "正在运行命令" : "已运行命令"),
+    creatingFile: (running) => (running ? "正在创建文件" : "已创建文件"),
+    writingFile: (running) => (running ? "正在写入文件" : "已写入文件"),
+    editingFile: (running) => (running ? "正在编辑文件" : "已编辑文件"),
+    readingGitStatus: (running) =>
+      running ? "正在读取 Git 状态" : "已读取 Git 状态",
+    readingGitDiff: (running) =>
+      running ? "正在读取 Git 差异" : "已读取 Git 差异",
+    committingGit: (running) => (running ? "正在提交 Git" : "已提交 Git"),
+  },
+
+  // Store utilities
+  storeUtils: {
+    appCategoryLabels: {
+      all: "全部",
+      developer: "开发部署",
+      ai: "AI",
+      creative: "创作",
+      research: "研究",
+      productivity: "效率",
+      finance: "金融",
+      ops: "运维",
+      connector: "连接器",
+      other: "其他",
+    },
+    technicalDetails: "技术细节",
+    createPluginPrompt:
+      "使用 $plugin-creator 创建一个新的 Octopus 插件。\n请先询问插件名称、用途、是否包含 skills/apps/MCP，然后 scaffold 到个人插件目录，补齐 manifest，并验证插件可被市场识别。",
+  },
+
+  // Local skill directory panel
+  localSkillDirectory: {
+    errorTitle: "技能目录暂时不可用",
+    retryLabel: "重新加载",
+    hideInternalSkills: "隐藏内部技能",
+    showInternalSkills: (count) => `显示内部 ${count}`,
+    verified: "已验证",
+    localCapability: "本地能力",
+    marketReasonMerged: "归并展示",
+    internalSkill: "内部技能",
+    visibilityDuplicate: "重复",
+    visibilityProvider: "后端",
+    visibilityDeprecated: "弃用",
+    visibilityInternal: "内部",
+    enabled: "已启用",
+    enable: "启用",
   },
 
   // Annotations

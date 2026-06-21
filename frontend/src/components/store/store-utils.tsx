@@ -1,6 +1,6 @@
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { ErrorState } from "@/components/ui/state";
 import { type OctopusApp } from "@/core/apps/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
@@ -210,18 +210,7 @@ export const APP_CATEGORIES: SkillCategory[] = [
   },
 ];
 
-export const APP_CATEGORY_LABELS: Record<string, string> = {
-  all: "全部",
-  developer: "开发部署",
-  ai: "AI",
-  creative: "创作",
-  research: "研究",
-  productivity: "效率",
-  finance: "金融",
-  ops: "运维",
-  connector: "连接器",
-  other: "其他",
-};
+
 
 // ── Utility functions ──────────────────────────────────────────────────
 
@@ -246,6 +235,11 @@ export function useLocalSkillCategoryLabel() {
     key === "other"
       ? t.unifiedStore.skills.other
       : (t.unifiedStore.skills.categoryLabels[key] ?? key);
+}
+
+export function useAppCategoryLabel() {
+  const { t } = useI18n();
+  return (key: string) => t.storeUtils.appCategoryLabels[key] ?? key;
 }
 
 export function searchableSkillText(skill: LocalSkill): string {
@@ -359,15 +353,30 @@ export function classifyPluginItem(
   return declared || "connector";
 }
 
-export function openCreatePluginChat() {
-  const prompt = [
-    "使用 $plugin-creator 创建一个新的 Octopus 插件。",
-    "请先询问插件名称、用途、是否包含 skills/apps/MCP，然后 scaffold 到个人插件目录，补齐 manifest，并验证插件可被市场识别。",
-  ].join("\n");
-  window.location.hash = `/workspace/realtime/new?prompt=${encodeURIComponent(prompt)}`;
+export function useOpenCreatePluginChat() {
+  const { t } = useI18n();
+  return () => {
+    window.location.hash = `/workspace/realtime/new?prompt=${encodeURIComponent(
+      t.storeUtils.createPluginPrompt,
+    )}`;
+  };
 }
 
 // ── Shared UI ──────────────────────────────────────────────────────────
+
+function StoreErrorDetails({ detail }: { detail: React.ReactNode }) {
+  const { t } = useI18n();
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer select-none">
+        {t.storeUtils.technicalDetails}
+      </summary>
+      <code className="mt-1 block break-words rounded-md bg-background/70 px-2 py-1">
+        {detail}
+      </code>
+    </details>
+  );
+}
 
 export function StoreErrorState({
   title,
@@ -383,35 +392,20 @@ export function StoreErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm">
-      <div className="flex items-start gap-2 text-destructive">
-        <AlertCircle className="mt-0.5 size-4 shrink-0" />
-        <div className="min-w-0 flex-1">
-          <p className="font-medium">{title}</p>
-          {detail && (
-            <details className="mt-1 text-xs text-destructive/75">
-              <summary className="cursor-pointer select-none">技术细节</summary>
-              <code className="mt-1 block break-words rounded-md bg-background/70 px-2 py-1">
-                {detail}
-              </code>
-            </details>
-          )}
-        </div>
-      </div>
-      <div>
-        <Button
-          className="h-8 rounded-lg"
-          disabled={retrying}
-          size="sm"
-          variant="outline"
-          onClick={onRetry}
-        >
-          <RefreshCw
-            className={cn("mr-1 size-3.5", retrying && "animate-spin")}
-          />
-          {retryLabel}
-        </Button>
-      </div>
-    </div>
+    <ErrorState
+      title={title}
+      detail={
+        detail ? (
+          <StoreErrorDetails detail={detail} />
+        ) : null
+      }
+      actionDisabled={retrying}
+      actionIcon={
+        <RefreshCw className={cn("size-3.5", retrying && "animate-spin")} />
+      }
+      actionLabel={retryLabel}
+      onAction={onRetry}
+      className="min-h-[180px]"
+    />
   );
 }

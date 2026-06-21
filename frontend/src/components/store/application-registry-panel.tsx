@@ -14,13 +14,14 @@ import { Input } from "@/components/ui/input";
 import { listApps, type OctopusApp } from "@/core/apps/api";
 import { listPlugins } from "@/core/plugins/api";
 import type { PluginInfo } from "@/core/plugins/types";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
   type PluginRegistryItem,
-  APP_CATEGORY_LABELS,
   StoreErrorState,
   classifyPluginItem,
-  openCreatePluginChat,
+  useAppCategoryLabel,
+  useOpenCreatePluginChat,
   pluginImageUrl,
   appIconUrl,
   searchablePluginItemText,
@@ -29,12 +30,15 @@ import {
 } from "./store-utils";
 
 export function ApplicationRegistryPanel() {
+  const { t } = useI18n();
   const [apps, setApps] = useState<OctopusApp[]>([]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
+  const appCategoryLabel = useAppCategoryLabel();
+  const openCreatePluginChat = useOpenCreatePluginChat();
 
   const refresh = async () => {
     setLoading(true);
@@ -245,7 +249,7 @@ export function ApplicationRegistryPanel() {
             {registryItems.length}
           </span>
         </Button>
-        {Object.entries(APP_CATEGORY_LABELS).map(([key, label]) => {
+        {Object.entries(t.storeUtils.appCategoryLabels).map(([key, label]) => {
           if (key === "all") return null;
           const count = categoryCounts.get(key) ?? 0;
           if (!count) return null;
@@ -339,8 +343,7 @@ export function ApplicationRegistryPanel() {
                     variant="secondary"
                     className="h-5 rounded-full px-2 text-[10px]"
                   >
-                    {APP_CATEGORY_LABELS[item.localCategory] ??
-                      item.localCategory}
+                    {appCategoryLabel(item.localCategory)}
                   </Badge>
                   {plugin && (
                     <Badge

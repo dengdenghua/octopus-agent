@@ -33,7 +33,7 @@ import type { PluginInfo } from "@/core/plugins/types";
 import type { HubPluginInfo } from "@/core/plugins/types";
 import { getBackendBaseURL } from "@/core/config";
 import { LocalSkillDirectoryPanel } from "@/components/store/unified-store";
-import { openCreatePluginChat } from "@/components/store/store-utils";
+import { useOpenCreatePluginChat } from "@/components/store/store-utils";
 import { SkillPacksTab } from "@/components/workspace/agents/skill-packs-tab";
 import { cn } from "@/lib/utils";
 
@@ -302,6 +302,7 @@ function PluginListItem({
 
 export default function PluginsPage() {
   const { t } = useI18n();
+  const openCreatePluginChat = useOpenCreatePluginChat();
   const [initialState] = useState(getInitialState);
   const [activeTab, setActiveTab] = useState<PluginsTab>(initialState.tab);
   const [skillView, setSkillView] = useState<SkillView>(initialState.skillView);

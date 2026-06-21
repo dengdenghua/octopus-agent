@@ -5078,6 +5078,81 @@ Strategy:
       "Demand-side leads supplemented; next step is to incorporate user pain points and consumption trends into conclusions.",
     roundResultsRead:
       "Results for this round read; next step is to adjust scope, supplement gaps, and enter comprehensive analysis.",
+    detailTitles: {
+      input: "Input",
+      thought: "Thought",
+      publicReasoning: "Public reasoning",
+      result: "Result",
+      observation: "Observation",
+      preview: "Live content preview",
+    },
+    statusRunning: "Running",
+    statusDone: "Done",
+    statusFailed: "Failed",
+    statusWaitingApproval: "Waiting approval",
+    showMoreResults: (count) => `Show ${count} more`,
+    collapseResults: "Collapse results",
+    applyingSkill: (running) => (running ? "Applying skill" : "Applied skill"),
+    planningNextStep: (running) =>
+      running ? "Planning next step" : "Planned next step",
+    readingFile: (running) => (running ? "Reading" : "Read"),
+    browsingDirectory: (running) =>
+      running ? "Browsing directory" : "Browsed directory",
+    searchingFiles: (running) =>
+      running ? "Searching files" : "Searched files",
+    searchingText: (running) =>
+      running ? "Searching text" : "Searched text",
+    runningCommand: (running) =>
+      running ? "Running command" : "Ran command",
+    creatingFile: (running) =>
+      running ? "Creating file" : "Created file",
+    writingFile: (running) =>
+      running ? "Writing file" : "Wrote file",
+    editingFile: (running) =>
+      running ? "Editing file" : "Edited file",
+    readingGitStatus: (running) =>
+      running ? "Reading Git status" : "Read Git status",
+    readingGitDiff: (running) =>
+      running ? "Reading Git diff" : "Read Git diff",
+    committingGit: (running) =>
+      running ? "Committing Git" : "Committed Git",
+  },
+
+  // Store utilities
+  storeUtils: {
+    appCategoryLabels: {
+      all: "All",
+      developer: "Developer",
+      ai: "AI",
+      creative: "Creative",
+      research: "Research",
+      productivity: "Productivity",
+      finance: "Finance",
+      ops: "Ops",
+      connector: "Connector",
+      other: "Other",
+    },
+    technicalDetails: "Technical details",
+    createPluginPrompt:
+      "Use $plugin-creator to create a new Octopus plugin.\nPlease first ask for the plugin name, purpose, and whether it includes skills/apps/MCP, then scaffold it into the personal plugin directory, complete the manifest, and verify the plugin can be recognized by the marketplace.",
+  },
+
+  // Local skill directory panel
+  localSkillDirectory: {
+    errorTitle: "Local skill catalog unavailable",
+    retryLabel: "Reload",
+    hideInternalSkills: "Hide internal skills",
+    showInternalSkills: (count) => `Show internal ${count}`,
+    verified: "Verified",
+    localCapability: "Local capability",
+    marketReasonMerged: "Merged display",
+    internalSkill: "Internal skill",
+    visibilityDuplicate: "Duplicate",
+    visibilityProvider: "Provider",
+    visibilityDeprecated: "Deprecated",
+    visibilityInternal: "Internal",
+    enabled: "Enabled",
+    enable: "Enable",
   },
 
   // Annotations

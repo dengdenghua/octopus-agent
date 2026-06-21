@@ -4439,6 +4439,58 @@ export interface Translations {
     technologyLeads: string;
     demandLeads: string;
     roundResultsRead: string;
+    detailTitles: {
+      input: string;
+      thought: string;
+      publicReasoning: string;
+      result: string;
+      observation: string;
+      preview: string;
+    };
+    statusRunning: string;
+    statusDone: string;
+    statusFailed: string;
+    statusWaitingApproval: string;
+    showMoreResults: (count: number) => string;
+    collapseResults: string;
+    applyingSkill: (running: boolean) => string;
+    planningNextStep: (running: boolean) => string;
+    readingFile: (running: boolean) => string;
+    browsingDirectory: (running: boolean) => string;
+    searchingFiles: (running: boolean) => string;
+    searchingText: (running: boolean) => string;
+    runningCommand: (running: boolean) => string;
+    creatingFile: (running: boolean) => string;
+    writingFile: (running: boolean) => string;
+    editingFile: (running: boolean) => string;
+    readingGitStatus: (running: boolean) => string;
+    readingGitDiff: (running: boolean) => string;
+    committingGit: (running: boolean) => string;
+  };
+
+  // Store utilities
+  storeUtils: {
+    appCategoryLabels: Record<string, string>;
+    technicalDetails: string;
+    createPluginPrompt: string;
+  };
+
+  // Local skill directory panel
+  localSkillDirectory: {
+    errorTitle: string;
+    retryLabel: string;
+    hideInternalSkills: string;
+    showInternalSkills: (count: number) => string;
+    verified: string;
+    localCapability: string;
+    marketReasonMerged: string;
+    internalSkill: string;
+    visibilityDuplicate: string;
+    visibilityProvider: string;
+    visibilityDeprecated: string;
+    visibilityInternal: string;
+    enabled: string;
+    enable: string;
   };
 
   // Annotations

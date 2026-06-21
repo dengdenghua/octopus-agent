@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 
 import { emitAgentWorkbenchFocus } from "./agent-workbench-events";
 import { getProcessTraceEvents } from "./process-trace-events";
-import { isChineseText, isSkillToolName } from "./tool-action-kind";
+import { isSkillToolName } from "./tool-action-kind";
 
 type TimelineT = Pick<Translations, "liveTools" | "liveToolTimeline">;
 
@@ -585,17 +585,12 @@ function compactMiddle(text: string, max = 96): string {
 }
 
 function actionStatusLabel(
-  t: TimelineT,
   event: LiveToolEvent,
-  zh: [string, string],
-  en: [string, string],
+  verb: (running: boolean) => string,
   target?: string,
 ): string {
-  const [running, done] = isChineseText(t.liveToolTimeline.searchingWeb)
-    ? zh
-    : en;
-  const verb = event.status === "running" ? running : done;
-  return target ? `${verb} ${target}` : verb;
+  const label = verb(event.status === "running");
+  return target ? `${label} ${target}` : label;
 }
 
 function elapsedInputMs(input?: Record<string, unknown>): number | undefined {
@@ -726,10 +721,8 @@ function codeLogText(
     ]);
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在应用技能", "已应用技能"],
-        ["Applying skill", "Applied skill"],
+        t.liveToolTimeline.applyingSkill,
         compactMiddle(skillName, 80),
       ),
       detail: request
@@ -747,10 +740,8 @@ function codeLogText(
     ]);
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在规划下一步", "已规划下一步"],
-        ["Planning next step", "Planned next step"],
+        t.liveToolTimeline.planningNextStep,
       ),
       detail: request
         ? compactMiddle(request, 180)
@@ -784,10 +775,8 @@ function codeLogText(
     if (event.status === "running") {
       return {
         label: actionStatusLabel(
-          t,
           event,
-          ["正在规划下一步", "已规划下一步"],
-          ["Planning next step", "Planned next step"],
+          t.liveToolTimeline.planningNextStep,
         ),
         detail:
           seconds > 0
@@ -832,10 +821,8 @@ function codeLogText(
   if (event.name === "read_file" || event.name === "read_text_file") {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在读取", "已读取"],
-        ["Reading", "Read"],
+        t.liveToolTimeline.readingFile,
         `${compactMiddle(path || "file")}${lineSuffix}`,
       ),
       detail: path ? undefined : t.liveToolTimeline.readFileToUnderstand,
@@ -845,10 +832,8 @@ function codeLogText(
   if (event.name === "list_cwd") {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在浏览目录", "已浏览目录"],
-        ["Browsing directory", "Browsed directory"],
+        t.liveToolTimeline.browsingDirectory,
         compactMiddle(path || "."),
       ),
       detail: t.liveToolTimeline.viewDirectoryStructure,
@@ -858,10 +843,8 @@ function codeLogText(
   if (event.name === "glob") {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在搜索文件", "已搜索文件"],
-        ["Searching files", "Searched files"],
+        t.liveToolTimeline.searchingFiles,
         compactMiddle(pattern || path || "*"),
       ),
       detail: path ? t.liveToolTimeline.scopePath(path) : undefined,
@@ -871,10 +854,8 @@ function codeLogText(
   if (event.name === "grep") {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在搜索文本", "已搜索文本"],
-        ["Searching text", "Searched text"],
+        t.liveToolTimeline.searchingText,
         compactMiddle(pattern || "pattern"),
       ),
       detail: path ? t.liveToolTimeline.scopePath(path) : undefined,
@@ -888,10 +869,8 @@ function codeLogText(
   ) {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在运行命令", "已运行命令"],
-        ["Running command", "Ran command"],
+        t.liveToolTimeline.runningCommand,
         compactMiddle(description || command || "command"),
       ),
       detail: command && description ? command : undefined,
@@ -906,14 +885,8 @@ function codeLogText(
     const creating = event.name === "create_file";
     return {
       label: actionStatusLabel(
-        t,
         event,
-        creating
-          ? ["正在创建文件", "已创建文件"]
-          : ["正在写入文件", "已写入文件"],
-        creating
-          ? ["Creating file", "Created file"]
-          : ["Writing file", "Wrote file"],
+        creating ? t.liveToolTimeline.creatingFile : t.liveToolTimeline.writingFile,
         compactMiddle(path || "file"),
       ),
       detail: t.liveToolTimeline.writeFileContent,
@@ -927,10 +900,8 @@ function codeLogText(
   ) {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在编辑文件", "已编辑文件"],
-        ["Editing file", "Edited file"],
+        t.liveToolTimeline.editingFile,
         compactMiddle(path || "file"),
       ),
       detail: pattern
@@ -942,30 +913,24 @@ function codeLogText(
   if (event.name === "git_status") {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在读取 Git 状态", "已读取 Git 状态"],
-        ["Reading Git status", "Read Git status"],
+        t.liveToolTimeline.readingGitStatus,
       ),
     };
   }
   if (event.name === "git_diff") {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在读取 Git 差异", "已读取 Git 差异"],
-        ["Reading Git diff", "Read Git diff"],
+        t.liveToolTimeline.readingGitDiff,
       ),
     };
   }
   if (event.name === "git_commit") {
     return {
       label: actionStatusLabel(
-        t,
         event,
-        ["正在提交 Git", "已提交 Git"],
-        ["Committing Git", "Committed Git"],
+        t.liveToolTimeline.committingGit,
       ),
     };
   }
@@ -1047,20 +1012,16 @@ function researchAdjustmentSummary(
   return t.liveToolTimeline.roundResultsRead;
 }
 
-function timelineWord(t: TimelineT, zh: string, en: string): string {
-  return isChineseText(t.liveToolTimeline.searchingWeb) ? zh : en;
-}
-
 function statusText(event: LiveToolEvent, t: TimelineT): string {
   switch (event.status) {
     case "running":
-      return timelineWord(t, "\u8fdb\u884c\u4e2d", "Running");
+      return t.liveToolTimeline.statusRunning;
     case "done":
-      return timelineWord(t, "\u5df2\u5b8c\u6210", "Done");
+      return t.liveToolTimeline.statusDone;
     case "error":
-      return timelineWord(t, "\u5931\u8d25", "Failed");
+      return t.liveToolTimeline.statusFailed;
     case "waiting_approval":
-      return timelineWord(t, "\u7b49\u5f85\u5ba1\u6279", "Waiting approval");
+      return t.liveToolTimeline.statusWaitingApproval;
     default:
       return "";
   }
@@ -1085,16 +1046,7 @@ function detailTitle(
     | "observation"
     | "preview",
 ): string {
-  const titles = {
-    input: ["\u8f93\u5165", "Input"],
-    thought: ["\u601d\u8003", "Thought"],
-    publicReasoning: ["\u53ef\u89c1\u63a8\u7406", "Public reasoning"],
-    result: ["\u7ed3\u679c", "Result"],
-    observation: ["\u89c2\u5bdf", "Observation"],
-    preview: ["\u5185\u5bb9\u9884\u89c8", "Live content preview"],
-  } as const;
-  const [zh, en] = titles[key];
-  return timelineWord(t, zh, en);
+  return t.liveToolTimeline.detailTitles[key];
 }
 
 function InlineSummaryRow({
@@ -1333,14 +1285,14 @@ function ToolEventRow({
 
       {inlineInputSummary && (
         <InlineSummaryRow
-          label={timelineWord(t, "\u8f93\u5165", "Input")}
+          label={t.liveToolTimeline.detailTitles.input}
           value={inlineInputSummary}
         />
       )}
 
       {inlineOutputSummary && (
         <InlineSummaryRow
-          label={timelineWord(t, "\u7ed3\u679c", "Result")}
+          label={t.liveToolTimeline.detailTitles.result}
           value={inlineOutputSummary}
           tone="result"
         />
@@ -1462,11 +1414,7 @@ function SearchResultsInline({
           onClick={() => setExpanded(true)}
         >
           <ChevronDownIcon className="size-3" />
-          {timelineWord(
-            t,
-            `\u5c55\u5f00\u5176\u4f59 ${hiddenCount} \u6761`,
-            `Show ${hiddenCount} more`,
-          )}
+          {t.liveToolTimeline.showMoreResults(hiddenCount)}
         </button>
       )}
       {expanded && results.length > collapsedCount && (
@@ -1476,7 +1424,7 @@ function SearchResultsInline({
           onClick={() => setExpanded(false)}
         >
           <ChevronDownIcon className="size-3 rotate-180" />
-          {timelineWord(t, "\u6536\u8d77\u7ed3\u679c", "Collapse results")}
+          {t.liveToolTimeline.collapseResults}
         </button>
       )}
     </div>
