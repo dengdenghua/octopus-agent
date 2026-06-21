@@ -135,7 +135,13 @@ class Worker:
         return True
 
 
-    def handle(self, task: ArmAssignment, budget: Budget) -> ArmResult:
+    def handle(
+        self,
+        task: ArmAssignment,
+        budget: Budget,
+        *,
+        seed_outputs: dict[str, Any] | None = None,
+    ) -> ArmResult:
         with trace_stage(
             "arm.handle",
             arm_id=str(self.arm_id),
@@ -160,6 +166,9 @@ class Worker:
                     caller=f"arms/{self.arm_id}",
                     arm_id=self.arm_id,
                     on_step_callback=self._on_step,
+                    # Seed with prior swarm-layer outputs so a node here can
+                    # resolve cross-layer template refs (e.g. {n1.content}).
+                    outputs_seed=seed_outputs,
                 )
             except Exception as e:  # noqa: BLE001
                 span.record_exception(e)

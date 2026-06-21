@@ -220,6 +220,11 @@ class SwarmRuntime:
             ]
             started_at = time.perf_counter()
             all_results: list[ArmResult] = []
+            # Outputs accumulate across layers so a later node can resolve
+            # template refs to an earlier layer's node (e.g. {n1.content}).
+            # Topo layers guarantee earlier layers ran first, so this is filled
+            # before any dependent node dispatches.
+            accumulated_outputs: dict[str, Any] = {}
             all_handoffs: list[AgentHandoff] = []
             phase_reports: list[SwarmPhaseReport] = []
             max_layer_parallelism = 0
@@ -249,12 +254,17 @@ class SwarmRuntime:
                         graph.task_id, phase.phase_index, prepared.pairs,
                     )
                 )
-                dispatched_results = self._dispatch(prepared.pairs, budget)
+                dispatched_results = self._dispatch(
+                    prepared.pairs, budget, seed_outputs=accumulated_outputs,
+                )
                 layer_results = [
                     *dispatched_results,
                     *(result for _assignment, result in prepared.unmatched),
                 ]
                 all_results.extend(layer_results)
+                # Feed this layer's outputs forward for the next layer's refs.
+                for _r in layer_results:
+                    accumulated_outputs.update(getattr(_r, "outputs", None) or {})
                 phase_handoffs = _agent_handoffs(
                     graph.task_id,
                     phase.phase_index,
@@ -444,6 +454,7 @@ class SwarmRuntime:
         self,
         pairs: list[tuple[ArmAssignment, Worker]],
         budget: Budget,
+        seed_outputs: dict[str, Any] | None = None,
     ) -> list[ArmResult]:
         if not pairs:
             return []
@@ -451,7 +462,7 @@ class SwarmRuntime:
         results: list[ArmResult] = []
         with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
             futures: list[Future[ArmResult]] = [
-                executor.submit(self._run_one, assignment, arm, budget)
+                executor.submit(self._run_one, assignment, arm, budget, seed_outputs)
                 for assignment, arm in pairs
             ]
             for fut in futures:
@@ -473,6 +484,7 @@ class SwarmRuntime:
         assignment: ArmAssignment,
         arm: Worker,
         budget: Budget,
+        seed_outputs: dict[str, Any] | None = None,
     ) -> ArmResult:
         arm_id = getattr(arm, "arm_id", ArmId("unknown"))
         task_id = assignment.subgraph.task_id
@@ -482,7 +494,18 @@ class SwarmRuntime:
             {"arm_id": str(arm_id), "task_id": str(task_id)},
         )
         try:
-            return arm.handle(assignment, budget)
+            if not seed_outputs:
+                # No cross-layer outputs to thread → keep the original call so
+                # custom/legacy Worker.handle implementations are unaffected.
+                return arm.handle(assignment, budget)
+            try:
+                return arm.handle(assignment, budget, seed_outputs=seed_outputs)
+            except TypeError as exc:
+                # A Worker.handle that doesn't accept the kwarg (test doubles,
+                # third-party arms) — fall back; it just won't see prior outputs.
+                if "seed_outputs" not in str(exc):
+                    raise
+                return arm.handle(assignment, budget)
         except Exception as e:
             return ArmResult(
                 arm_id=arm_id,

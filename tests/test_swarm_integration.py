@@ -171,6 +171,41 @@ class TestArmsAndSwarmIntegration:
         assert result.parallelism_achieved == 3
 
         # Implementation note.
+
+    def test_cross_layer_template_ref_resolves(
+        self, pool, signal_bus, boids, journal
+    ):
+        """A node in a later topo-layer resolves a template ref to an EARLIER
+        layer's output ({n0.path}). Regression: the swarm used to dispatch each
+        layer in isolation, so the dependent node raised TemplateResolutionError
+        — surfaced live on the mesh serve path. Now outputs thread across layers.
+        """
+        from runtime.platform.models.pipeline import WorkflowEdge
+
+        n0 = TaskNode(
+            node_id="n0", skill_ref=SkillId("read_file"), args_template={"path": "."},
+        )
+        n1 = TaskNode(
+            node_id="n1", skill_ref=SkillId("count_words"),
+            args_template={"text": "{n0.path}"},  # cross-layer ref to n0's output
+        )
+        graph = TaskGraph(
+            nodes=[n0, n1],
+            edges=[WorkflowEdge(from_node="n0", to_node="n1")],
+            budget=BudgetSpec(tokens=50_000, usd=0.50),
+            task_type="mixed",
+        )
+        budget = Budget(
+            task_id=graph.task_id, limits=BudgetLimits(tokens=50_000, usd=0.50),
+        )
+        swarm = SwarmRuntime(
+            arm_pool=pool, signal_bus=signal_bus, boids=boids,
+            journal=journal, max_workers=3,
+        )
+        result = swarm.run(graph=graph, budget=budget, split_strategy="topo_layers")
+        assert result.all_successful, (
+            f"cross-layer template ref did not resolve: {result.arm_results}"
+        )
         # Implementation note.
         assert result.total_wall_ms < 400, (
             f"should be concurrent, but took {result.total_wall_ms}ms"
