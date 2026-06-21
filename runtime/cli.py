@@ -892,6 +892,10 @@ def main(argv: list[str] | None = None) -> int:
     skills_info.add_argument("name", help="skill name")
     skills_publish = skills_sub.add_parser("publish", help="Prepare a skill for publishing.")
     skills_publish.add_argument("path", type=Path, help="path to skill directory")
+    skills_lint = skills_sub.add_parser(
+        "lint", help="Check a skill folder against the agentskills.io standard + safety scan.",
+    )
+    skills_lint.add_argument("path", type=Path, help="path to skill directory")
 
     pluginsp = sub.add_parser(
         "plugins", help="Manage plugins · list, discover, load."
@@ -1368,7 +1372,29 @@ def run_skills(args: argparse.Namespace, *, color: bool = True) -> int:
             print(f"  ✗ {result.get('message', 'Unknown error')}")
         return 0 if status == "ready" else 1
 
-    print("  Usage: python -m runtime skills {list|search|install|uninstall|info|publish}")
+    if op == "lint":
+        from runtime.memory.skills_lib.agentskills import (
+            scan_skill_safety,
+            validate_skill_dir,
+        )
+
+        ok, name, _desc, err = validate_skill_dir(Path(args.path))
+        if not ok:
+            print(f"  ✗ not agentskills.io-conformant: {err}")
+            return 1
+        findings = scan_skill_safety(Path(args.path))
+        if findings:
+            print(f"  ⚠ '{name}' is conformant but has {len(findings)} safety finding(s):")
+            for f in findings:
+                print(f"      ! {f.file}:{f.line} — {f.reason}: {f.excerpt}")
+            return 1
+        print(f"  ✓ '{name}' is agentskills.io-conformant and clean")
+        return 0
+
+    print(
+        "  Usage: python -m runtime skills "
+        "{list|search|install|uninstall|info|publish|lint}"
+    )
     return 2
 
 
