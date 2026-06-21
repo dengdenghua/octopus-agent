@@ -636,6 +636,27 @@ class LLMPlanner:
         triples = self.kg.query()  # Implementation note.
         return format_triples_for_prompt(triples, max_triples=self.kg_max_triples)
 
+    def _render_codebase_section(self, intent: Any) -> str:
+        """Auto-retrieve relevant project-wiki pages for the goal — the
+        codebase grounding the context composer never provides (it feeds
+        system/skills/memory only). Best-effort and self-gating: no wiki, no
+        overlap, or any error → ''. Disable with OCTOPUS_CODEBASE_CONTEXT=0."""
+        import os
+
+        if os.environ.get("OCTOPUS_CODEBASE_CONTEXT", "1").strip().lower() in (
+            "0", "false", "no", "off",
+        ):
+            return ""
+        goal = str(getattr(intent, "normalized_goal", "") or "")
+        if not goal:
+            return ""
+        try:
+            from runtime.memory.hemolymph.repo_context import retrieve_repo_context
+
+            return retrieve_repo_context(goal) or ""
+        except Exception:  # noqa: BLE001 — grounding must never break planning
+            return ""
+
     def assess_recipe_from_journal(self, journal: Journal) -> Any:
         from runtime.safety.recovery import RecipeEvaluator
 
@@ -767,6 +788,9 @@ class LLMPlanner:
         kg_section = self._render_kg_section()
         if kg_section:
             base_prompt = base_prompt + "\n\n" + kg_section
+        codebase_section = self._render_codebase_section(intent)
+        if codebase_section:
+            base_prompt = base_prompt + "\n\n" + codebase_section
         recipe_warning = self._render_recipe_self_assessment()
         if recipe_warning:
             base_prompt = base_prompt + "\n\n" + recipe_warning
