@@ -93,3 +93,37 @@ def test_build_arm_pool_from_registry_include_dangerous_opt_in() -> None:
     pool = build_arm_pool_from_registry(reg, runtime=None, include_dangerous=True)
     allowed = {str(s) for arm in pool.all_arms() for s in arm.allowed_skills}
     assert "exec_shell" in allowed   # opted in
+
+
+# ── pick_for: specialist arm beats the atomic bypass (anti-funnel) ──
+
+
+def test_pick_for_prefers_explicit_arm_over_atomic_bypass() -> None:
+    # list_cwd is atomic, so ANY arm can_use it (the universal bypass). The arm
+    # that EXPLICITLY lists it must still win — otherwise every atomic-skill
+    # node funnels to arm index 0 and the swarm never parallelizes.
+    from runtime.execution.arms import Arm, ArmPool
+    from runtime.execution.swarm.runtime import _split_per_node
+    from runtime.platform.models import (
+        ArmId,
+        BudgetSpec,
+        SkillId,
+        TaskGraph,
+        TaskNode,
+    )
+
+    broad = Arm(  # index 0, does NOT list list_cwd
+        arm_id=ArmId("broad_arm"), affinity=["x"],
+        allowed_skills=[SkillId("some_market_skill")], runtime=None,
+    )
+    fs = Arm(  # the specialist
+        arm_id=ArmId("fs_arm"), affinity=["fs"],
+        allowed_skills=[SkillId("list_cwd")], runtime=None,
+    )
+    pool = ArmPool([broad, fs])
+    g = TaskGraph(
+        nodes=[TaskNode(node_id="n0", skill_ref=SkillId("list_cwd"), args_template={})],
+        edges=[], budget=BudgetSpec(tokens=1000, usd=0.1), task_type="mixed",
+    )
+    arm = pool.pick_for(_split_per_node(g)[0])
+    assert arm is not None and str(arm.arm_id) == "fs_arm"

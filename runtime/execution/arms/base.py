@@ -261,24 +261,34 @@ class ArmPool:
             if node.skill_ref is not None
         }
 
-        candidates: list[tuple[int, int, int, Worker]] = []
+        candidates: list[tuple[int, int, int, int, Worker]] = []
         for idx, arm in enumerate(self._arms):
             if not arm.can_handle(task):
                 continue
             allow = {str(skill) for skill in arm.allowed_skills}
             from runtime.execution.suckers.layers import is_atomic
-            non_atomic_needed = {str(s) for s in needed if not is_atomic(s)}
+            needed_str = {str(s) for s in needed}
+            non_atomic_needed = {s for s in needed_str if not is_atomic(s)}
             coverage = (
                 len(non_atomic_needed)
                 if "*" in allow
                 else len(non_atomic_needed & allow)
             )
-            candidates.append((coverage, len(arm.affinity), -idx, arm))
+            # Specialist preference: an arm that EXPLICITLY lists the needed
+            # skills beats one that only handles them via the universal atomic
+            # bypass (``can_use`` returns True for any atomic skill). Without
+            # this every atomic-skill node funnels to the first arm (idx 0) and
+            # the swarm never spreads across the registry-derived arms — a node
+            # goes to its specialist arm instead, so a diverse layer fans out.
+            explicit = (
+                len(needed_str) if "*" in allow else len(needed_str & allow)
+            )
+            candidates.append((coverage, explicit, len(arm.affinity), -idx, arm))
 
         if not candidates:
             return None
-        candidates.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
-        return candidates[0][3]
+        candidates.sort(key=lambda t: (t[0], t[1], t[2], t[3]), reverse=True)
+        return candidates[0][4]
 
     def pick_for_intent(self, intent: Any) -> Worker | None:
         goal = ""
