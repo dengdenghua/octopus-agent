@@ -1643,6 +1643,23 @@ def _finder_prompt(goal: str, seen: list[str]) -> str:
     return base
 
 
+def _synthesis_prompt(goal: str, findings: list[str]) -> str:
+    """Prompt for the single synthesizer that closes an orchestration: turn the
+    confirmed findings into one coherent answer. The closing step my own
+    fan-out harness always has — without it ``run_orchestration`` hands back a
+    bag of findings and makes the caller synthesize."""
+    numbered = "\n".join(f"{i + 1}. {f}" for i, f in enumerate(findings))
+    return (
+        "You are the synthesizer at the end of a parallel discovery + "
+        "verification pass. Combine the CONFIRMED FINDINGS below into ONE "
+        "coherent, non-redundant answer to the GOAL. Merge overlaps, order by "
+        "importance, and add nothing that is not supported by a finding.\n\n"
+        f"GOAL:\n{goal}\n\n"
+        f"CONFIRMED FINDINGS:\n{numbered}\n\n"
+        "Return the synthesized answer as plain text — no preamble."
+    )
+
+
 def _coerce_roles(agent_id: Any) -> list[str]:
     """Normalise ``agent_id`` into a worker-role roster (deduped, order kept).
     A LIST gives heterogeneous lenses (e.g. researcher + explorer + critic)
@@ -1667,6 +1684,7 @@ def _run_orchestration(
     rounds: int | str = 2,
     patience: int | str = 1,
     verify: bool = False,
+    synthesize: bool = False,
     choices: Any = None,
     max_spawns: int | str | None = None,
     timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
@@ -1676,8 +1694,9 @@ def _run_orchestration(
 ) -> dict[str, Any]:
     """Run a deterministic discovery loop: fan out ``n`` workers per round,
     split + dedupe their findings, loop up to ``rounds`` (stopping early after
-    ``patience`` dry rounds), optionally vote-verify each finding. The whole
-    run is bounded by a spawn budget so it can't run away.
+    ``patience`` dry rounds), optionally vote-verify each finding, and
+    optionally synthesize the confirmed findings into one coherent answer. The
+    whole run is bounded by a spawn budget so it can't run away.
     """
     goal = str(goal or _kw.get("prompt") or _kw.get("task") or _kw.get("query") or "").strip()
     if not goal:
@@ -1695,11 +1714,18 @@ def _run_orchestration(
     n = _clamp(n, 1, 6, 3)
     rounds = _clamp(rounds, 1, 5, 2)
     patience = _clamp(patience, 0, 3, 1)
+    # LLM callers pass booleans as strings ("true"/"false") just as often as
+    # real bools; normalise so ``synthesize="false"`` doesn't read truthy.
+    synthesize = str(synthesize).strip().lower() not in (
+        "", "0", "false", "no", "off", "none",
+    )
     if max_spawns is None:
-        # find spends n per round; verify spends ``voters`` per finding, so
-        # budget ~``n*rounds`` findings worth of voting on top of the search.
+        # find spends n per round; verify spends ``voters`` per finding; an
+        # optional synthesis spends ONE more — budget ~``n*rounds`` findings
+        # worth of voting on top of the search, plus the synthesizer.
         verify_cost = n * rounds * _ORCH_VERIFY_VOTERS if verify else 0
-        planned = n * rounds + verify_cost
+        synth_cost = 1 if synthesize else 0
+        planned = n * rounds + verify_cost + synth_cost
         max_spawns = min(_ORCH_MAX_SPAWNS_CEILING, max(n, planned))
     else:
         max_spawns = _clamp(max_spawns, n, _ORCH_MAX_SPAWNS_CEILING, n * rounds)
@@ -1766,6 +1792,7 @@ def _run_orchestration(
                 break
 
         confirmed = list(collected)
+        synthesis = ""
         verified = False
         unverified = 0
         if verify and collected:
@@ -1816,6 +1843,22 @@ def _run_orchestration(
                 if v != ballot[-1]
             ]
             confirmed = kept + collected[len(to_verify):]
+
+        # Closing synthesis: one spawn folds the confirmed findings into a
+        # single coherent answer (the stage that makes the harness return a
+        # usable result, not a bag of findings). Budget-gated like everything
+        # else; a failed/empty synthesis leaves ``confirmed`` untouched.
+        if synthesize and confirmed and budget.has_room():
+            synth_env = _call_agent_parallel(
+                specs=[{
+                    "agent_id": roles[0],
+                    "prompt": _synthesis_prompt(goal, confirmed),
+                }],
+                timeout_s=timeout_s, context=context, session=session,
+            )
+            synth_succ = synth_env.get("successes", [])
+            if synth_succ:
+                synthesis = str(synth_succ[0].get("output") or "").strip()
         budget_used = budget.used
 
     return {
@@ -1828,6 +1871,7 @@ def _run_orchestration(
         "fresh_per_round": per_round,
         "verified": verified,
         "unverified": unverified,
+        "synthesis": synthesis,
         "stopped_reason": stopped,
         "budget_used": budget_used,
         "max_spawns": int(max_spawns),
@@ -2301,16 +2345,18 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "Args: {goal: string (what to discover), n?: int 1-6 workers/round "
         "(default 3), rounds?: int 1-5 (default 2), patience?: int 0-3 dry "
         "rounds tolerated before stopping (default 1), verify?: bool "
-        "(default false — vote-verify each finding), choices?: [keep,drop]-"
-        "style ballot for verify, max_spawns?: int total spawn budget "
-        "(auto-sized, capped at 48), agent_id?: worker role, or a LIST of "
-        "roles rotated across workers for diverse lenses, e.g. "
+        "(default false — vote-verify each finding), synthesize?: bool "
+        "(default false — fold the confirmed findings into ONE coherent "
+        "answer via a final synthesizer; returned in `synthesis`), choices?: "
+        "[keep,drop]-style ballot for verify, max_spawns?: int total spawn "
+        "budget (auto-sized, capped at 48), agent_id?: worker role, or a LIST "
+        "of roles rotated across workers for diverse lenses, e.g. "
         "[researcher, explorer, critic] (default researcher)}.\n"
         "\n"
         "Returns: {ok, goal, collected:[...], confirmed:[...] (== collected "
         "unless verify), count, rounds_run, fresh_per_round:[...], verified, "
-        "unverified, stopped_reason (rounds|dry|budget), budget_used, "
-        "max_spawns}.\n"
+        "unverified, synthesis (str, '' unless synthesize), stopped_reason "
+        "(rounds|dry|budget), budget_used, max_spawns}.\n"
         "\n"
         "Budget: one orchestration costs ONE against the 5/turn delegation "
         "cap; its internal fan-outs/votes draw from the bounded spawn budget, "

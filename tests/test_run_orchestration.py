@@ -355,3 +355,82 @@ def test_orchestration_falls_back_to_line_split(monkeypatch):
     )
     assert r["ok"] is True
     assert r["collected"] == ["alpha", "beta"]
+
+
+# ── synthesis (P1: fan-out → vote-gate → SYNTHESIZE) ──────────────
+
+
+def _fake_parallel_split(finder_outputs, synth_output):
+    """Fake that returns ``finder_outputs`` for a discovery spec and
+    ``synth_output`` for the closing synthesizer (detected by its prompt)."""
+    state = {"round": 0, "synth_calls": 0}
+
+    def fake(specs=None, **_kw):
+        spec = (specs or [{}])[0]
+        prompt = str(spec.get("prompt", ""))
+        if "CONFIRMED FINDINGS" in prompt:  # the synthesizer
+            state["synth_calls"] += 1
+            return {
+                "ok": True,
+                "successes": [{"output": synth_output, "agent_id": "researcher"}],
+                "success_count": 1,
+            }
+        idx = state["round"]
+        state["round"] += 1
+        outs = finder_outputs[idx] if idx < len(finder_outputs) else []
+        return {
+            "ok": True,
+            "successes": [{"output": o, "agent_id": "researcher"} for o in outs],
+            "success_count": len(outs),
+        }
+
+    fake.state = state
+    return fake
+
+
+def test_synthesize_folds_findings_into_one_answer(monkeypatch):
+    fake = _fake_parallel_split([["alpha\nbeta"]], "SYNTH: alpha + beta")
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, synthesize=True, max_spawns=20)
+    assert r["collected"] == ["alpha", "beta"]
+    assert r["synthesis"] == "SYNTH: alpha + beta"
+    assert fake.state["synth_calls"] == 1
+
+
+def test_synthesizer_prompt_carries_the_confirmed_findings(monkeypatch):
+    seen = {}
+
+    def fake(specs=None, **_kw):
+        prompt = str((specs or [{}])[0].get("prompt", ""))
+        if "CONFIRMED FINDINGS" in prompt:
+            seen["prompt"] = prompt
+            return {"ok": True, "successes": [{"output": "s"}], "success_count": 1}
+        return {"ok": True, "successes": [{"output": "alpha\nbeta"}], "success_count": 1}
+
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    ds._run_orchestration(goal="my-goal", n=1, rounds=1, synthesize=True, max_spawns=20)
+    assert "alpha" in seen["prompt"] and "beta" in seen["prompt"]
+    assert "my-goal" in seen["prompt"]
+
+
+def test_no_synthesis_by_default(monkeypatch):
+    monkeypatch.setattr(ds, "_call_agent_parallel", _fake_parallel_seq([["alpha\nbeta"]]))
+    r = ds._run_orchestration(goal="g", n=1, rounds=1)
+    assert r["synthesis"] == ""
+
+
+def test_synthesize_accepts_string_true(monkeypatch):
+    fake = _fake_parallel_split([["x"]], "S")
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, synthesize="true", max_spawns=20)
+    assert fake.state["synth_calls"] == 1
+    assert r["synthesis"] == "S"
+
+
+def test_synthesize_skipped_when_nothing_confirmed(monkeypatch):
+    fake = _fake_parallel_split([[]], "S")  # finders find nothing
+    monkeypatch.setattr(ds, "_call_agent_parallel", fake)
+    r = ds._run_orchestration(goal="g", n=1, rounds=1, synthesize=True, patience=0)
+    assert r["confirmed"] == []
+    assert fake.state["synth_calls"] == 0
+    assert r["synthesis"] == ""
