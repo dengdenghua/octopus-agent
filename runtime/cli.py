@@ -374,6 +374,7 @@ _CLI_COMMANDS = frozenset({
     "setup",
     "doctor",
     "skills",
+    "bb",
     "plugins",
 })
 
@@ -897,6 +898,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     skills_lint.add_argument("path", type=Path, help="path to skill directory")
 
+    bbp = sub.add_parser(
+        "bb",
+        help="Cross-process blackboard · let separate agent processes share a "
+        "live workspace (needs OCTOPUS_BLACKBOARD_DB).",
+    )
+    bb_sub = bbp.add_subparsers(dest="bb_op")
+    bb_set = bb_sub.add_parser("set", help="Write key=value to the shared board.")
+    bb_set.add_argument("key")
+    bb_set.add_argument("value")
+    bb_set.add_argument("--turn", default=None, help="turn id (or OCTOPUS_TURN_ID)")
+    bb_get = bb_sub.add_parser("get", help="Read a key (exit 1 if absent).")
+    bb_get.add_argument("key")
+    bb_get.add_argument("--turn", default=None)
+    bb_keys = bb_sub.add_parser("keys", help="List keys on the shared board.")
+    bb_keys.add_argument("--turn", default=None)
+    bb_snap = bb_sub.add_parser("snapshot", help="Dump the whole shared board as JSON.")
+    bb_snap.add_argument("--turn", default=None)
+
     pluginsp = sub.add_parser(
         "plugins", help="Manage plugins · list, discover, load."
     )
@@ -1098,6 +1117,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "skills":
         return run_skills(args, color=color)
 
+    if args.command == "bb":
+        return run_bb(args)
+
     if args.command == "plugins":
         return run_plugins(args, color=color)
 
@@ -1278,6 +1300,56 @@ def run_quickstart(
     print(f"start: python -m runtime serve --config {config_path} --host {host} --port {port}")
     print("tip: add --serve to quickstart to start it immediately")
     return 0
+
+
+def run_bb(args: argparse.Namespace) -> int:
+    """Cross-process blackboard CLI.
+
+    The durable blackboard (``OCTOPUS_BLACKBOARD_DB``) is a file, so a
+    separate agent *process* — a worktree worker, a remote runner, even a
+    non-Python tool — can read/write the same turn's shared workspace through
+    this command. That is the channel that turns ``run_worktree_loop``'s
+    already-isolated subprocess workers into *coordinated* distributed agents.
+    """
+    import os
+
+    db = os.environ.get("OCTOPUS_BLACKBOARD_DB")
+    if not db:
+        print(
+            "  ✗ OCTOPUS_BLACKBOARD_DB not set — the cross-process blackboard "
+            "needs a shared DB file path."
+        )
+        return 2
+    turn = getattr(args, "turn", None) or os.environ.get("OCTOPUS_TURN_ID")
+    if not turn:
+        print("  ✗ turn id required (--turn or OCTOPUS_TURN_ID).")
+        return 2
+
+    from runtime.memory.runtime_state.blackboard_store import get_sqlite_blackboard
+
+    bb = get_sqlite_blackboard(db, turn)
+    op = getattr(args, "bb_op", None)
+    writer = os.environ.get("OCTOPUS_AGENT_ID") or "cli"
+    if op == "set":
+        bb.write(args.key, args.value, writer=writer)
+        print(f"  ✓ {args.key} set")
+        return 0
+    if op == "get":
+        val = bb.read(args.key, None)
+        if val is None:
+            return 1
+        print(val if isinstance(val, str) else json.dumps(val, ensure_ascii=False))
+        return 0
+    if op == "keys":
+        board_keys = bb.keys()  # a SqliteBlackboard method, not a dict
+        for key in board_keys:
+            print(key)
+        return 0
+    if op == "snapshot":
+        print(json.dumps(bb.snapshot(), ensure_ascii=False, indent=2))
+        return 0
+    print("  Usage: python -m runtime bb {set|get|keys|snapshot} [--turn ID]")
+    return 2
 
 
 def run_skills(args: argparse.Namespace, *, color: bool = True) -> int:
