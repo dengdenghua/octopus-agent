@@ -821,6 +821,72 @@ export interface Translations {
     unknown: string;
   };
 
+  // Agent workbench pages
+  agentWorkbenchPages: {
+    collapse: string;
+    expandDetails: string;
+    openArtifact: (title: string) => string;
+    viewDiff: (title: string) => string;
+    reference: {
+      files: string;
+      plans: string;
+      web: string;
+      memory: string;
+      other: string;
+    };
+    statusRunning: string;
+    statusWaitingApproval: string;
+    statusError: string;
+    statusDone: string;
+    progress: string;
+    artifacts: string;
+    generatedArtifacts: string;
+    changedFiles: string;
+    subagents: string;
+    subagentsCompleted: (done: number, total: number) => string;
+    subagentsFailed: (count: number) => string;
+    subagentsRunning: (count: number) => string;
+    subagentsPending: (count: number) => string;
+    failedLanes: (lanes: string) => string;
+    context: string;
+    observableThisRound: string;
+    sourceCount: (count: number) => string;
+    sourceCountWithLabel: (label: string, count: number) => string;
+    estimatePercentage: (percentage: number) => string;
+    noSources: string;
+    estimatedTokens: (count: number) => string;
+    noObservableReferences: string;
+    dashboardOverview: string;
+    dashboardOverviewDescription: string;
+    noSubagentsObservedDescription: string;
+    metricRunning: string;
+    metricCompleted: string;
+    metricError: string;
+    waitingForTaskEvents: string;
+    subagentRuntimeDetails: string;
+    roleLabel: string;
+    currentToolLabel: string;
+    startTimeLabel: string;
+    durationLabel: string;
+    eventCountLabel: string;
+    parentTaskLabel: string;
+    latestThoughtLabel: string;
+    resultSummaryLabel: string;
+    blackboardWritesLabel: string;
+    filesTouchedLabel: string;
+    errorLabel: string;
+    noneYet: string;
+    eventsCount: (count: number) => string;
+    agentClusterCreateAssistant: string;
+    backToRoleCard: string;
+    roleDescription: string;
+    noFullRoleDescription: string;
+    defaultMotto: string;
+    iterationRound: (count: number) => string;
+    noWorkDirDescription: string;
+    noDiffEntriesDescription: string;
+  };
+
   // Diagnostics page
   diagnosticsPage: {
     title: string;

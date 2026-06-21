@@ -26,6 +26,8 @@ import {
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { pickCurrentWorkBlock, type WorkBlock } from "./work-blocks";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales/types";
 import {
   type AgentTile,
   type DiffEntry,
@@ -75,6 +77,7 @@ export function WorkBlockDetailSection({
   empty?: ReactNode;
   title: string;
 }) {
+  const { t } = useI18n();
   const isLong = content.length > 360 || content.split(/\r?\n/).length > 6;
   const [open, setOpen] = useState(!isLong);
   const preview = compactDetail(content, 240);
@@ -96,7 +99,7 @@ export function WorkBlockDetailSection({
                 open && "rotate-180",
               )}
             />
-            {open ? "收起" : "展开详情"}
+            {open ? t.agentWorkbenchPages.collapse : t.agentWorkbenchPages.expandDetails}
           </button>
         )}
       </div>
@@ -162,6 +165,7 @@ function SummaryDiffEntryList({
   kind: "artifact" | "change";
   onOpenEntry?: (entry: DiffEntry, kind: "artifact" | "change") => void;
 }) {
+  const { t } = useI18n();
   const Icon = kind === "artifact" ? FilePlus2Icon : FileTextIcon;
   return (
     <ul className="max-h-48 divide-y divide-border/20 overflow-y-auto">
@@ -171,7 +175,11 @@ function SummaryDiffEntryList({
             type="button"
             onClick={() => onOpenEntry?.(entry, kind)}
             className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            aria-label={`${kind === "artifact" ? "打开产物" : "查看 Diff"} ${entry.title}`}
+            aria-label={
+              kind === "artifact"
+                ? t.agentWorkbenchPages.openArtifact(entry.title)
+                : t.agentWorkbenchPages.viewDiff(entry.title)
+            }
             title={entry.path}
           >
             <Icon
@@ -210,15 +218,12 @@ interface ObservedReferenceTab {
   items: ObservedReferenceItem[];
 }
 
-const OBSERVED_REFERENCE_TABS: Array<{
-  id: ObservedReferenceTabId;
-  label: string;
-}> = [
-  { id: "files", label: "文件" },
-  { id: "plans", label: "待办 plan" },
-  { id: "web", label: "搜索/网页" },
-  { id: "memory", label: "记忆" },
-  { id: "other", label: "其他" },
+const OBSERVED_REFERENCE_TABS: ObservedReferenceTabId[] = [
+  "files",
+  "plans",
+  "web",
+  "memory",
+  "other",
 ];
 
 const OBSERVED_REFERENCE_META: Record<
@@ -264,6 +269,7 @@ const OBSERVED_REFERENCE_META: Record<
 
 function buildObservedReferenceTabs(
   blocks: WorkBlock[],
+  t: Translations,
 ): ObservedReferenceTab[] {
   const buckets: Record<ObservedReferenceTabId, ObservedReferenceItem[]> = {
     files: [],
@@ -276,12 +282,13 @@ function buildObservedReferenceTabs(
   for (const block of blocks) {
     if (isAgentLifecycleBlock(block)) continue;
     const tabId = referenceTabForBlock(block);
-    buckets[tabId].push(...referenceItemsForBlock(block));
+    buckets[tabId].push(...referenceItemsForBlock(block, t));
   }
 
-  return OBSERVED_REFERENCE_TABS.map((tab) => ({
-    ...tab,
-    items: dedupeReferenceItems(buckets[tab.id]).slice(0, 50),
+  return OBSERVED_REFERENCE_TABS.map((id) => ({
+    id,
+    label: t.agentWorkbenchPages.reference[id],
+    items: dedupeReferenceItems(buckets[id]).slice(0, 50),
   })).filter((tab) => tab.items.length > 0);
 }
 
@@ -310,7 +317,10 @@ function referenceTabForBlock(block: WorkBlock): ObservedReferenceTabId {
   return "other";
 }
 
-function referenceItemsForBlock(block: WorkBlock): ObservedReferenceItem[] {
+function referenceItemsForBlock(
+  block: WorkBlock,
+  t: Translations,
+): ObservedReferenceItem[] {
   if (block.kind === "todo") return [];
 
   if (block.kind === "file" || block.kind === "read") {
@@ -334,7 +344,7 @@ function referenceItemsForBlock(block: WorkBlock): ObservedReferenceItem[] {
       id: block.id,
       title: compactReference(title, 120),
       subtitle: detail ? compactReference(detail, 128) : undefined,
-      tag: referenceStatusLabel(block.status),
+      tag: referenceStatusLabel(block.status, t),
     },
   ];
 }
@@ -610,11 +620,15 @@ function dedupeReferenceItems(
   return result;
 }
 
-function referenceStatusLabel(status: WorkBlock["status"]): string {
-  if (status === "running") return "进行中";
-  if (status === "waiting_approval") return "待确认";
-  if (status === "error") return "异常";
-  return "已完成";
+function referenceStatusLabel(
+  status: WorkBlock["status"],
+  t: Translations,
+): string {
+  if (status === "running") return t.agentWorkbenchPages.statusRunning;
+  if (status === "waiting_approval")
+    return t.agentWorkbenchPages.statusWaitingApproval;
+  if (status === "error") return t.agentWorkbenchPages.statusError;
+  return t.agentWorkbenchPages.statusDone;
 }
 
 function fileKindLabel(path: string): string | undefined {
@@ -740,6 +754,7 @@ export function AgentSummaryPage({
   blocks: WorkBlock[];
   onSelectTab?: (tabId: AgentWorkbenchTabId) => void;
 }) {
+  const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(["progress", "artifacts", "references", "operations", "subagents"]),
   );
@@ -766,8 +781,8 @@ export function AgentSummaryPage({
   };
 
   const observedReferenceTabs = useMemo(
-    () => buildObservedReferenceTabs(blocks),
-    [blocks],
+    () => buildObservedReferenceTabs(blocks, t),
+    [blocks, t],
   );
   const activeRefTab = observedReferenceTabs.some((tab) => tab.id === refTab)
     ? refTab
@@ -814,7 +829,7 @@ export function AgentSummaryPage({
 
     for (const block of blocks) {
       if (isAgentLifecycleBlock(block)) continue;
-      const referenceItems = referenceItemsForBlock(block);
+      const referenceItems = referenceItemsForBlock(block, t);
       if (referenceItems.length === 0) continue;
 
       const inputTokens = estimateTokens(block.inputText || "");
@@ -841,14 +856,14 @@ export function AgentSummaryPage({
     const filePercentage =
       totalTokens > 0 ? Math.round((fileTokens / totalTokens) * 100) : 0;
     const otherPercentage = totalTokens > 0 ? 100 - filePercentage : 0;
-    const segments = OBSERVED_REFERENCE_TABS.map((tab) => ({
-      id: tab.id,
-      label: tab.label,
+    const segments = OBSERVED_REFERENCE_TABS.map((id) => ({
+      id,
+      label: t.agentWorkbenchPages.reference[id],
       percentage:
         totalTokens > 0
-          ? Math.max(1, Math.round((tokenByTab[tab.id] / totalTokens) * 100))
+          ? Math.max(1, Math.round((tokenByTab[id] / totalTokens) * 100))
           : 0,
-      tokens: tokenByTab[tab.id],
+      tokens: tokenByTab[id],
     })).filter((segment) => segment.tokens > 0);
 
     return {
@@ -858,7 +873,7 @@ export function AgentSummaryPage({
       otherPercentage,
       segments,
     };
-  }, [blocks]);
+  }, [blocks, t]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70">
@@ -871,7 +886,7 @@ export function AgentSummaryPage({
               onClick={() => toggleSection("progress")}
               className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-muted/30"
             >
-              <h3 className="text-xs font-medium text-foreground">进展</h3>
+              <h3 className="text-xs font-medium text-foreground">{t.agentWorkbenchPages.progress}</h3>
               {expandedSections.has("progress") ? (
                 <ChevronDownIcon className="ml-auto size-3.5 text-muted-foreground" />
               ) : (
@@ -915,7 +930,7 @@ export function AgentSummaryPage({
               onClick={() => toggleSection("artifacts")}
               className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-muted/30"
             >
-              <h3 className="text-xs font-medium text-foreground">产物</h3>
+              <h3 className="text-xs font-medium text-foreground">{t.agentWorkbenchPages.artifacts}</h3>
               {expandedSections.has("artifacts") ? (
                 <ChevronDownIcon className="ml-auto size-3.5 text-muted-foreground" />
               ) : (
@@ -928,7 +943,7 @@ export function AgentSummaryPage({
                   <>
                     <div className="flex items-center gap-1.5 border-b border-border/20 px-3 py-1.5">
                       <span className="text-[11px] font-medium text-foreground">
-                        生成产物
+                        {t.agentWorkbenchPages.generatedArtifacts}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
                         {artifactDiffEntries.length}
@@ -951,7 +966,7 @@ export function AgentSummaryPage({
                       )}
                     >
                       <span className="text-[11px] font-medium text-foreground">
-                        变更文件
+                        {t.agentWorkbenchPages.changedFiles}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
                         {changedFileEntries.length}
@@ -977,7 +992,7 @@ export function AgentSummaryPage({
               onClick={() => toggleSection("subagents")}
               className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-muted/30"
             >
-              <h3 className="text-xs font-medium text-foreground">子智能体</h3>
+              <h3 className="text-xs font-medium text-foreground">{t.agentWorkbenchPages.subagents}</h3>
               {expandedSections.has("subagents") ? (
                 <ChevronDownIcon className="ml-auto size-3.5 text-muted-foreground" />
               ) : (
@@ -1004,27 +1019,32 @@ export function AgentSummaryPage({
                       )}
                     />
                     <span className="font-medium text-foreground">
-                      {agentHealth.done}/{agentHealth.total} 已完成
+                      {t.agentWorkbenchPages.subagentsCompleted(
+                        agentHealth.done,
+                        agentHealth.total,
+                      )}
                     </span>
                     {agentHealth.failed > 0 && (
                       <span className="font-medium text-destructive">
-                        {agentHealth.failed} 异常
+                        {t.agentWorkbenchPages.subagentsFailed(agentHealth.failed)}
                       </span>
                     )}
                     {agentHealth.running > 0 && (
                       <span className="text-muted-foreground">
-                        {agentHealth.running} 运行中
+                        {t.agentWorkbenchPages.subagentsRunning(agentHealth.running)}
                       </span>
                     )}
                     {agentHealth.pending > 0 && (
                       <span className="text-muted-foreground">
-                        {agentHealth.pending} 等待中
+                        {t.agentWorkbenchPages.subagentsPending(agentHealth.pending)}
                       </span>
                     )}
                   </div>
                   {agentHealth.failedLabels.length > 0 && (
                     <div className="mt-1 line-clamp-2 text-destructive/90">
-                      失败 lane: {agentHealth.failedLabels.join(" / ")}
+                      {t.agentWorkbenchPages.failedLanes(
+                        agentHealth.failedLabels.join(" / "),
+                      )}
                     </div>
                   )}
                 </div>
@@ -1088,21 +1108,21 @@ export function AgentSummaryPage({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-foreground">
-                  上下文
+                  {t.agentWorkbenchPages.context}
                 </h3>
                 <span className="rounded-md border border-border/45 bg-muted/35 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  本轮可观测
+                  {t.agentWorkbenchPages.observableThisRound}
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  来源 {totalReferenceItems} 条
+                  {t.agentWorkbenchPages.sourceCount(totalReferenceItems)}
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  估算 {contextStats.percentage}%
+                  {t.agentWorkbenchPages.estimatePercentage(contextStats.percentage)}
                 </span>
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
                 {observedReferenceTabs.length === 0 ? (
-                  <span>暂无来源</span>
+                  <span>{t.agentWorkbenchPages.noSources}</span>
                 ) : (
                   observedReferenceTabs.map((tab) => {
                     const meta = OBSERVED_REFERENCE_META[tab.id];
@@ -1121,7 +1141,7 @@ export function AgentSummaryPage({
                 )}
                 {contextStats.totalTokens > 0 && (
                   <span className="font-mono">
-                    {contextStats.totalTokens.toLocaleString()} 估算 token
+                    {t.agentWorkbenchPages.estimatedTokens(contextStats.totalTokens)}
                   </span>
                 )}
               </div>
@@ -1152,7 +1172,7 @@ export function AgentSummaryPage({
                             OBSERVED_REFERENCE_META[segment.id].barClassName,
                           )}
                           style={{ width: `${segment.percentage}%` }}
-                          title={`${segment.label} ${segment.tokens.toLocaleString()} 估算 token`}
+                          title={`${segment.label} ${t.agentWorkbenchPages.estimatedTokens(segment.tokens)}`}
                         />
                       ))
                     )}
@@ -1169,7 +1189,10 @@ export function AgentSummaryPage({
                       <button
                         key={tab.id}
                         type="button"
-                        aria-label={`${tab.label} ${tab.items.length} 条来源`}
+                        aria-label={t.agentWorkbenchPages.sourceCountWithLabel(
+                          tab.label,
+                          tab.items.length,
+                        )}
                         onClick={() => setRefTab(tab.id)}
                         className={cn(
                           "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
@@ -1194,7 +1217,7 @@ export function AgentSummaryPage({
               <ul className="max-h-48 divide-y divide-border/20 overflow-y-auto">
                 {observedReferenceTabs.length === 0 ? (
                   <li className="px-3 py-4 text-center text-[11px] text-muted-foreground">
-                    本轮暂无可确认的上下文引用
+                    {t.agentWorkbenchPages.noObservableReferences}
                   </li>
                 ) : (
                   activeRefItems.map((ref) => (
@@ -1237,9 +1260,11 @@ export function AgentSummaryPage({
           agentTiles.length === 0 && (
             <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
               <BotIcon className="mb-2 size-8 text-muted-foreground/50" />
-              <p className="text-xs font-medium text-foreground">看板概览</p>
+              <p className="text-xs font-medium text-foreground">
+                {t.agentWorkbenchPages.dashboardOverview}
+              </p>
               <p className="mt-1 max-w-[240px] text-[11px] text-muted-foreground">
-                Agent 开始工作后，这里会显示进展、产物和本轮可确认上下文
+                {t.agentWorkbenchPages.dashboardOverviewDescription}
               </p>
             </div>
           )}
@@ -1261,11 +1286,12 @@ export function AgentSubagentsPage({
   onSelectAgent: (agentId: string) => void;
   selectedAgent?: AgentTile;
 }) {
+  const { t } = useI18n();
   if (agents.length === 0) {
     return (
       <WorkbenchEmptyPage
         title={SUBAGENTS_TAB_LABEL}
-        description="暂未观测到子智能体。触发 call_agent_parallel 后，这里会按父任务聚合每个 subagent 的状态、工具、黑板写入和文件改动。"
+        description={t.agentWorkbenchPages.noSubagentsObservedDescription}
       />
     );
   }
@@ -1279,9 +1305,9 @@ export function AgentSubagentsPage({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70 p-3">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
         <section className="grid grid-cols-3 gap-2">
-          <AgentMetric label="运行中" value={running} />
-          <AgentMetric label="已完成" value={done} />
-          <AgentMetric label="异常" value={errors} />
+          <AgentMetric label={t.agentWorkbenchPages.metricRunning} value={running} />
+          <AgentMetric label={t.agentWorkbenchPages.metricCompleted} value={done} />
+          <AgentMetric label={t.agentWorkbenchPages.metricError} value={errors} />
         </section>
 
         <section className="grid gap-2 md:grid-cols-2">
@@ -1346,7 +1372,9 @@ export function AgentSubagentsPage({
                   />
                 </div>
                 <div className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                  {agent.lastThought ?? agent.currentTool ?? "等待任务事件"}
+                  {agent.lastThought ??
+                    agent.currentTool ??
+                    t.agentWorkbenchPages.waitingForTaskEvents}
                 </div>
               </button>
             );
@@ -1358,7 +1386,7 @@ export function AgentSubagentsPage({
             <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2">
               <UsersIcon className="size-4 text-muted-foreground" />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-                子智能体运行详情
+                {t.agentWorkbenchPages.subagentRuntimeDetails}
               </span>
               <span
                 className={cn(
@@ -1372,54 +1400,60 @@ export function AgentSubagentsPage({
             </summary>
             <div className="border-t border-border/45 p-3">
               <div className="grid gap-2 md:grid-cols-2">
-                <AgentMetric label="角色" value={active.role ?? "subagent"} />
                 <AgentMetric
-                  label="当前工具"
-                  value={active.currentTool ?? "暂无"}
+                  label={t.agentWorkbenchPages.roleLabel}
+                  value={active.role ?? "subagent"}
                 />
                 <AgentMetric
-                  label="开始时间"
+                  label={t.agentWorkbenchPages.currentToolLabel}
+                  value={active.currentTool ?? t.agentWorkbenchPages.noneYet}
+                />
+                <AgentMetric
+                  label={t.agentWorkbenchPages.startTimeLabel}
                   value={timeLabel(active.startedAt)}
                 />
                 <AgentMetric
-                  label="耗时"
+                  label={t.agentWorkbenchPages.durationLabel}
                   value={durationLabel(active.durationMs)}
                 />
-                <AgentMetric label="事件数" value={`${active.eventCount} 条`} />
                 <AgentMetric
-                  label="父任务"
-                  value={active.parentToolUseId ?? "暂无"}
+                  label={t.agentWorkbenchPages.eventCountLabel}
+                  value={t.agentWorkbenchPages.eventsCount(active.eventCount)}
+                />
+                <AgentMetric
+                  label={t.agentWorkbenchPages.parentTaskLabel}
+                  value={active.parentToolUseId ?? t.agentWorkbenchPages.noneYet}
                 />
               </div>
 
               <div className="mt-3 grid gap-2">
                 <AgentMetric
-                  label="最近思考"
-                  value={active.lastThought ?? "暂无"}
+                  label={t.agentWorkbenchPages.latestThoughtLabel}
+                  value={active.lastThought ?? t.agentWorkbenchPages.noneYet}
                 />
                 <AgentMetric
-                  label="结果摘要"
-                  value={active.resultSummary ?? "暂无"}
+                  label={t.agentWorkbenchPages.resultSummaryLabel}
+                  value={active.resultSummary ?? t.agentWorkbenchPages.noneYet}
                 />
                 <AgentMetric
-                  label="黑板写入"
+                  label={t.agentWorkbenchPages.blackboardWritesLabel}
                   value={
                     active.blackboardWrites.length > 0
                       ? active.blackboardWrites.join(" / ")
-                      : "暂无"
+                      : t.agentWorkbenchPages.noneYet
                   }
                 />
                 <AgentMetric
-                  label="触碰文件"
+                  label={t.agentWorkbenchPages.filesTouchedLabel}
                   value={
                     active.filesTouched.length > 0
                       ? active.filesTouched.join(" / ")
-                      : "暂无"
+                      : t.agentWorkbenchPages.noneYet
                   }
                 />
                 {active.error && (
                   <AgentMetric
-                    label="错误"
+                    label={t.agentWorkbenchPages.errorLabel}
                     value={
                       <span className="text-destructive">{active.error}</span>
                     }
@@ -1443,6 +1477,7 @@ export function AgentCreationCard({
   agentStatusClass: (status: AgentTile["status"]) => string;
   agentStatusLabel: (status: AgentTile["status"]) => string;
 }) {
+  const { t } = useI18n();
   const [showBrief, setShowBrief] = useState(false);
   const displayName = agent.codename ?? agent.name;
   const roleName = friendlyRoleName(agent.role ?? agent.name);
@@ -1451,13 +1486,13 @@ export function AgentCreationCard({
     agent.lastThought ??
     agent.task ??
     agent.currentTool ??
-    "我会负责这一路任务，并把进展同步回主控。";
+    t.agentWorkbenchPages.defaultMotto;
   const active = agent.status === "running";
 
   return (
     <section className="overflow-hidden rounded-lg border border-border/55 bg-background shadow-sm">
       <div className="flex items-center justify-center border-b border-border/45 px-3 py-2 text-sm font-medium text-muted-foreground">
-        Agent 集群 - 创建助手
+        {t.agentWorkbenchPages.agentClusterCreateAssistant}
       </div>
       <div className="flex justify-center bg-[color:color-mix(in_oklch,var(--muted)_38%,var(--background))] px-4 py-5">
         <div className="relative w-full max-w-sm">
@@ -1471,13 +1506,13 @@ export function AgentCreationCard({
                     type="button"
                     onClick={() => setShowBrief(false)}
                     className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label="返回角色卡"
-                    title="返回角色卡"
+                    aria-label={t.agentWorkbenchPages.backToRoleCard}
+                    title={t.agentWorkbenchPages.backToRoleCard}
                   >
                     <ChevronRightIcon className="size-4 rotate-180" />
                   </button>
                   <div className="min-w-0 flex-1 text-center text-xl font-semibold text-foreground">
-                    角色说明
+                    {t.agentWorkbenchPages.roleDescription}
                   </div>
                   <span className="w-8" aria-hidden="true" />
                 </div>
@@ -1500,7 +1535,7 @@ export function AgentCreationCard({
                   </span>
                 </div>
                 <div className="mt-5 max-h-72 flex-1 overflow-y-auto whitespace-pre-wrap break-words text-base leading-7 text-foreground">
-                  {fullBrief || "暂无完整角色说明。"}
+                  {fullBrief || t.agentWorkbenchPages.noFullRoleDescription}
                 </div>
               </div>
             ) : (
@@ -1532,9 +1567,9 @@ export function AgentCreationCard({
                     type="button"
                     onClick={() => setShowBrief(true)}
                     className="ml-auto rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-85"
-                    title="查看角色说明"
+                    title={t.agentWorkbenchPages.roleDescription}
                   >
-                    角色说明
+                    {t.agentWorkbenchPages.roleDescription}
                   </button>
                 </div>
                 <div className="mt-3 flex items-center gap-2">
@@ -1550,7 +1585,7 @@ export function AgentCreationCard({
                   </span>
                   {agent.iterationCount !== undefined && (
                     <span className="text-xs text-muted-foreground">
-                      {agent.iterationCount} 轮
+                      {t.agentWorkbenchPages.iterationRound(agent.iterationCount)}
                     </span>
                   )}
                 </div>
@@ -1657,11 +1692,12 @@ export function AgentFilesPage({
   threadId?: string | null;
   workDir?: string;
 }) {
+  const { t } = useI18n();
   if (!workDir) {
     return (
       <WorkbenchEmptyPage
         title={FILES_TAB_LABEL}
-        description="还没有定位到工作目录。Agent 读取或写入文件后，这里会自动关联项目文件。"
+        description={t.agentWorkbenchPages.noWorkDirDescription}
       />
     );
   }
@@ -1707,11 +1743,12 @@ export function DiffText({ text }: { text: string }) {
 }
 
 export function AgentDiffPage({ entries }: { entries: DiffEntry[] }) {
+  const { t } = useI18n();
   if (entries.length === 0) {
     return (
       <WorkbenchEmptyPage
         title={DIFF_TAB_LABEL}
-        description="还没有捕获到可展示的 diff。文件编辑工具返回补丁后会显示在这里。"
+        description={t.agentWorkbenchPages.noDiffEntriesDescription}
       />
     );
   }
