@@ -59,6 +59,7 @@ export function ExportTrigger({ threadId }: { threadId: string }) {
             className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/60 hover:text-foreground"
             variant="ghost"
             size="icon"
+            aria-label="Export"
           >
             <Download className="size-4" />
           </Button>

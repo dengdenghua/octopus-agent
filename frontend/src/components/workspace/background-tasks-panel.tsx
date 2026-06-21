@@ -277,7 +277,7 @@ function TaskDetailView({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 border-b px-4 py-3">
-        <Button variant="ghost" size="icon" className="size-7" onClick={onBack}>
+        <Button variant="ghost" size="icon" className="size-7" onClick={onBack} aria-label="Back">
           <ChevronLeftIcon className="size-4" />
         </Button>
         <div className="min-w-0 flex-1">
@@ -529,6 +529,7 @@ function BackgroundTasksPanelContent() {
             size="icon"
             className="size-7"
             onClick={() => setShowNewForm(false)}
+            aria-label="Back"
           >
             <ChevronLeftIcon className="size-4" />
           </Button>

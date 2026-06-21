@@ -311,6 +311,7 @@ export default function AccountSettingsPage() {
                 variant="ghost"
                 size="icon"
                 className="size-8 text-muted-foreground hover:text-destructive"
+                aria-label="Unlink account"
                 onClick={() =>
                   setUnlinkAccount({
                     provider: account.provider,
@@ -612,6 +613,7 @@ function OfficialCreditsCard() {
               onClick={onRefresh}
               disabled={refresh.isPending}
               className="size-8"
+              aria-label="Refresh"
             >
               <RefreshCwIcon
                 className={refresh.isPending ? "animate-spin size-4" : "size-4"}

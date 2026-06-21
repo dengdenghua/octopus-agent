@@ -235,6 +235,7 @@ const IdleView = forwardRef<
             onClick={onSubmit}
             disabled={!prompt.trim()}
             className="shrink-0"
+            aria-label="Submit"
           >
             <SendIcon className="size-4" />
           </Button>

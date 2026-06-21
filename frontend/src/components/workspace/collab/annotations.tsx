@@ -140,6 +140,7 @@ export function AnnotationThread({
                   onClick={() =>
                     void unresolveAnnotation(annotation.annotation_id)
                   }
+                  aria-label="Mark as unresolved"
                 >
                   <Undo2 size={12} />
                 </Button>
@@ -156,6 +157,7 @@ export function AnnotationThread({
                   onClick={() =>
                     void resolveAnnotation(annotation.annotation_id)
                   }
+                  aria-label="Resolve comment"
                 >
                   <CheckCircle2 size={12} />
                 </Button>
@@ -170,6 +172,7 @@ export function AnnotationThread({
                 size="icon"
                 className="size-6 text-destructive hover:text-destructive"
                 onClick={() => void deleteAnnotation(annotation.annotation_id)}
+                aria-label="Delete comment"
               >
                 <Trash2 size={12} />
               </Button>
@@ -220,6 +223,7 @@ export function AnnotationThread({
             className="size-6"
             disabled={!replyText.trim() || replying}
             onClick={() => void handleReply()}
+            aria-label="Send reply"
           >
             <Send size={12} />
           </Button>
@@ -376,6 +380,7 @@ export function AddAnnotationButton({
               setOpen(true);
               setTimeout(() => inputRef.current?.focus(), 50);
             }}
+            aria-label={t.annotations.addComment}
           >
             <MessageSquarePlus size={14} />
           </Button>
