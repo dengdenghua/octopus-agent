@@ -26,6 +26,7 @@ import {
   registerLocalAgentPartners,
   type LocalAgentPartner,
 } from "@/core/agents/api";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 const PARTNER_ICONS: Record<string, typeof BotIcon> = {
@@ -33,28 +34,6 @@ const PARTNER_ICONS: Record<string, typeof BotIcon> = {
   "codex-cli": Code2Icon,
   openclaw: BotIcon,
 };
-
-function partnerBadge(partner: LocalAgentPartner): {
-  label: string;
-  className: string;
-} {
-  if (partner.registered) {
-    return {
-      label: "已接入",
-      className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-    };
-  }
-  if (partner.detected) {
-    return {
-      label: "已检测",
-      className: "bg-primary/10 text-primary ring-primary/15",
-    };
-  }
-  return {
-    label: "未检测到",
-    className: "bg-muted text-muted-foreground ring-border",
-  };
-}
 
 export function LocalAgentConnectDialog({
   open,
@@ -64,8 +43,31 @@ export function LocalAgentConnectDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const { t } = useI18n();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [aliases, setAliases] = useState<Record<string, string>>({});
+
+  const partnerBadge = (partner: LocalAgentPartner): {
+    label: string;
+    className: string;
+  } => {
+    if (partner.registered) {
+      return {
+        label: t.localAgentConnect.statusConnected,
+        className: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+      };
+    }
+    if (partner.detected) {
+      return {
+        label: t.localAgentConnect.statusDetected,
+        className: "bg-primary/10 text-primary ring-primary/15",
+      };
+    }
+    return {
+      label: t.localAgentConnect.statusNotDetected,
+      className: "bg-muted text-muted-foreground ring-border",
+    };
+  };
 
   const {
     data: partners = [],
@@ -90,19 +92,23 @@ export function LocalAgentConnectDialog({
       ]);
 
       if (result.registered_count > 0) {
-        toast.success(`已接入 ${result.registered_count} 个本地伙伴`);
+        toast.success(
+          t.localAgentConnect.registerSuccess(result.registered_count),
+        );
         onOpenChange(false);
         return;
       }
       if (result.already_exists_count > 0) {
-        toast.success("这些本地伙伴已经在智能体库里了");
+        toast.success(t.localAgentConnect.alreadyExists);
         onOpenChange(false);
         return;
       }
-      toast.error("没有可接入的本地伙伴，请先安装对应本地工具");
+      toast.error(t.localAgentConnect.noPartnersAvailable);
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "接入本地伙伴失败");
+      toast.error(
+        error instanceof Error ? error.message : t.localAgentConnect.registerFailed,
+      );
     },
   });
 
@@ -140,7 +146,7 @@ export function LocalAgentConnectDialog({
   const handleConfirm = () => {
     const selected = partners.filter((partner) => selectedSet.has(partner.id));
     if (selected.length === 0) {
-      toast.error("请选择一个已检测到的本地伙伴");
+      toast.error(t.localAgentConnect.noPartnerSelected);
       return;
     }
     registerMutation.mutate(
@@ -157,11 +163,10 @@ export function LocalAgentConnectDialog({
         <DialogHeader className="pr-8">
           <DialogTitle className="flex items-center gap-2 text-base">
             <BotIcon className="size-4 text-primary" />
-            接入本地伙伴
+            {t.localAgentConnect.title}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            自动检测本机已安装的 Agent
-            工具，注册到智能体库后就可以在团队任务里直接指派。
+            {t.localAgentConnect.description}
           </DialogDescription>
         </DialogHeader>
 
@@ -169,18 +174,18 @@ export function LocalAgentConnectDialog({
           {isLoading ? (
             <div className="flex min-h-28 items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
               <Loader2Icon className="mr-2 size-4 animate-spin" />
-              正在检测本地伙伴...
+              {t.localAgentConnect.detecting}
             </div>
           ) : isError ? (
             <div className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-xs text-muted-foreground">
               <AlertCircleIcon className="size-4 text-destructive" />
-              本地伙伴检测失败
+              {t.localAgentConnect.detectFailed}
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => void refetch()}
               >
-                重新检测
+                {t.localAgentConnect.retryDetect}
               </Button>
             </div>
           ) : (
@@ -255,7 +260,9 @@ export function LocalAgentConnectDialog({
                           }))
                         }
                         className="h-8 max-w-sm rounded-lg bg-background text-xs"
-                        aria-label={`${partner.name} 名称`}
+                        aria-label={t.localAgentConnect.partnerNameAria(
+                          partner.name,
+                        )}
                       />
                     </span>
                   </span>
@@ -267,7 +274,7 @@ export function LocalAgentConnectDialog({
 
         <DialogFooter className="items-center justify-between gap-2 border-t pt-3 sm:justify-between">
           <span className="text-xs text-muted-foreground">
-            可接入 {selectableCount} 个
+            {t.localAgentConnect.availableCount(selectableCount)}
           </span>
           <span className="flex items-center gap-2">
             <Button
@@ -276,7 +283,7 @@ export function LocalAgentConnectDialog({
               onClick={() => onOpenChange(false)}
               disabled={registerMutation.isPending}
             >
-              取消
+              {t.localAgentConnect.cancel}
             </Button>
             <Button
               size="sm"
@@ -286,7 +293,7 @@ export function LocalAgentConnectDialog({
               {registerMutation.isPending ? (
                 <Loader2Icon className="mr-1 size-3.5 animate-spin" />
               ) : null}
-              接入 {selectedIds.length} 个 Agent
+              {t.localAgentConnect.connectSelected(selectedIds.length)}
             </Button>
           </span>
         </DialogFooter>

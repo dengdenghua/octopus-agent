@@ -3417,6 +3417,55 @@ export const enUS: Translations = {
     authorPrefix: "By",
   },
 
+  // Agent World Unified
+  agentWorldUnified: {
+    roleLibrary: "Role Library",
+    roleLibraryDescription:
+      "Pick ready-to-use roles; each card represents its responsibilities, tone, and callable abilities.",
+    installedLabel: "Joined",
+    installableLabel: "Available",
+    installAllButton: "Join All",
+    installAllConfirmButton: (count: number) => `Confirm joining ${count}`,
+    installAllConfirmTitle: (count: number) =>
+      `Click again to join ${count} roles under the current filter`,
+    installAllConfirmHint: "Requires confirmation",
+    installSuccess: (installed: number) =>
+      `${installed} role${installed === 1 ? "" : "s"} joined`,
+    installSuccessWithFailure: (installed: number, failed: number) =>
+      `${installed} joined, ${failed} failed`,
+    installFailed: "Installation failed, please try again later",
+    connectLocalPartner: "Connect Local Partner",
+    enterprise: "Enterprise",
+  },
+
+  // Local Agent Connect Dialog
+  localAgentConnect: {
+    title: "Connect Local Partner",
+    description:
+      "Auto-detect Agent tools installed on this machine and register them to the agent library so they can be assigned directly in team tasks.",
+    detecting: "Detecting local partners...",
+    detectFailed: "Local partner detection failed",
+    retryDetect: "Retry",
+    statusConnected: "Connected",
+    statusDetected: "Detected",
+    statusNotDetected: "Not detected",
+    availableCount: (count: number) => `${count} available`,
+    cancel: "Cancel",
+    connectSelected: (count: number) =>
+      `Connect ${count} Agent${count === 1 ? "" : "s"}`,
+    noPartnerSelected: "Please select a detected local partner",
+    registerSuccess: (count: number) =>
+      `${count} local partner${count === 1 ? "" : "s"} connected`,
+    alreadyExists: "These local partners are already in the agent library",
+    noPartnersAvailable:
+      "No connectable local partners; please install the corresponding local tool first",
+    registerFailed: "Failed to connect local partners",
+    partnerNameAria: (name: string) => `${name} name`,
+  },
+
+  // Agent World Card
+  agentWorldCard: {},
+
   // Community
   community: {
     searchDiscussions: "Search discussions...",

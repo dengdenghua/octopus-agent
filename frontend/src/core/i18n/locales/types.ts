@@ -2923,6 +2923,47 @@ export interface Translations {
     authorPrefix: string;
   };
 
+  // Agent World Unified
+  agentWorldUnified: {
+    roleLibrary: string;
+    roleLibraryDescription: string;
+    installedLabel: string;
+    installableLabel: string;
+    installAllButton: string;
+    installAllConfirmButton: (count: number) => string;
+    installAllConfirmTitle: (count: number) => string;
+    installAllConfirmHint: string;
+    installSuccess: (installed: number) => string;
+    installSuccessWithFailure: (installed: number, failed: number) => string;
+    installFailed: string;
+    connectLocalPartner: string;
+    enterprise: string;
+  };
+
+  // Local Agent Connect Dialog
+  localAgentConnect: {
+    title: string;
+    description: string;
+    detecting: string;
+    detectFailed: string;
+    retryDetect: string;
+    statusConnected: string;
+    statusDetected: string;
+    statusNotDetected: string;
+    availableCount: (count: number) => string;
+    cancel: string;
+    connectSelected: (count: number) => string;
+    noPartnerSelected: string;
+    registerSuccess: (count: number) => string;
+    alreadyExists: string;
+    noPartnersAvailable: string;
+    registerFailed: string;
+    partnerNameAria: (name: string) => string;
+  };
+
+  // Agent World Card
+  agentWorldCard: {};
+
   // Community
   community: {
     searchDiscussions: string;

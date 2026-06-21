@@ -3216,6 +3216,51 @@ export const zhCN: Translations = {
     authorPrefix: "作者:",
   },
 
+  // Agent World Unified
+  agentWorldUnified: {
+    roleLibrary: "角色库",
+    roleLibraryDescription:
+      "挑选可直接出场的岗位角色；每张卡片代表它的职责、语气和可调用能力。",
+    installedLabel: "已加入",
+    installableLabel: "可加入",
+    installAllButton: "批量加入",
+    installAllConfirmButton: (count: number) => `确认加入 ${count} 个`,
+    installAllConfirmTitle: (count: number) =>
+      `再次点击会加入当前筛选下的 ${count} 个角色`,
+    installAllConfirmHint: "需要二次确认",
+    installSuccess: (installed: number) => `已加入 ${installed} 个角色`,
+    installSuccessWithFailure: (installed: number, failed: number) =>
+      `已加入 ${installed} 个角色，${failed} 个失败`,
+    installFailed: "安装失败，请稍后重试",
+    connectLocalPartner: "接入本地伙伴",
+    enterprise: "企业版",
+  },
+
+  // Local Agent Connect Dialog
+  localAgentConnect: {
+    title: "接入本地伙伴",
+    description:
+      "自动检测本机已安装的 Agent 工具，注册到智能体库后就可以在团队任务里直接指派。",
+    detecting: "正在检测本地伙伴...",
+    detectFailed: "本地伙伴检测失败",
+    retryDetect: "重新检测",
+    statusConnected: "已接入",
+    statusDetected: "已检测",
+    statusNotDetected: "未检测到",
+    availableCount: (count: number) => `可接入 ${count} 个`,
+    cancel: "取消",
+    connectSelected: (count: number) => `接入 ${count} 个 Agent`,
+    noPartnerSelected: "请选择一个已检测到的本地伙伴",
+    registerSuccess: (count: number) => `已接入 ${count} 个本地伙伴`,
+    alreadyExists: "这些本地伙伴已经在智能体库里了",
+    noPartnersAvailable: "没有可接入的本地伙伴，请先安装对应本地工具",
+    registerFailed: "接入本地伙伴失败",
+    partnerNameAria: (name: string) => `${name} 名称`,
+  },
+
+  // Agent World Card
+  agentWorldCard: {},
+
   // Community
   community: {
     searchDiscussions: "搜索讨论...",

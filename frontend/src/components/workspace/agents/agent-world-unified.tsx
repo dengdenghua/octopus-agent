@@ -328,11 +328,11 @@ function AgentsTab({
     if (installed > 0) {
       toast.success(
         failed > 0
-          ? `已加入 ${installed} 个角色，${failed} 个失败`
-          : `已加入 ${installed} 个角色`,
+          ? t.agentWorldUnified.installSuccessWithFailure(installed, failed)
+          : t.agentWorldUnified.installSuccess(installed),
       );
     } else if (failed > 0) {
-      toast.error("安装失败，请稍后重试");
+      toast.error(t.agentWorldUnified.installFailed);
     }
   };
 
@@ -354,10 +354,12 @@ function AgentsTab({
       <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/12 px-3 py-2 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <BotIcon className="h-4 w-4 shrink-0 text-primary/75" />
-          <div className="text-sm font-semibold">角色库</div>
+          <div className="text-sm font-semibold">
+            {t.agentWorldUnified.roleLibrary}
+          </div>
         </div>
         <div className="text-xs text-muted-foreground">
-          挑选可直接出场的岗位角色；每张卡片代表它的职责、语气和可调用能力。
+          {t.agentWorldUnified.roleLibraryDescription}
         </div>
       </div>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
@@ -401,13 +403,17 @@ function AgentsTab({
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:justify-end">
           <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
-            <span className="text-muted-foreground/80">已加入</span>
+            <span className="text-muted-foreground/80">
+              {t.agentWorldUnified.installedLabel}
+            </span>
             <span className="ml-1 font-medium text-foreground">
               {installedCount}
             </span>
           </span>
           <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
-            <span className="text-muted-foreground/80">可加入</span>
+            <span className="text-muted-foreground/80">
+              {t.agentWorldUnified.installableLabel}
+            </span>
             <span className="ml-1 font-medium text-foreground">
               {Math.max(0, installableCount)}
             </span>
@@ -421,16 +427,20 @@ function AgentsTab({
             onClick={() => void handleInstallAll()}
             title={
               confirmInstallAll
-                ? `再次点击会加入当前筛选下的 ${installableAgents.length} 个角色`
-                : "需要二次确认"
+                ? t.agentWorldUnified.installAllConfirmTitle(
+                    installableAgents.length,
+                  )
+                : t.agentWorldUnified.installAllConfirmHint
             }
           >
             {installingAll && (
               <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             )}
             {confirmInstallAll
-              ? `确认加入 ${installableAgents.length} 个`
-              : "批量加入"}
+              ? t.agentWorldUnified.installAllConfirmButton(
+                  installableAgents.length,
+                )
+              : t.agentWorldUnified.installAllButton}
           </Button>
         </div>
       </div>
@@ -660,7 +670,7 @@ export function AgentWorldUnified() {
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
                   <BotIcon className="h-4 w-4" />
-                  接入本地伙伴
+                  {t.agentWorldUnified.connectLocalPartner}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -679,7 +689,7 @@ export function AgentWorldUnified() {
                   className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
                 >
                   <BotIcon className="h-3.5 w-3.5" />
-                  角色库
+                  {t.agentWorldUnified.roleLibrary}
                 </TabsTrigger>
               )}
               {SHOW_ENTERPRISE_ASSETS && (
@@ -688,7 +698,7 @@ export function AgentWorldUnified() {
                   className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
                 >
                   <Building2Icon className="h-3.5 w-3.5" />
-                  企业版
+                  {t.agentWorldUnified.enterprise}
                 </TabsTrigger>
               )}
             </TabsList>
