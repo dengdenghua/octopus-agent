@@ -106,14 +106,11 @@ class TestAutoDocsFresh:
             if rel in volatile:
                 continue  # timestamp-bearing · byte-compare would always drift
             actual = path.read_text(encoding="utf-8")
-            # Compare content modulo trailing newlines. The generator's
-            # trailing-newline output is order-dependent for some agent
-            # persona docs (an optional last field that is sometimes empty
-            # leaves a stray blank line), so a sole trailing-newline delta
-            # flips this test red in isolation but green in the full suite.
-            # A trailing-newline-only diff never means stale CONTENT, which
-            # is what "docs are fresh" actually guards.
-            if actual.rstrip("\n") != expected.rstrip("\n"):
+            # Exact byte-compare. The generator emits a single deterministic
+            # trailing newline for every page (``page_agent`` strips stray
+            # blank lines from optional fields before write), so there is no
+            # longer an order-dependent trailing-newline delta to tolerate.
+            if actual != expected:
                 drift.append(f"drift: docs/auto/{rel}")
 
         # Stale files · on disk but generator doesn't produce them.
