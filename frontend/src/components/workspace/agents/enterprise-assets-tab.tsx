@@ -14,8 +14,10 @@ import {
   listEnterpriseAssets,
   type EnterpriseAsset,
 } from "@/core/agents/agent-world-api";
+import { useI18n } from "@/core/i18n/hooks";
 
 export function EnterpriseAssetsTab({ query }: { query?: string }) {
+  const { t } = useI18n();
   const [items, setItems] = useState<EnterpriseAsset[]>([]);
   const [available, setAvailable] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
@@ -26,9 +28,13 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
     setInstalling(a.id);
     try {
       const r = await installEnterpriseAsset(a.id);
-      toast.success(`已导入「${r.name || a.name}」到本地角色库`);
+      toast.success(t.enterpriseAssetsTab.importSuccess(r.name || a.name));
     } catch (e) {
-      toast.error(`导入失败:${e instanceof Error ? e.message : String(e)}`);
+      toast.error(
+        t.enterpriseAssetsTab.importFailed(
+          e instanceof Error ? e.message : String(e),
+        ),
+      );
     } finally {
       setInstalling(null);
     }
@@ -60,27 +66,27 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
   if (loading) {
     return (
       <div className="py-10 text-center text-xs text-muted-foreground">
-        加载中…
+        {t.enterpriseAssetsTab.loading}
       </div>
     );
   }
   if (available === false) {
     return (
       <div className="py-10 text-center text-xs leading-relaxed text-muted-foreground">
-        企业版资产库未接通。
+        {t.enterpriseAssetsTab.notAvailableTitle}
         <br />
-        后端配置{" "}
+        {t.enterpriseAssetsTab.notAvailableHintPrefix}{" "}
         <code className="rounded bg-muted/50 px-1">
           OCTOPUS_ENTERPRISE_URL
         </code>{" "}
-        后,这里会列出企业版托管的角色资产。
+        {t.enterpriseAssetsTab.notAvailableHintSuffix}
       </div>
     );
   }
   if (items.length === 0) {
     return (
       <div className="py-10 text-center text-xs text-muted-foreground">
-        企业版暂无匹配的角色资产。
+        {t.enterpriseAssetsTab.empty}
       </div>
     );
   }
@@ -88,7 +94,7 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
   return (
     <div>
       <div className="mb-2 text-[11px] text-muted-foreground">
-        来自企业版资产库 · 共 {items.length} 个(消费而非 fork)
+        {t.enterpriseAssetsTab.header(items.length)}
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {items.map((a) => (
@@ -130,7 +136,9 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
               disabled={installing !== null}
               className="shrink-0 self-center rounded-md border border-primary/40 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary transition hover:bg-primary/20 disabled:opacity-50"
             >
-              {installing === a.id ? "导入中…" : "导入本地"}
+              {installing === a.id
+                ? t.enterpriseAssetsTab.installing
+                : t.enterpriseAssetsTab.install}
             </button>
           </div>
         ))}

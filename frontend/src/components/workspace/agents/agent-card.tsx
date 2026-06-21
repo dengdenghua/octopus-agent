@@ -128,7 +128,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
             }}
           >
             <MessageSquareIcon className="mr-1.5 h-3.5 w-3.5" />
-            开聊
+            {t.agentCard.chat}
           </Button>
           <div className="flex gap-1">
             <Button
@@ -139,8 +139,8 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
                 event.stopPropagation();
                 onSelect?.(agent);
               }}
-              title="角色档案"
-              aria-label={`${displayName} 角色档案`}
+              title={t.agentCard.profile}
+              aria-label={t.agentCard.profileAriaLabel(displayName)}
             >
               <WrenchIcon className="h-3.5 w-3.5" />
             </Button>

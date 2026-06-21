@@ -363,15 +363,16 @@ export const enUS: Translations = {
     maxSubagents: "Max Subagents",
     maxSearches: "Max Searches",
     permissionModeLabel: "Permissions",
-    permissionModeDefault: "Confirm",
-    permissionModeDefaultDesc: "Confirm before risky tool use.",
-    permissionModeAcceptEdits: "Edit files",
+    permissionModeDefault: "Ask first",
+    permissionModeDefaultDesc: "Ask before sensitive actions.",
+    permissionModeAcceptEdits: "Auto-edit files",
     permissionModeAcceptEditsDesc:
-      "Allow file edits automatically; still confirm other risky actions.",
-    permissionModeBypass: "Trusted",
-    permissionModeBypassDesc: "Auto-approve local tools for trusted tasks.",
-    permissionModePlan: "Plan",
-    permissionModePlanDesc: "Plan first; run tools after you decide.",
+      "Apply file edits automatically; still ask before risky commands.",
+    permissionModeBypass: "Full access",
+    permissionModeBypassDesc:
+      "Run local tools automatically; use only for fully trusted tasks.",
+    permissionModePlan: "Plan only",
+    permissionModePlanDesc: "Suggest steps only; do not call tools yet.",
     seedWebSearch: "Search the web, cross-check sources, and summarize: ",
     seedCreatePpt: "Write content structured for a PPT deck: ",
     seedCreateHtml: "Generate a complete HTML page: ",
@@ -2174,6 +2175,29 @@ export const enUS: Translations = {
     agentCreated: "Agent created!",
     startChatting: "Start chatting",
     backToGallery: "Back to Gallery",
+  },
+
+  // Agent card
+  agentCard: {
+    chat: "Chat",
+    profile: "Profile",
+    profileAriaLabel: (name) => `${name} profile`,
+  },
+
+  // Enterprise assets tab
+  enterpriseAssetsTab: {
+    loading: "Loading…",
+    notAvailableTitle: "Enterprise asset library not connected.",
+    notAvailableHintPrefix: "Configure",
+    notAvailableHintSuffix:
+      "in the backend to list enterprise-managed agent assets here.",
+    empty: "No matching enterprise assets.",
+    header: (count) =>
+      `From enterprise asset library · ${count} items (consume, not fork)`,
+    install: "Install locally",
+    installing: "Importing…",
+    importSuccess: (name) => `Imported "${name}" to local agent library`,
+    importFailed: (msg) => `Import failed: ${msg}`,
   },
 
   // Breadcrumb

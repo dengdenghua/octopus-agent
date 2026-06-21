@@ -347,14 +347,15 @@ export const zhCN: Translations = {
     maxSubagents: "最大子代理数",
     maxSearches: "最大搜索数",
     permissionModeLabel: "权限",
-    permissionModeDefault: "确认",
-    permissionModeDefaultDesc: "风险操作前先请求确认。",
-    permissionModeAcceptEdits: "文件直改",
-    permissionModeAcceptEditsDesc: "文件编辑自动允许，其他风险操作仍确认。",
-    permissionModeBypass: "信任",
-    permissionModeBypassDesc: "本地工具自动批准，适合可信任务。",
-    permissionModePlan: "规划",
-    permissionModePlanDesc: "先给方案，暂不执行工具。",
+    permissionModeDefault: "默认确认",
+    permissionModeDefaultDesc: "执行敏感操作前先问你确认。",
+    permissionModeAcceptEdits: "自动改文件",
+    permissionModeAcceptEditsDesc:
+      "文件编辑可直接执行，命令等高风险操作仍需确认。",
+    permissionModeBypass: "全权执行",
+    permissionModeBypassDesc: "本地工具自动执行，仅用于完全可信的任务。",
+    permissionModePlan: "仅规划",
+    permissionModePlanDesc: "只给方案和步骤，暂不调用工具。",
     seedWebSearch: "请联网搜索、交叉验证并总结：",
     seedCreatePpt: "帮我写一份可直接制作成 PPT 的内容结构：",
     seedCreateHtml: "帮我生成一个完整的 HTML 网页：",
@@ -2014,6 +2015,27 @@ export const zhCN: Translations = {
     backToGallery: "返回 Gallery",
   },
 
+  // Agent card
+  agentCard: {
+    chat: "开聊",
+    profile: "角色档案",
+    profileAriaLabel: (name) => `${name} 角色档案`,
+  },
+
+  // Enterprise assets tab
+  enterpriseAssetsTab: {
+    loading: "加载中…",
+    notAvailableTitle: "企业版资产库未接通。",
+    notAvailableHintPrefix: "后端配置",
+    notAvailableHintSuffix: "后,这里会列出企业版托管的角色资产。",
+    empty: "企业版暂无匹配的角色资产。",
+    header: (count) => `来自企业版资产库 · 共 ${count} 个(消费而非 fork)`,
+    install: "导入本地",
+    installing: "导入中…",
+    importSuccess: (name) => `已导入「${name}」到本地角色库`,
+    importFailed: (msg) => `导入失败:${msg}`,
+  },
+
   // Breadcrumb
   breadcrumb: {
     workspace: "工作区",
@@ -2869,7 +2891,8 @@ export const zhCN: Translations = {
       sectionsLabel: "设置项",
       resultsCount: (count) => `${count} 项`,
       noSearchResultsTitle: "没有找到匹配设置",
-      noSearchResultsDescription: "换个关键词试试，例如模型、权限、主题或 MCP。",
+      noSearchResultsDescription:
+        "换个关键词试试，例如模型、权限、主题或 MCP。",
       sectionKeywords: {
         account: ["账号", "登录"],
         subscription: ["订阅", "计费"],

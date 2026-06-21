@@ -1788,6 +1788,27 @@ export interface Translations {
     backToGallery: string;
   };
 
+  // Agent card
+  agentCard: {
+    chat: string;
+    profile: string;
+    profileAriaLabel: (name: string) => string;
+  };
+
+  // Enterprise assets tab
+  enterpriseAssetsTab: {
+    loading: string;
+    notAvailableTitle: string;
+    notAvailableHintPrefix: string;
+    notAvailableHintSuffix: string;
+    empty: string;
+    header: (count: number) => string;
+    install: string;
+    installing: string;
+    importSuccess: (name: string) => string;
+    importFailed: (msg: string) => string;
+  };
+
   // Breadcrumb
   breadcrumb: {
     workspace: string;
