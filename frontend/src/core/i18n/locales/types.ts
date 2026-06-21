@@ -3923,6 +3923,49 @@ export interface Translations {
     active: string;
     disabled: string;
     of100: string;
+    // Growth story hero
+    recentEvolutionTitle: string;
+    growthSummary: (
+      totalMemories: number,
+      totalSkills: number,
+      learningEvents: number,
+    ) => string;
+    noEvidenceDescription: string;
+    overallImprovementLabel: string;
+    observeTasks: string;
+    observeTasksDescription: string;
+    accumulateMemories: string;
+    accumulateMemoriesDescription: string;
+    formSkills: string;
+    formSkillsDescription: string;
+    proposeImprovements: string;
+    proposeImprovementsDescription: string;
+    unitTimes: string;
+    unitItems: string;
+    unitSkills: string;
+    unitSuggestions: string;
+    autoExtractedSkills: string;
+    autoExtractedSkillsShare: (percent: string) => string;
+    waitingForSkillAccumulation: string;
+    reusableMemoryLibrary: string;
+    ruleMemoryCount: (count: number) => string;
+    memoryDetailDefault: string;
+    nextSteps: string;
+    nextStepsAvailable: string;
+    nextStepsNone: string;
+    // Learning story
+    capabilityTrend: string;
+    noTrendYet: string;
+    recentChange: string;
+    currentSuccessRate: string;
+    recentSkillCalls: string;
+    // Skill story
+    strongerSkills: string;
+    noSkillPerformanceYet: string;
+    skillCalls: (count: number) => string;
+    // Recommendations story
+    howToImproveNext: string;
+    noPendingRecommendations: string;
   };
 
   // Wiki Panel

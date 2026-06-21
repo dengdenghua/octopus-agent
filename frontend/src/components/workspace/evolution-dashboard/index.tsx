@@ -142,6 +142,7 @@ function GrowthStoryHero({
   memorySparkline: number[];
   recommendationCount: number;
 }) {
+  const { t } = useI18n();
   const skills = overview?.skills;
   const memory = overview?.memory;
   const learningEvents = numberOrZero(overview?.learning_events);
@@ -159,35 +160,35 @@ function GrowthStoryHero({
   const stages = [
     {
       icon: ActivityIcon,
-      title: "观察任务",
+      title: t.evolutionDashboard.observeTasks,
       value: learningEvents,
-      unit: "次",
+      unit: t.evolutionDashboard.unitTimes,
       done: learningEvents > 0,
-      description: "从真实对话和执行过程里找经验。",
+      description: t.evolutionDashboard.observeTasksDescription,
     },
     {
       icon: DatabaseIcon,
-      title: "沉淀记忆",
+      title: t.evolutionDashboard.accumulateMemories,
       value: totalMemories,
-      unit: "条",
+      unit: t.evolutionDashboard.unitItems,
       done: totalMemories > 0,
-      description: "把可复用事实、偏好和规则存下来。",
+      description: t.evolutionDashboard.accumulateMemoriesDescription,
     },
     {
       icon: BookOpenIcon,
-      title: "形成技能",
+      title: t.evolutionDashboard.formSkills,
       value: totalSkills,
-      unit: "个",
+      unit: t.evolutionDashboard.unitSkills,
       done: totalSkills > 0,
-      description: "把稳定做法变成下次可调用的能力。",
+      description: t.evolutionDashboard.formSkillsDescription,
     },
     {
       icon: LightbulbIcon,
-      title: "提出改进",
+      title: t.evolutionDashboard.proposeImprovements,
       value: recommendationCount,
-      unit: "项",
+      unit: t.evolutionDashboard.unitSuggestions,
       done: recommendationCount > 0,
-      description: "给下一轮优化留下明确方向。",
+      description: t.evolutionDashboard.proposeImprovementsDescription,
     },
   ];
 
@@ -198,16 +199,22 @@ function GrowthStoryHero({
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm font-semibold">
               <BrainCircuitIcon className="size-4 text-primary" />
-              这段时间它进化了什么
+              {t.evolutionDashboard.recentEvolutionTitle}
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {hasEvidence
-                ? `它已经沉淀了 ${totalMemories} 条记忆、${totalSkills} 个技能，并从 ${learningEvents} 次学习事件里提炼经验。`
-                : "还没有足够的进化证据。跑过更多任务后，这里会自动变成可读的成长记录。"}
+                ? t.evolutionDashboard.growthSummary(
+                    totalMemories,
+                    totalSkills,
+                    learningEvents,
+                  )
+                : t.evolutionDashboard.noEvidenceDescription}
             </p>
           </div>
           <div className="shrink-0 rounded-lg border border-primary/20 bg-background/80 px-4 py-3 text-right shadow-sm">
-            <div className="text-[11px] text-muted-foreground">综合提升感</div>
+            <div className="text-[11px] text-muted-foreground">
+              {t.evolutionDashboard.overallImprovementLabel}
+            </div>
             <div
               className={cn(
                 "mt-1 text-3xl font-bold tabular-nums",
@@ -216,7 +223,9 @@ function GrowthStoryHero({
             >
               {improvementPct}
             </div>
-            <div className="text-[11px] text-muted-foreground">/ 100</div>
+            <div className="text-[11px] text-muted-foreground">
+              {t.evolutionDashboard.of100}
+            </div>
           </div>
         </div>
 
@@ -232,33 +241,35 @@ function GrowthStoryHero({
       <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
         <StoryMetric
           icon={BookOpenIcon}
-          title="自动形成的技能"
+          title={t.evolutionDashboard.autoExtractedSkills}
           value={autoSkills}
           detail={
             totalSkills > 0
-              ? `占全部技能 ${formatPercent(autoSkills / Math.max(totalSkills, 1))}`
-              : "等待技能沉淀"
+              ? t.evolutionDashboard.autoExtractedSkillsShare(
+                  formatPercent(autoSkills / Math.max(totalSkills, 1)),
+                )
+              : t.evolutionDashboard.waitingForSkillAccumulation
           }
         />
         <StoryMetric
           icon={DatabaseIcon}
-          title="可复用经验库"
+          title={t.evolutionDashboard.reusableMemoryLibrary}
           value={totalMemories}
           detail={
             ruleCount > 0
-              ? `${ruleCount} 条是规则/避坑经验`
-              : "记住事实、偏好和执行经验"
+              ? t.evolutionDashboard.ruleMemoryCount(ruleCount)
+              : t.evolutionDashboard.memoryDetailDefault
           }
           sparkline={memorySparkline.length >= 2 ? memorySparkline : undefined}
         />
         <StoryMetric
           icon={LightbulbIcon}
-          title="下一步建议"
+          title={t.evolutionDashboard.nextSteps}
           value={recommendationCount}
           detail={
             recommendationCount > 0
-              ? "可以继续点开查看"
-              : "暂时没有需要你处理的建议"
+              ? t.evolutionDashboard.nextStepsAvailable
+              : t.evolutionDashboard.nextStepsNone
           }
         />
       </div>
@@ -357,11 +368,12 @@ function StoryMetric({
 }
 
 function LearningStory({ data }: { data: LearningCurvePoint[] }) {
+  const { t } = useI18n();
   if (data.length === 0) {
     return (
       <section className="rounded-xl border border-border/60 bg-card p-4">
-        <SectionTitle icon={TrendingUpIcon} title="能力趋势" />
-        <EmptyStory text="还没有形成趋势。等它跑过几轮任务后，这里会展示成功率和耗时变化。" />
+        <SectionTitle icon={TrendingUpIcon} title={t.evolutionDashboard.capabilityTrend} />
+        <EmptyStory text={t.evolutionDashboard.noTrendYet} />
       </section>
     );
   }
@@ -381,7 +393,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   return (
     <section className="rounded-xl border border-border/60 bg-card p-4">
       <div className="flex items-start justify-between gap-4">
-        <SectionTitle icon={TrendingUpIcon} title="能力趋势" />
+        <SectionTitle icon={TrendingUpIcon} title={t.evolutionDashboard.capabilityTrend} />
         <div className="text-right">
           <div
             className={cn(
@@ -394,14 +406,16 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
             {delta >= 0 ? "+" : ""}
             {formatPercent(delta, 0)}
           </div>
-          <div className="text-[11px] text-muted-foreground">最近变化</div>
+          <div className="text-[11px] text-muted-foreground">
+            {t.evolutionDashboard.recentChange}
+          </div>
         </div>
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <MiniStat label="当前成功率" value={formatPercent(lastRate, 0)} />
+        <MiniStat label={t.evolutionDashboard.currentSuccessRate} value={formatPercent(lastRate, 0)} />
         <MiniStat
-          label="平均耗时"
+          label={t.evolutionDashboard.avgDuration}
           value={
             avgDuration >= 1000
               ? `${fixed(avgDuration / 1000, 1)}s`
@@ -409,7 +423,7 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
           }
         />
         <MiniStat
-          label="最近技能调用"
+          label={t.evolutionDashboard.recentSkillCalls}
           value={String(
             compact.reduce(
               (sum, point) => sum + numberOrZero(point.skills_used),
@@ -452,18 +466,19 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
 }
 
 function SkillStory({ data }: { data: SkillPerformance[] }) {
+  const { t } = useI18n();
   if (data.length === 0) {
     return (
       <section className="rounded-xl border border-border/60 bg-card p-4">
-        <SectionTitle icon={BrainCircuitIcon} title="变强的能力" />
-        <EmptyStory text="暂时还没有技能表现数据。后续会按使用次数和成功率展示最常用能力。" />
+        <SectionTitle icon={BrainCircuitIcon} title={t.evolutionDashboard.strongerSkills} />
+        <EmptyStory text={t.evolutionDashboard.noSkillPerformanceYet} />
       </section>
     );
   }
 
   return (
     <section className="rounded-xl border border-border/60 bg-card p-4">
-      <SectionTitle icon={BrainCircuitIcon} title="变强的能力" />
+      <SectionTitle icon={BrainCircuitIcon} title={t.evolutionDashboard.strongerSkills} />
       <div className="mt-4 space-y-3">
         {data.map((skill) => {
           const rate = numberOrZero(skill.success_rate);
@@ -496,7 +511,9 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
                 />
               </div>
               <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>调用 {numberOrZero(skill.usage_count)} 次</span>
+                <span>
+                  {t.evolutionDashboard.skillCalls(numberOrZero(skill.usage_count))}
+                </span>
                 <span>{skill.source}</span>
               </div>
             </div>
@@ -508,18 +525,19 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
 }
 
 function RecommendationsStory({ data }: { data: Recommendation[] }) {
+  const { t } = useI18n();
   if (data.length === 0) {
     return (
       <section className="rounded-xl border border-border/60 bg-card p-4">
-        <SectionTitle icon={LightbulbIcon} title="下一步怎么变强" />
-        <EmptyStory text="目前没有待处理建议。系统会在发现可优化点时，把它翻译成这里的普通话建议。" />
+        <SectionTitle icon={LightbulbIcon} title={t.evolutionDashboard.howToImproveNext} />
+        <EmptyStory text={t.evolutionDashboard.noPendingRecommendations} />
       </section>
     );
   }
 
   return (
     <section className="rounded-xl border border-border/60 bg-card p-4">
-      <SectionTitle icon={LightbulbIcon} title="下一步怎么变强" />
+      <SectionTitle icon={LightbulbIcon} title={t.evolutionDashboard.howToImproveNext} />
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         {data.slice(0, 3).map((rec, index) => (
           <div
