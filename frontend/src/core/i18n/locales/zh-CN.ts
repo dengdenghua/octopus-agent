@@ -1335,6 +1335,49 @@ export const zhCN: Translations = {
     libraryAuthorizedDirs: "授权目录",
   },
 
+  // Team tasks panel
+  teamTasksPanel: {
+    emptyState: "选择或创建 Team 后，这里会显示团队待办。",
+    summary: (total, running, done) =>
+      `${total} 个任务 · ${running} 运行中 · ${done} 已完成`,
+    newTask: "新建",
+    loading: "正在加载任务",
+    emptyFilter: "暂无匹配任务",
+    autoMatch: "自动匹配",
+    artifactCount: (count) => `${count} 个产物`,
+    rolesCompleted: (completed, total) =>
+      ` · ${completed}/${total} 角色完成`,
+    statusPending: "待运行",
+    toast: {
+      runStarted: "任务已开始运行",
+      runFailed: "运行任务失败",
+      taskPaused: "任务已暂停",
+      pauseFailed: "暂停任务失败",
+      taskDeleted: "任务已删除",
+      deleteFailed: "删除任务失败",
+    },
+    events: {
+      runStarted: "任务已启动",
+      roleStarted: (role) =>
+        role ? `${role} 开始执行` : "角色开始执行",
+      roleCompleted: (role) =>
+        role ? `${role} 已完成` : "一个角色已完成",
+      runDone: "任务完成，产物已写回",
+      runFailed: "任务运行失败",
+      runCancelled: "任务已暂停",
+      fallback: (role) =>
+        role ? `${role} 有新进展` : "任务有新进展",
+    },
+    roles: {
+      planner: "规划者",
+      researcher: "调研员",
+      executor: "执行者",
+      critic: "评审者",
+      synthesizer: "整理者",
+      evaluator: "验收者",
+    },
+  },
+
   // Browser settings
   browserSettings: {
     title: "浏览器偏好",

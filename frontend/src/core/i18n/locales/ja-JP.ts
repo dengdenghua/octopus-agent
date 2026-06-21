@@ -1381,6 +1381,49 @@ export const jaJP: Translations = {
     libraryAuthorizedDirs: "Authorized dirs",
   },
 
+  // Team tasks panel
+  teamTasksPanel: {
+    emptyState: "Select or create a Team to see the team todo list here.",
+    summary: (total, running, done) =>
+      `${total} tasks · ${running} running · ${done} completed`,
+    newTask: "New",
+    loading: "Loading tasks...",
+    emptyFilter: "No matching tasks",
+    autoMatch: "Auto-match",
+    artifactCount: (count) => `${count} artifact${count === 1 ? "" : "s"}`,
+    rolesCompleted: (completed, total) =>
+      ` · ${completed}/${total} roles completed`,
+    statusPending: "Pending",
+    toast: {
+      runStarted: "Task started",
+      runFailed: "Failed to run task",
+      taskPaused: "Task paused",
+      pauseFailed: "Failed to pause task",
+      taskDeleted: "Task deleted",
+      deleteFailed: "Failed to delete task",
+    },
+    events: {
+      runStarted: "Task started",
+      roleStarted: (role) =>
+        role ? `${role} started` : "Role started",
+      roleCompleted: (role) =>
+        role ? `${role} completed` : "A role completed",
+      runDone: "Task completed, artifacts written back",
+      runFailed: "Task failed",
+      runCancelled: "Task cancelled",
+      fallback: (role) =>
+        role ? `${role} updated` : "Task updated",
+    },
+    roles: {
+      planner: "Planner",
+      researcher: "Researcher",
+      executor: "Executor",
+      critic: "Critic",
+      synthesizer: "Synthesizer",
+      evaluator: "Evaluator",
+    },
+  },
+
   // Browser settings
   browserSettings: {
     title: "Browser Preferences",

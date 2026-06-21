@@ -1201,6 +1201,44 @@ export interface Translations {
     libraryAuthorizedDirs: string;
   };
 
+  // Team tasks panel
+  teamTasksPanel: {
+    emptyState: string;
+    summary: (total: number, running: number, done: number) => string;
+    newTask: string;
+    loading: string;
+    emptyFilter: string;
+    autoMatch: string;
+    artifactCount: (count: number) => string;
+    rolesCompleted: (completed: number, total: number) => string;
+    statusPending: string;
+    toast: {
+      runStarted: string;
+      runFailed: string;
+      taskPaused: string;
+      pauseFailed: string;
+      taskDeleted: string;
+      deleteFailed: string;
+    };
+    events: {
+      runStarted: string;
+      roleStarted: (role?: string | null) => string;
+      roleCompleted: (role?: string | null) => string;
+      runDone: string;
+      runFailed: string;
+      runCancelled: string;
+      fallback: (role?: string | null) => string;
+    };
+    roles: {
+      planner: string;
+      researcher: string;
+      executor: string;
+      critic: string;
+      synthesizer: string;
+      evaluator: string;
+    };
+  };
+
   // Browser settings page
   browserSettings: {
     title: string;
