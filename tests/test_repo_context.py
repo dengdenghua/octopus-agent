@@ -7,7 +7,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from runtime.memory.hemolymph.repo_context import _flatten, retrieve_repo_context
+from runtime.memory.hemolymph.repo_context import (
+    _flatten,
+    _tokenize,
+    retrieve_repo_context,
+)
 
 
 def _make_wiki(root: Path, pages: list[tuple[str, str, str]]) -> Path:
@@ -79,6 +83,38 @@ def test_cache_refreshes_on_mtime(tmp_path: Path) -> None:
     future = time.time() + 10
     os.utime(idx, (future, future))
     assert "content two" in (retrieve_repo_context("alpha", wiki_dir=auto) or "")
+
+
+def test_identifier_tokenization_splits_camel_and_snake() -> None:
+    assert set(_tokenize("ToolEngine")) >= {"tool", "engine"}
+    assert set(_tokenize("tool_engine executor")) >= {"tool", "engine", "executor"}
+    assert set(_tokenize("HTTPServer")) >= {"http", "server"}
+    assert "规划" in _tokenize("cerebrum 规划")
+
+
+def test_word_goal_matches_camelcase_identifier(tmp_path: Path) -> None:
+    auto = _make_wiki(tmp_path, [
+        ("Engine", "e.md", "The ToolEngine executes skills via execute_token."),
+        ("Other", "o.md", "unrelated browser playwright content"),
+    ])
+    out = retrieve_repo_context("how does the tool engine execute", wiki_dir=auto)
+    assert out is not None and "ToolEngine" in out
+
+
+def test_bm25_length_normalization_beats_long_page(tmp_path: Path) -> None:
+    # Both pages contain the query terms, but the catalog page buries them in
+    # 1800 unrelated tokens. Plain overlap would tie (or favour the long page);
+    # BM25 length-normalizes so the short on-topic page wins.
+    short = "Cerebrum planner: plans tool calls."
+    longp = "cerebrum planner " + ("catalog skill registry module export summary " * 300)
+    auto = _make_wiki(tmp_path, [
+        ("Cerebrum planning", "cere.md", short),
+        ("Skills catalog", "cat.md", longp),
+    ])
+    out = retrieve_repo_context("cerebrum planner", wiki_dir=auto, max_pages=1)
+    assert out is not None
+    assert "Cerebrum planning" in out
+    assert "Skills catalog" not in out
 
 
 def test_real_wiki_smoke() -> None:
