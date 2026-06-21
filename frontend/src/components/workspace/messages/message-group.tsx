@@ -1857,7 +1857,7 @@ function compactReasoningSummary(
     .replace(/\s+/g, " ")
     .replace(/^\s*[-*•]\s+/, "")
     .trim();
-  if (!normalized) return t?.messageGrouping.reasoningFallback ?? "整理思考过程";
+  if (!normalized) return t?.messageGrouping.reasoningFallback ?? "Synthesize reasoning";
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max).trimEnd()}...`;
 }
