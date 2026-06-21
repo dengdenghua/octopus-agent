@@ -637,10 +637,11 @@ class LLMPlanner:
         return format_triples_for_prompt(triples, max_triples=self.kg_max_triples)
 
     def _render_codebase_section(self, intent: Any) -> str:
-        """Auto-retrieve relevant project-wiki pages for the goal — the
-        codebase grounding the context composer never provides (it feeds
-        system/skills/memory only). Best-effort and self-gating: no wiki, no
-        overlap, or any error → ''. Disable with OCTOPUS_CODEBASE_CONTEXT=0."""
+        """Auto-retrieve codebase grounding the context composer never provides
+        (it feeds system/skills/memory only): relevant project-wiki pages
+        (summaries) plus the actual source chunks most relevant to the goal.
+        Best-effort and self-gating: no wiki/source, no overlap, or any error →
+        that part is omitted. Disable all with OCTOPUS_CODEBASE_CONTEXT=0."""
         import os
 
         if os.environ.get("OCTOPUS_CODEBASE_CONTEXT", "1").strip().lower() in (
@@ -650,12 +651,24 @@ class LLMPlanner:
         goal = str(getattr(intent, "normalized_goal", "") or "")
         if not goal:
             return ""
+        parts: list[str] = []
         try:
             from runtime.memory.hemolymph.repo_context import retrieve_repo_context
 
-            return retrieve_repo_context(goal) or ""
+            wiki = retrieve_repo_context(goal)
+            if wiki:
+                parts.append(wiki)
         except Exception:  # noqa: BLE001 — grounding must never break planning
-            return ""
+            pass
+        try:
+            from runtime.memory.hemolymph.code_index import retrieve_code_context
+
+            code = retrieve_code_context(goal)
+            if code:
+                parts.append(code)
+        except Exception:  # noqa: BLE001 — grounding must never break planning
+            pass
+        return "\n\n".join(parts)
 
     def assess_recipe_from_journal(self, journal: Journal) -> Any:
         from runtime.safety.recovery import RecipeEvaluator
