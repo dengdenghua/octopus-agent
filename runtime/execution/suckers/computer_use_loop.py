@@ -367,6 +367,7 @@ def _final(
 def make_computer_use_loop_skill(
     planner: VisionPlanner,
     *,
+    journal: Any = None,
     default_screenshot_dir: str = ".",
     default_sandbox_dir: str | None = None,
     default_max_iterations: int = 10,
@@ -390,7 +391,7 @@ def make_computer_use_loop_skill(
             return {"error": "pyautogui not installed"}
         if max_iterations <= 0 or max_iterations > 200:
             return {"error": f"max_iterations out of range: {max_iterations}"}
-        return _run_computer_use_loop(
+        result = _run_computer_use_loop(
             goal=goal,
             planner=planner,
             screenshot_dir=screenshot_dir,
@@ -399,6 +400,16 @@ def make_computer_use_loop_skill(
             wait_between_ms=wait_between_ms,
             stop_on_error=stop_on_error,
         )
+        # Record → skill: a successful run becomes a journal Trajectory so
+        # SkillForge can distil a reusable (immune-gated) macro. Best-effort;
+        # never let recording break the live loop.
+        if journal is not None:
+            from runtime.execution.suckers.computer_use_record import (
+                record_successful_loop,
+            )
+
+            record_successful_loop(journal, result)
+        return result
 
     return Skill(
         name="computer_use_loop",

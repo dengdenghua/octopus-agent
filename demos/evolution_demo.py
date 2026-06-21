@@ -107,6 +107,7 @@ def _forge_and_promote(
         "candidates_total": result.candidates_total,
         "promoted": list(result.promoted),
         "shadow_failed": list(result.shadow_failed),
+        "quarantined": list(result.quarantined),
         "retired": list(result.retired),
         "reports": {k: v.overall_passed for k, v in result.reports.items()},
     }
@@ -250,12 +251,17 @@ def run_demo(
             print(c.dim(f"  persisted .md files: {persisted}"))
             print()
 
-        # Implementation note.
+        # A run is "successful evolution" if the forge proposed at least one
+        # candidate AND took a definite action on it — promoted it, rejected
+        # it on shadow tests, or quarantined it for approval because it wraps
+        # dangerous primitives. All three exercise the forge end-to-end; only
+        # "no candidate proposed" is a non-result.
         success = (
             forge_result["candidates_total"] >= 1
             and (
                 len(forge_result["promoted"]) >= 1
                 or len(forge_result["shadow_failed"]) >= 1
+                or len(forge_result.get("quarantined", [])) >= 1
             )
         )
         if verbose:
@@ -263,6 +269,12 @@ def run_demo(
                 print(c.green(c.bold(
                     f"  ✓ self-evolution verified: forged + promoted "
                     f"{len(forge_result['promoted'])} new skill(s) into registry",
+                )))
+            elif forge_result.get("quarantined"):
+                print(c.yellow(c.bold(
+                    f"  ⚠ forge proposed {forge_result['candidates_total']} "
+                    f"candidate(s) · quarantined for approval (wraps dangerous "
+                    "primitives) · the immune gate worked",
                 )))
             elif forge_result["shadow_failed"]:
                 print(c.yellow(c.bold(

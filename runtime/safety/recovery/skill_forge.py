@@ -89,6 +89,11 @@ class SkillForgeResult(BaseModel):
     promoted: list[str]
     retired: list[str]
     shadow_failed: list[str]
+    # Candidates refused auto-promotion because they wrap dangerous
+    # primitives (e.g. forged GUI macros over mouse_click/keyboard_type).
+    # Not dropped — routed to governed human approval. Also appear in
+    # ``retired`` so they are not re-promoted next tick.
+    quarantined: list[str] = Field(default_factory=list)
     reports: dict[str, SkillTestReport] = Field(default_factory=dict)
 
 
@@ -216,6 +221,7 @@ class SkillForge:
         promoted: list[str] = []
         retired: list[str] = []
         shadow_failed: list[str] = []
+        quarantined: list[str] = []
         reports: dict[str, SkillTestReport] = {}
 
         for cand in candidates:
@@ -242,6 +248,23 @@ class SkillForge:
                     CanaryManager().register(cand.name)
                 except Exception as _exc:
                     _LOG.debug("canary register after forge failed: %s", _exc)
+            except UnsafeSkillPromotionError as exc:
+                # The forged macro wraps dangerous primitives — e.g. a
+                # recorded GUI sequence over mouse_click / keyboard_type, all
+                # of which are ``is_dangerous_tool``. Auto-granting it would
+                # let a replayed click-sequence run unattended; silently
+                # dropping it (the old generic-ValueError path) loses a real
+                # learned capability. Instead route it to governed quarantine
+                # for human approval. Must precede the generic ``ValueError``
+                # clause below — UnsafeSkillPromotionError subclasses it.
+                dangerous = self._dangerous_underlying_skills(cand)
+                _LOG.info(
+                    "forge candidate %s quarantined; dangerous underlying: %s",
+                    cand.name, ", ".join(dangerous) or "(affinity)",
+                )
+                quarantined.append(cand.name)
+                retired.append(cand.name)
+                self._record_quarantine_decision(cand, dangerous, exc)
             except (SkillTestsFailed, ValueError) as exc:
                 # ValueError subsumes UnsafeSkillPromotionError (a subclass)
                 # AND the bare duplicate-name ValueError from
@@ -259,8 +282,38 @@ class SkillForge:
             promoted=promoted,
             retired=retired,
             shadow_failed=shadow_failed,
+            quarantined=quarantined,
             reports=reports,
         )
+
+    def _record_quarantine_decision(
+        self,
+        candidate: ForgedSkillCandidate,
+        dangerous: list[str],
+        exc: Exception,
+    ) -> None:
+        """Surface a refused forged macro to the governed approval queue.
+
+        Best-effort: a journal that lacks the method (or a write failure)
+        must not break the regeneration tick.
+        """
+        try:
+            self.journal.write_skill_proposal_decision(
+                proposal_name=candidate.name,
+                decision="quarantined",
+                candidate_id=candidate.candidate_id,
+                proposal_kind="skill_forge",
+                reason=str(exc),
+                details={
+                    "dangerous_underlying": dangerous,
+                    "underlying_sequence": list(candidate.underlying_sequence),
+                    "source_sample_count": candidate.source_sample_count,
+                    "source_success_rate": candidate.source_success_rate,
+                },
+                actor="skill_forge",
+            )
+        except Exception as _exc:  # noqa: BLE001 — recording must not break tick
+            _LOG.debug("forge quarantine decision not recorded: %s", _exc)
 
     def _dangerous_underlying_skills(
         self, candidate: ForgedSkillCandidate

@@ -332,6 +332,7 @@ def create_app(
                                 # non-macOS / no perms — pure-pixel fallback.
                                 grounding=combined_grounding,
                             ),
+                            journal=stack.journal,
                         )
                     except Exception as _cul_exc:  # noqa: BLE001
                         import logging as _logging
