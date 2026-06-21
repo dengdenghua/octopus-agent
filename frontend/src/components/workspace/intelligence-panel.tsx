@@ -28,6 +28,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import type { Translations } from "@/core/i18n/locales/types";
 import { cn } from "@/lib/utils";
 import { MarkdownContent } from "./messages/markdown-content";
 
@@ -84,16 +85,6 @@ const subscriptionsKey = ["intelligence", "subscriptions"] as const;
 const reportsKey = ["intelligence", "reports"] as const;
 const EMPTY_SUBSCRIPTIONS: IntelligenceSubscription[] = [];
 const EMPTY_REPORTS: IntelligenceReport[] = [];
-const CADENCE_OPTIONS = ["高频", "每天", "每周", "每月"] as const;
-const WEEKDAY_OPTIONS = [
-  { value: "1", label: "周一" },
-  { value: "2", label: "周二" },
-  { value: "3", label: "周三" },
-  { value: "4", label: "周四" },
-  { value: "5", label: "周五" },
-  { value: "6", label: "周六" },
-  { value: "7", label: "周日" },
-] as const;
 const MONTHDAY_OPTIONS = Array.from({ length: 31 }, (_, index) =>
   String(index + 1),
 );
@@ -102,17 +93,23 @@ function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
 }
 
-function normalizeDraft(draft: SubscriptionDraft): SubscriptionDraft {
+function normalizeDraft(
+  draft: SubscriptionDraft,
+  defaultCadence: string,
+): SubscriptionDraft {
   return {
     ...draft,
-    cadence: draft.cadence || "每天",
+    cadence: draft.cadence || defaultCadence,
     schedule_time: draft.schedule_time || "09:00",
     schedule_day: draft.schedule_day || "1",
     timezone: draft.timezone || localTimezone(),
   };
 }
 
-function inferScheduleFromGoal(goal: string): Partial<SubscriptionDraft> {
+function inferScheduleFromGoal(
+  goal: string,
+  t: Translations,
+): Partial<SubscriptionDraft> {
   const patch: Partial<SubscriptionDraft> = {};
   const timeMatch = goal.match(/\b([01]?\d|2[0-3])[:：]([0-5]\d)\b/);
   if (timeMatch) {
@@ -126,7 +123,7 @@ function inferScheduleFromGoal(goal: string): Partial<SubscriptionDraft> {
   }
 
   if (/每周|周报|weekly/i.test(goal)) {
-    patch.cadence = "每周";
+    patch.cadence = t.intelligencePanel.cadenceWeekly;
     const weekdayMatch = goal.match(
       /(?:周|星期|礼拜)\s*([一二三四五六日天1-7])/,
     );
@@ -150,7 +147,7 @@ function inferScheduleFromGoal(goal: string): Partial<SubscriptionDraft> {
     const weekdayToken = weekdayMatch?.[1];
     if (weekdayToken) patch.schedule_day = weekdayMap[weekdayToken] ?? "1";
   } else if (/每月|月报|monthly/i.test(goal)) {
-    patch.cadence = "每月";
+    patch.cadence = t.intelligencePanel.cadenceMonthly;
     const monthDayMatch = goal.match(/(?:每月|月)\s*(\d{1,2})\s*(?:号|日)?/);
     if (monthDayMatch) {
       patch.schedule_day = String(
@@ -158,9 +155,9 @@ function inferScheduleFromGoal(goal: string): Partial<SubscriptionDraft> {
       );
     }
   } else if (/高频|实时|hourly|real-time/i.test(goal)) {
-    patch.cadence = "高频";
+    patch.cadence = t.intelligencePanel.cadenceHighFrequency;
   } else if (/每天|每日|daily/i.test(goal)) {
-    patch.cadence = "每天";
+    patch.cadence = t.intelligencePanel.cadenceDaily;
   }
 
   return patch;
@@ -192,11 +189,17 @@ function safeDate(value?: string | null) {
   return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
-function reportDateParts(value?: string | null) {
+function reportDateParts(value: string | null | undefined, t: Translations) {
   const d = safeDate(value);
-  const weekday = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"][
-    d.getDay()
-  ];
+  const weekday = [
+    t.intelligencePanel.reportWeekdaySunday,
+    t.intelligencePanel.reportWeekdayMonday,
+    t.intelligencePanel.reportWeekdayTuesday,
+    t.intelligencePanel.reportWeekdayWednesday,
+    t.intelligencePanel.reportWeekdayThursday,
+    t.intelligencePanel.reportWeekdayFriday,
+    t.intelligencePanel.reportWeekdaySaturday,
+  ][d.getDay()];
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   const hours = String(d.getHours()).padStart(2, "0");
@@ -241,40 +244,57 @@ function scheduleText(
     IntelligenceSubscription,
     "cadence" | "schedule_time" | "schedule_day" | "timezone"
   >,
+  t: Translations,
 ) {
-  const cadence = item.cadence || "每天";
+  const cadence = item.cadence || t.intelligencePanel.cadenceDaily;
   const time = item.schedule_time || "09:00";
   const timezone = item.timezone || localTimezone();
   if (cadence.includes("高频") || cadence.toLowerCase().includes("hour")) {
-    return `高频检查 · ${timezone}`;
+    return t.intelligencePanel.scheduleHighFrequency(timezone);
   }
   if (cadence.includes("周") || cadence.toLowerCase().includes("week")) {
+    const weekdayMap: Record<string, string> = {
+      "1": t.intelligencePanel.weekdayMonday,
+      "2": t.intelligencePanel.weekdayTuesday,
+      "3": t.intelligencePanel.weekdayWednesday,
+      "4": t.intelligencePanel.weekdayThursday,
+      "5": t.intelligencePanel.weekdayFriday,
+      "6": t.intelligencePanel.weekdaySaturday,
+      "7": t.intelligencePanel.weekdaySunday,
+    };
     const weekday =
-      WEEKDAY_OPTIONS.find(
-        (option) => option.value === String(item.schedule_day || "1"),
-      )?.label ?? "周一";
-    return `每周 ${weekday} ${time} · ${timezone}`;
+      weekdayMap[String(item.schedule_day || "1")] ??
+      t.intelligencePanel.weekdayMonday;
+    return t.intelligencePanel.scheduleWeekly(weekday, time, timezone);
   }
   if (cadence.includes("月") || cadence.toLowerCase().includes("month")) {
-    return `每月 ${item.schedule_day || "1"} 号 ${time} · ${timezone}`;
+    return t.intelligencePanel.scheduleMonthly(
+      item.schedule_day || "1",
+      time,
+      timezone,
+    );
   }
-  return `每天 ${time} · ${timezone}`;
+  return t.intelligencePanel.scheduleDaily(time, timezone);
 }
 
-function articleContent(report: IntelligenceReport) {
+function articleContent(report: IntelligenceReport, t: Translations) {
   if (report.markdown?.trim()) return report.markdown.trim();
   const sections: string[] = [];
   if (report.summary) sections.push(report.summary);
   if (report.findings?.length) {
     sections.push(
-      ["## 关键发现", ...report.findings.map((item) => `- ${item}`)].join("\n"),
+      [
+        `## ${t.intelligencePanel.keyFindingsHeading}`,
+        ...report.findings.map((item) => `- ${item}`),
+      ].join("\n"),
     );
   }
   if (report.recommendations?.length) {
     sections.push(
-      ["## 建议", ...report.recommendations.map((item) => `- ${item}`)].join(
-        "\n",
-      ),
+      [
+        `## ${t.intelligencePanel.recommendationsHeading}`,
+        ...report.recommendations.map((item) => `- ${item}`),
+      ].join("\n"),
     );
   }
   return sections.join("\n\n");
@@ -291,6 +311,7 @@ function ReportCover({
   label: string;
   compact?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <div
       className={cn(
@@ -301,7 +322,7 @@ function ReportCover({
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.55),transparent_28%),radial-gradient(circle_at_78%_35%,rgba(99,102,241,0.42),transparent_30%),linear-gradient(135deg,rgba(15,23,42,1),rgba(17,24,39,0.92))]" />
       <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:28px_28px]" />
       <div className="absolute left-2 top-2 rounded-md bg-black/45 px-1.5 py-0.5 text-[10px] font-medium text-white/90">
-        AI生成
+        {t.intelligencePanel.aiGenerated}
       </div>
       <div className="absolute bottom-2 left-2 right-2 line-clamp-2 text-xs font-semibold leading-5">
         {label}
@@ -323,7 +344,8 @@ function ReportTimelineItem({
   fallback: string;
   onSelect: () => void;
 }) {
-  const date = reportDateParts(report.created_at);
+  const { t } = useI18n();
+  const date = reportDateParts(report.created_at, t);
   const headline = reportHeadline(report, fallback);
   const topic = reportTopic(report, fallback);
   const preview = reportPreview(report);
@@ -375,15 +397,19 @@ function ReportTimelineItem({
                     {date.monthDay} {date.weekday}
                   </span>
                   {typeof report.items_analyzed === "number" && (
-                    <span>{report.items_analyzed} 条情报</span>
+                    <span>
+                      {t.intelligencePanel.itemsCount(report.items_analyzed)}
+                    </span>
                   )}
                   {typeof report.skills_created === "number" && (
-                    <span>{report.skills_created} 个能力</span>
+                    <span>
+                      {t.intelligencePanel.skillsCount(report.skills_created)}
+                    </span>
                   )}
                 </div>
               </div>
               <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-muted px-2 text-[11px] text-muted-foreground transition-colors group-hover:text-foreground">
-                查看
+                {t.intelligencePanel.view}
                 <ArrowRightIcon className="size-3" />
               </span>
             </div>
@@ -411,6 +437,28 @@ export function IntelligencePanel() {
   const [draft, setDraft] = useState<SubscriptionDraft | null>(null);
   const [builderOpen, setBuilderOpen] = useState(true);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+
+  const cadenceOptions = useMemo(
+    () => [
+      t.intelligencePanel.cadenceHighFrequency,
+      t.intelligencePanel.cadenceDaily,
+      t.intelligencePanel.cadenceWeekly,
+      t.intelligencePanel.cadenceMonthly,
+    ],
+    [t],
+  );
+  const weekdayOptions = useMemo(
+    () => [
+      { value: "1", label: t.intelligencePanel.weekdayMonday },
+      { value: "2", label: t.intelligencePanel.weekdayTuesday },
+      { value: "3", label: t.intelligencePanel.weekdayWednesday },
+      { value: "4", label: t.intelligencePanel.weekdayThursday },
+      { value: "5", label: t.intelligencePanel.weekdayFriday },
+      { value: "6", label: t.intelligencePanel.weekdaySaturday },
+      { value: "7", label: t.intelligencePanel.weekdaySunday },
+    ],
+    [t],
+  );
 
   const subscriptionsQuery = useQuery({
     queryKey: subscriptionsKey,
@@ -484,7 +532,13 @@ export function IntelligencePanel() {
       ),
     onSuccess: (data, nextGoal) =>
       setDraft(
-        normalizeDraft({ ...data.draft, ...inferScheduleFromGoal(nextGoal) }),
+        normalizeDraft(
+          {
+            ...data.draft,
+            ...inferScheduleFromGoal(nextGoal, t),
+          },
+          t.intelligencePanel.cadenceDaily,
+        ),
       ),
     onError: () => toast.error(t.intelligence.addFailed),
   });
@@ -586,8 +640,8 @@ export function IntelligencePanel() {
 
   const reportBody = useMemo(() => {
     if (!selectedReport) return "";
-    return articleContent(selectedReport);
-  }, [selectedReport]);
+    return articleContent(selectedReport, t);
+  }, [selectedReport, t]);
 
   const handleCreateDraft = () => {
     if (!draft) return;
@@ -720,7 +774,7 @@ export function IntelligencePanel() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {CADENCE_OPTIONS.map((option) => (
+                        {cadenceOptions.map((option) => (
                           <SelectItem key={option} value={option}>
                             {option}
                           </SelectItem>
@@ -749,7 +803,7 @@ export function IntelligencePanel() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <ClockIcon className="size-3" />
-                        运行时间
+                        {t.intelligencePanel.runTime}
                       </div>
                       <Input
                         type="time"
@@ -764,15 +818,19 @@ export function IntelligencePanel() {
                               : current,
                           )
                         }
-                        disabled={draft.cadence === "高频"}
+                        disabled={
+                          draft.cadence === t.intelligencePanel.cadenceHighFrequency
+                        }
                         className="h-7 bg-background/75 text-xs"
                       />
                     </div>
                     <div className="space-y-1">
                       <div className="text-[10px] text-muted-foreground">
-                        {draft.cadence === "每月" ? "每月日期" : "每周日期"}
+                        {draft.cadence === t.intelligencePanel.cadenceMonthly
+                          ? t.intelligencePanel.monthlyDate
+                          : t.intelligencePanel.weeklyDate}
                       </div>
-                      {draft.cadence === "每月" ? (
+                      {draft.cadence === t.intelligencePanel.cadenceMonthly ? (
                         <Select
                           value={draft.schedule_day}
                           onValueChange={(value) =>
@@ -789,7 +847,7 @@ export function IntelligencePanel() {
                           <SelectContent>
                             {MONTHDAY_OPTIONS.map((day) => (
                               <SelectItem key={day} value={day}>
-                                {day} 号
+                                {t.intelligencePanel.monthDayLabel(day)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -804,13 +862,15 @@ export function IntelligencePanel() {
                                 : current,
                             )
                           }
-                          disabled={draft.cadence !== "每周"}
+                          disabled={
+                            draft.cadence !== t.intelligencePanel.cadenceWeekly
+                          }
                         >
                           <SelectTrigger className="h-7 w-full bg-background/75 text-xs">
                             <SelectValue placeholder="-" />
                           </SelectTrigger>
                           <SelectContent>
-                            {WEEKDAY_OPTIONS.map((option) => (
+                            {weekdayOptions.map((option) => (
                               <SelectItem
                                 key={option.value}
                                 value={option.value}
@@ -824,7 +884,7 @@ export function IntelligencePanel() {
                     </div>
                     <div className="space-y-1">
                       <div className="text-[10px] text-muted-foreground">
-                        时区
+                        {t.intelligencePanel.timezone}
                       </div>
                       <Input
                         value={draft.timezone}
@@ -840,7 +900,7 @@ export function IntelligencePanel() {
                     </div>
                   </div>
                   <div className="rounded-md border border-border/50 bg-background/50 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-                    预计执行：{scheduleText(draft)}
+                    {t.intelligencePanel.expectedRun(scheduleText(draft, t))}
                   </div>
                   <Textarea
                     value={draft.instructions}
@@ -925,7 +985,9 @@ export function IntelligencePanel() {
                   <RadarIcon className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">还没有自动订阅</div>
+                  <div className="text-sm font-semibold">
+                    {t.intelligencePanel.noSubscriptionsYet}
+                  </div>
                   <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
                     {t.intelligence.noSubscriptionsHint(
                       t.intelligence.exampleKeyword,
@@ -1016,7 +1078,7 @@ export function IntelligencePanel() {
                               .filter(Boolean)
                               .join(", ")}
                           </span>
-                          <span>{scheduleText(item)}</span>
+                          <span>{scheduleText(item, t)}</span>
                           <span>
                             {reportCount} {t.intelligence.reports}
                           </span>
@@ -1101,17 +1163,18 @@ export function IntelligencePanel() {
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold">
                 <NewspaperIcon className="size-4 text-primary" />
-                最新动态
+                {t.intelligencePanel.latestUpdates}
               </div>
               <div className="text-xs text-muted-foreground">
-                {reports.length} {t.intelligence.reports} · 按订阅推送排序
+                {reports.length} {t.intelligence.reports} ·{" "}
+                {t.intelligencePanel.sortedBySubscriptionPush}
               </div>
             </div>
             <Badge
               variant="secondary"
               className="rounded-md px-2 py-0.5 text-[11px]"
             >
-              资讯流
+              {t.intelligencePanel.newsFeed}
             </Badge>
           </div>
 
@@ -1122,7 +1185,9 @@ export function IntelligencePanel() {
                   <NewspaperIcon className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold">暂无报告</div>
+                  <div className="text-sm font-semibold">
+                    {t.intelligencePanel.noReportsYet}
+                  </div>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     {t.intelligence.noReportsHint}
                   </p>
@@ -1147,10 +1212,10 @@ export function IntelligencePanel() {
             <div className="space-y-2.5 px-3 py-3">
               <div className="rounded-lg border border-border/70 bg-background/55 px-3 py-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">
-                  正在持续追踪
+                  {t.intelligencePanel.trackingNow}
                 </span>
                 <span className="mx-2 text-border">/</span>
-                有新报告时会进入时间线，点开卡片可阅读完整推送。
+                {t.intelligencePanel.reportTimelineHint}
               </div>
               {reports.slice(0, 8).map((report, index) => {
                 const key = reportKey(report, index);
@@ -1178,7 +1243,7 @@ export function IntelligencePanel() {
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/70 px-2.5 py-1 text-foreground">
                     <BellRingIcon className="size-3.5 text-primary" />
-                    订阅主题
+                    {t.intelligencePanel.subscriptionTopic}
                   </span>
                   <span>
                     {selectedReport.topic || t.intelligence.topicReport}
@@ -1205,9 +1270,9 @@ export function IntelligencePanel() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <span>今日推送</span>
+                  <span>{t.intelligencePanel.todayPush}</span>
                   <span>
-                    {reportDateParts(selectedReport.created_at).monthDay}
+                    {reportDateParts(selectedReport.created_at, t).monthDay}
                   </span>
                 </div>
                 <ReportCover

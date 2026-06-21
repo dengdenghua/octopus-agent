@@ -56,6 +56,21 @@ vi.mock("@/core/i18n/hooks", () => {
         "每周汇总 AI Agent、浏览器自动化、多智能体框架的新论文",
       ],
       goalPlaceholder: "描述你想持续追踪的情报目标",
+      noSubscriptionsYet: "还没有自动订阅",
+      scheduleHighFrequency: (timezone: string) => `高频检查 · ${timezone}`,
+      scheduleWeekly: (
+        weekday: string,
+        time: string,
+        timezone: string,
+      ) => `每周 ${weekday} ${time} · ${timezone}`,
+      scheduleMonthly: (day: string, time: string, timezone: string) =>
+        `每月 ${day} 号 ${time} · ${timezone}`,
+      scheduleDaily: (time: string, timezone: string) =>
+        `每天 ${time} · ${timezone}`,
+      itemsCount: (count: number) => `${count} 条情报`,
+      skillsCount: (count: number) => `${count} 个能力`,
+      expectedRun: (schedule: string) => `预计执行：${schedule}`,
+      monthDayLabel: (day: string) => `${day} 号`,
     },
   };
   const makeLeaf = (section: string) =>

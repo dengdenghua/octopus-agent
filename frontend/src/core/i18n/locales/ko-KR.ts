@@ -1346,6 +1346,7 @@ export const koKR: Translations = {
     actionNewProject: "New project",
     actionNewTask: "New task",
     actionNewChat: "New chat",
+    sectionStart: "Start",
     actionEnableProjectGrouping: "Enable project grouping",
     actionDisableProjectGrouping: "Disable project grouping",
     sectionProjects: "Projects",
@@ -1629,7 +1630,19 @@ export const koKR: Translations = {
     localDataNote: "All connection data is stored locally — no cloud involved.",
     connectedCount: (n: number) => `${n} connected`,
     loading: "Loading channels...",
+    loadFailed: "Failed to load channels",
+    retry: "Retry",
     noRegistered: "No messaging channels registered.",
+    noRegisteredDescription:
+      "Once the channel service is running, available platforms and pairing status will appear here.",
+    searchPlaceholder: "Search channels, platforms, agents...",
+    filterAll: "All",
+    filterConnected: "Connected",
+    filterUnlinked: "Unlinked",
+    noSearchResults: "No matching channels",
+    noSearchResultsDescription:
+      "Try another keyword, or switch back to all statuses.",
+    categoryOther: "Other",
     connectedBadge: "Connected",
     toastAgentBound: "Agent bound",
     toastBindFailed: "Bind failed",
@@ -1966,6 +1979,106 @@ export const koKR: Translations = {
     modified: "Modified",
     signedDelta: (count) => `${count > 0 ? "+" : ""}${count}`,
   },
+
+  // Agent role profile dialog
+  agentRoleProfile: {
+    imageReadFailed: "Failed to read image",
+    switchToAgent: (name) => `Switch to ${name}`,
+    generateVisualPromptTitle: "Generate visual prompt",
+    generateVisualPromptDescription:
+      "Use the agent-visual-kit workflow for quality control, then add your own appearance terms.",
+    visualPromptGroupStyle: "Style",
+    visualPromptGroupComposition: "Composition",
+    visualPromptGroupBackground: "Background",
+    visualPromptGroupQuality: "Quality",
+    visualPromptOptionGameCharacter: "Game character art",
+    visualPromptOptionCleanAnime: "Clean anime style",
+    visualPromptOptionSemiReal: "Semi-realistic",
+    visualPromptOptionFullBody: "Full body",
+    visualPromptOptionSafeHeadroom: "Extra headroom",
+    visualPromptOptionAvatarReady: "Avatar-friendly",
+    visualPromptOptionThreeViewConsistency: "Three-view consistency",
+    visualPromptOptionTransparent: "Transparent background",
+    visualPromptOptionSoftShadow: "Soft shadow",
+    visualPromptOptionHighResolution: "High-resolution details",
+    visualPromptOptionNoArtifacts: "Reduce artifacts",
+    customAdditions: "Custom additions",
+    customPromptPlaceholder:
+      "e.g., silver-white short hair, black techwear jacket, yellow energy lines, calm but approachable.",
+    referenceImages: "Reference images",
+    referenceImagesHint: (count) =>
+      `Up to ${count} images to help keep face and art style consistent`,
+    referenceImageUrlPlaceholder:
+      "Paste image URLs, one per line; or upload local images directly.",
+    upload: "Upload",
+    referenceImageAlt: (index) => `Reference image ${index + 1}`,
+    removeReferenceImage: "Remove reference image",
+    referenceImagesGenerateHint: (count) =>
+      `Will send ${count} reference image(s) to Agnes for reference-based generation.`,
+    reset: "Reset",
+    cancel: "Cancel",
+    generateThreeViews: "Generate three views",
+    codeMode: "Code mode",
+    codeModeDescription:
+      "Top-level access switch; enables code mode and extra workspace authorization when on.",
+    toggleCodeMode: "Toggle code mode",
+    saveCodeMode: "Save code mode",
+    coderBestFor: [
+      "Code review and fixes",
+      "Refactoring plans",
+      "Tests and edge cases",
+    ],
+    coderBoundaries: [
+      "Locate a reproduction path before changing code",
+      "Confirm high-risk bulk edits",
+    ],
+    researcherBestFor: [
+      "Market research",
+      "Competitive landscape",
+      "Opportunities and risk assessment",
+    ],
+    researcherBoundaries: [
+      "Conclusions must cite sources",
+      "Do not present guesses as facts",
+    ],
+    growthBestFor: [
+      "Campaign copy",
+      "Growth experiments",
+      "Product selling points",
+    ],
+    growthBoundaries: [
+      "Creatives must lead to conversion actions",
+      "Do not replace legal or compliance commitments",
+    ],
+    ecommerceBestFor: [
+      "Category strategy",
+      "Inventory and supply chain analysis",
+      "Conversion funnel optimization",
+    ],
+    ecommerceBoundaries: [
+      "Strategy must match fulfillment capability",
+      "Pricing and contract matters need review",
+    ],
+    aoiBestFor: [
+      "Character interaction",
+      "World-building",
+      "Creative narrative and atmosphere",
+    ],
+    aoiBoundaries: [
+      "Confirm risky requests first",
+      "Keep character tone without overriding user intent",
+    ],
+    defaultBestFor: [
+      "Writing and summarizing",
+      "Plan breakdown",
+      "Information organization and Q&A",
+    ],
+    defaultBoundaries: [
+      "Will confirm before external actions",
+      "Will flag gaps in uncertain content",
+    ],
+  },
+
   chatPage: {
     stopNote: "User clicked Stop in the chat input",
   },
@@ -2609,6 +2722,13 @@ export const koKR: Translations = {
       materialStandardDescription: "Keep the original surface treatment",
       materialLiquid: "Liquid Glass",
       materialLiquidDescription: "Global blur, depth, and dynamic refraction",
+      materialIntensityTitle: "Material intensity",
+      materialIntensityClear: "Clear",
+      materialIntensityClearDescription: "Lighter blur, more background",
+      materialIntensityBalanced: "Balanced",
+      materialIntensityBalancedDescription: "Layered for daily use",
+      materialIntensityDeep: "Deep",
+      materialIntensityDeepDescription: "Stronger depth and highlights",
       languageTitle: "Language",
       languageDescription: "Switch between languages.",
       languageEnglish: "English",
@@ -4392,6 +4512,52 @@ Strategy:
     ],
     goalPlaceholder:
       "e.g., Track Octopus Agent, browser-use, and OpenAI Agent SDK releases, issues, and important discussions daily, keeping only changes that impact the product roadmap.",
+    cadenceHighFrequency: "High frequency",
+    cadenceDaily: "Daily",
+    cadenceWeekly: "Weekly",
+    cadenceMonthly: "Monthly",
+    weekdayMonday: "Monday",
+    weekdayTuesday: "Tuesday",
+    weekdayWednesday: "Wednesday",
+    weekdayThursday: "Thursday",
+    weekdayFriday: "Friday",
+    weekdaySaturday: "Saturday",
+    weekdaySunday: "Sunday",
+    reportWeekdaySunday: "Sun",
+    reportWeekdayMonday: "Mon",
+    reportWeekdayTuesday: "Tue",
+    reportWeekdayWednesday: "Wed",
+    reportWeekdayThursday: "Thu",
+    reportWeekdayFriday: "Fri",
+    reportWeekdaySaturday: "Sat",
+    scheduleHighFrequency: (timezone) => `High-frequency check · ${timezone}`,
+    scheduleWeekly: (weekday, time, timezone) =>
+      `Weekly on ${weekday} at ${time} · ${timezone}`,
+    scheduleMonthly: (day, time, timezone) =>
+      `Monthly on day ${day} at ${time} · ${timezone}`,
+    scheduleDaily: (time, timezone) => `Daily at ${time} · ${timezone}`,
+    monthDayLabel: (day) => `Day ${day}`,
+    keyFindingsHeading: "Key findings",
+    recommendationsHeading: "Recommendations",
+    aiGenerated: "AI-generated",
+    itemsCount: (count) => `${count} items`,
+    skillsCount: (count) => `${count} skills`,
+    view: "View",
+    runTime: "Run time",
+    monthlyDate: "Monthly day",
+    weeklyDate: "Weekly day",
+    timezone: "Timezone",
+    expectedRun: (schedule) => `Next run: ${schedule}`,
+    noSubscriptionsYet: "No automated subscriptions yet",
+    latestUpdates: "Latest updates",
+    sortedBySubscriptionPush: "Sorted by subscription push",
+    newsFeed: "News feed",
+    noReportsYet: "No reports yet",
+    trackingNow: "Tracking continuously",
+    reportTimelineHint:
+      "New reports will appear in the timeline; click a card to read the full push.",
+    subscriptionTopic: "Subscription topic",
+    todayPush: "Today",
   },
 
   // Live Run Feedback
@@ -6147,6 +6313,13 @@ Strategy:
   // Settings Dialog
   settingsDialog: {
     dragToResize: "Drag to resize",
+    searchPlaceholder: "Search settings",
+    clearSearch: "Clear search",
+    sectionsLabel: "Sections",
+    resultsCount: (count) => `${count} result${count === 1 ? "" : "s"}`,
+    noSearchResultsTitle: "No matching settings",
+    noSearchResultsDescription:
+      "Try another keyword, such as models, permissions, theme, or MCP.",
   },
 
   // Skill Categories
@@ -6519,6 +6692,13 @@ Strategy:
     title: "Architecture",
     subtitle:
       "Hand-written design docs under docs/architecture/. Mermaid code blocks render automatically.",
+    loading: "Loading architecture docs...",
+    rendering: "Rendering document...",
+    loadFailed: "Failed to load architecture docs",
+    retry: "Retry",
+    emptyTitle: "No architecture document to show",
+    emptyDescription:
+      "The backend returned no content, or this document has not been written yet.",
     groups: {
       entry: "Entry",
       diagrams: "Diagrams",

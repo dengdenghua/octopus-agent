@@ -1168,6 +1168,7 @@ export interface Translations {
     actionNewProject: string;
     actionNewTask: string;
     actionNewChat: string;
+    sectionStart: string;
     actionEnableProjectGrouping: string;
     actionDisableProjectGrouping: string;
     sectionProjects: string;
@@ -1420,7 +1421,17 @@ export interface Translations {
     localDataNote: string;
     connectedCount: (n: number) => string;
     loading: string;
+    loadFailed: string;
+    retry: string;
     noRegistered: string;
+    noRegisteredDescription: string;
+    searchPlaceholder: string;
+    filterAll: string;
+    filterConnected: string;
+    filterUnlinked: string;
+    noSearchResults: string;
+    noSearchResultsDescription: string;
+    categoryOther: string;
     connectedBadge: string;
     toastAgentBound: string;
     toastBindFailed: string;
@@ -1648,6 +1659,58 @@ export interface Translations {
     modified: string;
     signedDelta: (count: number) => string;
   };
+
+  // Agent role profile dialog
+  agentRoleProfile: {
+    imageReadFailed: string;
+    switchToAgent: (name: string) => string;
+    generateVisualPromptTitle: string;
+    generateVisualPromptDescription: string;
+    visualPromptGroupStyle: string;
+    visualPromptGroupComposition: string;
+    visualPromptGroupBackground: string;
+    visualPromptGroupQuality: string;
+    visualPromptOptionGameCharacter: string;
+    visualPromptOptionCleanAnime: string;
+    visualPromptOptionSemiReal: string;
+    visualPromptOptionFullBody: string;
+    visualPromptOptionSafeHeadroom: string;
+    visualPromptOptionAvatarReady: string;
+    visualPromptOptionThreeViewConsistency: string;
+    visualPromptOptionTransparent: string;
+    visualPromptOptionSoftShadow: string;
+    visualPromptOptionHighResolution: string;
+    visualPromptOptionNoArtifacts: string;
+    customAdditions: string;
+    customPromptPlaceholder: string;
+    referenceImages: string;
+    referenceImagesHint: (count: number) => string;
+    referenceImageUrlPlaceholder: string;
+    upload: string;
+    referenceImageAlt: (index: number) => string;
+    removeReferenceImage: string;
+    referenceImagesGenerateHint: (count: number) => string;
+    reset: string;
+    cancel: string;
+    generateThreeViews: string;
+    codeMode: string;
+    codeModeDescription: string;
+    toggleCodeMode: string;
+    saveCodeMode: string;
+    coderBestFor: string[];
+    coderBoundaries: string[];
+    researcherBestFor: string[];
+    researcherBoundaries: string[];
+    growthBestFor: string[];
+    growthBoundaries: string[];
+    ecommerceBestFor: string[];
+    ecommerceBoundaries: string[];
+    aoiBestFor: string[];
+    aoiBoundaries: string[];
+    defaultBestFor: string[];
+    defaultBoundaries: string[];
+  };
+
   chatPage: {
     stopNote: string;
   };
@@ -2246,6 +2309,13 @@ export interface Translations {
       materialStandardDescription: string;
       materialLiquid: string;
       materialLiquidDescription: string;
+      materialIntensityTitle: string;
+      materialIntensityClear: string;
+      materialIntensityClearDescription: string;
+      materialIntensityBalanced: string;
+      materialIntensityBalancedDescription: string;
+      materialIntensityDeep: string;
+      materialIntensityDeepDescription: string;
       languageTitle: string;
       languageDescription: string;
       languageEnglish: string;
@@ -3870,6 +3940,49 @@ export interface Translations {
   intelligencePanel: {
     examplePrompts: string[];
     goalPlaceholder: string;
+    cadenceHighFrequency: string;
+    cadenceDaily: string;
+    cadenceWeekly: string;
+    cadenceMonthly: string;
+    weekdayMonday: string;
+    weekdayTuesday: string;
+    weekdayWednesday: string;
+    weekdayThursday: string;
+    weekdayFriday: string;
+    weekdaySaturday: string;
+    weekdaySunday: string;
+    reportWeekdaySunday: string;
+    reportWeekdayMonday: string;
+    reportWeekdayTuesday: string;
+    reportWeekdayWednesday: string;
+    reportWeekdayThursday: string;
+    reportWeekdayFriday: string;
+    reportWeekdaySaturday: string;
+    scheduleHighFrequency: (timezone: string) => string;
+    scheduleWeekly: (weekday: string, time: string, timezone: string) => string;
+    scheduleMonthly: (day: string, time: string, timezone: string) => string;
+    scheduleDaily: (time: string, timezone: string) => string;
+    monthDayLabel: (day: string) => string;
+    keyFindingsHeading: string;
+    recommendationsHeading: string;
+    aiGenerated: string;
+    itemsCount: (count: number) => string;
+    skillsCount: (count: number) => string;
+    view: string;
+    runTime: string;
+    monthlyDate: string;
+    weeklyDate: string;
+    timezone: string;
+    expectedRun: (schedule: string) => string;
+    noSubscriptionsYet: string;
+    latestUpdates: string;
+    sortedBySubscriptionPush: string;
+    newsFeed: string;
+    noReportsYet: string;
+    trackingNow: string;
+    reportTimelineHint: string;
+    subscriptionTopic: string;
+    todayPush: string;
   };
 
   // Live Run Feedback
@@ -5439,6 +5552,12 @@ export interface Translations {
   // Settings Dialog
   settingsDialog: {
     dragToResize: string;
+    searchPlaceholder: string;
+    clearSearch: string;
+    sectionsLabel: string;
+    resultsCount: (count: number) => string;
+    noSearchResultsTitle: string;
+    noSearchResultsDescription: string;
   };
 
   // Skill Categories
@@ -5946,6 +6065,12 @@ export interface Translations {
   architecture: {
     title: string;
     subtitle: string;
+    loading: string;
+    rendering: string;
+    loadFailed: string;
+    retry: string;
+    emptyTitle: string;
+    emptyDescription: string;
     groups: {
       entry: string;
       diagrams: string;

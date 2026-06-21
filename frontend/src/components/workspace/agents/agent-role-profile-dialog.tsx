@@ -117,16 +117,10 @@ type AgentCharacterProfile = {
   prompt: string;
 };
 
-type VisualPromptOption = {
-  id: string;
-  label: string;
-  prompt: string;
-};
-
 type VisualPromptGroup = {
   id: string;
   label: string;
-  options: VisualPromptOption[];
+  options: { id: string; label: string }[];
 };
 
 type RoleProfileNotes = {
@@ -136,98 +130,30 @@ type RoleProfileNotes = {
 
 const MAX_VISUAL_REFERENCE_IMAGES = 3;
 
-const VISUAL_PROMPT_GROUPS: VisualPromptGroup[] = [
-  {
-    id: "style",
-    label: "风格",
-    options: [
-      {
-        id: "game-character",
-        label: "游戏角色立绘",
-        prompt:
-          "premium game character illustration, polished character card art, readable silhouette",
-      },
-      {
-        id: "clean-anime",
-        label: "精致二次元",
-        prompt:
-          "clean anime-inspired linework, delicate rendering, expressive face, refined costume details",
-      },
-      {
-        id: "semi-real",
-        label: "半写实",
-        prompt:
-          "semi-realistic character concept art, natural proportions, cinematic but not photorealistic",
-      },
-    ],
-  },
-  {
-    id: "composition",
-    label: "构图",
-    options: [
-      {
-        id: "full-body",
-        label: "完整全身",
-        prompt:
-          "full body visible, standing pose, entire character contained inside canvas",
-      },
-      {
-        id: "safe-headroom",
-        label: "头顶留白",
-        prompt:
-          "full head visible with extra top margin, do not crop hair or head",
-      },
-      {
-        id: "avatar-ready",
-        label: "头像友好",
-        prompt:
-          "face clear and centered enough for a high quality avatar crop from the front view",
-      },
-      {
-        id: "three-view-consistency",
-        label: "三视图一致",
-        prompt:
-          "front side and back views must keep the same face, hairstyle, outfit, colors, and proportions",
-      },
-    ],
-  },
-  {
-    id: "background",
-    label: "背景",
-    options: [
-      {
-        id: "transparent",
-        label: "透明背景",
-        prompt:
-          "transparent background, isolated character, no scenery, no colored backdrop",
-      },
-      {
-        id: "soft-shadow",
-        label: "轻阴影",
-        prompt:
-          "subtle grounding shadow only, no environment, suitable for UI overlay",
-      },
-    ],
-  },
-  {
-    id: "quality",
-    label: "质量",
-    options: [
-      {
-        id: "high-resolution",
-        label: "高清细节",
-        prompt:
-          "high resolution, crisp edges, detailed outfit materials, sharp eyes, no blur",
-      },
-      {
-        id: "no-artifacts",
-        label: "减少瑕疵",
-        prompt:
-          "avoid extra fingers, distorted hands, asymmetrical eyes, duplicate limbs, messy text, watermark",
-      },
-    ],
-  },
-];
+const VISUAL_PROMPT_OPTION_PROMPTS: Record<string, string> = {
+  "game-character":
+    "premium game character illustration, polished character card art, readable silhouette",
+  "clean-anime":
+    "clean anime-inspired linework, delicate rendering, expressive face, refined costume details",
+  "semi-real":
+    "semi-realistic character concept art, natural proportions, cinematic but not photorealistic",
+  "full-body":
+    "full body visible, standing pose, entire character contained inside canvas",
+  "safe-headroom":
+    "full head visible with extra top margin, do not crop hair or head",
+  "avatar-ready":
+    "face clear and centered enough for a high quality avatar crop from the front view",
+  "three-view-consistency":
+    "front side and back views must keep the same face, hairstyle, outfit, colors, and proportions",
+  transparent:
+    "transparent background, isolated character, no scenery, no colored backdrop",
+  "soft-shadow":
+    "subtle grounding shadow only, no environment, suitable for UI overlay",
+  "high-resolution":
+    "high resolution, crisp edges, detailed outfit materials, sharp eyes, no blur",
+  "no-artifacts":
+    "avoid extra fingers, distorted hands, asymmetrical eyes, duplicate limbs, messy text, watermark",
+};
 
 const DEFAULT_VISUAL_PROMPT_OPTION_IDS = [
   "game-character",
@@ -240,23 +166,14 @@ const DEFAULT_VISUAL_PROMPT_OPTION_IDS = [
   "no-artifacts",
 ];
 
-function selectedVisualPromptOptions(
-  selectedIds: string[],
-): VisualPromptOption[] {
-  const selected = new Set(selectedIds);
-  return VISUAL_PROMPT_GROUPS.flatMap((group) =>
-    group.options.filter((option) => selected.has(option.id)),
-  );
-}
-
 function buildVisualPrompt(
   basePrompt: string,
   selectedIds: string[],
   customPrompt: string,
 ): string {
-  const optionPrompts = selectedVisualPromptOptions(selectedIds).map(
-    (option) => option.prompt,
-  );
+  const optionPrompts = selectedIds
+    .map((id) => VISUAL_PROMPT_OPTION_PROMPTS[id])
+    .filter(Boolean);
   return [
     basePrompt,
     "Use agent-visual-kit metaskill workflow.",
@@ -282,7 +199,7 @@ function readImageFileAsDataUrl(file: File): Promise<string> {
       if (typeof reader.result === "string") {
         resolve(reader.result);
       } else {
-        reject(new Error("图片读取失败"));
+        reject(new Error("Failed to read image"));
       }
     });
     reader.addEventListener("error", () => reject(reader.error));
@@ -290,41 +207,44 @@ function readImageFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function buildRoleProfileNotes(agent: AgentWorldAgent): RoleProfileNotes {
+function buildRoleProfileNotes(
+  agent: AgentWorldAgent,
+  t: Translations,
+): RoleProfileNotes {
   const key = `${agent.name} ${agent.display_name}`.toLowerCase();
   if (key.includes("coder")) {
     return {
-      bestFor: ["代码审查与修复", "重构方案", "测试与边界情况"],
-      boundaries: ["改动前先定位复现路径", "高风险批量修改需要确认"],
+      bestFor: t.agentRoleProfile.coderBestFor,
+      boundaries: t.agentRoleProfile.coderBoundaries,
     };
   }
   if (key.includes("market_researcher") || key.includes("research")) {
     return {
-      bestFor: ["赛道调研", "竞品格局", "机会点与风险判断"],
-      boundaries: ["结论必须带来源", "不把猜测包装成确定事实"],
+      bestFor: t.agentRoleProfile.researcherBestFor,
+      boundaries: t.agentRoleProfile.researcherBoundaries,
     };
   }
   if (key.includes("vibe") || key.includes("growth")) {
     return {
-      bestFor: ["活动文案", "增长实验", "产品卖点提炼"],
-      boundaries: ["创意要能落到转化动作", "不替代法务或合规承诺"],
+      bestFor: t.agentRoleProfile.growthBestFor,
+      boundaries: t.agentRoleProfile.growthBoundaries,
     };
   }
   if (key.includes("ecommerce") || key.includes("commerce")) {
     return {
-      bestFor: ["品类策略", "货盘与供应链分析", "转化链路优化"],
-      boundaries: ["策略要能对应履约能力", "价格和合同事项需复核"],
+      bestFor: t.agentRoleProfile.ecommerceBestFor,
+      boundaries: t.agentRoleProfile.ecommerceBoundaries,
     };
   }
   if (key.includes("aoi")) {
     return {
-      bestFor: ["角色互动", "世界观补完", "创意叙事与氛围设定"],
-      boundaries: ["危险委托先确认", "保持角色口吻但不越过用户意图"],
+      bestFor: t.agentRoleProfile.aoiBestFor,
+      boundaries: t.agentRoleProfile.aoiBoundaries,
     };
   }
   return {
-    bestFor: ["写作与总结", "计划拆解", "信息整理与问答"],
-    boundaries: ["涉及外部操作会先确认", "不确定内容会说明缺口"],
+    bestFor: t.agentRoleProfile.defaultBestFor,
+    boundaries: t.agentRoleProfile.defaultBoundaries,
   };
 }
 
@@ -587,6 +507,79 @@ function AgentCoreVisual({
     ["side", t.agentConfig.viewSide],
     ["back", t.agentConfig.viewBack],
   ] as const;
+  const visualPromptGroups = useMemo<VisualPromptGroup[]>(
+    () => [
+      {
+        id: "style",
+        label: t.agentRoleProfile.visualPromptGroupStyle,
+        options: [
+          {
+            id: "game-character",
+            label: t.agentRoleProfile.visualPromptOptionGameCharacter,
+          },
+          {
+            id: "clean-anime",
+            label: t.agentRoleProfile.visualPromptOptionCleanAnime,
+          },
+          {
+            id: "semi-real",
+            label: t.agentRoleProfile.visualPromptOptionSemiReal,
+          },
+        ],
+      },
+      {
+        id: "composition",
+        label: t.agentRoleProfile.visualPromptGroupComposition,
+        options: [
+          {
+            id: "full-body",
+            label: t.agentRoleProfile.visualPromptOptionFullBody,
+          },
+          {
+            id: "safe-headroom",
+            label: t.agentRoleProfile.visualPromptOptionSafeHeadroom,
+          },
+          {
+            id: "avatar-ready",
+            label: t.agentRoleProfile.visualPromptOptionAvatarReady,
+          },
+          {
+            id: "three-view-consistency",
+            label: t.agentRoleProfile.visualPromptOptionThreeViewConsistency,
+          },
+        ],
+      },
+      {
+        id: "background",
+        label: t.agentRoleProfile.visualPromptGroupBackground,
+        options: [
+          {
+            id: "transparent",
+            label: t.agentRoleProfile.visualPromptOptionTransparent,
+          },
+          {
+            id: "soft-shadow",
+            label: t.agentRoleProfile.visualPromptOptionSoftShadow,
+          },
+        ],
+      },
+      {
+        id: "quality",
+        label: t.agentRoleProfile.visualPromptGroupQuality,
+        options: [
+          {
+            id: "high-resolution",
+            label: t.agentRoleProfile.visualPromptOptionHighResolution,
+          },
+          {
+            id: "no-artifacts",
+            label: t.agentRoleProfile.visualPromptOptionNoArtifacts,
+          },
+        ],
+      },
+    ],
+    [t],
+  );
   const visualUrls = agent.visual_urls ?? {};
   const activeGeneratedVisual = visualUrls[view] ?? null;
   const activeAvatar = agent.avatar_url
@@ -620,9 +613,8 @@ function AgentCoreVisual({
           MAX_VISUAL_REFERENCE_IMAGES,
         ),
       );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error(message);
+    } catch {
+      toast.error(t.agentRoleProfile.imageReadFailed);
     }
   }
 
@@ -775,7 +767,9 @@ function AgentCoreVisual({
                   <button
                     key={candidate.id}
                     type="button"
-                    aria-label={`切换到 ${candidate.display_name}`}
+                    aria-label={t.agentRoleProfile.switchToAgent(
+                      candidate.display_name,
+                    )}
                     title={candidate.display_name}
                     className={cn(
                       "relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-sm border bg-white/[0.04] text-sm transition",
@@ -825,16 +819,16 @@ function AgentCoreVisual({
             <div className="pointer-events-none absolute inset-0 opacity-25 [background-image:linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:28px_28px]" />
             <DialogTitle className="relative flex items-center gap-2 text-base">
               <ImagePlus className="size-4 text-primary" />
-              生成立绘提示词
+              {t.agentRoleProfile.generateVisualPromptTitle}
             </DialogTitle>
             <DialogDescription className="relative mt-1 text-xs text-white/48">
-              先用 agent-visual-kit 固定工作流控制质量，再补充你想要的外观词。
+              {t.agentRoleProfile.generateVisualPromptDescription}
             </DialogDescription>
           </div>
 
           <div className="max-h-[calc(88vh-148px)] overflow-y-auto p-5">
             <div className="grid gap-3">
-              {VISUAL_PROMPT_GROUPS.map((group) => (
+              {visualPromptGroups.map((group) => (
                 <div
                   key={group.id}
                   className="rounded-sm border border-white/8 bg-black/18 p-3"
@@ -875,11 +869,11 @@ function AgentCoreVisual({
 
               <div className="rounded-sm border border-white/8 bg-black/18 p-3">
                 <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
-                  自定义补充
+                  {t.agentRoleProfile.customAdditions}
                 </div>
                 <Textarea
                   className="min-h-[92px] resize-none border-white/10 bg-black/24 text-sm leading-6 text-white placeholder:text-white/28"
-                  placeholder="例如：银白短发、黑色机能外套、黄色能量线条、冷静但有亲和力。"
+                  placeholder={t.agentRoleProfile.customPromptPlaceholder}
                   value={customVisualPrompt}
                   onChange={(event) =>
                     setCustomVisualPrompt(event.target.value)
@@ -890,16 +884,18 @@ function AgentCoreVisual({
               <div className="rounded-sm border border-white/8 bg-black/18 p-3">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/44">
-                    参考图
+                    {t.agentRoleProfile.referenceImages}
                   </div>
                   <span className="text-[11px] text-white/36">
-                    最多 {MAX_VISUAL_REFERENCE_IMAGES} 张，辅助保持脸型和画风
+                    {t.agentRoleProfile.referenceImagesHint(
+                      MAX_VISUAL_REFERENCE_IMAGES,
+                    )}
                   </span>
                 </div>
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <Textarea
                     className="min-h-[58px] resize-none border-white/10 bg-black/24 text-xs leading-5 text-white placeholder:text-white/28"
-                    placeholder="粘贴图片 URL，可多行；也可以直接上传本地图。"
+                    placeholder={t.agentRoleProfile.referenceImageUrlPlaceholder}
                     value={referenceImageInput}
                     onChange={(event) =>
                       setReferenceImageInput(event.target.value)
@@ -907,7 +903,7 @@ function AgentCoreVisual({
                   />
                   <label className="inline-flex h-[58px] cursor-pointer items-center justify-center gap-2 rounded-sm border border-white/12 bg-white/[0.04] px-3 text-xs text-white/72 transition hover:border-[#f4e86f]/45 hover:text-white">
                     <Upload className="size-3.5" />
-                    上传
+                    {t.agentRoleProfile.upload}
                     <input
                       accept="image/*"
                       className="sr-only"
@@ -927,12 +923,12 @@ function AgentCoreVisual({
                         className="relative size-16 shrink-0 overflow-hidden rounded-sm border border-white/10 bg-white/[0.035]"
                       >
                         <img
-                          alt={`参考图 ${index + 1}`}
+                          alt={t.agentRoleProfile.referenceImageAlt(index)}
                           className="size-full object-cover"
                           src={image}
                         />
                         <button
-                          aria-label="移除参考图"
+                          aria-label={t.agentRoleProfile.removeReferenceImage}
                           className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-sm bg-black/62 text-white/78 transition hover:text-white"
                           type="button"
                           onClick={() => removeReferenceImage(image)}
@@ -956,8 +952,9 @@ function AgentCoreVisual({
                 </div>
                 {referenceImages.length > 0 ? (
                   <div className="mb-2 text-[11px] text-[#f4e86f]/78">
-                    将携带 {referenceImages.length} 张参考图进入 Agnes
-                    参考图生成。
+                    {t.agentRoleProfile.referenceImagesGenerateHint(
+                      referenceImages.length,
+                    )}
                   </div>
                 ) : null}
                 <p className="max-h-28 overflow-y-auto whitespace-pre-wrap text-[11px] leading-5 text-white/48 [scrollbar-width:thin]">
@@ -979,7 +976,7 @@ function AgentCoreVisual({
                 setUploadedReferenceImages([]);
               }}
             >
-              重置
+              {t.agentRoleProfile.reset}
             </Button>
             <div className="flex items-center gap-2">
               <Button
@@ -988,7 +985,7 @@ function AgentCoreVisual({
                 variant="outline"
                 onClick={() => setVisualPromptOpen(false)}
               >
-                取消
+                {t.agentRoleProfile.cancel}
               </Button>
               <Button
                 className="h-8 rounded-sm bg-[#f4e86f] px-4 text-xs text-[#232323] hover:bg-[#fff27c]"
@@ -1001,7 +998,7 @@ function AgentCoreVisual({
                 ) : (
                   <Sparkles className="mr-1 size-3.5" />
                 )}
-                生成三视图
+                {t.agentRoleProfile.generateThreeViews}
               </Button>
             </div>
           </div>
@@ -1138,7 +1135,7 @@ export function AgentRoleProfileDialog({
       : null,
     [typeLabel, characterProfile.currentState || roleLabel],
   ].filter(Boolean) as Array<[string, string]>;
-  const profileNotes = buildRoleProfileNotes(agent);
+  const profileNotes = buildRoleProfileNotes(agent, t);
   const personaTags = uniqueList([
     roleLabel,
     characterProfile.temperament,
@@ -1528,14 +1525,14 @@ export function AgentRoleProfileDialog({
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/88">
                                 <CircuitBoard className="size-3.5 text-primary/85" />
-                                编程模式
+                                {t.agentRoleProfile.codeMode}
                               </div>
                               <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-white/42">
-                                上层准入开关；开启后才允许进入代码模式与授权额外工作区。
+                                {t.agentRoleProfile.codeModeDescription}
                               </p>
                             </div>
                             <Switch
-                              aria-label="切换编程模式"
+                              aria-label={t.agentRoleProfile.toggleCodeMode}
                               checked={form.codeModeUnlock}
                               className="mt-0.5"
                               disabled={isLoading || isSaving}
@@ -1559,7 +1556,7 @@ export function AgentRoleProfileDialog({
                               ) : (
                                 <Save className="mr-1.5 size-3" />
                               )}
-                              保存编程模式
+                              {t.agentRoleProfile.saveCodeMode}
                             </Button>
                           ) : null}
                         </div>
