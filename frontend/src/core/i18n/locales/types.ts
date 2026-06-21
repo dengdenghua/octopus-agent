@@ -2985,6 +2985,59 @@ export interface Translations {
     };
   };
 
+  // Browser Home
+  browserHome: {
+    appNameDoubao: string;
+    appNameTongyiQianwen: string;
+    appNameWenxinYiyan: string;
+    appNameTencentYuanbao: string;
+    appNameZhihu: string;
+    appDescGemini: string;
+    appDescNotebookLM: string;
+    appDescDoubao: string;
+    appDescTongyiQianwen: string;
+    appDescWenxinYiyan: string;
+    appDescTencentYuanbao: string;
+    appDescPerplexity: string;
+    appDescChatGPT: string;
+    appDescClaude: string;
+    appDescKimi: string;
+    appDescAgnesAi: string;
+    appDescYouTube: string;
+    appDescBilibili: string;
+    appDescGitHub: string;
+    appDescStackOverflow: string;
+    appDescMdn: string;
+    appDescZhihu: string;
+    appDescWikipedia: string;
+    groupAiTools: string;
+    groupAiToolsSubtitle: string;
+    groupVideo: string;
+    groupVideoSubtitle: string;
+    groupDev: string;
+    groupDevSubtitle: string;
+    groupKnowledge: string;
+    groupKnowledgeSubtitle: string;
+    searchEngineBaidu: string;
+    searchEngineBaiduIcon: string;
+    metaBookmark: string;
+    metaRecent: string;
+    metaCommon: string;
+    categoryVideo: string;
+    categoryDev: string;
+    switchSearchEngine: string;
+    commonCategories: string;
+    bookmarksLabel: string;
+    bookmarkCount: (count: number) => string;
+    recentVisits: string;
+    commonEntries: string;
+    addToDock: string;
+    todoPlaceholder: string;
+    removeFromDock: string;
+    alreadyInDock: string;
+    add: string;
+  };
+
   // Execution Plan
   executionPlan: {
     title: string;

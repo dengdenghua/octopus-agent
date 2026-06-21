@@ -23,38 +23,28 @@ import {
   FileTextIcon,
   Clock3Icon,
   LayoutGridIcon,
-  PlugIcon,
-  CopyIcon,
   SparklesIcon,
   BookOpenIcon,
   MessageCircleIcon,
   BrainCircuitIcon,
   GraduationCapIcon,
   Edit3,
-  CheckCircle2,
   Folder,
   FolderOpen,
   Trash2,
   X,
   Plus,
-  GripVertical,
   Minimize2,
   Maximize2,
   type LucideIcon,
 } from "lucide-react";
 
 import { swallow } from "@/core/utils/log";
-import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
-import { copyTextToClipboard } from "@/core/clipboard";
-import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 
-import {
-  BROWSER_HOME_URL,
-  useBrowserStore,
-  type BrowserTab,
-} from "./browser-store";
+import { liquidGlassClass } from "./liquid-glass";
+import { useBrowserStore, type BrowserTab } from "./browser-store";
 
 type DesktopPanelId =
   | "home"
@@ -74,13 +64,6 @@ interface BrowserDesktopApp {
   color: string;
   description: string;
   category: DesktopAppCategory;
-}
-
-interface BrowserDesktopWidget {
-  title: string;
-  subtitle: string;
-  icon: LucideIcon;
-  color: string;
 }
 
 interface QuickLink {
@@ -142,7 +125,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: SparklesIcon,
     logoUrl: "https://cdn.simpleicons.org/googlegemini",
     color: "from-blue-500 to-cyan-400",
-    description: "综合搜索、多轮分析",
+    description: "Comprehensive search, multi-turn analysis",
     category: "ai",
   },
   {
@@ -151,16 +134,16 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: BookOpenIcon,
     logoUrl: "https://cdn.simpleicons.org/notebooklm",
     color: "from-amber-500 to-orange-400",
-    description: "资料库、引用、文档研究",
+    description: "Library, citations, document research",
     category: "ai",
   },
   {
-    name: "豆包",
+    name: "Doubao",
     url: "https://www.doubao.com/chat/",
     icon: MessageCircleIcon,
     logoUrl: "https://www.google.com/s2/favicons?domain=www.doubao.com&sz=128",
     color: "from-emerald-500 to-teal-400",
-    description: "中文调研、中文改写",
+    description: "Chinese research, Chinese rewriting",
     category: "ai",
   },
   {
@@ -169,35 +152,35 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: BrainCircuitIcon,
     logoUrl: "https://cdn.simpleicons.org/deepseek",
     color: "from-blue-700 to-indigo-500",
-    description: "推理、代码、中文问答",
+    description: "Reasoning, coding, Chinese Q&A",
     category: "ai",
   },
   {
-    name: "通义千问",
+    name: "Tongyi Qianwen",
     url: "https://chat.qwen.ai/",
     icon: SparklesIcon,
     logoUrl: "https://cdn.simpleicons.org/qwen",
     color: "from-blue-600 to-cyan-500",
-    description: "通义模型、多模态对话",
+    description: "Tongyi models, multimodal chat",
     category: "ai",
   },
   {
-    name: "文心一言",
+    name: "Wenxin Yiyan",
     url: "https://yiyan.baidu.com/",
     icon: MessageCircleIcon,
     logoUrl: "https://cdn.simpleicons.org/baidu",
     color: "from-indigo-600 to-blue-500",
-    description: "百度智能体、中文创作",
+    description: "Baidu agents, Chinese creation",
     category: "ai",
   },
   {
-    name: "腾讯元宝",
+    name: "Tencent Yuanbao",
     url: "https://yuanbao.tencent.com/",
     icon: BotIcon,
     logoUrl:
       "https://www.google.com/s2/favicons?domain=yuanbao.tencent.com&sz=128",
     color: "from-cyan-600 to-blue-500",
-    description: "中文搜索、资料总结",
+    description: "Chinese search, material summary",
     category: "ai",
   },
   {
@@ -206,7 +189,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: SearchIcon,
     logoUrl: "https://cdn.simpleicons.org/perplexity",
     color: "from-sky-500 to-indigo-500",
-    description: "网页检索、来源线索",
+    description: "Web search, source leads",
     category: "ai",
   },
   {
@@ -215,7 +198,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: BotIcon,
     logoUrl: "https://chatgpt.com/favicon.ico",
     color: "from-zinc-700 to-zinc-500",
-    description: "通用对话、代码辅助",
+    description: "General chat, coding assistance",
     category: "ai",
   },
   {
@@ -224,7 +207,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: BrainCircuitIcon,
     logoUrl: "https://cdn.simpleicons.org/claude",
     color: "from-stone-600 to-rose-400",
-    description: "长文分析、写作整理",
+    description: "Long-text analysis, writing organization",
     category: "ai",
   },
   {
@@ -233,7 +216,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: GraduationCapIcon,
     logoUrl: "https://www.google.com/s2/favicons?domain=www.kimi.com&sz=128",
     color: "from-violet-500 to-fuchsia-500",
-    description: "长上下文、中文资料",
+    description: "Long context, Chinese materials",
     category: "ai",
   },
   {
@@ -243,7 +226,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     logoUrl:
       "https://www.google.com/s2/favicons?domain=app.agnes-ai.com&sz=128",
     color: "from-pink-500 to-rose-400",
-    description: "AI 网关、生图、生视频",
+    description: "AI gateway, image/video generation",
     category: "ai",
   },
   {
@@ -252,7 +235,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: ImageIcon,
     logoUrl: "https://cdn.simpleicons.org/youtube",
     color: "from-red-600 to-red-500",
-    description: "视频、频道、直播",
+    description: "Videos, channels, live streams",
     category: "video",
   },
   {
@@ -261,7 +244,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: ImageIcon,
     logoUrl: "https://cdn.simpleicons.org/bilibili",
     color: "from-sky-500 to-cyan-400",
-    description: "视频、番剧、知识区",
+    description: "Videos, anime, knowledge zone",
     category: "video",
   },
   {
@@ -270,7 +253,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: BotIcon,
     logoUrl: "https://github.githubassets.com/favicons/favicon.svg",
     color: "from-zinc-900 to-zinc-700",
-    description: "代码仓库、项目协作",
+    description: "Code repos, project collaboration",
     category: "dev",
   },
   {
@@ -279,7 +262,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: BrainCircuitIcon,
     logoUrl: "https://cdn.simpleicons.org/stackoverflow",
     color: "from-orange-500 to-amber-400",
-    description: "编程问答、错误排查",
+    description: "Programming Q&A, troubleshooting",
     category: "dev",
   },
   {
@@ -288,16 +271,16 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: BookOpenIcon,
     logoUrl: "https://cdn.simpleicons.org/mdnwebdocs",
     color: "from-slate-900 to-blue-600",
-    description: "Web 文档、API 参考",
+    description: "Web docs, API reference",
     category: "dev",
   },
   {
-    name: "知乎",
+    name: "Zhihu",
     url: "https://www.zhihu.com/",
     icon: SearchIcon,
     logoUrl: "https://cdn.simpleicons.org/zhihu",
     color: "from-blue-600 to-sky-500",
-    description: "问答、专栏、中文资料",
+    description: "Q&A, columns, Chinese materials",
     category: "knowledge",
   },
   {
@@ -306,21 +289,17 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     icon: GraduationCapIcon,
     logoUrl: "https://cdn.simpleicons.org/wikipedia",
     color: "from-slate-700 to-slate-500",
-    description: "百科、背景资料",
+    description: "Encyclopedia, background materials",
     category: "knowledge",
   },
 ];
 
 const DESKTOP_APP_GROUPS: Array<{
   id: DesktopAppCategory;
-  title: string;
-  subtitle: string;
   appUrls: string[];
 }> = [
   {
     id: "ai",
-    title: "AI 工具",
-    subtitle: "模型、写作、研究",
     appUrls: [
       "https://gemini.google.com/app",
       "https://notebooklm.google.com/",
@@ -334,14 +313,10 @@ const DESKTOP_APP_GROUPS: Array<{
   },
   {
     id: "video",
-    title: "视频",
-    subtitle: "YouTube、Bilibili",
     appUrls: ["https://www.youtube.com/", "https://www.bilibili.com/"],
   },
   {
     id: "dev",
-    title: "开发",
-    subtitle: "代码、文档、问答",
     appUrls: [
       "https://github.com/",
       "https://stackoverflow.com/",
@@ -350,44 +325,26 @@ const DESKTOP_APP_GROUPS: Array<{
   },
   {
     id: "knowledge",
-    title: "知识",
-    subtitle: "问答、百科、资料",
     appUrls: ["https://www.zhihu.com/", "https://www.wikipedia.org/"],
-  },
-];
-
-const DESKTOP_WIDGETS: BrowserDesktopWidget[] = [
-  {
-    title: "调研记录",
-    subtitle: "REC 模式会把外部 AI 结果沉淀为简报",
-    icon: FileTextIcon,
-    color: "from-slate-700 to-slate-500",
-  },
-  {
-    title: "今日任务",
-    subtitle: "打开平台、收集结论、核查来源",
-    icon: LayoutGridIcon,
-    color: "from-indigo-500 to-blue-400",
   },
 ];
 
 const DESKTOP_SIDE_NAV: Array<{
   id: DesktopPanelId;
-  label: string;
   icon: LucideIcon;
 }> = [
-  { id: "home", label: "桌面", icon: HomeIcon },
-  { id: "theme", label: "主题", icon: PaletteIcon },
-  { id: "widgets", label: "小组件", icon: PanelLeftIcon },
-  { id: "wallpaper", label: "壁纸", icon: ImageIcon },
-  { id: "games", label: "娱乐", icon: Gamepad2Icon },
+  { id: "home", icon: HomeIcon },
+  { id: "theme", icon: PaletteIcon },
+  { id: "widgets", icon: PanelLeftIcon },
+  { id: "wallpaper", icon: ImageIcon },
+  { id: "games", icon: Gamepad2Icon },
 ];
 
 const SEARCH_ENGINES = [
   {
-    name: "百度",
+    name: "Baidu",
     url: "https://www.baidu.com/s?wd=",
-    icon: "百",
+    icon: "Bai",
     logoUrl: "https://www.baidu.com/favicon.ico",
     accent: "bg-[#2f6bff] text-white",
   },
@@ -415,7 +372,6 @@ const SEARCH_ENGINES = [
 ];
 
 type SearchEngine = (typeof SEARCH_ENGINES)[number];
-const DEFAULT_SEARCH_ENGINE = SEARCH_ENGINES[0]!;
 
 function DesktopAppLogo({
   app,
@@ -563,15 +519,6 @@ function moveDesktopApp(
   if (targetIndex < 0) return order;
   next.splice(targetIndex, 0, fromUrl);
   return next;
-}
-
-async function browserJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getBackendBaseURL()}${path}`, init);
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(data.detail || `HTTP ${res.status}`);
-  }
-  return res.json();
 }
 
 function MenuItem({
@@ -782,30 +729,42 @@ export function BrowserHome({
 }) {
   const { t } = useI18n();
   const wt = t.browser.webviewTab;
+  const bt = t.browserHome;
   const { bookmarks, history } = useBrowserStore();
 
   const appNameMap = useMemo<Record<string, string>>(
     () => ({
-      "Cocoloop 社区": wt.appNameCocoloopCommunity,
-      "Cocoloop 市场": wt.appNameCocoloopMarket,
-      豆包: wt.appNameDoubao,
+      Doubao: bt.appNameDoubao,
+      "Tongyi Qianwen": bt.appNameTongyiQianwen,
+      "Wenxin Yiyan": bt.appNameWenxinYiyan,
+      "Tencent Yuanbao": bt.appNameTencentYuanbao,
+      Zhihu: bt.appNameZhihu,
     }),
-    [wt],
+    [bt],
   );
 
   const appDescMap = useMemo<Record<string, string>>(
     () => ({
-      "社区、动态、交流": wt.appDescCocoloopCommunity,
-      "应用、资源、工具": wt.appDescCocoloopMarket,
-      "综合搜索、多轮分析": wt.appDescGemini,
-      "资料库、引用、文档研究": wt.appDescNotebookLM,
-      "中文调研、中文改写": wt.appDescDoubao,
-      "网页检索、来源线索": wt.appDescPerplexity,
-      "通用对话、代码辅助": wt.appDescChatGPT,
-      "长文分析、写作整理": wt.appDescClaude,
-      "长上下文、中文资料": wt.appDescKimi,
+      "Comprehensive search, multi-turn analysis": bt.appDescGemini,
+      "Library, citations, document research": bt.appDescNotebookLM,
+      "Chinese research, Chinese rewriting": bt.appDescDoubao,
+      "Reasoning, coding, Chinese Q&A": bt.appDescTongyiQianwen,
+      "Tongyi models, multimodal chat": bt.appDescWenxinYiyan,
+      "Baidu agents, Chinese creation": bt.appDescTencentYuanbao,
+      "Web search, source leads": bt.appDescPerplexity,
+      "General chat, coding assistance": bt.appDescChatGPT,
+      "Long-text analysis, writing organization": bt.appDescClaude,
+      "Long context, Chinese materials": bt.appDescKimi,
+      "AI gateway, image/video generation": bt.appDescAgnesAi,
+      "Videos, channels, live streams": bt.appDescYouTube,
+      "Videos, anime, knowledge zone": bt.appDescBilibili,
+      "Code repos, project collaboration": bt.appDescGitHub,
+      "Programming Q&A, troubleshooting": bt.appDescStackOverflow,
+      "Web docs, API reference": bt.appDescMdn,
+      "Q&A, columns, Chinese materials": bt.appDescZhihu,
+      "Encyclopedia, background materials": bt.appDescWikipedia,
     }),
-    [wt],
+    [bt],
   );
 
   const sideNavLabelMap = useMemo<Record<string, string>>(
@@ -917,7 +876,7 @@ export function BrowserHome({
             url: item.url,
             title: item.title || item.url,
             favicon: item.favicon,
-            meta: "收藏",
+            meta: bt.metaBookmark,
           }))
         : history
             .filter(
@@ -930,7 +889,7 @@ export function BrowserHome({
               url: item.url,
               title: item.title || item.url,
               favicon: item.favicon,
-              meta: "最近",
+              meta: bt.metaRecent,
             }));
 
     if (sourceItems.length > 0) return sourceItems.slice(0, 6);
@@ -951,22 +910,33 @@ export function BrowserHome({
         favicon: app.logoUrl,
         meta:
           app.category === "video"
-            ? "视频"
+            ? bt.categoryVideo
             : app.category === "dev"
-              ? "开发"
+              ? bt.categoryDev
               : "AI",
       }));
-  }, [appByUrl, appNameMap, bookmarks, history]);
-  const desktopAppGroups = useMemo(
-    () =>
-      DESKTOP_APP_GROUPS.map((group) => ({
-        ...group,
-        apps: group.appUrls
-          .map((url) => appByUrl.get(url))
-          .filter((app): app is BrowserDesktopApp => Boolean(app)),
-      })),
-    [appByUrl],
-  );
+  }, [appByUrl, appNameMap, bookmarks, bt, history]);
+  const desktopAppGroups = useMemo(() => {
+    const titles: Record<
+      DesktopAppCategory,
+      { title: string; subtitle: string }
+    > = {
+      ai: { title: bt.groupAiTools, subtitle: bt.groupAiToolsSubtitle },
+      video: { title: bt.groupVideo, subtitle: bt.groupVideoSubtitle },
+      dev: { title: bt.groupDev, subtitle: bt.groupDevSubtitle },
+      knowledge: {
+        title: bt.groupKnowledge,
+        subtitle: bt.groupKnowledgeSubtitle,
+      },
+    };
+    return DESKTOP_APP_GROUPS.map((group) => ({
+      ...titles[group.id],
+      id: group.id,
+      apps: group.appUrls
+        .map((url) => appByUrl.get(url))
+        .filter((app): app is BrowserDesktopApp => Boolean(app)),
+    }));
+  }, [appByUrl, bt]);
   const compactDesktop = device !== "desktop";
   const tabletDesktop = device === "tablet";
   const mobileDesktop = device === "mobile";
@@ -976,8 +946,28 @@ export function BrowserHome({
   const week = wt.weekdays[today.getDay()];
   const searchInputRef = useRef<HTMLInputElement>(null);
   const enginePickerRef = useRef<HTMLDivElement>(null);
-  const selectedSearchEngine =
-    SEARCH_ENGINES[selectedEngine] ?? DEFAULT_SEARCH_ENGINE;
+  const searchEngineNameMap = useMemo<Record<string, string>>(
+    () => ({
+      Baidu: bt.searchEngineBaidu,
+    }),
+    [bt],
+  );
+  const searchEngineIconMap = useMemo<Record<string, string>>(
+    () => ({
+      Bai: bt.searchEngineBaiduIcon,
+    }),
+    [bt],
+  );
+  const engines = useMemo(
+    () =>
+      SEARCH_ENGINES.map((engine) => ({
+        ...engine,
+        name: searchEngineNameMap[engine.name] ?? engine.name,
+        icon: searchEngineIconMap[engine.icon] ?? engine.icon,
+      })),
+    [searchEngineNameMap, searchEngineIconMap],
+  );
+  const selectedSearchEngine = engines[selectedEngine] ?? engines[0]!;
   useEffect(() => {
     if (typeof window === "undefined") return;
     localStorage.setItem(DESKTOP_APP_ORDER_KEY, JSON.stringify(appOrder));
@@ -1397,7 +1387,7 @@ export function BrowserHome({
                   selected &&
                     "border border-white/35 bg-white/24 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.35)]",
                 )}
-                title={sideNavLabelMap[item.id] ?? item.label}
+                title={sideNavLabelMap[item.id]}
               >
                 <Icon className="size-5" />
               </button>
@@ -1457,7 +1447,7 @@ export function BrowserHome({
               onClick={() => setEnginePickerOpen((value) => !value)}
               aria-haspopup="menu"
               aria-expanded={enginePickerOpen}
-              title="切换搜索引擎"
+              title={bt.switchSearchEngine}
               className={cn(
                 "group flex h-10 shrink-0 items-center gap-1 rounded-xl px-2 transition-colors hover:bg-slate-900/5",
                 mobileDesktop && "h-9 px-1.5",
@@ -1493,7 +1483,7 @@ export function BrowserHome({
               role="menu"
               className="absolute left-2 top-[calc(100%+10px)] z-30 w-56 rounded-2xl border border-white/60 bg-white/55 p-1.5 text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_22px_70px_rgba(15,23,42,0.18)] backdrop-blur-2xl"
             >
-              {SEARCH_ENGINES.map((engine, index) => {
+              {engines.map((engine, index) => {
                 const active = selectedEngine === index;
                 return (
                   <button
@@ -1689,7 +1679,7 @@ export function BrowserHome({
                 ))}
               </div>
               <div className="mt-3 text-center text-sm font-medium text-white/88">
-                常用分类
+                {bt.commonCategories}
               </div>
 
               {desktopAppGroups.map((group) =>
@@ -1759,21 +1749,21 @@ export function BrowserHome({
               <div className="mb-3 flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold text-slate-800">
-                    收藏标签
+                    {bt.bookmarksLabel}
                   </div>
                   <div className="text-xs text-slate-500">
                     {bookmarks.length > 0
-                      ? `${bookmarks.length} 个收藏`
+                      ? bt.bookmarkCount(bookmarks.length)
                       : history.length > 0
-                        ? "最近访问"
-                        : "常用入口"}
+                        ? bt.recentVisits
+                        : bt.commonEntries}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setActivePanel("add")}
                   className="grid size-8 place-items-center rounded-full border border-white/45 bg-white/30 text-slate-500 shadow-[inset_0_1px_1px_rgba(255,255,255,0.65)] transition hover:bg-white/48 hover:text-slate-800"
-                  title="添加到 Dock"
+                  title={bt.addToDock}
                 >
                   <Plus className="size-4" />
                 </button>
@@ -1864,7 +1854,7 @@ export function BrowserHome({
                           <div className="space-y-2">
                             <div className="rounded-xl border border-white/45 bg-white/32 p-2 backdrop-blur-xl">
                               <p className="text-xs text-slate-500">
-                                待办事项...
+                                {bt.todoPlaceholder}
                               </p>
                             </div>
                           </div>
@@ -2125,7 +2115,7 @@ export function BrowserHome({
                   type="button"
                   onClick={() => removeAppFromDock(app.url)}
                   className="absolute -right-1.5 -top-1.5 grid size-5 place-items-center rounded-full bg-rose-500 text-white shadow-lg transition hover:bg-rose-600"
-                  title="从 Dock 移除"
+                  title={bt.removeFromDock}
                 >
                   <X className="size-3" />
                 </button>
@@ -2142,7 +2132,7 @@ export function BrowserHome({
                 tabletDesktop && "size-13",
                 mobileDesktop && "size-11 rounded-[15px]",
               )}
-              title="添加到 Dock"
+              title={bt.addToDock}
             >
               <Plus className="size-6" />
             </button>
@@ -2278,6 +2268,7 @@ function DesktopControlPanel({
 }) {
   const { t } = useI18n();
   const wt = t.browser.webviewTab;
+  const bt = t.browserHome;
 
   const title =
     panel === "theme"
@@ -2294,11 +2285,13 @@ function DesktopControlPanel({
 
   const appNameMap = useMemo<Record<string, string>>(
     () => ({
-      "Cocoloop 社区": wt.appNameCocoloopCommunity,
-      "Cocoloop 市场": wt.appNameCocoloopMarket,
-      豆包: wt.appNameDoubao,
+      Doubao: bt.appNameDoubao,
+      "Tongyi Qianwen": bt.appNameTongyiQianwen,
+      "Wenxin Yiyan": bt.appNameWenxinYiyan,
+      "Tencent Yuanbao": bt.appNameTencentYuanbao,
+      Zhihu: bt.appNameZhihu,
     }),
-    [wt],
+    [bt],
   );
 
   const getAppName = useCallback(
@@ -2451,7 +2444,7 @@ function DesktopControlPanel({
                         : "bg-slate-950/88 text-white shadow-lg shadow-black/15 hover:bg-slate-700",
                     )}
                   >
-                    {inDock ? "已在 Dock" : "添加"}
+                    {inDock ? bt.alreadyInDock : bt.add}
                   </button>
                 </div>
               );
