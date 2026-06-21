@@ -43,11 +43,14 @@ Not for
 - Cross-thread / cross-conversation sharing (use long-term memory).
 - Large blobs (keep entries short · the blackboard goes into LLM
   context when ``bb_keys`` enumerates).
-- Persistence (in-memory only, gone on process restart).
+- Persistence — the default board is in-memory (gone on restart). For
+  durable, cross-process coordination set ``OCTOPUS_BLACKBOARD_DB`` to a
+  file path; see ``blackboard_store.SqliteBlackboard``.
 """
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from collections import OrderedDict
@@ -142,15 +145,31 @@ _BOARDS: OrderedDict[str, Blackboard] = OrderedDict()
 _BOARDS_LOCK = threading.Lock()
 
 
-def get_blackboard(turn_id: str | None) -> Blackboard | None:
+def get_blackboard(turn_id: str | None) -> Any:
     """Return the blackboard for ``turn_id``, creating one on demand.
 
     Returns ``None`` only when ``turn_id`` is empty / None — skills
     require a Session to share state, so callers should fall back to
     a "no shared scope" error message when this returns None.
+
+    When ``OCTOPUS_BLACKBOARD_DB`` names a file, returns a durable,
+    cross-process SQLite-backed board (same interface) instead of the
+    in-memory one, so agents in separate processes sharing the turn_id +
+    DB file coordinate on one workspace. Falls back to in-memory on any
+    backend error so coordination is never lost.
     """
     if not turn_id:
         return None
+    db_path = os.environ.get("OCTOPUS_BLACKBOARD_DB")
+    if db_path:
+        try:
+            from runtime.memory.runtime_state.blackboard_store import (
+                get_sqlite_blackboard,
+            )
+
+            return get_sqlite_blackboard(db_path, turn_id)
+        except Exception:  # noqa: BLE001 — never lose coordination to a bad backend
+            pass
     with _BOARDS_LOCK:
         bb = _BOARDS.get(turn_id)
         if bb is None:
