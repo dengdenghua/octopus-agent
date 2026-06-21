@@ -46,3 +46,50 @@ def test_run_swarm_without_on_signal(monkeypatch) -> None:
 
     monkeypatch.setattr(drive, "SwarmRuntime", _FakeSwarm)
     assert drive.run_swarm("g", "b", arm_pool="p", signal_bus=SignalBus()) == "ok"
+
+
+# ── build_arm_pool_from_registry (real arms, safe-filtered) ───────
+
+
+def test_build_arm_pool_from_registry_excludes_dangerous_and_groups() -> None:
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.swarm.drive import build_arm_pool_from_registry
+
+    reg = SkillRegistry()
+    for name in ("read_file", "count_words", "list_cwd", "hash_text"):  # builtin, safe
+        reg.register(
+            Skill(name=name, trusted_source=f"skill://public/{name}",
+                  handler=lambda **kw: {"ok": True}),
+            verify_tests=False,
+        )
+    reg.register(
+        Skill(name="exec_shell", trusted_source="skill://public/exec_shell",
+              handler=lambda **kw: {}, affinity=["shell", "dangerous"]),
+        verify_tests=False,
+    )
+
+    pool = build_arm_pool_from_registry(reg, runtime=None)
+    allowed = {str(s) for arm in pool.all_arms() for s in arm.allowed_skills}
+    assert {"read_file", "count_words", "list_cwd", "hash_text"} <= allowed
+    assert "exec_shell" not in allowed   # dangerous filtered out by default
+    assert len(pool) >= 1
+
+
+def test_build_arm_pool_from_registry_include_dangerous_opt_in() -> None:
+    from runtime.execution.suckers import Skill, SkillRegistry
+    from runtime.execution.swarm.drive import build_arm_pool_from_registry
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(name="exec_shell", trusted_source="skill://public/exec_shell",
+              handler=lambda **kw: {}, affinity=["dangerous"]),
+        verify_tests=False,
+    )
+    reg.register(
+        Skill(name="read_file", trusted_source="skill://public/read_file",
+              handler=lambda **kw: {"ok": True}),
+        verify_tests=False,
+    )
+    pool = build_arm_pool_from_registry(reg, runtime=None, include_dangerous=True)
+    allowed = {str(s) for arm in pool.all_arms() for s in arm.allowed_skills}
+    assert "exec_shell" in allowed   # opted in
