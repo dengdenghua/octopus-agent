@@ -695,12 +695,27 @@ def create_app(
     # WS server in this app's event loop, so the team reads live device state in
     # one process. Defensive: missing deps / port-in-use must not abort boot.
     try:
+        from runtime.core.cerebrum.planner import StaticPlanner
         from runtime.tentacle.coordinator import TentacleCoordinator
         from runtime.tentacle.dashboard import create_tentacle_router
+        from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
+        from runtime.tentacle.team_bridge import set_active_coordinator
 
-        _tentacle_coordinator = TentacleCoordinator(dashboard_port=None)
+        # Reuse the stack's planner when it can plan; else a bare StaticPlanner
+        # (the adapter degrades gracefully — a failed/empty plan just yields no
+        # device actions rather than crashing). This is the decision engine that
+        # turns a team task's natural-language goal into device tool calls.
+        _tentacle_planner = getattr(stack, "planner", None)
+        if not callable(getattr(_tentacle_planner, "plan", None)):
+            _tentacle_planner = StaticPlanner()
+        _tentacle_engine = CerebrumDecisionAdapter(_tentacle_planner).decide
+
+        _tentacle_coordinator = TentacleCoordinator(
+            dashboard_port=None, decision_engine=_tentacle_engine
+        )
         app.include_router(create_tentacle_router(_tentacle_coordinator))
         app.state.tentacle_coordinator = _tentacle_coordinator
+        set_active_coordinator(_tentacle_coordinator)
 
         @app.on_event("startup")
         async def _start_tentacle_bridge() -> None:

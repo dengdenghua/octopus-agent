@@ -337,6 +337,89 @@ def create_team_tasks_router(
 
         result: Any = None
         try:
+            # ── Mobile route ────────────────────────────────────
+            # Task assigned to connected phones (ref ``mobile_*``): run the goal
+            # on each device through the in-process tentacle bridge and record
+            # what it did. Falls through to CLI / topology when none assigned.
+            mobile_refs = [
+                a.ref.strip()
+                for a in task.assignees
+                if a.kind.strip().lower() == "agent" and a.ref.strip().startswith("mobile_")
+            ]
+            if mobile_refs:
+                import asyncio as _asyncio
+
+                from runtime.tentacle.team_bridge import (
+                    device_id_from_ref,
+                    get_active_coordinator,
+                    run_device_task,
+                )
+
+                coordinator = get_active_coordinator()
+                records: list[dict[str, Any]] = []
+                if coordinator is None or loop is None:
+                    records = [
+                        {
+                            "tentacle_id": device_id_from_ref(ref),
+                            "ok": False,
+                            "output": "",
+                            "error": "mobile bridge not running",
+                        }
+                        for ref in mobile_refs
+                    ]
+                else:
+                    for ref in mobile_refs:
+                        tentacle_id = device_id_from_ref(ref)
+                        try:
+                            with scoped_cancellation(source.token):
+                                future = _asyncio.run_coroutine_threadsafe(
+                                    run_device_task(
+                                        coordinator, tentacle_id, prepared["task_input"]
+                                    ),
+                                    loop,
+                                )
+                                records.append(future.result(timeout=260.0))
+                        except Exception as exc:  # noqa: BLE001 — isolate per device
+                            records.append(
+                                {
+                                    "tentacle_id": tentacle_id,
+                                    "ok": False,
+                                    "output": "",
+                                    "error": f"{type(exc).__name__}: {exc}",
+                                }
+                            )
+                succeeded = sum(1 for r in records if r.get("ok"))
+                final_status = (
+                    "cancelled"
+                    if source.is_cancelled
+                    else ("done" if succeeded else "failed")
+                )
+                metadata = {
+                    **dict(task.metadata),
+                    "runner": {
+                        "engine": "mobile",
+                        "devices": len(records),
+                        "succeeded": succeeded,
+                    },
+                }
+                if final_status == "failed":
+                    metadata["error"] = "no connected device completed the task"
+                updates = {
+                    "status": final_status,
+                    "completed_at": _now(),
+                    "metadata": metadata,
+                }
+                if final_status == "done":
+                    updates["produced_artifacts"] = _mobile_artifacts(records)
+                updated = _persist_task(task.id, updates)
+                if updated is not None:
+                    _broadcast_from_worker(
+                        loop,
+                        updated.room_id,
+                        _task_payload(updated, event=f"run_{final_status}"),
+                    )
+                return
+
             # ── CLI-team route ──────────────────────────────────
             # If the task is assigned to local coding-agent CLIs
             # (Claude Code / Codex / …, ref ``local_*``), run them
@@ -1127,6 +1210,28 @@ def _runner_metadata(result: Any, prepared: dict[str, Any]) -> dict[str, Any]:
         "error": _runner_result_error(result),
         "role_outputs": _jsonable(_result_value(result, "role_outputs", [])),
     }
+
+
+def _mobile_artifacts(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One artifact per phone carrying its run output, so the team room can
+    review what each device did."""
+    artifacts: list[dict[str, Any]] = []
+    for rec in records or []:
+        tentacle_id = str(rec.get("tentacle_id") or "device")
+        artifacts.append(
+            {
+                "id": f"artifact-{uuid4().hex[:12]}",
+                "type": "mobile_run",
+                "title": f"{tentacle_id} · {'完成' if rec.get('ok') else '未完成'}",
+                "content": str(rec.get("output") or rec.get("error") or ""),
+                "agent_id": f"mobile_{tentacle_id}",
+                "device_id": tentacle_id,
+                "ok": bool(rec.get("ok")),
+                "error": rec.get("error"),
+                "created_at": _now(),
+            }
+        )
+    return artifacts
 
 
 def _local_cli_members(task: TeamTaskWire) -> list[dict[str, str]]:
