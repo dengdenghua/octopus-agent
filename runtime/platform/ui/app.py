@@ -755,6 +755,13 @@ def create_app(
             exc_info=True,
         )
 
+    # Generic semantic ranking · /api/retrieve/rank — order candidate texts by
+    # meaning (configurable embedder, lexical fallback). A connected phone uses
+    # it to pick the right skill/cached action instead of keyword matching.
+    from runtime.sensing.gateway.retrieve_router import create_retrieve_router
+
+    app.include_router(create_retrieve_router())
+
     # ─── Persistent terminal WebSocket ─────────
     from runtime.sensing.gateway.terminal_router import mount_terminal_routes
     mount_terminal_routes(
