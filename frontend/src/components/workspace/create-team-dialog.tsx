@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import TeamRoleModelsPanel from "@/components/workspace/team-role-models-panel";
 import { useAgents } from "@/core/agents";
 import type { Agent } from "@/core/agents/types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -251,6 +252,11 @@ export function CreateTeamDialog({
               />
             </div>
           </div>
+        </div>
+
+        {/* Team config · per-role model tiering (cheap vs primary, cost control) */}
+        <div className="border-t px-6 py-2">
+          <TeamRoleModelsPanel />
         </div>
 
         <DialogFooter className="px-6 py-3 border-t gap-2">
