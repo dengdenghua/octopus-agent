@@ -156,3 +156,12 @@ def test_cli_team_skill_errors(monkeypatch) -> None:
     monkeypatch.setattr(ct, "detect_installed_partners", lambda: [])
     r = ds._run_cli_team(goal="x")
     assert r["ok"] is False and "no installed" in r["error"]  # none detected
+
+
+def test_router_exposes_status_and_run_routes() -> None:
+    from runtime.sensing.gateway.cli_team_router import create_cli_team_router
+
+    router = create_cli_team_router()
+    paths = {getattr(r, "path", None) for r in router.routes}
+    assert "/api/cli-team/status" in paths
+    assert "/api/cli-team/run" in paths

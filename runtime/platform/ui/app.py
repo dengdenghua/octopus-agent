@@ -678,6 +678,11 @@ def create_app(
     from runtime.sensing.gateway.local_brain_router import create_local_brain_router
     app.include_router(create_local_brain_router())
 
+    # CLI-team · detect installed coding CLIs (Claude/Codex) + run them as a team
+    # in isolated worktrees, diff-first review.
+    from runtime.sensing.gateway.cli_team_router import create_cli_team_router
+    app.include_router(create_cli_team_router())
+
     # ─── Persistent terminal WebSocket ─────────
     from runtime.sensing.gateway.terminal_router import mount_terminal_routes
     mount_terminal_routes(
