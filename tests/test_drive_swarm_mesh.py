@@ -80,10 +80,27 @@ def test_parallel_graph_runs_mesh_and_emits(monkeypatch) -> None:
         mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
                               text="g", topology_id="topo"),
     )
-    assert len(turn.items) == 3  # 2 arm results + summary
+    assert len(turn.items) == 1  # all succeeded → just the plain summary
+    assert "Ran 2 agents in parallel" in turn.items[0].text
+    assert "2 done" in turn.items[0].text
+
+
+def test_failed_agent_surfaces_a_plain_line(monkeypatch) -> None:
+    parallel = _graph(["a", "b", "c"], [])
+    result = SimpleNamespace(arm_results=[
+        SimpleNamespace(arm_id="x", status="success", reason=""),
+        SimpleNamespace(arm_id="y", status="failed", reason="timeout"),
+    ])
+    monkeypatch.setattr(asyncio, "to_thread", _to_thread_seq(parallel, (result, 3)))
+    turn = SimpleNamespace(thread_id="th", id="t1", items=[])
+    intent = SimpleNamespace(user_context={})
+    asyncio.run(
+        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
+                              text="g", topology_id="topo"),
+    )
     bodies = [it.text for it in turn.items]
-    assert any("builtin_arm" in b for b in bodies)
-    assert any("mesh swarm complete" in b and "2 arm" in b for b in bodies)
+    assert any("couldn't finish" in b and "timeout" in b for b in bodies)
+    assert any("Ran 2 agents in parallel" in b and "1 need a look" in b for b in bodies)
 
 
 # ── auto-select: small/sequential graph routes to the team ───────

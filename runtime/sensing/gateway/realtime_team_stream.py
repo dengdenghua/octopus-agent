@@ -762,18 +762,17 @@ async def _drive_swarm_mesh(
         return
 
     try:
-        result, signal_count = await asyncio.to_thread(_run, graph)
+        result, _signal_count = await asyncio.to_thread(_run, graph)
         arms = list(getattr(result, "arm_results", []) or [])
-        for arm in arms:
-            reason = str(getattr(arm, "reason", "") or "")[:4000]
-            await _emit(
-                f"[{getattr(arm, 'arm_id', 'arm')}] "
-                f"{getattr(arm, 'status', '?')} · {reason}"
-            )
-        await _emit(
-            f"mesh swarm complete · {len(arms)} arm(s) · "
-            f"{signal_count} coordination signal(s)"
-        )
+        # Plain language for the chat: no "swarm / arm / coordination signal"
+        # jargon. Only surface the agents that hit a problem, then one summary.
+        failed = [a for a in arms if str(getattr(a, "status", "")) != "success"]
+        for arm in failed:
+            reason = str(getattr(arm, "reason", "") or "").strip()[:2000]
+            await _emit(f"One agent couldn't finish: {reason or 'unknown error'}")
+        done = len(arms) - len(failed)
+        tail = f", {len(failed)} need a look" if failed else ""
+        await _emit(f"Ran {len(arms)} agents in parallel — {done} done{tail}")
     except Exception as exc:  # noqa: BLE001 — never break the turn on a mesh fault
         _logger.warning(
             "mesh swarm failed (%s: %s) — falling back to react",
