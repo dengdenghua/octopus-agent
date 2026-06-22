@@ -362,16 +362,6 @@ export function TeamInputBox({
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-          <button
-            type="button"
-            className="flex h-7 items-center gap-1.5 rounded-md bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            aria-label={t.teamInput.localFileAgentHint}
-            title={t.teamInput.localFileAgentHint}
-            onClick={summonLocalFileAgent}
-          >
-            <DatabaseIcon className="size-3.5 text-muted-foreground" />
-            <span>{t.teamInput.localFileAgent}</span>
-          </button>
         </div>
 
         <div className="ml-auto flex min-w-0 items-center gap-2">
