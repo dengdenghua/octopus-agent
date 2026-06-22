@@ -1,6 +1,7 @@
 export * from "./api";
 export * from "./hooks";
 export * from "./local-cli";
+export * from "./mobile-devices";
 export {
   type Agent,
   type CreateAgentRequest,

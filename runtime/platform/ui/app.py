@@ -683,6 +683,19 @@ def create_app(
     from runtime.sensing.gateway.cli_team_router import create_cli_team_router
     app.include_router(create_cli_team_router())
 
+    # Team role-model tiering · per-role cheap/primary override (cost control).
+    from runtime.sensing.gateway.team_role_models_router import (
+        create_team_role_models_router,
+    )
+    app.include_router(create_team_role_models_router())
+
+    # Mobile devices · phones (octopus-mobile) join the team as remote members;
+    # register/heartbeat, poll for device tasks, post results.
+    from runtime.sensing.gateway.mobile_devices_router import (
+        create_mobile_devices_router,
+    )
+    app.include_router(create_mobile_devices_router())
+
     # ─── Persistent terminal WebSocket ─────────
     from runtime.sensing.gateway.terminal_router import mount_terminal_routes
     mount_terminal_routes(

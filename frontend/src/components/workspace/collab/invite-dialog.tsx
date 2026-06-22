@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useAgents, useLocalCliAgents } from "@/core/agents";
+import { useAgents, useLocalCliAgents, useMobileDevices } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import type { Agent } from "@/core/agents/types";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -73,11 +73,12 @@ export function InviteDialog({
   const { t } = useI18n();
   const { agents: builtinAgents, isLoading: agentsLoading } = useAgents();
   const { cliAgents } = useLocalCliAgents();
-  // Detected local CLIs (Claude Code / Codex / …) sit alongside built-in
-  // agents in the picker, so 拉群 can pull them in like any other member.
+  const { mobileAgents } = useMobileDevices();
+  // Detected local CLIs + connected phones sit alongside built-in agents in
+  // the picker, so 拉群 can pull them in like any other member.
   const agents = useMemo(
-    () => [...cliAgents, ...builtinAgents],
-    [cliAgents, builtinAgents],
+    () => [...mobileAgents, ...cliAgents, ...builtinAgents],
+    [mobileAgents, cliAgents, builtinAgents],
   );
   const [copied, setCopied] = useState(false);
   const [inviteLink, setInviteLink] = useState("");

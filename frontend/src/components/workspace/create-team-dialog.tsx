@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import TeamRoleModelsPanel from "@/components/workspace/team-role-models-panel";
-import { useAgents, useLocalCliAgents } from "@/core/agents";
+import { useAgents, useLocalCliAgents, useMobileDevices } from "@/core/agents";
 import type { Agent } from "@/core/agents/types";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -37,10 +37,11 @@ export function CreateTeamDialog({
   const { t } = useI18n();
   const { agents: builtinAgents } = useAgents();
   const { cliAgents } = useLocalCliAgents();
-  // Detected local CLIs (Claude Code / Codex / …) join the picker as members.
+  const { mobileAgents } = useMobileDevices();
+  // Detected local CLIs + connected phones join the picker as members.
   const userAgents = useMemo(
-    () => [...cliAgents, ...builtinAgents],
-    [cliAgents, builtinAgents],
+    () => [...mobileAgents, ...cliAgents, ...builtinAgents],
+    [mobileAgents, cliAgents, builtinAgents],
   );
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Agent[]>([]);
