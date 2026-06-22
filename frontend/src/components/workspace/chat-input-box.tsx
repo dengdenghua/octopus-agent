@@ -2,6 +2,7 @@ import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
   CalendarClockIcon,
+  ChevronDownIcon,
   Code2Icon,
   FileTextIcon,
   FolderOpenIcon,
@@ -28,6 +29,11 @@ import {
   MentionAutocompletePopup,
   useMentionAutocomplete,
 } from "./mention-autocomplete";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 
 import { swallow } from "@/core/utils/log";
 import { currentActorId } from "@/core/auth/api";
@@ -283,7 +289,6 @@ export function ChatInputBox({
   const isBusy = disabled || uploadingMaterials;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
-  const projectModeLabel = t.chatInputBox.projectModeLabel;
   const projectModeHint = t.chatInputBox.projectModeHint;
   const projectStatusTitle = t.chatInputBox.projectStatusTitle;
   const projectStatusDesc = codeModeUnlocked
@@ -1162,100 +1167,92 @@ export function ChatInputBox({
             variant="muted"
           />
           {isProjectMode && (
-            <span
-              className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
-              title={projectModeHint}
-            >
-              <Code2Icon className="size-3" />
-              <span className="truncate">{projectModeLabel}</span>
-            </span>
-          )}
-        </div>
-      )}
-      {isProjectMode && (
-        <div
-          className={cn(
-            "mx-2 mt-2 rounded-lg border px-3 py-2 text-xs",
-            codeModeUnlocked
-              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
-              : "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-200",
-          )}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <span
-                className={cn(
-                  "grid size-6 shrink-0 place-items-center rounded-md",
-                  codeModeUnlocked
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
-                    : "bg-amber-500/15 text-amber-700 dark:text-amber-200",
-                )}
-              >
-                {codeModeUnlocked ? (
-                  <Code2Icon className="size-3.5" />
-                ) : (
-                  <LockIcon className="size-3.5" />
-                )}
-              </span>
-              <div className="min-w-0">
-                <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
-                  <span className="truncate">{projectStatusTitle}</span>
-                  <span className="rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                    {permissionLabel}
-                  </span>
-                </div>
-                <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
-                  {workDir}
-                </div>
-              </div>
-            </div>
-            <ModeSelector
-              workDir={workDir ?? ""}
-              sessionId={threadId ?? "new"}
-              mode={projectAgentMode}
-              onModeChange={onProjectAgentModeChange ?? (() => undefined)}
-              onDetectionChange={onProjectDetectionChange}
-            />
-          </div>
-          {projectSignalBadges.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {projectSignalBadges.map((badge) => (
-                <span
-                  key={badge}
-                  className="rounded-md bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            <>
+              <ModeSelector
+                workDir={workDir ?? ""}
+                sessionId={threadId ?? "new"}
+                mode={projectAgentMode}
+                onModeChange={onProjectAgentModeChange ?? (() => undefined)}
+                onDetectionChange={onProjectDetectionChange}
+              />
+              <HoverCard openDelay={80} closeDelay={120}>
+                <HoverCardTrigger asChild>
+                  <button
+                    type="button"
+                    title={projectModeHint}
+                    className={cn(
+                      "inline-flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors",
+                      codeModeUnlocked
+                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
+                        : "border-amber-500/25 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300",
+                    )}
+                  >
+                    {codeModeUnlocked ? (
+                      <Code2Icon className="size-3" />
+                    ) : (
+                      <LockIcon className="size-3" />
+                    )}
+                    <span className="truncate">{projectStatusTitle}</span>
+                    <ChevronDownIcon className="size-3 opacity-60" />
+                  </button>
+                </HoverCardTrigger>
+                <HoverCardContent
+                  align="start"
+                  side="top"
+                  className="w-80 text-xs"
                 >
-                  {badge}
-                </span>
-              ))}
-            </div>
+                  <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
+                    <span className="truncate">{projectStatusTitle}</span>
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {permissionLabel}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                    {workDir}
+                  </div>
+                  {projectSignalBadges.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {projectSignalBadges.map((badge) => (
+                        <span
+                          key={badge}
+                          className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                        >
+                          {badge}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {projectVerificationCommands.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        {projectVerificationLabel}
+                      </span>
+                      {projectVerificationCommands.map((item) => (
+                        <span
+                          key={`${item.kind}:${item.command}`}
+                          className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                          title={item.source}
+                        >
+                          <span className="font-sans uppercase text-foreground/60">
+                            {item.kind}
+                          </span>
+                          <span className="truncate">{item.command}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
+                    {codeModeUnlocked ? (
+                      <GitBranchIcon className="mt-0.5 size-3.5 shrink-0" />
+                    ) : (
+                      <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
+                    )}
+                    <span>{projectStatusDesc}</span>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            </>
           )}
-          {projectVerificationCommands.length > 0 && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-medium text-muted-foreground">
-                {projectVerificationLabel}
-              </span>
-              {projectVerificationCommands.map((item) => (
-                <span
-                  key={`${item.kind}:${item.command}`}
-                  className="inline-flex max-w-full items-center gap-1 rounded-md bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                  title={item.source}
-                >
-                  <span className="font-sans uppercase text-foreground/60">
-                    {item.kind}
-                  </span>
-                  <span className="truncate">{item.command}</span>
-                </span>
-              ))}
-            </div>
-          )}
-          <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
-            {codeModeUnlocked ? (
-              <GitBranchIcon className="mt-0.5 size-3.5 shrink-0" />
-            ) : (
-              <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
-            )}
-            <span>{projectStatusDesc}</span>
-          </div>
         </div>
       )}
     </>
