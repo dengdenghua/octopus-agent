@@ -110,6 +110,9 @@ from runtime.sensing.gateway.realtime_react_stream import (
     _try_reflex_reply as _try_reflex_reply,
 )
 from runtime.sensing.gateway.realtime_team_stream import (
+    _drive_group_fanout as _drive_group_fanout,
+)
+from runtime.sensing.gateway.realtime_team_stream import (
     _drive_swarm_mesh as _drive_swarm_mesh,
 )
 from runtime.sensing.gateway.realtime_team_stream import (
@@ -894,6 +897,24 @@ class CerebrumRuntime:
             topology_id=topology_id,
         )
 
+    async def _drive_group_fanout(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        intent: ParsedIntent,
+        *,
+        text: str,
+    ) -> None:
+        await _drive_group_fanout(
+            self,
+            turn,
+            log,
+            emitter,
+            intent,
+            text=text,
+        )
+
     async def _drive_react(
         self,
         turn: Turn,
@@ -986,9 +1007,7 @@ class CerebrumRuntime:
         function so the dispatch/fallback logic stays unit-testable."""
         from runtime.sensing.gateway.realtime_local_partner import drive_local_partner
 
-        await drive_local_partner(
-            self, turn, log, emitter, intent, agent, provider, text=text
-        )
+        await drive_local_partner(self, turn, log, emitter, intent, agent, provider, text=text)
 
 
 # Static check: this class fulfills the realtime contract.

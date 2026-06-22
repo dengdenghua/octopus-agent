@@ -793,3 +793,100 @@ async def _drive_swarm_mesh(
             type(exc).__name__, exc,
         )
         await _fallback_to_react()
+
+
+async def _drive_group_fanout(
+    runtime: Any,
+    turn: Turn,
+    log: EventLog,
+    emitter: EventEmitter,
+    intent: ParsedIntent,
+    *,
+    text: str,
+) -> None:
+    """蜂群 / 冒泡: fan the message out to every member agent in parallel and
+    emit each persona reply as its own group-chat bubble — the "boss speaks,
+    everyone chimes in" experience. Falls back to single-agent ReAct when the
+    room has <2 member agents or nobody answers, so the turn never stalls.
+    """
+    import asyncio
+
+    ctx = getattr(intent, "user_context", None) or {}
+    roster = ctx.get("agent_roster") or []
+    members = [
+        {
+            "name": str(r.get("agent_id")),
+            "display_name": str(r.get("display_name") or r.get("agent_id")),
+        }
+        for r in roster
+        if isinstance(r, dict) and r.get("agent_id")
+    ]
+
+    async def _emit(body: str) -> None:
+        item = AgentMessageItem(text=body, status=ItemStatus.COMPLETED)
+        turn.items.append(item)
+        with contextlib.suppress(Exception):
+            log.item_started(turn.thread_id, turn.id, item)
+            log.item_completed(turn.thread_id, turn.id, item)
+        payload = {
+            "threadId": turn.thread_id,
+            "turnId": turn.id,
+            "item": item.model_dump(by_alias=True, mode="json"),
+        }
+        with contextlib.suppress(Exception):
+            await emitter.notify(ServerMethod.ITEM_STARTED, payload)
+            await emitter.notify(ServerMethod.ITEM_COMPLETED, payload)
+
+    async def _fallback_to_react() -> None:
+        loop = asyncio.get_running_loop()
+        gateway_provider = GatewayApprovalProvider(
+            emitter,
+            loop,
+            thread_id=intent.user_context.get("thread_id", turn.thread_id),
+            turn_id=turn.id,
+            trace_store=runtime._trace_store,
+        )
+        provider = runtime._wrap_with_policy(gateway_provider)
+        from runtime.protocol.items import TurnParams
+
+        agent = None
+        with contextlib.suppress(Exception):
+            agent = runtime._resolve_agent(
+                TurnParams(threadId=turn.thread_id, input=[]),  # type: ignore[call-arg]
+            )
+        await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+
+    if len(members) < 2:
+        # Not a real group → one agent answers (the normal single-agent path).
+        await _fallback_to_react()
+        return
+
+    try:
+        from runtime.execution.agents.group_fanout import run_group_fanout
+        from runtime.execution.suckers.delegation_skills import _call_agent
+
+        # max_members=5 matches the per-turn delegation budget so every member
+        # that fits actually gets to speak.
+        result = await asyncio.to_thread(
+            run_group_fanout,
+            text,
+            members,
+            agent_caller=_call_agent,
+            max_members=5,
+            turn_id=turn.id,
+        )
+        spoke = 0
+        for reply in result.get("replies", []):
+            body = str(reply.get("reply") or "").strip()
+            if reply.get("ok") and body:
+                await _emit(f"**{reply.get('display_name')}**\n\n{body}")
+                spoke += 1
+        if spoke == 0:
+            await _fallback_to_react()
+    except Exception as exc:  # noqa: BLE001 — never break the turn on a fan-out fault
+        _logger.warning(
+            "group fan-out failed (%s: %s) — falling back to react",
+            type(exc).__name__,
+            exc,
+        )
+        await _fallback_to_react()
