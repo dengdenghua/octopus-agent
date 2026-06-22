@@ -171,9 +171,71 @@ def ax_control_grounding(max_elements: int = 25, max_depth: int = 14) -> str:
     )
 
 
+# Actionable UIA control types (Windows). Mirrors ``_AX_ACTIONABLE`` — the
+# kinds a user actually clicks/types into, so the planner gets click targets.
+_UIA_ACTIONABLE = frozenset({
+    "Button", "Edit", "CheckBox", "ComboBox", "RadioButton", "Hyperlink",
+    "MenuItem", "ListItem", "TabItem", "Slider", "SplitButton",
+})
+
+
+def _format_uia_grounding(tree: object, max_elements: int) -> str:
+    """Pure: turn a ``computer_uia_skills._computer_uia_tree`` result into the
+    same ``- Kind 'label' @ (x,y)`` lines ``ax_control_grounding`` emits.
+    Testable off Windows by passing a synthetic tree dict."""
+    if not isinstance(tree, dict) or not tree.get("ok"):
+        return ""
+    app_name = "foreground app"
+    root_node = tree.get("tree")
+    if isinstance(root_node, dict) and root_node.get("name"):
+        app_name = str(root_node["name"]).strip()[:60]
+    lines: list[str] = []
+    for node in tree.get("nodes") or []:
+        if len(lines) >= max_elements:
+            break
+        if not isinstance(node, dict):
+            continue
+        kind = str(node.get("control_type") or "")
+        if kind not in _UIA_ACTIONABLE:
+            continue
+        if not node.get("enabled", True) or node.get("offscreen"):
+            continue
+        center = node.get("center")
+        if not isinstance(center, dict) or "x" not in center or "y" not in center:
+            continue
+        label = str(node.get("name") or "").strip().replace("\n", " ")[:40]
+        lines.append(f"- {kind} {label!r} @ ({center['x']},{center['y']})")
+    if not lines:
+        return ""
+    return (
+        f"Actionable UI in '{app_name}' (control label @ center x,y):\n"
+        + "\n".join(lines)
+    )
+
+
+def uia_control_grounding(max_elements: int = 25, max_depth: int = 6) -> str:
+    """Windows counterpart of ``ax_control_grounding`` — the foreground app's
+    actionable UIA controls (kind label @ center). ``""`` off Windows or when
+    ``uiautomation`` is unavailable. Never raises — strictly additive."""
+    if sys.platform != "win32":
+        return ""
+    try:
+        from runtime.execution.suckers.computer_uia_skills import (
+            _computer_uia_tree,
+        )
+
+        tree = _computer_uia_tree(
+            root="foreground", max_depth=max_depth, max_nodes=200,
+        )
+    except Exception:  # noqa: BLE001 — uiautomation absent / load failed
+        return ""
+    return _format_uia_grounding(tree, max_elements)
+
+
 def combined_grounding() -> str:
     """Window list + frontmost-app actionable controls, for the vision loop.
     Each part is best-effort and contributes nothing (``""``) when unavailable.
+    macOS → Quartz windows + AX controls; Windows → UIA controls.
     """
-    parts = [window_grounding(), ax_control_grounding()]
+    parts = [window_grounding(), ax_control_grounding(), uia_control_grounding()]
     return "\n\n".join(p for p in parts if p)
