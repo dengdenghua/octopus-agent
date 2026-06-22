@@ -1211,6 +1211,14 @@ def run_ui(
         return 2
 
     app = create_app(journal_path=journal_path)
+
+    # Opt-in co-launch of the octopus-storage sibling (File Agent backend), so a
+    # single-machine user gets one command. Off by default; best-effort.
+    with contextlib.suppress(Exception):
+        from runtime.sensing.gateway.storage_supervisor import maybe_start_storage
+
+        maybe_start_storage()
+
     if uds:
         import os
         with contextlib.suppress(FileNotFoundError):
