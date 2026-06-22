@@ -17,7 +17,7 @@ HTTP request
 └────┬────┘
      ▼
 ┌─────────┐     消费 DAG，逐节点调度
-│Ganglia  │ ─── GraphRuntime / SwarmRuntime ─ runtime/core/ganglia/
+│Ganglia  │ ─── GraphRuntime / SwarmRuntime ─ runtime/core/graph_runtime/
 └────┬────┘
      ▼
 ┌─────────┐     执行载体，8 类 worker
@@ -29,11 +29,17 @@ HTTP request
 └────┬────┘
      ▼
 ┌─────────┐     真正调工具 + 全程审计
-│Beak     │ ─── ToolExecutor ─────────── runtime/execution/beak/
+│Beak     │ ─── ToolExecutor ─────────── runtime/execution/tool_engine/
 └─────────┘
 ```
 
 **读这 5 个**，就理解了 Octopus 怎么把"用户一句话"变成"tool 调用 + 返回"。
+
+> **默认路径 vs 条件路径（避免误读）**
+> 一次**普通对话轮次**实际走的是**中心化 ReAct loop**（`_drive_react`，见 `runtime/sensing/gateway/realtime_turn_lifecycle.py`）——Cerebrum 直接驱动 Arms/Beak，并不一定经过 Ganglia 的多节点图调度。
+> 上面图里的 **GraphRuntime / SwarmRuntime（Ganglia 多臂并行 + 腕间 SignalBus）** 是**按条件启用的次路径**：仅当任务是多代理 / 图编排 / 团队协作（`_drive_swarm_mesh` / `_drive_team_topology`）时才激活。
+> 同理 **Hearts 三心 HA**：fencing 租约 + etcd/redis 选举 + 每通道熔断**已实装**，但单机默认回退到 `_AlwaysLeaderGuard`，多节点互备需显式部署协调器。
+> 一句话:**这些分布式器官"代码已具备、机制可用",但默认运行拓扑是中心化 ReAct;mesh/HA 是条件启用,不是"未实装"。**
 
 ---
 
@@ -44,7 +50,7 @@ Beak 每次 `execute_step` 都会经过这 3 个关卡：
 | 器官 | 位置 | 管什么 |
 |---|---|---|
 | **Immunity** | `runtime/safety/immunity/` | 谁能调 / 谁被拒 · AntigenSignature + TrustEngine |
-| **Ink** | `runtime/safety/ink/` | 预算/熔断 · CircuitBreaker + Budget |
+| **Ink** | `runtime/safety/budget_breaker/` | 预算/熔断 · CircuitBreaker + Budget |
 | **Genome** | `runtime/memory/genome/` | Journal 持久化 · 所有事件 append-only |
 
 ---

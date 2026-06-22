@@ -1,3 +1,10 @@
+"""Self-evolution subsystem — biomimetic alias: *Regeneration*.
+
+Despite the directory name, this is NOT crash/error recovery. It is the
+agent's self-improvement loop: GEPA prompt/skill optimization, the genome
+registry, evolution datasets + constraints, and external-session mining.
+Engineering term: **self-evolution**. See docs/architecture/module-map.md.
+"""
 
 from .evolution_constraints import (
     EvolutionConstraintConfig,

@@ -1,3 +1,10 @@
+"""Prompt A/B experimentation subsystem — biomimetic alias: *Camouflage*.
+
+Runs prompt variants as controlled experiments: A/B splitting, Pareto
+selection, mutation/optimization, and auto-retire of losing variants.
+Engineering term: **prompt A/B testing & variant lifecycle**.
+See docs/architecture/module-map.md.
+"""
 
 from .auto_retire import (
     AutoRetireConfig,
