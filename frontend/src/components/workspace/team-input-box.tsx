@@ -239,7 +239,7 @@ export function TeamInputBox({
   return (
     <div
       data-testid="team-composer"
-      className="rounded-xl border border-border/70 bg-card overflow-hidden focus-within:border-primary/40 focus-within:shadow-sm focus-within:shadow-primary/10 transition-[border-color,box-shadow] duration-200"
+      className="rounded-xl border border-border/70 bg-card focus-within:border-primary/40 focus-within:shadow-sm focus-within:shadow-primary/10 transition-[border-color,box-shadow] duration-200"
     >
       <FloorBar />
       <div className="relative">
