@@ -967,7 +967,10 @@ export default function TeamPage() {
                     <div className="ml-auto flex items-center gap-2">
                       {teamId && (
                         <>
-                          <PresenceAvatars className="hidden md:flex" />
+                          <PresenceAvatars
+                            className="hidden md:flex"
+                            agents={teamConfig?.members ?? []}
+                          />
                           {canInvite && (
                             <Button
                               variant="ghost"
