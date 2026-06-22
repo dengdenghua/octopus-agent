@@ -12,6 +12,7 @@ import { WorkDirSelector } from "@/components/workspace/workdir-selector";
 import type { Team } from "@/core/teams";
 import { cn } from "@/lib/utils";
 
+import { TeamRoster } from "./team-roster";
 import { TeamTasksPanel } from "./team-tasks-panel";
 
 export type TeamWorkbenchTabId = "tasks" | "workspace" | "members";
@@ -26,6 +27,7 @@ interface TeamWorkbenchPanelProps {
   onWorkDirChange: (path: string) => void;
   currentParticipantId?: string;
   canManageTasks?: boolean;
+  onMention?: (name: string) => void;
   className?: string;
 }
 
@@ -34,9 +36,9 @@ const TABS: Array<{
   label: string;
   Icon: typeof ClipboardListIcon;
 }> = [
+  { id: "members", label: "群成员", Icon: UsersIcon },
   { id: "tasks", label: "待办 plan", Icon: ClipboardListIcon },
   { id: "workspace", label: "工作区", Icon: FolderIcon },
-  { id: "members", label: "成员", Icon: UsersIcon },
 ];
 
 export function TeamWorkbenchPanel({
@@ -49,6 +51,7 @@ export function TeamWorkbenchPanel({
   onWorkDirChange,
   currentParticipantId,
   canManageTasks = true,
+  onMention,
   className,
 }: TeamWorkbenchPanelProps) {
   return (
@@ -129,9 +132,10 @@ export function TeamWorkbenchPanel({
         ) : activeTab === "workspace" ? (
           <WorkspacePage workDir={workDir} />
         ) : (
-          <MembersPage
+          <TeamRoster
             team={team}
             currentParticipantId={currentParticipantId}
+            onMention={onMention}
           />
         )}
       </main>
@@ -173,69 +177,6 @@ function WorkspacePage({ workDir }: { workDir: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="min-h-0 flex-1 p-1">
         <FileTree workDir={workDir} className="h-full" />
-      </div>
-    </div>
-  );
-}
-
-function MembersPage({
-  team,
-  currentParticipantId,
-}: {
-  team: Team | null;
-  currentParticipantId?: string;
-}) {
-  const participants = (team?.participants ?? []).filter(
-    (participant) => participant.status !== "removed",
-  );
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-3">
-      <div className="mb-3">
-        <div className="text-sm font-medium text-foreground">成员</div>
-        <div className="mt-0.5 text-xs text-muted-foreground">
-          {team?.name ?? "未选择 Team"} · {participants.length} 位在线/协作成员
-        </div>
-      </div>
-      <div className="space-y-2">
-        {participants.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-4 py-8 text-center text-sm text-muted-foreground">
-            暂无成员
-          </div>
-        ) : (
-          participants.map((participant) => (
-            <div
-              key={participant.id}
-              className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-3 py-2"
-            >
-              <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground">
-                {participant.display_name.charAt(0)}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-sm font-medium text-foreground">
-                    {participant.display_name}
-                  </span>
-                  {participant.id === currentParticipantId && (
-                    <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                      You
-                    </span>
-                  )}
-                </span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {participant.role}
-                </span>
-              </span>
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  participant.status === "active"
-                    ? "bg-emerald-500"
-                    : "bg-muted-foreground/35",
-                )}
-              />
-            </div>
-          ))
-        )}
       </div>
     </div>
   );

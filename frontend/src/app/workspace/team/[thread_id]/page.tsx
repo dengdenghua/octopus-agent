@@ -440,7 +440,7 @@ export default function TeamPage() {
   // multiple pages inside it.
   const [showTeamWorkbench, setShowTeamWorkbench] = useState(false);
   const [teamWorkbenchTab, setTeamWorkbenchTab] =
-    useState<TeamWorkbenchTabId>("tasks");
+    useState<TeamWorkbenchTabId>("members");
   const [planOpen, setPlanOpen] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -452,6 +452,16 @@ export default function TeamPage() {
     [],
   );
   const teamId = teamConfig?.id;
+  // Open the room on the 群成员 list once per team, so it reads like a work
+  // group (members present) rather than a task board on entry.
+  const rosterOpenedForTeamRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!teamId || isNewThread) return;
+    if (rosterOpenedForTeamRef.current === teamId) return;
+    rosterOpenedForTeamRef.current = teamId;
+    setTeamWorkbenchTab("members");
+    setShowTeamWorkbench(true);
+  }, [teamId, isNewThread]);
   const participantId = useMemo(
     () => readTeamParticipantIdForTeam(teamConfig),
     [teamConfig],
@@ -1050,7 +1060,6 @@ export default function TeamPage() {
                         onClick={() => {
                           setShowTeamWorkbench((open) => !open);
                           if (!showTeamWorkbench) {
-                            setTeamWorkbenchTab("tasks");
                             setShowPreview(false);
                           }
                         }}
@@ -1196,6 +1205,13 @@ export default function TeamPage() {
                     onWorkDirChange={setWorkDir}
                     currentParticipantId={participantId}
                     canManageTasks={canRunTeamTask}
+                    onMention={(name) =>
+                      window.dispatchEvent(
+                        new CustomEvent("octopus:mention-member", {
+                          detail: { name },
+                        }),
+                      )
+                    }
                   />
                 }
                 showSidebar={showTeamWorkbench}

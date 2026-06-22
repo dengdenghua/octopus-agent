@@ -209,6 +209,23 @@ export function TeamInputBox({
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
+  // @mention a roster member into the composer (fired from the 群成员 list).
+  useEffect(() => {
+    const onMention = (event: Event) => {
+      const name = (event as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      if (!name) return;
+      const mention = `@${name} `;
+      setInput((value) => {
+        if (value.includes(mention.trim())) return value;
+        const prefix = value.trim().length > 0 ? `${value.trimEnd()} ` : "";
+        return `${prefix}${mention}`;
+      });
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+    };
+    window.addEventListener("octopus:mention-member", onMention);
+    return () => window.removeEventListener("octopus:mention-member", onMention);
+  }, []);
+
   const toggleSelectedAgent = useCallback(
     (agentId: string, checked: boolean) => {
       const next = new Set(selectedAgentIds);
