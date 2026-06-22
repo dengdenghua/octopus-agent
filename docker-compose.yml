@@ -30,6 +30,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: octopus-agent
       OCTOPUS_LOG_LEVEL: ${OCTOPUS_LOG_LEVEL:-INFO}
+      # File Agent 文档库:连同栈的 storage 服务(用 --profile storage 拉起;
+      # 没起则 search_documents 自然降级,不影响 agent)。
+      OCTOPUS_STORAGE_URL: http://octopus-storage:8767
     volumes:
       - ./data:/data
       - ./config.yaml:/etc/octopus/config.yaml:ro
@@ -56,6 +59,39 @@ services:
           cpus: "2.0"
         reservations:
           memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── File Agent / 数字资产管家 后端(可选,独立镜像)─────────────
+  # 默认不启动;`docker compose --profile storage up -d` 才连它一起拉起 →
+  # 一条命令起 agent + storage,但平时 `docker compose up` 仍是 agent 单进程。
+  # 独立项目,build 上下文指向兄弟仓(源码同级 clone 时可用);也可换成已发布镜像。
+  octopus-storage:
+    profiles: ["storage"]
+    build:
+      context: ../octopus-storage
+      dockerfile: Dockerfile
+    image: octopus-storage:latest
+    container_name: octopus-storage
+    restart: unless-stopped
+    ports:
+      - "${STORAGE_PORT:-8767}:8767"
+    environment:
+      OCTOPUS_STORAGE_PATH: /data/storage.sqlite3
+      # 把 Storage 的嵌入指向本地/同栈模型(可选 · OpenAI-兼容端点,如 Ollama)
+      OCTOPUS_EMBED_URL: ${OCTOPUS_EMBED_URL:-}
+      OCTOPUS_EMBED_MODEL: ${OCTOPUS_EMBED_MODEL:-bge-m3}
+    volumes:
+      - ./data/storage:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8767/v1/manifest', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     logging:
       driver: json-file
       options:
