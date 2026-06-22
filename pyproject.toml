@@ -50,6 +50,15 @@ web = [
 extract = [
     "trafilatura>=2.0",
 ]
+# ── File Agent / 数字资产管家 · the octopus-storage document KB ──
+# octopus-storage stays an INDEPENDENT package (it serves File Agent for the
+# whole family and carries heavy OCR / vision / embedding deps), but it ships
+# through the SAME index as a one-command pull: `pip install "octopus-agent[storage]"`.
+# Its console script then lands on PATH, so OCTOPUS_STORAGE_AUTOSTART can
+# co-launch it. For a source checkout: `pip install -e ../octopus-storage`.
+storage = [
+    "octopus-storage>=0.1.0",
+]
 # ── LLM provider adapters ────────────────────────────────
 anthropic = [
     "anthropic>=0.40,<1.0",
