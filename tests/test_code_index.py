@@ -5,6 +5,7 @@ from pathlib import Path
 
 from runtime.memory.hemolymph import code_index
 from runtime.memory.hemolymph.code_index import (
+    _salient_identifiers,
     reciprocal_rank_fusion,
     retrieve_code_context,
 )
@@ -156,3 +157,49 @@ def test_semantic_fuses_in_a_token_missed_file(tmp_path: Path, monkeypatch) -> N
     assert out
     assert "hit/bm.py" in out  # BM25 exact-token hit
     assert "miss/sem.py" in out  # fused in by semantic despite zero token overlap
+
+
+# ── multi-hop grounding (retrieve → follow symbols → retrieve again) ──
+
+
+def test_salient_identifiers_picks_structural_symbols() -> None:
+    text = "def validate_shipping_address(): return Foobar().run_widget()  # the data item"
+    out = _salient_identifiers(text)
+    assert "validate_shipping_address" in out  # snake_case
+    assert "Foobar" in out  # CamelCase
+    assert "run_widget" in out
+    assert "data" not in out and "item" not in out  # stopwords dropped
+    assert "return" not in out
+
+
+def test_hop_pulls_in_a_referenced_definition(tmp_path: Path) -> None:
+    # a.py matches the goal and references Foobar/run_widget, whose definition
+    # lives in b.py — which shares NO token with the goal, so round-0 misses it.
+    _make_src(
+        tmp_path,
+        {
+            "a.py": "def validate_shipping_address():\n    return Foobar().run_widget()\n",
+            "b.py": "class Foobar:\n    def run_widget(self):\n        return helper_zap()\n",
+        },
+    )
+    out = retrieve_code_context("validate the shipping address", root=tmp_path, max_chunks=3)
+    assert out
+    assert "a.py" in out  # round-0 direct hit
+    assert "b.py" in out  # pulled in by the symbol hop
+    assert "(dependency)" in out  # tagged as a dependency
+
+
+def test_hops_zero_disables_expansion(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("OCTOPUS_GROUNDING_HOPS", "0")
+    _make_src(
+        tmp_path,
+        {
+            "a.py": "def validate_shipping_address():\n    return Foobar().run_widget()\n",
+            "b.py": "class Foobar:\n    def run_widget(self):\n        return helper_zap()\n",
+        },
+    )
+    out = retrieve_code_context("validate the shipping address", root=tmp_path, max_chunks=3)
+    assert out
+    assert "a.py" in out
+    assert "b.py" not in out  # one-shot: no graph follow
+    assert "(dependency)" not in out

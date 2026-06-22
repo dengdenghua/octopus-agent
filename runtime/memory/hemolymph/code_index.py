@@ -15,6 +15,7 @@ the walk once. Self-gating: no source under the root → ``None``.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from collections import Counter
@@ -145,6 +146,37 @@ def _get_index(root: Path, *, ttl: float = _INDEX_TTL_S) -> dict[str, Any]:
     return built
 
 
+# Structural identifiers (CamelCase / snake_case) carry cross-file signal —
+# they're the symbols a chunk *uses* whose definitions likely live elsewhere.
+# Bare lowercase words (locals, comment prose) don't, so we skip them.
+_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{3,}")
+_IDENT_STOP = frozenset(
+    {
+        "self", "none", "true", "false", "return", "import", "from", "class",
+        "async", "await", "with", "for", "while", "elif", "else", "try",
+        "except", "finally", "raise", "yield", "lambda", "global", "nonlocal",
+        "assert", "pass", "break", "continue", "print", "this", "that", "your",
+        "list", "dict", "bool", "float", "tuple", "object", "super", "init",
+        "args", "kwargs", "value", "result", "data", "item", "items", "name",
+    }
+)
+
+
+def _salient_identifiers(text: str, *, max_n: int = 12) -> list[str]:
+    """Pull the most frequent *structural* identifiers (CamelCase or snake_case)
+    out of retrieved chunk bodies — the symbols worth following to their
+    definitions in a second retrieval hop. Pure + deterministic."""
+    counts: Counter[str] = Counter()
+    for tok in _IDENT_RE.findall(text or ""):
+        low = tok.lower()
+        if low in _IDENT_STOP:
+            continue
+        structural = ("_" in tok) or tok[0].isupper() or any(c.isupper() for c in tok[1:])
+        if structural:
+            counts[tok] += 1
+    return [tok for tok, _n in counts.most_common(max_n)]
+
+
 def retrieve_code_context(
     query: str,
     *,
@@ -216,17 +248,56 @@ def retrieve_code_context(
             for c in bm25_chunks[:max_chunks]
         ]
 
-    per_chunk_chars = max(300, (budget_tokens * 4) // max(1, max_chunks))
+    # ── Hop 2 · follow the code graph one step ─────────────────────────
+    # The round-0 chunks USE symbols whose definitions usually live in OTHER
+    # files. Extract those identifiers and run a second BM25 pass to pull the
+    # files that define/use them — the deterministic half of "retrieve → read →
+    # re-retrieve" (the model-driven half is its grep/read tools). BM25-only:
+    # we have exact symbol names, no dense pass needed. Off with
+    # OCTOPUS_GROUNDING_HOPS=0 → byte-identical to the one-shot grounding.
+    hop_chunks: list[dict[str, Any]] = []
+    try:
+        hops = int(os.environ.get("OCTOPUS_GROUNDING_HOPS", "1") or "1")
+    except ValueError:
+        hops = 1
+    if hops >= 1 and chosen:
+        chosen_paths = {str(c["path"]) for c in chosen}
+        idents = _salient_identifiers(" ".join(str(c["body"]) for c in chosen))
+        hop_terms = list(dict.fromkeys(_tokenize(" ".join(idents))))
+        if hop_terms:
+            hop_scored = [
+                (_bm25(hop_terms, p, idx), p)
+                for p in idx["pages"]
+                if str(p["path"]) not in chosen_paths
+            ]
+            hop_scored = [(s, p) for s, p in hop_scored if s > 0]
+            hop_scored.sort(key=lambda sp: (-sp[0], sp[1]["path"], sp[1]["line"]))
+            seen: set[str] = set()
+            for _s, c in hop_scored:
+                p = str(c["path"])
+                if p in seen:
+                    continue
+                seen.add(p)
+                hop_chunks.append(
+                    {"path": p, "line": c["line"], "body": c["body"], "hop": True}
+                )
+                if len(seen) >= max_chunks:
+                    break
+
+    all_chunks = chosen + hop_chunks
+    per_chunk_chars = max(300, (budget_tokens * 4) // max(1, len(all_chunks)))
     parts: list[str] = [
-        "RELEVANT SOURCE (auto-retrieved by relevance to the goal — read the "
-        "files for full context before editing):",
+        "RELEVANT SOURCE (auto-retrieved by relevance to the goal; some entries are "
+        "dependencies the top hits reference — read the files for full context "
+        "before editing):",
     ]
-    for item in chosen:
+    for item in all_chunks:
         body = item["body"]
         if len(body) > per_chunk_chars:
             body = body[:per_chunk_chars].rstrip() + "\n…(truncated)"
         path = str(item["path"])
         loc = f"{path}:{item['line']}" if item["line"] is not None else path
+        tag = "  (dependency)" if item.get("hop") else ""
         if _sink is not None:
             _sink.append(
                 {
@@ -235,5 +306,5 @@ def retrieve_code_context(
                     "path": loc,
                 }
             )
-        parts.append(f"\n### {loc}\n{body}")
+        parts.append(f"\n### {loc}{tag}\n{body}")
     return "\n".join(parts)
