@@ -135,6 +135,49 @@ function withLocalFileAgentMention(
   return [LOCAL_FILE_AGENT_MENTION, ...results];
 }
 
+/** A team member offered by the @ typeahead (group roster). */
+export interface MentionMemberInput {
+  name: string;
+  display_name?: string | null;
+  icon?: string | null;
+  description?: string | null;
+}
+
+/** Prepend matching group members so typing "@" in a team room summons the
+ * roster inline — no hard button needed. */
+function withMemberMentions(
+  query: string,
+  members: MentionMemberInput[],
+  results: MentionItem[],
+): MentionItem[] {
+  if (!members.length) return results;
+  const q = query.trim().toLowerCase();
+  const existing = new Set(results.map((r) => r.value));
+  const matched: MentionItem[] = members
+    .filter((m) => {
+      const dn = (m.display_name ?? m.name).toLowerCase();
+      return (
+        q === "" ||
+        q === "agent:" ||
+        dn.includes(q) ||
+        m.name.toLowerCase().includes(q) ||
+        q.startsWith(`agent:${dn}`)
+      );
+    })
+    .map((m) => {
+      const label = m.display_name ?? m.name;
+      return {
+        type: "agent",
+        label,
+        value: label,
+        description: m.description || "群成员",
+        icon: m.icon?.trim() || "bot",
+      };
+    })
+    .filter((m) => !existing.has(m.value));
+  return [...matched, ...results];
+}
+
 // ============================================================================
 // API
 // ============================================================================
@@ -178,6 +221,8 @@ interface UseMentionAutocompleteOptions {
   workDir?: string;
   threadId?: string;
   actor?: string;
+  /** Group members offered first when typing "@" in a team room. */
+  members?: MentionMemberInput[];
   /** Debounce delay in ms for API calls. Default 150. */
   debounceMs?: number;
 }
@@ -188,8 +233,13 @@ export function useMentionAutocomplete({
   workDir,
   threadId,
   actor,
+  members,
   debounceMs = 150,
 }: UseMentionAutocompleteOptions) {
+  // Stable handle to the latest roster so the fetch effect can read it
+  // without re-running on every render (members is a fresh array each time).
+  const membersRef = useRef<MentionMemberInput[]>(members ?? []);
+  membersRef.current = members ?? [];
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [items, setItems] = useState<MentionItem[]>([]);
@@ -318,14 +368,22 @@ export function useMentionAutocomplete({
       )
         .then((results) => {
           if (!controller.signal.aborted) {
-            setItems(withLocalFileAgentMention(mentionQuery, results));
+            setItems(
+              withMemberMentions(
+                mentionQuery,
+                membersRef.current,
+                withLocalFileAgentMention(mentionQuery, results),
+              ),
+            );
             setSelectedIndex(0);
             setIsLoading(false);
           }
         })
         .catch(() => {
           if (!controller.signal.aborted) {
-            setItems([]);
+            // Members still resolve locally even if the backend mention API
+            // is unreachable.
+            setItems(withMemberMentions(mentionQuery, membersRef.current, []));
             setIsLoading(false);
           }
         });

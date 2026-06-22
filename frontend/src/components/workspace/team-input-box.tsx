@@ -164,6 +164,12 @@ export function TeamInputBox({
     value: input,
     onChange: setInput,
     workDir,
+    members: teamMembers.map((m) => ({
+      name: m.name,
+      display_name: m.display_name,
+      icon: m.icon,
+      description: m.description,
+    })),
   });
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
