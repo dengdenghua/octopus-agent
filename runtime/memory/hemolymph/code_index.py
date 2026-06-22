@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from runtime.memory.hemolymph.repo_context import _bm25, _tokenize
+from runtime.memory.hemolymph.semantic_code_index import search_persisted
 
 # v1 indexes Python source; the chunker is language-agnostic, so extending the
 # extension set later needs no other change.
@@ -110,6 +111,27 @@ def _default_root() -> Path:
     return Path.cwd()
 
 
+def reciprocal_rank_fusion(rankings: list[list[str]], *, k: int = 60) -> list[str]:
+    """Fuse several ranked key-lists into one order by Reciprocal Rank Fusion.
+
+    Each key's score is ``Σ 1/(k + rank)`` across the lists it appears in (rank
+    0-based, first occurrence per list wins). RRF needs no score calibration —
+    it merges a BM25 ranking and a dense-vector ranking by *position*, so a chunk
+    that both retrievers rank highly floats to the top even though their raw
+    scores aren't comparable. Ties break by first-seen order (stable)."""
+    scores: dict[str, float] = {}
+    first_seen: dict[str, int] = {}
+    for ranking in rankings:
+        seen: set[str] = set()
+        for rank, key in enumerate(ranking):
+            if key in seen:
+                continue
+            seen.add(key)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+            first_seen.setdefault(key, len(first_seen))
+    return sorted(scores, key=lambda key: (-scores[key], first_seen[key]))
+
+
 def _get_index(root: Path, *, ttl: float = _INDEX_TTL_S) -> dict[str, Any]:
     key = str(root)
     now = time.monotonic()
@@ -155,24 +177,63 @@ def retrieve_code_context(
     if not scored:
         return None
     scored.sort(key=lambda sp: (-sp[0], sp[1]["path"], sp[1]["line"]))
+    bm25_chunks = [chunk for _s, chunk in scored]
+
+    # Dense-semantic recall, FUSED with BM25 — reuses the work-mode KB's
+    # persisted index (data/code_index.db). Self-gating: no index / no model →
+    # ``None`` and we stay pure BM25 (byte-identical to before). When present,
+    # RRF blends the two rankings at the file level: BM25 nails exact-token
+    # chunks, the embedder catches files that share meaning but no literal token
+    # — the synonym-bridging gap BM25 alone can't close.
+    # The persisted KB index (data/code_index.db) is built for the cwd
+    # workspace, so only fuse it when we're grounding THAT workspace (root
+    # unset, the real react-chat path) — never when retrieving over a different
+    # explicit root, where the global index would be incoherent.
+    use_semantic = root is None or Path(root).resolve() == Path.cwd().resolve()
+    semantic = search_persisted(query, top_k=max(6, max_chunks * 2)) if use_semantic else None
+    if semantic:
+        first_chunk: dict[str, dict[str, Any]] = {}
+        for chunk in bm25_chunks:
+            first_chunk.setdefault(str(chunk["path"]), chunk)
+        sem_snippet: dict[str, str] = {}
+        for r in semantic:
+            sem_snippet.setdefault(str(r["path"]), str(r.get("snippet") or ""))
+        fused = reciprocal_rank_fusion(
+            [[str(c["path"]) for c in bm25_chunks], [str(r["path"]) for r in semantic]]
+        )
+        chosen: list[dict[str, Any]] = []
+        for path in fused:
+            if path in first_chunk:
+                c = first_chunk[path]
+                chosen.append({"path": path, "line": c["line"], "body": c["body"]})
+            elif sem_snippet.get(path, "").strip():
+                chosen.append({"path": path, "line": None, "body": sem_snippet[path]})
+            if len(chosen) >= max_chunks:
+                break
+    else:
+        chosen = [
+            {"path": str(c["path"]), "line": c["line"], "body": c["body"]}
+            for c in bm25_chunks[:max_chunks]
+        ]
 
     per_chunk_chars = max(300, (budget_tokens * 4) // max(1, max_chunks))
     parts: list[str] = [
         "RELEVANT SOURCE (auto-retrieved by relevance to the goal — read the "
         "files for full context before editing):",
     ]
-    for _score, chunk in scored[:max_chunks]:
-        body = chunk["body"]
+    for item in chosen:
+        body = item["body"]
         if len(body) > per_chunk_chars:
             body = body[:per_chunk_chars].rstrip() + "\n…(truncated)"
+        path = str(item["path"])
+        loc = f"{path}:{item['line']}" if item["line"] is not None else path
         if _sink is not None:
-            path = str(chunk["path"])
             _sink.append(
                 {
                     "kind": "source",
                     "title": path.rsplit("/", 1)[-1],
-                    "path": f"{path}:{chunk['line']}",
+                    "path": loc,
                 }
             )
-        parts.append(f"\n### {chunk['path']}:{chunk['line']}\n{body}")
+        parts.append(f"\n### {loc}\n{body}")
     return "\n".join(parts)

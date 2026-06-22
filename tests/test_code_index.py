@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from runtime.memory.hemolymph.code_index import retrieve_code_context
+from runtime.memory.hemolymph import code_index
+from runtime.memory.hemolymph.code_index import (
+    reciprocal_rank_fusion,
+    retrieve_code_context,
+)
 
 
 def _make_src(root: Path, files: dict[str, str]) -> None:
@@ -89,3 +93,66 @@ def test_sink_captures_chosen_chunks_faithfully(tmp_path: Path) -> None:
         {"kind": "source", "title": "planner.py", "path": "runtime/planner.py:1"},
     ]
     assert sink[0]["path"] in out  # faithful: the cited path is in the prompt
+
+
+# ── semantic fusion (reuses the persisted KB index, gated to the workspace) ──
+
+
+def test_rrf_blends_two_rankings() -> None:
+    # "b" sits high in BOTH lists → wins; union is preserved.
+    fused = reciprocal_rank_fusion([["a", "b", "c"], ["b", "d"]])
+    assert fused[0] == "b"
+    assert set(fused) == {"a", "b", "c", "d"}
+
+
+def test_rrf_handles_empty() -> None:
+    assert reciprocal_rank_fusion([]) == []
+    assert reciprocal_rank_fusion([[], []]) == []
+
+
+def test_explicit_root_skips_semantic(tmp_path: Path, monkeypatch) -> None:
+    # A retrieval over an explicit (non-cwd) root must NOT consult the global
+    # persisted index — it's built for the cwd workspace and would be incoherent.
+    _make_src(tmp_path, {"a.py": "def alpha_token(): pass\n"})
+    calls = {"n": 0}
+
+    def spy(_q, **_kw):
+        calls["n"] += 1
+        return [{"path": "x.py", "snippet": "y", "score": 1.0}]
+
+    monkeypatch.setattr(code_index, "search_persisted", spy)
+    out = retrieve_code_context("alpha token", root=tmp_path)
+    assert calls["n"] == 0
+    assert out and "a.py:1" in out
+
+
+def test_no_semantic_is_pure_bm25(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _make_src(tmp_path, {"a.py": "def alpha_token(): pass\n"})
+    monkeypatch.setattr(code_index, "search_persisted", lambda _q, **_kw: None)
+    out = retrieve_code_context("alpha token")  # root=None → cwd, semantic eligible
+    assert out and "a.py:1" in out  # but None semantic → identical BM25 output
+
+
+def test_semantic_fuses_in_a_token_missed_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _make_src(
+        tmp_path,
+        {
+            "hit/bm.py": "def alpha_token():\n    return alpha_token()\n",
+            "miss/sem.py": "def unrelated_symbol():\n    return other()\n",
+        },
+    )
+    # The embedder surfaces a file with NO token overlap with the query — the
+    # exact synonym-bridging gap BM25 can't close. It must be fused in.
+    monkeypatch.setattr(
+        code_index,
+        "search_persisted",
+        lambda _q, **_kw: [
+            {"path": "miss/sem.py", "snippet": "# miss/sem.py\ndef unrelated_symbol(): ...", "score": 0.9}
+        ],
+    )
+    out = retrieve_code_context("alpha token", max_chunks=3)
+    assert out
+    assert "hit/bm.py" in out  # BM25 exact-token hit
+    assert "miss/sem.py" in out  # fused in by semantic despite zero token overlap
