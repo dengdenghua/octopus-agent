@@ -84,6 +84,10 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 
 `run_orchestration(goal, verify=True)`: 确定性多轮发现循环(扇出→去重→可选投票验证→直到无新增/预算尽),用于穷尽式发现("枚举每处 X")。
 
+`verdict_repair(task, max_repairs=2)`: 产出→投票判 pass/fail→不过则带批评重做→再判的有界闭环。用于"对比快更重要正确"的任务:写完要确保正确、答完要先验证再给。
+
+`tournament(goal, n=3)`: 同一目标跑 N 个隔离 worktree 候选→投票选最优 diff(不自动合并,返回给你审)。用于一次不靠谱、解法空间宽的高价值改动("实现 X,试几种取最好")。
+
 `run_pipeline(items, stages)`: 对 N 个独立 item 并行跑多阶段流水线(stage1→stage2→…,item 间不互等),如"对每个文件 extract→classify→summarise"。
 """
 
