@@ -689,12 +689,37 @@ def create_app(
     )
     app.include_router(create_team_role_models_router())
 
-    # Mobile devices · phones (octopus-mobile) join the team as remote members;
-    # register/heartbeat, poll for device tasks, post results.
-    from runtime.sensing.gateway.mobile_devices_router import (
-        create_mobile_devices_router,
-    )
-    app.include_router(create_mobile_devices_router())
+    # Mobile (tentacle) · phones running octopus-mobile connect over WebSocket
+    # (:8765) via the existing tentacle bridge and appear in the team. Mount the
+    # device dashboard router (/api/tentacle/*) into the main app and start the
+    # WS server in this app's event loop, so the team reads live device state in
+    # one process. Defensive: missing deps / port-in-use must not abort boot.
+    try:
+        from runtime.tentacle.coordinator import TentacleCoordinator
+        from runtime.tentacle.dashboard import create_tentacle_router
+
+        _tentacle_coordinator = TentacleCoordinator(dashboard_port=None)
+        app.include_router(create_tentacle_router(_tentacle_coordinator))
+        app.state.tentacle_coordinator = _tentacle_coordinator
+
+        @app.on_event("startup")
+        async def _start_tentacle_bridge() -> None:
+            import logging as _logging
+
+            try:
+                await _tentacle_coordinator.start()
+            except Exception:  # noqa: BLE001
+                _logging.getLogger(__name__).warning(
+                    "tentacle WS server failed to start; phones can't join the team",
+                    exc_info=True,
+                )
+    except Exception:  # noqa: BLE001
+        import logging as _logging
+
+        _logging.getLogger(__name__).warning(
+            "tentacle bridge unavailable (missing deps?); phones can't join the team",
+            exc_info=True,
+        )
 
     # ─── Persistent terminal WebSocket ─────────
     from runtime.sensing.gateway.terminal_router import mount_terminal_routes

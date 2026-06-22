@@ -337,71 +337,6 @@ def create_team_tasks_router(
 
         result: Any = None
         try:
-            # ── Mobile route ────────────────────────────────────
-            # If the task is assigned to connected phones (ref
-            # ``mobile_*``), dispatch the goal to each device and
-            # await its result — the phone runs the device action
-            # via octopus-mobile and reports back. A phone is a
-            # remote team member, reached over HTTP.
-            mobile_members = _mobile_members(task)
-            if mobile_members:
-                from runtime.execution.agents.mobile_device import get_mobile_registry
-
-                registry = get_mobile_registry()
-                records: list[dict[str, Any]] = []
-                for device in mobile_members:
-                    sub_id = f"{task.id}:{device['agent_id']}"
-                    if not registry.dispatch(device["device_id"], sub_id, prepared["task_input"]):
-                        records.append(
-                            {**device, "ok": False, "output": "", "error": "device not connected"}
-                        )
-                        continue
-                    res = registry.await_result(sub_id, timeout=240.0)
-                    if res is None:
-                        records.append(
-                            {**device, "ok": False, "output": "", "error": "device timed out"}
-                        )
-                    else:
-                        records.append(
-                            {
-                                **device,
-                                "ok": bool(res.get("ok")),
-                                "output": res.get("output", ""),
-                                "error": res.get("error"),
-                            }
-                        )
-                succeeded = sum(1 for r in records if r.get("ok"))
-                final_status = (
-                    "cancelled"
-                    if source.is_cancelled
-                    else ("done" if succeeded else "failed")
-                )
-                metadata = {
-                    **dict(task.metadata),
-                    "runner": {
-                        "engine": "mobile",
-                        "devices": len(records),
-                        "succeeded": succeeded,
-                    },
-                }
-                if final_status == "failed":
-                    metadata["error"] = "no connected device completed the task"
-                updates = {
-                    "status": final_status,
-                    "completed_at": _now(),
-                    "metadata": metadata,
-                }
-                if final_status == "done":
-                    updates["produced_artifacts"] = _mobile_artifacts(records)
-                updated = _persist_task(task.id, updates)
-                if updated is not None:
-                    _broadcast_from_worker(
-                        loop,
-                        updated.room_id,
-                        _task_payload(updated, event=f"run_{final_status}"),
-                    )
-                return
-
             # ── CLI-team route ──────────────────────────────────
             # If the task is assigned to local coding-agent CLIs
             # (Claude Code / Codex / …, ref ``local_*``), run them
@@ -1192,42 +1127,6 @@ def _runner_metadata(result: Any, prepared: dict[str, Any]) -> dict[str, Any]:
         "error": _runner_result_error(result),
         "role_outputs": _jsonable(_result_value(result, "role_outputs", [])),
     }
-
-
-def _mobile_members(task: TeamTaskWire) -> list[dict[str, Any]]:
-    """The connected phones assigned to this task — the ``mobile_*`` agent
-    assignees that the device registry confirms are registered. Empty → the
-    task takes the normal (CLI / role-topology) path."""
-    from runtime.execution.agents.mobile_device import mobile_members_from_assignees
-
-    refs = [
-        a.ref.strip()
-        for a in task.assignees
-        if a.kind.strip().lower() == "agent" and a.ref.strip().startswith("mobile_")
-    ]
-    return mobile_members_from_assignees(refs)
-
-
-def _mobile_artifacts(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """One artifact per phone carrying its run output, so the team room can
-    review what each device did."""
-    artifacts: list[dict[str, Any]] = []
-    for rec in records or []:
-        agent_id = str(rec.get("agent_id") or "mobile")
-        artifacts.append(
-            {
-                "id": f"artifact-{uuid4().hex[:12]}",
-                "type": "mobile_run",
-                "title": f"{rec.get('name') or agent_id} · {'完成' if rec.get('ok') else '未完成'}",
-                "content": str(rec.get("output") or rec.get("error") or ""),
-                "agent_id": agent_id,
-                "device_id": str(rec.get("device_id") or ""),
-                "ok": bool(rec.get("ok")),
-                "error": rec.get("error"),
-                "created_at": _now(),
-            }
-        )
-    return artifacts
 
 
 def _local_cli_members(task: TeamTaskWire) -> list[dict[str, str]]:
