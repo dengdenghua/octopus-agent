@@ -492,6 +492,16 @@ export default function TeamPage() {
       selected.has(member.name),
     );
   }, [selectedTaskAgentIds, teamConfig?.members]);
+  // The default responder (team leader, else first member) — used to label
+  // single-agent replies that don't carry per-message agent identity, so the
+  // 群 thread still shows who's speaking.
+  const leaderAgent = useMemo(
+    () =>
+      teamConfig?.members.find((m) => m.name === teamConfig?.leaderId) ??
+      teamConfig?.members[0] ??
+      null,
+    [teamConfig?.members, teamConfig?.leaderId],
+  );
   const createTeamTask = useCreateTeamTask();
   const removalHandledRef = useRef(false);
 
@@ -1081,6 +1091,8 @@ export default function TeamPage() {
                     thread={thread}
                     paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
                     mode={isCoworkMode ? "team" : "chat"}
+                    showSenderName={Boolean(teamId)}
+                    currentAgent={leaderAgent}
                     liveToolEvents={liveToolEvents}
                     lastTurnToolEvents={lastTurnToolEvents}
                     footer={

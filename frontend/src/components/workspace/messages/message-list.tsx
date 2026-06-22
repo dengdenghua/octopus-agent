@@ -194,6 +194,7 @@ export function MessageList({
   liveToolEvents,
   currentAgent,
   completedAgentOutput = false,
+  showSenderName = false,
 }: {
   className?: string;
   threadId: string;
@@ -201,6 +202,8 @@ export function MessageList({
   paddingBottom?: number;
   /** Legacy compatibility prop — no longer consumed by MessageList. */
   mode?: string;
+  /** Label each agent message with its name (group-chat / team room). */
+  showSenderName?: boolean;
   compact?: boolean;
   /** Rendered above the first message — e.g. a "load older turns"
    * banner when the thread resumed with a paginated window. */
@@ -599,15 +602,21 @@ export function MessageList({
     agentName,
     agentAvatar,
     agentIcon,
+    agentRole,
     children,
   }: {
     key: string;
     agentName?: string;
     agentAvatar?: string;
     agentIcon?: string | null;
+    agentRole?: string;
     children: ReactNode;
   }) => {
     const displayName = agentName || t.message.assistant;
+    // In a team room, label each agent's message with its name (and 队长
+    // badge) so the thread reads like a group chat — you can see who's
+    // speaking, not just an anonymous avatar.
+    const isTeam = showSenderName;
     return (
       <div key={key} className="flex w-full items-start gap-3">
         <AgentAvatar
@@ -616,7 +625,21 @@ export function MessageList({
           icon={agentIcon}
           className="mt-1 size-8 rounded-md"
         />
-        <div className="min-w-0 flex-1">{children}</div>
+        <div className="min-w-0 flex-1">
+          {isTeam && agentName && (
+            <div className="mb-0.5 flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-foreground">
+                {displayName}
+              </span>
+              {agentRole === "tl" && (
+                <span className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-1.5 py-0 text-[10px] leading-4 font-medium text-emerald-600 dark:text-emerald-400">
+                  队长
+                </span>
+              )}
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     );
   };
@@ -644,12 +667,13 @@ export function MessageList({
     if (msg.type !== "ai") {
       return <div key={key}>{content}</div>;
     }
-    const { name, avatar, icon } = getAgentIdentity(msg);
+    const { name, avatar, icon, role } = getAgentIdentity(msg);
     return renderAssistantFrame({
       key,
       agentName: name,
       agentAvatar: avatar,
       agentIcon: icon,
+      agentRole: role,
       children: content,
     });
   };
@@ -667,6 +691,7 @@ export function MessageList({
       name: agentName,
       avatar: agentAvatar,
       icon: agentIcon,
+      role: agentRole,
     } = getAgentIdentity(aiMessage);
     const content = (
       <MessageGroup
@@ -687,6 +712,7 @@ export function MessageList({
       agentName,
       agentAvatar,
       agentIcon,
+      agentRole,
       children: content,
     });
   };
