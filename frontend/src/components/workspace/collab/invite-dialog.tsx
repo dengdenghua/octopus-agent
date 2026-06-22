@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAgents, useLocalCliAgents, useMobileDevices } from "@/core/agents";
+import { MobileJoinSection } from "./mobile-join-section";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import type { Agent } from "@/core/agents/types";
 import { copyTextToClipboard } from "@/core/clipboard";
@@ -242,6 +243,8 @@ export function InviteDialog({
               </Button>
             </div>
           </section>
+
+          <MobileJoinSection />
 
           <section className="min-w-0 rounded-lg border border-border/60 bg-muted/10">
             <div className="border-b border-border/50 p-3">

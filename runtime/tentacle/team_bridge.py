@@ -11,10 +11,33 @@ team-task router can reach it without threading it through every factory.
 
 from __future__ import annotations
 
+import secrets
 import time
 from typing import Any
 
 _ACTIVE_COORDINATOR: Any | None = None
+
+
+def get_or_create_tentacle_token() -> str:
+    """Stable shared secret a phone must present in ``device/hello`` to join over
+    the LAN (loopback connects without one). Persisted under ``data/`` so the
+    join 口令 / QR stays valid across restarts."""
+    from runtime.platform.process.paths import app_paths
+
+    path = app_paths().data_dir / "tentacle_token"
+    try:
+        existing = path.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except (FileNotFoundError, OSError):
+        pass
+    token = secrets.token_urlsafe(18)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(token, encoding="utf-8")
+    except OSError:
+        pass  # non-persistent fallback — token still usable this run
+    return token
 
 
 def set_active_coordinator(coordinator: Any | None) -> None:

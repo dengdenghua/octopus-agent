@@ -696,10 +696,20 @@ def create_app(
     # one process. Defensive: missing deps / port-in-use must not abort boot.
     try:
         from runtime.core.cerebrum.planner import StaticPlanner
+        from runtime.sensing.gateway.tentacle_join_router import (
+            create_tentacle_join_router,
+        )
         from runtime.tentacle.coordinator import TentacleCoordinator
         from runtime.tentacle.dashboard import create_tentacle_router
         from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
-        from runtime.tentacle.team_bridge import set_active_coordinator
+        from runtime.tentacle.team_bridge import (
+            get_or_create_tentacle_token,
+            set_active_coordinator,
+        )
+
+        # Shared secret a LAN phone presents to join (loopback joins tokenless).
+        _tentacle_token = get_or_create_tentacle_token()
+        _tentacle_ws_port = 8765
 
         # Reuse the stack's planner when it can plan; else a bare StaticPlanner
         # (the adapter degrades gracefully — a failed/empty plan just yields no
@@ -711,9 +721,18 @@ def create_app(
         _tentacle_engine = CerebrumDecisionAdapter(_tentacle_planner).decide
 
         _tentacle_coordinator = TentacleCoordinator(
-            dashboard_port=None, decision_engine=_tentacle_engine
+            host="0.0.0.0",
+            port=_tentacle_ws_port,
+            dashboard_port=None,
+            decision_engine=_tentacle_engine,
+            auth_token=_tentacle_token,
         )
         app.include_router(create_tentacle_router(_tentacle_coordinator))
+        app.include_router(
+            create_tentacle_join_router(
+                ws_port=_tentacle_ws_port, auth_token=_tentacle_token
+            )
+        )
         app.state.tentacle_coordinator = _tentacle_coordinator
         set_active_coordinator(_tentacle_coordinator)
 
