@@ -627,6 +627,12 @@ def register_all(registry: SkillRegistry) -> int:
     lsp_count = register_lsp_skills(registry)
     # Code quality · lint / test / format
     quality_count = register_code_quality_skills(registry)
+    # File Agent document search · calls the octopus-storage sibling service
+    # (/v1/search) so the agent can ground on the user's OWN documents without
+    # octopus-agent owning a document index. Self-gating when Storage is down.
+    from .storage_skills import register_storage_skills
+
+    storage_count = register_storage_skills(registry)
     # 扩展点:消费者经 OCTOPUS_SKILL_EXTENSIONS 注册自定义技能(如 os 的企业版 PM
     # 工具),无需 fork agent。未配置则 0。见 runtime/platform/extensions.py。
     from runtime.platform.extensions import load_skill_extensions
@@ -646,5 +652,6 @@ def register_all(registry: SkillRegistry) -> int:
         + code_edit_count
         + lsp_count
         + quality_count
+        + storage_count
         + extension_count
     )

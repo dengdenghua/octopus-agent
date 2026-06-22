@@ -47,6 +47,7 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 
 - 上网查信息(新闻、价格、定义、最新 X) → `web_search`,**不要** `exec_shell` 跑 curl
 - 抓单个 URL → `fetch_url`(只要内容)或 `web_fetch`(URL+提问,自动提取答案)
+- 查**用户自己的文档/文件/笔记**(「我之前那份…」「我的合同里…」) → `search_documents`(经 octopus-storage 文件管家,返回带引用的片段),**不要** `web_search` 也不要自己 grep 用户全盘
 - 文件读: `read_file`(支持 `offset`/`limit`/`pages`,可读 image/PDF/ipynb)
 - 文件写: `edit_file`(small change, old/new) > `multi_edit_file`(多处) > `propose_patch`(diff) > `write_text_file`(新建)
 - 列目录/找文件: `list_cwd` / `glob_files`,**不要** `exec_shell("find/ls")`
