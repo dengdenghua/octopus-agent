@@ -383,19 +383,28 @@ async def _start_turn(
                     provider,
                     text=text,
                 )
-            elif topology_id:
+            elif topology_id or (
+                str((intent.user_context or {}).get("serve_mesh") or "").strip()
+                == "1"
+            ):
                 # Swarm mode: auto-select the engine by the planned graph's
                 # shape — a parallel graph runs on the boids/SignalBus mesh
                 # swarm, a small/sequential one on the sequential TeamRunner.
                 # _drive_swarm_mesh plans, decides, and delegates to the team
                 # itself (OCTOPUS_SERVE_MESH=1/0 can still force the choice).
+                #
+                # Enter here even WITHOUT a topology_id when the user explicitly
+                # picked 蜂群 (serve_mesh="1"): the forced-mesh path plans its own
+                # graph and never needs a registered topology, so an ad-hoc group
+                # chat fans out to parallel arms instead of silently degrading to
+                # single-agent ReAct.
                 await runtime._drive_swarm_mesh(
                     turn,
                     log,
                     emitter,
                     intent,
                     text=text,
-                    topology_id=topology_id,
+                    topology_id=topology_id or "",
                 )
             elif runtime._should_use_reflection_fast_path(
                 text,
