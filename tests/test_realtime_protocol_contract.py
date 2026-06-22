@@ -50,6 +50,7 @@ ACTIVE_REDUCED_NOTIFICATIONS = {
     ServerMethod.WORKBENCH_SNAPSHOT.value,
     ServerMethod.TURN_HEARTBEAT.value,
     ServerMethod.TURN_META_SKILL_HINT.value,
+    ServerMethod.TURN_GROUNDING.value,
     ServerMethod.ITEM_STARTED.value,
     ServerMethod.ITEM_COMPLETED.value,
     ServerMethod.ITEM_AGENT_MESSAGE_DELTA.value,

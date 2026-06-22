@@ -885,7 +885,13 @@ class CerebrumRuntime:
         topology_id: str = "",
     ) -> None:
         await _drive_swarm_mesh(
-            self, turn, log, emitter, intent, text=text, topology_id=topology_id,
+            self,
+            turn,
+            log,
+            emitter,
+            intent,
+            text=text,
+            topology_id=topology_id,
         )
 
     async def _drive_react(
@@ -955,6 +961,34 @@ class CerebrumRuntime:
         await self._emit_item_started(turn, log, emitter, item)
         item.status = ItemStatus.COMPLETED
         await self._emit_item_completed(turn, log, emitter, item)
+
+    def _is_local_partner(self, agent: Any) -> bool:
+        """True when this agent should be driven by spawning its registered
+        coding-agent CLI directly (Claude Code / Codex) instead of the LLM
+        loop — i.e. its profile carries drivable ``local_partner`` capabilities."""
+        from runtime.sensing.gateway.realtime_local_partner import agent_is_local_partner
+
+        return agent_is_local_partner(agent)
+
+    async def _drive_local_partner(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        intent: ParsedIntent,
+        agent: Any,
+        provider: ApprovalProvider,
+        *,
+        text: str,
+    ) -> None:
+        """Drive the agent's registered external coding-agent CLI directly —
+        the missing execution half of LocalPartner. Delegates to the free
+        function so the dispatch/fallback logic stays unit-testable."""
+        from runtime.sensing.gateway.realtime_local_partner import drive_local_partner
+
+        await drive_local_partner(
+            self, turn, log, emitter, intent, agent, provider, text=text
+        )
 
 
 # Static check: this class fulfills the realtime contract.

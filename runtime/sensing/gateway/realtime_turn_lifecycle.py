@@ -368,14 +368,34 @@ async def _start_turn(
                     },
                 )
 
-            if topology_id:
+            if runtime._is_local_partner(agent):
+                # LocalPartner agent: the user picked a registered external
+                # coding-agent CLI (Claude Code / Codex). Drive that CLI
+                # directly with their own login instead of the LLM loop. The
+                # agent identity is the strongest signal, so this wins even
+                # over a stale topology_id.
+                await runtime._drive_local_partner(
+                    turn,
+                    log,
+                    emitter,
+                    intent,
+                    agent,
+                    provider,
+                    text=text,
+                )
+            elif topology_id:
                 # Swarm mode: auto-select the engine by the planned graph's
                 # shape — a parallel graph runs on the boids/SignalBus mesh
                 # swarm, a small/sequential one on the sequential TeamRunner.
                 # _drive_swarm_mesh plans, decides, and delegates to the team
                 # itself (OCTOPUS_SERVE_MESH=1/0 can still force the choice).
                 await runtime._drive_swarm_mesh(
-                    turn, log, emitter, intent, text=text, topology_id=topology_id,
+                    turn,
+                    log,
+                    emitter,
+                    intent,
+                    text=text,
+                    topology_id=topology_id,
                 )
             elif runtime._should_use_reflection_fast_path(
                 text,
