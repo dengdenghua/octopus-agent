@@ -2545,6 +2545,14 @@ export const jaJP: Translations = {
     reject: "Reject",
     approved: "Approved",
     rejected: "Rejected",
+    tools: {
+      bash: "コマンド実行",
+      write_file: "ファイル書き込み",
+      str_replace: "ファイル編集",
+      git_commit: "コミット",
+      schedule_cron: "定期タスク",
+      remote_trigger: "Webhook",
+    },
   },
 
   diffEditor: {

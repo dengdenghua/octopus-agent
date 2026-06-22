@@ -2548,6 +2548,14 @@ export const enUS: Translations = {
     reject: "Reject",
     approved: "Approved",
     rejected: "Rejected",
+    tools: {
+      bash: "Run command",
+      write_file: "Write file",
+      str_replace: "Edit file",
+      git_commit: "Commit",
+      schedule_cron: "Schedule task",
+      remote_trigger: "Webhook",
+    },
   },
 
   diffEditor: {

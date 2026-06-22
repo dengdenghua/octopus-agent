@@ -2373,6 +2373,14 @@ export const zhCN: Translations = {
     reject: "拒绝",
     approved: "已批准",
     rejected: "已拒绝",
+    tools: {
+      bash: "运行命令",
+      write_file: "写文件",
+      str_replace: "改文件",
+      git_commit: "提交代码",
+      schedule_cron: "定时任务",
+      remote_trigger: "Webhook",
+    },
   },
 
   diffEditor: {

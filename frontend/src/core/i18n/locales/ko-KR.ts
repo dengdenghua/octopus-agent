@@ -2543,6 +2543,14 @@ export const koKR: Translations = {
     reject: "Reject",
     approved: "Approved",
     rejected: "Rejected",
+    tools: {
+      bash: "명령 실행",
+      write_file: "파일 쓰기",
+      str_replace: "파일 편집",
+      git_commit: "커밋",
+      schedule_cron: "예약 작업",
+      remote_trigger: "Webhook",
+    },
   },
 
   diffEditor: {

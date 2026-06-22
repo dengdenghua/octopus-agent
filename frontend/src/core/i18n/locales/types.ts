@@ -2144,6 +2144,14 @@ export interface Translations {
     reject: string;
     approved: string;
     rejected: string;
+    tools: {
+      bash: string;
+      write_file: string;
+      str_replace: string;
+      git_commit: string;
+      schedule_cron: string;
+      remote_trigger: string;
+    };
   };
 
   // Diff Editor

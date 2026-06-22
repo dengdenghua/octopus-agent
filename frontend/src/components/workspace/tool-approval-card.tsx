@@ -54,31 +54,15 @@ export function getApprovalData(
   return parseApprovalRequest(content);
 }
 
-const TOOL_LABELS: Record<string, { label: string; color: string }> = {
-  bash: {
-    label: "Terminal",
-    color: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
-  },
-  write_file: {
-    label: "Write File",
-    color: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  },
-  str_replace: {
-    label: "Edit File",
-    color: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
-  },
-  git_commit: {
-    label: "Git Commit",
-    color: "bg-green-500/10 text-green-600 dark:text-green-400",
-  },
-  schedule_cron: {
-    label: "Cron Job",
-    color: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
-  },
-  remote_trigger: {
-    label: "Webhook",
-    color: "bg-red-500/10 text-red-600 dark:text-red-400",
-  },
+// Colors stay here (styling); the human-readable label comes from i18n
+// (t.toolApproval.tools) so a beginner sees "运行命令"/"改文件", not "bash".
+const TOOL_COLORS: Record<string, string> = {
+  bash: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+  write_file: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  str_replace: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+  git_commit: "bg-green-500/10 text-green-600 dark:text-green-400",
+  schedule_cron: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+  remote_trigger: "bg-red-500/10 text-red-600 dark:text-red-400",
 };
 
 export function ToolApprovalCard({
@@ -116,10 +100,12 @@ export function ToolApprovalCard({
 
   if (!approvalData) return null;
 
-  const toolInfo = TOOL_LABELS[approvalData.tool_name] ?? {
-    label: approvalData.tool_name,
-    color: "bg-gray-500/10 text-gray-600 dark:text-gray-400",
-  };
+  const toolLabel =
+    (t.toolApproval.tools as Record<string, string>)[approvalData.tool_name] ??
+    approvalData.tool_name;
+  const toolColor =
+    TOOL_COLORS[approvalData.tool_name] ??
+    "bg-gray-500/10 text-gray-600 dark:text-gray-400";
 
   return (
     <div
@@ -135,10 +121,10 @@ export function ToolApprovalCard({
         <span
           className={cn(
             "text-xs font-medium px-2 py-0.5 rounded-lg",
-            toolInfo.color,
+            toolColor,
           )}
         >
-          {toolInfo.label}
+          {toolLabel}
         </span>
         <span className="text-muted-foreground text-xs">
           {t.toolApproval.requiresApproval}
