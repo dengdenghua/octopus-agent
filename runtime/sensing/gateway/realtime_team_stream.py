@@ -762,7 +762,7 @@ async def _drive_swarm_mesh(
         return
 
     try:
-        result, _signal_count = await asyncio.to_thread(_run, graph)
+        result, signal_count = await asyncio.to_thread(_run, graph)
         arms = list(getattr(result, "arm_results", []) or [])
         # Plain language for the chat: no "swarm / arm / coordination signal"
         # jargon. Only surface the agents that hit a problem, then one summary.
@@ -772,7 +772,14 @@ async def _drive_swarm_mesh(
             await _emit(f"One agent couldn't finish: {reason or 'unknown error'}")
         done = len(arms) - len(failed)
         tail = f", {len(failed)} need a look" if failed else ""
-        await _emit(f"Ran {len(arms)} agents in parallel — {done} done{tail}")
+        # Surface the SignalBus chatter — observable proof the agents actually
+        # shared progress with each other, not just ran in isolation.
+        shared = (
+            f" · shared {signal_count} live updates between them"
+            if signal_count
+            else ""
+        )
+        await _emit(f"Ran {len(arms)} agents in parallel — {done} done{tail}{shared}")
     except Exception as exc:  # noqa: BLE001 — never break the turn on a mesh fault
         _logger.warning(
             "mesh swarm failed (%s: %s) — falling back to react",
