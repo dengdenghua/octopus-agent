@@ -152,6 +152,13 @@ function withMemberMentions(
 ): MentionItem[] {
   if (!members.length) return results;
   const q = query.trim().toLowerCase();
+  // WeChat-style: a team @ is for mentioning people, so drop the tool/skill
+  // category noise (the "Bundled skills:" packs and bare category rows). Keep
+  // people + 本地数据库 + any concrete file/symbol hits the user typed.
+  const peopleFocused = results.filter(
+    (r) => !/^Bundled skills:/.test(String(r.description ?? "")),
+  );
+  results = peopleFocused;
   const existing = new Set(results.map((r) => r.value));
   const matched: MentionItem[] = members
     .filter((m) => {
