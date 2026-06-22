@@ -14,6 +14,7 @@ the walk once. Self-gating: no source under the root → ``None``.
 """
 from __future__ import annotations
 
+import ast
 import os
 import re
 import threading
@@ -39,6 +40,7 @@ _MAX_FILES = 1200
 _MAX_CHUNKS = 2500
 _MAX_FILE_BYTES = 200_000
 _CHUNK_LINES = 50
+_MAX_CHUNK_LINES = 120  # cap a single semantic chunk (huge funcs / classes)
 _INDEX_TTL_S = 120.0
 
 _CACHE_LOCK = threading.Lock()
@@ -62,15 +64,92 @@ def _chunk_file(path: Path, rel: str) -> list[tuple[str, int, str]]:
     try:
         if path.stat().st_size > _MAX_FILE_BYTES:
             return []
-        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        source = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return []
-    chunks: list[tuple[str, int, str]] = []
+    lines = source.splitlines()
+    # Semantic chunks (one per function / class, real start line) beat fixed
+    # line windows: a retrieved chunk is a whole unit with its signature intact,
+    # not a mid-function slice. Python only → stdlib ``ast``, no new dependency.
+    if path.suffix == ".py":
+        ast_chunks = _ast_chunks(rel, source, lines)
+        if ast_chunks:
+            return ast_chunks
+    return _window_chunks(rel, lines)
+
+
+def _window_chunks(rel: str, lines: list[str]) -> list[tuple[str, int, str]]:
+    """Fixed line-window fallback (non-Python or unparseable source)."""
+    out: list[tuple[str, int, str]] = []
     for start in range(0, len(lines), _CHUNK_LINES):
-        body = "\n".join(lines[start:start + _CHUNK_LINES]).strip()
+        body = "\n".join(lines[start : start + _CHUNK_LINES]).strip()
         if body:
-            chunks.append((rel, start + 1, body))
-    return chunks
+            out.append((rel, start + 1, body))
+    return out
+
+
+def _capped(lines: list[str], start: int, end: int) -> str:
+    """Join 1-indexed line span ``[start, end]``, capping runaway units."""
+    seg = lines[start - 1 : end]
+    if len(seg) > _MAX_CHUNK_LINES:
+        seg = [*seg[:_MAX_CHUNK_LINES], "    # …(truncated)"]
+    return "\n".join(seg).strip()
+
+
+def _def_chunks(rel: str, node: ast.AST, lines: list[str]) -> list[tuple[str, int, str]]:
+    start = getattr(node, "lineno", 0)
+    end = getattr(node, "end_lineno", start) or start
+    # A large class is split into its header + one chunk per method, so a big
+    # file doesn't collapse into a single diluted chunk.
+    if isinstance(node, ast.ClassDef) and (end - start + 1) > _MAX_CHUNK_LINES:
+        methods = [
+            n for n in node.body if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+        ]
+        out: list[tuple[str, int, str]] = []
+        header_end = (methods[0].lineno - 1) if methods else end
+        header = _capped(lines, start, header_end)
+        if header:
+            out.append((rel, start, header))
+        for m in methods:
+            m_end = getattr(m, "end_lineno", m.lineno) or m.lineno
+            body = _capped(lines, m.lineno, m_end)
+            if body:
+                out.append((rel, m.lineno, body))
+        return out
+    body = _capped(lines, start, end)
+    return [(rel, start, body)] if body else []
+
+
+def _ast_chunks(rel: str, source: str, lines: list[str]) -> list[tuple[str, int, str]]:
+    """One chunk per top-level function / class (real line numbers), plus
+    module-level statements grouped into preamble chunks. ``[]`` on a syntax
+    error so the caller falls back to line windows."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return []
+    out: list[tuple[str, int, str]] = []
+    pending: int | None = None  # 1-indexed start of an accumulating module block
+
+    def flush(end_line: int) -> None:
+        nonlocal pending
+        if pending is not None:
+            body = _capped(lines, pending, end_line)
+            if body:
+                out.append((rel, pending, body))
+            pending = None
+
+    for node in tree.body:
+        start = getattr(node, "lineno", None)
+        if not start:
+            continue
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            flush(start - 1)
+            out.extend(_def_chunks(rel, node, lines))
+        elif pending is None:
+            pending = start
+    flush(len(lines))
+    return out
 
 
 def _build_index(root: Path) -> dict[str, Any]:

@@ -203,3 +203,30 @@ def test_hops_zero_disables_expansion(tmp_path: Path, monkeypatch) -> None:
     assert "a.py" in out
     assert "b.py" not in out  # one-shot: no graph follow
     assert "(dependency)" not in out
+
+
+# ── AST-aware chunking (function/class boundaries, real line numbers) ──
+
+
+def test_ast_chunks_at_function_boundaries(tmp_path: Path) -> None:
+    # imports + two functions at different lines → each function is its OWN chunk
+    # at its real start line, not folded into a single line-1 window.
+    src = (
+        "import os\n"          # 1
+        "\n"                   # 2
+        "def alpha_one():\n"   # 3
+        "    return 1\n"       # 4
+        "\n"                   # 5
+        "def beta_two():\n"    # 6
+        "    return 2\n"       # 7
+    )
+    _make_src(tmp_path, {"m.py": src})
+    out = retrieve_code_context("beta two", root=tmp_path, max_chunks=5)
+    assert out
+    assert "m.py:6" in out  # beta_two chunk starts at its REAL line (6), not 1
+
+
+def test_ast_falls_back_to_windows_on_syntax_error(tmp_path: Path) -> None:
+    _make_src(tmp_path, {"bad.py": "def broken(:\n    oops_here\n"})  # unparseable
+    out = retrieve_code_context("broken oops_here", root=tmp_path)
+    assert out is None or "bad.py" in out  # no crash; window fallback indexes it
