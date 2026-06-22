@@ -271,6 +271,22 @@ export function useMentionAutocomplete({
   const abortRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ---- IME/paste-robust trigger ----
+  // The keydown handler only opens the popup when the browser reports
+  // key === "@". Under a Chinese IME (where "@" is Shift+2 routed through
+  // composition) that key never arrives, so typing "@" did nothing. As a
+  // fallback, open from the *value*: if it ends with an "@mention" at a word
+  // boundary, treat that "@" as the trigger.
+  useEffect(() => {
+    if (isOpen) return;
+    const match = /(?:^|[\s\n\t])@([^\s@]*)$/.exec(value);
+    if (!match) return;
+    const atPos = value.length - (match[1] ?? "").length - 1;
+    if (atPos < 0 || value[atPos] !== "@") return;
+    triggerPosRef.current = atPos;
+    setIsOpen(true);
+  }, [value, isOpen]);
+
   // ---- Detect @ trigger and extract query ----
   useEffect(() => {
     if (!isOpen) return;
