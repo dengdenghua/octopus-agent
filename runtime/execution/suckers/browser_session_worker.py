@@ -41,9 +41,34 @@ PageFactory = Callable[[], "tuple[Any, Callable[[], None]]"]
 
 
 def _default_page_factory(headless: bool) -> tuple[Any, Callable[[], None]]:
+    import os
+
     from playwright.sync_api import sync_playwright
 
     pw = sync_playwright().start()
+
+    # Signed-in browser without the desktop app: when OCTOPUS_BROWSER_PROFILE
+    # points at a (pre-authenticated) user-data dir, launch a *persistent*
+    # context so the agent's browser carries that profile's cookies/logins and
+    # can act on signed-in sites — the capability that otherwise needed the
+    # Electron bridge. Opt-in (the user points it at a profile they've logged
+    # into); unset → the original stateless launch, so default behaviour and
+    # the security posture are unchanged.
+    profile = os.environ.get("OCTOPUS_BROWSER_PROFILE", "").strip()
+    if profile:
+        context = pw.chromium.launch_persistent_context(
+            user_data_dir=profile, headless=headless,
+        )
+        page = context.pages[0] if context.pages else context.new_page()
+
+        def _close_ctx() -> None:
+            try:
+                context.close()
+            finally:
+                pw.stop()
+
+        return page, _close_ctx
+
     browser = pw.chromium.launch(headless=headless)
     page = browser.new_context().new_page()
 
