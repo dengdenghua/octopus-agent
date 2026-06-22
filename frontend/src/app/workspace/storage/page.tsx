@@ -35,6 +35,7 @@ import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import LocalBrainSetup from "@/components/workspace/local-brain-setup";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -621,7 +622,8 @@ export default function StoragePage() {
   return (
     <WorkspaceContainer>
       <WorkspaceBody className="overflow-hidden">
-        <div className="flex size-full flex-col p-2">
+        <div className="flex size-full flex-col overflow-y-auto p-2">
+          <LocalBrainSetup />
           <section className="workspace-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/55 bg-[#f7f7f7]">
             <div className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-black/5 bg-[#f7f7f7] px-4">
               <div className="flex min-w-0 items-center gap-3">
