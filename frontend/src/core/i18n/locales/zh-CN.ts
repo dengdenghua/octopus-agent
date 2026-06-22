@@ -5110,7 +5110,7 @@ export const zhCN: Translations = {
 
   // Team Input
   teamInput: {
-    placeholder: "描述任务，可 @本地数据库 检索本机资料...",
+    placeholder: "发消息给群成员…  输入 @ 提成员、/ 用命令",
     assigneeAll: "全员",
     assigneeCount: (count: number) => `${count} 人`,
     assigneeHint: "选择本次任务先由谁执行，后续仍可加人",
