@@ -146,7 +146,12 @@ def local_brain_status(
             "ok": storage_up,
             "detail": ("已运行" if storage_up else "没运行(不影响代码,只影响文档问答)"),
             "action": (
-                "" if storage_up else "启动 octopus-storage 服务后,在文件管家里加授权文件夹。"
+                ""
+                if storage_up
+                else (
+                    "启动 octopus-storage 服务后,在文件管家里加授权文件夹;"
+                    "或设 OCTOPUS_STORAGE_AUTOSTART=1,让 octopus 启动时自动把它一起拉起来。"
+                )
             ),
         }
     )
