@@ -34,14 +34,16 @@ from .testing import SkillExpect, SkillTestCase
 # does that work itself. They remain CALLABLE if the model knows
 # their name — that's a deliberate escape hatch, not a contradiction.
 _INTERNAL_AGENTS: frozenset[str] = frozenset({"arbiter"})
-_ADVERTISED_BUILTINS: frozenset[str] = frozenset({
-    "architect",
-    "debugger",
-    "explorer",
-    "researcher",
-    "reviewer",
-    "security-review",
-})
+_ADVERTISED_BUILTINS: frozenset[str] = frozenset(
+    {
+        "architect",
+        "debugger",
+        "explorer",
+        "researcher",
+        "reviewer",
+        "security-review",
+    }
+)
 
 
 # ── Cheap-model routing policy ────────────────────────────
@@ -51,36 +53,42 @@ _ADVERTISED_BUILTINS: frozenset[str] = frozenset({
 # ``"cheap": False``. The non-cheap roles — architect / synthesizer /
 # designer / implementer — keep the parent's primary model since they
 # carry the heavy reasoning load.
-_NON_CHEAP_ROLES: frozenset[str] = frozenset({
-    "architect",
-    "synthesizer",
-    "designer",
-    "implementer",
-})
+_NON_CHEAP_ROLES: frozenset[str] = frozenset(
+    {
+        "architect",
+        "synthesizer",
+        "designer",
+        "implementer",
+    }
+)
 
-_CHEAP_BY_DEFAULT_ROLES: frozenset[str] = frozenset({
-    "researcher",
-    "fact_checker",
-    "fact-checker",
-    "security",
-    "security-review",
-    "performance",
-    "style",
-    "reproducer",
-    "hypothesizer",
-    "verifier",
-    "debugger",
-    "explorer",
-    "reviewer",
-})
+_CHEAP_BY_DEFAULT_ROLES: frozenset[str] = frozenset(
+    {
+        "researcher",
+        "fact_checker",
+        "fact-checker",
+        "security",
+        "security-review",
+        "performance",
+        "style",
+        "reproducer",
+        "hypothesizer",
+        "verifier",
+        "debugger",
+        "explorer",
+        "reviewer",
+    }
+)
 
-_FULL_TOOL_MARKERS: frozenset[str] = frozenset({
-    "*",
-    "all",
-    "full",
-    "inherit_all",
-    "全部",
-})
+_FULL_TOOL_MARKERS: frozenset[str] = frozenset(
+    {
+        "*",
+        "all",
+        "full",
+        "inherit_all",
+        "全部",
+    }
+)
 
 _DYNAMIC_SKILL_PACKS: dict[str, tuple[str, ...]] = {
     "research": (
@@ -223,6 +231,7 @@ def _parallel_route_decision(
         from runtime.safety.evolution.subagent_routing import (
             decide_subagent_route,
         )
+
         decision = decide_subagent_route(
             role=agent_id,
             risk_level=_route_context_risk_level(ctx),
@@ -401,6 +410,7 @@ def _format_role_catalog() -> str:
     rows: list[tuple[str, str]] = []
     try:
         from .ephemeral_agents import BUILTIN_ROLES
+
         for name in sorted(_ADVERTISED_BUILTINS):
             role = BUILTIN_ROLES.get(name)
             if role is None:
@@ -424,11 +434,13 @@ def _allowed_agent_ids() -> set[str]:
     out: set[str] = set()
     try:
         from .ephemeral_agents import BUILTIN_ROLES
+
         out.update(set(BUILTIN_ROLES.keys()) - _INTERNAL_AGENTS)
     except Exception:  # noqa: BLE001
         pass
     try:
         from runtime.execution.subagents import get_subagent_registry
+
         reg = get_subagent_registry()
         if reg is not None:
             out.update(set(reg.all_names()) - _INTERNAL_AGENTS)
@@ -453,10 +465,25 @@ def _allowed_agent_ids() -> set[str]:
 
 # Names that look research-y route to the cheap researcher builtin.
 _RESEARCH_NAME_HINTS: tuple[str, ...] = (
-    "research", "researcher", "explore", "explorer", "investigate",
-    "study", "analyst", "analyzer", "fact_check", "fact-check",
-    "scout", "probe", "screen", "screener", "audit", "auditor",
-    "monitor", "watcher", "intel",
+    "research",
+    "researcher",
+    "explore",
+    "explorer",
+    "investigate",
+    "study",
+    "analyst",
+    "analyzer",
+    "fact_check",
+    "fact-check",
+    "scout",
+    "probe",
+    "screen",
+    "screener",
+    "audit",
+    "auditor",
+    "monitor",
+    "watcher",
+    "intel",
 )
 
 
@@ -484,10 +511,7 @@ def _resolve_custom_agent_id(
         and "debugger" in allowed
     ):
         return "debugger", requested
-    if (
-        any(hint in lower for hint in ("review", "critic", "audit_code"))
-        and "reviewer" in allowed
-    ):
+    if any(hint in lower for hint in ("review", "critic", "audit_code")) and "reviewer" in allowed:
         return "reviewer", requested
     # Unknown shape → general/explorer fallback
     for fallback in ("explorer", "researcher", "general"):
@@ -525,6 +549,7 @@ def _resolve_session_and_turn() -> tuple[Any, str | None]:
     """Pull the active Session + turn_id from the ContextVar."""
     try:
         from runtime.platform.process.session import current_session
+
         sess = current_session()
         return sess, (getattr(sess, "turn_id", None) if sess else None)
     except Exception:  # noqa: BLE001
@@ -545,9 +570,16 @@ def _is_transient_error(result: dict[str, Any]) -> bool:
         return True
     err_msg = (result.get("error") or "").lower()
     transient_markers = (
-        "timeout", "timed out", "connection", "rate limit",
-        "rate-limit", "rate_limit", "too many requests",
-        "temporarily", "503", "504",
+        "timeout",
+        "timed out",
+        "connection",
+        "rate limit",
+        "rate-limit",
+        "rate_limit",
+        "too many requests",
+        "temporarily",
+        "503",
+        "504",
     )
     return any(marker in err_msg for marker in transient_markers)
 
@@ -682,16 +714,19 @@ def _call_agent(
             schema_arg = _loaded
 
     # First attempt
-    subagent_context = _skill_context_from_spec({
-        **_kw,
-        "skills": skills,
-        "tools": tools,
-        "skill_pack": skill_pack,
-        "skill_packs": skill_packs,
-        "plugin": plugin,
-        "plugins": plugins,
-        "tool_allowlist": tool_allowlist,
-    }, context)
+    subagent_context = _skill_context_from_spec(
+        {
+            **_kw,
+            "skills": skills,
+            "tools": tools,
+            "skill_pack": skill_pack,
+            "skill_packs": skill_packs,
+            "plugin": plugin,
+            "plugins": plugins,
+            "tool_allowlist": tool_allowlist,
+        },
+        context,
+    )
     result = call_subagent(
         agent_id=target,
         prompt=final_prompt,
@@ -721,15 +756,16 @@ def _call_agent(
             result["retried"] = True
             existing_err = result.get("error") or ""
             result["error"] = (
-                f"{existing_err} (retry also failed: "
-                f"{retry_result.get('error') or 'unknown'})"
+                f"{existing_err} (retry also failed: {retry_result.get('error') or 'unknown'})"
             )
 
     # Record against budget AFTER we know the outcome. Smart-budget:
     # first-time failures get a free pass; repeat failures + successes
     # both count.
     _record_delegation(
-        turn_id, fingerprint, succeeded=bool(result.get("success")),
+        turn_id,
+        fingerprint,
+        succeeded=bool(result.get("success")),
     )
 
     # Preserve the operator's original custom name in the response so
@@ -887,14 +923,21 @@ def _call_agent_parallel(
         if not isinstance(raw, dict):
             continue
         aid_raw = (
-            raw.get("agent_id") or raw.get("agent_name")
-            or raw.get("agent") or raw.get("role")
-            or raw.get("name") or ""
+            raw.get("agent_id")
+            or raw.get("agent_name")
+            or raw.get("agent")
+            or raw.get("role")
+            or raw.get("name")
+            or ""
         )
         prm = (
-            raw.get("prompt") or raw.get("task")
-            or raw.get("message") or raw.get("query")
-            or raw.get("description") or raw.get("instruction") or ""
+            raw.get("prompt")
+            or raw.get("task")
+            or raw.get("message")
+            or raw.get("query")
+            or raw.get("description")
+            or raw.get("instruction")
+            or ""
         )
         if not aid_raw and prm:
             aid_raw = "researcher"
@@ -907,8 +950,7 @@ def _call_agent_parallel(
         aid_resolved, role_label = _resolve_custom_agent_id(str(aid_raw), allowed)
         if aid_resolved not in allowed:
             return _empty_parallel_result(
-                f"no fallback subagent available for {aid_raw!r}. "
-                f"Available: {sorted(allowed)}.",
+                f"no fallback subagent available for {aid_raw!r}. Available: {sorted(allowed)}.",
             )
         # Cheap routing: explicit ``cheap`` in the spec wins; otherwise
         # the role-name policy decides. ``cheap=False`` disables the
@@ -916,24 +958,25 @@ def _call_agent_parallel(
         # default-cheap allowlist by mistake can still be pinned to the
         # primary model from the call site.
         cheap_flag = (
-            bool(raw.get("cheap")) if "cheap" in raw
-            else _role_defaults_to_cheap(str(aid_resolved))
+            bool(raw.get("cheap")) if "cheap" in raw else _role_defaults_to_cheap(str(aid_resolved))
         )
-        cleaned.append({
-            "spec_index": len(cleaned),
-            "agent_id": aid_resolved,
-            "agent_id_original": str(aid_raw),
-            "bb_key": str(raw.get("bb_key") or raw.get("key") or "").strip(),
-            "prompt": _wrap_prompt_with_role_label(str(prm), role_label),
-            "task_preview": str(prm).replace("\n", " ").strip()[:240],
-            "role_label": role_label,
-            "cheap": cheap_flag,
-            "context": _skill_context_from_spec(raw, context),
-            # Optional JSON Schema: when a spec carries one, the sub-agent's
-            # reply is validated (and re-asked once on mismatch) by
-            # call_subagent, and the parsed object rides back in the envelope.
-            "output_schema": raw.get("output_schema"),
-        })
+        cleaned.append(
+            {
+                "spec_index": len(cleaned),
+                "agent_id": aid_resolved,
+                "agent_id_original": str(aid_raw),
+                "bb_key": str(raw.get("bb_key") or raw.get("key") or "").strip(),
+                "prompt": _wrap_prompt_with_role_label(str(prm), role_label),
+                "task_preview": str(prm).replace("\n", " ").strip()[:240],
+                "role_label": role_label,
+                "cheap": cheap_flag,
+                "context": _skill_context_from_spec(raw, context),
+                # Optional JSON Schema: when a spec carries one, the sub-agent's
+                # reply is validated (and re-asked once on mismatch) by
+                # call_subagent, and the parsed object rides back in the envelope.
+                "output_schema": raw.get("output_schema"),
+            }
+        )
 
     if not cleaned:
         return _empty_parallel_result(
@@ -972,6 +1015,7 @@ def _call_agent_parallel(
         if session is not None:
             try:
                 from runtime.platform.process.session import _current_session
+
                 _current_session.set(session)
             except Exception:  # noqa: BLE001
                 pass
@@ -990,10 +1034,7 @@ def _call_agent_parallel(
                 "output": "",
                 "success": False,
                 "status": "blocked",
-                "error": str(
-                    route_decision.get("reason")
-                    or "subagent blocked by routing policy"
-                ),
+                "error": str(route_decision.get("reason") or "subagent blocked by routing policy"),
                 "error_type": "subagent_route_blocked",
                 "spec_index": spec.get("spec_index"),
                 "task_label": task_label,
@@ -1050,8 +1091,7 @@ def _call_agent_parallel(
                     result["retried"] = True
                     existing_err = result.get("error") or ""
                     result["error"] = (
-                        f"{existing_err} (retry also failed: "
-                        f"{retry.get('error') or 'unknown'})"
+                        f"{existing_err} (retry also failed: {retry.get('error') or 'unknown'})"
                     )
             except (ConnectionError, TimeoutError, TypeError, ValueError):
                 result["retried"] = True
@@ -1061,8 +1101,10 @@ def _call_agent_parallel(
         # but a repeat of the same {agent, prompt} does count.
         spec_fingerprint = _compute_fingerprint(spec["agent_id"], spec["prompt"])
         _record_delegation(
-            turn_id, spec_fingerprint,
-            succeeded=bool(result.get("success")), budget=orch_budget,
+            turn_id,
+            spec_fingerprint,
+            succeeded=bool(result.get("success")),
+            budget=orch_budget,
         )
         # Preserve operator's original agent_id in response
         if role_label:
@@ -1095,45 +1137,43 @@ def _call_agent_parallel(
             except (ConnectionError, TimeoutError, TypeError, ValueError) as exc:  # noqa: BLE001
                 spec = future_specs.get(f, {})
                 task_label = (
-                    spec.get("bb_key")
-                    or spec.get("role_label")
-                    or spec.get("agent_id_original")
+                    spec.get("bb_key") or spec.get("role_label") or spec.get("agent_id_original")
                 )
-                results.append({
-                    "agent_id": (
-                        spec.get("agent_id_original") or spec.get("agent_id") or "?"
-                    ),
-                    "spec_index": spec.get("spec_index"),
-                    "task_label": task_label,
-                    "bb_key": spec.get("bb_key"),
-                    "task_preview": spec.get("task_preview"),
-                    "output": "",
-                    "success": False,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "error_type": type(exc).__name__,
-                })
+                results.append(
+                    {
+                        "agent_id": (spec.get("agent_id_original") or spec.get("agent_id") or "?"),
+                        "spec_index": spec.get("spec_index"),
+                        "task_label": task_label,
+                        "bb_key": spec.get("bb_key"),
+                        "task_preview": spec.get("task_preview"),
+                        "output": "",
+                        "success": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "error_type": type(exc).__name__,
+                    }
+                )
         for f in not_done:
             spec = future_specs.get(f, {})
             f.cancel()
             task_label = (
-                spec.get("bb_key")
-                or spec.get("role_label")
-                or spec.get("agent_id_original")
+                spec.get("bb_key") or spec.get("role_label") or spec.get("agent_id_original")
             )
-            results.append({
-                "agent_id": spec.get("agent_id_original") or spec.get("agent_id") or "?",
-                "spec_index": spec.get("spec_index"),
-                "task_label": task_label,
-                "bb_key": spec.get("bb_key"),
-                "task_preview": spec.get("task_preview"),
-                "resolved_to": spec.get("agent_id"),
-                "custom_role": spec.get("role_label"),
-                "output": "",
-                "success": False,
-                "status": "timeout",
-                "error": f"subagent timed out after {timeout_s}s",
-                "error_type": "timeout",
-            })
+            results.append(
+                {
+                    "agent_id": spec.get("agent_id_original") or spec.get("agent_id") or "?",
+                    "spec_index": spec.get("spec_index"),
+                    "task_label": task_label,
+                    "bb_key": spec.get("bb_key"),
+                    "task_preview": spec.get("task_preview"),
+                    "resolved_to": spec.get("agent_id"),
+                    "custom_role": spec.get("role_label"),
+                    "output": "",
+                    "success": False,
+                    "status": "timeout",
+                    "error": f"subagent timed out after {timeout_s}s",
+                    "error_type": "timeout",
+                }
+            )
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
@@ -1141,7 +1181,9 @@ def _call_agent_parallel(
 
 
 def _build_parallel_envelope(
-    results: list[dict[str, Any]], *, total: int,
+    results: list[dict[str, Any]],
+    *,
+    total: int,
 ) -> dict[str, Any]:
     """Split raw per-spec results into successes/failures and build
     the graceful-degradation envelope. Pure function · easy to unit
@@ -1153,12 +1195,14 @@ def _build_parallel_envelope(
 
     for r in results:
         if not isinstance(r, dict):
-            failures.append({
-                "role": "?",
-                "agent_id": "?",
-                "error": f"non-dict result: {r!r}",
-                "error_type": "malformed",
-            })
+            failures.append(
+                {
+                    "role": "?",
+                    "agent_id": "?",
+                    "error": f"non-dict result: {r!r}",
+                    "error_type": "malformed",
+                }
+            )
             continue
         agent_id = str(r.get("agent_id") or "")
         output = str(r.get("output") or "")
@@ -1173,10 +1217,8 @@ def _build_parallel_envelope(
             "avatar": r.get("avatar"),
             "resolved_to": r.get("resolved_to"),
             "custom_role": r.get("custom_role"),
-            "iteration_count": r.get("iteration_count")
-            or r.get("rounds_completed"),
-            "rounds_completed": r.get("rounds_completed")
-            or r.get("iteration_count"),
+            "iteration_count": r.get("iteration_count") or r.get("rounds_completed"),
+            "rounds_completed": r.get("rounds_completed") or r.get("iteration_count"),
             "duration_s": r.get("duration_s"),
             "files_touched": list(r.get("files_touched") or []),
             "retried": bool(r.get("retried") or r.get("retry_attempted")),
@@ -1206,20 +1248,20 @@ def _build_parallel_envelope(
                 "partial_output": output,
                 "status": r.get("status"),
             }
-            failures.append({
-                key: value
-                for key, value in failure.items()
-                if value not in (None, "", [], False)
-            })
+            failures.append(
+                {key: value for key, value in failure.items() if value not in (None, "", [], False)}
+            )
             if output.strip():
-                partial_outputs.append({
-                    "agent_id": agent_id,
-                    "spec_index": r.get("spec_index"),
-                    "task_label": r.get("task_label"),
-                    "error": error,
-                    "error_type": _derive_error_type(r),
-                    "output": output,
-                })
+                partial_outputs.append(
+                    {
+                        "agent_id": agent_id,
+                        "spec_index": r.get("spec_index"),
+                        "task_label": r.get("task_label"),
+                        "error": error,
+                        "error_type": _derive_error_type(r),
+                        "output": output,
+                    }
+                )
 
     success_count = len(successes)
     failure_count = len(failures)
@@ -1245,15 +1287,12 @@ def _build_parallel_envelope(
         )
 
     status_summary = (
-        f"{success_count}/{total} sub-agents succeeded"
-        if total
-        else "0/0 sub-agents succeeded"
+        f"{success_count}/{total} sub-agents succeeded" if total else "0/0 sub-agents succeeded"
     )
     honesty_warning = ""
     if partial:
         failed_labels = [
-            str(f.get("task_label") or f.get("agent_id") or f.get("role") or "?")
-            for f in failures
+            str(f.get("task_label") or f.get("agent_id") or f.get("role") or "?") for f in failures
         ]
         honesty_warning = (
             "PARTIAL RUN: do not claim all sub-agents completed. "
@@ -1383,7 +1422,8 @@ def _extract_verdict(output: str, choices: list[str] | None) -> tuple[str, str]:
 
 
 def _tally_votes(
-    votes: list[dict[str, Any]], choices: list[str] | None,
+    votes: list[dict[str, Any]],
+    choices: list[str] | None,
 ) -> dict[str, Any]:
     """Pure majority aggregation over parsed votes."""
     abstentions = sum(1 for v in votes if not v.get("verdict"))
@@ -1395,9 +1435,14 @@ def _tally_votes(
     votes_cast = sum(tally.values())
     if votes_cast == 0:
         return {
-            "verdict": None, "confidence": 0.0, "unanimous": False,
-            "tie": False, "tie_between": [], "tally": {},
-            "voter_count": len(votes), "votes_cast": 0,
+            "verdict": None,
+            "confidence": 0.0,
+            "unanimous": False,
+            "tie": False,
+            "tie_between": [],
+            "tally": {},
+            "voter_count": len(votes),
+            "votes_cast": 0,
             "abstentions": abstentions,
         }
     top = max(tally.values())
@@ -1429,10 +1474,7 @@ def _vote_note(tally: dict[str, Any]) -> str:
             "decision; break the tie yourself or escalate."
         )
     if tally["unanimous"]:
-        return (
-            f"[unanimous] all {tally['votes_cast']} voters agree: "
-            f"{tally['verdict']}."
-        )
+        return f"[unanimous] all {tally['votes_cast']} voters agree: {tally['verdict']}."
     return (
         f"[majority] {tally['verdict']} at {tally['confidence']:.0%} "
         f"({tally['tally']}); minority dissent present — weigh it before acting."
@@ -1458,14 +1500,24 @@ def _call_agent_vote(
     patch fix it?", "which design is safer: A or B?").
     """
     q = str(
-        question or _kw.get("prompt") or _kw.get("task")
-        or _kw.get("claim") or _kw.get("query") or "",
+        question
+        or _kw.get("prompt")
+        or _kw.get("task")
+        or _kw.get("claim")
+        or _kw.get("query")
+        or "",
     ).strip()
     if not q:
         return {
-            "ok": False, "error": "question is required", "verdict": None,
-            "confidence": 0.0, "tally": {}, "votes": [], "voter_count": 0,
-            "votes_cast": 0, "abstentions": 0,
+            "ok": False,
+            "error": "question is required",
+            "verdict": None,
+            "confidence": 0.0,
+            "tally": {},
+            "votes": [],
+            "voter_count": 0,
+            "votes_cast": 0,
+            "abstentions": 0,
             "note": "[no-verdict] nothing to vote on",
         }
     try:
@@ -1489,12 +1541,14 @@ def _call_agent_vote(
         "required": ["verdict"],
     }
     specs = [
-        {"agent_id": voter, "prompt": ballot, "output_schema": vote_schema}
-        for _ in range(n_int)
+        {"agent_id": voter, "prompt": ballot, "output_schema": vote_schema} for _ in range(n_int)
     ]
 
     env = _call_agent_parallel(
-        specs=specs, timeout_s=timeout_s, context=context, session=session,
+        specs=specs,
+        timeout_s=timeout_s,
+        context=context,
+        session=session,
     )
 
     votes: list[dict[str, Any]] = []
@@ -1511,13 +1565,15 @@ def _call_agent_vote(
             # fall back to the legacy free-text parse so a malformed reply is
             # no worse than before rather than a hard abstention.
             verdict, reason = _extract_verdict(str(s.get("output") or ""), ballot_choices)
-        votes.append({
-            "verdict": verdict,
-            "reason": reason,
-            "agent_id": s.get("agent_id"),
-            "codename": s.get("codename"),
-            "abstained": not verdict,
-        })
+        votes.append(
+            {
+                "verdict": verdict,
+                "reason": reason,
+                "agent_id": s.get("agent_id"),
+                "codename": s.get("codename"),
+                "abstained": not verdict,
+            }
+        )
 
     tally = _tally_votes(votes, ballot_choices)
     return {
@@ -1544,9 +1600,17 @@ _ORCH_MAX_SPAWNS_CEILING = 48
 _ORCH_VERIFY_VOTERS = 3
 _ORCH_MAX_FINDINGS_PER_WORKER = 50
 _ORCH_MAX_FINDINGS_TOTAL = 200
-_NULL_FINDING_TOKENS = frozenset({
-    "none", "n/a", "na", "nothing", "no new findings", "no findings", "(none)",
-})
+_NULL_FINDING_TOKENS = frozenset(
+    {
+        "none",
+        "n/a",
+        "na",
+        "nothing",
+        "no new findings",
+        "no findings",
+        "(none)",
+    }
+)
 # A LEADING list marker only: a bullet, or an enumerator like "1." / "2)" /
 # "(3)" / "4、" followed by a space. Deliberately NOT a bare digit run, so a
 # finding whose content starts with a number ("3 retries observed") is kept
@@ -1563,7 +1627,9 @@ _NOISE_LINE = re.compile(
 
 
 def _split_findings(
-    output: str, *, max_items: int = _ORCH_MAX_FINDINGS_PER_WORKER,
+    output: str,
+    *,
+    max_items: int = _ORCH_MAX_FINDINGS_PER_WORKER,
 ) -> list[str]:
     """One finding per line; strip a leading list marker, drop null markers and
     markdown noise (rules / headings / section labels), and cap how many lines a
@@ -1702,8 +1768,11 @@ def _run_orchestration(
     goal = str(goal or _kw.get("prompt") or _kw.get("task") or _kw.get("query") or "").strip()
     if not goal:
         return {
-            "ok": False, "error": "goal is required",
-            "collected": [], "confirmed": [], "count": 0,
+            "ok": False,
+            "error": "goal is required",
+            "collected": [],
+            "confirmed": [],
+            "count": 0,
         }
 
     def _clamp(value: Any, lo: int, hi: int, default: int) -> int:
@@ -1718,7 +1787,12 @@ def _run_orchestration(
     # LLM callers pass booleans as strings ("true"/"false") just as often as
     # real bools; normalise so ``synthesize="false"`` doesn't read truthy.
     synthesize = str(synthesize).strip().lower() not in (
-        "", "0", "false", "no", "off", "none",
+        "",
+        "0",
+        "false",
+        "no",
+        "off",
+        "none",
     )
     if max_spawns is None:
         # find spends n per round; verify spends ``voters`` per finding; an
@@ -1745,7 +1819,9 @@ def _run_orchestration(
                 "delegation budget exhausted for this turn — do the rest "
                 "yourself, don't launch another orchestration."
             ),
-            "collected": [], "confirmed": [], "count": 0,
+            "collected": [],
+            "confirmed": [],
+            "count": 0,
         }
     fingerprint = _compute_fingerprint("run_orchestration", goal)
     _record_delegation(turn_id, fingerprint, succeeded=True)
@@ -1801,7 +1877,9 @@ def _run_orchestration(
                     }
                     for i in range(n)
                 ],
-                timeout_s=timeout_s, context=context, session=session,
+                timeout_s=timeout_s,
+                context=context,
+                session=session,
             )
             items: list[str] = []
             for s in env.get("successes", []):
@@ -1842,8 +1920,11 @@ def _run_orchestration(
                 try:
                     vote = _call_agent_vote(
                         question=f"Is this finding correct and worth keeping?\n\n{finding}",
-                        n=voters, choices=ballot,
-                        timeout_s=timeout_s, context=context, session=session,
+                        n=voters,
+                        choices=ballot,
+                        timeout_s=timeout_s,
+                        context=context,
+                        session=session,
                     )
                     return vote.get("verdict")
                 except Exception:  # noqa: BLE001 — a failed vote keeps the finding
@@ -1856,7 +1937,8 @@ def _run_orchestration(
 
                 pool_workers = max(1, min(4, len(to_verify)))
                 with _cf.ThreadPoolExecutor(
-                    max_workers=pool_workers, thread_name_prefix="orch-verify",
+                    max_workers=pool_workers,
+                    thread_name_prefix="orch-verify",
                 ) as pool:
                     # copy_context per task so each pool thread sees the ambient
                     # orchestration budget (a ContextVar doesn't auto-propagate
@@ -1869,11 +1951,8 @@ def _run_orchestration(
                         verdicts[futures[fut]] = fut.result()
 
             # Drop only on an explicit majority "drop"; ties/no-verdict keep.
-            kept = [
-                f for f, v in zip(to_verify, verdicts, strict=True)
-                if v != ballot[-1]
-            ]
-            confirmed = kept + collected[len(to_verify):]
+            kept = [f for f, v in zip(to_verify, verdicts, strict=True) if v != ballot[-1]]
+            confirmed = kept + collected[len(to_verify) :]
 
         # Closing synthesis: one spawn folds the confirmed findings into a
         # single coherent answer (the stage that makes the harness return a
@@ -1881,11 +1960,15 @@ def _run_orchestration(
         # else; a failed/empty synthesis leaves ``confirmed`` untouched.
         if synthesize and confirmed and budget.has_room():
             synth_env = _call_agent_parallel(
-                specs=[{
-                    "agent_id": roles[0],
-                    "prompt": _synthesis_prompt(goal, confirmed),
-                }],
-                timeout_s=timeout_s, context=context, session=session,
+                specs=[
+                    {
+                        "agent_id": roles[0],
+                        "prompt": _synthesis_prompt(goal, confirmed),
+                    }
+                ],
+                timeout_s=timeout_s,
+                context=context,
+                session=session,
             )
             synth_succ = synth_env.get("successes", [])
             if synth_succ:
@@ -1910,6 +1993,147 @@ def _run_orchestration(
         "inherited": inherited,
         "stopped_reason": stopped,
         "budget_used": budget_used,
+        "max_spawns": int(max_spawns),
+    }
+
+
+# ── verdict-gated repair loop (produce -> judge -> rewrite -> re-judge) ──
+_REPAIR_MAX_REPAIRS_CEILING = 4
+_REPAIR_DEFAULT_JUDGE_N = 3
+
+
+def _run_verdict_repair(
+    task: str = "",
+    *,
+    agent_id: str = "general",
+    judge_n: int | str = _REPAIR_DEFAULT_JUDGE_N,
+    max_repairs: int | str = 2,
+    choices: Any = None,
+    timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
+    context: dict[str, Any] | None = None,
+    session: Any = None,
+    **kw: Any,
+) -> dict[str, Any]:
+    """Produce → judge → (on FAIL) rewrite-with-critique → re-judge, bounded.
+
+    The verdict-gated repair loop octopus lacked: a worker attempts the task, an
+    independent ``call_agent_vote`` judges it, and a rejection drives a corrected
+    re-attempt that is *fed the critique* — Orca's PLAN→CRITIQUE→REWRITE closed
+    loop, built on octopus's own sub-agent + vote primitives. The control flow
+    (loop, stop-on-pass, bound) is deterministic code in
+    :func:`runtime.execution.suckers.verdict_repair.run_verdict_repair`.
+    """
+    from runtime.execution.suckers.verdict_repair import Verdict, run_verdict_repair
+
+    task = str(
+        task or kw.get("goal") or kw.get("prompt") or kw.get("query") or ""
+    ).strip()
+    if not task:
+        return {
+            "ok": False,
+            "error": "task is required",
+            "passed": False,
+            "output": "",
+            "attempts": 0,
+            "rounds": [],
+        }
+
+    def _clamp(value: Any, lo: int, hi: int, default: int) -> int:
+        try:
+            return max(lo, min(hi, int(value)))
+        except (TypeError, ValueError):
+            return default
+
+    n_judge = _clamp(judge_n, _VOTE_MIN, _VOTE_MAX, _REPAIR_DEFAULT_JUDGE_N)
+    repairs = _clamp(max_repairs, 0, _REPAIR_MAX_REPAIRS_CEILING, 2)
+    # First ballot choice = "accept"; default to a plain pass/fail gate.
+    ballot = _coerce_vote_choices(choices) or ["pass", "fail"]
+    pass_choice = ballot[0]
+
+    def _produce(attempt: int, critique: str) -> str:
+        if attempt == 0 or not critique:
+            prompt = task
+        else:
+            prompt = (
+                f"{task}\n\n"
+                "An independent reviewer REJECTED your previous attempt for these "
+                f"reasons:\n{critique}\n\n"
+                "Produce a corrected result that fixes every cited problem. "
+                "Return only the result."
+            )
+        env = _call_agent_parallel(
+            specs=[{"agent_id": str(agent_id or "general"), "prompt": prompt}],
+            timeout_s=timeout_s,
+            context=context,
+            session=session,
+        )
+        successes = env.get("successes") or []
+        return str(successes[0].get("output") or "").strip() if successes else ""
+
+    def _judge(output: str) -> Verdict:
+        if not output:
+            return Verdict(
+                passed=False, label="fail", critique="the attempt produced no output"
+            )
+        question = (
+            "Does the RESULT fully and correctly accomplish the TASK? Answer "
+            "'fail' if anything is missing, wrong, or unverified.\n\n"
+            f"TASK:\n{task}\n\nRESULT:\n{output}"
+        )
+        vote = _call_agent_vote(
+            question=question,
+            n=n_judge,
+            choices=ballot,
+            timeout_s=timeout_s,
+            context=context,
+            session=session,
+        )
+        label = str(vote.get("verdict") or "")
+        passed = bool(label) and label == pass_choice
+        critique = ""
+        if not passed:
+            reasons = [
+                str(v.get("reason") or "").strip()
+                for v in vote.get("votes", [])
+                if str(v.get("verdict") or "") != pass_choice and v.get("reason")
+            ]
+            critique = " ; ".join(r for r in reasons if r)[:600] or (
+                "rejected by the reviewers without a specific reason"
+            )
+        return Verdict(
+            passed=passed,
+            label=label or "fail",
+            critique=critique,
+            confidence=float(vote.get("confidence") or 0.0),
+        )
+
+    # Bound the whole loop in a spawn budget so the per-turn delegation cap
+    # doesn't refuse the repair re-runs (same mechanism the orchestration loop
+    # uses): (1 + repairs) producers, each followed by n_judge voters.
+    planned = (1 + repairs) * (1 + n_judge)
+    max_spawns = _clamp(planned, 1 + n_judge, _ORCH_MAX_SPAWNS_CEILING, planned)
+    with _orchestration_budget_scope(int(max_spawns)):
+        result = run_verdict_repair(produce=_produce, judge=_judge, max_repairs=repairs)
+
+    final = result.final_verdict
+    return {
+        "ok": True,
+        "task": task[:240],
+        "passed": result.passed,
+        "repaired": result.repaired,
+        "output": result.output,
+        "attempts": result.attempts,
+        "verdict": final.label if final else "",
+        "confidence": final.confidence if final else 0.0,
+        "rounds": [
+            {
+                "attempt": r.attempt,
+                "passed": r.verdict.passed,
+                "verdict": r.verdict.label,
+                "critique": r.verdict.critique,
+            }
+            for r in result.rounds
+        ],
         "max_spawns": int(max_spawns),
     }
 
@@ -1951,6 +2175,7 @@ def _run_pipeline(
     if isinstance(items, str):
         try:
             import json as _json
+
             _parsed = _json.loads(items)
             items = _parsed if isinstance(_parsed, list) else [items]
         except Exception:  # noqa: BLE001
@@ -1960,8 +2185,11 @@ def _run_pipeline(
         return {
             "ok": False,
             "error": "items is required (list of strings or dicts)",
-            "results": [], "success_count": 0, "failure_count": 0,
-            "total": 0, "stages_run": 0,
+            "results": [],
+            "success_count": 0,
+            "failure_count": 0,
+            "total": 0,
+            "stages_run": 0,
         }
 
     # ── coerce stages ────────────────────────────────────────────────
@@ -1969,8 +2197,11 @@ def _run_pipeline(
         return {
             "ok": False,
             "error": "stages is required (list of {prompt_template, agent_id?})",
-            "results": [], "success_count": 0, "failure_count": 0,
-            "total": len(items), "stages_run": 0,
+            "results": [],
+            "success_count": 0,
+            "failure_count": 0,
+            "total": len(items),
+            "stages_run": 0,
         }
 
     items = list(items[:_PIPELINE_MAX_ITEMS])
@@ -1990,8 +2221,11 @@ def _run_pipeline(
                 "delegation budget exhausted for this turn — do the rest "
                 "yourself, don't launch another pipeline."
             ),
-            "results": [], "success_count": 0, "failure_count": 0,
-            "total": len(items), "stages_run": 0,
+            "results": [],
+            "success_count": 0,
+            "failure_count": 0,
+            "total": len(items),
+            "stages_run": 0,
         }
     _record_delegation(
         turn_id,
@@ -2011,25 +2245,28 @@ def _run_pipeline(
         for s_idx, stage_spec in enumerate(stages):
             if not chain_ok:
                 # Previous stage failed — skip remaining stages for this item
-                stage_outputs.append({
-                    "stage": s_idx,
-                    "agent_id": str(stage_spec.get("agent_id") or default_role),
-                    "output": "", "ok": False, "skipped": True,
-                })
+                stage_outputs.append(
+                    {
+                        "stage": s_idx,
+                        "agent_id": str(stage_spec.get("agent_id") or default_role),
+                        "output": "",
+                        "ok": False,
+                        "skipped": True,
+                    }
+                )
                 continue
 
-            tmpl = str(
-                stage_spec.get("prompt_template")
-                or stage_spec.get("prompt")
-                or ""
-            ).strip()
+            tmpl = str(stage_spec.get("prompt_template") or stage_spec.get("prompt") or "").strip()
             if not tmpl:
-                stage_outputs.append({
-                    "stage": s_idx,
-                    "agent_id": str(stage_spec.get("agent_id") or default_role),
-                    "output": "", "ok": False,
-                    "error": "prompt_template is required for this stage",
-                })
+                stage_outputs.append(
+                    {
+                        "stage": s_idx,
+                        "agent_id": str(stage_spec.get("agent_id") or default_role),
+                        "output": "",
+                        "ok": False,
+                        "error": "prompt_template is required for this stage",
+                    }
+                )
                 chain_ok = False
                 continue
 
@@ -2054,14 +2291,18 @@ def _run_pipeline(
                 )
             except Exception as exc:  # noqa: BLE001
                 result = {
-                    "success": False, "output": "",
+                    "success": False,
+                    "output": "",
                     "error": f"{type(exc).__name__}: {exc}",
                 }
 
             ok = bool(result.get("success"))
             out = str(result.get("output") or "")
             entry: dict[str, Any] = {
-                "stage": s_idx, "agent_id": role, "output": out, "ok": ok,
+                "stage": s_idx,
+                "agent_id": role,
+                "output": out,
+                "ok": ok,
             }
             if not ok:
                 entry["error"] = result.get("error") or "subagent failed"
@@ -2083,14 +2324,17 @@ def _run_pipeline(
     item_results: list[dict[str, Any]] = []
     max_workers = min(len(items), 8)
 
-    with _orchestration_budget_scope(max_spawns), _cf.ThreadPoolExecutor(
-        max_workers=max_workers, thread_name_prefix="pipeline",
-    ) as pool:
+    with (
+        _orchestration_budget_scope(max_spawns),
+        _cf.ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="pipeline",
+        ) as pool,
+    ):
         # copy_context so each worker thread inherits the orchestration
         # budget ContextVar from the calling thread.
         futures = {
-            pool.submit(_ctxvars.copy_context().run, _run_item_chain, it): it
-            for it in items
+            pool.submit(_ctxvars.copy_context().run, _run_item_chain, it): it for it in items
         }
         done, not_done = _cf.wait(
             futures.keys(),
@@ -2102,23 +2346,30 @@ def _run_pipeline(
                 item_results.append(f.result(timeout=1))
             except Exception as exc:  # noqa: BLE001
                 it = futures.get(f, "")
-                item_results.append({
-                    "item": str(it), "stages": [], "final_output": "",
-                    "ok": False, "error": f"{type(exc).__name__}: {exc}",
-                })
+                item_results.append(
+                    {
+                        "item": str(it),
+                        "stages": [],
+                        "final_output": "",
+                        "ok": False,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
         for f in not_done:
             f.cancel()
             it = futures.get(f, "")
-            item_results.append({
-                "item": str(it), "stages": [], "final_output": "",
-                "ok": False, "error": "timeout",
-            })
+            item_results.append(
+                {
+                    "item": str(it),
+                    "stages": [],
+                    "final_output": "",
+                    "ok": False,
+                    "error": "timeout",
+                }
+            )
 
     # Restore original insertion order
-    _order = {
-        (it if isinstance(it, str) else str(it)): i
-        for i, it in enumerate(items)
-    }
+    _order = {(it if isinstance(it, str) else str(it)): i for i, it in enumerate(items)}
     item_results.sort(key=lambda r: _order.get(r["item"], 9999))
 
     success_count = sum(1 for r in item_results if r["ok"])
@@ -2195,29 +2446,37 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "Advertised specialist roles:\n"
         f"{role_table}"
     )
-    registry.register(Skill(
-        name="call_agent",
-        description=description,
-        affinity=["delegation", "subagent", "task", "last-resort"],
-        cost_profile="high",  # spawns a separate LLM turn
-        trusted_source="skill://public/call_agent",
-        handler=_call_agent,
-        tests=[
-            SkillTestCase(
-                name="missing_agent_id_returns_error",
-                tier="golden",
-                args={"agent_id": "", "prompt": "hi"},
-                expect=SkillExpect(schema_keys=[
-                    "agent_id", "output", "success", "error",
-                ]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("success") is False
-                    and "agent_id is required" in (r.get("error") or "")
+    registry.register(
+        Skill(
+            name="call_agent",
+            description=description,
+            affinity=["delegation", "subagent", "task", "last-resort"],
+            cost_profile="high",  # spawns a separate LLM turn
+            trusted_source="skill://public/call_agent",
+            handler=_call_agent,
+            tests=[
+                SkillTestCase(
+                    name="missing_agent_id_returns_error",
+                    tier="golden",
+                    args={"agent_id": "", "prompt": "hi"},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "agent_id",
+                            "output",
+                            "success",
+                            "error",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("success") is False
+                        and "agent_id is required" in (r.get("error") or "")
+                    ),
                 ),
-            ),
-        ],
-    ), replace=True)
+            ],
+        ),
+        replace=True,
+    )
 
     # ── parallel variant ─────────────────────────────────────
     parallel_description = (
@@ -2254,7 +2513,7 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "\n"
         "Honesty contract: if the returned envelope has ``partial=True`` or "
         "``failed > 0``, your final answer MUST include a brief run-status "
-        "line such as \"Subagent status: 3/5 succeeded; 2 failed\" and MUST "
+        'line such as "Subagent status: 3/5 succeeded; 2 failed" and MUST '
         "not say that all lanes completed. Name the failed lanes from "
         "``failures[].task_label`` / ``failures[].agent_id`` and either "
         "disclose the gap or explicitly describe how you filled it yourself.\n"
@@ -2281,33 +2540,46 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "Available specialist roles (same as call_agent):\n"
         f"{role_table}"
     )
-    registry.register(Skill(
-        name="call_agent_parallel",
-        description=parallel_description,
-        affinity=["delegation", "subagent", "parallel", "swarm"],
-        cost_profile="high",  # spawns N separate LLM turns
-        trusted_source="skill://public/call_agent_parallel",
-        handler=_call_agent_parallel,
-        tests=[
-            SkillTestCase(
-                name="empty_specs_returns_error",
-                tier="golden",
-                args={"specs": []},
-                expect=SkillExpect(schema_keys=[
-                    "ok", "successes", "failures", "partial",
-                    "total", "success_count", "notes",
-                    "results", "count", "outputs", "error",
-                ]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("count") == 0
-                    and r.get("ok") is False
-                    and r.get("partial") is False
-                    and r.get("successes") == []
+    registry.register(
+        Skill(
+            name="call_agent_parallel",
+            description=parallel_description,
+            affinity=["delegation", "subagent", "parallel", "swarm"],
+            cost_profile="high",  # spawns N separate LLM turns
+            trusted_source="skill://public/call_agent_parallel",
+            handler=_call_agent_parallel,
+            tests=[
+                SkillTestCase(
+                    name="empty_specs_returns_error",
+                    tier="golden",
+                    args={"specs": []},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "ok",
+                            "successes",
+                            "failures",
+                            "partial",
+                            "total",
+                            "success_count",
+                            "notes",
+                            "results",
+                            "count",
+                            "outputs",
+                            "error",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("count") == 0
+                        and r.get("ok") is False
+                        and r.get("partial") is False
+                        and r.get("successes") == []
+                    ),
                 ),
-            ),
-        ],
-    ), replace=True)
+            ],
+        ),
+        replace=True,
+    )
 
     # ── consensus / vote gate ────────────────────────────────
     vote_description = (
@@ -2329,7 +2601,7 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "\n"
         "Args: {question: string (the claim / question to judge), n?: int "
         "2-5 voters (default 3 · odd avoids ties), choices?: list[string] a "
-        "fixed ballot e.g. [\"yes\",\"no\"] (omit for a free-form verdict), "
+        'fixed ballot e.g. ["yes","no"] (omit for a free-form verdict), '
         "agent_id?: voter role (default reviewer), timeout_s?: int}.\n"
         "\n"
         "Returns: {ok, verdict (null on tie / no-verdict), confidence (0-1), "
@@ -2340,29 +2612,38 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "Budget: each voter is one delegation against the 5/turn cap, so a "
         "3-voter vote uses 3. Reserve it for decisions worth the spend."
     )
-    registry.register(Skill(
-        name="call_agent_vote",
-        description=vote_description,
-        affinity=["delegation", "verify", "vote", "consensus", "judge"],
-        cost_profile="high",  # spawns N separate LLM turns
-        trusted_source="skill://public/call_agent_vote",
-        handler=_call_agent_vote,
-        tests=[
-            SkillTestCase(
-                name="missing_question_returns_error",
-                tier="golden",
-                args={"question": ""},
-                expect=SkillExpect(schema_keys=[
-                    "ok", "verdict", "tally", "votes", "note",
-                ]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("ok") is False
-                    and "required" in (r.get("error") or "")
+    registry.register(
+        Skill(
+            name="call_agent_vote",
+            description=vote_description,
+            affinity=["delegation", "verify", "vote", "consensus", "judge"],
+            cost_profile="high",  # spawns N separate LLM turns
+            trusted_source="skill://public/call_agent_vote",
+            handler=_call_agent_vote,
+            tests=[
+                SkillTestCase(
+                    name="missing_question_returns_error",
+                    tier="golden",
+                    args={"question": ""},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "ok",
+                            "verdict",
+                            "tally",
+                            "votes",
+                            "note",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
                 ),
-            ),
-        ],
-    ), replace=True)
+            ],
+        ),
+        replace=True,
+    )
 
     # ── deterministic orchestration loop ─────────────────────
     orchestrate_description = (
@@ -2405,29 +2686,99 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "cap; its internal fan-outs/votes draw from the bounded spawn budget, "
         "not the turn cap. Reserve it for genuinely multi-round work."
     )
-    registry.register(Skill(
-        name="run_orchestration",
-        description=orchestrate_description,
-        affinity=["delegation", "orchestration", "swarm", "discovery", "loop"],
-        cost_profile="high",  # spawns many LLM turns under a budget
-        trusted_source="skill://public/run_orchestration",
-        handler=_run_orchestration,
-        tests=[
-            SkillTestCase(
-                name="missing_goal_returns_error",
-                tier="golden",
-                args={"goal": ""},
-                expect=SkillExpect(schema_keys=[
-                    "ok", "collected", "confirmed", "count",
-                ]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("ok") is False
-                    and "required" in (r.get("error") or "")
+    registry.register(
+        Skill(
+            name="run_orchestration",
+            description=orchestrate_description,
+            affinity=["delegation", "orchestration", "swarm", "discovery", "loop"],
+            cost_profile="high",  # spawns many LLM turns under a budget
+            trusted_source="skill://public/run_orchestration",
+            handler=_run_orchestration,
+            tests=[
+                SkillTestCase(
+                    name="missing_goal_returns_error",
+                    tier="golden",
+                    args={"goal": ""},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "ok",
+                            "collected",
+                            "confirmed",
+                            "count",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
                 ),
-            ),
-        ],
-    ), replace=True)
+            ],
+        ),
+        replace=True,
+    )
+
+    # ── verdict-gated repair loop ─────────────────────────────────
+    verdict_repair_description = (
+        "Run a task through a CLOSED quality loop in one call: a worker "
+        "produces a result, an independent panel VOTES pass/fail on it, and a "
+        "rejection drives a corrected re-attempt that is FED the reviewers' "
+        "critique — produce → judge → rewrite → re-judge, bounded. The loop "
+        "(stop-on-pass, bound, feeding the critique forward) is deterministic "
+        "code, not the model, so a FAIL actually triggers a fix instead of just "
+        "shipping.\n"
+        "\n"
+        "Use it when correctness matters more than speed and a single attempt "
+        "isn't trustworthy: 'write this function AND make sure it's right', "
+        "'draft the migration and have it reviewed until it passes', 'answer "
+        "this, but verify before returning'.\n"
+        "\n"
+        "Args: {task: string (what to accomplish), agent_id?: worker role "
+        "(default general), judge_n?: int 2-5 voters on the gate (default 3), "
+        "max_repairs?: int 0-4 corrective re-attempts (default 2), choices?: "
+        "[accept,reject]-style ballot where the FIRST label means accept "
+        "(default [pass,fail])}.\n"
+        "\n"
+        "Returns: {ok, task, passed (bool — did it clear the gate), repaired "
+        "(bool — only reached pass AFTER a repair), output (the accepted/best "
+        "result), attempts, verdict, confidence, rounds:[{attempt, passed, "
+        "verdict, critique}], max_spawns}.\n"
+        "\n"
+        "Budget: one call costs ONE against the 5/turn delegation cap; its "
+        "internal produce/judge fan-outs draw from a bounded spawn budget."
+    )
+    registry.register(
+        Skill(
+            name="verdict_repair",
+            description=verdict_repair_description,
+            affinity=["delegation", "verify", "repair", "critique", "quality", "judge"],
+            cost_profile="high",  # spawns producers + voters across rounds
+            trusted_source="skill://public/verdict_repair",
+            handler=_run_verdict_repair,
+            tests=[
+                SkillTestCase(
+                    name="missing_task_returns_error",
+                    tier="golden",
+                    args={"task": ""},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "ok",
+                            "passed",
+                            "output",
+                            "attempts",
+                            "rounds",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
+                ),
+            ],
+        ),
+        replace=True,
+    )
 
     # ── pipeline (item-chain, no inter-stage barrier) ─────────────
     pipeline_description = (
@@ -2463,42 +2814,57 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         "Budget: one pipeline costs ONE against the 5/turn delegation cap; "
         "item × stage spawn budget is managed internally."
     )
-    registry.register(Skill(
-        name="run_pipeline",
-        description=pipeline_description,
-        affinity=["delegation", "pipeline", "stages", "multi-step", "batch"],
-        cost_profile="high",
-        trusted_source="skill://public/run_pipeline",
-        handler=_run_pipeline,
-        tests=[
-            SkillTestCase(
-                name="empty_items_returns_error",
-                tier="golden",
-                args={"items": [], "stages": [{"prompt_template": "review {item}"}]},
-                expect=SkillExpect(schema_keys=[
-                    "ok", "results", "success_count", "failure_count", "total",
-                ]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("ok") is False
-                    and "required" in (r.get("error") or "")
+    registry.register(
+        Skill(
+            name="run_pipeline",
+            description=pipeline_description,
+            affinity=["delegation", "pipeline", "stages", "multi-step", "batch"],
+            cost_profile="high",
+            trusted_source="skill://public/run_pipeline",
+            handler=_run_pipeline,
+            tests=[
+                SkillTestCase(
+                    name="empty_items_returns_error",
+                    tier="golden",
+                    args={"items": [], "stages": [{"prompt_template": "review {item}"}]},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "ok",
+                            "results",
+                            "success_count",
+                            "failure_count",
+                            "total",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
                 ),
-            ),
-            SkillTestCase(
-                name="empty_stages_returns_error",
-                tier="golden",
-                args={"items": ["foo"], "stages": []},
-                expect=SkillExpect(schema_keys=[
-                    "ok", "results", "success_count", "failure_count", "total",
-                ]),
-                custom_predicate=lambda r: (
-                    isinstance(r, dict)
-                    and r.get("ok") is False
-                    and "required" in (r.get("error") or "")
+                SkillTestCase(
+                    name="empty_stages_returns_error",
+                    tier="golden",
+                    args={"items": ["foo"], "stages": []},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "ok",
+                            "results",
+                            "success_count",
+                            "failure_count",
+                            "total",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
                 ),
-            ),
-        ],
-    ), replace=True)
+            ],
+        ),
+        replace=True,
+    )
     return 5
 
 
