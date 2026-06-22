@@ -842,17 +842,6 @@ export default function TeamPage() {
 
   const handleSubmit = useCallback(
     (message: { text: string }) => {
-      const taskAgentNames = selectedTaskAgents.map(
-        (agent) => agent.display_name ?? agent.name,
-      );
-      const modeLine =
-        teamMode === "cowork"
-          ? "任务模式：群任务，TL 负责拆解、分派、汇总。"
-          : "任务模式：单人任务，保留随时添加成员升级为群任务。";
-      const assigneeLine =
-        taskAgentNames.length > 0
-          ? `本次任务优先交给：${taskAgentNames.join("、")}。`
-          : "本次任务未指定成员，由当前角色先判断。";
       const hasLocalDatabaseMention =
         message.text.includes("@本地数据库") ||
         message.text.includes("@本地资料官") ||
@@ -860,6 +849,28 @@ export default function TeamPage() {
       const localFileAgentLine = hasLocalDatabaseMention
         ? "本地数据库只检索本机授权资料；未经确认不要把原文件或全量索引上传云端。"
         : null;
+
+      // Plain group chat (default): just talk to the group — no task, no
+      // 任务模式 framing, no panel jump. Tasks are created explicitly via
+      // 待办 plan · 新建, or by switching to 协作 (cowork) mode below.
+      if (teamMode !== "cowork") {
+        const text = [localFileAgentLine, message.text]
+          .filter(Boolean)
+          .join("\n\n");
+        void sendMessage(threadId, { text, files: [] });
+        return;
+      }
+
+      // Cowork mode: structured teamwork → frame the turn + spin up a team
+      // task so the TL can decompose/dispatch/aggregate.
+      const taskAgentNames = selectedTaskAgents.map(
+        (agent) => agent.display_name ?? agent.name,
+      );
+      const modeLine = "任务模式：群任务，TL 负责拆解、分派、汇总。";
+      const assigneeLine =
+        taskAgentNames.length > 0
+          ? `本次任务优先交给：${taskAgentNames.join("、")}。`
+          : "本次任务未指定成员，由当前角色先判断。";
       const text = [modeLine, assigneeLine, localFileAgentLine, message.text]
         .filter(Boolean)
         .join("\n\n");
