@@ -53,6 +53,8 @@ export interface MentionItem {
   value: string;
   description: string;
   icon: string;
+  /** Real avatar image (group members) — rendered instead of the icon. */
+  avatarUrl?: string;
 }
 
 export type MentionCategory =
@@ -141,6 +143,13 @@ export interface MentionMemberInput {
   display_name?: string | null;
   icon?: string | null;
   description?: string | null;
+  avatar_url?: string | null;
+}
+
+/** Resolve an agent avatar_url to an absolute, cache-busted src. */
+function resolveMentionAvatar(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  return url.startsWith("http") ? url : `${getBackendBaseURL()}${url}`;
 }
 
 /** Prepend matching group members so typing "@" in a team room summons the
@@ -179,6 +188,7 @@ function withMemberMentions(
         value: label,
         description: m.description || "群成员",
         icon: m.icon?.trim() || "bot",
+        avatarUrl: resolveMentionAvatar(m.avatar_url),
       };
     })
     .filter((m) => !existing.has(m.value));
@@ -725,11 +735,19 @@ export function MentionAutocompletePopup({
               >
                 <div
                   className={cn(
-                    "flex size-6 shrink-0 items-center justify-center rounded",
+                    "flex size-6 shrink-0 items-center justify-center overflow-hidden rounded",
                     isSelected ? "bg-accent-foreground/10" : "bg-muted",
                   )}
                 >
-                  <IconComponent className={cn("size-3.5", colorClass)} />
+                  {item.avatarUrl ? (
+                    <img
+                      src={item.avatarUrl}
+                      alt={item.label}
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    <IconComponent className={cn("size-3.5", colorClass)} />
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-[13px] leading-tight">

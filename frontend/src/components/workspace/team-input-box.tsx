@@ -169,6 +169,7 @@ export function TeamInputBox({
       display_name: m.display_name,
       icon: m.icon,
       description: m.description,
+      avatar_url: m.avatar_url,
     })),
   });
 
