@@ -240,15 +240,18 @@ _INDEX_DB_PATH = Path("data/code_index.db")
 
 
 def _get_embedder():
+    """The index embedder, via the shared configurable backend so the BUILD and
+    the react-grounding QUERY use the SAME model — and the whole stack can point
+    at one local Ollama / OpenAI-compatible endpoint (``OCTOPUS_EMBED_URL``),
+    unifying with octopus-storage. Returns an ``.encode``-compatible object, or
+    ``None`` when no backend is available (caller falls back to text search)."""
     global _EMBEDDER
     if _EMBEDDER is not None:
         return _EMBEDDER
-    try:
-        from sentence_transformers import SentenceTransformer
-        _EMBEDDER = SentenceTransformer("all-MiniLM-L6-v2")
-        return _EMBEDDER
-    except ImportError:
-        return None
+    from runtime.memory.hemolymph.embedding_backend import get_encoder
+
+    _EMBEDDER = get_encoder()
+    return _EMBEDDER
 
 
 def _load_persisted_index() -> list[tuple[str, str, Any]]:
