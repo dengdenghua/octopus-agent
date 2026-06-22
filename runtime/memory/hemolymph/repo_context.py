@@ -204,3 +204,32 @@ def retrieve_repo_context(
         header = page["title"] or page["path"]
         parts.append(f"\n## {header}  ({page['path']})\n{body}")
     return "\n".join(parts)
+
+
+def render_codebase_context(goal: str) -> str:
+    """Combined codebase grounding for a goal: relevant wiki pages (summaries)
+    + the actual source chunks. Shared by the planner AND the react chat loop
+    so interactive chat gets the same grounding as planned turns — not just the
+    graph paths. Self-gating + best-effort; disabled by OCTOPUS_CODEBASE_CONTEXT=0.
+    """
+    import os
+
+    if os.environ.get("OCTOPUS_CODEBASE_CONTEXT", "1").strip().lower() in (
+        "0", "false", "no", "off",
+    ):
+        return ""
+    goal = (goal or "").strip()
+    if not goal:
+        return ""
+    parts: list[str] = []
+    with contextlib.suppress(Exception):
+        wiki = retrieve_repo_context(goal)
+        if wiki:
+            parts.append(wiki)
+    with contextlib.suppress(Exception):
+        from runtime.memory.hemolymph.code_index import retrieve_code_context
+
+        code = retrieve_code_context(goal)
+        if code:
+            parts.append(code)
+    return "\n\n".join(parts)

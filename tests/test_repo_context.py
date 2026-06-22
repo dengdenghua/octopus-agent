@@ -121,3 +121,27 @@ def test_real_wiki_smoke() -> None:
     # the repo ships a generated wiki under docs/auto
     out = retrieve_repo_context("cerebrum planner tool engine skills", wiki_dir="docs/auto")
     assert out is None or "CODEBASE DOCS" in out
+
+
+# ── render_codebase_context: shared wiki+code grounding (planner + chat) ──
+
+
+def test_render_codebase_context_combines_wiki_and_code(monkeypatch) -> None:
+    import runtime.memory.hemolymph.code_index as ci
+    import runtime.memory.hemolymph.repo_context as rc
+
+    monkeypatch.delenv("OCTOPUS_CODEBASE_CONTEXT", raising=False)
+    monkeypatch.setattr(rc, "retrieve_repo_context", lambda goal, **k: "WIKI-PART")
+    monkeypatch.setattr(ci, "retrieve_code_context", lambda goal, **k: "CODE-PART")
+    out = rc.render_codebase_context("fix the planner")
+    assert "WIKI-PART" in out and "CODE-PART" in out
+
+
+def test_render_codebase_context_empty_goal_and_env_off(monkeypatch) -> None:
+    import runtime.memory.hemolymph.repo_context as rc
+
+    monkeypatch.delenv("OCTOPUS_CODEBASE_CONTEXT", raising=False)
+    assert rc.render_codebase_context("") == ""
+    assert rc.render_codebase_context("   ") == ""
+    monkeypatch.setenv("OCTOPUS_CODEBASE_CONTEXT", "0")
+    assert rc.render_codebase_context("anything") == ""

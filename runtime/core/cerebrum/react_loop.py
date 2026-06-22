@@ -530,6 +530,23 @@ def stream_react_loop(
         or _metadata.get("capability_mode")
         or (isinstance(_wp, str) and _wp.strip())
     )
+    # Codebase grounding for code/project chats: the same wiki + source
+    # retrieval the planner uses, so interactive chat is grounded the same way
+    # planned turns are (previously only plan() got this). Volatile (goal-
+    # dependent) + best-effort; self-gating when no project wiki/source exists.
+    if _is_code_mode:
+        try:
+            from runtime.memory.hemolymph.repo_context import (
+                render_codebase_context,
+            )
+
+            _cb = render_codebase_context(
+                str(getattr(intent, "normalized_goal", "") or ""),
+            )
+            if _cb:
+                volatile_parts.append(_cb)
+        except Exception:  # noqa: BLE001 — grounding must never break the loop
+            pass
     _browser_regression_enabled = bool(
         _uc.get("browser_regression_enabled") or _metadata.get("browser_regression_enabled")
     )
