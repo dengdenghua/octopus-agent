@@ -15,6 +15,7 @@ is unit-testable against a real git repo without any CLI installed.
 from __future__ import annotations
 
 import concurrent.futures as _cf
+import shutil
 import subprocess
 from collections.abc import Callable
 from typing import Any
@@ -31,6 +32,33 @@ _MAX_MEMBERS = 6
 
 # Matches run_local_partner's keyword call shape; injectable for tests.
 PartnerRunner = Callable[..., LocalPartnerResult]
+
+
+# Drivable CLI agents → the commands that launch them (mirrors build_partner_argv).
+_KNOWN_PARTNERS: dict[str, list[str]] = {
+    "claude-code": ["claude", "claude.cmd", "claude.exe"],
+    "codex-cli": ["codex", "codex.cmd", "codex.exe"],
+}
+
+
+def detect_installed_partners() -> list[dict[str, str]]:
+    """Discover the drivable coding-agent CLIs actually on this machine (via
+    ``shutil.which``) as team members — ``[]`` if none. Self-contained: no agent
+    registry / gateway needed, so a skill can auto-assemble the team."""
+    members: list[dict[str, str]] = []
+    for partner_id, commands in _KNOWN_PARTNERS.items():
+        for cmd in commands:
+            path = shutil.which(cmd)
+            if path:
+                members.append(
+                    {
+                        "agent_id": f"local_{partner_id.replace('-', '_')}",
+                        "partner_id": partner_id,
+                        "command": path,
+                    }
+                )
+                break
+    return members
 
 
 def _slug(text: str, fallback: str) -> str:

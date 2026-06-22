@@ -88,3 +88,71 @@ def test_guards(tmp_path: Path) -> None:
     assert run_cli_team("", _MEMBERS, repo_root=repo)["ok"] is False  # no goal
     assert run_cli_team("g", [], repo_root=repo)["ok"] is False  # no members
     assert run_cli_team("g", _MEMBERS, repo_root=str(tmp_path / "nope"))["ok"] is False  # not git
+
+
+# ── detection + the reachable cli_team skill (judge) ──────────────────
+
+
+def test_detect_installed_partners(monkeypatch) -> None:
+    from runtime.execution.agents import cli_team as ct
+
+    monkeypatch.setattr(
+        ct.shutil, "which", lambda c: f"/usr/bin/{c}" if c in ("claude", "codex") else None
+    )
+    mems = ct.detect_installed_partners()
+    assert {m["partner_id"] for m in mems} == {"claude-code", "codex-cli"}
+    assert all(m["command"].startswith("/usr/bin/") for m in mems)
+
+
+def test_detect_none_when_nothing_installed(monkeypatch) -> None:
+    from runtime.execution.agents import cli_team as ct
+
+    monkeypatch.setattr(ct.shutil, "which", lambda _c: None)
+    assert ct.detect_installed_partners() == []
+
+
+def test_cli_team_skill_judges_a_winner(monkeypatch) -> None:
+    from runtime.execution.agents import cli_team as ct
+    from runtime.execution.suckers import delegation_skills as ds
+
+    monkeypatch.setattr(
+        ct,
+        "detect_installed_partners",
+        lambda: [
+            {"agent_id": "local_claude_code", "partner_id": "claude-code", "command": "claude"},
+            {"agent_id": "local_codex_cli", "partner_id": "codex-cli", "command": "codex"},
+        ],
+    )
+    monkeypatch.setattr(
+        ct,
+        "run_cli_team",
+        lambda goal, members, **kw: {
+            "ok": True,
+            "count": 2,
+            "succeeded": 2,
+            "members": [
+                {"agent_id": "local_claude_code", "partner_id": "claude-code", "ok": True, "diff": "diff A", "files": ["a.py"]},
+                {"agent_id": "local_codex_cli", "partner_id": "codex-cli", "ok": True, "diff": "diff B", "files": ["b.py"]},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        ds, "_call_agent_vote",
+        lambda **kw: {"ok": True, "verdict": "local_codex_cli", "confidence": 0.8, "votes": []},
+    )
+    r = ds._run_cli_team(goal="implement X")
+    assert r["ok"] is True
+    assert r["winner"]["agent_id"] == "local_codex_cli"
+    assert r["winner"]["diff"] == "diff B"
+    assert r["count"] == 2
+    assert {m["agent_id"] for m in r["members"]} == {"local_claude_code", "local_codex_cli"}
+
+
+def test_cli_team_skill_errors(monkeypatch) -> None:
+    from runtime.execution.agents import cli_team as ct
+    from runtime.execution.suckers import delegation_skills as ds
+
+    assert ds._run_cli_team(goal="")["ok"] is False  # missing goal
+    monkeypatch.setattr(ct, "detect_installed_partners", lambda: [])
+    r = ds._run_cli_team(goal="x")
+    assert r["ok"] is False and "no installed" in r["error"]  # none detected

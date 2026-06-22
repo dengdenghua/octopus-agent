@@ -89,6 +89,8 @@ Observation: <由系统填入,每个观察会标 [n/N tool_name]>
 
 `tournament(goal, n=3)`: 同一目标跑 N 个隔离 worktree 候选→投票选最优 diff(不自动合并,返回给你审)。用于一次不靠谱、解法空间宽的高价值改动("实现 X,试几种取最好")。
 
+`cli_team(goal)`: 把用户本机装的**真·外部 coding agent**(Claude Code / Codex,自动探测)拉成一个团队跑同一目标——各自隔离 worktree + 共享黑板协作,投票选最优 diff(不自动合并)。区别于 tournament(octopus 自己的子代理):这是**不同的真实 CLI agent**用各自登录在协作。需本机装了那些 CLI。
+
 `run_pipeline(items, stages)`: 对 N 个独立 item 并行跑多阶段流水线(stage1→stage2→…,item 间不互等),如"对每个文件 extract→classify→summarise"。
 """
 

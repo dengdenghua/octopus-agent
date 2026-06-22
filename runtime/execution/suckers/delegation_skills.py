@@ -2282,6 +2282,116 @@ def _run_tournament(
     }
 
 
+# ── cli_team: a team of EXTERNAL CLI agents (Claude/Codex) ──────────────
+def _run_cli_team(
+    goal: str = "",
+    *,
+    members: Any = None,
+    judge: bool = True,
+    judge_n: int | str = 3,
+    repo_root: str | None = None,
+    context: dict[str, Any] | None = None,
+    session: Any = None,
+    **kw: Any,
+) -> dict[str, Any]:
+    """Run a team of the user's OWN external coding-agent CLIs (Claude Code /
+    Codex) in parallel — each in its own isolated git worktree, briefed from and
+    harvesting to the shared blackboard — then judge-pick the best diff. Detects
+    installed CLIs automatically; never auto-merges (returns the winning diff for
+    review). The Conductor/orca pattern on octopus's pieces."""
+    import os
+
+    from runtime.execution.agents.cli_team import detect_installed_partners, run_cli_team
+    from runtime.execution.subagents.tournament import Candidate, select_winner
+
+    goal = str(goal or kw.get("task") or kw.get("prompt") or "").strip()
+    if not goal:
+        return {"ok": False, "error": "goal is required", "members": [], "winner": None}
+
+    mems = members if isinstance(members, list) and members else detect_installed_partners()
+    if not mems:
+        return {
+            "ok": False,
+            "error": "no installed coding-agent CLI detected (install Claude Code or Codex)",
+            "members": [],
+            "winner": None,
+        }
+
+    root = str(repo_root or os.getcwd())
+    turn_id = None
+    if isinstance(context, dict):
+        turn_id = context.get("turn_id") or context.get("thread_id")
+    turn_id = turn_id or os.environ.get("OCTOPUS_TURN_ID")
+
+    result = run_cli_team(goal, mems, repo_root=root, turn_id=turn_id)
+    members_out = result.get("members") or []
+
+    def _judge_int(value: Any, default: int) -> int:
+        try:
+            return max(_VOTE_MIN, min(_VOTE_MAX, int(value)))
+        except (TypeError, ValueError):
+            return default
+
+    winner: dict[str, Any] | None = None
+    viable = [m for m in members_out if m.get("ok") and str(m.get("diff") or "").strip()]
+    if str(judge).strip().lower() not in ("false", "0", "no", "off") and len(viable) > 1:
+        n_judge = _judge_int(judge_n, 3)
+        cands = [
+            Candidate(
+                id=str(m["agent_id"]),
+                output=str(m.get("diff") or ""),
+                ok=bool(m.get("ok")),
+                meta={"files": m.get("files") or []},
+            )
+            for m in members_out
+        ]
+
+        def _judge(viable_cands: list[Candidate]) -> str | None:
+            blocks = [f"### {c.id}\n{(c.output or '')[:2000]}" for c in viable_cands]
+            question = (
+                "Several CLI agents each attempted the SAME goal in isolation. Which "
+                "diff best and most correctly accomplishes it? Weigh correctness, "
+                f"completeness, simplicity.\n\nGOAL:\n{goal}\n\n" + "\n\n".join(blocks)
+            )
+            vote = _call_agent_vote(
+                question=question,
+                n=n_judge,
+                choices=[c.id for c in viable_cands],
+                context=context,
+                session=session,
+            )
+            return str(vote.get("verdict") or "") or None
+
+        with _orchestration_budget_scope(n_judge + 1):
+            sel = select_winner(cands, _judge)
+        if sel.winner is not None:
+            winner = {
+                "agent_id": sel.winner.id,
+                "files": list(sel.winner.meta.get("files") or []),
+                "diff": sel.winner.output,
+                "decided_by": sel.decided_by,
+            }
+
+    return {
+        "ok": bool(result.get("ok")),
+        "goal": goal[:240],
+        "count": result.get("count", 0),
+        "succeeded": result.get("succeeded", 0),
+        "members": [
+            {
+                "agent_id": m.get("agent_id"),
+                "partner_id": m.get("partner_id"),
+                "ok": m.get("ok"),
+                "files": m.get("files") or [],
+                "error": m.get("error"),
+            }
+            for m in members_out
+        ],
+        "winner": winner,
+        "note": "diffs are NOT merged — review (or apply the winner's diff) yourself",
+    }
+
+
 _PIPELINE_MAX_ITEMS = 16
 _PIPELINE_MAX_STAGES = 4
 
@@ -2971,6 +3081,54 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
                             "decided_by",
                         ]
                     ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
+                ),
+            ],
+        ),
+        replace=True,
+    )
+
+    # ── cli_team: a team of the user's external coding CLIs ───────
+    cli_team_description = (
+        "Run a TEAM of the user's OWN external coding-agent CLIs (Claude Code / "
+        "Codex, auto-detected on this machine) on one goal — each in its own "
+        "isolated git worktree (no collisions), each briefed from + harvesting to "
+        "the shared blackboard (team stigmergy), then judge-pick the best diff. "
+        "Uses the user's own logins/subscriptions; NEVER auto-merges (returns the "
+        "winning diff for review). This is best-of-N across DIFFERENT real coding "
+        "agents, not octopus sub-agents.\n"
+        "\n"
+        "Use it when you want several top coding agents to each take a crack at a "
+        "task and keep the best ('have Claude and Codex both implement this, pick "
+        "the better one'). Costly + needs those CLIs installed.\n"
+        "\n"
+        "Args: {goal: string, members?: [{agent_id, partner_id, command}] (default "
+        "auto-detect installed claude-code/codex-cli), judge?: bool (default true "
+        "— vote a winner), judge_n?: int 2-5 voters, repo_root?: path (default "
+        "cwd, must be a git repo)}.\n"
+        "\n"
+        "Returns: {ok, goal, count, succeeded, members:[{agent_id, partner_id, ok, "
+        "files, error}], winner:{agent_id, files, diff, decided_by}, note}. Apply "
+        "the winner's diff yourself."
+    )
+    registry.register(
+        Skill(
+            name="cli_team",
+            description=cli_team_description,
+            affinity=["delegation", "cli", "external_agent", "worktree", "team", "best_of"],
+            cost_profile="high",  # N external coding agents in worktrees + voters
+            trusted_source="skill://public/cli_team",
+            handler=_run_cli_team,
+            tests=[
+                SkillTestCase(
+                    name="missing_goal_returns_error",
+                    tier="golden",
+                    args={"goal": ""},
+                    expect=SkillExpect(schema_keys=["ok", "members", "winner"]),
                     custom_predicate=lambda r: (
                         isinstance(r, dict)
                         and r.get("ok") is False
