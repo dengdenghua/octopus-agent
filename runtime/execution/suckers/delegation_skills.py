@@ -2138,6 +2138,150 @@ def _run_verdict_repair(
     }
 
 
+# ── tournament: N isolated candidates -> judge -> pick the best ─────────
+_TOURNAMENT_MAX_CANDIDATES = 5
+
+
+def _run_tournament(
+    goal: str = "",
+    *,
+    n: int | str = 3,
+    agent_id: str = "worktree_writer",
+    judge_n: int | str = 3,
+    repo_root: str | None = None,
+    timeout_s: int | str = _DEFAULT_SUBAGENT_TIMEOUT_S,
+    max_workers: int | str = 4,
+    context: dict[str, Any] | None = None,
+    session: Any = None,
+    **kw: Any,
+) -> dict[str, Any]:
+    """Run the SAME goal as N isolated git-worktree candidates, then judge-pick
+    the best diff — the missing half on top of octopus's existing worktree
+    isolation. Reuses ``run_worktree_loop`` (each candidate edits in its own
+    worktree, no collisions) + ``call_agent_vote`` (an independent panel picks
+    the winner); the selection logic is deterministic in
+    ``subagents.tournament.select_winner``. Never auto-applies — the winner's
+    diff is returned for review (reconciling parallel edits is a human call).
+    """
+    import os
+
+    from runtime.execution.subagents.tournament import Candidate, select_winner
+    from runtime.execution.subagents.worktree_loop import (
+        is_git_repo,
+        run_worktree_loop,
+        subagent_worktree_worker,
+    )
+
+    goal = str(goal or kw.get("task") or kw.get("prompt") or "").strip()
+    if not goal:
+        return {
+            "ok": False,
+            "error": "goal is required",
+            "winner": None,
+            "candidates": [],
+            "decided_by": "none",
+        }
+
+    def _clamp(value: Any, lo: int, hi: int, default: int) -> int:
+        try:
+            return max(lo, min(hi, int(value)))
+        except (TypeError, ValueError):
+            return default
+
+    root = str(repo_root or os.getcwd())
+    if not is_git_repo(root):
+        return {
+            "ok": False,
+            "error": f"not a git repo: {root}",
+            "winner": None,
+            "candidates": [],
+            "decided_by": "none",
+        }
+
+    n_cand = _clamp(n, 2, _TOURNAMENT_MAX_CANDIDATES, 3)
+    n_judge = _clamp(judge_n, _VOTE_MIN, _VOTE_MAX, 3)
+
+    worker = subagent_worktree_worker(agent_id=str(agent_id or "worktree_writer"))
+    loop = run_worktree_loop(
+        root,
+        [goal] * n_cand,
+        worker,
+        max_workers=_clamp(max_workers, 1, n_cand, n_cand),
+    )
+    results = loop.get("results") or []
+    candidates = [
+        Candidate(
+            id=f"candidate_{r.get('index', i) + 1}",
+            output=str(r.get("diff") or ""),
+            ok=bool(r.get("ok")),
+            meta={
+                "files": r.get("files") or [],
+                "branch": r.get("branch"),
+                "error": r.get("error"),
+            },
+        )
+        for i, r in enumerate(results)
+    ]
+
+    def _judge(viable: list[Candidate]) -> str | None:
+        blocks: list[str] = []
+        for c in viable:
+            files = ", ".join(str(f) for f in (c.meta.get("files") or [])) or "(no files)"
+            diff = (c.output or "")[:2000]
+            blocks.append(f"### {c.id} — files: {files}\n{diff}")
+        question = (
+            "Each candidate independently attempted the SAME goal in isolation. "
+            "Which ONE best and most correctly accomplishes it? Weigh "
+            "correctness, completeness, and simplicity.\n\n"
+            f"GOAL:\n{goal}\n\n" + "\n\n".join(blocks)
+        )
+        vote = _call_agent_vote(
+            question=question,
+            n=n_judge,
+            choices=[c.id for c in viable],
+            timeout_s=timeout_s,
+            context=context,
+            session=session,
+        )
+        return str(vote.get("verdict") or "") or None
+
+    # The judge's voters go through the delegation path → bound them in a spawn
+    # budget so the per-turn cap doesn't refuse them. The worktree candidates run
+    # under their own concurrency cap, before the judge.
+    with _orchestration_budget_scope(n_judge + 1):
+        result = select_winner(candidates, _judge)
+
+    winner = result.winner
+    return {
+        "ok": winner is not None,
+        "goal": goal[:240],
+        "decided_by": result.decided_by,
+        "candidate_count": len(candidates),
+        "viable_count": result.viable_count,
+        "winner": (
+            {
+                "id": winner.id,
+                "files": list(winner.meta.get("files") or []),
+                "branch": winner.meta.get("branch"),
+                "diff": winner.output,
+            }
+            if winner
+            else None
+        ),
+        "candidates": [
+            {
+                "id": c.id,
+                "ok": c.ok,
+                "viable": c.viable,
+                "files": list(c.meta.get("files") or []),
+                "error": c.meta.get("error"),
+            }
+            for c in candidates
+        ],
+        "note": "diffs are NOT auto-applied — review the winner and apply it yourself",
+    }
+
+
 _PIPELINE_MAX_ITEMS = 16
 _PIPELINE_MAX_STAGES = 4
 
@@ -2767,6 +2911,64 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
                             "output",
                             "attempts",
                             "rounds",
+                        ]
+                    ),
+                    custom_predicate=lambda r: (
+                        isinstance(r, dict)
+                        and r.get("ok") is False
+                        and "required" in (r.get("error") or "")
+                    ),
+                ),
+            ],
+        ),
+        replace=True,
+    )
+
+    # ── tournament: best-of-N over isolated worktree candidates ───
+    tournament_description = (
+        "Attempt the SAME goal N independent times, each in its OWN isolated "
+        "git worktree (no collisions), then have an independent panel VOTE on "
+        "which result is best — best-of-N with a judge. Builds on octopus's "
+        "worktree isolation (the candidates) plus call_agent_vote (the judge); "
+        "selection is deterministic code. NEVER auto-applies: the winning diff "
+        "is returned for you to review and apply (reconciling parallel edits is "
+        "a human call).\n"
+        "\n"
+        "Use it when one attempt is unreliable and the solution space is wide, "
+        "so divergent tries help: 'implement X — try a few approaches and keep "
+        "the best', 'refactor this several ways and pick the cleanest'. Costly "
+        "(N full coding sub-agents + voters) — reserve it for genuinely "
+        "high-value or ambiguous work.\n"
+        "\n"
+        "Args: {goal: string (what each candidate should accomplish), n?: int "
+        "2-5 candidates (default 3), agent_id?: worker role (default "
+        "worktree_writer), judge_n?: int 2-5 voters (default 3), repo_root?: "
+        "path (default cwd — must be a git repo)}.\n"
+        "\n"
+        "Returns: {ok, goal, decided_by (judge|only_candidate|judge_abstained|"
+        "none), candidate_count, viable_count, winner:{id, files, branch, "
+        "diff}, candidates:[{id, ok, viable, files, error}], note}. Apply the "
+        "winner's diff yourself — nothing is merged automatically."
+    )
+    registry.register(
+        Skill(
+            name="tournament",
+            description=tournament_description,
+            affinity=["delegation", "worktree", "tournament", "best_of", "judge", "candidates"],
+            cost_profile="high",  # N coding sub-agents in worktrees + voters
+            trusted_source="skill://public/tournament",
+            handler=_run_tournament,
+            tests=[
+                SkillTestCase(
+                    name="missing_goal_returns_error",
+                    tier="golden",
+                    args={"goal": ""},
+                    expect=SkillExpect(
+                        schema_keys=[
+                            "ok",
+                            "winner",
+                            "candidates",
+                            "decided_by",
                         ]
                     ),
                     custom_predicate=lambda r: (
