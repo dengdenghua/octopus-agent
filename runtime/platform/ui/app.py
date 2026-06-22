@@ -673,6 +673,11 @@ def create_app(
     from runtime.sensing.gateway.wiki_router import create_wiki_router
     app.include_router(create_wiki_router())
 
+    # Local-brain setup wizard · plain-language readiness checklist so a
+    # non-technical user can wire the whole stack to run locally.
+    from runtime.sensing.gateway.local_brain_router import create_local_brain_router
+    app.include_router(create_local_brain_router())
+
     # ─── Persistent terminal WebSocket ─────────
     from runtime.sensing.gateway.terminal_router import mount_terminal_routes
     mount_terminal_routes(
