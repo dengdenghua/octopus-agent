@@ -651,6 +651,21 @@ async def _apply_react_event(
             },
         )
         return
+    if kind == "codebase_grounding":
+        # The loop folded these project docs/chunks into the prompt this turn.
+        # Forward them so the frontend can show a plain-language grounding chip
+        # on the AI reply. Best-effort UX — never a turn-breaking contract.
+        sources = evt.get("sources")
+        if isinstance(sources, list) and sources:
+            await emitter.notify(
+                ServerMethod.TURN_GROUNDING,
+                {
+                    "threadId": turn.thread_id,
+                    "turnId": turn.id,
+                    "sources": sources,
+                },
+            )
+        return
     if kind == "react_step_complete":
         await state.flush(turn, log, emitter)
         return

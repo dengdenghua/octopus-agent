@@ -259,6 +259,24 @@ describe("conversationToAgentThreadState · agentMessage + reasoning", () => {
     expect(ai.additional_kwargs?.reasoning_content).toBe("bullet 1\nbullet 2");
   });
 
+  it("bridges turn.grounding onto the final AI reply's additional_kwargs", () => {
+    const grounding = [
+      { kind: "doc" as const, title: "Hemolymph", path: "hemolymph.md" },
+      { kind: "source" as const, title: "react_loop.py", path: "rl.py:501" },
+    ];
+    const turn: Turn = {
+      ...makeTurn([userMsg("q"), agentMsg("grounded answer")]),
+      grounding,
+    };
+    const state = conversationToAgentThreadState(makeConv([turn]));
+    const ai = state.messages[1] as {
+      type: string;
+      additional_kwargs?: Record<string, unknown>;
+    };
+    expect(ai.type).toBe("ai");
+    expect(ai.additional_kwargs?.grounding).toEqual(grounding);
+  });
+
   it("dedupes repeated final answers emitted in the same turn", () => {
     const answer = [
       "你想调研的是哪类 harness？",

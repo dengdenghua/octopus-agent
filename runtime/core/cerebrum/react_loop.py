@@ -534,19 +534,20 @@ def stream_react_loop(
     # retrieval the planner uses, so interactive chat is grounded the same way
     # planned turns are (previously only plan() got this). Volatile (goal-
     # dependent) + best-effort; self-gating when no project wiki/source exists.
+    _grounding_sources: list[dict[str, str]] = []
     if _is_code_mode:
         try:
             from runtime.memory.hemolymph.repo_context import (
-                render_codebase_context,
+                build_codebase_context,
             )
 
-            _cb = render_codebase_context(
+            _cb, _grounding_sources = build_codebase_context(
                 str(getattr(intent, "normalized_goal", "") or ""),
             )
             if _cb:
                 volatile_parts.append(_cb)
         except Exception:  # noqa: BLE001 — grounding must never break the loop
-            pass
+            _grounding_sources = []
     _browser_regression_enabled = bool(
         _uc.get("browser_regression_enabled") or _metadata.get("browser_regression_enabled")
     )
@@ -1230,6 +1231,15 @@ def stream_react_loop(
         "thread_id": thread_id or None,
         "max_iterations": max_iterations,
     }
+
+    # Surface the codebase docs/chunks we actually grounded this turn on, so
+    # the UI can show a plain-language "consulted N project docs" chip. Faithful
+    # by construction: these are the exact sources folded into the prompt above.
+    if _grounding_sources:
+        yield {
+            "type": "codebase_grounding",
+            "sources": _grounding_sources,
+        }
 
     # ── PHASE 4.5 · agent auto-delegation short-circuit ────────────────
     # When the user prompt has a single, unambiguous @agent: pin AND no

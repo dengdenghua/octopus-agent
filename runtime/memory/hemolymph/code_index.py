@@ -130,9 +130,14 @@ def retrieve_code_context(
     budget_tokens: int = 1500,
     max_chunks: int = 3,
     ttl: float = _INDEX_TTL_S,
+    _sink: list[dict[str, str]] | None = None,
 ) -> str | None:
     """Return the source chunks most relevant to ``query`` as a prompt section,
-    or ``None`` when there is no source or no chunk overlaps the query."""
+    or ``None`` when there is no source or no chunk overlaps the query.
+
+    ``_sink``: if given, the EXACT chunks chosen for the prompt are appended as
+    ``{"kind": "source", "title", "path"}`` (``path`` carries ``file:line``) so
+    a UI grounding chip is faithful to what was injected — no second scoring."""
     query = (query or "").strip()
     if not query:
         return None
@@ -160,5 +165,14 @@ def retrieve_code_context(
         body = chunk["body"]
         if len(body) > per_chunk_chars:
             body = body[:per_chunk_chars].rstrip() + "\n…(truncated)"
+        if _sink is not None:
+            path = str(chunk["path"])
+            _sink.append(
+                {
+                    "kind": "source",
+                    "title": path.rsplit("/", 1)[-1],
+                    "path": f"{path}:{chunk['line']}",
+                }
+            )
         parts.append(f"\n### {chunk['path']}:{chunk['line']}\n{body}")
     return "\n".join(parts)

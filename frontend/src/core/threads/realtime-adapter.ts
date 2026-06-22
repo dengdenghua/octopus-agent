@@ -24,6 +24,7 @@ import type {
   Conversation,
   ErrorItem,
   FileChangeItem,
+  GroundingSource,
   McpToolCallItem,
   PlanItem,
   ReasoningItem,
@@ -423,7 +424,28 @@ function turnToMessages(turn: Turn): Message[] {
   }
 
   flushPendingAsTrailingAi();
+  attachGroundingToLastAi(out, turn.grounding);
   return out;
+}
+
+// Fold the turn's codebase grounding (project docs/chunks it was grounded on)
+// onto the final AI reply's ``additional_kwargs.grounding`` — the one channel
+// the chat actually renders — so message-list-item can show a grounding chip.
+// Attached once, to the last AI message (the final answer bubble).
+function attachGroundingToLastAi(
+  messages: Message[],
+  grounding: GroundingSource[] | undefined,
+): void {
+  if (!grounding || grounding.length === 0) return;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (!message || message.type !== "ai") continue;
+    message.additional_kwargs = {
+      ...(message.additional_kwargs ?? {}),
+      grounding,
+    };
+    return;
+  }
 }
 
 function mergePendingIntoLastAiAnswer(

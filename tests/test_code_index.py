@@ -73,3 +73,19 @@ def test_real_repo_smoke() -> None:
         "compose context segments token budget", root="runtime", max_chunks=2,
     )
     assert out is None or "RELEVANT SOURCE" in out
+
+
+def test_sink_captures_chosen_chunks_faithfully(tmp_path: Path) -> None:
+    _make_src(tmp_path, {
+        "runtime/planner.py": "def plan_tool_calls():\n    # planner builds react steps\n    return step()\n",
+        "runtime/browser.py": "def open_browser():\n    return playwright_launch()\n",
+    })
+    sink: list[dict[str, str]] = []
+    out = retrieve_code_context("how does plan_tool_calls work", root=tmp_path, _sink=sink)
+    assert out is not None
+    # the sink lists EXACTLY the chunk(s) folded into the prompt — same scoring,
+    # so a UI chip can't drift from what was actually injected.
+    assert sink == [
+        {"kind": "source", "title": "planner.py", "path": "runtime/planner.py:1"},
+    ]
+    assert sink[0]["path"] in out  # faithful: the cited path is in the prompt

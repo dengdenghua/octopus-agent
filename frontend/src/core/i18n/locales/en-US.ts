@@ -282,6 +282,11 @@ export const enUS: Translations = {
     useTopicInAgent: "Use this topic in Agent",
     actionLabel: (action: string) => `Action: ${action}`,
     attachmentFallback: "attachment",
+    grounding: {
+      label: "Consulted {count} project docs",
+      doc: "doc",
+      source: "code",
+    },
     thinkingForSeconds: (seconds: number) => `${seconds}s thinking`,
     planningNSteps: (n: number) => `${n} planning step${n === 1 ? "" : "s"}`,
     fileOperationsCount: (n: number) =>

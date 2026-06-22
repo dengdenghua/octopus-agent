@@ -10,6 +10,8 @@ from typing import Any
 from runtime.memory.hemolymph.repo_context import (
     _flatten,
     _tokenize,
+    build_codebase_context,
+    collect_codebase_sources,
     retrieve_repo_context,
 )
 
@@ -145,3 +147,56 @@ def test_render_codebase_context_empty_goal_and_env_off(monkeypatch) -> None:
     assert rc.render_codebase_context("   ") == ""
     monkeypatch.setenv("OCTOPUS_CODEBASE_CONTEXT", "0")
     assert rc.render_codebase_context("anything") == ""
+
+
+# ── grounding sources: faithful to what render_codebase_context injects ──
+
+
+def test_sink_captures_chosen_doc_faithfully(tmp_path: Path) -> None:
+    auto = _make_wiki(tmp_path, [
+        ("Cerebrum planning", "cerebrum.md", "The planner builds a ReAct loop."),
+        ("Browser automation", "browser.md", "Playwright drives chromium."),
+    ])
+    sink: list[dict[str, str]] = []
+    out = retrieve_repo_context("how does the planner cerebrum work", wiki_dir=auto, _sink=sink)
+    assert out is not None
+    assert sink == [{"kind": "doc", "title": "Cerebrum planning", "path": "cerebrum.md"}]
+    assert all(s["path"] in out for s in sink)  # every cited path is in the prompt
+
+
+def test_build_codebase_context_returns_text_and_sources(monkeypatch) -> None:
+    import runtime.memory.hemolymph.code_index as ci
+    import runtime.memory.hemolymph.repo_context as rc
+
+    monkeypatch.delenv("OCTOPUS_CODEBASE_CONTEXT", raising=False)
+
+    def _fake_wiki(goal: str, **k: Any) -> str:
+        sink = k.get("_sink")
+        if sink is not None:
+            sink.append({"kind": "doc", "title": "Cerebrum", "path": "cerebrum.md"})
+        return "WIKI-PART"
+
+    def _fake_code(goal: str, **k: Any) -> str:
+        sink = k.get("_sink")
+        if sink is not None:
+            sink.append({"kind": "source", "title": "planner.py", "path": "p.py:1"})
+        return "CODE-PART"
+
+    monkeypatch.setattr(rc, "retrieve_repo_context", _fake_wiki)
+    monkeypatch.setattr(ci, "retrieve_code_context", _fake_code)
+
+    text, sources = build_codebase_context("fix the planner")
+    assert "WIKI-PART" in text and "CODE-PART" in text
+    assert sources == [
+        {"kind": "doc", "title": "Cerebrum", "path": "cerebrum.md"},
+        {"kind": "source", "title": "planner.py", "path": "p.py:1"},
+    ]
+    # collect_codebase_sources is just the sources half
+    assert collect_codebase_sources("fix the planner") == sources
+
+
+def test_collect_codebase_sources_empty_when_off(monkeypatch) -> None:
+    monkeypatch.setenv("OCTOPUS_CODEBASE_CONTEXT", "0")
+    assert collect_codebase_sources("anything") == []
+    monkeypatch.delenv("OCTOPUS_CODEBASE_CONTEXT", raising=False)
+    assert collect_codebase_sources("") == []

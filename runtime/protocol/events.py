@@ -88,6 +88,13 @@ class ServerMethod(StrEnum):
     # this is informational only until the graph runtime is wired
     # through realtime gateway.
     TURN_META_SKILL_HINT = "turn/metaSkill/hint"
+    # Codebase grounding: when a code/project turn retrieves relevant wiki
+    # pages + source chunks and folds them into the prompt, the runtime emits
+    # this with the consulted sources. The frontend bridges it onto the AI
+    # message's ``additional_kwargs.grounding`` and renders a plain-language
+    # "consulted N project docs" chip. Informational — grounding already
+    # happened; this just makes it visible.
+    TURN_GROUNDING = "turn/grounding"
 
     # Generic item lifecycle
     ITEM_STARTED = "item/started"

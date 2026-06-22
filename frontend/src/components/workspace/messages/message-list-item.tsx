@@ -69,6 +69,7 @@ import { StreamingIndicator } from "../streaming-indicator";
 import { MarkdownContent } from "./markdown-content";
 import { useThreadStreaming, useThreadValues } from "./context";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
+import { GroundingChip } from "./grounding-chip";
 import { extractClarificationQuestionnaire } from "../clarification-questionnaire";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -818,6 +819,7 @@ function MessageContent_({
       )}
       {filesList}
       {attachmentsList}
+      <GroundingChip message={message} />
       {segmentedReasoningPanel}
       {visibleContentToDisplay.trim() && (
         <div className="relative">

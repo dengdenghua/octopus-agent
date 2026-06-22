@@ -898,4 +898,44 @@ describe("reducer", () => {
     expect(result.next).toBe(before);
     expect(result.changedTurnIds).toEqual([]);
   });
+
+  it("turn/grounding attaches consulted sources to the turn", () => {
+    const sources = [
+      { kind: "doc" as const, title: "Hemolymph", path: "23-memory/hemolymph.md" },
+      { kind: "source" as const, title: "react_loop.py", path: "runtime/react_loop.py:501" },
+    ];
+    const state = apply(
+      emptyConversation("th"),
+      {
+        method: "turn/started",
+        params: { threadId: "th", turn: blankTurn("tn", "th") },
+      },
+      { method: "turn/grounding", params: { threadId: "th", turnId: "tn", sources } },
+    );
+    expect(state.turns[0].grounding).toEqual(sources);
+  });
+
+  it("turn/grounding with empty sources or unknown turn is a no-op", () => {
+    const before = apply(emptyConversation("th"), {
+      method: "turn/started",
+      params: { threadId: "th", turn: blankTurn("tn", "th") },
+    });
+    // empty list → dropped
+    const empty = reduce(before, {
+      method: "turn/grounding",
+      params: { threadId: "th", turnId: "tn", sources: [] },
+    });
+    expect(empty.next).toBe(before);
+    // unknown turn (race before turn/started) → dropped silently
+    const unknown = reduce(before, {
+      method: "turn/grounding",
+      params: {
+        threadId: "th",
+        turnId: "nope",
+        sources: [{ kind: "doc", title: "X", path: "x.md" }],
+      },
+    });
+    expect(unknown.next).toBe(before);
+    expect(unknown.changedTurnIds).toEqual([]);
+  });
 });

@@ -272,6 +272,11 @@ export const zhCN: Translations = {
     useTopicInAgent: "在 Agent 中使用该主题",
     actionLabel: (action: string) => `Action: ${action}`,
     attachmentFallback: "附件",
+    grounding: {
+      label: "查阅了 {count} 处项目资料",
+      doc: "文档",
+      source: "代码",
+    },
     thinkingForSeconds: (seconds: number) => `思考 ${seconds} 秒`,
     planningNSteps: (n: number) => `规划 ${n} 步`,
     fileOperationsCount: (n: number) => `操作文件 ${n} 次`,

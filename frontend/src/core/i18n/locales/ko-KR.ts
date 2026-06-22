@@ -279,6 +279,11 @@ export const koKR: Translations = {
     useTopicInAgent: "Agent 에서 이 주제 사용",
     actionLabel: (action: string) => `액션: ${action}`,
     attachmentFallback: "첨부 파일",
+    grounding: {
+      label: "프로젝트 자료 {count}건 참조",
+      doc: "문서",
+      source: "코드",
+    },
     thinkingForSeconds: (seconds: number) => `${seconds}초 동안 생각 중`,
     planningNSteps: (n: number) => `${n}단계 계획`,
     fileOperationsCount: (n: number) => `파일 작업 ${n}회`,

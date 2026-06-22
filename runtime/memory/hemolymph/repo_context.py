@@ -170,9 +170,16 @@ def retrieve_repo_context(
     wiki_dir: str | Path | None = None,
     budget_tokens: int = 1400,
     max_pages: int = 2,
+    _sink: list[dict[str, str]] | None = None,
 ) -> str | None:
     """Retrieve the wiki pages most relevant to ``query`` (BM25) as a prompt
-    section. Returns ``None`` when there is no wiki or no page overlaps."""
+    section. Returns ``None`` when there is no wiki or no page overlaps.
+
+    ``_sink``: if given, the EXACT pages chosen for the prompt are appended as
+    ``{"kind": "doc", "title", "path"}`` dicts — so a UI "consulted these docs"
+    chip is faithful to what was actually injected, with no second scoring pass
+    that could drift from this one.
+    """
     query = (query or "").strip()
     if not query:
         return None
@@ -202,34 +209,61 @@ def retrieve_repo_context(
         if len(body) > per_page_chars:
             body = body[:per_page_chars].rstrip() + "\n…(truncated)"
         header = page["title"] or page["path"]
+        if _sink is not None:
+            _sink.append({"kind": "doc", "title": str(header), "path": str(page["path"])})
         parts.append(f"\n## {header}  ({page['path']})\n{body}")
     return "\n".join(parts)
 
 
-def render_codebase_context(goal: str) -> str:
-    """Combined codebase grounding for a goal: relevant wiki pages (summaries)
-    + the actual source chunks. Shared by the planner AND the react chat loop
-    so interactive chat gets the same grounding as planned turns — not just the
-    graph paths. Self-gating + best-effort; disabled by OCTOPUS_CODEBASE_CONTEXT=0.
-    """
+def _codebase_context_disabled() -> bool:
     import os
 
-    if os.environ.get("OCTOPUS_CODEBASE_CONTEXT", "1").strip().lower() in (
-        "0", "false", "no", "off",
-    ):
-        return ""
+    return os.environ.get("OCTOPUS_CODEBASE_CONTEXT", "1").strip().lower() in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
+def build_codebase_context(goal: str) -> tuple[str, list[dict[str, str]]]:
+    """Combined codebase grounding for a goal: relevant wiki pages (summaries)
+    + the actual source chunks. Returns ``(prompt_section, sources)`` where
+    ``sources`` lists exactly the docs/chunks folded into ``prompt_section``
+    (``{"kind": "doc"|"source", "title", "path"}``) — so a UI grounding chip
+    shows what was *actually* injected, from the same retrieval.
+
+    Shared by the planner AND the react chat loop so interactive chat gets the
+    same grounding as planned turns — not just the graph paths. Self-gating +
+    best-effort; disabled by ``OCTOPUS_CODEBASE_CONTEXT=0``.
+    """
+    if _codebase_context_disabled():
+        return "", []
     goal = (goal or "").strip()
     if not goal:
-        return ""
+        return "", []
     parts: list[str] = []
+    sources: list[dict[str, str]] = []
     with contextlib.suppress(Exception):
-        wiki = retrieve_repo_context(goal)
+        wiki = retrieve_repo_context(goal, _sink=sources)
         if wiki:
             parts.append(wiki)
     with contextlib.suppress(Exception):
         from runtime.memory.hemolymph.code_index import retrieve_code_context
 
-        code = retrieve_code_context(goal)
+        code = retrieve_code_context(goal, _sink=sources)
         if code:
             parts.append(code)
-    return "\n\n".join(parts)
+    return "\n\n".join(parts), sources
+
+
+def render_codebase_context(goal: str) -> str:
+    """``build_codebase_context``'s prompt section only — the existing string
+    contract for callers that don't need the structured source list."""
+    return build_codebase_context(goal)[0]
+
+
+def collect_codebase_sources(goal: str) -> list[dict[str, str]]:
+    """The docs/chunks that ``render_codebase_context(goal)`` would inject, as
+    structured ``{"kind", "title", "path"}`` dicts — for a UI grounding chip."""
+    return build_codebase_context(goal)[1]

@@ -279,6 +279,11 @@ export const jaJP: Translations = {
     useTopicInAgent: "Agent でこのトピックを使用",
     actionLabel: (action: string) => `アクション: ${action}`,
     attachmentFallback: "添付ファイル",
+    grounding: {
+      label: "{count} 件のプロジェクト資料を参照",
+      doc: "ドキュメント",
+      source: "コード",
+    },
     thinkingForSeconds: (seconds: number) => `${seconds} 秒 思考中`,
     planningNSteps: (n: number) => `${n} ステップを計画`,
     fileOperationsCount: (n: number) => `ファイル操作 ${n} 回`,

@@ -279,6 +279,19 @@ export interface MetaSkillHint {
   dismissed?: boolean;
 }
 
+/** One codebase source the agent grounded a turn on.
+ *
+ * ``kind: "doc"`` is a project-wiki page (``title`` is its heading);
+ * ``kind: "source"`` is a source-file chunk (``path`` carries ``file:line``).
+ * Emitted via ``turn/grounding`` when a code/project turn folds relevant wiki
+ * pages + source chunks into the prompt. Faithful: exactly what was injected.
+ */
+export interface GroundingSource {
+  kind: "doc" | "source";
+  title: string;
+  path: string;
+}
+
 export interface Turn {
   id: string;
   threadId: string;
@@ -288,6 +301,10 @@ export interface Turn {
   items: Item[];
   error: Record<string, unknown> | null;
   metaSkillHint?: MetaSkillHint;
+  /** Project docs/chunks this turn was grounded on (``turn/grounding``).
+   * The realtime adapter folds it onto the AI reply's
+   * ``additional_kwargs.grounding`` so the chat renders a grounding chip. */
+  grounding?: GroundingSource[];
   phases?: AgentPhaseSnapshot[];
   workspaceFocus?: WorkspaceFocus | null;
   workbenchSnapshot?: WorkbenchSnapshotV2 | null;

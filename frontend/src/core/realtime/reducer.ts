@@ -10,6 +10,7 @@ import type {
   AgentPhaseSnapshot,
   Conversation,
   FileHunk,
+  GroundingSource,
   Item,
   McpToolProgress,
   Turn,
@@ -97,6 +98,18 @@ export type ConversationEvent =
         kind: string;
         affinity: string[];
         stepCount: number;
+      };
+    }
+  | {
+      // Codebase grounding: the project docs/chunks a code/project turn
+      // folded into its prompt. Reducer attaches them to the matching turn;
+      // the realtime adapter bridges them onto the AI reply's
+      // ``additional_kwargs.grounding`` so the chat shows a grounding chip.
+      method: "turn/grounding";
+      params: {
+        threadId: string;
+        turnId: string;
+        sources: GroundingSource[];
       };
     }
   | {
@@ -316,6 +329,30 @@ export function reduce(
           ...t,
           metaSkillHint: { name, description, kind, affinity, stepCount },
         };
+      });
+      if (!touched) {
+        return { next: state, changedTurnIds: [], changedItemIds: [] };
+      }
+      void threadId;
+      return {
+        next: { ...state, turns },
+        changedTurnIds: [turnId],
+        changedItemIds: [],
+      };
+    }
+    case "turn/grounding": {
+      // Attach the consulted project docs/chunks to the matching turn.
+      // Same race tolerance as the meta-skill hint: drop if the turn isn't
+      // in state yet — grounding is best-effort UX, not a contract.
+      const { turnId, threadId, sources } = evt.params;
+      if (!Array.isArray(sources) || sources.length === 0) {
+        return { next: state, changedTurnIds: [], changedItemIds: [] };
+      }
+      let touched = false;
+      const turns = state.turns.map((t) => {
+        if (t.id !== turnId) return t;
+        touched = true;
+        return { ...t, grounding: sources };
       });
       if (!touched) {
         return { next: state, changedTurnIds: [], changedItemIds: [] };

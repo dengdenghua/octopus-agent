@@ -219,6 +219,12 @@ export interface Translations {
     useTopicInAgent: string;
     actionLabel: (action: string) => string;
     attachmentFallback: string;
+    grounding: {
+      /** ``{count}`` is replaced with the number of consulted sources. */
+      label: string;
+      doc: string;
+      source: string;
+    };
     thinkingForSeconds: (seconds: number) => string;
     planningNSteps: (n: number) => string;
     fileOperationsCount: (n: number) => string;
