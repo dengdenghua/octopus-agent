@@ -88,7 +88,6 @@ import {
   writePreferredTeam,
   type Team,
 } from "@/core/teams";
-import { useCreateTeamTask, type TaskAssignee } from "@/core/team-tasks";
 import { useThreadStream } from "@/core/threads/hooks";
 import { type TeamMode } from "@/components/workspace/team-mode-picker";
 import { isAbsolutePath } from "@/lib/path-utils";
@@ -120,15 +119,6 @@ function filterRemovedTeamsForLocalUser(teams: Team[]) {
     const participantId = readTeamParticipantIdForTeam(team);
     return !isParticipantRemoved(team, participantId);
   });
-}
-
-function teamTaskTitleFromText(text: string) {
-  const firstLine = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
-  const title = firstLine || "Team task";
-  return title.length > 80 ? `${title.slice(0, 77)}...` : title;
 }
 
 function readInitialTeamWorkDir(threadId?: string | null) {
@@ -479,7 +469,6 @@ export default function TeamPage() {
   const canRunTeamTask =
     !currentParticipantRemoved &&
     (participantRole === "owner" || participantRole === "member");
-  const canCreateTeamTask = canRunTeamTask;
   const canInvite =
     !currentParticipantRemoved &&
     (participantRole === "owner" || participantRole === "member");
@@ -502,7 +491,6 @@ export default function TeamPage() {
       null,
     [teamConfig?.members, teamConfig?.leaderId],
   );
-  const createTeamTask = useCreateTeamTask();
   const removalHandledRef = useRef(false);
 
   useEffect(() => {
@@ -791,57 +779,14 @@ export default function TeamPage() {
     if (previewBlocks && !showPreview) setShowPreview(true);
   }, [previewBlocks, showPreview]);
 
-  const createTaskFromSubmit = useCallback(
-    async (text: string) => {
-      if (!teamId || !canCreateTeamTask) return;
-      const assignees: TaskAssignee[] = selectedTaskAgents.map((agent) => ({
-        kind: "agent",
-        ref: agent.name,
-      }));
-      const taskScope =
-        teamMode === "cowork"
-          ? "群任务"
-          : selectedTaskAgents.length > 1
-            ? "可升级群任务"
-            : "单人任务";
-      try {
-        await createTeamTask.mutateAsync({
-          room_id: teamId,
-          title: teamTaskTitleFromText(text),
-          description: text,
-          assignees,
-          metadata: {
-            source: "team_input",
-            thread_id: isNewThread ? undefined : threadId,
-            team_mode: teamMode,
-            task_scope: taskScope,
-            local_file_agent_enabled:
-              text.includes("@本地数据库") ||
-              text.includes("@本地资料官") ||
-              text.includes("@私域资料库"),
-          },
-        });
-        setShowTeamWorkbench(true);
-        setTeamWorkbenchTab("tasks");
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "创建团队待办失败",
-        );
-      }
-    },
-    [
-      canCreateTeamTask,
-      createTeamTask,
-      isNewThread,
-      selectedTaskAgents,
-      teamId,
-      teamMode,
-      threadId,
-    ],
-  );
-
   const handleSubmit = useCallback(
     (message: { text: string }) => {
+      // Just talk to the group. The backend already knows the mode (chat vs
+      // cowork), the roster, and the TL from the turn context above — so we
+      // do NOT prepend "任务模式…" prose (it only littered the chat) and we do
+      // NOT auto-create a 待办 task. In cowork mode the turn still fans out to
+      // the TL/swarm via context.team_mode. Tracked tasks are explicit: 待办
+      // plan · 新建. The only prepended line is the local-DB safety note.
       const hasLocalDatabaseMention =
         message.text.includes("@本地数据库") ||
         message.text.includes("@本地资料官") ||
@@ -849,35 +794,12 @@ export default function TeamPage() {
       const localFileAgentLine = hasLocalDatabaseMention
         ? "本地数据库只检索本机授权资料；未经确认不要把原文件或全量索引上传云端。"
         : null;
-
-      // Plain group chat (default): just talk to the group — no task, no
-      // 任务模式 framing, no panel jump. Tasks are created explicitly via
-      // 待办 plan · 新建, or by switching to 协作 (cowork) mode below.
-      if (teamMode !== "cowork") {
-        const text = [localFileAgentLine, message.text]
-          .filter(Boolean)
-          .join("\n\n");
-        void sendMessage(threadId, { text, files: [] });
-        return;
-      }
-
-      // Cowork mode: structured teamwork → frame the turn + spin up a team
-      // task so the TL can decompose/dispatch/aggregate.
-      const taskAgentNames = selectedTaskAgents.map(
-        (agent) => agent.display_name ?? agent.name,
-      );
-      const modeLine = "任务模式：群任务，TL 负责拆解、分派、汇总。";
-      const assigneeLine =
-        taskAgentNames.length > 0
-          ? `本次任务优先交给：${taskAgentNames.join("、")}。`
-          : "本次任务未指定成员，由当前角色先判断。";
-      const text = [modeLine, assigneeLine, localFileAgentLine, message.text]
+      const text = [localFileAgentLine, message.text]
         .filter(Boolean)
         .join("\n\n");
-      void createTaskFromSubmit(message.text);
       void sendMessage(threadId, { text, files: [] });
     },
-    [createTaskFromSubmit, selectedTaskAgents, sendMessage, teamMode, threadId],
+    [sendMessage, threadId],
   );
 
   const handleStop = useCallback(async () => {
