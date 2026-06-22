@@ -1,5 +1,6 @@
 export * from "./api";
 export * from "./hooks";
+export * from "./local-cli";
 export {
   type Agent,
   type CreateAgentRequest,
