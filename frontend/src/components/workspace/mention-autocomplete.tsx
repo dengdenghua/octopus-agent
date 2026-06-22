@@ -175,7 +175,27 @@ function withMemberMentions(
       };
     })
     .filter((m) => !existing.has(m.value));
-  return [...matched, ...results];
+
+  // WeChat/DingTalk style: "@所有人" first, to address the whole group.
+  const showAll =
+    q === "" ||
+    "所有人".includes(q) ||
+    "全员".includes(q) ||
+    "everyone".includes(q) ||
+    "all".includes(q);
+  const everyone: MentionItem[] =
+    showAll && !existing.has("所有人")
+      ? [
+          {
+            type: "agent",
+            label: "所有人",
+            value: "所有人",
+            description: "通知群里全体成员",
+            icon: "users",
+          },
+        ]
+      : [];
+  return [...everyone, ...matched, ...results];
 }
 
 // ============================================================================

@@ -14,7 +14,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -89,8 +88,6 @@ export function TeamInputBox({
   onTeamModeChange,
   onModelChange,
   teamMembers = [],
-  selectedAgentIds = [],
-  onSelectedAgentIdsChange,
   onSubmit,
   onStop,
   submitBehavior = "run",
@@ -199,14 +196,6 @@ export function TeamInputBox({
     cowork: t.teamMode.coworkDescription,
   };
   const ActiveTeamModeIcon = TEAM_MODE_CONFIG[activeTeamMode].icon;
-  const selectedAgentSet = useMemo(
-    () => new Set(selectedAgentIds),
-    [selectedAgentIds],
-  );
-  const selectedAgentLabel =
-    selectedAgentIds.length > 0
-      ? t.teamInput.assigneeCount(selectedAgentIds.length)
-      : t.teamInput.assigneeAll;
 
   const summonLocalFileAgent = useCallback(() => {
     const mention = "@本地数据库 ";
@@ -246,16 +235,6 @@ export function TeamInputBox({
     window.addEventListener("octopus:mention-member", onMention);
     return () => window.removeEventListener("octopus:mention-member", onMention);
   }, []);
-
-  const toggleSelectedAgent = useCallback(
-    (agentId: string, checked: boolean) => {
-      const next = new Set(selectedAgentIds);
-      if (checked) next.add(agentId);
-      else next.delete(agentId);
-      onSelectedAgentIdsChange?.(Array.from(next));
-    },
-    [onSelectedAgentIdsChange, selectedAgentIds],
-  );
 
   return (
     <div
@@ -339,70 +318,8 @@ export function TeamInputBox({
               onWorkDirChange={onWorkDirChange}
             />
           )}
-          {teamMembers.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  data-testid="team-assignee-trigger"
-                  title={t.teamInput.assigneeHint}
-                  className={cn(
-                    "flex h-7 items-center gap-1.5 rounded-md bg-muted/45 px-2.5 text-[11px] font-medium text-foreground transition-colors",
-                    selectedAgentIds.length > 0 && "bg-primary/10 text-primary",
-                    "hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                  )}
-                >
-                  <UsersIcon className="size-3.5 text-muted-foreground" />
-                  <span>{selectedAgentLabel}</span>
-                  <ChevronDownIcon className="size-3 text-muted-foreground/70" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64">
-                <DropdownMenuLabel className="text-xs">
-                  {t.teamInput.assigneeMenuTitle}
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {teamMembers.map((agent) => {
-                  const displayName = agent.display_name ?? agent.name;
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={agent.name}
-                      checked={selectedAgentSet.has(agent.name)}
-                      onCheckedChange={(checked) =>
-                        toggleSelectedAgent(agent.name, Boolean(checked))
-                      }
-                      onSelect={(event) => event.preventDefault()}
-                      className="items-start gap-2 py-2"
-                    >
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted text-xs leading-none">
-                        {agent.icon?.trim() || displayName.charAt(0)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-medium">
-                          {displayName}
-                        </span>
-                        <span className="line-clamp-1 text-[11px] text-muted-foreground">
-                          {agent.description}
-                        </span>
-                      </span>
-                    </DropdownMenuCheckboxItem>
-                  );
-                })}
-                {selectedAgentIds.length > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <button
-                      type="button"
-                      className="w-full rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/60"
-                      onClick={() => onSelectedAgentIdsChange?.([])}
-                    >
-                      {t.teamInput.clearAssignee}
-                    </button>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          {/* The 全员 assignee picker is gone: address the group or a single
+              member by typing @ (WeChat/DingTalk style — @所有人 or @name). */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
