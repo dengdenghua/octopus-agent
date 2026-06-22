@@ -110,7 +110,7 @@
 
 ## 分布式编排拓扑
 
-> ⚠️ **愿景图** — 图中 Ganglia×8 / Hearts×3 HA / 腕间 gossip 三项均未实装。当前实装为中心化树状编排（SwarmRuntime / ParallelAgentOrchestrator），Arm 之间完全隔离。详见 [implementation-status.md](implementation-status.md#分布式与编排)。
+> ⚠️ **愿景图** — **未实装**：独立 Ganglia×8 节层、「三心互备调度循环」、完全不经中枢的去中心化腕间 gossip。**已实装（易被误读为未做）**：Hearts HA 机制（fencing 租约 + etcd/redis 选举 + 每通道熔断，可选后端，单机回退 AlwaysLeader）、SwarmRuntime 并行编排、且 **swarm 路径下 Arm 共享同一 SignalBus 互传进度（非"完全隔离"）**。准确状态以 [implementation-status.md](implementation-status.md#分布式与编排) 为准。
 
 ```
                             ┌──────────────┐
@@ -137,7 +137,7 @@
 ### 三条核心通路
 
 1. **纵向命令链**：Cerebrum → Ganglion → Arm → Sucker（规划下行）— ✅ 已接线（Cerebrum → Arm → Sucker，无独立 Ganglia 层）
-2. **横向腕间**：Arm ↔ Chromatophores ↔ Arm（腕足可直接互通，不占用中枢）— ❌ **未实装**：当前 Arm 之间完全隔离，Chromatophores 仅提供 pub/sub 原语但 Worker 未接入
+2. **横向腕间**：Arm ↔ Chromatophores ↔ Arm（腕足可直接互通，不占用中枢）— ⚠️ **部分实装**：swarm 路径下 Arm 共享同一 SignalBus、注册 peer-message handler 可互传进度（`_drive_swarm_mesh` → `build_arm_pool_from_registry(signal_bus=sb)`、`arms/base.py`）；未做的是「完全不经中枢的去中心化 gossip」。详见 [implementation-status.md](implementation-status.md#分布式与编排)
 3. **感知上行**：Eyes/Skin → Hemolymph → Cerebrum（环境信号汇聚规划）— ⚠️ 部分实装（Eyes 已接线，Skin 未实装）
 
 ### 为什么比 Lead+Sub-agents 更进一步
