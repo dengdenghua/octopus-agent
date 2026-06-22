@@ -31,6 +31,7 @@ Design:
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -106,12 +107,21 @@ def build_partner_argv(partner_id: str, command: str, prompt: str) -> list[str] 
     return None
 
 
-def _default_runner(argv: list[str], cwd: str | None, timeout: float) -> tuple[int, str, str]:
-    """Spawn ``argv`` with no shell, capturing stdout/stderr. Raises
-    ``subprocess.TimeoutExpired`` on timeout (handled by ``run_local_partner``)."""
+def _default_runner(
+    argv: list[str],
+    cwd: str | None,
+    timeout: float,
+    env: dict[str, str] | None = None,
+) -> tuple[int, str, str]:
+    """Spawn ``argv`` with no shell, capturing stdout/stderr. ``env`` (when given)
+    is layered OVER the inherited environment, so extra vars like
+    ``OCTOPUS_BLACKBOARD_DB`` / ``OCTOPUS_TURN_ID`` reach the CLI (letting a
+    shell-capable agent read/write the shared blackboard via ``octopus bb``)
+    without dropping PATH etc. Raises ``subprocess.TimeoutExpired`` on timeout."""
     proc = subprocess.run(  # noqa: S603 — argv is a list, shell=False, no user shell string
         argv,
         cwd=cwd,
+        env=({**os.environ, **env} if env else None),
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -127,16 +137,23 @@ def run_local_partner(
     prompt: str,
     cwd: str | None = None,
     timeout: float = _DEFAULT_TIMEOUT_S,
+    env: dict[str, str] | None = None,
     runner: Runner | None = None,
 ) -> LocalPartnerResult:
     """Drive the partner CLI once. Best-effort and total — never raises; every
     failure mode (unsupported tool, missing binary, non-zero exit, timeout) is
-    reflected in the returned :class:`LocalPartnerResult`."""
+    reflected in the returned :class:`LocalPartnerResult`. ``env`` is layered over
+    the inherited environment for the default runner (custom runners ignore it)."""
     argv = build_partner_argv(partner_id, command, prompt)
     if argv is None:
         return LocalPartnerResult(ok=False, unsupported=True)
 
-    run = runner or _default_runner
+    if runner is None:
+
+        def run(a: list[str], c: str | None, t: float) -> tuple[int, str, str]:
+            return _default_runner(a, c, t, env=env)
+    else:
+        run = runner
     try:
         exit_code, stdout, stderr = run(argv, cwd, timeout)
     except subprocess.TimeoutExpired:
@@ -172,3 +189,56 @@ def run_local_partner(
         exit_code=exit_code,
         argv=argv,
     )
+
+
+# ── Shared-blackboard envelope (octopus-mediated stigmergy) ──────────
+# External CLIs are black boxes: we can't touch their internal context. So
+# teammates collaborate at the I/O boundary — brief the agent FROM the shared
+# blackboard (read → into the prompt) and harvest its output BACK to the
+# blackboard (so the next teammate's brief sees it). Shell-capable CLIs can also
+# read/write the same board directly via ``octopus bb`` (we pass the env).
+
+_BRIEF_VALUE_CAP = 300
+_HARVEST_CAP = 4000
+
+
+def blackboard_brief(turn_id: str | None, *, max_entries: int = 8) -> str:
+    """A compact digest of the turn's shared blackboard, to brief a teammate —
+    ``""`` when there's nothing to share (or no turn / no board). Best-effort."""
+    if not turn_id:
+        return ""
+    try:
+        from runtime.memory.runtime_state.blackboard import get_blackboard
+
+        board = get_blackboard(str(turn_id))
+        snap = board.snapshot() if board is not None else {}
+    except Exception:  # noqa: BLE001 — briefing is strictly best-effort
+        return ""
+    if not isinstance(snap, dict) or not snap:
+        return ""
+    lines: list[str] = []
+    for key, value in list(snap.items())[: max(1, max_entries)]:
+        text = str(value)
+        if len(text) > _BRIEF_VALUE_CAP:
+            text = text[:_BRIEF_VALUE_CAP].rstrip() + "…"
+        lines.append(f"- {key}: {text}")
+    return "TEAM SHARED CONTEXT (from the shared blackboard):\n" + "\n".join(lines)
+
+
+def harvest_to_blackboard(turn_id: str | None, writer: str | None, output: str) -> None:
+    """Write a partner's output back to the turn blackboard so teammates see it.
+    Best-effort; no-op without a turn / output / board."""
+    if not turn_id or not (output or "").strip():
+        return
+    try:
+        from runtime.memory.runtime_state.blackboard import get_blackboard
+
+        board = get_blackboard(str(turn_id))
+        if board is not None:
+            board.write(
+                f"partner.{writer or 'agent'}.output",
+                output[:_HARVEST_CAP],
+                writer=str(writer or "partner"),
+            )
+    except Exception:  # noqa: BLE001 — harvesting is strictly best-effort
+        pass

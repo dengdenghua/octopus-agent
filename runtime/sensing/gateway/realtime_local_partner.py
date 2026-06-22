@@ -18,6 +18,8 @@ import os
 from typing import Any
 
 from runtime.execution.agents.local_partner_bridge import (
+    blackboard_brief,
+    harvest_to_blackboard,
     partner_identity,
     run_local_partner,
 )
@@ -71,13 +73,31 @@ async def drive_local_partner(
     timeout = _resolve_timeout()
     label = getattr(agent, "display_name", None) or command
 
+    # Shared-blackboard envelope (octopus-mediated stigmergy): brief this agent
+    # FROM the team's blackboard, pass the env so a shell-capable CLI can also
+    # read/write it via ``octopus bb``, and harvest its output BACK afterwards —
+    # collaboration at the I/O boundary, never touching the agent's internals.
+    turn_id = str(getattr(turn, "id", "") or getattr(turn, "thread_id", "") or "")
+    agent_id = str(getattr(agent, "agent_id", "") or label)
+    prompt = text
+    brief = blackboard_brief(turn_id)
+    if brief:
+        prompt = f"{brief}\n\n---\n\n{text}"
+    if turn_id and os.environ.get("OCTOPUS_BLACKBOARD_DB"):
+        prompt += (
+            "\n\n(You're on a team. The shared workspace blackboard is reachable "
+            "with `octopus bb get <key>` / `octopus bb set <key> <value>`.)"
+        )
+    env = {"OCTOPUS_TURN_ID": turn_id, "OCTOPUS_AGENT_ID": agent_id} if turn_id else None
+
     result = await asyncio.to_thread(
         run_local_partner,
         partner_id=partner_id,
         command=command,
-        prompt=text,
+        prompt=prompt,
         cwd=None,
         timeout=timeout,
+        env=env,
     )
 
     if result.unsupported:
@@ -85,6 +105,7 @@ async def drive_local_partner(
         return
 
     if result.ok:
+        harvest_to_blackboard(turn_id, agent_id, result.output)
         await runtime._emit_agent_message(turn, log, emitter, result.output)
         return
 

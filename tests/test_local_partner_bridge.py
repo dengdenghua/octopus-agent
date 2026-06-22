@@ -157,3 +157,61 @@ def test_run_truncates_runaway_output() -> None:
     assert res.ok is True
     assert "…(truncated)" in res.output
     assert len(res.output) < 21_000
+
+
+# ── shared-blackboard envelope + env pass-through ────────────────────
+
+
+def test_run_layers_env_over_inherited(monkeypatch) -> None:
+    from runtime.execution.agents import local_partner_bridge as b
+
+    captured: dict = {}
+
+    class _CP:
+        returncode = 0
+        stdout = "done"
+        stderr = ""
+
+    def fake_run(argv, **kw):
+        captured["env"] = kw.get("env")
+        return _CP()
+
+    monkeypatch.setattr(b.subprocess, "run", fake_run)
+    monkeypatch.setenv("PATH", "/usr/bin")
+    res = b.run_local_partner(
+        partner_id="claude-code", command="claude", prompt="go",
+        env={"OCTOPUS_TURN_ID": "t1"},
+    )
+    assert res.ok is True
+    assert captured["env"]["OCTOPUS_TURN_ID"] == "t1"  # extra layered in
+    assert "PATH" in captured["env"]  # inherited env not dropped
+
+
+def test_brief_empty_without_turn_or_board() -> None:
+    from runtime.execution.agents import local_partner_bridge as b
+
+    assert b.blackboard_brief("") == ""
+    assert b.blackboard_brief(None) == ""
+
+
+def test_brief_and_harvest_round_trip() -> None:
+    from runtime.execution.agents import local_partner_bridge as b
+    from runtime.memory.runtime_state.blackboard import get_blackboard
+
+    tid = "test-turn-envelope-1"
+    board = get_blackboard(tid)
+    assert board is not None
+    board.write("finding.1", "auth uses JWT", writer="agentA")
+
+    brief = b.blackboard_brief(tid)
+    assert "finding.1" in brief and "auth uses JWT" in brief
+
+    b.harvest_to_blackboard(tid, "agentB", "I rewired the login flow")
+    assert "rewired the login flow" in str(get_blackboard(tid).read("partner.agentB.output"))
+
+
+def test_harvest_noop_without_turn_or_output() -> None:
+    from runtime.execution.agents import local_partner_bridge as b
+
+    b.harvest_to_blackboard("", "a", "x")  # no turn → no-op, no raise
+    b.harvest_to_blackboard("tid", "a", "   ")  # blank output → no-op, no raise

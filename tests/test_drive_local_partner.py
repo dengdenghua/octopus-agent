@@ -128,3 +128,34 @@ def test_non_partner_agent_falls_back(monkeypatch) -> None:
     _drive(rt, SimpleNamespace(capabilities={}, display_name="plain"))
     assert rt.react_called is True
     assert rt.messages == []
+
+
+def test_envelope_briefs_prompt_passes_env_and_harvests(monkeypatch) -> None:
+    rt = _FakeRuntime()
+    monkeypatch.setattr(mod, "blackboard_brief", lambda tid, **_k: "TEAM: prior finding" if tid else "")
+    harvested: dict = {}
+    monkeypatch.setattr(
+        mod, "harvest_to_blackboard",
+        lambda tid, w, out: harvested.update({"tid": tid, "writer": w, "out": out}),
+    )
+    seen: dict = {}
+
+    def fake_run(**kw):
+        seen.update(kw)
+        return LocalPartnerResult(ok=True, output="did the work", exit_code=0)
+
+    monkeypatch.setattr(mod, "run_local_partner", fake_run)
+    turn = SimpleNamespace(id="turn-1", thread_id="th", items=[], status="inProgress")
+    intent = SimpleNamespace(user_context={})
+    asyncio.run(
+        mod.drive_local_partner(rt, turn, object(), object(), intent, _agent(), object(), text="do X")
+    )
+    # brief was prepended to the prompt the CLI received
+    assert "TEAM: prior finding" in seen["prompt"]
+    assert "do X" in seen["prompt"]
+    # env carries the turn id so `octopus bb` is reachable from the CLI
+    assert seen["env"]["OCTOPUS_TURN_ID"] == "turn-1"
+    # the CLI's output was harvested back to the shared board
+    assert harvested["out"] == "did the work"
+    assert harvested["tid"] == "turn-1"
+    assert rt.messages == ["did the work"]
