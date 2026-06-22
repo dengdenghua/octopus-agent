@@ -7,8 +7,6 @@ import {
   PlusIcon,
   SquareIcon,
   MessageCircleIcon,
-  UserCircleIcon,
-  UsersIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -34,7 +32,11 @@ import { useOptionalCollab } from "./collab";
 import { FloorBar } from "./collab/floor-bar";
 import { useSlashTypeahead } from "./use-slash-typeahead";
 import { WorkDirSelector } from "./workdir-selector";
-import { type TeamMode } from "./team-mode-picker";
+import {
+  TEAM_MODE_META,
+  TEAM_MODES,
+  type TeamMode,
+} from "./team-mode-picker";
 import { cn } from "@/lib/utils";
 
 interface TeamInputBoxProps {
@@ -55,27 +57,6 @@ interface TeamInputBoxProps {
   submitBehavior?: "run" | "message";
 }
 
-// Monochrome pill config — colored fills replaced with a neutral
-// "active pill" (bg-background shadow) on top of a muted track. Matches
-// the sidebar + model-picker language: emphasis via a single raised
-// surface, not a brand color.
-type AvailableTeamMode = TeamMode;
-
-const TEAM_MODE_CONFIG: Record<
-  AvailableTeamMode,
-  {
-    icon: typeof UsersIcon;
-  }
-> = {
-  chat: {
-    icon: UserCircleIcon,
-  },
-  cowork: {
-    icon: UsersIcon,
-  },
-};
-
-const TEAM_MODES: AvailableTeamMode[] = ["chat", "cowork"];
 
 export function TeamInputBox({
   status = "ready",
@@ -97,8 +78,9 @@ export function TeamInputBox({
   const [input, setInput] = useState("");
   const collab = useOptionalCollab();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const activeTeamMode: AvailableTeamMode =
-    teamMode === "cowork" ? teamMode : "chat";
+  const activeTeamMode: TeamMode = TEAM_MODES.includes(teamMode)
+    ? teamMode
+    : "chat";
 
   const selectedModel = useMemo(() => {
     if (!modelName || models.length === 0) return models[0];
@@ -188,15 +170,7 @@ export function TeamInputBox({
     }
   };
 
-  const TEAM_MODE_LABELS: Record<TeamMode, string> = {
-    chat: t.teamMode.chat,
-    cowork: t.teamMode.cowork,
-  };
-  const TEAM_MODE_DESCRIPTIONS: Record<TeamMode, string> = {
-    chat: t.teamMode.chatDescription,
-    cowork: t.teamMode.coworkDescription,
-  };
-  const ActiveTeamModeIcon = TEAM_MODE_CONFIG[activeTeamMode].icon;
+  const ActiveTeamModeIcon = TEAM_MODE_META[activeTeamMode].icon;
 
   const summonLocalFileAgent = useCallback(() => {
     const mention = "@本地数据库 ";
@@ -332,29 +306,34 @@ export function TeamInputBox({
                 )}
               >
                 <ActiveTeamModeIcon className="size-3.5 text-muted-foreground" />
-                <span>{TEAM_MODE_LABELS[activeTeamMode]}</span>
+                <span>{TEAM_MODE_META[activeTeamMode].label}</span>
                 <ChevronDownIcon className="size-3 text-muted-foreground/70" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-40">
+            <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuRadioGroup
                 value={activeTeamMode}
                 onValueChange={(value) =>
-                  onTeamModeChange?.(value as AvailableTeamMode)
+                  onTeamModeChange?.(value as TeamMode)
                 }
               >
                 {TEAM_MODES.map((mode) => {
-                  const Icon = TEAM_MODE_CONFIG[mode].icon;
+                  const meta = TEAM_MODE_META[mode];
+                  const Icon = meta.icon;
                   return (
                     <DropdownMenuRadioItem
                       key={mode}
                       value={mode}
-                      title={TEAM_MODE_DESCRIPTIONS[mode]}
-                      className="items-center gap-2 py-1.5"
+                      className="items-start gap-2 py-1.5"
                     >
-                      <Icon className="size-3.5" />
-                      <span className="text-[13px] font-medium leading-none">
-                        {TEAM_MODE_LABELS[mode]}
+                      <Icon className="mt-0.5 size-3.5 shrink-0" />
+                      <span className="min-w-0">
+                        <span className="block text-[13px] font-medium leading-none">
+                          {meta.label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-tight text-muted-foreground">
+                          {meta.description}
+                        </span>
                       </span>
                     </DropdownMenuRadioItem>
                   );

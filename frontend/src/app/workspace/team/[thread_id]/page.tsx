@@ -89,7 +89,10 @@ import {
   type Team,
 } from "@/core/teams";
 import { useThreadStream } from "@/core/threads/hooks";
-import { type TeamMode } from "@/components/workspace/team-mode-picker";
+import {
+  serveMeshForMode,
+  type TeamMode,
+} from "@/components/workspace/team-mode-picker";
 import { isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
@@ -465,7 +468,9 @@ export default function TeamPage() {
   );
   const participantRole = currentParticipant?.role ?? "member";
   const currentParticipantRemoved = currentParticipant?.status === "removed";
-  const isCoworkMode = teamMode === "cowork";
+  // 单聊 = single agent; 集群 / 蜂群 = the multi-agent (cowork) path, which the
+  // backend then runs as a cluster (topology) or swarm (mesh) per serve_mesh.
+  const isCoworkMode = teamMode !== "chat";
   const canRunTeamTask =
     !currentParticipantRemoved &&
     (participantRole === "owner" || participantRole === "member");
@@ -681,6 +686,9 @@ export default function TeamPage() {
         // single-LLM TL path; cowork enters the heavy swarm/cowork
         // executor. Backend only branches on this field.
         team_mode: isCoworkMode ? "cowork" : "chat",
+        // 集群 → "0" forces the sequential TeamRunner; 蜂群 → "1" forces the
+        // boids/SignalBus mesh; 单聊/absent → backend auto-picks (B).
+        serve_mesh: serveMeshForMode(teamMode),
         // Send the full roster (agent_id + display_name + role) so the
         // backend's `_resolve_agent_roster` can drive routing/swarm/vote.
         // ``Agent.name`` is the registered backend agent_id (coder /
@@ -826,7 +834,7 @@ export default function TeamPage() {
   );
 
   const handleStartCodingProject = useCallback(() => {
-    setTeamMode("cowork");
+    setTeamMode("cluster");
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("octopus:edit-message", {

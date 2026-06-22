@@ -741,7 +741,14 @@ async def _drive_swarm_mesh(
 
     import os
 
-    force = os.environ.get("OCTOPUS_SERVE_MESH", "").strip().lower()
+    # Engine choice precedence: the per-turn UI pick (集群 vs 蜂群) wins, then
+    # the OCTOPUS_SERVE_MESH env, then auto (_graph_favors_mesh). The UI sends
+    # serve_mesh="1" for 蜂群 (mesh) and "0" for 集群 (sequential TeamRunner);
+    # absent = auto, which keeps the "smart default, overridable" (B) behavior.
+    ctx = getattr(intent, "user_context", None) or {}
+    force = str(ctx.get("serve_mesh") or "").strip().lower()
+    if not force:
+        force = os.environ.get("OCTOPUS_SERVE_MESH", "").strip().lower()
     forced_off = force in {"0", "false", "no", "off"}
     forced_on = force in {"1", "true", "yes", "on"}
 

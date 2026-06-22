@@ -152,3 +152,46 @@ def test_mesh_fault_falls_back_to_react(monkeypatch) -> None:
                               text="g", topology_id="topo"),
     )
     assert react["called"] is True
+
+
+# ── per-turn override: the 集群/蜂群 UI pick wins over the auto-decision ──
+
+
+def test_serve_mesh_0_forces_team_even_for_parallel(monkeypatch) -> None:
+    """集群: serve_mesh="0" routes to the sequential team even when the graph
+    would otherwise favor the mesh."""
+    monkeypatch.delenv("OCTOPUS_SERVE_MESH", raising=False)
+    parallel = _graph(["a", "b", "c"], [])  # would favor mesh
+    monkeypatch.setattr(asyncio, "to_thread", _to_thread_seq(parallel))
+    team = {"called": None}
+
+    async def fake_team(runtime, turn, log, emitter, intent, *, text, topology_id):
+        team["called"] = topology_id
+
+    monkeypatch.setattr(mod, "_drive_team_topology", fake_team)
+    turn = SimpleNamespace(thread_id="th", id="t1", items=[])
+    intent = SimpleNamespace(user_context={"serve_mesh": "0"})
+    asyncio.run(
+        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
+                              text="g", topology_id="topo-c"),
+    )
+    assert team["called"] == "topo-c"  # forced to the cluster (sequential) team
+    assert turn.items == []
+
+
+def test_serve_mesh_1_forces_mesh_even_for_small(monkeypatch) -> None:
+    """蜂群: serve_mesh="1" runs the mesh even for a small/sequential graph that
+    would otherwise route to the team."""
+    monkeypatch.delenv("OCTOPUS_SERVE_MESH", raising=False)
+    small = _graph(["a", "b"], [])  # too small → would go to team
+    result = SimpleNamespace(arm_results=[
+        SimpleNamespace(arm_id="x", status="success", reason="ok"),
+    ])
+    monkeypatch.setattr(asyncio, "to_thread", _to_thread_seq(small, (result, 2)))
+    turn = SimpleNamespace(thread_id="th", id="t1", items=[])
+    intent = SimpleNamespace(user_context={"serve_mesh": "1"})
+    asyncio.run(
+        mod._drive_swarm_mesh(SimpleNamespace(), turn, _Log(), _Emitter(), intent,
+                              text="g", topology_id="topo"),
+    )
+    assert any("parallel" in it.text for it in turn.items)  # mesh actually ran
