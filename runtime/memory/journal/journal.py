@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -60,7 +59,6 @@ JournalEventType = Literal[
 ]
 
 
-
 # Event schema version. Bump when any event shape changes in a way
 # that isn't purely additive (e.g. field rename, type narrowing,
 # required-field addition). Readers honor this via `_EVENT_MIGRATIONS`
@@ -95,7 +93,6 @@ CURRENT_SCHEMA_VERSION = 1
 
 
 class JournalEvent(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     schema_version: int = CURRENT_SCHEMA_VERSION
@@ -111,19 +108,16 @@ class JournalEvent(BaseModel):
 
 
 class StepEvent(JournalEvent):
-
     event_type: Literal["step"] = "step"
     step: Step
 
 
 class TrajectoryEvent(JournalEvent):
-
     event_type: Literal["trajectory"] = "trajectory"
     trajectory: Trajectory
 
 
 class ImmuneEvent(JournalEvent):
-
     event_type: Literal["immune"] = "immune"
     verdict: ImmuneVerdict
     signature: AntigenSignature
@@ -131,7 +125,6 @@ class ImmuneEvent(JournalEvent):
 
 
 class BudgetEvent(JournalEvent):
-
     event_type: Literal["budget_squirt", "budget_commit"] = "budget_commit"
     reason: str = ""
     cost: CostEntry = Field(default_factory=CostEntry)
@@ -145,10 +138,7 @@ class BudgetBreakerResetEvent(JournalEvent):
     reason: str = ""
 
 
-
-
 class TaskStartedEvent(JournalEvent):
-
     event_type: Literal["task_started"] = "task_started"
     total_nodes: int = 0
     strategy: str = ""
@@ -157,7 +147,6 @@ class TaskStartedEvent(JournalEvent):
 
 
 class NodeStartedEvent(JournalEvent):
-
     event_type: Literal["node_started"] = "node_started"
     node_id: str = ""
     skill_ref: str = ""
@@ -165,7 +154,6 @@ class NodeStartedEvent(JournalEvent):
 
 
 class TaskCheckpointEvent(JournalEvent):
-
     event_type: Literal["task_checkpoint"] = "task_checkpoint"
     nodes_completed: int = 0
     total_nodes: int = 0
@@ -205,7 +193,6 @@ class ReactCheckpointEvent(JournalEvent):
 
 
 class TaskPausedEvent(JournalEvent):
-
     event_type: Literal["task_paused"] = "task_paused"
     reason: str = "user_request"
     requested_by: str = ""
@@ -213,7 +200,6 @@ class TaskPausedEvent(JournalEvent):
 
 
 class TaskResumedEvent(JournalEvent):
-
     event_type: Literal["task_resumed"] = "task_resumed"
     resumed_by: str = ""
     extra_tokens: int = 0
@@ -222,7 +208,6 @@ class TaskResumedEvent(JournalEvent):
 
 
 class TokenUsageEvent(JournalEvent):
-
     event_type: Literal["token_usage"] = "token_usage"
     iteration: int = 0
     input_tokens: int = 0
@@ -231,10 +216,7 @@ class TokenUsageEvent(JournalEvent):
     model: str = ""
 
 
-
-
 class FileOpEvent(JournalEvent):
-
     event_type: Literal["file_op"] = "file_op"
     path: str = ""
     action: Literal["create", "write", "edit", "delete", "rename"] = "write"
@@ -247,7 +229,6 @@ class FileOpEvent(JournalEvent):
 
 
 class FileRollbackEvent(JournalEvent):
-
     event_type: Literal["file_rollback"] = "file_rollback"
     dry_run: bool = False
     project_root: str = ""
@@ -263,7 +244,6 @@ class FileRollbackEvent(JournalEvent):
 
 
 class PreviewRefreshEvent(JournalEvent):
-
     event_type: Literal["preview_refresh"] = "preview_refresh"
     target: str = ""
     trigger_path: str = ""
@@ -271,13 +251,12 @@ class PreviewRefreshEvent(JournalEvent):
 
 
 class ReflexHitEvent(JournalEvent):
-
     event_type: Literal["reflex_hit"] = "reflex_hit"
     rule_id: str = ""
-    kind: str = "regex"           # regex / deterministic / cache / slm
+    kind: str = "regex"  # regex / deterministic / cache / slm
     latency_ms: float = 0.0
     intent_goal: str = ""
-    response: Any = None           # Implementation note.
+    response: Any = None  # Implementation note.
 
 
 class SkillProposalDecisionEvent(JournalEvent):
@@ -382,7 +361,6 @@ class BrowserArtifactEvent(JournalEvent):
 
 
 class Journal:
-
     def write(self, event: JournalEvent) -> None:
         raise NotImplementedError
 
@@ -420,15 +398,15 @@ class Journal:
         return summarize_file_ops(events).to_dict()
 
     def read_by_conversation(
-        self, conversation_id: str,
+        self,
+        conversation_id: str,
     ) -> list[JournalEvent]:
-        return [
-            e for e in self.read_all()
-            if e.conversation_id == conversation_id
-        ]
+        return [e for e in self.read_all() if e.conversation_id == conversation_id]
 
     def list_conversations(
-        self, *, agent_id: str | None = None,
+        self,
+        *,
+        agent_id: str | None = None,
     ) -> list[str]:
         seen: dict[str, datetime] = {}
         for e in self.read_all():
@@ -439,9 +417,7 @@ class Journal:
                 continue
             if cid not in seen or e.ts < seen[cid]:
                 seen[cid] = e.ts
-        return [
-            cid for cid, _ts in sorted(seen.items(), key=lambda kv: kv[1])
-        ]
+        return [cid for cid, _ts in sorted(seen.items(), key=lambda kv: kv[1])]
 
     def export_trajectories(
         self,
@@ -473,7 +449,7 @@ class Journal:
                     ...
                   ],
                   "task_id": "...",
-                  "outcome": "success|failed|...",
+                  "outcome": "pass|fail|pass_degraded|unknown",
                   "total_cost_tokens": 0,
                 }
 
@@ -491,12 +467,14 @@ class Journal:
 
         if format == "raw":
             import json as _json
+
             return [_json.loads(e.model_dump_json()) for e in events]
 
         # ── ShareGPT format ──────────────────────────────────────
         # Group events by task_id, then build a conversation thread
         # from the step sequence.
         from collections import defaultdict
+
         by_task: dict[str, list[JournalEvent]] = defaultdict(list)
         for e in events:
             key = str(e.task_id) if e.task_id else "__unbound__"
@@ -524,6 +502,7 @@ class Journal:
                     result = getattr(step, "result", None)
                     if action is not None:
                         import json as _json
+
                         try:
                             args_str = _json.dumps(
                                 getattr(action, "args", {}),
@@ -531,26 +510,28 @@ class Journal:
                             )
                         except (TypeError, ValueError):
                             args_str = str(getattr(action, "args", ""))
-                        conversations.append({
-                            "from": "tool",
-                            "value": (
-                                f"{getattr(action, 'sucker_id', '?')}"
-                                f"({args_str})"
-                            ),
-                        })
+                        conversations.append(
+                            {
+                                "from": "tool",
+                                "value": (f"{getattr(action, 'sucker_id', '?')}({args_str})"),
+                            }
+                        )
                     if result is not None:
                         try:
                             import json as _json
+
                             out_str = _json.dumps(
                                 getattr(result, "output", ""),
                                 ensure_ascii=False,
                             )
                         except (TypeError, ValueError):
                             out_str = str(getattr(result, "output", ""))
-                        conversations.append({
-                            "from": "tool_result",
-                            "value": out_str[:2000],
-                        })
+                        conversations.append(
+                            {
+                                "from": "tool_result",
+                                "value": out_str[:2000],
+                            }
+                        )
                         cost = getattr(result, "cost", None)
                         if cost is not None:
                             total_tokens += (
@@ -564,25 +545,29 @@ class Journal:
                     if traj is not None:
                         traj_outcome = getattr(traj, "outcome", None)
                         if traj_outcome is not None:
-                            outcome = str(
-                                getattr(traj_outcome, "status", "unknown"),
-                            )
-                        summary = getattr(traj_outcome, "summary", None)
-                        if summary:
-                            conversations.append(
-                                {"from": "gpt", "value": summary},
-                            )
+                            # ``TrajectoryOutcome`` exposes ``success`` /
+                            # ``degraded`` — there is no ``status`` field,
+                            # so derive the label from the real booleans.
+                            if getattr(traj_outcome, "success", False):
+                                outcome = (
+                                    "pass_degraded"
+                                    if getattr(traj_outcome, "degraded", False)
+                                    else "pass"
+                                )
+                            else:
+                                outcome = "fail"
 
             if conversations:
-                records.append({
-                    "conversations": conversations,
-                    "task_id": tid,
-                    "outcome": outcome,
-                    "total_cost_tokens": total_tokens,
-                })
+                records.append(
+                    {
+                        "conversations": conversations,
+                        "task_id": tid,
+                        "outcome": outcome,
+                        "total_cost_tokens": total_tokens,
+                    }
+                )
 
         return records
-
 
     def write_step(
         self,
@@ -592,11 +577,16 @@ class Journal:
         *,
         actor: str | None = None,
     ) -> None:
-        self.write(StepEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor, step=step,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            StepEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                step=step,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_trajectory(
         self,
@@ -626,13 +616,19 @@ class Journal:
         task_type: str = "",
         recipe_hash: str | None = None,
     ) -> None:
-        self.write(TaskStartedEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor,
-            total_nodes=total_nodes, strategy=strategy,
-            task_type=task_type, recipe_hash=recipe_hash,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            TaskStartedEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                total_nodes=total_nodes,
+                strategy=strategy,
+                task_type=task_type,
+                recipe_hash=recipe_hash,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_node_started(
         self,
@@ -644,12 +640,18 @@ class Journal:
         skill_ref: str,
         node_index: int,
     ) -> None:
-        self.write(NodeStartedEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor,
-            node_id=node_id, skill_ref=skill_ref, node_index=node_index,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            NodeStartedEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                node_id=node_id,
+                skill_ref=skill_ref,
+                node_index=node_index,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_checkpoint(
         self,
@@ -662,13 +664,19 @@ class Journal:
         tokens_spent: int = 0,
         usd_spent: float = 0.0,
     ) -> None:
-        self.write(TaskCheckpointEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor,
-            nodes_completed=nodes_completed, total_nodes=total_nodes,
-            tokens_spent=tokens_spent, usd_spent=usd_spent,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            TaskCheckpointEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                nodes_completed=nodes_completed,
+                total_nodes=total_nodes,
+                tokens_spent=tokens_spent,
+                usd_spent=usd_spent,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_react_checkpoint(
         self,
@@ -686,20 +694,24 @@ class Journal:
         progress_summary: str = "",
         current_phase: str = "",
     ) -> None:
-        self.write(ReactCheckpointEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor,
-            iteration_completed=iteration_completed,
-            max_iterations=max_iterations,
-            messages_snapshot=messages_snapshot,
-            steps_snapshot=steps_snapshot,
-            has_final_answer=has_final_answer,
-            final_answer=final_answer,
-            working_set_snapshot=working_set_snapshot or [],
-            progress_summary=progress_summary,
-            current_phase=current_phase,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            ReactCheckpointEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                iteration_completed=iteration_completed,
+                max_iterations=max_iterations,
+                messages_snapshot=messages_snapshot,
+                steps_snapshot=steps_snapshot,
+                has_final_answer=has_final_answer,
+                final_answer=final_answer,
+                working_set_snapshot=working_set_snapshot or [],
+                progress_summary=progress_summary,
+                current_phase=current_phase,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_task_paused(
         self,
@@ -709,14 +721,16 @@ class Journal:
         requested_by: str = "",
         iteration: int = 0,
     ) -> None:
-        self.write(TaskPausedEvent(
-            task_id=task_id,
-            reason=reason,
-            requested_by=requested_by,
-            iteration=iteration,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            TaskPausedEvent(
+                task_id=task_id,
+                reason=reason,
+                requested_by=requested_by,
+                iteration=iteration,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_task_resumed(
         self,
@@ -727,15 +741,17 @@ class Journal:
         extra_usd: float = 0.0,
         extra_iterations: int = 0,
     ) -> None:
-        self.write(TaskResumedEvent(
-            task_id=task_id,
-            resumed_by=resumed_by,
-            extra_tokens=extra_tokens,
-            extra_usd=extra_usd,
-            extra_iterations=extra_iterations,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            TaskResumedEvent(
+                task_id=task_id,
+                resumed_by=resumed_by,
+                extra_tokens=extra_tokens,
+                extra_usd=extra_usd,
+                extra_iterations=extra_iterations,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_token_usage(
         self,
@@ -749,16 +765,18 @@ class Journal:
     ) -> None:
         if input_tokens == 0 and output_tokens == 0:
             return  # Implementation note.
-        self.write(TokenUsageEvent(
-            task_id=task_id,
-            iteration=iteration,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            cost_usd=cost_usd,
-            model=model,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            TokenUsageEvent(
+                task_id=task_id,
+                iteration=iteration,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost_usd,
+                model=model,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_file_op(
         self,
@@ -781,19 +799,23 @@ class Journal:
             delta = new_size
         elif old_size is not None and action == "delete":
             delta = -old_size
-        self.write(FileOpEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor,
-            path=path,
-            action=action,  # type: ignore[arg-type]
-            old_size=old_size,
-            new_size=new_size,
-            bytes_delta=delta,
-            sucker_id=sucker_id,
-            diff=diff,
-            rollback=rollback,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            FileOpEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                path=path,
+                action=action,  # type: ignore[arg-type]
+                old_size=old_size,
+                new_size=new_size,
+                bytes_delta=delta,
+                sucker_id=sucker_id,
+                diff=diff,
+                rollback=rollback,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_preview_refresh(
         self,
@@ -805,14 +827,18 @@ class Journal:
         arm_id: ArmId | None = None,
         actor: str | None = None,
     ) -> None:
-        self.write(PreviewRefreshEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor,
-            target=target,
-            trigger_path=trigger_path,
-            reason=reason,
-            agent_id=current_agent_id(),
-            conversation_id=current_conversation_id(),
-        ))
+        self.write(
+            PreviewRefreshEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                target=target,
+                trigger_path=trigger_path,
+                reason=reason,
+                agent_id=current_agent_id(),
+                conversation_id=current_conversation_id(),
+            )
+        )
 
     def write_reflex_hit(
         self,
@@ -826,11 +852,18 @@ class Journal:
         intent_goal: str,
         response: Any = None,  # noqa: F821
     ) -> None:
-        self.write(ReflexHitEvent(
-            task_id=task_id, arm_id=arm_id, actor=actor,
-            rule_id=rule_id, kind=kind, latency_ms=latency_ms,
-            intent_goal=intent_goal, response=response,
-        ))
+        self.write(
+            ReflexHitEvent(
+                task_id=task_id,
+                arm_id=arm_id,
+                actor=actor,
+                rule_id=rule_id,
+                kind=kind,
+                latency_ms=latency_ms,
+                intent_goal=intent_goal,
+                response=response,
+            )
+        )
 
     def write_immune(
         self,
@@ -988,7 +1021,6 @@ class Journal:
 
 
 class InMemoryJournal(Journal):
-
     def __init__(self) -> None:
         self._events = AppendOnlyList[JournalEvent](rule_id="CC-5")
         self._lock = Lock()
@@ -1011,7 +1043,6 @@ class InMemoryJournal(Journal):
 
 
 class JSONLJournal(Journal):
-
     def __init__(
         self,
         path: Path | str,
@@ -1166,8 +1197,10 @@ class JSONLJournal(Journal):
                     )
                 except Exception:  # noqa: BLE001 — audit mirror is best-effort; never break the hot write path
                     import logging
+
                     logging.getLogger(__name__).warning(
-                        "journal %s: audit chain append failed", self._path,
+                        "journal %s: audit chain append failed",
+                        self._path,
                     )
             # Rotate if we've blown past the cap. Cheap check (stat
             # call) · only triggers rewrite when actually needed.
@@ -1279,11 +1312,13 @@ class JSONLJournal(Journal):
         nl_idx = chunk.find(b"\n")
         if nl_idx == -1:
             import logging
+
             logging.getLogger(__name__).warning(
-                "journal %s: rotate skipped · no newline in tail", self._path,
+                "journal %s: rotate skipped · no newline in tail",
+                self._path,
             )
             return
-        tail = chunk[nl_idx + 1:]
+        tail = chunk[nl_idx + 1 :]
         # Atomic replace: write to .tmp then rename.
         tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         with tmp.open("wb") as f:
@@ -1294,9 +1329,12 @@ class JSONLJournal(Journal):
         self._cache_byte_pos = 0
         self._skipped_total = 0
         import logging
+
         logging.getLogger(__name__).info(
             "journal %s rotated · kept tail %d bytes (was %d)",
-            self._path, len(tail), size,
+            self._path,
+            len(tail),
+            size,
         )
 
     def read_all(self) -> list[JournalEvent]:
@@ -1340,10 +1378,12 @@ class JSONLJournal(Journal):
                     self._skipped_total += 1
                     if self._skipped_total == 1:
                         import logging
+
                         logging.getLogger(__name__).warning(
                             "journal %s: unparseable event %s at "
                             "byte ~%d · skipping (and any subsequent)",
-                            self._path, type(exc).__name__,
+                            self._path,
+                            type(exc).__name__,
                             self._cache_byte_pos,
                         )
             self._cache_byte_pos = new_pos

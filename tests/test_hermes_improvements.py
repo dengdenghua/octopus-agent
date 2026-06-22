@@ -150,6 +150,7 @@ class TestSkillCurator:
     def skills_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         """Redirect _project_root to tmp_path."""
         import runtime.memory.skills_lib.skill_curator as _mod
+
         monkeypatch.setattr(_mod, "_project_root", lambda: tmp_path)
         return tmp_path / "agents" / "test_agent" / "skills"
 
@@ -230,7 +231,10 @@ class TestSkillCurator:
 
         old_ts = datetime.now(UTC) - timedelta(days=35)
         _write_skill(
-            skills_dir, "stale_skill", last_used_at=old_ts, status="stale",
+            skills_dir,
+            "stale_skill",
+            last_used_at=old_ts,
+            status="stale",
         )
         record_use("test_agent", "stale_skill")
 
@@ -273,8 +277,12 @@ class TestExportTrajectories:
 
         tid = uuid4()
         call_id = uuid4()
-        call = ToolCall(call_id=call_id, caller="arm:test", sucker_id="exec_shell", args={"cmd": "ls"})
-        result = ExecutionResult(call_id=call_id, status="success", output="file.txt", cost=CostEntry(tokens=10, usd=0.0))
+        call = ToolCall(
+            call_id=call_id, caller="arm:test", sucker_id="exec_shell", args={"cmd": "ls"}
+        )
+        result = ExecutionResult(
+            call_id=call_id, status="success", output="file.txt", cost=CostEntry(tokens=10, usd=0.0)
+        )
         step = Step(step_id=1, node_id="n1", action=call, result=result)
 
         j = InMemoryJournal()
@@ -296,8 +304,17 @@ class TestExportTrajectories:
         def _step(n: int) -> StepEvent:
             cid = uuid4()
             call = ToolCall(call_id=cid, caller="arm:test", sucker_id=f"skill_{n}", args={"n": n})
-            res = ExecutionResult(call_id=cid, status="success", output=f"out_{n}", cost=CostEntry(tokens_in=3, tokens_out=2, usd=0.0))
-            return StepEvent(task_id=tid, arm_id="arm-1", step=Step(step_id=n, node_id=f"n{n}", action=call, result=res))
+            res = ExecutionResult(
+                call_id=cid,
+                status="success",
+                output=f"out_{n}",
+                cost=CostEntry(tokens_in=3, tokens_out=2, usd=0.0),
+            )
+            return StepEvent(
+                task_id=tid,
+                arm_id="arm-1",
+                step=Step(step_id=n, node_id=f"n{n}", action=call, result=res),
+            )
 
         j.write(_step(1))
         j.write(_step(2))
@@ -310,7 +327,9 @@ class TestExportTrajectories:
         assert rec["conversations"][0]["from"] == "tool"
         assert "skill_1" in rec["conversations"][0]["value"]
         assert rec["conversations"][1]["from"] == "tool_result"
-        assert rec["total_cost_tokens"] == 20  # 2 steps × (3+2) × 2 (tokens_in+tokens_out counted separately)
+        assert (
+            rec["total_cost_tokens"] == 20
+        )  # 2 steps × (3+2) × 2 (tokens_in+tokens_out counted separately)
 
     def test_sharegpt_filter_by_task_id(self):
         from uuid import uuid4
@@ -325,9 +344,67 @@ class TestExportTrajectories:
         for tid in (tid_a, tid_b):
             cid = uuid4()
             call = ToolCall(call_id=cid, caller="arm:x", sucker_id="s", args={})
-            res = ExecutionResult(call_id=cid, status="success", output="ok", cost=CostEntry(tokens=1, usd=0.0))
-            j.write(StepEvent(task_id=tid, arm_id="arm-1", step=Step(step_id=1, node_id="n1", action=call, result=res)))
+            res = ExecutionResult(
+                call_id=cid, status="success", output="ok", cost=CostEntry(tokens=1, usd=0.0)
+            )
+            j.write(
+                StepEvent(
+                    task_id=tid,
+                    arm_id="arm-1",
+                    step=Step(step_id=1, node_id="n1", action=call, result=res),
+                )
+            )
 
         records = j.export_trajectories(task_id=tid_a, format="sharegpt")
         assert len(records) == 1
         assert records[0]["task_id"] == str(tid_a)
+
+    def test_sharegpt_outcome_derived_from_success(self):
+        """A TrajectoryEvent must export a real pass/fail outcome.
+
+        ``TrajectoryOutcome`` has no ``status`` field, so the old code
+        always emitted the literal ``"unknown"``. Outcome is now derived
+        from ``success`` (and reflects ``degraded``).
+        """
+        from uuid import uuid4
+
+        from runtime.memory.journal import InMemoryJournal, StepEvent
+        from runtime.platform.models import (
+            CostEntry,
+            ExecutionResult,
+            Step,
+            ToolCall,
+            Trajectory,
+            TrajectoryOutcome,
+        )
+
+        def _record_for(success: bool, degraded: bool = False) -> dict:
+            j = InMemoryJournal()
+            tid = uuid4()
+            # A trajectory-only task yields no conversation turns, so seed
+            # one step to make the record materialize.
+            cid = uuid4()
+            call = ToolCall(call_id=cid, caller="arm:test", sucker_id="s", args={})
+            res = ExecutionResult(
+                call_id=cid, status="success", output="ok", cost=CostEntry(tokens=1, usd=0.0)
+            )
+            j.write(
+                StepEvent(
+                    task_id=tid,
+                    arm_id="arm-1",
+                    step=Step(step_id=1, node_id="n1", action=call, result=res),
+                )
+            )
+            traj = Trajectory(
+                task_id=tid,
+                arm_id="arm-1",
+                outcome=TrajectoryOutcome(success=success, degraded=degraded),
+            )
+            j.write_trajectory(traj)
+            records = j.export_trajectories(format="sharegpt")
+            assert len(records) == 1
+            return records[0]
+
+        assert _record_for(success=True)["outcome"] == "pass"
+        assert _record_for(success=False)["outcome"] == "fail"
+        assert _record_for(success=True, degraded=True)["outcome"] == "pass_degraded"
