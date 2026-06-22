@@ -11,6 +11,7 @@ import {
   PlusIcon,
   UserCogIcon,
   UserPlusIcon,
+  UsersIcon,
   XCircleIcon,
   XIcon,
 } from "lucide-react";
@@ -69,6 +70,7 @@ import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicato
 import { Welcome } from "@/components/workspace/welcome";
 import { WorkDirSelector } from "@/components/workspace/workdir-selector";
 import { LocalAgentConnectDialog } from "@/components/workspace/agents/local-agent-connect-dialog";
+import { CliTeamDialog } from "@/components/workspace/cli-team-panel";
 import {
   useRegenerateHandler,
   usePlanActionHandler,
@@ -444,6 +446,7 @@ export default function TeamPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [connectLocalAgentOpen, setConnectLocalAgentOpen] = useState(false);
+  const [showCliTeam, setShowCliTeam] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   const [selectedTaskAgentIds, setSelectedTaskAgentIds] = useState<string[]>(
     [],
@@ -952,6 +955,12 @@ export default function TeamPage() {
                             <BotIcon className="size-4" />
                             接入本地伙伴
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setShowCliTeam(true)}
+                          >
+                            <UsersIcon className="size-4" />
+                            CLI 团队 · 开跑
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -1225,6 +1234,7 @@ export default function TeamPage() {
               open={connectLocalAgentOpen}
               onOpenChange={setConnectLocalAgentOpen}
             />
+            <CliTeamDialog open={showCliTeam} onOpenChange={setShowCliTeam} />
             <ChatsDrawer
               open={chatsDrawerOpen}
               onOpenChange={setChatsDrawerOpen}

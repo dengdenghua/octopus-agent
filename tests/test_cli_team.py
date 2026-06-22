@@ -165,3 +165,83 @@ def test_router_exposes_status_and_run_routes() -> None:
     paths = {getattr(r, "path", None) for r in router.routes}
     assert "/api/cli-team/status" in paths
     assert "/api/cli-team/run" in paths
+
+
+# ── team-task routing: local_* assignees → run_cli_team ───────────────
+
+
+_DETECTED = [
+    {"agent_id": "local_claude_code", "partner_id": "claude-code", "command": "/b/claude"},
+    {"agent_id": "local_codex_cli", "partner_id": "codex-cli", "command": "/b/codex"},
+]
+
+
+def test_select_cli_members_filters_to_assigned() -> None:
+    from runtime.execution.agents.cli_team import select_cli_members
+
+    # only the assigned, installed CLIs come back
+    got = select_cli_members(["local_codex_cli", "ghost"], detected=_DETECTED)
+    assert [m["agent_id"] for m in got] == ["local_codex_cli"]
+    # no refs / no match → empty (caller falls back to the topology path)
+    assert select_cli_members([], detected=_DETECTED) == []
+    assert select_cli_members(["planner"], detected=_DETECTED) == []
+
+
+def test_local_cli_members_reads_local_assignees(monkeypatch) -> None:
+    import runtime.execution.agents.cli_team as ct
+    from runtime.sensing.gateway import team_tasks_router as ttr
+    from runtime.sensing.gateway.team_tasks_router import TeamTaskWire
+
+    monkeypatch.setattr(ct, "detect_installed_partners", lambda: _DETECTED)
+    task = TeamTaskWire(
+        id="task-cli",
+        room_id="team-alpha",
+        title="implement X",
+        created_at="2026-06-07T00:00:00+00:00",
+        updated_at="2026-06-07T00:00:00+00:00",
+        assignees=[
+            {"kind": "agent", "ref": "local_codex_cli"},
+            {"kind": "agent", "ref": "planner"},  # normal agent, ignored
+            {"kind": "participant", "ref": "local_codex_cli"},  # human, ignored
+        ],
+    )
+    got = ttr._local_cli_members(task)
+    assert [m["agent_id"] for m in got] == ["local_codex_cli"]
+
+
+def test_local_cli_members_empty_without_local_assignees(monkeypatch) -> None:
+    import runtime.execution.agents.cli_team as ct
+    from runtime.sensing.gateway import team_tasks_router as ttr
+    from runtime.sensing.gateway.team_tasks_router import TeamTaskWire
+
+    monkeypatch.setattr(ct, "detect_installed_partners", lambda: _DETECTED)
+    task = TeamTaskWire(
+        id="task-normal",
+        room_id="team-alpha",
+        title="plan something",
+        created_at="2026-06-07T00:00:00+00:00",
+        updated_at="2026-06-07T00:00:00+00:00",
+        assignees=[{"kind": "agent", "ref": "planner"}],
+    )
+    assert ttr._local_cli_members(task) == []
+
+
+def test_cli_team_artifacts_one_per_member_diff_first() -> None:
+    from runtime.sensing.gateway.team_tasks_router import _cli_team_artifacts
+
+    arts = _cli_team_artifacts(
+        {
+            "members": [
+                {"agent_id": "local_codex_cli", "partner_id": "codex-cli", "ok": True, "diff": "DIFF-X", "files": ["x.py"]},
+                {"agent_id": "local_claude_code", "partner_id": "claude-code", "ok": False, "diff": "", "output": "n/c", "error": "boom"},
+            ]
+        }
+    )
+    assert len(arts) == 2
+    by_id = {a["agent_id"]: a for a in arts}
+    assert by_id["local_codex_cli"]["type"] == "cli_team_diff"
+    assert by_id["local_codex_cli"]["content"] == "DIFF-X"  # diff preferred
+    assert by_id["local_codex_cli"]["files"] == ["x.py"]
+    assert by_id["local_claude_code"]["content"] == "n/c"  # falls back to output
+    assert by_id["local_claude_code"]["ok"] is False
+    assert by_id["local_claude_code"]["error"] == "boom"

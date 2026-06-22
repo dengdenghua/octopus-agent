@@ -61,6 +61,26 @@ def detect_installed_partners() -> list[dict[str, str]]:
     return members
 
 
+def select_cli_members(
+    assignee_refs: list[str] | None,
+    *,
+    detected: list[dict[str, str]] | None = None,
+) -> list[dict[str, str]]:
+    """Of the coding-agent CLIs installed on this machine, return those whose
+    ``agent_id`` is in ``assignee_refs`` — i.e. the team task's ``local_*``
+    members that are actually runnable here. Empty when none match, so callers
+    fall back to the normal (non-CLI) team path.
+
+    Used by the team-task dispatcher: a task assigned to ``local_codex_cli``
+    routes through :func:`run_cli_team` instead of the role topology.
+    """
+    wanted = {str(r).strip() for r in (assignee_refs or []) if str(r).strip()}
+    if not wanted:
+        return []
+    pool = detect_installed_partners() if detected is None else detected
+    return [m for m in pool if str(m.get("agent_id") or "") in wanted]
+
+
 def _slug(text: str, fallback: str) -> str:
     cleaned = "".join(c if (c.isalnum() or c in "-_") else "-" for c in str(text))[:32].strip("-")
     return cleaned or fallback

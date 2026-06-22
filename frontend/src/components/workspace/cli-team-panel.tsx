@@ -7,6 +7,12 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getBackendBaseURL } from "@/core/config";
 
 interface Detected {
@@ -155,5 +161,26 @@ export default function CliTeamPanel() {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Dialog wrapper so the team room can open the CLI-team run surface from its
+ * header menu, alongside 接入本地伙伴. The same diff-first run engine. */
+export function CliTeamDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent style={{ maxWidth: "720px", width: "720px" }}>
+        <DialogHeader>
+          <DialogTitle className="text-base">CLI 团队 · 开跑</DialogTitle>
+        </DialogHeader>
+        <CliTeamPanel />
+      </DialogContent>
+    </Dialog>
   );
 }

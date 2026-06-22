@@ -337,6 +337,58 @@ def create_team_tasks_router(
 
         result: Any = None
         try:
+            # ── CLI-team route ──────────────────────────────────
+            # If the task is assigned to local coding-agent CLIs
+            # (Claude Code / Codex / …, ref ``local_*``), run them
+            # through the diff-first CLI engine — each in its own
+            # worktree with the shared blackboard — instead of the
+            # role topology. The CLIs use their own subscriptions.
+            cli_members = _local_cli_members(task)
+            if cli_members:
+                import os as _os
+
+                from runtime.execution.agents.cli_team import run_cli_team
+
+                with scoped_cancellation(source.token):
+                    cli_result = run_cli_team(
+                        prepared["task_input"],
+                        cli_members,
+                        repo_root=_os.getcwd(),
+                        turn_id=task.id,
+                    )
+                final_status = (
+                    "cancelled"
+                    if source.is_cancelled
+                    else ("done" if cli_result.get("ok") else "failed")
+                )
+                metadata = {
+                    **dict(task.metadata),
+                    "runner": {
+                        "engine": "cli_team",
+                        "members": cli_result.get("count", 0),
+                        "succeeded": cli_result.get("succeeded", 0),
+                        "note": cli_result.get("note"),
+                    },
+                }
+                if final_status == "failed":
+                    metadata["error"] = (
+                        cli_result.get("error") or "cli_team reported no successful member"
+                    )
+                updates = {
+                    "status": final_status,
+                    "completed_at": _now(),
+                    "metadata": metadata,
+                }
+                if final_status == "done":
+                    updates["produced_artifacts"] = _cli_team_artifacts(cli_result)
+                updated = _persist_task(task.id, updates)
+                if updated is not None:
+                    _broadcast_from_worker(
+                        loop,
+                        updated.room_id,
+                        _task_payload(updated, event=f"run_{final_status}"),
+                    )
+                return
             runner = _runner_instance(_emit_runner_event)
             with scoped_cancellation(source.token):
                 result = runner.run(
@@ -1075,6 +1127,45 @@ def _runner_metadata(result: Any, prepared: dict[str, Any]) -> dict[str, Any]:
         "error": _runner_result_error(result),
         "role_outputs": _jsonable(_result_value(result, "role_outputs", [])),
     }
+
+
+def _local_cli_members(task: TeamTaskWire) -> list[dict[str, str]]:
+    """The locally-installed coding-agent CLIs assigned to this task — the
+    ``local_*`` agent assignees that :func:`select_cli_members` confirms are
+    runnable here. Empty → the task takes the normal role-topology path."""
+    from runtime.execution.agents.cli_team import select_cli_members
+
+    refs = [
+        a.ref.strip()
+        for a in task.assignees
+        if a.kind.strip().lower() == "agent" and a.ref.strip().startswith("local_")
+    ]
+    return select_cli_members(refs)
+
+
+def _cli_team_artifacts(cli_result: dict[str, Any]) -> list[dict[str, Any]]:
+    """One artifact per CLI member carrying its diff + output, so the team room
+    can review each candidate. Diffs are NOT merged (diff-first by design)."""
+    artifacts: list[dict[str, Any]] = []
+    for member in cli_result.get("members", []) or []:
+        if not isinstance(member, dict):
+            continue
+        agent_id = str(member.get("agent_id") or "agent")
+        artifacts.append(
+            {
+                "id": f"artifact-{uuid4().hex[:12]}",
+                "type": "cli_team_diff",
+                "title": f"{agent_id} · {'diff' if member.get('diff') else 'no changes'}",
+                "content": str(member.get("diff") or member.get("output") or ""),
+                "agent_id": agent_id,
+                "partner_id": str(member.get("partner_id") or ""),
+                "ok": bool(member.get("ok")),
+                "files": _jsonable(member.get("files", [])),
+                "error": member.get("error"),
+                "created_at": _now(),
+            }
+        )
+    return artifacts
 
 
 def _runner_artifacts(result: Any, prepared: dict[str, Any]) -> list[dict[str, Any]]:
