@@ -11,8 +11,12 @@ the same local Ollama / OpenAI-compatible endpoint octopus-storage uses (bge-m3)
                           for a remote endpoint use e.g. ``bge-m3`` / ``nomic-embed-text``).
   ``OCTOPUS_EMBED_API_KEY`` optional bearer for the endpoint (Ollama needs none).
 
-Resolution: URL set → remote (``urllib``, zero new dependency); else in-process
-SentenceTransformer; else ``None``.
+Resolution: ``OCTOPUS_EMBED_URL`` set → remote (``urllib``, zero new dependency
+— point it at local Ollama for a fully-local, no-Python-ML path); else in-process
+**fastembed** (ONNX, CPU, no torch — the lightest local path) if installed; else
+**sentence-transformers**; else ``None``. Note ``OCTOPUS_EMBED_URL`` is generic
+OpenAI-compatible: it's local only when it points at a local server (Ollama /
+vLLM); it would equally accept a cloud endpoint.
 
 CRITICAL invariant: the corpus index and the query MUST embed with the SAME
 model, or cosine is meaningless. Both the index BUILD (``code_intelligence_skills``)
@@ -100,7 +104,37 @@ def _st_model() -> Any:
         return _ST_MODEL
 
 
+_FE_MODEL: Any = None
+_FE_LOCK = threading.Lock()
+
+
+def _fastembed_model() -> Any:
+    """Load + cache a fastembed model (ONNX, CPU, no torch — the lightest local
+    path); ``None`` if fastembed isn't installed or the model name is unsupported."""
+    global _FE_MODEL
+    if _FE_MODEL is not None:
+        return _FE_MODEL
+    with _FE_LOCK:
+        if _FE_MODEL is not None:
+            return _FE_MODEL
+        try:
+            from fastembed import TextEmbedding
+
+            _FE_MODEL = TextEmbedding(model_name=embed_model())
+        except Exception:  # noqa: BLE001 — lib absent / model not in fastembed's set
+            _FE_MODEL = None
+        return _FE_MODEL
+
+
 def _embed_local(texts: list[str]) -> list[list[float]] | None:
+    # Prefer fastembed (ONNX CPU, no torch — lightest) when it's installed and
+    # knows the model; fall back to sentence-transformers otherwise.
+    fe = _fastembed_model()
+    if fe is not None:
+        try:
+            return [[float(x) for x in vec] for vec in fe.embed(texts)]
+        except Exception:  # noqa: BLE001 — fall through to sentence-transformers
+            pass
     model = _st_model()
     if model is None:
         return None
@@ -110,17 +144,20 @@ def _embed_local(texts: list[str]) -> list[list[float]] | None:
         return None
 
 
-def available() -> bool:
-    """True when SOME embedding backend is reachable (remote endpoint set, or
-    sentence-transformers importable) — cheap, doesn't embed."""
-    if embed_endpoint():
-        return True
+def _lib_importable(name: str) -> bool:
     try:
-        import sentence_transformers  # noqa: F401
-
+        __import__(name)
         return True
     except Exception:  # noqa: BLE001
         return False
+
+
+def available() -> bool:
+    """True when SOME embedding backend is reachable — a remote endpoint is set,
+    or fastembed / sentence-transformers is importable. Cheap; doesn't embed."""
+    return bool(embed_endpoint()) or _lib_importable("fastembed") or _lib_importable(
+        "sentence_transformers"
+    )
 
 
 def embed_texts(texts: list[str]) -> list[list[float]] | None:

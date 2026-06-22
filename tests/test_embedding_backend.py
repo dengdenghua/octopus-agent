@@ -85,3 +85,48 @@ def test_available_true_with_remote_endpoint(monkeypatch) -> None:
     monkeypatch.setenv("OCTOPUS_EMBED_URL", "http://host/v1")
     assert eb.available() is True
     assert eb.get_encoder() is not None  # an .encode-shaped adapter
+
+
+def test_local_prefers_fastembed(monkeypatch) -> None:
+    monkeypatch.delenv("OCTOPUS_EMBED_URL", raising=False)
+
+    class _FE:
+        def embed(self, texts):
+            return [[0.5, 0.5] for _ in texts]
+
+    monkeypatch.setattr(eb, "_fastembed_model", lambda: _FE())
+    # sentence-transformers must NOT be consulted when fastembed handles it
+    monkeypatch.setattr(
+        eb, "_st_model", lambda: (_ for _ in ()).throw(AssertionError("ST used"))
+    )
+    assert eb.embed_texts(["x", "y"]) == [[0.5, 0.5], [0.5, 0.5]]
+
+
+def test_local_falls_back_to_sentence_transformers(monkeypatch) -> None:
+    monkeypatch.delenv("OCTOPUS_EMBED_URL", raising=False)
+    monkeypatch.setattr(eb, "_fastembed_model", lambda: None)
+
+    class _ST:
+        def encode(self, texts):
+            return [[0.1, 0.2] for _ in texts]
+
+    monkeypatch.setattr(eb, "_st_model", lambda: _ST())
+    assert eb.embed_texts(["a"]) == [[0.1, 0.2]]
+
+
+def test_no_local_backend_returns_none(monkeypatch) -> None:
+    monkeypatch.delenv("OCTOPUS_EMBED_URL", raising=False)
+    monkeypatch.setattr(eb, "_fastembed_model", lambda: None)
+    monkeypatch.setattr(eb, "_st_model", lambda: None)
+    assert eb.embed_texts(["a"]) is None
+
+
+def test_fastembed_model_none_when_absent() -> None:
+    eb._FE_MODEL = None  # fastembed isn't installed in this env → graceful None
+    assert eb._fastembed_model() is None
+
+
+def test_available_false_when_no_backend(monkeypatch) -> None:
+    monkeypatch.delenv("OCTOPUS_EMBED_URL", raising=False)
+    monkeypatch.setattr(eb, "_lib_importable", lambda _name: False)
+    assert eb.available() is False
