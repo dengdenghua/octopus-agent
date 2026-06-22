@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import {
   CheckCircle2Icon,
+  ChevronDownIcon,
+  ChevronRightIcon,
   ClipboardListIcon,
   Loader2Icon,
   PauseIcon,
@@ -315,6 +317,7 @@ export function TeamTasksPanel({
     const progress = taskProgressValue(task, taskEvent);
     const assigneeLabels = assigneeNames(task, team);
     const artifactCount = task.produced_artifacts?.length ?? 0;
+    const [showArtifacts, setShowArtifacts] = useState(false);
     const roleLabel = formatTeamRole(taskEvent?.role);
     const liveStatus = taskEvent
       ? formatTeamTaskEvent(taskEvent.event, roleLabel)
@@ -359,13 +362,54 @@ export function TeamTasksPanel({
                 </span>
               )}
               {artifactCount > 0 && (
-                <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700">
+                <button
+                  type="button"
+                  onClick={() => setShowArtifacts((v) => !v)}
+                  className="flex items-center gap-0.5 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700 transition-colors hover:bg-emerald-500/20"
+                >
+                  {showArtifacts ? (
+                    <ChevronDownIcon className="size-3" />
+                  ) : (
+                    <ChevronRightIcon className="size-3" />
+                  )}
                   {t.teamTasksPanel.artifactCount(artifactCount)}
-                </span>
+                </button>
               )}
             </div>
           </div>
         </div>
+
+        {showArtifacts && artifactCount > 0 && (
+          <div className="space-y-1.5 border-t border-border/45 px-3 py-2">
+            {task.produced_artifacts.map((artifact, i) => {
+              const a = artifact as Record<string, unknown>;
+              const title = String(a.title ?? a.agent_id ?? a.type ?? `产出 ${i + 1}`);
+              const content = String(a.content ?? "");
+              const ok = a.ok;
+              return (
+                <div
+                  key={String(a.id ?? i)}
+                  className="overflow-hidden rounded-md border border-border/50 bg-muted/20"
+                >
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium">
+                    {ok === true && (
+                      <CheckCircle2Icon className="size-3 shrink-0 text-emerald-600" />
+                    )}
+                    {ok === false && (
+                      <XCircleIcon className="size-3 shrink-0 text-amber-500" />
+                    )}
+                    <span className="truncate">{title}</span>
+                  </div>
+                  {content && (
+                    <pre className="max-h-48 overflow-auto border-t border-border/40 px-2 py-1.5 text-[11px] leading-snug whitespace-pre-wrap break-words">
+                      {content}
+                    </pre>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {liveStatus && task.status === "running" && (
           <div className="px-3 pb-2 text-[11px] text-primary">
