@@ -1,8 +1,10 @@
 import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
+  AtSignIcon,
   ChevronDownIcon,
   DatabaseIcon,
+  PlusIcon,
   SquareIcon,
   MessageCircleIcon,
   UserCircleIcon,
@@ -14,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -215,6 +218,18 @@ export function TeamInputBox({
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
+  // Insert "@name " — used by the + menu (typing "@" also opens the inline
+  // member popup; this is the click path for the same result).
+  const mentionMemberFromMenu = useCallback((name: string) => {
+    const mention = `@${name} `;
+    setInput((value) => {
+      if (value.includes(mention.trim())) return value;
+      const prefix = value.trim().length > 0 ? `${value.trimEnd()} ` : "";
+      return `${prefix}${mention}`;
+    });
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
   // @mention a roster member into the composer (fired from the 群成员 list).
   useEffect(() => {
     const onMention = (event: Event) => {
@@ -274,6 +289,50 @@ export function TeamInputBox({
 
       <div className="composer-footer flex flex-wrap items-center justify-between gap-2 border-t border-border/30 px-2 py-1">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {/* + : quick-insert menu. @ and / are typed inline; this is the
+              discoverable click path (mention a member, summon 本地数据库). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                data-testid="composer-plus"
+                title="插入：@提成员 · 本地数据库"
+                className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted/45 text-foreground transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                <PlusIcon className="size-4 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-52">
+              {teamMembers.length > 0 && (
+                <>
+                  <DropdownMenuLabel className="flex items-center gap-1.5 text-xs">
+                    <AtSignIcon className="size-3.5" /> 提及成员
+                  </DropdownMenuLabel>
+                  {teamMembers.map((agent) => {
+                    const displayName = agent.display_name ?? agent.name;
+                    return (
+                      <DropdownMenuItem
+                        key={agent.name}
+                        onSelect={() => mentionMemberFromMenu(displayName)}
+                        className="gap-2"
+                      >
+                        <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted text-[11px] leading-none">
+                          {agent.icon?.trim() || displayName.charAt(0)}
+                        </span>
+                        <span className="truncate text-[13px]">{displayName}</span>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem onSelect={() => summonLocalFileAgent()} className="gap-2">
+                <DatabaseIcon className="size-3.5 text-muted-foreground" />
+                <span className="text-[13px]">检索本地数据库</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           {showWorkDirSelector && (
             <WorkDirSelector
               workDir={workDir}
