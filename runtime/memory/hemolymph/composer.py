@@ -101,6 +101,55 @@ def estimate_tokens(text: str) -> int:
 
 
 # ═══════════════════════════════════════════════════════════
+# Skill relevance scoring · surface task-relevant skills first so a
+# focused task (e.g. "做个网页") reliably gets `create-website` instead of
+# losing it to a registration-ordered, token-truncated flat dump.
+# ═══════════════════════════════════════════════════════════
+
+import re
+
+_SKILL_WORD_RE = re.compile(r"[a-z0-9]{3,}")
+_CJK_RUN_RE = re.compile(r"[一-鿿]{2,}")
+
+
+def _cjk_bigrams(text: str) -> set[str]:
+    """Adjacent-CJK-char bigrams within each CJK run — a cheap cross-lingual
+    overlap signal (Chinese tasks don't tokenize on whitespace)."""
+    out: set[str] = set()
+    for run in _CJK_RUN_RE.findall(text):
+        for i in range(len(run) - 1):
+            out.add(run[i : i + 2])
+    return out
+
+
+def score_skill_relevance(
+    query: str, name: str, affinity: list[str], description: str
+) -> int:
+    """Lexical relevance of a skill to the task. Zero infra: English word
+    overlap + name/affinity substring hits + CJK bigram overlap. Higher = more
+    relevant. Deterministic; ties are broken by the caller (stable order)."""
+    q = (query or "").lower()
+    if not q.strip():
+        return 0
+    doc = f"{name} {' '.join(affinity)} {description or ''}".lower()
+    score = 0
+    # English word overlap (task ∩ skill doc).
+    q_words = set(_SKILL_WORD_RE.findall(q))
+    score += 2 * len(q_words & set(_SKILL_WORD_RE.findall(doc)))
+    # Name / affinity term appearing directly in the task — strong signal,
+    # catches CJK affinity keywords too.
+    for term in (name, *affinity):
+        t = term.lower().strip()
+        if len(t) >= 2 and t in q:
+            score += 4
+    # CJK bigram overlap (Chinese task vs Chinese description/keywords).
+    q_bi = _cjk_bigrams(q)
+    if q_bi:
+        score += len(q_bi & _cjk_bigrams(doc))
+    return score
+
+
+# ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
 
 
@@ -277,7 +326,11 @@ class ContextComposer:
                 )
 
             # ─── suckers bucket · progressive disclosure ─
-            skill_blurb = self._render_skills(relevant_skills, budget_for_bucket=alloc["suckers"])
+            skill_blurb = self._render_skills(
+                relevant_skills,
+                budget_for_bucket=alloc["suckers"],
+                task_query=self._skill_query(task_info),
+            )
             if skill_blurb:
                 segments.append(
                     ContextSegment(
@@ -335,35 +388,65 @@ class ContextComposer:
                 task_type=task_type,
             )
 
-
     @staticmethod
     def _render_task(task_info: Any) -> str:
         if isinstance(task_info, ParsedIntent):
-            return (
-                f"TASK intent={task_info.intent_type} goal={task_info.normalized_goal!r}"
-            )
+            return f"TASK intent={task_info.intent_type} goal={task_info.normalized_goal!r}"
         if isinstance(task_info, TaskGraph):
-            steps = " → ".join(
-                f"{n.node_id}:{n.skill_ref}" for n in task_info.nodes
-            )
+            steps = " → ".join(f"{n.node_id}:{n.skill_ref}" for n in task_info.nodes)
             return f"TASK task_type={task_info.task_type} plan=[{steps}]"
         return ""
+
+    @staticmethod
+    def _skill_query(task_info: Any) -> str:
+        """The text used to rank skills by relevance — the user's goal for an
+        intent, or the plan shape for a graph."""
+        if isinstance(task_info, ParsedIntent):
+            return task_info.normalized_goal or ""
+        if isinstance(task_info, TaskGraph):
+            refs = " ".join(n.skill_ref for n in task_info.nodes)
+            return f"{task_info.task_type or ''} {refs}".strip()
+        return ""
+
+    def _skill_relevance(self, name: str, task_query: str) -> int:
+        try:
+            skill = self.registry.get(name)
+        except (KeyError, LookupError):
+            return 0
+        return score_skill_relevance(
+            task_query,
+            name,
+            list(getattr(skill, "affinity", []) or []),
+            skill.description or "",
+        )
 
     def _render_skills(
         self,
         relevant_skills: list[str] | None,
         budget_for_bucket: int,
+        task_query: str = "",
     ) -> str:
         if relevant_skills is None or "*" in relevant_skills:
-            names = [
-                n for n in self.registry.all_names()
-                if n not in _HIDDEN_BY_DEFAULT_SKILLS
-            ]
+            names = [n for n in self.registry.all_names() if n not in _HIDDEN_BY_DEFAULT_SKILLS]
         else:
             names = [n for n in relevant_skills if self.registry.has(n)]
 
         if not names:
             return ""
+
+        # Rank by task relevance so the skills that actually fit the task are
+        # surfaced first — and therefore never the ones dropped when the bucket
+        # budget truncates. Ties keep the original (registry) order via the
+        # index tie-breaker. No query (e.g. some warm-up calls) → original order.
+        if task_query.strip():
+            ranked = sorted(
+                enumerate(names),
+                key=lambda it: (
+                    -self._skill_relevance(it[1], task_query),
+                    it[0],
+                ),
+            )
+            names = [n for _, n in ranked]
 
         lines: list[str] = ["AVAILABLE SKILLS (name · one-liner):"]
         used = estimate_tokens(lines[0])

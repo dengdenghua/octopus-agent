@@ -914,10 +914,18 @@ function ChatsPageContent({
     hasCurrentTodos &&
     !shouldHideSettledProcessChrome;
   const canOpenAgentWorkbench =
-    !isNewThread || hasRenderableAgentWorkbench || !!previewBlocks;
+    !isNewThread ||
+    hasRenderableAgentWorkbench ||
+    !!previewBlocks ||
+    // Code mode docks the workbench (file tree / diff / terminal) like an IDE
+    // — available from the first turn, even on a fresh thread.
+    isProjectCodeMode;
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
+      // Code mode keeps the workbench docked by default (still closable —
+      // honored via agentWorkbenchDismissed).
+      (isProjectCodeMode && !agentWorkbenchDismissed) ||
       (hasRenderableAgentWorkbench &&
         (!agentWorkbenchDismissed || artifactsOpen || showAgentPlan))) &&
     !showResearchHistory &&
@@ -1584,7 +1592,17 @@ function ChatsPageContent({
                 </div>
               ) : showAgentWorkbench ? (
                 <AgentWorkbenchPanel
-                  activeTab={agentWorkbenchTab}
+                  activeTab={
+                    // Fresh code-mode open with no run yet → land on the file
+                    // tree so the panel reads like an IDE explorer, not an
+                    // empty agent tab. Once touched / once a run produces
+                    // content, defer to the normal tab state.
+                    !agentWorkbenchTabTouched &&
+                    isProjectCodeMode &&
+                    !hasRenderableAgentWorkbench
+                      ? "files"
+                      : agentWorkbenchTab
+                  }
                   events={agentDisplayEvents}
                   focusedAgentId={focusedWorkbenchAgentId}
                   hasAnswer={hasCompletedAgentOutput}

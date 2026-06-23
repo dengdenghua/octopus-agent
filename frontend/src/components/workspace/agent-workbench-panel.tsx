@@ -468,8 +468,14 @@ export function AgentWorkbenchPanel({
   const [activityView, setActivityView] = useState<"summary" | "screen">(
     "summary",
   );
+  // Start lean: only the file tree is shown. Diff / terminal / browser stay
+  // hidden until there's something in them — they auto-reveal when a run
+  // focuses them (latestWorkspaceFocusTab → activeTab → the auto-open effect
+  // below) or when the user adds them from the tab menu. Tab CONTENT is already
+  // lazy (only the active tab mounts), so this is purely about decluttering the
+  // bar, not load cost.
   const [closedTabs, setClosedTabs] = useState<Set<AgentWorkbenchTabId>>(
-    () => new Set(),
+    () => new Set<AgentWorkbenchTabId>(["diff", "terminal", "browser"]),
   );
 
   const selectedPhase =

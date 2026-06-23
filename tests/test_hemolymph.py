@@ -9,6 +9,7 @@ import pytest
 from runtime.execution.suckers import Skill, SkillRegistry
 from runtime.execution.suckers.builtins import register_builtins
 from runtime.memory.hemolymph import ContextComposer, estimate_tokens
+from runtime.memory.hemolymph.composer import score_skill_relevance
 from runtime.memory.journal import InMemoryJournal
 from runtime.platform.models import (
     ArmId,
@@ -22,6 +23,33 @@ from runtime.platform.models import (
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════
+
+
+_CW_DESC = (
+    "Build real, multi-file web projects the user can open, run, and "
+    "extend. User requests a new website, webpage, app, landing page, "
+    "dashboard. 做个网页 写个应用 钢琴网页 计算器"
+)
+
+
+class TestScoreSkillRelevance:
+    def test_relevant_skill_outranks_irrelevant(self):
+        q = "做一个 AI 会议纪要工具 web 主页"
+        web = score_skill_relevance(q, "create-website", [], _CW_DESC)
+        doc = score_skill_relevance(q, "docx", [], "Edit Word documents")
+        assert web > doc
+
+    def test_cjk_keyword_match(self):
+        assert score_skill_relevance("做个网页", "create-website", [], _CW_DESC) > 0
+
+    def test_affinity_substring_hit(self):
+        assert score_skill_relevance("run a web_search now", "x", ["web_search"], "") >= 4
+
+    def test_empty_query_is_zero(self):
+        assert score_skill_relevance("", "create-website", [], _CW_DESC) == 0
+
+    def test_irrelevant_query_is_zero(self):
+        assert score_skill_relevance("天气怎么样", "create-website", [], _CW_DESC) == 0
 
 
 class TestEstimateTokens:
