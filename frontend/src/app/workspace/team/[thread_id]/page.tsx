@@ -606,6 +606,24 @@ export default function TeamPage() {
     return () => window.removeEventListener("octopus:create-team", handler);
   }, []);
 
+  // Cross-page entry into 新建团队 (e.g. the sidebar-footer switcher fired from
+  // Hub/自动化) navigates here and the window event above can race the
+  // listener's mount, or the /team/new → /team/:id redirect strips a query
+  // param. A sessionStorage flag survives both: read it once on mount.
+  useEffect(() => {
+    let pending = false;
+    try {
+      pending =
+        window.sessionStorage.getItem("octopus:pending-create-team") === "1";
+      if (pending) {
+        window.sessionStorage.removeItem("octopus:pending-create-team");
+      }
+    } catch (e) {
+      swallow(e, "storage");
+    }
+    if (pending) setShowCreateTeam(true);
+  }, []);
+
   useEffect(() => {
     const handler = (e: CustomEvent<Team>) => {
       const team = e.detail;

@@ -530,7 +530,24 @@ export function TeamFooter() {
     }
   };
 
-  const openCreate = () => eventBus.emit("team:create");
+  const openCreate = () => {
+    // The CreateTeamDialog + its trigger live on the team page. Emitting
+    // ``team:create`` alone was a no-op (nothing subscribes to it), so this
+    // entry was a dead button. Two cases to cover:
+    //  - already on the team page → the live window listener opens the dialog;
+    //  - coming from another route → a sessionStorage flag the page reads on
+    //    mount (survives the /team/new → /team/:id redirect that would strip a
+    //    query param, and the event-before-listener-mount race).
+    eventBus.emit("team:create");
+    try {
+      sessionStorage.setItem("octopus:pending-create-team", "1");
+    } catch {
+      // sessionStorage unavailable (private mode); window event still covers
+      // the common already-on-team-page case.
+    }
+    navigate("/workspace/team/new");
+    window.dispatchEvent(new CustomEvent("octopus:create-team"));
+  };
 
   return (
     <div className="flex items-center gap-1">
