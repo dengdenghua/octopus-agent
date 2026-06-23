@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import TeamRoleModelsPanel from "@/components/workspace/team-role-models-panel";
 import { useAgents, useLocalCliAgents, useMobileDevices } from "@/core/agents";
 import type { Agent } from "@/core/agents/types";
@@ -147,13 +148,10 @@ export function CreateTeamDialog({
                         : "hover:bg-accent disabled:opacity-30 disabled:hover:bg-transparent",
                     )}
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-muted text-[15px] leading-none">
-                      {agent.icon?.trim() || (
-                        <span className="text-xs font-semibold text-muted-foreground">
-                          {displayName.charAt(0)}
-                        </span>
-                      )}
-                    </div>
+                    <AgentAvatar
+                      agent={agent}
+                      className="size-8 rounded-lg text-[15px]"
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">
                         {displayName}
@@ -208,13 +206,10 @@ export function CreateTeamDialog({
                       <span className="text-muted-foreground text-[10px] w-3 text-center">
                         {idx + 1}
                       </span>
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/60 bg-muted text-[13px] leading-none">
-                        {agent.icon?.trim() || (
-                          <span className="text-[10px] font-semibold text-muted-foreground">
-                            {displayName.charAt(0)}
-                          </span>
-                        )}
-                      </div>
+                      <AgentAvatar
+                        agent={agent}
+                        className="size-6 rounded-lg"
+                      />
                       <span className="min-w-0 flex-1 truncate text-xs font-medium">
                         {displayName}
                       </span>
