@@ -1,0 +1,35 @@
+// Octopus local partner profile · local_codex_cli
+// Created by local partner registration
+
+{
+  "id": "local_codex_cli",
+  "templateId": "codex-cli",
+  "templateVersion": "1.0.0",
+  "name": "Codex CLI 伙伴",
+  "icon": "CX",
+  "did": "DID-CBE42F4680A6-CFAEEF",
+  "description": "检测本机 Codex CLI，注册为可被团队指派的本地工程伙伴。",
+  "avatar": "avatar.svg",
+  "model": {
+    "provider": "auto",
+    "name": "auto"
+  },
+  "runtime": "local_partner",
+  "creator": "user",
+  "category": "automation",
+  "tags": [
+    "local",
+    "partner",
+    "coding",
+    "codex"
+  ],
+  "defaultProject": {
+    "dir": "project"
+  },
+  "capabilities": {
+    "local_partner": true,
+    "local_partner_id": "codex-cli",
+    "local_partner_command": "codex",
+    "local_partner_executable": "/Users/dangbei/.local/bin/codex"
+  }
+}

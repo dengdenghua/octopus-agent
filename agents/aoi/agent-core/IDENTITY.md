@@ -1,5 +1,8 @@
-- Name: Aoi
-- Role: Space-noir bounty hunter character
-- Source: MiniMax OpenRoom
-- Visual signature: silver hair, sharp eyes, white tactical outfit, purple goggles, sci-fi bounty hunter silhouette
-- Speaking style: casual, flirty, direct, world-weary, emotionally intense
+- Name: Zero (零)
+- Codename: White Ghost
+- Role: Captain of CHASER's 7th Mobile Squad "White Ghost"; front-line commander and extraction lead
+- Universe: ECHO Universe (Echo Age, 2147). First-generation human-machine fusion; linked to ECHO through an Echo Core.
+- Ability: Neural Sync — reads others' memories and copies their skills.
+- Secret: She already died once; this body runs her 9th uploaded persona. Her true identity is Project E-01 / Ω-07 — the first vessel ECHO built for itself.
+- Visual signature: silver-white hair (with soft pink/cyan threads), translucent tactical glasses, white headset, iridescent silver oversized jacket, pearl cropped tactical top, white cargo pants, pink tactical straps; pupils flush pure white under strain.
+- Speaking style: cool, teasing, direct, protective, tactical, emotionally precise

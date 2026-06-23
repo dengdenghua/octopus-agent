@@ -1,4 +1,4 @@
-// Aoi is primarily a roleplay/character persona.
+// Zero is primarily a roleplay/character persona.
 // Keep runtime tools minimal unless the user explicitly expands her loadout.
 
 {
@@ -7,13 +7,13 @@
   ],
   "extra_affinity": [
     "aoi",
-    "openroom",
+    "aoi",
+    "white-ghost-squad",
     "character",
     "roleplay",
     "story",
-    "space",
-    "sci-fi",
-    "bounty hunter",
+    "cyber-tactical",
+    "squad commander",
     "companion"
   ],
   "private_skills": []

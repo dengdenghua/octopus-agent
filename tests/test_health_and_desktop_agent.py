@@ -49,7 +49,7 @@ class TestDesktopOperatorAgent:
     def test_agent_constructs(self):
         agent = make_desktop_operator_agent(_rt())
         assert agent.agent_id == "desktop_operator"
-        assert agent.display_name == "Desktop Operator"
+        assert agent.display_name == "Raven"
         assert agent.icon == "🖥️"
         assert "desktop" in agent.extra_affinity
 

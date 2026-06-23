@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-06-20T15:02:51+00:00",
-  "files_analyzed": 31,
+  "generated_at": "2026-06-23T04:29:33+00:00",
+  "files_analyzed": 32,
   "tree": [
     {
       "type": "doc",
@@ -138,42 +138,47 @@
           "children": [
             {
               "type": "doc",
-              "title": "🛡️ 管理员",
+              "title": "🛡️ Leon",
               "path": "20-backend/26-agents/admin.md"
             },
             {
               "type": "doc",
-              "title": "🛰️ Aoi",
+              "title": "🛰️ Zero",
               "path": "20-backend/26-agents/aoi.md"
             },
             {
               "type": "doc",
-              "title": "💻 Coder",
+              "title": "💻 Kane",
               "path": "20-backend/26-agents/coder.md"
             },
             {
               "type": "doc",
-              "title": "🖥️ Desktop Operator",
+              "title": "🖥️ Raven",
               "path": "20-backend/26-agents/desktop_operator.md"
             },
             {
               "type": "doc",
-              "title": "📊 Commerce Strategist",
+              "title": "📊 Shion",
               "path": "20-backend/26-agents/ecommerce_mind.md"
             },
             {
               "type": "doc",
-              "title": "🐙 Octopus",
+              "title": "🐙 Eve",
               "path": "20-backend/26-agents/general.md"
             },
             {
               "type": "doc",
-              "title": "Agent Market Researcher",
+              "title": "CX Codex CLI 伙伴",
+              "path": "20-backend/26-agents/local_codex_cli.md"
+            },
+            {
+              "type": "doc",
+              "title": "📊 Noah",
               "path": "20-backend/26-agents/market_researcher.md"
             },
             {
               "type": "doc",
-              "title": "✨ Growth Marketer",
+              "title": "✨ Luna",
               "path": "20-backend/26-agents/vibe_selling.md"
             }
           ]

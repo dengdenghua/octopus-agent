@@ -89,10 +89,10 @@ class TestPresetAgents:
 
     def test_display_names_match_upstream_spirit(self):
         rt = _fake_runtime()
-        assert make_general_agent(rt).display_name == "Octopus"
-        assert make_coder_agent(rt).display_name == "Coder"
-        assert make_vibe_selling_agent(rt).display_name == "Growth Marketer"
-        assert make_ecommerce_mind_agent(rt).display_name == "Commerce Strategist"
+        assert make_general_agent(rt).display_name == "Eve"
+        assert make_coder_agent(rt).display_name == "Kane"
+        assert make_vibe_selling_agent(rt).display_name == "Luna"
+        assert make_ecommerce_mind_agent(rt).display_name == "Shion"
 
     def test_all_distinct_ids(self):
         agents = make_all_agent_presets(_fake_runtime())

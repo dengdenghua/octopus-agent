@@ -43,21 +43,23 @@ Use this metaskill to generate Agent visual assets that are usable inside the HU
 
 4. Generate one separate avatar portrait:
    - square 1:1 image, normally 512x512
-   - close-up large headshot, face and eyes readable at small list size
+   - Zero-like close-up large headshot, face and eyes readable at small list size
    - same identity, hairstyle, palette, outfit collar, and temperament as the full-body views
    - transparent background or flat chroma-key background
+   - face should fill most of the icon, with only light collar or shoulder context
 
 5. Post-process every generated full-body view:
    - prefer real alpha transparency
    - if alpha is absent, remove flat chroma-key or flat edge-connected background
    - keep only the primary connected character component
    - crop to subject while adding transparent headroom and footroom
+   - keep the character visually large enough for Hub preview cards
    - save as PNG when possible
 
 6. Post-process the avatar:
    - remove flat background if needed
    - keep a fixed 512x512 square output
-   - make it a close-up large headshot with only slight shoulder/collar context, not a half-body crop
+   - make it a Zero-like large-face headshot with only slight shoulder/collar context, not a half-body crop
    - keep the face readable and centered
    - save as 512x512 `avatar.png`
    - replace the Agent avatar with this new file so lists, switchers, and HUD thumbnails show the new face

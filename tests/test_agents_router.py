@@ -157,12 +157,15 @@ class TestAgentDetail:
         data = r.json()
         # Implementation note.
         assert data["name"] == "coder"
-        assert data["display_name"] == "Coder"
+        assert data["display_name"] == "Kane"
         # Implementation note.
         assert len(data["arms"]) == 5
         arm_ids = [a["arm_id"] for a in data["arms"]]
         assert arm_ids == [
-            "web_read_arm", "fs_writer_arm", "git_arm", "shell_arm",
+            "web_read_arm",
+            "fs_writer_arm",
+            "git_arm",
+            "shell_arm",
             "coder_private_arm",
         ]
         # Implementation note.

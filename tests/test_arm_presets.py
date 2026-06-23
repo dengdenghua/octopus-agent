@@ -78,13 +78,13 @@ class TestRoleIdentities:
             "mobile_browser_operator_arm",
         }
 
-    def test_display_names_match_upstream_spirit(self):
+    def test_display_names_match_ghost_current_roster(self):
         """Implementation note."""
         rt = _fake_runtime()
-        assert make_general_arm(rt).display_name == "Octopus"
-        assert make_coder_arm_v2(rt).display_name == "Coder"
-        assert make_vibe_selling_arm(rt).display_name == "Growth Marketer"
-        assert make_ecommerce_mind_arm(rt).display_name == "Commerce Strategist"
+        assert make_general_arm(rt).display_name == "Eve"
+        assert make_coder_arm_v2(rt).display_name == "Kane"
+        assert make_vibe_selling_arm(rt).display_name == "Luna"
+        assert make_ecommerce_mind_arm(rt).display_name == "Shion"
 
 
 # ═══════════════════════════════════════════════════════════

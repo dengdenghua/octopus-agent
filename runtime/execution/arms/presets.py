@@ -318,11 +318,8 @@ def make_general_arm(runtime: GraphRuntime) -> Worker:
         affinity=["general", "assistant", "io", "research", "writing"],
         allowed_skills=[*_WEB_READ],
         runtime=runtime,
-        display_name="Octopus",
-        description=(
-            "General-purpose assistant for writing, planning, research, "
-            "summarization, and Q&A."
-        ),
+        display_name="Eve",
+        description=("白幽灵小队的联络与协调中枢（代号 Siren），负责把计划、情报和临场变化编成可执行行动线。"),
         soul=_OCTOPUS_SOUL,
         icon="🐙",
     )
@@ -333,15 +330,14 @@ def make_coder_arm_v2(runtime: GraphRuntime) -> Worker:
         arm_id=ArmId("coder_arm_v2"),
         affinity=["code", "git", "test", "debug", "refactor", "shell", "quality"],
         allowed_skills=[
-            *_WRITE_FS, *_GIT_ALL, *_CODE_QUALITY,
+            *_WRITE_FS,
+            *_GIT_ALL,
+            *_CODE_QUALITY,
             *_SHELL_EXEC,
         ],
         runtime=runtime,
-        display_name="Coder",
-        description=(
-            "Coding-focused agent for writing, debugging, refactoring, "
-            "and reviewing code."
-        ),
+        display_name="Kane",
+        description=("白幽灵小队的副队长与渗透工程师（代号 Paladin），负责逆向、入侵、补丁和现场系统接管。"),
         soul=_CODER_SOUL,
         icon="💻",
     )
@@ -360,11 +356,8 @@ def make_vibe_selling_arm(runtime: GraphRuntime) -> Worker:
             *_WRITE_FS,
         ],
         runtime=runtime,
-        display_name="Growth Marketer",
-        description=(
-            "E-commerce growth operator — drafts product pages, social posts, "
-            "and campaign briefs with a focus on conversion."
-        ),
+        display_name="Luna",
+        description=("白幽灵小队的叙事渗透手（代号 Dream Walker），负责内容诱导、传播伪装和行动叙事包装。"),
         soul=_VIBE_SELLING_SOUL,
         icon="✨",
     )
@@ -374,19 +367,24 @@ def make_ecommerce_mind_arm(runtime: GraphRuntime) -> Worker:
     return Worker(
         arm_id=ArmId("ecommerce_mind_arm"),
         affinity=[
-            "ecommerce", "operations", "analytics", "strategy",
-            "supply", "traffic", "cro", "shopify", "storefront", "listing",
+            "ecommerce",
+            "operations",
+            "analytics",
+            "strategy",
+            "supply",
+            "traffic",
+            "cro",
+            "shopify",
+            "storefront",
+            "listing",
         ],
         allowed_skills=[
             *_WEB_READ,
             *_BROWSER_READ,
         ],
         runtime=runtime,
-        display_name="Commerce Strategist",
-        description=(
-            "E-commerce operations advisor — category strategy, supply chain, "
-            "traffic, CRO, and fulfillment."
-        ),
+        display_name="Shion",
+        description=("白幽灵小队的后勤与分发官（代号 Virus Queen），负责伪装物流、战术采购和补给路径计算。"),
         soul=_ECOMMERCE_MIND_SOUL,
         icon="📊",
     )

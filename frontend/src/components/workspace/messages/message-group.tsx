@@ -189,7 +189,7 @@ function extractTraceTarget(text: string, name: string): string | undefined {
     text.match(/"role"\s*:\s*"([^"]+)"/i);
   if (jsonMatch?.[1]?.trim()) return jsonMatch[1].trim();
   const knownAgentMatch = text.match(
-    /(Market Researcher|Coder|Vibe Selling|Ecommerce Mind)/i,
+    /(Zero|Eve|Kane|Raven|Noah|Luna|Shion|Leon|Market Researcher|Coder|Vibe Selling|Ecommerce Mind)/i,
   );
   return knownAgentMatch?.[1];
 }
@@ -1011,7 +1011,7 @@ function extractTeamCallTarget(
     if (names.length > 0) return names.join(", ");
   }
   const knownAgentMatch = JSON.stringify(args).match(
-    /(Market Researcher|Coder|Vibe Selling|Ecommerce Mind)/i,
+    /(Zero|Eve|Kane|Raven|Noah|Luna|Shion|Leon|Market Researcher|Coder|Vibe Selling|Ecommerce Mind)/i,
   );
   return knownAgentMatch?.[1];
 }
