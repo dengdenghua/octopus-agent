@@ -187,3 +187,6 @@ evidence/kimi-desktop/
 output/
 ura-artifacts/
 evidence/
+
+# Avatar-generation intermediate backups — keep on disk, not in git
+agents/*/visuals/backups/
