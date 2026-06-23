@@ -19,6 +19,11 @@ export function AgentWelcome({
     agent?.name ??
     (agentName === "general" ? "Octopus Agent" : agentName);
   const description = agent?.description;
+  // Local CLI partners (Codex CLI / Claude Code / …) are not regular in-process
+  // agents — label the badge so it doesn't read as a generic "Agent".
+  const isLocalPartner =
+    agentName.startsWith("local_") || (agent?.name ?? "").startsWith("local_");
+  const typeBadge = isLocalPartner ? "本地伙伴" : "Agent";
 
   return (
     <div
@@ -42,7 +47,7 @@ export function AgentWelcome({
           )}
         </div>
         <span className="absolute -right-1 -bottom-1 flex h-5 items-center rounded-md border border-border bg-background px-1.5 text-[10px] font-medium text-muted-foreground shadow-sm">
-          Agent
+          {typeBadge}
         </span>
       </div>
       <div className="space-y-1.5">
