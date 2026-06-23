@@ -188,6 +188,11 @@ export function WorkDirSelector({
   const [isBrowserOpen, setBrowserOpen] = useState(
     () => !isMutedVariant && !workDir,
   );
+  // True when the user just hit the "pick folder" CTA but no Electron bridge
+  // is present (i.e. running in a plain browser). We surface the manual input
+  // and a one-line hint instead of silently doing nothing. Resets once the
+  // user enters a path or closes the menu.
+  const [noBridgeHint, setNoBridgeHint] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
@@ -227,6 +232,7 @@ export function WorkDirSelector({
         return merged;
       });
       setShowMenu(false);
+      setNoBridgeHint(false);
     },
     [onWorkDirChange],
   );
@@ -331,13 +337,14 @@ export function WorkDirSelector({
 
   const handlePrimaryAction = useCallback(async () => {
     if (isPicking) return;
-    if (isMutedVariant) {
-      setShowMenu(true);
-      return;
-    }
     if (!window.octopus?.dialog?.open) {
+      // No Electron bridge (plain browser) — surface the manual-input path
+      // explicitly so the click does SOMETHING, even in the muted/compact
+      // variant. Without this, muted callers (composer "选择工作区") looked
+      // broken because they silently swallowed the click.
       setShowMenu(true);
       setBrowserOpen(true);
+      setNoBridgeHint(true);
       requestAnimationFrame(() => manualInputRef.current?.focus());
       return;
     }
@@ -425,11 +432,11 @@ export function WorkDirSelector({
   // for "open folder", info popups for the unimplemented ones).
   const handleOpenFolderCta = useCallback(async () => {
     if (!window.octopus?.dialog?.open) {
-      if (isMutedVariant) {
-        setShowMenu(false);
-        return;
-      }
+      // Same web-fallback shape as handlePrimaryAction — don't silently swallow
+      // the click on the muted variant.
+      setShowMenu(true);
       setBrowserOpen(true);
+      setNoBridgeHint(true);
       requestAnimationFrame(() => manualInputRef.current?.focus());
       return;
     }
@@ -521,7 +528,12 @@ export function WorkDirSelector({
           </button>
         )}
 
-        {!isMutedVariant && (
+        {noBridgeHint && (
+          <div className="mt-2 rounded-md border border-border/50 bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+            {t.codeMode.folderPickerPathUnavailable}
+          </div>
+        )}
+        {(!isMutedVariant || noBridgeHint) && (
           <form
             className="mt-2 flex items-center gap-1.5 rounded-lg border border-border/50 bg-background/70 p-1 shadow-inner"
             onSubmit={handleManualSubmit}
