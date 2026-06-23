@@ -54,8 +54,39 @@ def test_argv_for_known_clis() -> None:
     assert build_partner_argv("codex-cli", "codex", "add a test") == [
         "codex",
         "exec",
+        "--skip-git-repo-check",
         "add a test",
     ]
+
+
+def test_argv_model_override_passes_through_m() -> None:
+    # A CLI-valid model name is threaded to the tool's own model flag.
+    assert build_partner_argv("codex-cli", "codex", "go", model="o3") == [
+        "codex",
+        "exec",
+        "-m",
+        "o3",
+        "--skip-git-repo-check",
+        "go",
+    ]
+    assert build_partner_argv("claude-code", "claude", "go", model="claude-x") == [
+        "claude",
+        "-p",
+        "--model",
+        "claude-x",
+        "go",
+    ]
+
+
+def test_argv_empty_or_auto_model_keeps_cli_default() -> None:
+    # No model / "auto" → omit the flag so the CLI uses its configured default.
+    for m in (None, "", "  ", "auto", "AUTO"):
+        assert build_partner_argv("codex-cli", "codex", "go", model=m) == [
+            "codex",
+            "exec",
+            "--skip-git-repo-check",
+            "go",
+        ]
 
 
 def test_prompt_is_a_separate_argv_element_not_a_shell_string() -> None:
@@ -112,9 +143,7 @@ def test_run_unsupported_partner_short_circuits() -> None:
         called["n"] += 1
         return (0, "x", "")
 
-    res = run_local_partner(
-        partner_id="openclaw", command="openclaw", prompt="go", runner=run
-    )
+    res = run_local_partner(partner_id="openclaw", command="openclaw", prompt="go", runner=run)
     assert res.unsupported is True
     assert res.ok is False
     assert called["n"] == 0
@@ -179,7 +208,9 @@ def test_run_layers_env_over_inherited(monkeypatch) -> None:
     monkeypatch.setattr(b.subprocess, "run", fake_run)
     monkeypatch.setenv("PATH", "/usr/bin")
     res = b.run_local_partner(
-        partner_id="claude-code", command="claude", prompt="go",
+        partner_id="claude-code",
+        command="claude",
+        prompt="go",
         env={"OCTOPUS_TURN_ID": "t1"},
     )
     assert res.ok is True

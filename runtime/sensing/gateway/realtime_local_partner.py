@@ -90,6 +90,12 @@ async def drive_local_partner(
         )
     env = {"OCTOPUS_TURN_ID": turn_id, "OCTOPUS_AGENT_ID": agent_id} if turn_id else None
 
+    # The UI can override the CLI's model via the dedicated ``partner_model``
+    # turn-context key (NOT ``model_name`` — that's octopus's own model namespace
+    # and would be an invalid ``-m`` for codex/claude). Empty / "auto" → the CLI
+    # keeps its configured default. See agents_local_partner.partner_model().
+    partner_model = str((getattr(intent, "user_context", None) or {}).get("partner_model") or "")
+
     result = await asyncio.to_thread(
         run_local_partner,
         partner_id=partner_id,
@@ -98,6 +104,7 @@ async def drive_local_partner(
         cwd=None,
         timeout=timeout,
         env=env,
+        model=partner_model or None,
     )
 
     if result.unsupported:

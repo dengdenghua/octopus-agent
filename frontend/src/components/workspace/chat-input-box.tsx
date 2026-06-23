@@ -41,6 +41,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
 import { EvolutionIndicator } from "./evolution-indicator";
 import { ModelPicker, type PickerModel } from "./model-picker";
+import { PartnerModelControl } from "./partner-model-control";
 import { PreviewRefreshIndicator } from "./preview-refresh-indicator";
 import type { ReasoningMode } from "./reasoning-mode";
 import { tryLocalSlash } from "./local-slash-dispatch";
@@ -112,6 +113,13 @@ export interface ChatInputBoxProps {
   projectAgentMode?: AgentModeName;
   projectDetection?: DetectResponse | null;
   reasoningEffort?: ReasoningEffort;
+  /** When set, this chat targets a local CLI partner (e.g. "codex-cli"); the
+   * model control switches from the Octopus picker to the partner's own model
+   * (passed to the CLI via -m). */
+  partnerId?: string;
+  /** User override for the partner model; empty ⇒ the CLI's own default. */
+  partnerModel?: string;
+  onPartnerModelChange?: (model: string) => void;
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
   onProjectDetectionChange?: (detection: DetectResponse | null) => void;
@@ -203,6 +211,9 @@ export function ChatInputBox({
   projectAgentMode = "coder",
   projectDetection,
   reasoningEffort,
+  partnerId,
+  partnerModel,
+  onPartnerModelChange,
   onPermissionModeChange,
   onProjectAgentModeChange,
   onProjectDetectionChange,
@@ -1116,18 +1127,28 @@ export function ChatInputBox({
                 </span>
               </button>
             )}
-            <EvolutionIndicator compact />
-            <ModelPicker
-              models={pickerModels}
-              // Pass the raw modelName so the picker sees the "auto"
-              // sentinel — selectedModel falls back to pickerModels[0]
-              // when name doesn't match, which would mask the auto state.
-              value={modelName ?? selectedModel?.name}
-              onChange={(name) => onModelChange?.(name)}
-              reasoningEffort={reasoningEffort}
-              reasoningEffortDisabled={disabled || status === "streaming"}
-              onReasoningEffortChange={onReasoningEffortChange}
-            />
+            <EvolutionIndicator compact quiet />
+            {partnerId ? (
+              // Local CLI partner: its model comes from the CLI's own config,
+              // not the Octopus picker (which would show a misleading "mimo…").
+              <PartnerModelControl
+                partnerId={partnerId}
+                value={partnerModel}
+                onChange={(m) => onPartnerModelChange?.(m)}
+              />
+            ) : (
+              <ModelPicker
+                models={pickerModels}
+                // Pass the raw modelName so the picker sees the "auto"
+                // sentinel — selectedModel falls back to pickerModels[0]
+                // when name doesn't match, which would mask the auto state.
+                value={modelName ?? selectedModel?.name}
+                onChange={(name) => onModelChange?.(name)}
+                reasoningEffort={reasoningEffort}
+                reasoningEffortDisabled={disabled || status === "streaming"}
+                onReasoningEffortChange={onReasoningEffortChange}
+              />
+            )}
             {status === "streaming" ? (
               <button
                 type="button"

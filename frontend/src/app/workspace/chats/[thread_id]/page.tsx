@@ -473,6 +473,21 @@ function ChatsPageContent({
   const projectWorkspacePath = workDir.trim();
   const isProjectCodeMode = !!projectWorkspacePath;
   const codeModeUnlocked = Boolean(activeAgent?.capabilities?.code_mode_unlock);
+  // Local CLI partner (Codex / Claude Code): driven by spawning its own CLI, so
+  // its model comes from the CLI's config, not the Octopus model picker.
+  const partnerCaps = activeAgent?.capabilities as
+    | { local_partner?: boolean; local_partner_id?: string }
+    | undefined;
+  const isLocalPartner =
+    activeAgentId.startsWith("local_") || Boolean(partnerCaps?.local_partner);
+  const partnerId = isLocalPartner
+    ? String(partnerCaps?.local_partner_id ?? "")
+    : "";
+  const [partnerModel, setPartnerModel] = useState("");
+  // Reset the override when switching to a different agent.
+  useEffect(() => {
+    setPartnerModel("");
+  }, [activeAgentId]);
   const projectSignals = useMemo(() => {
     if (!isProjectCodeMode || !projectDetection) return undefined;
     const signals = projectDetection.signals;
@@ -617,6 +632,10 @@ function ChatsPageContent({
       agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
       project_signals: projectSignals,
       agent_name: activeAgentId,
+      // Local CLI partner model override → passed to the CLI via -m. Empty/absent
+      // ⇒ the CLI keeps its own configured default. Kept separate from
+      // model_name (octopus's namespace) on purpose.
+      partner_model: partnerId ? partnerModel : undefined,
       interaction_mode:
         effectiveMode === "react" ||
         effectiveMode === "deep" ||
@@ -1447,6 +1466,9 @@ function ChatsPageContent({
                             : "ready"
                       }
                       modelName={settings.context.model_name}
+                      partnerId={partnerId}
+                      partnerModel={partnerModel}
+                      onPartnerModelChange={setPartnerModel}
                       mode={effectiveMode}
                       reasoningEffort={settings.context.reasoning_effort}
                       threadId={threadId}

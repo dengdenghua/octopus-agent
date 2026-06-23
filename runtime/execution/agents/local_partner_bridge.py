@@ -85,14 +85,34 @@ def partner_identity(capabilities: Any) -> tuple[str, str] | None:
     return partner_id, command
 
 
-def build_partner_argv(partner_id: str, command: str, prompt: str) -> list[str] | None:
-    """Map ``(partner_id, command, prompt)`` to the CLI's own non-interactive
-    invocation, or ``None`` for partners we can't drive headless yet.
+def _clean_model(model: str | None) -> str | None:
+    """Normalize a requested partner model. Empty / ``auto`` mean "let the CLI
+    use its own configured default" → no ``-m`` flag. The model namespace is the
+    CLI's own (e.g. codex ``gpt-5.5``), NOT octopus's, so callers must pass a
+    CLI-valid name — never an octopus model id."""
+    value = (model or "").strip()
+    if not value or value.lower() == "auto":
+        return None
+    return value
+
+
+def build_partner_argv(
+    partner_id: str, command: str, prompt: str, model: str | None = None
+) -> list[str] | None:
+    """Map ``(partner_id, command, prompt[, model])`` to the CLI's own
+    non-interactive invocation, or ``None`` for partners we can't drive headless
+    yet.
 
     The flags are best-effort for the known CLIs and intentionally isolated
     here so a single edit fixes a tool whose interface drifts:
-      * ``claude-code`` → ``claude -p "<prompt>"``  (print / headless mode)
-      * ``codex-cli``   → ``codex exec "<prompt>"`` (non-interactive exec)
+      * ``claude-code`` → ``claude -p [--model <m>] "<prompt>"`` (headless)
+      * ``codex-cli``   → ``codex exec [-m <m>] --skip-git-repo-check "<prompt>"``
+        (non-interactive exec; the skip flag lets it run in any chosen workspace
+        — without it codex refuses outside a git repo: "Not inside a trusted
+        directory". Octopus already controls/gates the workspace dir.)
+
+    ``model`` (when set to a CLI-valid name) overrides the CLI's configured
+    default. ``None`` / ``"auto"`` → the CLI keeps its own default.
 
     ``openclaw`` (desktop automation, not a prompt→answer coding agent) has no
     headless prompt form here → ``None`` (caller falls back to the LLM loop).
@@ -100,10 +120,17 @@ def build_partner_argv(partner_id: str, command: str, prompt: str) -> list[str] 
     prompt = (prompt or "").strip()
     if not command or not prompt:
         return None
+    m = _clean_model(model)
     if partner_id == "claude-code":
-        return [command, "-p", prompt]
+        return [command, "-p", *(["--model", m] if m else []), prompt]
     if partner_id == "codex-cli":
-        return [command, "exec", prompt]
+        return [
+            command,
+            "exec",
+            *(["-m", m] if m else []),
+            "--skip-git-repo-check",
+            prompt,
+        ]
     return None
 
 
@@ -122,6 +149,12 @@ def _default_runner(
         argv,
         cwd=cwd,
         env=({**os.environ, **env} if env else None),
+        # Headless partners take the prompt as an argv element, never via stdin.
+        # Without this the child inherits our (non-tty pipe) stdin and CLIs like
+        # Claude Code stall ~3s waiting for piped data ("no stdin data received
+        # in 3s, proceeding without it") before falling back. /dev/null gives an
+        # immediate EOF so they start at once.
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -139,12 +172,14 @@ def run_local_partner(
     timeout: float = _DEFAULT_TIMEOUT_S,
     env: dict[str, str] | None = None,
     runner: Runner | None = None,
+    model: str | None = None,
 ) -> LocalPartnerResult:
     """Drive the partner CLI once. Best-effort and total — never raises; every
     failure mode (unsupported tool, missing binary, non-zero exit, timeout) is
     reflected in the returned :class:`LocalPartnerResult`. ``env`` is layered over
-    the inherited environment for the default runner (custom runners ignore it)."""
-    argv = build_partner_argv(partner_id, command, prompt)
+    the inherited environment for the default runner (custom runners ignore it).
+    ``model`` (a CLI-valid name) overrides the CLI's configured default."""
+    argv = build_partner_argv(partner_id, command, prompt, model)
     if argv is None:
         return LocalPartnerResult(ok=False, unsupported=True)
 

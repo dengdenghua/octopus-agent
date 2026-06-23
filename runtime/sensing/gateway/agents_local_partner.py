@@ -170,7 +170,46 @@ LOCAL_PARTNER_SPECS: dict[str, dict[str, Any]] = {
 }
 
 
+# ── Model config (the CLI's OWN model namespace) ───────────────────
+
+
+def partner_model(partner_id: str) -> dict[str, Any]:
+    """Read a local CLI partner's own configured default model — its namespace
+    (e.g. codex ``gpt-5.5``), NOT octopus's — so the UI can display it instead of
+    the octopus model selector. Returns ``{partner_id, model, source}`` with
+    ``model=""`` when not found. Best-effort and total — never raises."""
+    import os
+    from pathlib import Path
+
+    home = Path(os.path.expanduser("~"))
+    model = ""
+    source = ""
+    try:
+        if partner_id == "codex-cli":
+            cfg = home / ".codex" / "config.toml"
+            if cfg.is_file():
+                import tomllib
+
+                data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+                model = str(data.get("model") or "")
+                source = "~/.codex/config.toml" if model else ""
+        elif partner_id == "claude-code":
+            # Claude Code: ANTHROPIC_MODEL env first, then ~/.claude/settings.json.
+            model = os.environ.get("ANTHROPIC_MODEL", "").strip()
+            source = "$ANTHROPIC_MODEL" if model else ""
+            if not model:
+                cfg = home / ".claude" / "settings.json"
+                if cfg.is_file():
+                    data = json.loads(cfg.read_text(encoding="utf-8"))
+                    model = str(data.get("model") or "")
+                    source = "~/.claude/settings.json" if model else ""
+    except (OSError, ValueError, KeyError):
+        pass
+    return {"partner_id": partner_id, "model": model, "source": source}
+
+
 # ── Detection ──────────────────────────────────────────────────────
+
 
 def which_command(commands: list[str]) -> tuple[str | None, str | None]:
     """Probe a list of candidate commands; return (name, path) for the

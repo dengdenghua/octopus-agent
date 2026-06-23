@@ -96,7 +96,10 @@ def build_turn_metadata(
     # single-agent ReAct: serve_mesh drives 蜂群 (fan-out) vs 集群 routing,
     # team_mode tags the turn, and agent_roster is the member list the
     # fan-out / planner / swarm need.
-    for key in ("serve_mesh", "team_mode"):
+    # ``partner_model`` lets the UI override a local CLI partner's model
+    # (codex/claude), passed straight to ``-m``. It is the CLI's own model
+    # namespace — kept separate from ``model_name`` (octopus's) on purpose.
+    for key in ("serve_mesh", "team_mode", "partner_model"):
         value = ctx.get(key) or stored_meta.get(key)
         if isinstance(value, str) and value.strip():
             metadata[key] = value.strip()

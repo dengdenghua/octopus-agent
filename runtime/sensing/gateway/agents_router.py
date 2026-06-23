@@ -166,6 +166,9 @@ from .agents_local_partner import (  # noqa: E402
     identity_has_admin_role as _identity_has_admin_role,
 )
 from .agents_local_partner import (  # noqa: E402
+    partner_model as _partner_model,
+)
+from .agents_local_partner import (  # noqa: E402
     safe_executable as _safe_local_partner_executable,
 )
 from .agents_local_partner import (  # noqa: E402
@@ -655,11 +658,22 @@ When making changes, first read the surrounding code.
         return {
             "partners": [
                 _local_partner_wire(
-                    spec, registry, which_fn=_which_local_partner_command,
+                    spec,
+                    registry,
+                    which_fn=_which_local_partner_command,
                 )
                 for spec in _LOCAL_PARTNER_SPECS.values()
             ]
         }
+
+    @router.get("/api/agents/local-partners/{partner_id}/model")
+    def get_local_partner_model(request: Request, partner_id: str) -> dict[str, Any]:
+        # Read-only: the CLI partner's OWN configured default model (codex/claude
+        # namespace), for the UI to display instead of octopus's model selector.
+        _auth(request)  # AUTH-OK: actor-agnostic, reads local CLI config only
+        if partner_id not in _LOCAL_PARTNER_SPECS:
+            raise HTTPException(404, f"unknown local partner: {partner_id}")
+        return _partner_model(partner_id)
 
     @router.post("/api/agents/local-partners/register")
     def register_local_partners(
