@@ -92,6 +92,24 @@ def build_turn_metadata(
     if isinstance(project_signals, dict):
         metadata["project_signals"] = project_signals
 
+    # Team-room turn context. Without these the team turn silently degrades to
+    # single-agent ReAct: serve_mesh drives 蜂群 (fan-out) vs 集群 routing,
+    # team_mode tags the turn, and agent_roster is the member list the
+    # fan-out / planner / swarm need.
+    for key in ("serve_mesh", "team_mode"):
+        value = ctx.get(key) or stored_meta.get(key)
+        if isinstance(value, str) and value.strip():
+            metadata[key] = value.strip()
+    for key in ("subagent_enabled", "is_plan_mode"):
+        value = ctx.get(key)
+        if value is None:
+            value = stored_meta.get(key)
+        if isinstance(value, bool):
+            metadata[key] = value
+    roster = ctx.get("agent_roster") or stored_meta.get("agent_roster")
+    if isinstance(roster, list) and roster:
+        metadata["agent_roster"] = roster
+
     return metadata
 
 
