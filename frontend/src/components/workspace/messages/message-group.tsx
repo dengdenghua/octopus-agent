@@ -353,28 +353,30 @@ export function MessageGroup({
   messages,
   isLoading = false,
   keepOpen = false,
+  codeMode = false,
 }: {
   className?: string;
   enableClarificationActions?: boolean;
   messages: Message[];
   isLoading?: boolean;
   keepOpen?: boolean;
+  // Code mode reads like an IDE: the work-log (tool steps) stays expanded by
+  // default even after the answer lands, instead of folding into a "过程回放 N
+  // 步" disclosure. Users can still collapse individual groups.
+  codeMode?: boolean;
 }) {
   const { t } = useI18n();
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
-  const [showSteps, setShowSteps] = useState(false);
+  const [showSteps, setShowSteps] = useState(codeMode);
   const [openReasoningGroups, setOpenReasoningGroups] = useState<
     Record<string, boolean>
   >({});
   const [openActionGroups, setOpenActionGroups] = useState<
     Record<string, boolean>
   >({});
-  const steps = useMemo(
-    () => convertToSteps(messages, t),
-    [messages, t],
-  );
+  const steps = useMemo(() => convertToSteps(messages, t), [messages, t]);
   const clarificationContent = useMemo(
     () =>
       steps
@@ -456,10 +458,10 @@ export function MessageGroup({
         : t.messageGrouping.viewNSavedSteps(steps.length);
 
   useEffect(() => {
-    setShowSteps(false);
+    setShowSteps(codeMode);
     setOpenReasoningGroups({});
     setOpenActionGroups({});
-  }, [isLiveTimeline, stepsFingerprint]);
+  }, [isLiveTimeline, stepsFingerprint, codeMode]);
 
   if (steps.length === 0) {
     return null;
@@ -506,7 +508,7 @@ export function MessageGroup({
     if (item.type === "reasoningGroup") {
       const open =
         isCurrentFrame ||
-        (openReasoningGroups[item.id] ?? item.steps.length <= 3);
+        (openReasoningGroups[item.id] ?? (codeMode || item.steps.length <= 3));
       const isActiveGroup =
         isCurrentFrame || (itemIsLoading && isLast && item.steps.length > 0);
       const content = (
@@ -538,7 +540,8 @@ export function MessageGroup({
     }
     if (item.type === "actionCallbackGroup") {
       const open =
-        isCurrentFrame || (openActionGroups[item.id] ?? item.steps.length <= 3);
+        isCurrentFrame ||
+        (openActionGroups[item.id] ?? (codeMode || item.steps.length <= 3));
       const isActiveGroup =
         isCurrentFrame || (itemIsLoading && isLast && item.steps.length > 0);
       const content = (
@@ -584,7 +587,16 @@ export function MessageGroup({
   return (
     <ChainOfThought
       defaultOpen
-      className={cn("w-full gap-1 border-l border-border/60 pl-4", className)}
+      className={cn(
+        "w-full gap-1",
+        // Code mode: render the work-log as a distinct, bounded "process lane"
+        // (faint panel) so it reads as its own region, not noise above the
+        // answer. Other modes keep the lighter left-rule treatment.
+        codeMode
+          ? "rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
+          : "border-l border-border/60 pl-4",
+        className,
+      )}
       open={true}
     >
       {leadInTimelineItems.length > 0 && (
@@ -615,7 +627,14 @@ export function MessageGroup({
         </Button>
       )}
       {showSteps && replayTimelineItems.length > 0 && (
-        <ChainOfThoughtContent className="px-0 pb-1.5">
+        <ChainOfThoughtContent
+          className={cn(
+            "px-0 pb-1.5",
+            // Code mode keeps the log expanded — cap very long runs so the
+            // answer stays reachable; short runs render with no scrollbar.
+            codeMode && "max-h-[420px] overflow-y-auto pr-1",
+          )}
+        >
           {replayTimelineItems.map((item, idx) =>
             renderTimelineItem(item, idx, replayTimelineItems),
           )}

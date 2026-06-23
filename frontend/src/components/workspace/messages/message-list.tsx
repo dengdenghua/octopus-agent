@@ -34,6 +34,8 @@ import { cn } from "@/lib/utils";
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
 import type { LiveToolEvent } from "../live-tool-timeline";
 
+import { withAgentAvatarVersion } from "@/core/agents/avatar";
+
 import { AgentAvatar } from "./agent-message-header";
 import { ClarificationChoiceCard } from "./clarification-choice-card";
 import { MarkdownContent } from "./markdown-content";
@@ -195,12 +197,14 @@ export function MessageList({
   currentAgent,
   completedAgentOutput = false,
   showSenderName = false,
+  mode,
 }: {
   className?: string;
   threadId: string;
   thread: BaseStream<AgentThreadState>;
   paddingBottom?: number;
-  /** Legacy compatibility prop — no longer consumed by MessageList. */
+  /** Active chat mode. Used to keep the work-log (tool steps) expanded in
+   *  code mode so the thread reads like an IDE, not a chat. */
   mode?: string;
   /** Label each agent message with its name (group-chat / team room). */
   showSenderName?: boolean;
@@ -621,7 +625,7 @@ export function MessageList({
       <div key={key} className="flex w-full items-start gap-3">
         <AgentAvatar
           agentDisplayName={displayName}
-          avatarUrl={agentAvatar}
+          avatarUrl={agentAvatar ? withAgentAvatarVersion(agentAvatar) : agentAvatar}
           icon={agentIcon}
           className="mt-1 size-8 rounded-md"
         />
@@ -698,6 +702,7 @@ export function MessageList({
         enableClarificationActions={enableClarificationActions}
         messages={group.messages}
         keepOpen={keepOpen}
+        codeMode={mode === "code"}
         isLoading={
           thread.isLoading &&
           group.messages.some(
@@ -816,6 +821,7 @@ export function MessageList({
               key={"thinking-group-" + message.id}
               messages={[message]}
               keepOpen={keepOpen}
+              codeMode={mode === "code"}
               isLoading={
                 thread.isLoading && message.id === thread.streamingMessage?.id
               }

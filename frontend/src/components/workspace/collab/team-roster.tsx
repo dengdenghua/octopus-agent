@@ -1,5 +1,6 @@
 import { AtSignIcon, BotIcon } from "lucide-react";
 
+import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import type { Team } from "@/core/teams/api";
 import { cn } from "@/lib/utils";
 
@@ -47,15 +48,26 @@ export function TeamRoster({
             {agents.map((agent) => {
               const name = agent.display_name ?? agent.name;
               const isLeader = team?.leaderId === agent.name;
+              // Local CLI partners may arrive without an avatar_url (older
+              // roster snapshots only carried the emoji icon) — fall back to
+              // their registered brand avatar endpoint so they match the chat.
+              const rawAvatar =
+                agent.avatar_url ??
+                (agent.name.startsWith("local_")
+                  ? `/api/agents/${agent.name}/avatar`
+                  : undefined);
+              const avatarSrc = rawAvatar
+                ? withAgentAvatarVersion(rawAvatar)
+                : undefined;
               return (
                 <div
                   key={agent.name}
                   className="group flex items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-3 py-2"
                 >
                   <span className="relative grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-[15px] leading-none">
-                    {agent.avatar_url ? (
+                    {avatarSrc ? (
                       <img
-                        src={agent.avatar_url}
+                        src={avatarSrc}
                         alt={name}
                         className="size-full object-cover"
                       />

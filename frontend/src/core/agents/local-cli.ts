@@ -41,6 +41,9 @@ function partnerToAgent(p: DetectedPartner): Agent {
     display_name: label,
     description: `本机 ${label} · 用你的订阅，在隔离 worktree 里跑、共享团队黑板`,
     icon: PARTNER_ICON[p.partner_id] ?? "🖥️",
+    // Prefer the partner's brand avatar (served once it's registered on disk);
+    // the emoji icon stays as the fallback when the SVG isn't available.
+    avatar_url: `/api/agents/${p.agent_id}/avatar`,
     model: null,
     tool_groups: null,
   };

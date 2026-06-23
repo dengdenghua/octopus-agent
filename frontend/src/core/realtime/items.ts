@@ -50,6 +50,11 @@ export interface SteeringUserMessageItem extends ItemBase {
 export interface AgentMessageItem extends ItemBase {
   type: "agentMessage";
   text: string;
+  /** Per-message speaker identity (group/team rooms). When set, the bubble
+   *  renders this member's avatar + name instead of the turn leader's. */
+  agentDisplayName?: string;
+  agentAvatarUrl?: string;
+  agentIcon?: string;
 }
 
 export interface ReasoningItem extends ItemBase {

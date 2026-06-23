@@ -23,6 +23,7 @@ import type { Translations } from "@/core/i18n/locales/types";
 import { cn } from "@/lib/utils";
 
 import { emitAgentWorkbenchFocus } from "./agent-workbench-events";
+import { stripToolEnvelope } from "./messages/trace-labels";
 import { getProcessTraceEvents } from "./process-trace-events";
 import { isSkillToolName } from "./tool-action-kind";
 
@@ -335,7 +336,8 @@ function formatInputSummary(
 function formatOutputSummary(output: unknown): string | undefined {
   if (output === undefined || output === null) return undefined;
   if (typeof output === "string") {
-    const normalized = output.replace(/\s+/g, " ").trim();
+    const normalized = stripToolEnvelope(output).replace(/\s+/g, " ").trim();
+    if (!normalized) return undefined;
     return normalized.length > 140
       ? `${normalized.slice(0, 140)}…`
       : normalized;
@@ -1088,10 +1090,15 @@ function ToolEventRow({
   showAgent?: boolean;
   nested?: boolean;
 }) {
-  const iconCfg = TOOL_ICONS[event.name] ?? {
-    icon: TerminalIcon,
-    color: "text-muted-foreground",
-  };
+  // Tool names carry suffixes the icon map doesn't (grep_text→grep,
+  // glob_files→glob) — fall back to the normalized base before the generic
+  // icon so search/file/shell steps stay visually distinct.
+  const iconCfg = TOOL_ICONS[event.name] ??
+    TOOL_ICONS[event.name.toLowerCase().replace(/_text/g, "")] ??
+    TOOL_ICONS[event.name.toLowerCase().replace(/_files?$/, "")] ?? {
+      icon: TerminalIcon,
+      color: "text-muted-foreground",
+    };
   const label = toolLabels[event.name] ?? event.name;
   const Icon = iconCfg.icon;
   const modelReasoningOutput = (() => {
@@ -1212,7 +1219,7 @@ function ToolEventRow({
             {statusText(event, t)}
           </span>
 
-          {event.status === "done" && event.durationMs != null && (
+          {event.status === "done" && event.durationMs != null && event.durationMs >= 1 && (
             <span className="text-muted-foreground text-[10px]">
               {event.durationMs < 1000
                 ? `${event.durationMs}ms`

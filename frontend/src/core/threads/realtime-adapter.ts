@@ -325,6 +325,17 @@ function turnToMessages(turn: Turn): Message[] {
           pending = newPending();
           break;
         }
+        // Per-speaker identity (group/team rooms) → additional_kwargs the
+        // message-list reads to render the real author's avatar + name.
+        if (am.agentDisplayName) {
+          kwargs.agent_display_name = am.agentDisplayName;
+        }
+        if (am.agentAvatarUrl) {
+          kwargs.agent_avatar_url = am.agentAvatarUrl;
+        }
+        if (am.agentIcon) {
+          kwargs.agent_icon = am.agentIcon;
+        }
         const ai: AIMessage = {
           type: "ai",
           id: am.id,
