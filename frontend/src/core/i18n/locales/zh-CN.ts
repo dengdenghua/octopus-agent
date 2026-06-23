@@ -95,9 +95,8 @@ export const zhCN: Translations = {
 
   // Welcome
   welcome: {
-    greeting: "你好,欢迎来到 Octopus!",
-    description:
-      "我是 Octopus,一个多智能体 AI 框架,可以帮你完成各种任务。\n你可以直接开始对话,也可以切换到更深入的 Agent 模式。\n有什么我可以帮你的吗?",
+    greeting: "你好,我是 Octopus",
+    description: "多智能体 AI · 直接说需求,或切到 Agent 模式深入处理。",
 
     createYourOwnSkill: "创建你自己的 Agent Skill",
     createYourOwnSkillDescription:

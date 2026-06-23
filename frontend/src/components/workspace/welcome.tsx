@@ -1,3 +1,4 @@
+import { Code2Icon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useMemo } from "react";
 
@@ -36,22 +37,29 @@ export function Welcome({
   return (
     <div
       className={cn(
-        "mx-auto flex w-full flex-col items-center justify-center gap-3 px-5 py-4 text-center sm:px-8",
+        "mx-auto flex w-full flex-col items-center justify-center gap-2 px-5 pt-1 pb-2 text-center sm:px-8",
         className,
       )}
     >
-      <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/72 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
-        <span className="size-1.5 rounded-full bg-primary" />
-        {modeLabel}
-      </div>
-      <div className="text-2xl font-semibold tracking-tight">
+      <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-2xl font-semibold tracking-tight">
         {isSkillSeed ? (
           t.welcome.createYourOwnSkill
+        ) : isCode ? (
+          <div className="flex items-center gap-2.5">
+            <Code2Icon className="size-7 text-teal-600 dark:text-teal-400" />
+            <AuroraText colors={colors}>Code with Octopus</AuroraText>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <span className="inline-block size-2 rounded-full bg-primary/80" />
             <AuroraText colors={colors}>{t.welcome.greeting}</AuroraText>
           </div>
+        )}
+        {!isSkillSeed && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-medium leading-4 text-muted-foreground shadow-xs">
+            <span className="size-1 rounded-full bg-primary/70" />
+            {modeLabel}
+          </span>
         )}
       </div>
       {/* Use ``whitespace-pre-line`` so the \n in the i18n string

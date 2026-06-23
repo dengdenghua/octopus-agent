@@ -316,7 +316,12 @@ export function ChatInputBox({
     () => parseComposerUrls(researchUrlText),
     [researchUrlText],
   );
-  const showContextCompressor = maxContextTokens > 0;
+  // Only surface the context meter once it's actually filling up — showing
+  // "0%" on an empty thread is just noise. Appears at ≥50% (when compressing
+  // starts to matter), or while a compression is running.
+  const showContextCompressor =
+    maxContextTokens > 0 &&
+    (isCompressingContext || contextTokens / maxContextTokens >= 0.5);
 
   useEffect(() => {
     if (!canUseDeepResearch) setResearchConfigOpen(false);
@@ -1179,9 +1184,10 @@ export function ChatInputBox({
                 <HoverCardTrigger asChild>
                   <button
                     type="button"
-                    title={projectModeHint}
+                    title={projectStatusTitle}
+                    aria-label={projectStatusTitle}
                     className={cn(
-                      "inline-flex min-w-0 items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors",
+                      "inline-flex shrink-0 items-center gap-0.5 rounded-lg border px-1.5 py-1 text-[11px] font-medium transition-colors",
                       codeModeUnlocked
                         ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
                         : "border-amber-500/25 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300",

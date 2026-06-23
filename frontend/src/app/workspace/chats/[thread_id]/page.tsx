@@ -1596,49 +1596,26 @@ function ChatsPageContent({
 
 function NewChatStarterGrid({ onPick }: { onPick: (prompt: string) => void }) {
   return (
-    <div className="mt-3 space-y-2">
-      <div className="flex items-center justify-between gap-3 px-1">
-        <div className="text-[12px] font-medium text-muted-foreground">
-          常用任务
-        </div>
-        <div className="hidden text-[11px] text-muted-foreground/70 sm:block">
-          精选场景
-        </div>
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {NEW_CHAT_STARTERS.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.label}
-              type="button"
-              onClick={() => onPick(item.prompt)}
-              className={cn(
-                "group flex min-h-[76px] items-start gap-3 rounded-lg border border-border/60 bg-background/78 px-3 py-3 text-left shadow-sm",
-                "transition-[border-color,background-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-md",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0",
-              )}
-            >
-              <span
-                className={cn(
-                  "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md transition-transform group-hover:scale-[1.03]",
-                  item.tone,
-                )}
-              >
-                <Icon className="size-3.5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium text-foreground">
-                  {item.label}
-                </span>
-                <span className="mt-1 line-clamp-2 block text-[11.5px] leading-4 text-muted-foreground">
-                  {item.prompt}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
+    <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+      {NEW_CHAT_STARTERS.map((item) => {
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.label}
+            type="button"
+            onClick={() => onPick(item.prompt)}
+            title={item.prompt}
+            className={cn(
+              "group inline-flex items-center gap-2 rounded-xl border border-border/60 bg-background/80 px-3.5 py-2.5 text-[13px] font-medium text-foreground shadow-sm",
+              "transition-all duration-150 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-card hover:shadow-md",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 active:translate-y-0",
+            )}
+          >
+            <Icon className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
+            {item.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
