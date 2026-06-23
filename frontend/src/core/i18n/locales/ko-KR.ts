@@ -1372,6 +1372,7 @@ export const koKR: Translations = {
     switchAgentLabel: "에이전트 전환",
     currentAgent: "현재 에이전트",
     soloChat: "개인 대화",
+    localCliPartners: "로컬 CLI 파트너",
     oneOnOneTask: "일대일 작업",
     soloTasks: "개인 작업",
     groupTasks: "그룹 작업",

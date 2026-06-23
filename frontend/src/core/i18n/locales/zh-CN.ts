@@ -1327,6 +1327,7 @@ export const zhCN: Translations = {
     switchAgentLabel: "切换 Agent",
     currentAgent: "当前 Agent",
     soloChat: "单人对话",
+    localCliPartners: "本地 CLI 伙伴",
     oneOnOneTask: "一对一任务",
     soloTasks: "单人任务",
     groupTasks: "群聊任务",

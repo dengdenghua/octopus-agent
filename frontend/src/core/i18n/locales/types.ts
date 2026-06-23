@@ -1194,6 +1194,7 @@ export interface Translations {
     switchAgentLabel: string;
     currentAgent: string;
     soloChat: string;
+    localCliPartners: string;
     oneOnOneTask: string;
     soloTasks: string;
     groupTasks: string;

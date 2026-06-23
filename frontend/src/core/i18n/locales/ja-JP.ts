@@ -1374,6 +1374,7 @@ export const jaJP: Translations = {
     switchAgentLabel: "エージェントを切り替え",
     currentAgent: "現在のエージェント",
     soloChat: "個人チャット",
+    localCliPartners: "ローカル CLI パートナー",
     oneOnOneTask: "one-on-one タスク",
     soloTasks: "個人タスク",
     groupTasks: "グループタスク",

@@ -1376,6 +1376,7 @@ export const enUS: Translations = {
     switchAgentLabel: "Switch agent",
     currentAgent: "Current agent",
     soloChat: "Solo chat",
+    localCliPartners: "Local CLI partners",
     oneOnOneTask: "One-on-one task",
     soloTasks: "Solo tasks",
     groupTasks: "Group tasks",

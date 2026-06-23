@@ -23,9 +23,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAgents } from "@/core/agents";
+import {
+  useAgents,
+  useLocalCliAgents,
+  dedupeAgentsByName,
+} from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import { getAuthProviders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -181,6 +186,7 @@ export function StackedMembers({
 
 export function AgentFooter() {
   const { agents } = useAgents();
+  const { cliAgents } = useLocalCliAgents();
   const { user, isGuest, logout } = useAuth();
   const _navigate = useNavigate();
   const { pathname, search } = useLocation();
@@ -194,11 +200,9 @@ export function AgentFooter() {
   const [authProviders, setAuthProviders] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
-    import("@/core/auth/api").then(({ getAuthProviders }) =>
-      getAuthProviders().then((list) => {
-        if (!cancelled) setAuthProviders(list);
-      }),
-    );
+    getAuthProviders().then((list) => {
+      if (!cancelled) setAuthProviders(list);
+    });
     return () => {
       cancelled = true;
     };
@@ -216,9 +220,26 @@ export function AgentFooter() {
     if (tab) params.set("tab", tab);
     return `/workspace/agents?${params.toString()}`;
   };
-  const footerAgents = useMemo(() => {
-    return agents;
-  }, [agents]);
+  // Merge on-disk agents with detected-but-unregistered local CLIs (Claude
+  // Code, Codex, …). Registered first so a CLI that already has a profile keeps
+  // its custom alias/avatar; the synthetic entry only fills in CLIs that were
+  // detected but never written to disk. See dedupeAgentsByName for why.
+  const footerAgents = useMemo(
+    () => dedupeAgentsByName([...agents, ...cliAgents]),
+    [agents, cliAgents],
+  );
+  // A local-partner CLI is either a synthetic `local_*` entry or an on-disk
+  // agent carrying the `local_partner` capability flag.
+  const isLocalCliAgent = (a: Agent) =>
+    a.name.startsWith("local_") || Boolean(a.capabilities?.local_partner);
+  const personaAgents = useMemo(
+    () => footerAgents.filter((a) => !isLocalCliAgent(a)),
+    [footerAgents],
+  );
+  const cliPartnerAgents = useMemo(
+    () => footerAgents.filter(isLocalCliAgent),
+    [footerAgents],
+  );
   const effectiveName = lock?.agent ?? activeName ?? "general";
 
   const active: Agent | undefined =
@@ -243,6 +264,38 @@ export function AgentFooter() {
     setActiveName(name);
     emitAgentChanged(name);
     _navigate(`/workspace/agents/${encodeURIComponent(name)}/chats/new`);
+  };
+
+  const renderAgentItem = (a: Agent) => {
+    const isActive = a.name === active?.name;
+    return (
+      <DropdownMenuItem
+        key={a.name}
+        onSelect={() => selectAgent(a.name)}
+        className={cn(
+          "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs",
+          "opacity-85 transition-colors focus:bg-muted/60 focus:text-foreground focus:opacity-100",
+          isActive && "bg-muted/35 opacity-100",
+        )}
+      >
+        <AgentAvatar agent={a} className="size-8 rounded-lg text-[11px]" />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate font-medium leading-none">
+            {a.display_name || a.name}
+          </span>
+          <span className="truncate text-[10px] font-normal leading-tight text-muted-foreground">
+            {isActive
+              ? t.sidebar.currentAgent
+              : a.description || t.sidebar.soloChat}
+          </span>
+        </span>
+        {isActive && (
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <CheckIcon className="size-3" />
+          </span>
+        )}
+      </DropdownMenuItem>
+    );
   };
 
   const displayAgent = lockedAgent ?? active;
@@ -313,38 +366,18 @@ export function AgentFooter() {
               {t.sidebar.noAgents}
             </div>
           ) : (
-            footerAgents.map((a) => {
-              const isActive = a.name === active?.name;
-              return (
-                <DropdownMenuItem
-                  key={a.name}
-                  onSelect={() => selectAgent(a.name)}
-                  className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs",
-                    "opacity-85 transition-colors focus:bg-muted/60 focus:text-foreground focus:opacity-100",
-                    isActive && "bg-muted/35 opacity-100",
-                  )}
-                >
-                  <AgentAvatar
-                    agent={a}
-                    className="size-8 rounded-lg text-[11px]"
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate font-medium leading-none">
-                      {a.display_name || a.name}
-                    </span>
-                    <span className="truncate text-[10px] font-normal leading-tight text-muted-foreground">
-                      {isActive ? t.sidebar.currentAgent : a.description || t.sidebar.soloChat}
-                    </span>
-                  </span>
-                  {isActive && (
-                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                      <CheckIcon className="size-3" />
-                    </span>
-                  )}
-                </DropdownMenuItem>
-              );
-            })
+            <>
+              {personaAgents.map(renderAgentItem)}
+              {cliPartnerAgents.length > 0 && (
+                <>
+                  {personaAgents.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {t.sidebar.localCliPartners}
+                  </DropdownMenuLabel>
+                  {cliPartnerAgents.map(renderAgentItem)}
+                </>
+              )}
+            </>
           )}
           <DropdownMenuSeparator />
           {displayAgent ? (
