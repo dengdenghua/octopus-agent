@@ -17,7 +17,11 @@ from runtime.memory.hemolymph.repo_context import (
 )
 
 
-def _make_wiki(root: Path, pages: list[tuple[str, str, str]]) -> Path:
+def _make_wiki(
+    root: Path,
+    pages: list[tuple[str, str, str]],
+    edges: list[dict[str, str]] | None = None,
+) -> Path:
     auto = root / "docs" / "auto"
     auto.mkdir(parents=True, exist_ok=True)
     tree: list[dict[str, Any]] = []
@@ -25,10 +29,10 @@ def _make_wiki(root: Path, pages: list[tuple[str, str, str]]) -> Path:
         (auto / rel).parent.mkdir(parents=True, exist_ok=True)
         (auto / rel).write_text(body, encoding="utf-8")
         tree.append({"type": "doc", "title": title, "path": rel})
-    (auto / "index.json").write_text(
-        json.dumps({"version": 2, "tree": tree}),
-        encoding="utf-8",
-    )
+    manifest: dict[str, Any] = {"version": 2, "tree": tree}
+    if edges is not None:
+        manifest["edges"] = edges
+    (auto / "index.json").write_text(json.dumps(manifest), encoding="utf-8")
     return auto
 
 
@@ -164,6 +168,44 @@ def test_bm25_length_normalization_beats_long_page(tmp_path: Path) -> None:
     assert out is not None
     assert "Cerebrum planning" in out
     assert "Skills catalog" not in out
+
+
+def test_graph_boost_reranks_dependency_neighbor(tmp_path: Path) -> None:
+    # a.md is the strong hit. z_tool.md and m_other.md TIE on base BM25 (same
+    # body), so without the graph they sort by path → m_other before z_tool.
+    # An import edge a.md↔z_tool.md lifts z_tool above m_other: a page's
+    # dependency context outranks an equally-lexical but unconnected page.
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("A", "a.md", "cerebrum planner cerebrum planner"),
+            ("Tool", "z_tool.md", "planner"),
+            ("Other", "m_other.md", "planner"),
+        ],
+        edges=[{"from": "a.md", "to": "z_tool.md", "type": "imports"}],
+    )
+    sink: list[dict[str, str]] = []
+    retrieve_repo_context("cerebrum planner", wiki_dir=auto, max_pages=2, _sink=sink)
+    assert [s["path"] for s in sink] == ["a.md", "z_tool.md"]
+
+
+def test_graph_boost_disabled_by_env(tmp_path: Path, monkeypatch) -> None:
+    # Same wiki; with the graph disabled the tie falls back to path order, so
+    # the unconnected m_other (m < z) takes second — proving the boost, not
+    # something else, produced the re-rank above.
+    monkeypatch.setenv("OCTOPUS_CODEBASE_GRAPH", "0")
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("A", "a.md", "cerebrum planner cerebrum planner"),
+            ("Tool", "z_tool.md", "planner"),
+            ("Other", "m_other.md", "planner"),
+        ],
+        edges=[{"from": "a.md", "to": "z_tool.md", "type": "imports"}],
+    )
+    sink: list[dict[str, str]] = []
+    retrieve_repo_context("cerebrum planner", wiki_dir=auto, max_pages=2, _sink=sink)
+    assert [s["path"] for s in sink] == ["a.md", "m_other.md"]
 
 
 def test_real_wiki_smoke() -> None:

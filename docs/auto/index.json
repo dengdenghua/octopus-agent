@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-06-23T04:29:33+00:00",
-  "files_analyzed": 32,
+  "generated_at": "2026-06-24T17:55:08+00:00",
+  "files_analyzed": 42,
   "tree": [
     {
       "type": "doc",
@@ -158,6 +158,51 @@
             },
             {
               "type": "doc",
+              "title": "E Eve / Siren",
+              "path": "20-backend/26-agents/echo_eve.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Kane / Paladin",
+              "path": "20-backend/26-agents/echo_kane.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Leon / Chronos",
+              "path": "20-backend/26-agents/echo_leon.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Luna / Dream Walker",
+              "path": "20-backend/26-agents/echo_luna.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Mira Voss / Glass Vein",
+              "path": "20-backend/26-agents/echo_mira_voss.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Noah / Probability",
+              "path": "20-backend/26-agents/echo_noah.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Raven / Night Crow",
+              "path": "20-backend/26-agents/echo_raven.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Shion / Virus Queen",
+              "path": "20-backend/26-agents/echo_shion.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Zero / White Ghost",
+              "path": "20-backend/26-agents/echo_zero.md"
+            },
+            {
+              "type": "doc",
               "title": "📊 Shion",
               "path": "20-backend/26-agents/ecommerce_mind.md"
             },
@@ -165,6 +210,11 @@
               "type": "doc",
               "title": "🐙 Eve",
               "path": "20-backend/26-agents/general.md"
+            },
+            {
+              "type": "doc",
+              "title": "CC Claude Code 伙伴",
+              "path": "20-backend/26-agents/local_claude_code.md"
             },
             {
               "type": "doc",
@@ -205,6 +255,258 @@
           "path": "50-governance/adr-anchors.md"
         }
       ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "20-backend/21-runtime/all-skills.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/arms.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/21-runtime/all-skills.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/21-runtime/tool-engine.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/22-safety/hooks.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/22-safety/recovery.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/22-safety/validation.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/23-memory/hemolymph.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/cerebrum.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/21-runtime/tool-engine.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/22-safety/auth.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/22-safety/hooks.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/22-safety/validation.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/23-memory/hemolymph.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/suckers.md",
+      "to": "20-backend/24-sensing/model-router.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/tool-engine.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/tool-engine.md",
+      "to": "20-backend/22-safety/auth.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/tool-engine.md",
+      "to": "20-backend/22-safety/hooks.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/tool-engine.md",
+      "to": "20-backend/22-safety/validation.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/21-runtime/tool-engine.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/hooks.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/recovery.md",
+      "to": "20-backend/21-runtime/cerebrum.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/recovery.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/recovery.md",
+      "to": "20-backend/21-runtime/tool-engine.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/recovery.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/validation.md",
+      "to": "20-backend/21-runtime/cerebrum.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/22-safety/validation.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/23-memory/hemolymph.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/23-memory/hemolymph.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/21-runtime/all-skills.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/21-runtime/arms.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/21-runtime/cerebrum.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/21-runtime/tool-engine.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/22-safety/auth.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/22-safety/hooks.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/22-safety/recovery.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/22-safety/validation.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/23-memory/hemolymph.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/24-sensing/model-router.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/25-adapters/channels.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/gateway.md",
+      "to": "20-backend/25-adapters/mcp.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/24-sensing/model-router.md",
+      "to": "20-backend/22-safety/hooks.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/25-adapters/channels.md",
+      "to": "20-backend/22-safety/validation.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/25-adapters/channels.md",
+      "to": "20-backend/23-memory/journal.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/25-adapters/integrations.md",
+      "to": "20-backend/22-safety/auth.md",
+      "type": "imports"
+    },
+    {
+      "from": "20-backend/25-adapters/mcp.md",
+      "to": "20-backend/21-runtime/suckers.md",
+      "type": "imports"
     }
   ]
 }

@@ -137,12 +137,29 @@ Phased, with the cheapest validation first:
   signals, not picking one.** The CJK-bigram change shipped to the live
   retriever (improves Chinese wiki grounding independent of the rest of OKF);
   pinned by `tests/test_repo_context.py`.
-- **Phase 1 — format.** `gen_wiki` emits OKF (frontmatter + `index.md` +
-  links + `timestamp`); keep `index.json` derived. CI freshness gate
-  extends to per-page.
-- **Phase 2 — engine.** Zero-LLM edge extraction across the unified
-  bundle; retrieval gains an edge-walk lane fused by RRF; source-tier /
-  recency boost from frontmatter.
+- **Phase 2 (engine) — DONE first (2026-06-24): zero-LLM edge graph +
+  graph-augmented retrieval.** Reordered ahead of Phase 1 because it carries
+  the value gbrain measured and needs no page-format change (so no frontend /
+  31-page-regeneration risk). `gen_wiki` now derives page→page dependency edges
+  from the AST import graph (`_page_import_edges`, ~50 edges e.g.
+  cerebrum→tool-engine/validation/journal) and emits them into `index.json`
+  under an additive `edges` key (the freshness gate already exempts
+  `index.json` from byte-compare). `repo_context` loads them into an
+  undirected adjacency and applies a bounded neighbour re-rank
+  (`_GRAPH_BOOST`): a page connected to a strong hit outranks an
+  equally-lexical but unconnected one. Conservative (re-ranks only matched
+  pages, never promotes zero-overlap), self-gated (no `edges` → no-op),
+  `OCTOPUS_CODEBASE_GRAPH=0` disables; pinned by `tests/test_repo_context.py`.
+  Still deferred from Phase 2: RRF fusion + source-tier weighting (want
+  Phase-1 frontmatter for the tier signal first).
+- **Phase 1 — format (deferred).** `gen_wiki` emits per-page OKF frontmatter
+  (`type`/`title`/`description`/`tags`) + page links + deterministic
+  provenance; keep `index.json` derived. Deferred behind Phase 2 because it
+  touches the page bodies (31-file regeneration) and the frontend renderer
+  (`wiki_router` returns raw `read_text()` — naive markdown would leak the
+  `---` YAML into the UI, so the renderer must strip frontmatter first), and a
+  per-page `timestamp` must be source-derived (not wall-clock) or it churns
+  every regen and defeats the freshness gate.
 - **Phase 3 — optional.** Vector lane (engine-only) for synonym bridging;
   a scheduled "dream cycle" wiring the existing `consolidate-memory` skill
   + a wiki-freshness pass onto the existing schedulers.

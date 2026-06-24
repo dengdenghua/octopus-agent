@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextlib
 import json
 import math
+import os
 import re
 import threading
 from collections import Counter
@@ -92,6 +93,11 @@ _SUBWORD_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+|[一-
 # BM25 params (standard defaults).
 _BM25_K1 = 1.5
 _BM25_B = 0.75
+
+# Graph-augmented retrieval (ADR-009): fraction of a neighbor's BM25 score that
+# bleeds onto a page via an AST-derived import edge. Small so it re-ranks among
+# already-matched pages without overpowering lexical relevance.
+_GRAPH_BOOST = 0.25
 
 # Cache the parsed + indexed wiki keyed by (dir, index.json mtime) so a hot
 # planning loop doesn't re-read/re-index ~30 files every turn, but a
@@ -174,7 +180,16 @@ def _build_index(wiki_dir: Path) -> dict[str, Any]:
 
     n = len(pages)
     avgdl = (total_len / n) if n else 0.0
-    return {"pages": pages, "df": df, "n": n, "avgdl": avgdl}
+    # Page→page edges (ADR-009): undirected adjacency for graph-augmented
+    # retrieval. A page imports / is imported by its neighbors, so a strong hit
+    # can lift the dependency context around it. Absent ``edges`` → empty → no-op.
+    adj: dict[str, set[str]] = {}
+    for edge in index.get("edges") or []:
+        a, b = edge.get("from"), edge.get("to")
+        if a and b:
+            adj.setdefault(a, set()).add(b)
+            adj.setdefault(b, set()).add(a)
+    return {"pages": pages, "df": df, "n": n, "avgdl": avgdl, "adj": adj}
 
 
 def _load_index(wiki_dir: Path) -> dict[str, Any]:
@@ -252,6 +267,29 @@ def retrieve_repo_context(
     scored = [(s, p) for s, p in scored if s > 0]
     if not scored:
         return None
+    # Graph-augmented re-rank (ADR-009 · gbrain-style): a page connected via the
+    # AST-derived import edges in index.json to a strong hit gets a bounded
+    # bonus, so a dependency-related page outranks an equally-lexical but
+    # unconnected one. Conservative — only re-ranks pages already matched, never
+    # promotes a zero-overlap page. Self-gated (no edges → no-op);
+    # OCTOPUS_CODEBASE_GRAPH=0 disables.
+    adj = idx.get("adj") or {}
+    _graph_on = os.environ.get("OCTOPUS_CODEBASE_GRAPH", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+    if adj and _graph_on:
+        base = {p["path"]: s for s, p in scored}
+        scored = [
+            (
+                s
+                + _GRAPH_BOOST
+                * max((base[n] for n in adj.get(p["path"], ()) if n in base), default=0.0),
+                p,
+            )
+            for s, p in scored
+        ]
     scored.sort(key=lambda sp: (-sp[0], sp[1]["path"]))
 
     # ~4 chars/token; split the body budget across the chosen pages.

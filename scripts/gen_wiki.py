@@ -1,4 +1,5 @@
 """Implementation note."""
+
 from __future__ import annotations
 
 import argparse
@@ -65,7 +66,9 @@ def _public_symbols(path: Path) -> list[str]:
     # Fallback: top-level non-_ classes / funcs
     names: list[str] = []
     for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith("_"):
+        if isinstance(
+            node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ) and not node.name.startswith("_"):
             names.append(node.name)
     return names
 
@@ -143,7 +146,12 @@ def _load_catalog() -> dict[str, dict[str, Any]]:
     )
     tree = ast.parse(src)
     for node in tree.body:
-        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == "_CATALOG" and node.value is not None:
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "_CATALOG"
+            and node.value is not None
+        ):
             return ast.literal_eval(node.value)
         if isinstance(node, ast.Assign):
             for tgt in node.targets:
@@ -162,7 +170,12 @@ def _load_arm_skill_map() -> dict[str, list[str]]:
     for node in tree.body:
         if isinstance(node, ast.Assign) and len(node.targets) == 1:
             tgt = node.targets[0]
-            if isinstance(tgt, ast.Name) and tgt.id.startswith("_") and tgt.id.isupper() and isinstance(node.value, ast.List):
+            if (
+                isinstance(tgt, ast.Name)
+                and tgt.id.startswith("_")
+                and tgt.id.isupper()
+                and isinstance(node.value, ast.List)
+            ):
                 skills: list[str] = []
                 for elt in node.value.elts:
                     if (
@@ -176,9 +189,13 @@ def _load_arm_skill_map() -> dict[str, list[str]]:
                     group_lists[tgt.id] = skills
     arm_to_skills: dict[str, list[str]] = {}
     for node in tree.body:
-        if not (isinstance(node, ast.FunctionDef) and node.name.startswith("make_") and node.name.endswith("_arm")):
+        if not (
+            isinstance(node, ast.FunctionDef)
+            and node.name.startswith("make_")
+            and node.name.endswith("_arm")
+        ):
             continue
-        arm_id = node.name[len("make_"):-len("_arm")]
+        arm_id = node.name[len("make_") : -len("_arm")]
         skills: list[str] = []
         for sub in ast.walk(node):
             if isinstance(sub, ast.Call):
@@ -257,7 +274,9 @@ def _build_import_graph() -> dict[str, set[str]]:
             continue
         # Self-module dotted name · skip self-references in results
         self_mod = (
-            "runtime" + "." + py.relative_to(runtime_dir).with_suffix("").as_posix().replace("/", ".")
+            "runtime"
+            + "."
+            + py.relative_to(runtime_dir).with_suffix("").as_posix().replace("/", ".")
         )
         for node in ast.walk(tree):
             target: str | None = None
@@ -289,10 +308,41 @@ def _importers_of(pkg: Path, graph: dict[str, set[str]]) -> list[str]:
     importers = graph.get(rel, set())
     pkg_prefix = pkg.relative_to(ROOT).as_posix() + "/"
     result = [
-        f for f in importers
+        f
+        for f in importers
         if not f.startswith(pkg_prefix) and f != pkg.relative_to(ROOT).as_posix()
     ]
     return sorted(result)
+
+
+def _page_import_edges(
+    import_graph: dict[str, set[str]],
+    page_pkgs: list[tuple[str, str]],
+) -> list[dict[str, str]]:
+    """Page→page dependency edges derived from the module import graph: page Q
+    →``imports``→ page P when a module under Q's package imports P's package.
+
+    Pure AST, zero LLM. Emitted into ``index.json`` so a retriever can surface a
+    hit page's dependencies as related context, and a viewer can draw the graph
+    (ADR-009 · turns the wiki tree into a graph without an LLM call)."""
+    pkgs = [(pkg.rstrip("/"), page) for page, pkg in page_pkgs]
+
+    def page_of(file_rel: str) -> str | None:
+        best: tuple[str, str] | None = None
+        for pkg, page in pkgs:
+            matches = file_rel == pkg or file_rel.startswith(pkg + "/")
+            if matches and (best is None or len(pkg) > len(best[0])):
+                best = (pkg, page)
+        return best[1] if best else None
+
+    edges: set[tuple[str, str]] = set()
+    for page, pkg in page_pkgs:
+        key = pkg.replace("/", ".")
+        for f in import_graph.get(key, set()):
+            q = page_of(f)
+            if q and q != page:
+                edges.add((q, page))  # q's package imports page's package
+    return [{"from": a, "to": b, "type": "imports"} for a, b in sorted(edges)]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -317,8 +367,7 @@ def _describe_dir(
         "",
     ]
     files = sorted(
-        p for p in pkg.rglob("*.py")
-        if "__pycache__" not in p.parts and p.name != "__init__.py"
+        p for p in pkg.rglob("*.py") if "__pycache__" not in p.parts and p.name != "__init__.py"
     )
     init = pkg / "__init__.py"
     if init.exists():
@@ -419,12 +468,8 @@ def page_overview() -> str:
     # Stats
     pieces.append("## 规模")
     pieces.append("")
-    py_files = sum(
-        1 for _ in (ROOT / "runtime").rglob("*.py") if "__pycache__" not in _.parts
-    )
-    tsx_files = sum(
-        1 for _ in (ROOT / "frontend/src").rglob("*.tsx")
-    )
+    py_files = sum(1 for _ in (ROOT / "runtime").rglob("*.py") if "__pycache__" not in _.parts)
+    tsx_files = sum(1 for _ in (ROOT / "frontend/src").rglob("*.tsx"))
     test_files = sum(1 for _ in (ROOT / "tests").rglob("test_*.py"))
     pieces.append(f"- Python 模块：**{py_files}** 个（runtime/）")
     pieces.append(f"- TSX 组件：**{tsx_files}** 个（frontend/src）")
@@ -434,7 +479,12 @@ def page_overview() -> str:
 
 
 def page_tech_stack() -> str:
-    lines: list[str] = ["# 技术栈 · Tech Stack", "", "> 从 `pyproject.toml` + `frontend/package.json` 抽取的关键依赖。", ""]
+    lines: list[str] = [
+        "# 技术栈 · Tech Stack",
+        "",
+        "> 从 `pyproject.toml` + `frontend/package.json` 抽取的关键依赖。",
+        "",
+    ]
 
     # Python deps
     pyproject = ROOT / "pyproject.toml"
@@ -596,7 +646,11 @@ def page_agent(agent_id: str, meta: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
-def page_skill_map(catalog: dict[str, dict[str, Any]], arm_to_skills: dict[str, list[str]], agents: dict[str, dict[str, Any]]) -> str:
+def page_skill_map(
+    catalog: dict[str, dict[str, Any]],
+    arm_to_skills: dict[str, list[str]],
+    agents: dict[str, dict[str, Any]],
+) -> str:
     """Flat catalog table (the old skill-map.md content · preserved)."""
     skill_to_arms: dict[str, list[str]] = {}
     for arm, skills in arm_to_skills.items():
@@ -631,9 +685,7 @@ def page_skill_map(catalog: dict[str, dict[str, Any]], arm_to_skills: dict[str, 
             ag_set.update(agents.keys())
         arms_cell = ", ".join(sorted(arms)) or "—"
         ag_cell = ", ".join(sorted(ag_set)) or "—"
-        lines.append(
-            f"| `{skill_id}` | {group} | {atomic} | {arms_cell} | {ag_cell} |"
-        )
+        lines.append(f"| `{skill_id}` | {group} | {atomic} | {arms_cell} | {ag_cell} |")
     lines.append("")
     return "\n".join(lines) + "\n"
 
@@ -661,7 +713,12 @@ def page_hook_surface() -> str:
             if m and "from runtime.safety.hooks" not in line and "import " not in line:
                 sites.setdefault(m.group("event"), []).append((rel, i))
 
-    lines = ["# Hook surface", "", "> 每个 lifecycle-hook 的 dispatch 调用点 · 社区 handler 通过 `@register_hook(EventType)` 订阅。", ""]
+    lines = [
+        "# Hook surface",
+        "",
+        "> 每个 lifecycle-hook 的 dispatch 调用点 · 社区 handler 通过 `@register_hook(EventType)` 订阅。",
+        "",
+    ]
     for event in sorted(sites):
         entries = sorted(set(sites[event]))
         lines.append(f"## `{event}` · {len(entries)} 处")
@@ -726,9 +783,7 @@ def page_adr_anchors() -> str:
     lines.append("")
     for path in sorted(file_to_adrs):
         adrs = sorted(set(file_to_adrs[path]))
-        adr_cell = ", ".join(
-            f"[{a.removesuffix('.md')}](../../adr/{a})" for a in adrs
-        )
+        adr_cell = ", ".join(f"[{a.removesuffix('.md')}](../../adr/{a})" for a in adrs)
         lines.append(f"- `{path}` ← {adr_cell}")
     lines.append("")
     return "\n".join(lines) + "\n"
@@ -755,46 +810,117 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
     out["20-backend/index.md"] = page_backend_index(import_graph)
 
     runtime_subs: list[tuple[str, str, str, str]] = [
-        ("21-runtime/tool-engine.md", "Tool Engine · 执行器", "runtime/execution/tool_engine",
-         "把每步 tool call 串起整套治理 · Auth / Budget / Journal / Hooks · 同时做 OTel span。"),
-        ("21-runtime/cerebrum.md", "Cerebrum · 规划器", "runtime/core/cerebrum",
-         "LLM Planner + Static Planner · 把自然语言意图拆成 TaskGraph。"),
-        ("21-runtime/suckers.md", "Suckers · 技能注册", "runtime/execution/suckers",
-         "Skill 注册表 · 原子层 · 沙箱 · 测试 tier。"),
-        ("21-runtime/arms.md", "Arms · 执行工具组", "runtime/execution/arms",
-         "Arm preset 工厂 · 将原始 Skill 按职责打包成 arm（fs_writer / git / shell / browser_read / ...）。"),
-        ("21-runtime/all-skills.md", "All Skills 目录", "runtime/execution/all_skills",
-         "全仓 Skill 目录 · 每个 skill 分 group / atomic 标记 · 决定哪个 arm 能包含它。"),
-        ("22-safety/validation.md", "Safety · Validation", "runtime/safety/validation",
-         "宪法层 · PRIV/LAWF/DGNT/SELF/EXFIL 五类 · rule gate + LLM judge + profile 降级。"),
-        ("22-safety/auth.md", "Safety · Auth", "runtime/safety/auth",
-         "TrustEngine · allow/quarantine/reject · IMM-I1~I6 不变量守护。"),
-        ("22-safety/hooks.md", "Safety · Hooks", "runtime/safety/hooks",
-         "Tool lifecycle hooks · 6 个事件 · sync + async handler · ESLint rules-of-hooks=error 静态守护。"),
-        ("22-safety/recovery.md", "Safety · Recovery", "runtime/safety/recovery",
-         "MemoryConsolidator · SkillForge · KG updater · 从 trajectory 反哺记忆 / 技能 / 图谱。"),
-        ("23-memory/journal.md", "Memory · Journal", "runtime/memory/journal",
-         "全 append-only 日志 · events: trajectory / immune / budget / step · 所有 agent 行为的 ground truth。"),
-        ("23-memory/hemolymph.md", "Memory · Hemolymph (Context)", "runtime/memory/hemolymph",
-         "Context Composer · 给 planner 组装上下文（最近 trajectory + learned rules + memories）。"),
-        ("24-sensing/model-router.md", "Sensing · Model Router", "runtime/sensing/model_router",
-         "ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。"),
-        ("24-sensing/gateway.md", "Sensing · Gateway (HTTP API)", "runtime/sensing/gateway",
-         "全部 FastAPI router · openai_gateway / meta / mcp / config / channels / thread_compat / …"),
-        ("25-adapters/mcp.md", "Adapters · MCP", "runtime/adapters/mcp_client",
-         "MCP 客户端 + Trust store · ADR-007 治理 · 未审批 server 的工具拒注册。"),
-        ("25-adapters/channels.md", "Adapters · Channels", "runtime/adapters/channels",
-         "外部 channel adapter (Slack / Discord / 微信 / …) · 必须走 validation safe_send 才允许出站。"),
-        ("25-adapters/integrations.md", "Adapters · Integrations", "runtime/adapters/integrations",
-         "Molili 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。"),
+        (
+            "21-runtime/tool-engine.md",
+            "Tool Engine · 执行器",
+            "runtime/execution/tool_engine",
+            "把每步 tool call 串起整套治理 · Auth / Budget / Journal / Hooks · 同时做 OTel span。",
+        ),
+        (
+            "21-runtime/cerebrum.md",
+            "Cerebrum · 规划器",
+            "runtime/core/cerebrum",
+            "LLM Planner + Static Planner · 把自然语言意图拆成 TaskGraph。",
+        ),
+        (
+            "21-runtime/suckers.md",
+            "Suckers · 技能注册",
+            "runtime/execution/suckers",
+            "Skill 注册表 · 原子层 · 沙箱 · 测试 tier。",
+        ),
+        (
+            "21-runtime/arms.md",
+            "Arms · 执行工具组",
+            "runtime/execution/arms",
+            "Arm preset 工厂 · 将原始 Skill 按职责打包成 arm（fs_writer / git / shell / browser_read / ...）。",
+        ),
+        (
+            "21-runtime/all-skills.md",
+            "All Skills 目录",
+            "runtime/execution/all_skills",
+            "全仓 Skill 目录 · 每个 skill 分 group / atomic 标记 · 决定哪个 arm 能包含它。",
+        ),
+        (
+            "22-safety/validation.md",
+            "Safety · Validation",
+            "runtime/safety/validation",
+            "宪法层 · PRIV/LAWF/DGNT/SELF/EXFIL 五类 · rule gate + LLM judge + profile 降级。",
+        ),
+        (
+            "22-safety/auth.md",
+            "Safety · Auth",
+            "runtime/safety/auth",
+            "TrustEngine · allow/quarantine/reject · IMM-I1~I6 不变量守护。",
+        ),
+        (
+            "22-safety/hooks.md",
+            "Safety · Hooks",
+            "runtime/safety/hooks",
+            "Tool lifecycle hooks · 6 个事件 · sync + async handler · ESLint rules-of-hooks=error 静态守护。",
+        ),
+        (
+            "22-safety/recovery.md",
+            "Safety · Recovery",
+            "runtime/safety/recovery",
+            "MemoryConsolidator · SkillForge · KG updater · 从 trajectory 反哺记忆 / 技能 / 图谱。",
+        ),
+        (
+            "23-memory/journal.md",
+            "Memory · Journal",
+            "runtime/memory/journal",
+            "全 append-only 日志 · events: trajectory / immune / budget / step · 所有 agent 行为的 ground truth。",
+        ),
+        (
+            "23-memory/hemolymph.md",
+            "Memory · Hemolymph (Context)",
+            "runtime/memory/hemolymph",
+            "Context Composer · 给 planner 组装上下文（最近 trajectory + learned rules + memories）。",
+        ),
+        (
+            "24-sensing/model-router.md",
+            "Sensing · Model Router",
+            "runtime/sensing/model_router",
+            "ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。",
+        ),
+        (
+            "24-sensing/gateway.md",
+            "Sensing · Gateway (HTTP API)",
+            "runtime/sensing/gateway",
+            "全部 FastAPI router · openai_gateway / meta / mcp / config / channels / thread_compat / …",
+        ),
+        (
+            "25-adapters/mcp.md",
+            "Adapters · MCP",
+            "runtime/adapters/mcp_client",
+            "MCP 客户端 + Trust store · ADR-007 治理 · 未审批 server 的工具拒注册。",
+        ),
+        (
+            "25-adapters/channels.md",
+            "Adapters · Channels",
+            "runtime/adapters/channels",
+            "外部 channel adapter (Slack / Discord / 微信 / …) · 必须走 validation safe_send 才允许出站。",
+        ),
+        (
+            "25-adapters/integrations.md",
+            "Adapters · Integrations",
+            "runtime/adapters/integrations",
+            "Molili 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。",
+        ),
     ]
     for rel, title, pkg_rel, prelude in runtime_subs:
         pkg = ROOT / pkg_rel
         if pkg.exists():
             out[f"20-backend/{rel}"] = _describe_dir(
-                pkg, dir_title=title, prelude=prelude,
+                pkg,
+                dir_title=title,
+                prelude=prelude,
                 import_graph=import_graph,
             )
+
+    # Page→page dependency edges (zero-LLM, AST-derived) for index.json · uses
+    # the per-page source package declared in runtime_subs above.
+    page_pkgs = [(f"20-backend/{rel}", pkg_rel) for rel, _title, pkg_rel, _prelude in runtime_subs]
+    page_edges = _page_import_edges(import_graph, page_pkgs)
 
     # Agents
     for agent_id, meta in sorted(agents.items()):
@@ -806,48 +932,142 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
     out["50-governance/adr-anchors.md"] = page_adr_anchors()
 
     # ── Build TOC tree ─────────────────────────────────────
-    tree = DocNode(type="dir", title="root", children=[
-        DocNode(type="doc", title="项目概述", path="00-overview.md"),
-        DocNode(type="doc", title="技术栈", path="10-tech-stack.md"),
-        DocNode(type="dir", title="后端架构", children=[
-            DocNode(type="doc", title="概览", path="20-backend/index.md"),
-            DocNode(type="dir", title="Runtime 核心", children=[
-                DocNode(type="doc", title="Tool Engine · 执行器", path="20-backend/21-runtime/tool-engine.md"),
-                DocNode(type="doc", title="Cerebrum · 规划", path="20-backend/21-runtime/cerebrum.md"),
-                DocNode(type="doc", title="Suckers · 技能", path="20-backend/21-runtime/suckers.md"),
-                DocNode(type="doc", title="Arms · 工具组", path="20-backend/21-runtime/arms.md"),
-                DocNode(type="doc", title="All Skills 目录", path="20-backend/21-runtime/all-skills.md"),
-            ]),
-            DocNode(type="dir", title="Safety", children=[
-                DocNode(type="doc", title="Validation", path="20-backend/22-safety/validation.md"),
-                DocNode(type="doc", title="Auth", path="20-backend/22-safety/auth.md"),
-                DocNode(type="doc", title="Hooks", path="20-backend/22-safety/hooks.md"),
-                DocNode(type="doc", title="Recovery", path="20-backend/22-safety/recovery.md"),
-            ]),
-            DocNode(type="dir", title="Memory", children=[
-                DocNode(type="doc", title="Journal", path="20-backend/23-memory/journal.md"),
-                DocNode(type="doc", title="Hemolymph (Context)", path="20-backend/23-memory/hemolymph.md"),
-            ]),
-            DocNode(type="dir", title="Sensing", children=[
-                DocNode(type="doc", title="Model Router", path="20-backend/24-sensing/model-router.md"),
-                DocNode(type="doc", title="Gateway · HTTP API", path="20-backend/24-sensing/gateway.md"),
-            ]),
-            DocNode(type="dir", title="Adapters", children=[
-                DocNode(type="doc", title="MCP", path="20-backend/25-adapters/mcp.md"),
-                DocNode(type="doc", title="Channels", path="20-backend/25-adapters/channels.md"),
-                DocNode(type="doc", title="Integrations", path="20-backend/25-adapters/integrations.md"),
-            ]),
-            DocNode(type="dir", title="Agents", children=[
-                DocNode(type="doc", title=f"{m.get('icon','')} {m['name']}", path=f"20-backend/26-agents/{aid}.md")
-                for aid, m in sorted(agents.items())
-            ]),
-        ]),
-        DocNode(type="dir", title="图谱 · Graphs", children=[
-            DocNode(type="doc", title="Skill × Arm × Agent", path="30-skills-graph/skill-map.md"),
-            DocNode(type="doc", title="Hook Surface", path="40-hooks/hook-surface.md"),
-            DocNode(type="doc", title="ADR 锚点", path="50-governance/adr-anchors.md"),
-        ]),
-    ])
+    tree = DocNode(
+        type="dir",
+        title="root",
+        children=[
+            DocNode(type="doc", title="项目概述", path="00-overview.md"),
+            DocNode(type="doc", title="技术栈", path="10-tech-stack.md"),
+            DocNode(
+                type="dir",
+                title="后端架构",
+                children=[
+                    DocNode(type="doc", title="概览", path="20-backend/index.md"),
+                    DocNode(
+                        type="dir",
+                        title="Runtime 核心",
+                        children=[
+                            DocNode(
+                                type="doc",
+                                title="Tool Engine · 执行器",
+                                path="20-backend/21-runtime/tool-engine.md",
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="Cerebrum · 规划",
+                                path="20-backend/21-runtime/cerebrum.md",
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="Suckers · 技能",
+                                path="20-backend/21-runtime/suckers.md",
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="Arms · 工具组",
+                                path="20-backend/21-runtime/arms.md",
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="All Skills 目录",
+                                path="20-backend/21-runtime/all-skills.md",
+                            ),
+                        ],
+                    ),
+                    DocNode(
+                        type="dir",
+                        title="Safety",
+                        children=[
+                            DocNode(
+                                type="doc",
+                                title="Validation",
+                                path="20-backend/22-safety/validation.md",
+                            ),
+                            DocNode(type="doc", title="Auth", path="20-backend/22-safety/auth.md"),
+                            DocNode(
+                                type="doc", title="Hooks", path="20-backend/22-safety/hooks.md"
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="Recovery",
+                                path="20-backend/22-safety/recovery.md",
+                            ),
+                        ],
+                    ),
+                    DocNode(
+                        type="dir",
+                        title="Memory",
+                        children=[
+                            DocNode(
+                                type="doc", title="Journal", path="20-backend/23-memory/journal.md"
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="Hemolymph (Context)",
+                                path="20-backend/23-memory/hemolymph.md",
+                            ),
+                        ],
+                    ),
+                    DocNode(
+                        type="dir",
+                        title="Sensing",
+                        children=[
+                            DocNode(
+                                type="doc",
+                                title="Model Router",
+                                path="20-backend/24-sensing/model-router.md",
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="Gateway · HTTP API",
+                                path="20-backend/24-sensing/gateway.md",
+                            ),
+                        ],
+                    ),
+                    DocNode(
+                        type="dir",
+                        title="Adapters",
+                        children=[
+                            DocNode(type="doc", title="MCP", path="20-backend/25-adapters/mcp.md"),
+                            DocNode(
+                                type="doc",
+                                title="Channels",
+                                path="20-backend/25-adapters/channels.md",
+                            ),
+                            DocNode(
+                                type="doc",
+                                title="Integrations",
+                                path="20-backend/25-adapters/integrations.md",
+                            ),
+                        ],
+                    ),
+                    DocNode(
+                        type="dir",
+                        title="Agents",
+                        children=[
+                            DocNode(
+                                type="doc",
+                                title=f"{m.get('icon', '')} {m['name']}",
+                                path=f"20-backend/26-agents/{aid}.md",
+                            )
+                            for aid, m in sorted(agents.items())
+                        ],
+                    ),
+                ],
+            ),
+            DocNode(
+                type="dir",
+                title="图谱 · Graphs",
+                children=[
+                    DocNode(
+                        type="doc", title="Skill × Arm × Agent", path="30-skills-graph/skill-map.md"
+                    ),
+                    DocNode(type="doc", title="Hook Surface", path="40-hooks/hook-surface.md"),
+                    DocNode(type="doc", title="ADR 锚点", path="50-governance/adr-anchors.md"),
+                ],
+            ),
+        ],
+    )
 
     # ── Index README ───────────────────────────────────────
     readme_lines = [
@@ -882,6 +1102,9 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
         "generated_at": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
         "files_analyzed": len(out),
         "tree": [c.to_dict() for c in tree.children],
+        # Page→page dependency edges (zero-LLM, AST-derived) · additive: any
+        # consumer that doesn't know ``edges`` ignores it. See ADR-009.
+        "edges": page_edges,
     }
     out["index.json"] = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
 
