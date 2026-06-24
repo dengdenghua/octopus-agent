@@ -66,9 +66,21 @@ class MatrixChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         room_id, event_id = self._split_thread_id(msg.thread_id)
 
-        if msg.content:
+        if content:
             self._txn_counter += 1
             txn_id = f"{self._txn_counter}-{uuid4().hex[:8]}"
             url = (
@@ -78,7 +90,7 @@ class MatrixChannel(Channel):
             )
             body: dict[str, Any] = {
                 "msgtype": "m.text",
-                "body": msg.content,
+                "body": content,
             }
             self._put_json(url, body=body)
 
@@ -130,7 +142,9 @@ class MatrixChannel(Channel):
                 }
             self._put_json(att_url, body=att_body)
 
-    def edit(self, original_message_id: str, msg: OutboundMessage) -> None:
+    def edit(self, msg: OutboundMessage, original_message_id: str) -> None:
+        # Param order must match Channel.edit (base.py) — the manager calls
+        # ``ch.edit(msg, original_message_id)`` positionally. This was inverted.
         room_id, event_id = self._split_thread_id(original_message_id)
         url = f"{self._homeserver_url}/_matrix/client/v3/rooms/{room_id}/messages/{event_id}"
         body: dict[str, Any] = {
@@ -280,7 +294,7 @@ class MatrixChannel(Channel):
             )
         try:
             data = resp.json()
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError) as e:
             raise MatrixError(f"json parse: {e}") from e
         if not isinstance(data, dict):
             raise MatrixError("response not an object")
@@ -337,7 +351,7 @@ class MatrixChannel(Channel):
             )
         try:
             data = resp.json()
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError) as e:
             raise MatrixError(f"json parse: {e}") from e
         if not isinstance(data, dict):
             raise MatrixError("response not an object")

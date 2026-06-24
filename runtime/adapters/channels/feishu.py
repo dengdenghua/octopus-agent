@@ -78,6 +78,18 @@ class FeishuChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         token = self._get_tenant_access_token()
         receive_id_type = msg.metadata.get("receive_id_type", "chat_id")
         receive_id = msg.metadata.get("receive_id") or msg.metadata.get("chat_id") or msg.thread_id
@@ -86,11 +98,11 @@ class FeishuChannel(Channel):
 
         url = f"{self.api_base_url}/im/v1/messages?receive_id_type={receive_id_type}"
 
-        if msg.content:
+        if content:
             body = {
                 "receive_id": receive_id,
                 "msg_type": "text",
-                "content": json.dumps({"text": msg.content}, ensure_ascii=False),
+                "content": json.dumps({"text": content}, ensure_ascii=False),
             }
             resp = self._post_json(url, body=body, bearer=token)
             if resp.get("code", 0) != 0:
@@ -154,7 +166,9 @@ class FeishuChannel(Channel):
                     f"msg={att_resp.get('msg', '')[:200]}",
                 )
 
-    def edit(self, original_message_id: str, msg: OutboundMessage) -> None:
+    def edit(self, msg: OutboundMessage, original_message_id: str) -> None:
+        # Param order must match Channel.edit (base.py) — the manager calls
+        # ``ch.edit(msg, original_message_id)`` positionally. This was inverted.
         token = self._get_tenant_access_token()
         url = f"{self.api_base_url}/im/v1/messages/{original_message_id}"
         body = {
@@ -254,7 +268,7 @@ class FeishuChannel(Channel):
             )
         try:
             data = resp.json()
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError) as e:
             raise FeishuError(f"json parse: {e}") from e
         if not isinstance(data, dict):
             raise FeishuError("response not an object")
@@ -297,7 +311,7 @@ class FeishuChannel(Channel):
             )
         try:
             data = resp.json()
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError) as e:
             raise FeishuError(f"json parse: {e}") from e
         if not isinstance(data, dict):
             raise FeishuError("response not an object")

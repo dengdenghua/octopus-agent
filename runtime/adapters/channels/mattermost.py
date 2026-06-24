@@ -64,6 +64,17 @@ class MattermostChannel(Channel):
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
 
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         channel_id, post_id = self._split_thread_id(msg.thread_id)
         file_ids: list[str] = []
 
@@ -95,7 +106,7 @@ class MattermostChannel(Channel):
 
         payload: dict[str, Any] = {
             "channel_id": channel_id,
-            "message": msg.content,
+            "message": content,
         }
         if post_id:
             payload["root_id"] = post_id
@@ -109,7 +120,9 @@ class MattermostChannel(Channel):
             authorization=f"Bearer {self._bot_token}",
         )
 
-    def edit(self, original_message_id: str, msg: OutboundMessage) -> None:
+    def edit(self, msg: OutboundMessage, original_message_id: str) -> None:
+        # Param order must match Channel.edit (base.py) — the manager calls
+        # ``ch.edit(msg, original_message_id)`` positionally. This was inverted.
         url = f"{self._server_url}/api/v4/posts/{original_message_id}"
         body: dict[str, Any] = {
             "message": msg.content,
@@ -200,7 +213,7 @@ class MattermostChannel(Channel):
             )
         try:
             data = resp.json()
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError) as e:
             raise MattermostError(f"json parse: {e}") from e
         if not isinstance(data, dict):
             raise MattermostError("response not an object")
@@ -253,7 +266,7 @@ class MattermostChannel(Channel):
             )
         try:
             data = resp.json()
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError) as e:
             raise MattermostError(f"json parse: {e}") from e
         if not isinstance(data, dict):
             raise MattermostError("response not an object")
