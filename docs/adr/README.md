@@ -64,3 +64,4 @@ What this costs us / what breaks / what we now can't do easily.
 - [ADR-006 · Lifecycle hook system](006-lifecycle-hooks.md)
 - [ADR-007 · MCP server trust store](007-mcp-trust-store.md)
 - [ADR-008 · Constitution enforcement profiles](008-constitution-profiles.md)
+- [ADR-009 · OKF as the knowledge substrate](009-okf-knowledge-substrate.md) (Proposed)

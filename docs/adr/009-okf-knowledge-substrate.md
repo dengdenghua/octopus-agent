@@ -1,0 +1,198 @@
+# ADR-009 · OKF as the knowledge substrate
+
+Status: Proposed | Date: 2026-06-24
+
+## Context
+
+The planner needs *codebase* grounding, and the context composer
+doesn't provide it — it feeds system / skills / memory but nothing
+about the repo, so the agent re-greps every task. `repo_context`
+([runtime/memory/hemolymph/repo_context.py](../../runtime/memory/hemolymph/repo_context.py))
+closes that gap: it builds a BM25 index over the generated wiki and
+retrieves the pages most relevant to a goal, rendered into the prompt
+via `render_codebase_context()` (shared by the planner's
+`_render_codebase_section` and the react chat loop). It is deliberately
+**no-LLM, no-embedding**, and self-documents the known ceiling: true
+synonym bridging with no shared token (planner→cerebrum) needs
+embeddings, "out of scope here".
+
+But codebase grounding is only one of **at least four knowledge stores**,
+each a different shape, none cross-referencing the others:
+
+| Store | Shape today | Source |
+|-------|-------------|--------|
+| Code wiki — `docs/auto/` (31 pages) | markdown body + central `index.json` tree, file-path IDs, **no per-page frontmatter, no page↔page links** | `scripts/gen_wiki.py` (AST) |
+| Skills — `SKILL.md` (128) | **markdown + YAML frontmatter** (`name`, `description`) | hand-authored |
+| Knowledge graph | sqlite/kuzu typed edges | journal → `KGUpdater`, fed to planner via `_render_kg_section` |
+| Document KB | separate service, `/v1/search` | Storage repo (cross-repo, File Agent) |
+
+Each is queried a different way; an edge in one is invisible to the
+others. Adding a new consumer means re-solving context assembly from
+scratch — the exact fragmentation Google's **Open Knowledge Format**
+names.
+
+Four external reference points triangulate on the *same* stack, and we
+already own scattered pieces of every layer:
+
+- **OKF** (Google, [blog][okf]) — the **format**: markdown + YAML
+  frontmatter, file paths as concept IDs, markdown links as graph edges,
+  `index.md` for progressive disclosure, `timestamp`/`log.md` for
+  provenance. Only `type` is required; no embeddings ("metadata and
+  documentation, not vector representations"); "format, not platform".
+- **gbrain** (Garry Tan, [repo][gbrain]) — the **engine**: markdown
+  brain-repo as system-of-record + hybrid retrieval (vector + BM25 +
+  reciprocal-rank fusion + source-tier boost) + **self-wiring graph that
+  extracts typed edges on every page write with zero LLM calls** (reports
+  +31.4 P@5 over its graph-disabled variant) + a 24/7 "dream cycle" that
+  dedups and consolidates.
+- **Karpathy** — the **context policy**: the context window is RAM, the
+  store is disk, the retriever is the pager. `repo_context` already pages
+  wiki pages per task; the KG section is a second pager.
+- **Obsidian / Zettelkasten** — the **human UX**: a navigable graph of
+  links and backlinks over local-first markdown.
+
+Key observation: **octopus already speaks most of OKF by accident.**
+`SKILL.md` is already markdown + frontmatter. `docs/auto` is already
+markdown with file-path identifiers. The Claude-Code memory convention
+this repo is developed under (markdown + frontmatter + `[[links]]` +
+`MEMORY.md` index) is a live reference of the full pattern. We are not
+being asked to invent a format — we are being asked to *converge* on one
+we are 80% of the way to.
+
+Two forces make convergence worth the churn now:
+
+1. **No-LLM ethos vs. retrieval quality.** OKF resolves the tension we
+   kept hitting: embeddings are an *engine* concern, not a *format* one.
+   The format stays pure and portable; the engine can add a vector lane
+   later without touching a single file.
+2. **The five-repo family has no interchange format.** agent ↔ Storage ↔
+   mobile ↔ os each hold knowledge; OKF is explicitly designed to be the
+   lingua franca between such systems, version-controlled alongside code.
+
+(The full-stack audit on this branch independently confirmed the
+governing principle: generated-and-gated artifacts stay fresh
+[`docs/auto` has `tests/test_auto_docs_fresh.py`]; hand-maintained ones
+drift [`CODE_WIKI.md`, the openapi snapshot]. OKF + a freshness gate is
+the durable side of that line.)
+
+## Decision
+
+Adopt **OKF as the common knowledge substrate** for the Octopus family,
+with an explicitly layered architecture so each layer evolves
+independently:
+
+```
+FORMAT   OKF bundle      markdown + frontmatter + path-IDs + link-edges     (no embeddings; only `type` required)
+ENGINE   repo_context    BM25 today → hybrid (BM25 + optional vector + RRF + source-tier); zero-LLM edge extraction
+POLICY   planner paging  retrieve per task into the prompt (_render_codebase_section + _render_kg_section)
+UX       static viewer   OKF HTML visualizer / Obsidian-style graph (optional)
+```
+
+The seam that makes this safe: **format carries no embeddings; the engine
+owns embeddings.** Today's BM25-only `repo_context` is a *valid OKF
+consumer*, not a stopgap — adding a vector lane is an engine change, not a
+format migration.
+
+Conformance deltas (what "adopt OKF" concretely means here):
+
+- **Per-page frontmatter + `index.md`, not a central `index.json`.**
+  `gen_wiki` emits each page with `type`/`title`/`description`/`tags`/
+  `timestamp` frontmatter and per-directory `index.md`. Distributed
+  frontmatter is git-mergeable (no central conflict magnet) and gives the
+  retriever high-signal fields to index instead of raw body. Keep
+  `index.json` as a derived artifact if the frontend needs it.
+- **Markdown links as edges.** Pages cross-link via relative markdown
+  links (`[customers](/tables/customers.md)`-style). The tree gains a
+  graph. The Claude-Code memory's `[[name]]` style is the same idea; emit
+  both if terseness for the author matters, but the portable form is the
+  relative link.
+- **Per-page `timestamp` provenance.** The cheap version of the
+  source-tier / freshness signal — lets drift detection move from
+  "regenerate the whole bundle" to "diff the stale page", and gives the
+  engine a recency boost.
+- **Zero-LLM edge extraction on write (gbrain pattern).** Unify the three
+  edge sources that don't talk today — `SKILL.md` frontmatter, journal-KG
+  edges, and wiki cross-links — into one retrievable graph, extracted
+  without an LLM call. This is the step gbrain's +31.4 P@5 motivates and
+  the one that needs no embeddings.
+- **OKF export for the non-markdown stores.** The knowledge graph and the
+  Storage doc-KB expose an OKF view, making the family's knowledge
+  exchangeable across repos via a vendor-neutral format.
+
+Phased, with the cheapest validation first:
+
+- **Phase 0 — validate the merge direction, zero format change.** Point
+  `repo_context` at the agent's own markdown knowledge (memory + `SKILL.md`)
+  in addition to `docs/auto`, still BM25. If retrieval quality on real
+  goals improves, the gbrain "one graph beats siloed stores" thesis holds
+  for us before we pay for any migration. If it doesn't, stop here.
+- **Phase 1 — format.** `gen_wiki` emits OKF (frontmatter + `index.md` +
+  links + `timestamp`); keep `index.json` derived. CI freshness gate
+  extends to per-page.
+- **Phase 2 — engine.** Zero-LLM edge extraction across the unified
+  bundle; retrieval gains an edge-walk lane fused by RRF; source-tier /
+  recency boost from frontmatter.
+- **Phase 3 — optional.** Vector lane (engine-only) for synonym bridging;
+  a scheduled "dream cycle" wiring the existing `consolidate-memory` skill
+  + a wiki-freshness pass onto the existing schedulers.
+
+## Alternatives considered
+
+- **RDF / JSON-LD / semantic web.** Formally richer, but needs tooling to
+  read/write and isn't human-renderable in a plain editor. OKF explicitly
+  rejects this trade for readability; so do we — our authors and the agent
+  both edit markdown.
+- **Vector DB as system-of-record** (gbrain's Postgres+pgvector default).
+  Couples truth to an engine and a deployment. We keep markdown files as
+  the system of record and the DB/index as *derived* — losing the index is
+  a rebuild, not a data-loss event. (gbrain itself keeps a markdown brain
+  repo as its record for the same reason.)
+- **Keep the bespoke `index.json`.** Works locally, but it is not an
+  interchange format (no cross-repo / cross-vendor portability), and a
+  single central file is a merge-conflict magnet under concurrent edits.
+- **Do nothing.** Each store stays siloed and each new consumer re-solves
+  context assembly. Tolerable at today's scale; the cost compounds as the
+  family grows and more agents need the same grounding.
+
+## Consequences
+
+**Positive**
+
+- One substrate, four consumers (planner, react loop, frontend viewer,
+  sibling repos) — and any OKF-aware external tool — read the same bundle.
+- Format stays no-LLM / no-embedding and git-native; the engine can grow
+  to embeddings without a format migration.
+- Per-page frontmatter + `timestamp` turns drift detection page-granular
+  and gives the retriever better signal than raw-body BM25.
+- The three disconnected edge sources become one retrievable graph; the
+  gbrain result says that is where the retrieval-quality win is.
+- Cross-repo knowledge exchange gets a vendor-neutral contract instead of
+  bespoke per-boundary glue.
+
+**Negative**
+
+- `gen_wiki` and `repo_context` both change; the CI freshness gate and any
+  `index.json` consumers (frontend wiki surface) must follow.
+- Two link syntaxes in play during migration (`[[name]]` vs relative
+  links) unless we pick one; risk of half-migrated bundles.
+- An OKF export for the KG / Storage KB is real new surface area, not just
+  a reshape of existing files.
+
+**Neutral**
+
+- BM25-only retrieval is unchanged through Phase 1 — it is already a
+  conformant OKF consumer, so nothing regresses while the format lands.
+- Embeddings remain explicitly out of the format; whether we ever add the
+  vector lane (Phase 3) stays a separate, reversible engine decision.
+
+## References
+
+- [How the Open Knowledge Format can improve data sharing][okf] — Google Cloud
+- [garrytan/gbrain][gbrain] — knowledge layer for AI agents (hybrid retrieval, zero-LLM self-wiring graph, dream cycle)
+- Karpathy — "context engineering" / LLM-OS (context window as RAM, external knowledge as disk)
+- [runtime/memory/hemolymph/repo_context.py](../../runtime/memory/hemolymph/repo_context.py) — current BM25 wiki retriever (the engine to evolve)
+- [scripts/gen_wiki.py](../../scripts/gen_wiki.py) — AST → `docs/auto` generator (the producer to make OKF-emitting)
+- [docs/auto/README.md](../auto/README.md) — current generated wiki + freshness gate
+
+[okf]: https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing
+[gbrain]: https://github.com/garrytan/gbrain
