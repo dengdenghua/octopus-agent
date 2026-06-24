@@ -1,3 +1,10 @@
+---
+type: "AdapterSubsystem"
+title: "Adapters · Channels"
+description: "外部 channel adapter (Slack / Discord / 微信 / …) · 必须走 validation safe_send 才允许出站。"
+tags: ["backend", "adapters"]
+tier: "standard"
+---
 # Adapters · Channels
 
 > 外部 channel adapter (Slack / Discord / 微信 / …) · 必须走 validation safe_send 才允许出站。

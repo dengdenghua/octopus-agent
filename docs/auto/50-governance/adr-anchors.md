@@ -1,3 +1,10 @@
+---
+type: "Governance"
+title: "ADR 锚点 · Governance Map"
+description: "哪个 ADR 治理哪段代码 · 从 ADR markdown 里的反引号路径引用抽取 · **PR 审查时用**：改了某文件 · 看它被哪些 ADR 引用。"
+tags: ["governance"]
+tier: "standard"
+---
 # ADR 锚点 · Governance Map
 
 > 哪个 ADR 治理哪段代码 · 从 ADR markdown 里的反引号路径引用抽取 · **PR 审查时用**：改了某文件 · 看它被哪些 ADR 引用。

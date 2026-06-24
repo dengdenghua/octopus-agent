@@ -1,3 +1,10 @@
+---
+type: "RuntimeSubsystem"
+title: "Arms · 执行工具组"
+description: "Arm preset 工厂 · 将原始 Skill 按职责打包成 arm（fs_writer / git / shell / browser_read / ...）。"
+tags: ["backend", "runtime"]
+tier: "core"
+---
 # Arms · 执行工具组
 
 > Arm preset 工厂 · 将原始 Skill 按职责打包成 arm（fs_writer / git / shell / browser_read / ...）。
@@ -10,6 +17,7 @@
 - `Arm`
 - `ArmPool`
 - `ByteStreamBuffer`
+- `EnterpriseDecisionCache`
 - `ExtensionContext`
 - `ExtensionInfo`
 - `ExtensionRegistry`
@@ -53,6 +61,7 @@
 | Module | Summary |
 | --- | --- |
 | `base.py` | — |
+| `enterprise_cache.py` | Enterprise Arm 本地决策层(Ganglion). |
 | `extension_registry.py` | Dynamic extension registry — hot-pluggable skill registration. |
 | `lazy_loader.py` | Lazy loading patterns — on-demand resource initialization. |
 | `output_buffer.py` | Dual-layer output buffer for shell command output. |
@@ -68,15 +77,16 @@
 
 ## Who imports this
 
-**7** file(s) reference this package:
+**8** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/execution/`** · 3 file(s)
+- **`runtime/execution/`** · 4 file(s)
   - `runtime/execution/agents/base.py`
   - `runtime/execution/agents/loader.py`
+  - `runtime/execution/swarm/drive.py`
   - `runtime/execution/swarm/runtime.py`
 - **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/ui/app.py`

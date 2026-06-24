@@ -1,3 +1,10 @@
+---
+type: "AdapterSubsystem"
+title: "Adapters · Integrations"
+description: "Molili 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。"
+tags: ["backend", "adapters"]
+tier: "standard"
+---
 # Adapters · Integrations
 
 > Molili 桥接 · Local auth 路由 · 各家第三方集成的 router proxy。

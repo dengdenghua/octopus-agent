@@ -10,11 +10,35 @@ from typing import Any
 
 from runtime.memory.hemolymph.repo_context import (
     _flatten,
+    _split_frontmatter,
     _tokenize,
     build_codebase_context,
     collect_codebase_sources,
     retrieve_repo_context,
 )
+
+
+def _page_with_fm(
+    title: str,
+    body: str,
+    *,
+    tier: str = "standard",
+    description: str = "",
+    tags: list[str] | None = None,
+) -> str:
+    """A page body prefixed with OKF frontmatter (JSON-literal values, matching
+    gen_wiki's emitter) for exercising the retriever's frontmatter handling."""
+    fm = [
+        "---",
+        'type: "Doc"',
+        f"title: {json.dumps(title)}",
+        f"description: {json.dumps(description)}",
+        f"tags: {json.dumps(tags or [])}",
+        f"tier: {json.dumps(tier)}",
+        "---",
+        "",
+    ]
+    return "\n".join(fm) + body
 
 
 def _make_wiki(
@@ -206,6 +230,53 @@ def test_graph_boost_disabled_by_env(tmp_path: Path, monkeypatch) -> None:
     sink: list[dict[str, str]] = []
     retrieve_repo_context("cerebrum planner", wiki_dir=auto, max_pages=2, _sink=sink)
     assert [s["path"] for s in sink] == ["a.md", "m_other.md"]
+
+
+def test_split_frontmatter_parses_json_values_and_passes_through() -> None:
+    meta, body = _split_frontmatter('---\ntype: "Doc"\ntags: ["a", "b"]\ntier: "core"\n---\nbody')
+    assert meta == {"type": "Doc", "tags": ["a", "b"], "tier": "core"}
+    assert body == "body"
+    assert _split_frontmatter("# plain markdown") == ({}, "# plain markdown")
+
+
+def test_frontmatter_stripped_from_prompt_and_description_indexed(tmp_path: Path) -> None:
+    # The match term lives only in the OKF description (not the body), so a hit
+    # proves the description is indexed. And the rendered prompt must not leak
+    # the raw YAML keys — the body injected verbatim is frontmatter-stripped.
+    auto = _make_wiki(
+        tmp_path,
+        [
+            (
+                "Topic",
+                "t.md",
+                _page_with_fm(
+                    "Topic",
+                    "# Topic\nbody about widgets",
+                    description="quantum entanglement theory",
+                ),
+            ),
+            ("Other", "o.md", _page_with_fm("Other", "# Other\nbody about gadgets")),
+        ],
+    )
+    out = retrieve_repo_context("quantum entanglement", wiki_dir=auto)
+    assert out is not None
+    assert "Topic" in out and "Other" not in out
+    assert "type:" not in out and "tier:" not in out  # frontmatter not leaked
+
+
+def test_tier_boosts_core_over_standard(tmp_path: Path) -> None:
+    # Both pages tie on BM25 for "planner" (same body); the core-tier page wins
+    # despite sorting after a_std alphabetically, proving the tier multiplier.
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("Core", "z_core.md", _page_with_fm("Core", "planner", tier="core")),
+            ("Std", "a_std.md", _page_with_fm("Std", "planner", tier="standard")),
+        ],
+    )
+    sink: list[dict[str, str]] = []
+    retrieve_repo_context("planner", wiki_dir=auto, max_pages=2, _sink=sink)
+    assert sink[0]["path"] == "z_core.md"
 
 
 def test_real_wiki_smoke() -> None:

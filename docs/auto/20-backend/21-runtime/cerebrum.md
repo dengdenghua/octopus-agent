@@ -1,3 +1,10 @@
+---
+type: "RuntimeSubsystem"
+title: "Cerebrum · 规划器"
+description: "LLM Planner + Static Planner · 把自然语言意图拆成 TaskGraph。"
+tags: ["backend", "runtime"]
+tier: "core"
+---
 # Cerebrum · 规划器
 
 > LLM Planner + Static Planner · 把自然语言意图拆成 TaskGraph。

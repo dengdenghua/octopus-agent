@@ -150,16 +150,21 @@ Phased, with the cheapest validation first:
   equally-lexical but unconnected one. Conservative (re-ranks only matched
   pages, never promotes zero-overlap), self-gated (no `edges` → no-op),
   `OCTOPUS_CODEBASE_GRAPH=0` disables; pinned by `tests/test_repo_context.py`.
-  Still deferred from Phase 2: RRF fusion + source-tier weighting (want
-  Phase-1 frontmatter for the tier signal first).
-- **Phase 1 — format (deferred).** `gen_wiki` emits per-page OKF frontmatter
-  (`type`/`title`/`description`/`tags`) + page links + deterministic
-  provenance; keep `index.json` derived. Deferred behind Phase 2 because it
-  touches the page bodies (31-file regeneration) and the frontend renderer
-  (`wiki_router` returns raw `read_text()` — naive markdown would leak the
-  `---` YAML into the UI, so the renderer must strip frontmatter first), and a
-  per-page `timestamp` must be source-derived (not wall-clock) or it churns
-  every regen and defeats the freshness gate.
+  Still deferred from Phase 2: *true* RRF (reciprocal-rank) fusion — the
+  current fusion is `tier × BM25` then `+ graph boost`, which is enough at this
+  corpus size.
+- **Phase 1 — format — DONE (2026-06-24).** `gen_wiki` now prepends
+  deterministic OKF frontmatter to every page (`type`/`title`/`description`/
+  `tags`/`tier`, all derived from path + body — no wall-clock, so the freshness
+  gate's byte-compare still holds). `wiki_router` strips it when serving (the UI
+  gets clean markdown; the parsed metadata is returned alongside as `meta` for
+  an optional type/tier header) and `repo_context` strips it from the indexed /
+  injected body while weighting `description` + `tags` and applying the `tier`
+  multiplier. Verified end-to-end on a live server — the docs endpoint returns
+  frontmatter-free content + structured `meta`. Deferred: a per-page
+  `timestamp` (needs a deterministic source-mtime, not wall-clock) and
+  switching the Claude-memory-style `[[name]]` links to OKF relative-path
+  links.
 - **Phase 3 — optional.** Vector lane (engine-only) for synonym bridging;
   a scheduled "dream cycle" wiring the existing `consolidate-memory` skill
   + a wiki-freshness pass onto the existing schedulers.

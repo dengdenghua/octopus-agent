@@ -21,6 +21,27 @@ except ImportError:  # pragma: no cover
     JSONResponse = None  # type: ignore[assignment, misc]
 
 
+def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Split OKF/YAML frontmatter (JSON-literal values · see gen_wiki) from the
+    markdown body so the UI renders clean markdown, not a raw ``---`` block.
+    No frontmatter → ``({}, text)``. (ADR-009)"""
+    if not text.startswith("---\n"):
+        return {}, text
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return {}, text
+    meta: dict[str, Any] = {}
+    for line in text[4:end].splitlines():
+        key, sep, val = line.partition(":")
+        if not sep:
+            continue
+        try:
+            meta[key.strip()] = json.loads(val.strip())
+        except (ValueError, TypeError):
+            meta[key.strip()] = val.strip().strip('"')
+    return meta, text[end + 5 :]
+
+
 # ═══════════════════════════════════════════════════════════
 # Generation state · in-process singleton
 # ═══════════════════════════════════════════════════════════
@@ -40,9 +61,7 @@ class _GenState:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             elapsed = (
-                (self.finished_at or time.time()) - self.started_at
-                if self.started_at
-                else 0.0
+                (self.finished_at or time.time()) - self.started_at if self.started_at else 0.0
             )
             status = "idle"
             if self.running:
@@ -141,11 +160,13 @@ def _flat_docs() -> list[dict[str, Any]]:
         # skip the README · it's the index and the UI has its own
         if rel == "README.md":
             continue
-        out.append({
-            "path": rel,
-            "name": rel.split("/")[-1].removesuffix(".md"),
-            "size": md.stat().st_size,
-        })
+        out.append(
+            {
+                "path": rel,
+                "name": rel.split("/")[-1].removesuffix(".md"),
+                "size": md.stat().st_size,
+            }
+        )
     return out
 
 
@@ -272,10 +293,14 @@ def create_wiki_router() -> Any:
         path = _resolve_doc_path(doc_path)
         if not path.is_file():
             raise HTTPException(404, f"doc not found: {doc_path}")
+        # Strip OKF frontmatter so the UI renders clean markdown; surface the
+        # parsed metadata separately for an optional type/tags/tier header.
+        meta, body = _split_frontmatter(path.read_text(encoding="utf-8"))
         return {
             "path": doc_path,
-            "content": path.read_text(encoding="utf-8"),
-            "size": path.stat().st_size,
+            "content": body,
+            "meta": meta,
+            "size": len(body.encode("utf-8")),
         }
 
     @router.put("/api/wiki/docs/{doc_path:path}")

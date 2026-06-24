@@ -1,3 +1,10 @@
+---
+type: "Overview"
+title: "项目概述 · Project Overview"
+description: "自动从仓库结构提取。Octopus · The Open-Source Multi-Agent AI Workspace."
+tags: []
+tier: "core"
+---
 # 项目概述 · Project Overview
 
 > 自动从仓库结构提取。Octopus · The Open-Source Multi-Agent AI Workspace.
@@ -19,7 +26,7 @@ Octopus-Agent 是一个自托管的 agent runtime，用来规划、执行、观�
 
 ## 规模
 
-- Python 模块：**743** 个（runtime/）
-- TSX 组件：**437** 个（frontend/src）
-- 后端测试：**452** 个
+- Python 模块：**760** 个（runtime/）
+- TSX 组件：**447** 个（frontend/src）
+- 后端测试：**489** 个
 

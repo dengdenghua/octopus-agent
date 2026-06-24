@@ -1,3 +1,10 @@
+---
+type: "MemorySubsystem"
+title: "Memory · Journal"
+description: "全 append-only 日志 · events: trajectory / immune / budget / step · 所有 agent 行为的 ground truth。"
+tags: ["backend", "memory"]
+tier: "core"
+---
 # Memory · Journal
 
 > 全 append-only 日志 · events: trajectory / immune / budget / step · 所有 agent 行为的 ground truth。
@@ -56,7 +63,7 @@
 
 ## Who imports this
 
-**38** file(s) reference this package:
+**40** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/channels/manager.py`
@@ -77,8 +84,9 @@
   - `runtime/execution/suckers/ephemeral_runner.py`
   - `runtime/execution/swarm/runtime.py`
   - `runtime/execution/tool_engine/executor.py`
-- **`runtime/memory/`** · 1 file(s)
+- **`runtime/memory/`** · 2 file(s)
   - `runtime/memory/hemolymph/composer.py`
+  - `runtime/memory/learning/promotion_applier.py`
 - **`runtime/platform/`** · 3 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/ui/app.py`
@@ -90,13 +98,13 @@
   - `runtime/safety/recovery/recipe_evaluator.py`
   - `runtime/safety/recovery/rule_extractor.py`
   - _… and 3 more_
-- **`runtime/sensing/`** · 13 file(s)
+- **`runtime/sensing/`** · 14 file(s)
   - `runtime/sensing/gateway/dag_debugger_router.py`
   - `runtime/sensing/gateway/evolution_ops/budget.py`
   - `runtime/sensing/gateway/evolution_ops/curriculum.py`
   - `runtime/sensing/gateway/evolution_ops/mcp_ops.py`
   - `runtime/sensing/gateway/evolution_ops/protocol_drift.py`
-  - _… and 8 more_
+  - _… and 9 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

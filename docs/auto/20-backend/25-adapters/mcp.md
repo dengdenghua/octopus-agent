@@ -1,3 +1,10 @@
+---
+type: "AdapterSubsystem"
+title: "Adapters · MCP"
+description: "MCP 客户端 + Trust store · ADR-007 治理 · 未审批 server 的工具拒注册。"
+tags: ["backend", "adapters"]
+tier: "standard"
+---
 # Adapters · MCP
 
 > MCP 客户端 + Trust store · ADR-007 治理 · 未审批 server 的工具拒注册。

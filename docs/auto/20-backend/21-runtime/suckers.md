@@ -1,3 +1,10 @@
+---
+type: "RuntimeSubsystem"
+title: "Suckers · 技能注册"
+description: "Skill 注册表 · 原子层 · 沙箱 · 测试 tier。"
+tags: ["backend", "runtime"]
+tier: "core"
+---
 # Suckers · 技能注册
 
 > Skill 注册表 · 原子层 · 沙箱 · 测试 tier。
@@ -50,11 +57,14 @@
 | `computer_skills.py` | — |
 | `computer_uia_skills.py` | — |
 | `computer_use_loop.py` | — |
+| `computer_use_record.py` | Record a successful computer-use loop as a journal Trajectory. |
 | `crawler_skills.py` | — |
 | `cron_skills.py` | cron_skills · let the agent self-schedule a future turn from inside a turn. |
 | `delegation_budget.py` | Smart per-turn delegation budget. |
 | `delegation_skills.py` | — |
 | `desktop_grounding.py` | Semantic grounding for the desktop vision loop. |
+| `echo_skills.py` | ECHO Universe Engine 叙事 Ganglion 接入. |
+| `enterprise_skills.py` | Octopus Enterprise 企业服务 Arm 接入. |
 | `ephemeral_agents.py` | Ephemeral sub-agent roles · lightweight personas for one-shot delegation tasks (``researcher`` / ``debugger`` / ``reviewer`` / …). |
 | `ephemeral_injection_gate.py` | Prompt-injection taint gate for ephemeral sub-agent tool calls. |
 | `ephemeral_runner.py` | LLM-backed runner for ephemeral sub-agent roles. |
@@ -74,15 +84,17 @@
 | `registry.py` | — |
 | `search.py` | Semantic skill search — TF-IDF-based skill discovery. |
 | `skill_library_skills.py` | skill_library_skills · expose Kimi-style "learned skills" as 3 skills. |
+| `storage_skills.py` | File Agent document search via the octopus-storage sibling service. |
 | `sub_agent.py` | Legacy compatibility shim for subagent dispatch. |
 | `testing.py` | — |
+| `verdict_repair.py` | Verdict-gated repair loop — the closed-loop orchestration octopus lacked. |
 | `verify_skills.py` | Project verification · detect project type and run checks. |
 | `web_skills.py` | — |
 | `write_skills.py` | — |
 
 ## Who imports this
 
-**39** file(s) reference this package:
+**43** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/mcp_client/bridge.py`
@@ -122,13 +134,13 @@
   - `runtime/safety/hooks/tool_edge_hooks.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 11 file(s)
+- **`runtime/sensing/`** · 15 file(s)
   - `runtime/sensing/gateway/agent_world_router.py`
   - `runtime/sensing/gateway/computer_router.py`
   - `runtime/sensing/gateway/debug_router.py`
   - `runtime/sensing/gateway/evolution_ops_router.py`
   - `runtime/sensing/gateway/index_router.py`
-  - _… and 6 more_
+  - _… and 10 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

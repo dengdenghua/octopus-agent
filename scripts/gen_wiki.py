@@ -346,6 +346,79 @@ def _page_import_edges(
 
 
 # ═══════════════════════════════════════════════════════════
+# OKF frontmatter (ADR-009 · Open Knowledge Format)
+# ═══════════════════════════════════════════════════════════
+
+# Path-prefix → (OKF type, tier). Tier feeds the retriever's source-tier boost
+# (core runtime/safety outranks an equally-relevant peripheral page). All
+# DETERMINISTIC from the path — no wall-clock — so the freshness gate's
+# byte-compare stays meaningful.
+_OKF_RULES: list[tuple[str, str, str]] = [
+    ("20-backend/21-runtime/", "RuntimeSubsystem", "core"),
+    ("20-backend/22-safety/", "SafetySubsystem", "core"),
+    ("20-backend/23-memory/", "MemorySubsystem", "core"),
+    ("20-backend/24-sensing/", "SensingSubsystem", "standard"),
+    ("20-backend/25-adapters/", "AdapterSubsystem", "standard"),
+    ("20-backend/26-agents/", "Agent", "standard"),
+    ("20-backend/index", "BackendIndex", "standard"),
+    ("30-skills-graph/", "Graph", "standard"),
+    ("40-hooks/", "Graph", "standard"),
+    ("50-governance/", "Governance", "standard"),
+    ("00-overview", "Overview", "core"),
+    ("10-tech-stack", "Reference", "standard"),
+]
+
+_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.M)
+_BLOCKQUOTE_RE = re.compile(r"^>\s+(.+?)\s*$", re.M)
+_PARA_RE = re.compile(r"^(?![#>\s|`\-*])(.+?)\s*$", re.M)
+
+
+def _okf_type_tier(rel: str) -> tuple[str, str]:
+    for prefix, typ, tier in _OKF_RULES:
+        if rel == f"{prefix}.md" or rel.startswith(prefix):
+            return typ, tier
+    return "WikiPage", "standard"
+
+
+def _yaml_str(value: str) -> str:
+    """A double-quoted JSON string is a valid YAML flow scalar · keeps CJK
+    literal and escapes quotes/backslashes correctly. Deterministic."""
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _with_okf_frontmatter(rel: str, body: str) -> str:
+    """Prepend an OKF frontmatter block (markdown + YAML). ``type`` is the only
+    OKF-required field; title/description/tags/tier are high-signal extras the
+    retriever indexes. All derived deterministically from path + body."""
+    typ, tier = _okf_type_tier(rel)
+    m_title = _H1_RE.search(body)
+    title = m_title.group(1).strip() if m_title else rel.rsplit("/", 1)[-1].removesuffix(".md")
+    # Description: the lead blockquote note if present, else the first prose
+    # paragraph. Collapse whitespace, cap length.
+    m_bq = _BLOCKQUOTE_RE.search(body)
+    if m_bq:
+        desc = m_bq.group(1)
+    else:
+        m_p = _PARA_RE.search(body)
+        desc = m_p.group(1) if m_p else ""
+    desc = re.sub(r"\s+", " ", desc).strip()[:280]
+    # Tags from the path segments (drop the NN- ordinal prefixes + the filename).
+    segs = [re.sub(r"^\d+-", "", s) for s in rel.split("/")[:-1]]
+    tags = [s for s in segs if s]
+    fm = [
+        "---",
+        f"type: {_yaml_str(typ)}",
+        f"title: {_yaml_str(title)}",
+        f"description: {_yaml_str(desc)}",
+        f"tags: [{', '.join(_yaml_str(t) for t in tags)}]",
+        f"tier: {_yaml_str(tier)}",
+        "---",
+        "",
+    ]
+    return "\n".join(fm) + body
+
+
+# ═══════════════════════════════════════════════════════════
 # Module-page generators · produce (title, markdown)
 # ═══════════════════════════════════════════════════════════
 
@@ -930,6 +1003,15 @@ def generate_all() -> tuple[dict[str, str], DocNode]:
     out["30-skills-graph/skill-map.md"] = page_skill_map(catalog, arm_to_skills, agents)
     out["40-hooks/hook-surface.md"] = page_hook_surface()
     out["50-governance/adr-anchors.md"] = page_adr_anchors()
+
+    # ── OKF frontmatter (ADR-009) ──────────────────────────
+    # Every generated page gets deterministic OKF frontmatter so the bundle is
+    # an Open Knowledge Format corpus (consumable by any OKF tool) and the
+    # retriever can weight type/description/tags/tier. README is the index page;
+    # index.json is the manifest (not a markdown concept).
+    for rel in list(out):
+        if rel.endswith(".md"):
+            out[rel] = _with_okf_frontmatter(rel, out[rel])
 
     # ── Build TOC tree ─────────────────────────────────────
     tree = DocNode(

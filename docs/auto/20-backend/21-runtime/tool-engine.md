@@ -1,3 +1,10 @@
+---
+type: "RuntimeSubsystem"
+title: "Tool Engine · 执行器"
+description: "把每步 tool call 串起整套治理 · Auth / Budget / Journal / Hooks · 同时做 OTel span。"
+tags: ["backend", "runtime"]
+tier: "core"
+---
 # Tool Engine · 执行器
 
 > 把每步 tool call 串起整套治理 · Auth / Budget / Journal / Hooks · 同时做 OTel span。

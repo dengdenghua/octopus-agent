@@ -1,3 +1,10 @@
+---
+type: "RuntimeSubsystem"
+title: "All Skills 目录"
+description: "全仓 Skill 目录 · 每个 skill 分 group / atomic 标记 · 决定哪个 arm 能包含它。"
+tags: ["backend", "runtime"]
+tier: "core"
+---
 # All Skills 目录
 
 > 全仓 Skill 目录 · 每个 skill 分 group / atomic 标记 · 决定哪个 arm 能包含它。
@@ -26,18 +33,13 @@ runtime.execution.all_skills · unified skill catalog.
 | `agnes-image-generate/scripts/agnes_image_generate.py` | Agnes AI image generation skill. |
 | `agnes-video-generate/scripts/agnes_video_generate.py` | Agnes AI video generation skill (async). |
 | `agnes-video-poll/scripts/agnes_video_poll.py` | Standalone skill entry for polling an Agnes video task. |
-| `api-doc-gen/scripts/generate_api_doc.py` | Generate OpenAPI 3.0 spec from source code route definitions. |
-| `auto-hypothesis-test/scripts/statistical_test_suite.py` | statistical_test_suite.py — 根据数据自动选择统计检验并输出通俗解读 |
 | `auto-stat-test/scripts/statistical_test_suite.py` | statistical_test_suite.py — 根据数据自动选择统计检验并输出通俗解读 |
 | `cn-finance-data/scripts/api_client.py` | Tushare API 客户端 |
 | `code-mentor/scripts/analyze_code.py` | Code Analyzer - Static analysis tool for code review |
 | `code-mentor/scripts/complexity_analyzer.py` | Complexity Analyzer - Analyze time and space complexity of algorithms |
 | `code-mentor/scripts/run_tests.py` | Test Runner - Execute and format test results |
-| `code-safety-audit/scripts/security_scan.py` | security_scan.py — 代码安全扫描工具 |
 | `code-vuln-audit/scripts/security_scan.py` | security_scan.py — 代码安全扫描工具 |
-| `data-viz-gen/scripts/build_infographic.py` | build_infographic.py — Generate self-contained HTML/SVG infographics from JSON data. |
 | `data-viz-renderer/scripts/build_infographic.py` | build_infographic.py — Generate self-contained HTML/SVG infographics from JSON data. |
-| `database-inspector/scripts/db_explorer.py` | db_explorer.py — SQLite / PostgreSQL 只读数据库探索工具 |
 | `database-scout/scripts/db_explorer.py` | db_explorer.py — SQLite / PostgreSQL 只读数据库探索工具 |
 | `email-to-calendar/scripts/tests/test_activity_ops.py` | Tests for utils/activity_ops.py |
 | `email-to-calendar/scripts/tests/test_changelog_ops.py` | Tests for utils/changelog_ops.py |
@@ -64,16 +66,12 @@ runtime.execution.all_skills · unified skill catalog.
 | `gantt-chart-builder/scripts/gantt_generator.py` | Project Timeline - 交互式 HTML 甘特图生成器 支持关键路径分析（CPM）、依赖关系可视化、浮动时间展示 |
 | `general-writing/scripts/check_chapter_quality.py` | Chapter quality checker for fiction writing pipeline. Extends check_wordcount.py with em-dash density + English leakage scanning. Minimal, zero-dependency (stdlib only), sandbox-safe. |
 | `general-writing/scripts/check_wordcount.py` | Word count checker for general-writing skills. Minimal, zero-dependency (stdlib only), sandbox-safe. |
-| `gitlab-cli-guide/scripts/post-inline-comment.py` | post-inline-comment.py — Post inline diff comments on GitLab MRs via JSON body. |
 | `gitlab-cli-skills/scripts/post-inline-comment.py` | post-inline-comment.py — Post inline diff comments on GitLab MRs via JSON body. |
-| `http-load-profiler/scripts/http_benchmark.py` | HTTP 阶梯式并发压测工具 — 封装 ab/wrk + p50/p90/p99 + 拐点分析 |
 | `http-load-tester/scripts/http_benchmark.py` | HTTP 阶梯式并发压测工具 — 封装 ab/wrk + p50/p90/p99 + 拐点分析 |
 | `incident-retrospective/scripts/generate_postmortem.py` | Postmortem document generator. |
-| `incident-review-guide/scripts/generate_postmortem.py` | Postmortem document generator. |
 | `landing-page-scaffold/scripts/generate_landing_page.py` | Generate a self-contained landing page HTML wireframe. |
 | `localization-toolkit/scripts/i18n_audit.py` | Audit i18n key usage vs locale JSON files. |
 | `log-diagnostic/scripts/analyze_logs.py` | 日志分析工具：错误聚类 + 频率统计 + 时间分布，支持 JSON/syslog/Nginx 格式。 |
-| `log-error-digest/scripts/analyze_logs.py` | 日志分析工具：错误聚类 + 频率统计 + 时间分布，支持 JSON/syslog/Nginx 格式。 |
 | `pricing-advisor/scripts/pricing_modeler.py` | Pricing modeler — projects revenue at different price points and recommends tier structure. |
 | `project-sizing-guide/scripts/estimate_calculator.py` | 软件项目工时估算计算器 支持三点估算 (PERT)、T-shirt Sizing、功能点分析 (FPA) |
 | `py-perf-analyzer/scripts/perf_profile.py` | Python 性能分析工具 - cProfile + line_profiler + tracemalloc |
@@ -81,13 +79,6 @@ runtime.execution.all_skills · unified skill catalog.
 | `seedance-video-generate/scripts/seedance_video_generate.py` | Seedance Video Generation Skill for Octopus-Agent Uses Volcano Engine Seedance API to generate videos from text, images, or existing videos. |
 | `seedream-image-generate/scripts/seedream_image_generate.py` | Seedream Image Generation Skill for Octopus-Agent Uses Volcano Engine Seedream API to generate images from text prompts. |
 | `sql-insight/scripts/sql_query_helper.py` | sql_query_helper.py — SQL 查询辅助工具：Schema 提取 / 查询优化分析 / EXPLAIN 解读 |
-| `sql-tutor/scripts/sql_query_helper.py` | sql_query_helper.py — SQL 查询辅助工具：Schema 提取 / 查询优化分析 / EXPLAIN 解读 |
-| `sun-path/scripts/annual_sun_hours.py` | Annual sun/shadow hours at a point. Given a building (footprint + height + rotation) and a point (x,y in meters from building center), compute total hours per year the point is in direct sun vs in building shadow vs night. Samples at configurable interval (default 1 hour) for memory efficiency on 1G |
-| `sun-path/scripts/comfort_calc.py` | — |
-| `sun-path/scripts/plot_sunpath.py` | — |
-| `sun-path/scripts/shadow_calc.py` | — |
-| `sun-path/scripts/sun_calc.py` | — |
-| `sun-path/scripts/terrain_shadow.py` | Terrain shadow from DEM at a given time. Reads a GeoTIFF DEM, computes sun position, and outputs a binary shadow raster (1 = in shadow, 0 = in sun) and optional hillshade-style plot. Designed for modest memory use (process by blocks if needed); single read for small DEMs. |
 | `sunlight-analysis/scripts/annual_sun_hours.py` | Annual sun/shadow hours at a point. Given a building (footprint + height + rotation) and a point (x,y in meters from building center), compute total hours per year the point is in direct sun vs in building shadow vs night. Samples at configurable interval (default 1 hour) for memory efficiency on 1G |
 | `sunlight-analysis/scripts/comfort_calc.py` | — |
 | `sunlight-analysis/scripts/plot_sunpath.py` | — |
@@ -97,13 +88,14 @@ runtime.execution.all_skills · unified skill catalog.
 
 ## Who imports this
 
-**5** file(s) reference this package:
+**6** file(s) reference this package:
 
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/cerebrum/react_context.py`
-- **`runtime/execution/`** · 2 file(s)
+- **`runtime/execution/`** · 3 file(s)
   - `runtime/execution/misc/capability_catalog.py`
   - `runtime/execution/misc/capability_permissions.py`
+  - `runtime/execution/swarm/drive.py`
 - **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/config/builder.py`
 - **`runtime/sensing/`** · 1 file(s)

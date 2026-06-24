@@ -1,3 +1,10 @@
+---
+type: "Agent"
+title: "🖥️ Raven · `desktop_operator`"
+description: "夜鸦（Raven）· 白幽灵小队的远程接管手，代号 Night Crow，全队最强单兵。能力「影子网络 Shadow Link」——借暗处与设备之间做数据跳跃，实现远程目视、终端接管、微操作潜入。对外身份是桌面自动化专家。"
+tags: ["backend", "agents"]
+tier: "standard"
+---
 # 🖥️ Raven · `desktop_operator`
 
 > 夜鸦（Raven）· 白幽灵小队的远程接管手，代号 Night Crow，全队最强单兵。能力「影子网络 Shadow Link」——借暗处与设备之间做数据跳跃，实现远程目视、终端接管、微操作潜入。对外身份是桌面自动化专家。

@@ -1,14 +1,29 @@
+---
+type: "SafetySubsystem"
+title: "Safety · Recovery"
+description: "MemoryConsolidator · SkillForge · KG updater · 从 trajectory 反哺记忆 / 技能 / 图谱。"
+tags: ["backend", "safety"]
+tier: "core"
+---
 # Safety · Recovery
 
 > MemoryConsolidator · SkillForge · KG updater · 从 trajectory 反哺记忆 / 技能 / 图谱。
 
 **Source**: `runtime/safety/recovery/`
 
+## Package summary
+
+Self-evolution subsystem — biomimetic alias: *Regeneration*.
+
 ## Exports
 
 - `CollectorConfig`
 - `ExtractorConfig`
+- `EvolutionPath`
+- `EvolutionRouter`
+- `EvolutionVerdict`
 - `ForgeConfig`
+- `ForgedReflexCandidate`
 - `ForgedSkillCandidate`
 - `GenomeRegistry`
 - `GenomeRegistryConfig`
@@ -54,6 +69,9 @@
 - `TurnReplayReport`
 - `filter_memories_for_agent`
 - `format_memories_for_prompt`
+- `ReflexForge`
+- `ReflexForgeConfig`
+- `ReflexForgeResult`
 - `RuleExtractionReport`
 - `RuleExtractor`
 - `ShadowConfig`
@@ -101,6 +119,7 @@
 | --- | --- |
 | `evolution_constraints.py` | — |
 | `evolution_dataset.py` | Unified dataset builder for regeneration and prompt evolution. |
+| `evolution_router.py` | EvolutionRouter · route evolution candidates to the right forge. |
 | `external_importers.py` | — |
 | `forge_auto_tick.py` | RecipeForge auto-promote scheduler · the last-mile autonomy knob. |
 | `genome_registry.py` | Genome Registry — versioned JSON snapshot store for system configuration. |
@@ -120,6 +139,7 @@
 | `native_turn_replay.py` | — |
 | `optimizer_backends.py` | Pluggable prompt-optimizer backends for Octopus evolution. |
 | `recipe_evaluator.py` | — |
+| `reflex_forge.py` | ReflexForge · auto-generate reflex rules from successful turns. |
 | `rule_extractor.py` | — |
 | `scheduler.py` | — |
 | `skill_forge.py` | — |
@@ -129,7 +149,7 @@
 
 ## Who imports this
 
-**18** file(s) reference this package:
+**19** file(s) reference this package:
 
 - **`runtime/cli.py/`** · 1 file(s)
   - `runtime/cli.py`
@@ -141,8 +161,9 @@
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/planner.py`
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/memory/`** · 1 file(s)
+- **`runtime/memory/`** · 2 file(s)
   - `runtime/memory/diagnostics/wiki_compiler.py`
+  - `runtime/memory/learning/promotion_applier.py`
 - **`runtime/platform/`** · 2 file(s)
   - `runtime/platform/ui/app.py`
   - `runtime/platform/ui/reflex_admin_router.py`

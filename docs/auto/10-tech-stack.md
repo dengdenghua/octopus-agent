@@ -1,3 +1,10 @@
+---
+type: "Reference"
+title: "技术栈 · Tech Stack"
+description: "从 `pyproject.toml` + `frontend/package.json` 抽取的关键依赖。"
+tags: []
+tier: "standard"
+---
 # 技术栈 · Tech Stack
 
 > 从 `pyproject.toml` + `frontend/package.json` 抽取的关键依赖。
@@ -34,5 +41,5 @@
 - `@radix-ui/react-toggle`
 - `@radix-ui/react-toggle-group`
 - `@radix-ui/react-tooltip`
-- … 共 74 个依赖
+- … 共 67 个依赖
 

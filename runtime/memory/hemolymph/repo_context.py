@@ -99,6 +99,11 @@ _BM25_B = 0.75
 # already-matched pages without overpowering lexical relevance.
 _GRAPH_BOOST = 0.25
 
+# Source-tier boost (ADR-009): a core subsystem page outranks an equally-relevant
+# peripheral one. Multiplicative on the BM25 score, small. Tier comes from the
+# page's OKF frontmatter; absent/unknown → 1.0 (no effect).
+_TIER_WEIGHT = {"core": 1.15, "standard": 1.0}
+
 # Cache the parsed + indexed wiki keyed by (dir, index.json mtime) so a hot
 # planning loop doesn't re-read/re-index ~30 files every turn, but a
 # regenerated wiki is picked up automatically.
@@ -152,6 +157,27 @@ def _flatten(tree: Any) -> list[tuple[str, str]]:
     return pages
 
 
+def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
+    """Split an OKF/YAML frontmatter block from the markdown body. gen_wiki
+    emits each value as a JSON literal, so every ``key: <json>`` line parses
+    with ``json.loads`` — no YAML dependency. No frontmatter → ``({}, text)``."""
+    if not text.startswith("---\n"):
+        return {}, text
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return {}, text
+    meta: dict[str, Any] = {}
+    for line in text[4:end].splitlines():
+        key, sep, val = line.partition(":")
+        if not sep:
+            continue
+        try:
+            meta[key.strip()] = json.loads(val.strip())
+        except (ValueError, TypeError):
+            meta[key.strip()] = val.strip().strip('"')
+    return meta, text[end + 5 :]
+
+
 def _build_index(wiki_dir: Path) -> dict[str, Any]:
     """Read every wiki page and build a small BM25 index over it."""
     index_path = wiki_dir / "index.json"
@@ -164,19 +190,29 @@ def _build_index(wiki_dir: Path) -> dict[str, Any]:
     df: Counter[str] = Counter()
     total_len = 0
     for title, rel in _flatten(index.get("tree")):
-        body = ""
+        raw = ""
         with contextlib.suppress(OSError):
-            body = (wiki_dir / rel).read_text(encoding="utf-8")
-        # Title + path weigh into matching even when the body is unreadable;
-        # repeat the title so a title hit counts for more than a body mention.
-        tf = Counter(_tokenize(f"{title} {title} {rel} {body}"))
+            raw = (wiki_dir / rel).read_text(encoding="utf-8")
+        meta, body = _split_frontmatter(raw)
+        desc = str(meta.get("description") or "")
+        tier = str(meta.get("tier") or "standard")
+        tags = meta.get("tags") or []
+        tag_str = " ".join(tags) if isinstance(tags, list) else str(tags)
+        # Weight the high-signal OKF fields: title + description repeated so a
+        # title/description hit beats a body mention. Frontmatter is stripped
+        # from ``body`` so YAML keys pollute neither BM25 nor the prompt (which
+        # injects ``body`` verbatim). No frontmatter → desc/tags empty → same
+        # tokens as before (backward compatible).
+        tf = Counter(_tokenize(f"{title} {title} {desc} {desc} {tag_str} {rel} {body}"))
         if not tf:
             continue
         length = sum(tf.values())
         total_len += length
         for term in tf:
             df[term] += 1
-        pages.append({"title": title, "path": rel, "body": body, "tf": tf, "length": length})
+        pages.append(
+            {"title": title, "path": rel, "body": body, "tf": tf, "length": length, "tier": tier}
+        )
 
     n = len(pages)
     avgdl = (total_len / n) if n else 0.0
@@ -263,7 +299,10 @@ def retrieve_repo_context(
     if not idx["pages"]:
         return None
 
-    scored = [(_bm25(q_terms, p, idx), p) for p in idx["pages"]]
+    scored = [
+        (_bm25(q_terms, p, idx) * _TIER_WEIGHT.get(p.get("tier", "standard"), 1.0), p)
+        for p in idx["pages"]
+    ]
     scored = [(s, p) for s, p in scored if s > 0]
     if not scored:
         return None

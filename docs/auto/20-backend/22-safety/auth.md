@@ -1,3 +1,10 @@
+---
+type: "SafetySubsystem"
+title: "Safety · Auth"
+description: "TrustEngine · allow/quarantine/reject · IMM-I1~I6 不变量守护。"
+tags: ["backend", "safety"]
+tier: "core"
+---
 # Safety · Auth
 
 > TrustEngine · allow/quarantine/reject · IMM-I1~I6 不变量守护。

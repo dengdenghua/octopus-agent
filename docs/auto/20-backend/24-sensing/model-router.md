@@ -1,3 +1,10 @@
+---
+type: "SensingSubsystem"
+title: "Sensing · Model Router"
+description: "ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。"
+tags: ["backend", "sensing"]
+tier: "standard"
+---
 # Sensing · Model Router
 
 > ModelRouter 抽象 · Anthropic / OpenAI / Molili / Mock / MultiModelRouter (multi-provider fallback)。

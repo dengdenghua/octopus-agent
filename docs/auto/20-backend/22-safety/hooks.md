@@ -1,3 +1,10 @@
+---
+type: "SafetySubsystem"
+title: "Safety · Hooks"
+description: "Tool lifecycle hooks · 6 个事件 · sync + async handler · ESLint rules-of-hooks=error 静态守护。"
+tags: ["backend", "safety"]
+tier: "core"
+---
 # Safety · Hooks
 
 > Tool lifecycle hooks · 6 个事件 · sync + async handler · ESLint rules-of-hooks=error 静态守护。

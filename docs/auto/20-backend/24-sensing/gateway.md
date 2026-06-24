@@ -1,3 +1,10 @@
+---
+type: "SensingSubsystem"
+title: "Sensing · Gateway (HTTP API)"
+description: "全部 FastAPI router · openai_gateway / meta / mcp / config / channels / thread_compat / …"
+tags: ["backend", "sensing"]
+tier: "standard"
+---
 # Sensing · Gateway (HTTP API)
 
 > 全部 FastAPI router · openai_gateway / meta / mcp / config / channels / thread_compat / …
@@ -34,6 +41,7 @@
 | `anthropic_compat/session_manager.py` | Session lifecycle manager for the Anthropic compat layer. |
 | `apps_router.py` | — |
 | `channels_router.py` | — |
+| `cli_team_router.py` | CLI-team router · ``/api/cli-team/*``. |
 | `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
 | `computer_router.py` | Computer automation API. |
 | `config_router.py` | Config router · identity-lock + providers + custom-models. |
@@ -58,6 +66,8 @@
 | `intelligence_router.py` | — |
 | `invariants_router.py` | Invariants router · catalog of the 34-rule constitution and which functions enforce each rule. |
 | `journal_router.py` | Journal query router · ``/api/journal/*``. |
+| `local_brain.py` | One-glance local-brain readiness for the work-mode setup wizard. |
+| `local_brain_router.py` | Local-brain setup router · ``/api/local-brain/*``. |
 | `lsp_router.py` | Thin HTTP wrapper around the registered LSP skills. |
 | `mcp_router.py` | MCP router · declare / enable / disable MCP servers at runtime. |
 | `memory_router.py` | Local memory compatibility API. |
@@ -82,6 +92,7 @@
 | `realtime_echo.py` | Echo runtime — reference :class:`RealtimeRuntime` implementation. |
 | `realtime_event_bridge.py` | React-event → ``item/*`` bridge state for the realtime runtime. |
 | `realtime_gateway.py` | Realtime gateway — JSON-RPC 2.0 over WebSocket. |
+| `realtime_local_partner.py` | Direct execution of LocalPartner agents on the realtime path. |
 | `realtime_react_stream.py` | Single-agent stream drivers for the realtime runtime. |
 | `realtime_team_stream.py` | Multi-agent team-topology stream driver for the realtime runtime. |
 | `realtime_thread_history.py` | Realtime turn ↔ legacy conversation history adapters. |
@@ -93,16 +104,20 @@
 | `realtime_workbench.py` | Workbench snapshot + workspace-focus helpers for the realtime runtime. |
 | `remote_backends_router.py` | Remote backends router · ``/api/remote-backends/*``. |
 | `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over SSH-tunneled HTTP. |
+| `retrieve_router.py` | Retrieval router · ``/api/retrieve/rank``. |
 | `skill_market_router.py` | — |
 | `slash_command_expansion.py` | Slash-command expansion for realtime chat input. |
+| `storage_supervisor.py` | Optional co-launch of the octopus-storage sibling service. |
 | `streaming_journal.py` | — |
 | `stub_router.py` | — |
 | `subagents_router.py` | Subagent FastAPI router. |
 | `system_router.py` | System-level local maintenance endpoints. |
+| `team_role_models_router.py` | Team role-model settings router · ``/api/team/role-models``. |
 | `team_rooms_router.py` | Persistent team rooms API. |
 | `team_rooms_ws.py` | Realtime Team Room WebSocket handler. |
 | `team_speaker_policy.py` | Pure team-room governance helpers. |
 | `team_tasks_router.py` | Persistent team tasks API. |
+| `tentacle_join_router.py` | Tentacle join router · ``/api/tentacle/join-info``. |
 | `terminal_router.py` | terminal_router · WebSocket-based persistent shell sessions. |
 | `thread_state_router.py` | Thread state HTTP router used by the realtime UI. |
 | `tool_bridge.py` | tool_bridge · the agentic-loop helper that turns Octopus skills into Claude-native ``tool_use`` calls and loops result → next turn. |
@@ -115,8 +130,10 @@
 
 ## Who imports this
 
-**4** file(s) reference this package:
+**5** file(s) reference this package:
 
+- **`runtime/cli.py/`** · 1 file(s)
+  - `runtime/cli.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
 - **`runtime/platform/`** · 3 file(s)

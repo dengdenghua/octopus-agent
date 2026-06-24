@@ -1,3 +1,10 @@
+---
+type: "SafetySubsystem"
+title: "Safety · Validation"
+description: "宪法层 · PRIV/LAWF/DGNT/SELF/EXFIL 五类 · rule gate + LLM judge + profile 降级。"
+tags: ["backend", "safety"]
+tier: "core"
+---
 # Safety · Validation
 
 > 宪法层 · PRIV/LAWF/DGNT/SELF/EXFIL 五类 · rule gate + LLM judge + profile 降级。
@@ -8,6 +15,7 @@
 
 - `CONSTITUTION_SUMMARY`
 - `ConstitutionViolationEvent`
+- `HARD_FLOOR`
 - `Judge`
 - `JudgeVerdict`
 - `ProfileName`
@@ -18,6 +26,7 @@
 - `get_constitution_summary`
 - `get_judge`
 - `get_profile`
+- `is_hard_floor`
 - `null_judge`
 - `reset_profile_for_tests`
 - `scan_pii`
