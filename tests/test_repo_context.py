@@ -237,6 +237,11 @@ def test_split_frontmatter_parses_json_values_and_passes_through() -> None:
     assert meta == {"type": "Doc", "tags": ["a", "b"], "tier": "core"}
     assert body == "body"
     assert _split_frontmatter("# plain markdown") == ({}, "# plain markdown")
+    # A doc that merely opens with a `---` rule (no OKF `type`) is NOT
+    # frontmatter — even when the block contains a colon — so its body is
+    # returned intact rather than truncated at the second `---`.
+    rule_doc = "---\nNote: not frontmatter\n---\nreal body"
+    assert _split_frontmatter(rule_doc) == ({}, rule_doc)
 
 
 def test_frontmatter_stripped_from_prompt_and_description_indexed(tmp_path: Path) -> None:

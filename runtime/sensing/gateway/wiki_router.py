@@ -39,6 +39,10 @@ def _split_frontmatter(text: str) -> tuple[dict[str, Any], str]:
             meta[key.strip()] = json.loads(val.strip())
         except (ValueError, TypeError):
             meta[key.strip()] = val.strip().strip('"')
+    # Only treat it as OKF frontmatter if the required ``type`` field is present,
+    # so a user doc that merely opens with a ``---`` rule isn't truncated.
+    if "type" not in meta:
+        return {}, text
     return meta, text[end + 5 :]
 
 
