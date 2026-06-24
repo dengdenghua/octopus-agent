@@ -38,6 +38,7 @@ import logging
 import os
 import platform
 import subprocess
+import time
 from typing import Any
 
 from fastapi import Request, WebSocket
@@ -53,6 +54,14 @@ _logger = logging.getLogger(__name__)
 # PLACEHOLDER_SESSIONS
 
 _sessions: dict[str, ShellSession] = {}
+
+# Idle terminal sessions are kept across ws reconnects (persistent shell), but a
+# client that drops and never returns would otherwise leak its shell + the
+# subprocess forever. reap_sessions() — called on each new connection — drops
+# dead shells, reaps sessions idle beyond _IDLE_TTL_SECONDS, and hard-caps the
+# live count at _MAX_SESSIONS (least-recently-active evicted first).
+_IDLE_TTL_SECONDS = 1800.0  # 30 min
+_MAX_SESSIONS = 64
 
 
 class ShellSession:
@@ -75,6 +84,9 @@ class ShellSession:
         self._output_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=4096)
         self._reader_task: asyncio.Task[None] | None = None
         self._alive = False
+        # Monotonic timestamp of the last user input / output byte · drives the
+        # idle reaper (reap_sessions) so an abandoned shell is eventually freed.
+        self.last_activity = time.monotonic()
 
         # State snapshot mechanism
         self._state_mgr = ShellStateManager(
@@ -105,10 +117,12 @@ class ShellSession:
             **_subprocess_platform_kwargs(),
         )
         self._alive = True
-        await self._output_queue.put({
-            "type": "output",
-            "data": _initial_terminal_text(self.cwd),
-        })
+        await self._output_queue.put(
+            {
+                "type": "output",
+                "data": _initial_terminal_text(self.cwd),
+            }
+        )
         self._reader_task = asyncio.create_task(self._read_loop())
 
     async def _read_loop(self) -> None:
@@ -118,6 +132,7 @@ class ShellSession:
                 chunk = await self.process.stdout.read(4096)
                 if not chunk:
                     break
+                self.last_activity = time.monotonic()
                 decoded = chunk.decode("utf-8", errors="replace")
 
                 # Update byte buffer
@@ -140,15 +155,19 @@ class ShellSession:
                 clean_data = self._state_mgr.extract_clean_output(decoded)
 
                 # Send output to queue
-                await self._output_queue.put({
-                    "type": "output",
-                    "data": clean_data,
-                })
-                if new_state:
-                    await self._output_queue.put({
+                await self._output_queue.put(
+                    {
                         "type": "output",
-                        "data": _prompt_for_cwd(new_state.cwd),
-                    })
+                        "data": clean_data,
+                    }
+                )
+                if new_state:
+                    await self._output_queue.put(
+                        {
+                            "type": "output",
+                            "data": _prompt_for_cwd(new_state.cwd),
+                        }
+                    )
 
                 # Report dropped data if any
                 if self._byte_buffer.bytes_dropped > 0 or self._line_buffer.lines_dropped > 0:
@@ -166,6 +185,7 @@ class ShellSession:
             await self._output_queue.put({"type": "exit", "code": code})
 
     async def write(self, data: str) -> None:
+        self.last_activity = time.monotonic()
         if self.process and self.process.stdin and self.process.returncode is None:
             # Apply safe_rm protection
             protected = self._safe_rm.wrap_command(data)
@@ -261,7 +281,35 @@ async def kill_session(session_id: str) -> None:
         await session.kill()
 
 
+async def reap_sessions(*, exclude_id: str | None = None) -> None:
+    """Drop dead/idle terminal sessions to bound ``_sessions`` growth.
+
+    A session is reaped if its process has exited (``alive`` is False) or it
+    has been idle longer than ``_IDLE_TTL_SECONDS``. If the live count still
+    exceeds ``_MAX_SESSIONS``, the least-recently-active sessions are evicted.
+    ``exclude_id`` (the session being (re)connected to) is never reaped, so a
+    reconnect within the idle window keeps its shell.
+    """
+    now = time.monotonic()
+    doomed: list[str] = []
+    for sid, sess in list(_sessions.items()):
+        if sid == exclude_id:
+            continue
+        if not sess.alive or (now - sess.last_activity) > _IDLE_TTL_SECONDS:
+            doomed.append(sid)
+    survivors = [sess for sid, sess in _sessions.items() if sid not in doomed and sid != exclude_id]
+    overflow = len(survivors) - _MAX_SESSIONS
+    if overflow > 0:
+        survivors.sort(key=lambda s: s.last_activity)
+        doomed.extend(s.session_id for s in survivors[:overflow])
+    for sid in doomed:
+        await kill_session(sid)
+    if doomed:
+        _logger.info("terminal: reaped %d idle/dead session(s)", len(doomed))
+
+
 # ── FastAPI WebSocket route ────────────────────────────────────
+
 
 def mount_terminal_routes(
     app: Any,
@@ -320,8 +368,10 @@ def mount_terminal_routes(
             return None
         if jwt_secret and token.count(".") == 2:
             identity = identity_store.verify_jwt(
-                token, secret=jwt_secret,
-                required_issuer=jwt_issuer, required_audience=jwt_audience,
+                token,
+                secret=jwt_secret,
+                required_issuer=jwt_issuer,
+                required_audience=jwt_audience,
             )
             if identity is not None:
                 return identity.actor_id
@@ -336,9 +386,13 @@ def mount_terminal_routes(
 
     def _auth_http(request: Request) -> None:
         from .openai_gateway_router import _resolve_actor
+
         _resolve_actor(
-            request, identity_store, require_auth,
-            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer,
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
             jwt_audience=jwt_audience,
         )
 
@@ -356,10 +410,15 @@ def mount_terminal_routes(
             # Refuse before accept(): no shell is ever spawned. 4401
             # mirrors HTTP 401 in the WS application close-code range.
             from contextlib import suppress
+
             with suppress(Exception):
                 await ws.close(code=4401, reason=str(exc))
             return
         await ws.accept()
+        # Bound _sessions growth: free shells abandoned by clients that
+        # disconnected without calling /api/terminal/kill. Never touches the
+        # session we're about to (re)connect to.
+        await reap_sessions(exclude_id=session_id)
         cwd = ws.query_params.get("cwd")
         session = get_session(session_id, cwd=cwd)
         try:

@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import struct
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -38,17 +39,23 @@ logger = logging.getLogger(__name__)
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", ""})
 
+# Pairing-token brute-force throttle · once an IP accumulates this many failed
+# device/hello attempts within the sliding window, further connections from it
+# are refused until the failures age out.
+_HELLO_MAX_FAILURES = 5
+_HELLO_WINDOW_SECONDS = 60.0
+
 # ── 消息类型常量 ──────────────────────────────────────────
 
 MSG_DEVICE_HELLO = "device/hello"
 MSG_DEVICE_HEARTBEAT = "device/heartbeat"
 MSG_DEVICE_SCREEN = "device/screen"
-MSG_DEVICE_SCREEN_FRAME = "device/screen_frame"   # 设备推送视频帧（二进制）
-MSG_SCREEN_SUBSCRIBE = "screen/subscribe"          # 客户端订阅某设备的屏幕流
-MSG_SCREEN_UNSUBSCRIBE = "screen/unsubscribe"      # 客户端取消订阅
-MSG_REMOTE_INPUT = "remote/input"                  # 手机端发送远程输入事件（控制PC）
-MSG_PC_SCREEN_SUBSCRIBE = "pc_screen/subscribe"    # 手机端订阅PC屏幕流
-MSG_PC_SCREEN_UNSUBSCRIBE = "pc_screen/unsubscribe"# 手机端取消订阅PC屏幕流
+MSG_DEVICE_SCREEN_FRAME = "device/screen_frame"  # 设备推送视频帧（二进制）
+MSG_SCREEN_SUBSCRIBE = "screen/subscribe"  # 客户端订阅某设备的屏幕流
+MSG_SCREEN_UNSUBSCRIBE = "screen/unsubscribe"  # 客户端取消订阅
+MSG_REMOTE_INPUT = "remote/input"  # 手机端发送远程输入事件（控制PC）
+MSG_PC_SCREEN_SUBSCRIBE = "pc_screen/subscribe"  # 手机端订阅PC屏幕流
+MSG_PC_SCREEN_UNSUBSCRIBE = "pc_screen/unsubscribe"  # 手机端取消订阅PC屏幕流
 MSG_TASK_EXECUTE = "task/execute"
 MSG_TASK_RESULT = "task/result"
 MSG_TOOL_EXECUTE = "tool/execute"
@@ -59,6 +66,7 @@ MSG_PONG = "pong"
 
 
 # ── 数据类 ────────────────────────────────────────────────
+
 
 class DeviceHello:
     """设备首次连接上报的元信息."""
@@ -98,6 +106,7 @@ class TaskExecuteRequest:
 
 # ── WebSocket Server ──────────────────────────────────────
 
+
 class TentacleWebSocketServer:
     """触手 WebSocket 服务器.
 
@@ -123,14 +132,17 @@ class TentacleWebSocketServer:
         host: str = "0.0.0.0",
         port: int = 8765,
         *,
-        on_device_hello: Callable[[DeviceHello, WebSocketServerProtocol], Awaitable[None]] | None = None,
+        on_device_hello: Callable[[DeviceHello, WebSocketServerProtocol], Awaitable[None]]
+        | None = None,
         on_device_disconnect: Callable[[str], Awaitable[None]] | None = None,
         on_tool_result: Callable[[ToolResult], Awaitable[None]] | None = None,
         on_heartbeat: Callable[[Heartbeat], Awaitable[None]] | None = None,
-        on_task_execute: Callable[[TaskExecuteRequest, WebSocketServerProtocol], Awaitable[None]] | None = None,
+        on_task_execute: Callable[[TaskExecuteRequest, WebSocketServerProtocol], Awaitable[None]]
+        | None = None,
         on_screen_frame: Callable[[str, bytes], Awaitable[None]] | None = None,
         on_remote_input: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
-        on_custom: Callable[[str | None, dict[str, Any], WebSocketServerProtocol], Awaitable[None]] | None = None,
+        on_custom: Callable[[str | None, dict[str, Any], WebSocketServerProtocol], Awaitable[None]]
+        | None = None,
         auth_token: str | None = None,
     ) -> None:
         self.host = host
@@ -143,7 +155,8 @@ class TentacleWebSocketServer:
         # for phones on the LAN), every connection is rejected — an
         # exposed port with no secret to check against is never safe.
         self.auth_token = (
-            auth_token if auth_token is not None
+            auth_token
+            if auth_token is not None
             else os.environ.get("OCTOPUS_TENTACLE_TOKEN") or None
         )
         self.on_device_hello = on_device_hello
@@ -162,6 +175,9 @@ class TentacleWebSocketServer:
 
         self._server: asyncio.Server | None = None
         self._stop_event = asyncio.Event()
+        # remote IP → recent failed device/hello timestamps (monotonic), for
+        # the pairing-token brute-force throttle (see _hello_rate_limited).
+        self._hello_failures: dict[str, list[float]] = {}
 
     # ── 生命周期 ────────────────────────────────────────────
 
@@ -182,6 +198,25 @@ class TentacleWebSocketServer:
         params = msg.get("params") or {}
         provided = params.get("auth_token") or params.get("token") or ""
         return hmac.compare_digest(str(provided), self.auth_token)
+
+    def _hello_rate_limited(self, ip: str) -> bool:
+        """True if ``ip`` has used up its device/hello failure budget within the
+        sliding window. Throttles pairing-token brute force: each failed hello
+        is recorded; once the window holds _HELLO_MAX_FAILURES attempts the IP
+        is refused until older failures age out."""
+        now = time.monotonic()
+        recent = [t for t in self._hello_failures.get(ip, ()) if now - t < _HELLO_WINDOW_SECONDS]
+        if recent:
+            self._hello_failures[ip] = recent
+        else:
+            self._hello_failures.pop(ip, None)
+        return len(recent) >= _HELLO_MAX_FAILURES
+
+    def _record_hello_failure(self, ip: str) -> None:
+        self._hello_failures.setdefault(ip, []).append(time.monotonic())
+
+    def _clear_hello_failures(self, ip: str) -> None:
+        self._hello_failures.pop(ip, None)
 
     async def start(self) -> None:
         """启动 WebSocket 服务器."""
@@ -236,9 +271,7 @@ class TentacleWebSocketServer:
         """
         ws = self._connections.get(tentacle_id)
         if ws is None or ws.closed:
-            return ToolResult.fail(
-                call.call_id, -32011, f"Device {tentacle_id} not connected", 0
-            )
+            return ToolResult.fail(call.call_id, -32011, f"Device {tentacle_id} not connected", 0)
 
         # 创建 future 等待结果
         future: asyncio.Future[ToolResult] = asyncio.get_event_loop().create_future()
@@ -260,9 +293,7 @@ class TentacleWebSocketServer:
                 call.call_id, -32012, f"Timeout after {timeout_ms}ms", timeout_ms
             )
         except Exception as e:
-            return ToolResult.fail(
-                call.call_id, -32013, f"Send failed: {e}", 0
-            )
+            return ToolResult.fail(call.call_id, -32013, f"Send failed: {e}", 0)
         finally:
             self._pending_calls.pop(call.call_id, None)
 
@@ -306,16 +337,16 @@ class TentacleWebSocketServer:
         if ws is None or ws.closed:
             return False
         try:
-            await ws.send(json.dumps({"jsonrpc": "2.0", "method": MSG_PING, "id": f"ping-{now_ms()}"}))
+            await ws.send(
+                json.dumps({"jsonrpc": "2.0", "method": MSG_PING, "id": f"ping-{now_ms()}"})
+            )
             return True
         except Exception:  # noqa: BLE001 — best-effort; fail-open
             return False
 
     # ── 连接处理 ────────────────────────────────────────────
 
-    async def _handle_connection(
-        self, ws: WebSocketServerProtocol, path: str
-    ) -> None:
+    async def _handle_connection(self, ws: WebSocketServerProtocol, path: str) -> None:
         """处理单个 WebSocket 连接."""
         remote = f"{ws.remote_address[0]}:{ws.remote_address[1]}"
         logger.info("ws connection from %s path=%s", remote, path)
@@ -324,6 +355,16 @@ class TentacleWebSocketServer:
         # other method — and no binary frame — is processed. A loopback
         # bind with no token configured starts pre-authenticated.
         authenticated = self._conn_pre_authenticated()
+
+        # Pairing-token brute-force throttle · only bites when auth is actually
+        # required. A loopback no-token dev bind is pre-authenticated and skips
+        # this entirely.
+        client_ip = ws.remote_address[0]
+        if not authenticated and self._hello_rate_limited(client_ip):
+            logger.warning("ws hello rate-limited for %s", client_ip)
+            with contextlib.suppress(Exception):
+                await ws.close(code=1008, reason="rate limited")
+            return
 
         try:
             async for raw in ws:
@@ -338,16 +379,17 @@ class TentacleWebSocketServer:
                     except json.JSONDecodeError:
                         await self._send_error(ws, None, -32700, "Parse error")
                         continue
-                    if (
-                        hello_msg.get("method") == MSG_DEVICE_HELLO
-                        and self._check_auth(hello_msg)
-                    ):
+                    if hello_msg.get("method") == MSG_DEVICE_HELLO and self._check_auth(hello_msg):
                         authenticated = True
+                        self._clear_hello_failures(client_ip)
                         tentacle_id = await self._handle_hello(ws, hello_msg)
                         continue
+                    self._record_hello_failure(client_ip)
                     logger.warning("ws unauthorized hello from %s", remote)
                     await self._send_error(
-                        ws, hello_msg.get("id"), -32099,
+                        ws,
+                        hello_msg.get("id"),
+                        -32099,
                         "unauthorized: device/hello with a valid token required",
                     )
                     await ws.close(code=1008, reason="unauthorized")
@@ -406,9 +448,7 @@ class TentacleWebSocketServer:
 
     # ── 消息处理器 ──────────────────────────────────────────
 
-    async def _handle_hello(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any]
-    ) -> str | None:
+    async def _handle_hello(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> str | None:
         """处理 device/hello —— 设备注册."""
         params = msg.get("params", {})
         hello = DeviceHello(params)
@@ -424,17 +464,19 @@ class TentacleWebSocketServer:
                 logger.warning("on_device_hello error: %s", e)
 
         # 回复确认
-        await ws.send(json.dumps({
-            "jsonrpc": "2.0",
-            "result": {"registered": True, "server_time": now_ms()},
-            "id": msg.get("id"),
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "result": {"registered": True, "server_time": now_ms()},
+                    "id": msg.get("id"),
+                }
+            )
+        )
         logger.info("device registered id=%s model=%s", hello.tentacle_id, hello.model)
         return hello.tentacle_id
 
-    async def _handle_heartbeat(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any]
-    ) -> None:
+    async def _handle_heartbeat(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
         """处理 device/heartbeat."""
         params = msg.get("params", {})
         hb = Heartbeat(
@@ -455,9 +497,7 @@ class TentacleWebSocketServer:
             except Exception as e:
                 logger.warning("on_heartbeat error: %s", e)
 
-    async def _handle_screen(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any]
-    ) -> None:
+    async def _handle_screen(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
         """处理 device/screen —— 屏幕变化事件."""
         params = msg.get("params", {})
         # 透发给订阅者（由 TentaclePool 处理）
@@ -479,6 +519,7 @@ class TentacleWebSocketServer:
         # 尝试解析帧头获取 tentacle_id
         try:
             from ..mobile.screen_relay import decode_frame_header
+
             parsed_tid, frame_type, flags, _ = decode_frame_header(data)
         except (struct.error, ValueError, IndexError) as e:
             logger.warning("invalid binary frame from %s: %s", ws.remote_address, e)
@@ -492,7 +533,10 @@ class TentacleWebSocketServer:
 
         logger.debug(
             "screen frame from %s type=%s flags=0x%02x size=%d",
-            effective_tid, frame_type, flags, len(data),
+            effective_tid,
+            frame_type,
+            flags,
+            len(data),
         )
 
         # 回调屏幕帧处理
@@ -502,9 +546,7 @@ class TentacleWebSocketServer:
             except Exception as e:
                 logger.warning("on_screen_frame error: %s", e)
 
-    async def _handle_task_execute(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any]
-    ) -> None:
+    async def _handle_task_execute(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
         """处理 task/execute —— 手机请求母体决策任务.
 
         这是 Mobile → Runtime 的任务请求通路.
@@ -516,41 +558,49 @@ class TentacleWebSocketServer:
         request = TaskExecuteRequest(params)
 
         if self.on_task_execute:
+
             async def _run_and_respond():
                 try:
                     await self.on_task_execute(request, ws)
                 except Exception as e:
                     logger.warning("on_task_execute error: %s", e)
                     with contextlib.suppress(Exception):  # immediate start heartbeat; failure OK
-                        await ws.send(json.dumps({
-                            "jsonrpc": "2.0",
-                            "method": MSG_TASK_RESULT,
-                            "params": {
-                                "task_id": request.task_id,
-                                "success": False,
-                                "response": f"Server error: {e}",
-                                "steps": 0,
-                            },
-                            "id": request.task_id,
-                        }))
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "method": MSG_TASK_RESULT,
+                                    "params": {
+                                        "task_id": request.task_id,
+                                        "success": False,
+                                        "response": f"Server error: {e}",
+                                        "steps": 0,
+                                    },
+                                    "id": request.task_id,
+                                }
+                            )
+                        )
+
             asyncio.create_task(_run_and_respond())
         else:
             # 未配置回调，返回未实现
-            await ws.send(json.dumps({
-                "jsonrpc": "2.0",
-                "method": MSG_TASK_RESULT,
-                "params": {
-                    "task_id": request.task_id,
-                    "success": False,
-                    "response": "Task execution not configured on server",
-                    "steps": 0,
-                },
-                "id": request.task_id,
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "method": MSG_TASK_RESULT,
+                        "params": {
+                            "task_id": request.task_id,
+                            "success": False,
+                            "response": "Task execution not configured on server",
+                            "steps": 0,
+                        },
+                        "id": request.task_id,
+                    }
+                )
+            )
 
-    async def _handle_tool_result(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any]
-    ) -> None:
+    async def _handle_tool_result(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
         """处理 tool/result —— 工具执行结果."""
         params = msg.get("params", {})
         call_id = params.get("call_id", "")
@@ -593,11 +643,15 @@ class TentacleWebSocketServer:
 
         try:
             result = await self.on_remote_input(tentacle_id or "unknown", params)
-            await ws.send(json.dumps({
-                "jsonrpc": "2.0",
-                "result": result,
-                "id": msg_id,
-            }))
+            await ws.send(
+                json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "result": result,
+                        "id": msg_id,
+                    }
+                )
+            )
         except Exception as e:
             await self._send_error(ws, msg_id, -32021, f"Remote input error: {e}")
 
@@ -608,11 +662,15 @@ class TentacleWebSocketServer:
         msg_id = msg.get("id")
         # 注册手机端为 PC 屏幕流的订阅者
         # 通过 ScreenRelay 的 add_subscriber 实现
-        await ws.send(json.dumps({
-            "jsonrpc": "2.0",
-            "result": {"subscribed": True, "source": "pc-host"},
-            "id": msg_id,
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "result": {"subscribed": True, "source": "pc-host"},
+                    "id": msg_id,
+                }
+            )
+        )
         logger.info("PC screen subscribe from device=%s", tentacle_id)
 
     async def _handle_pc_screen_unsubscribe(
@@ -620,11 +678,15 @@ class TentacleWebSocketServer:
     ) -> None:
         """处理 pc_screen/unsubscribe —— 手机端取消订阅PC屏幕流."""
         msg_id = msg.get("id")
-        await ws.send(json.dumps({
-            "jsonrpc": "2.0",
-            "result": {"unsubscribed": True, "source": "pc-host"},
-            "id": msg_id,
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "result": {"unsubscribed": True, "source": "pc-host"},
+                    "id": msg_id,
+                }
+            )
+        )
         logger.info("PC screen unsubscribe from device=%s", tentacle_id)
 
     # ── PC屏幕帧推送 ─────────────────────────────────────────
@@ -657,11 +719,15 @@ class TentacleWebSocketServer:
         code: int,
         message: str,
     ) -> None:
-        await ws.send(json.dumps({
-            "jsonrpc": "2.0",
-            "error": {"code": code, "message": message},
-            "id": msg_id,
-        }))
+        await ws.send(
+            json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "error": {"code": code, "message": message},
+                    "id": msg_id,
+                }
+            )
+        )
 
     @property
     def connected_count(self) -> int:

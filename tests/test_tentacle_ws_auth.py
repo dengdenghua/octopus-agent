@@ -11,6 +11,7 @@ can't reach task/execute at all.
 stream ends, so we assert on the registration callback / close state
 rather than connected_count after the call returns.)
 """
+
 from __future__ import annotations
 
 import json
@@ -18,7 +19,10 @@ from typing import Any
 
 import pytest
 
-from runtime.tentacle.transport.ws_server import TentacleWebSocketServer
+from runtime.tentacle.transport.ws_server import (
+    _HELLO_MAX_FAILURES,
+    TentacleWebSocketServer,
+)
 
 
 class _FakeWs:
@@ -57,10 +61,14 @@ def _hello(token: str | None = None, tentacle_id: str = "android-1") -> str:
 
 
 def _task_execute() -> str:
-    return json.dumps({
-        "jsonrpc": "2.0", "method": "task/execute",
-        "params": {"task_id": "t1", "task": "do thing"}, "id": "9",
-    })
+    return json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "method": "task/execute",
+            "params": {"task_id": "t1", "task": "do thing"},
+            "id": "9",
+        }
+    )
 
 
 def _make_server(**kw: Any) -> tuple[TentacleWebSocketServer, list[str]]:
@@ -124,7 +132,9 @@ async def test_unauthenticated_cannot_reach_task_execute():
         seen.append(req)
 
     server = TentacleWebSocketServer(
-        host="0.0.0.0", auth_token="s3cret", on_task_execute=_on_task,
+        host="0.0.0.0",
+        auth_token="s3cret",
+        on_task_execute=_on_task,
     )
     ws = _FakeWs([_task_execute()])
     await server._handle_connection(ws, "/")
@@ -141,3 +151,63 @@ async def test_env_var_token_is_honored(monkeypatch: Any):
     await server._handle_connection(ok, "/")
     assert registered == ["android-1"]
     assert not ok.closed
+
+
+# ── pairing-token brute-force throttle ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_hello_failures_rate_limited_per_ip():
+    """After _HELLO_MAX_FAILURES wrong-token hellos from one IP, the next
+    connection from that IP is refused (1008 'rate limited') BEFORE the hello
+    is even processed — a valid token can't get in. Throttles brute force."""
+    server, registered = _make_server(host="0.0.0.0", auth_token="s3cret")
+    attacker = ("203.0.113.7", 9000)
+
+    for _ in range(_HELLO_MAX_FAILURES):
+        ws = _FakeWs([_hello(token="wrong")], remote=attacker)
+        await server._handle_connection(ws, "/")
+        assert ws.closed
+        assert ws.close_reason == "unauthorized"
+
+    blocked = _FakeWs([_hello(token="s3cret")], remote=attacker)
+    await server._handle_connection(blocked, "/")
+    assert blocked.closed
+    assert blocked.close_code == 1008
+    assert blocked.close_reason == "rate limited"
+    assert registered == []  # the valid hello was never processed
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_is_per_ip():
+    """One IP's exhausted budget must not block a different IP."""
+    server, registered = _make_server(host="0.0.0.0", auth_token="s3cret")
+    attacker = ("203.0.113.8", 9000)
+    for _ in range(_HELLO_MAX_FAILURES):
+        await server._handle_connection(_FakeWs([_hello(token="wrong")], remote=attacker), "/")
+
+    other = _FakeWs([_hello(token="s3cret")], remote=("203.0.113.9", 1234))
+    await server._handle_connection(other, "/")
+    assert not other.closed
+    assert registered == ["android-1"]
+
+
+@pytest.mark.asyncio
+async def test_successful_hello_clears_failure_budget():
+    """A success resets the IP's failure count, so a user who mistypes a few
+    times then succeeds isn't subsequently locked out."""
+    server, registered = _make_server(host="0.0.0.0", auth_token="s3cret")
+    ip = ("203.0.113.10", 4321)
+
+    for _ in range(_HELLO_MAX_FAILURES - 1):
+        await server._handle_connection(_FakeWs([_hello(token="wrong")], remote=ip), "/")
+
+    ok = _FakeWs([_hello(token="s3cret")], remote=ip)
+    await server._handle_connection(ok, "/")
+    assert not ok.closed
+
+    # Clean slate after success: the next wrong hello is processed (and
+    # rejected as unauthorized), NOT short-circuited as "rate limited".
+    again = _FakeWs([_hello(token="wrong")], remote=ip)
+    await server._handle_connection(again, "/")
+    assert again.close_reason == "unauthorized"

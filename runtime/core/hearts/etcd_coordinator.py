@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -16,7 +15,6 @@ except ImportError:  # pragma: no cover
 
 
 class EtcdCoordinator:
-
     def __init__(
         self,
         client,
@@ -27,8 +25,7 @@ class EtcdCoordinator:
         if not _quacks_like_etcd3(client):
             if not ETCD3_AVAILABLE:
                 raise ImportError(
-                    "etcd3 not installed · pip install etcd3 · "
-                    "或注入 duck-type 兼容客户端",
+                    "etcd3 not installed · pip install etcd3 · 或注入 duck-type 兼容客户端",
                 )
             raise TypeError(
                 f"client does not look like etcd3.Etcd3Client: {type(client).__name__}",
@@ -57,7 +54,6 @@ class EtcdCoordinator:
         except ValueError:
             return None
 
-
     def acquire_lease(self, scope: str, *, ttl: float) -> Lease | None:
         if ttl <= 0:
             raise ValueError("ttl must be positive")
@@ -85,9 +81,13 @@ class EtcdCoordinator:
         etcd_lease = self.client.lease(int(ttl) if ttl >= 1 else 1)
         success, responses = self.client.transaction(
             compare=[self.client.transactions.create(key) == 0],
-            success=[self.client.transactions.put(
-                key, self._encode_value(0), etcd_lease,  # Implementation note.
-            )],
+            success=[
+                self.client.transactions.put(
+                    key,
+                    self._encode_value(0),
+                    etcd_lease,  # Implementation note.
+                )
+            ],
             failure=[],
         )
         if not success:
@@ -175,14 +175,24 @@ class EtcdCoordinator:
             scope=scope,
             holder_id=holder,
             acquired_at=now,
-            expires_at=now,            # Implementation note.
+            # Placeholder, not a bug: etcd's basic KV get() here doesn't return
+            # the attached lease's remaining TTL, and the sole caller of
+            # current_lease() — Hearts.is_leader() — compares holder_id only and
+            # never reads expires_at. acquire_lease/renew_lease set a real
+            # expires_at; don't "fix" this to now+ttl without a real TTL lookup.
+            expires_at=now,
             fencing_token=token,
         )
 
 
 def _quacks_like_etcd3(client) -> bool:
     needed = (
-        "get", "put", "lease", "transaction", "transactions",
-        "refresh_lease", "revoke_lease",
+        "get",
+        "put",
+        "lease",
+        "transaction",
+        "transactions",
+        "refresh_lease",
+        "revoke_lease",
     )
     return all(hasattr(client, m) for m in needed)
