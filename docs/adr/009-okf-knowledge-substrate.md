@@ -21,8 +21,8 @@ each a different shape, none cross-referencing the others:
 
 | Store | Shape today | Source |
 |-------|-------------|--------|
-| Code wiki — `docs/auto/` (31 pages) | markdown body + central `index.json` tree, file-path IDs, **no per-page frontmatter, no page↔page links** | `scripts/gen_wiki.py` (AST) |
-| Skills — `SKILL.md` (128) | **markdown + YAML frontmatter** (`name`, `description`) | hand-authored |
+| Code wiki — `docs/auto/` (40 pages) | markdown body + central `index.json` tree, file-path IDs, **no per-page frontmatter, no page↔page links** | `scripts/gen_wiki.py` (AST) |
+| Skills — `SKILL.md` (255: all_skills 159 + public 88 + local 8) | **markdown + YAML frontmatter** (`name`, `description`) | hand-authored |
 | Knowledge graph | sqlite/kuzu typed edges | journal → `KGUpdater`, fed to planner via `_render_kg_section` |
 | Document KB | separate service, `/v1/search` | Storage repo (cross-repo, File Agent) |
 
@@ -150,9 +150,8 @@ Phased, with the cheapest validation first:
   equally-lexical but unconnected one. Conservative (re-ranks only matched
   pages, never promotes zero-overlap), self-gated (no `edges` → no-op),
   `OCTOPUS_CODEBASE_GRAPH=0` disables; pinned by `tests/test_repo_context.py`.
-  Still deferred from Phase 2: *true* RRF (reciprocal-rank) fusion — the
-  current fusion is `tier × BM25` then `+ graph boost`, which is enough at this
-  corpus size.
+  (Superseded 2026-06-24: the additive `_GRAPH_BOOST` became a proper
+  reciprocal-rank fusion lane — see Phase 3.)
 - **Phase 1 — format — DONE (2026-06-24).** `gen_wiki` now prepends
   deterministic OKF frontmatter to every page (`type`/`title`/`description`/
   `tags`/`tier`, all derived from path + body — no wall-clock, so the freshness
@@ -165,9 +164,20 @@ Phased, with the cheapest validation first:
   `timestamp` (needs a deterministic source-mtime, not wall-clock) and
   switching the Claude-memory-style `[[name]]` links to OKF relative-path
   links.
-- **Phase 3 — optional.** Vector lane (engine-only) for synonym bridging;
-  a scheduled "dream cycle" wiring the existing `consolidate-memory` skill
-  + a wiki-freshness pass onto the existing schedulers.
+- **Phase 3 (hybrid engine) — DONE (2026-06-24): RRF fusion + semantic lane.**
+  `repo_context` now fuses up to three ranked lanes by reciprocal-rank fusion
+  (`_rrf`): **lexical** (BM25 × tier, always), **semantic** (reranks the lexical
+  top-pool via the existing `OCTOPUS_EMBED_*` embedder — Ollama / fastembed /
+  sentence-transformers — bridging the planner→cerebrum synonym gap this module
+  documented), and **graph** (the import-edge neighbours, now a fusion lane
+  rather than an additive boost). RRF of a single lane is that lane's order, so
+  the default no-embedder / no-edge path stays byte-for-byte plain BM25 — the
+  semantic lane is dormant and free until an embedder is configured (a *local*
+  model satisfies it; no external API required). This closes the biggest gbrain
+  gap — hybrid retrieval — with in-repo infrastructure; pinned by
+  `tests/test_repo_context.py`. Still out: a cross-encoder **reranker** and a
+  **synthesis layer** (both need a model service), and a scheduled "dream
+  cycle".
 
 ## Alternatives considered
 

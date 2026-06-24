@@ -7,16 +7,23 @@ pages + ``index.json``); this module retrieves the pages most relevant to a
 task and renders them into a compact prompt section, so the planner gets
 codebase grounding the way Qoder's repo wiki does — without an LLM call.
 
-Ranking is **BM25** over **identifier-aware** tokens: ``ToolEngine`` and
-``tool_engine`` both tokenize to {tool, engine}, so a natural-language goal
-matches code identifiers; BM25's length normalization stops a long index page
-from out-ranking a short on-topic one just by having more words (the failure
-plain keyword-overlap had). Bilingual wiki titles (e.g. "Cerebrum · 规划")
-mean an EN or 中 goal hits the same page for free. True synonym bridging with
-no shared token (planner→cerebrum) still needs embeddings — out of scope here.
+Retrieval fuses up to three lanes by reciprocal-rank fusion (ADR-009 ·
+gbrain-shaped), so heterogeneous signals combine without comparing magnitudes:
 
-Self-gating: no wiki (no ``docs/auto/index.json``) → returns ``None`` and the
-planner omits the section.
+- **lexical** — BM25 over identifier-aware tokens (``ToolEngine`` /
+  ``tool_engine`` → {tool, engine}) with CJK bigrams (a 中 goal matches a 中
+  page) and an OKF source-tier weight. Always on; the only lane the default
+  deployment runs.
+- **semantic** — reranks the lexical top-pool with the ``OCTOPUS_EMBED_*``
+  embedder (Ollama / fastembed / sentence-transformers) when one is configured,
+  bridging synonyms BM25 can't (planner→cerebrum). Dormant — and free —
+  otherwise.
+- **graph** — import-edge neighbours of the top hits (zero-LLM, from
+  ``index.json``), surfacing a hit's dependency context.
+
+RRF of a single lane is just that lane's order, so a deployment with no embedder
+and no edges behaves exactly like plain BM25. Self-gating: no wiki (no
+``docs/auto/index.json``) → returns ``None`` and the planner omits the section.
 """
 
 from __future__ import annotations
@@ -94,15 +101,31 @@ _SUBWORD_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+|[一-
 _BM25_K1 = 1.5
 _BM25_B = 0.75
 
-# Graph-augmented retrieval (ADR-009): fraction of a neighbor's BM25 score that
-# bleeds onto a page via an AST-derived import edge. Small so it re-ranks among
-# already-matched pages without overpowering lexical relevance.
-_GRAPH_BOOST = 0.25
+# Hybrid retrieval (ADR-009 · gbrain-shaped) — reciprocal-rank fusion of up to
+# three lanes (lexical / semantic / graph). RRF combines *ranks*, not scores, so
+# a BM25 score and a cosine score fuse without magnitude mixing.
+_RRF_K = 60  # standard RRF damping
+_FUSION_POOL = 12  # lexical top-N handed to the semantic lane (bounds embed cost)
+_GRAPH_SEEDS = 3  # top lexical hits whose import-neighbours seed the graph lane
 
 # Source-tier boost (ADR-009): a core subsystem page outranks an equally-relevant
 # peripheral one. Multiplicative on the BM25 score, small. Tier comes from the
 # page's OKF frontmatter; absent/unknown → 1.0 (no effect).
 _TIER_WEIGHT = {"core": 1.15, "standard": 1.0}
+
+
+def _rrf(rankings: list[list[str]], k: int = _RRF_K) -> dict[str, float]:
+    """Reciprocal-rank fusion: each doc scores Σ 1/(k + rank) over the lists it
+    appears in. Rank-based, so heterogeneous lanes (BM25, cosine, graph
+    proximity) combine without comparing magnitudes. A single list fuses to its
+    own order — the no-op that keeps the default (no embedder / no edges) path
+    identical to plain BM25."""
+    out: dict[str, float] = {}
+    for ranking in rankings:
+        for rank_i, doc_id in enumerate(ranking):
+            out[doc_id] = out.get(doc_id, 0.0) + 1.0 / (k + rank_i + 1)
+    return out
+
 
 # Cache the parsed + indexed wiki keyed by (dir, index.json mtime) so a hot
 # planning loop doesn't re-read/re-index ~30 files every turn, but a
@@ -305,18 +328,36 @@ def retrieve_repo_context(
     if not idx["pages"]:
         return None
 
-    scored = [
+    # ── Lane 1 · lexical (BM25 × source-tier) — always present ──────────────
+    lexical = [
         (_bm25(q_terms, p, idx) * _TIER_WEIGHT.get(p.get("tier", "standard"), 1.0), p)
         for p in idx["pages"]
     ]
-    scored = [(s, p) for s, p in scored if s > 0]
-    if not scored:
+    lexical = [(s, p) for s, p in lexical if s > 0]
+    if not lexical:
         return None
-    # Graph-augmented re-rank (ADR-009 · gbrain-style): a page connected via the
-    # AST-derived import edges in index.json to a strong hit gets a bounded
-    # bonus, so a dependency-related page outranks an equally-lexical but
-    # unconnected one. Conservative — only re-ranks pages already matched, never
-    # promotes a zero-overlap page. Self-gated (no edges → no-op);
+    lexical.sort(key=lambda sp: (-sp[0], sp[1]["path"]))
+    pages_by_path = {p["path"]: p for _s, p in lexical}
+    lexical_order = [p["path"] for _s, p in lexical]
+    rankings: list[list[str]] = [lexical_order]
+
+    # Lazy import keeps the semantic backend off the module-load path.
+    from runtime.memory.hemolymph import embedding_backend, semantic_rank
+
+    # ── Lane 2 · semantic — rerank the lexical top-pool by meaning ──────────
+    # Bridges synonyms BM25 can't (the ceiling repo_context documented), using
+    # the OCTOPUS_EMBED_* embedder. Bounded to the pool; only when an embedder
+    # is actually configured, so the default path pays nothing.
+    pool = lexical_order[:_FUSION_POOL]
+    if len(pool) > 1 and embedding_backend.available():
+        cand = [pages_by_path[pth] for pth in pool]
+        texts = [f"{p['title']}\n{(p['body'] or '')[:600]}" for p in cand]
+        res = semantic_rank.rank(query, texts)
+        if res.get("backend") == "embed":
+            rankings.append([pool[r["index"]] for r in res["ranked"]])
+
+    # ── Lane 3 · graph — import-edge neighbours of the top lexical hits ─────
+    # Only lexical-matched neighbours (never promotes a zero-overlap page).
     # OCTOPUS_CODEBASE_GRAPH=0 disables.
     adj = idx.get("adj") or {}
     _graph_on = os.environ.get("OCTOPUS_CODEBASE_GRAPH", "1").strip().lower() not in (
@@ -325,17 +366,22 @@ def retrieve_repo_context(
         "no",
     )
     if adj and _graph_on:
-        base = {p["path"]: s for s, p in scored}
-        scored = [
-            (
-                s
-                + _GRAPH_BOOST
-                * max((base[n] for n in adj.get(p["path"], ()) if n in base), default=0.0),
-                p,
-            )
-            for s, p in scored
-        ]
-    scored.sort(key=lambda sp: (-sp[0], sp[1]["path"]))
+        seen: set[str] = set()
+        graph_order: list[str] = []
+        for pth in lexical_order[:_GRAPH_SEEDS]:
+            for nb in sorted(adj.get(pth, ())):
+                if nb in pages_by_path and nb not in seen:
+                    seen.add(nb)
+                    graph_order.append(nb)
+        if graph_order:
+            rankings.append(graph_order)
+
+    # Fuse the lanes. One lane → identity order (default path unchanged).
+    fused = _rrf(rankings)
+    scored = sorted(
+        ((fused.get(p["path"], 0.0), p) for _s, p in lexical),
+        key=lambda sp: (-sp[0], sp[1]["path"]),
+    )
 
     # ~4 chars/token; split the body budget across the chosen pages.
     per_page_chars = max(400, (budget_tokens * 4) // max(1, max_pages))

@@ -284,6 +284,50 @@ def test_tier_boosts_core_over_standard(tmp_path: Path) -> None:
     assert sink[0]["path"] == "z_core.md"
 
 
+def test_semantic_lane_fuses_when_embedder_present(tmp_path: Path, monkeypatch) -> None:
+    # Three pages tie on BM25 (same body) → lexical order is path-sorted
+    # [a, b, c]. A configured embedder reranks them [c, a, b]; RRF fusion then
+    # pulls c above b. Proves the semantic lane participates in fusion.
+    import runtime.memory.hemolymph.embedding_backend as eb
+    import runtime.memory.hemolymph.semantic_rank as sr
+
+    auto = _make_wiki(
+        tmp_path,
+        [("Alpha", "a.md", "planner"), ("Beta", "b.md", "planner"), ("Gamma", "c.md", "planner")],
+    )
+    monkeypatch.setattr(eb, "available", lambda: True)
+    monkeypatch.setattr(
+        sr,
+        "rank",
+        lambda query, texts, **kw: {
+            "backend": "embed",
+            "ranked": [
+                {"index": 2, "score": 0.9, "text": texts[2]},
+                {"index": 0, "score": 0.5, "text": texts[0]},
+                {"index": 1, "score": 0.1, "text": texts[1]},
+            ],
+        },
+    )
+    sink: list[dict[str, str]] = []
+    retrieve_repo_context("planner", wiki_dir=auto, max_pages=3, _sink=sink)
+    paths = [s["path"] for s in sink]
+    assert paths.index("c.md") < paths.index("b.md")  # semantic lifted c over b
+
+
+def test_semantic_lane_off_without_embedder(tmp_path: Path, monkeypatch) -> None:
+    # No embedder → semantic lane skipped → pure lexical path-tiebreak order.
+    import runtime.memory.hemolymph.embedding_backend as eb
+
+    monkeypatch.setattr(eb, "available", lambda: False)
+    auto = _make_wiki(
+        tmp_path,
+        [("Alpha", "a.md", "planner"), ("Beta", "b.md", "planner"), ("Gamma", "c.md", "planner")],
+    )
+    sink: list[dict[str, str]] = []
+    retrieve_repo_context("planner", wiki_dir=auto, max_pages=3, _sink=sink)
+    assert [s["path"] for s in sink] == ["a.md", "b.md", "c.md"]
+
+
 def test_real_wiki_smoke() -> None:
     # the repo ships a generated wiki under docs/auto
     out = retrieve_repo_context("cerebrum planner tool engine skills", wiki_dir="docs/auto")
