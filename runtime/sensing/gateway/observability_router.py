@@ -12,11 +12,16 @@ Observability panel + `/api/stream` SSE feed rely on:
     GET  /api/stream     · SSE feed of journal appends
     POST /api/run        · quick static-planner probe run
 
-These are the debug / introspection surface · they share the
-journal + registry but need no identity / scope wiring. Keeping
-them in one router makes the app.py factory shorter and lets a
-future test mount them in isolation against a bare journal.
+These are the debug / introspection surface. They expose the
+journal — which carries file diffs, absolute paths, and task
+history — over ``/api/stream`` and ``/api/files/stream``. So they
+DO honour ``require_auth`` via a router-level dependency (see
+``create_observability_router``): off by default for single-user
+dev (no-op, frontend EventSource panel unchanged), enforced as 401
+when auth is enabled so a deployed/multi-user server doesn't leak
+the whole work log to any anonymous client.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -24,16 +29,29 @@ import json
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
     from fastapi.responses import StreamingResponse
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     StreamingResponse = None  # type: ignore[assignment, misc]
+
+
+# Standard SSE headers · keep proxies (nginx, Cloudflare) from buffering or
+# killing long-lived event streams. X-Accel-Buffering disables nginx response
+# buffering; Cache-Control/Connection keep the stream open. The generators
+# below already emit a 15s ``: keepalive`` comment to defeat idle timeouts.
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -70,12 +88,8 @@ def _snapshot_to_dict(snap: Any) -> dict[str, Any]:
         "status": snap.status,
         "strategy": snap.strategy,
         "task_type": snap.task_type,
-        "started_at": (
-            snap.started_at.isoformat() if snap.started_at else None
-        ),
-        "last_event_ts": (
-            snap.last_event_ts.isoformat() if snap.last_event_ts else None
-        ),
+        "started_at": (snap.started_at.isoformat() if snap.started_at else None),
+        "last_event_ts": (snap.last_event_ts.isoformat() if snap.last_event_ts else None),
         "tokens_spent": snap.tokens_spent,
         "usd_spent": snap.usd_spent,
     }
@@ -113,12 +127,12 @@ def _serialize_rollback_entry(entry: Any) -> dict[str, Any]:
         "path": getattr(entry, "path", ""),
         "action": getattr(entry, "action", ""),
         "expected_current_sha256": getattr(
-            entry, "expected_current_sha256", "",
+            entry,
+            "expected_current_sha256",
+            "",
         ),
         "source_event_id": getattr(entry, "source_event_id", ""),
-        "content_bytes": (
-            len(content.encode("utf-8")) if isinstance(content, str) else None
-        ),
+        "content_bytes": (len(content.encode("utf-8")) if isinstance(content, str) else None),
     }
 
 
@@ -143,8 +157,7 @@ def _serialize_rollback_result(
         "skipped": int(getattr(result, "skipped", 0) or 0),
         "failed": int(getattr(result, "failed", 0) or 0),
         "entries": [
-            _serialize_rollback_entry(entry)
-            for entry in getattr(result, "entries", ()) or ()
+            _serialize_rollback_entry(entry) for entry in getattr(result, "entries", ()) or ()
         ],
         "errors": list(getattr(result, "errors", ()) or ()),
     }
@@ -154,11 +167,7 @@ def _serialize_file_rollback_event(event: Any) -> dict[str, Any]:
     return {
         "event_type": getattr(event, "event_type", "file_rollback"),
         "event_id": str(getattr(event, "event_id", "") or ""),
-        "ts": (
-            event.ts.isoformat()
-            if getattr(event, "ts", None) is not None
-            else None
-        ),
+        "ts": (event.ts.isoformat() if getattr(event, "ts", None) is not None else None),
         "dry_run": bool(getattr(event, "dry_run", False)),
         "project_root": getattr(event, "project_root", ""),
         "event_id_filter": getattr(event, "event_id_filter", None),
@@ -180,6 +189,11 @@ def create_observability_router(
     journal: Any,
     registry: Any,
     planner: Any = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> Any:
     """Build the router.
 
@@ -220,7 +234,26 @@ def create_observability_router(
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
-    router = APIRouter(tags=["observability"])
+    def _auth_dep(request: Request) -> None:
+        # Router-level auth gate · mirrors create_browser_router. These
+        # endpoints expose the journal (file diffs, absolute paths, task
+        # history) over /api/stream + /api/files/stream. require_auth off
+        # (default / single-user dev) → _resolve_actor is a no-op so local
+        # preview + the EventSource-based Observability panel are unchanged;
+        # require_auth on (deployed / multi-user) → 401 across every endpoint
+        # instead of leaking the whole work log to any anonymous client.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(  # AUTH-OK: actor-agnostic — router-level dep, 401 enforcement only
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["observability"], dependencies=[Depends(_auth_dep)])
 
     # Progress tracker owns incremental O(N_tasks) snapshots · build
     # once per app, not per request.
@@ -273,27 +306,29 @@ def create_observability_router(
         if not dry_run:
             from runtime.memory.journal import FileRollbackEvent
 
-            journal.write(FileRollbackEvent(
-                dry_run=False,
-                project_root=project_root or "",
-                event_id_filter=event_id,
-                task_id_filter=task_id,
-                path_filter=path,
-                applied=int(getattr(result, "applied", 0) or 0),
-                skipped=int(getattr(result, "skipped", 0) or 0),
-                failed=int(getattr(result, "failed", 0) or 0),
-                source_event_ids=[
-                    str(getattr(entry, "source_event_id", "") or "")
-                    for entry in getattr(result, "entries", ()) or ()
-                    if getattr(entry, "source_event_id", "") or ""
-                ],
-                paths=[
-                    str(getattr(entry, "path", "") or "")
-                    for entry in getattr(result, "entries", ()) or ()
-                    if getattr(entry, "path", "") or ""
-                ],
-                errors=list(getattr(result, "errors", ()) or ()),
-            ))
+            journal.write(
+                FileRollbackEvent(
+                    dry_run=False,
+                    project_root=project_root or "",
+                    event_id_filter=event_id,
+                    task_id_filter=task_id,
+                    path_filter=path,
+                    applied=int(getattr(result, "applied", 0) or 0),
+                    skipped=int(getattr(result, "skipped", 0) or 0),
+                    failed=int(getattr(result, "failed", 0) or 0),
+                    source_event_ids=[
+                        str(getattr(entry, "source_event_id", "") or "")
+                        for entry in getattr(result, "entries", ()) or ()
+                        if getattr(entry, "source_event_id", "") or ""
+                    ],
+                    paths=[
+                        str(getattr(entry, "path", "") or "")
+                        for entry in getattr(result, "entries", ()) or ()
+                        if getattr(entry, "path", "") or ""
+                    ],
+                    errors=list(getattr(result, "errors", ()) or ()),
+                )
+            )
         return _serialize_rollback_result(
             result,
             dry_run=dry_run,
@@ -344,15 +379,29 @@ def create_observability_router(
             }
             payload = getattr(e, "payload", None)
             if isinstance(payload, dict):
-                for k in ("skill_name", "strategy", "strategy_id",
-                           "thought", "action", "observation",
-                           "iteration", "final_answer", "error",
-                           "tokens_in", "tokens_out", "usd",
-                           "latency_ms", "model", "provider"):
+                for k in (
+                    "skill_name",
+                    "strategy",
+                    "strategy_id",
+                    "thought",
+                    "action",
+                    "observation",
+                    "iteration",
+                    "final_answer",
+                    "error",
+                    "tokens_in",
+                    "tokens_out",
+                    "usd",
+                    "latency_ms",
+                    "model",
+                    "provider",
+                ):
                     if k in payload:
                         entry[k] = payload[k]
             grouped.setdefault(tid, []).append(entry)
-        task_ids = sorted(grouped.keys(), key=lambda k: grouped[k][0]["ts"] if grouped[k] else "", reverse=True)[:limit]
+        task_ids = sorted(
+            grouped.keys(), key=lambda k: grouped[k][0]["ts"] if grouped[k] else "", reverse=True
+        )[:limit]
         return {
             "task_ids": task_ids,
             "timelines": {tid: grouped[tid] for tid in task_ids},
@@ -403,7 +452,6 @@ def create_observability_router(
             },
         }
 
-
     def _parse_section_lines(section: str) -> list[str]:
         out: list[str] = []
         for ln in (section or "").splitlines():
@@ -434,18 +482,12 @@ def create_observability_router(
                 "reason": "no planner wired to observability router",
             }
         rules_section = getattr(planner, "learned_rules_section", "") or ""
-        memories_section = (
-            getattr(planner, "learned_memories_section", "") or ""
-        )
+        memories_section = getattr(planner, "learned_memories_section", "") or ""
         # Count rule/memory lines: each bullet starts with "  - "
         # (see format_rules_for_prompt / format_memories_for_prompt).
-        rules_count = sum(
-            1 for ln in rules_section.splitlines()
-            if ln.lstrip().startswith("- [")
-        )
+        rules_count = sum(1 for ln in rules_section.splitlines() if ln.lstrip().startswith("- ["))
         memories_count = sum(
-            1 for ln in memories_section.splitlines()
-            if ln.lstrip().startswith("- [")
+            1 for ln in memories_section.splitlines() if ln.lstrip().startswith("- [")
         )
 
         # Trajectory-level counts from journal · by strategy_id
@@ -454,6 +496,7 @@ def create_observability_router(
         total_trajs = 0
         try:
             from runtime.memory.journal import TrajectoryEvent
+
             for ev in journal.read_by_type("trajectory"):
                 if not isinstance(ev, TrajectoryEvent):
                     continue
@@ -473,6 +516,7 @@ def create_observability_router(
             from runtime.core.cerebrum.react_loop import (
                 get_react_variant_stats,
             )
+
             react_variants = get_react_variant_stats()
         except (OSError, ImportError, AttributeError):
             react_variants = []
@@ -508,7 +552,8 @@ def create_observability_router(
             )
         dropped = current.pop(index)
         planner.learned_rules_section = _rebuild_section(
-            "LEARNED MITIGATIONS (from past failures):", current,
+            "LEARNED MITIGATIONS (from past failures):",
+            current,
         )
         return {"dropped": dropped, "remaining": len(current)}
 
@@ -527,7 +572,8 @@ def create_observability_router(
             )
         dropped = current.pop(index)
         planner.learned_memories_section = _rebuild_section(
-            "CONSOLIDATED MEMORIES (past pattern stats):", current,
+            "CONSOLIDATED MEMORIES (past pattern stats):",
+            current,
         )
         return {"dropped": dropped, "remaining": len(current)}
 
@@ -563,6 +609,7 @@ def create_observability_router(
     def api_kg_export() -> dict[str, Any]:
         from runtime.memory.knowledge_graph import KnowledgeGraph
         from runtime.safety.recovery import KGUpdater
+
         kg = KnowledgeGraph()
         KGUpdater(journal, kg).update()
         triples = kg.export_triples(active_only=True)
@@ -572,6 +619,7 @@ def create_observability_router(
     async def api_kg_import(request: Any) -> dict[str, Any]:
         from runtime.memory.knowledge_graph import KnowledgeGraph
         from runtime.safety.recovery import KGUpdater
+
         try:
             body = await request.json()
         except (OSError, json.JSONDecodeError, ValueError, TypeError) as e:
@@ -601,6 +649,7 @@ def create_observability_router(
     def _build_kg_view(limit: int = 200) -> tuple[list, list, dict]:
         from runtime.memory.knowledge_graph import KnowledgeGraph
         from runtime.safety.recovery import KGUpdater
+
         kg = KnowledgeGraph()
         KGUpdater(journal, kg).update()
         triples = kg.query()[:limit]
@@ -620,13 +669,15 @@ def create_observability_router(
                         "description": "",
                     }
                     type_counts[etype] = type_counts.get(etype, 0) + 1
-            rels.append({
-                "id": f"rel_{i}",
-                "source_name": t.subject,
-                "target_name": t.object[:200],
-                "relationship_type": t.predicate,
-                "confidence": t.confidence,
-            })
+            rels.append(
+                {
+                    "id": f"rel_{i}",
+                    "source_name": t.subject,
+                    "target_name": t.object[:200],
+                    "relationship_type": t.predicate,
+                    "confidence": t.confidence,
+                }
+            )
 
         entities = list(entity_set.values())
         stats = {
@@ -656,6 +707,7 @@ def create_observability_router(
     ) -> dict[str, Any]:
         from runtime.memory.knowledge_graph import KnowledgeGraph
         from runtime.safety.recovery import KGUpdater
+
         kg = KnowledgeGraph()
         KGUpdater(journal, kg).update()
         triples = kg.neighbors(entity, hops=hops)[:limit]
@@ -665,13 +717,15 @@ def create_observability_router(
             for val in [t.subject, t.object]:
                 if val not in nodes:
                     nodes[val] = {"id": val, "label": val[:60]}
-            edges.append({
-                "id": f"e_{i}",
-                "source": t.subject,
-                "target": t.object[:200],
-                "label": t.predicate,
-                "confidence": t.confidence,
-            })
+            edges.append(
+                {
+                    "id": f"e_{i}",
+                    "source": t.subject,
+                    "target": t.object[:200],
+                    "label": t.predicate,
+                    "confidence": t.confidence,
+                }
+            )
         return {
             "center": entity,
             "nodes": list(nodes.values()),
@@ -687,7 +741,8 @@ def create_observability_router(
             snap = progress_tracker.get(task_id)
             if snap is None:
                 raise HTTPException(
-                    404, f"no events for task_id={task_id!r}",
+                    404,
+                    f"no events for task_id={task_id!r}",
                 )
             return _snapshot_to_dict(snap)
 
@@ -702,9 +757,7 @@ def create_observability_router(
         return {
             "event_type": event.event_type,
             "ts": event.ts.isoformat(),
-            "task_id": (
-                str(event.task_id) if event.task_id else None
-            ),
+            "task_id": (str(event.task_id) if event.task_id else None),
             "arm_id": event.arm_id,
         }
 
@@ -717,56 +770,67 @@ def create_observability_router(
             SubToolEndEvent,
             SubToolStartEvent,
         )
+
         payload = _event_base_payload(event)
         if isinstance(event, FileOpEvent):
-            payload.update({
-                "path": event.path,
-                "action": event.action,
-                "bytes_delta": event.bytes_delta,
-                "old_size": event.old_size,
-                "new_size": event.new_size,
-                "sucker_id": event.sucker_id,
-                "diff": event.diff,
-            })
+            payload.update(
+                {
+                    "path": event.path,
+                    "action": event.action,
+                    "bytes_delta": event.bytes_delta,
+                    "old_size": event.old_size,
+                    "new_size": event.new_size,
+                    "sucker_id": event.sucker_id,
+                    "diff": event.diff,
+                }
+            )
         elif isinstance(event, FileRollbackEvent):
             payload.update(_serialize_file_rollback_event(event))
         elif isinstance(event, PreviewRefreshEvent):
-            payload.update({
-                "target": event.target,
-                "trigger_path": event.trigger_path,
-                "reason": event.reason,
-            })
+            payload.update(
+                {
+                    "target": event.target,
+                    "trigger_path": event.trigger_path,
+                    "reason": event.reason,
+                }
+            )
         elif isinstance(event, SubToolStartEvent):
-            payload.update({
-                "role_id": event.role_id,
-                "tool_call_id": event.tool_call_id,
-                "tool_name": event.tool_name,
-                "iteration": event.iteration,
-                "args_preview": event.args_preview,
-                "parent_tool_use_id": event.parent_tool_use_id,
-            })
+            payload.update(
+                {
+                    "role_id": event.role_id,
+                    "tool_call_id": event.tool_call_id,
+                    "tool_name": event.tool_name,
+                    "iteration": event.iteration,
+                    "args_preview": event.args_preview,
+                    "parent_tool_use_id": event.parent_tool_use_id,
+                }
+            )
         elif isinstance(event, SubToolEndEvent):
-            payload.update({
-                "role_id": event.role_id,
-                "tool_call_id": event.tool_call_id,
-                "tool_name": event.tool_name,
-                "iteration": event.iteration,
-                "is_error": event.is_error,
-                "duration_ms": event.duration_ms,
-                "output_preview": event.output_preview,
-                "parent_tool_use_id": event.parent_tool_use_id,
-            })
+            payload.update(
+                {
+                    "role_id": event.role_id,
+                    "tool_call_id": event.tool_call_id,
+                    "tool_name": event.tool_name,
+                    "iteration": event.iteration,
+                    "is_error": event.is_error,
+                    "duration_ms": event.duration_ms,
+                    "output_preview": event.output_preview,
+                    "parent_tool_use_id": event.parent_tool_use_id,
+                }
+            )
         elif isinstance(event, BrowserArtifactEvent):
-            payload.update({
-                "kind": event.kind,
-                "url": event.url,
-                "filename": event.filename,
-                "caption": event.caption,
-                "mime_type": event.mime_type,
-                "width": event.width,
-                "height": event.height,
-                "thread_id": event.thread_id,
-            })
+            payload.update(
+                {
+                    "kind": event.kind,
+                    "url": event.url,
+                    "filename": event.filename,
+                    "caption": event.caption,
+                    "mime_type": event.mime_type,
+                    "width": event.width,
+                    "height": event.height,
+                    "thread_id": event.thread_id,
+                }
+            )
         return payload
 
     # ─── /api/stream (SSE) ──────────────────────────────────
@@ -793,7 +857,7 @@ def create_observability_router(
             finally:
                 unsubscribe()
 
-        return StreamingResponse(_gen(), media_type="text/event-stream")
+        return StreamingResponse(_gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
     @router.get("/api/preview/stream")
     def api_preview_stream() -> Any:
@@ -811,16 +875,13 @@ def create_observability_router(
             try:
                 try:
                     from runtime.memory.journal import PreviewRefreshEvent
-                    recent = [
-                        e for e in journal.read_all()
-                        if isinstance(e, PreviewRefreshEvent)
-                    ][-5:]
+
+                    recent = [e for e in journal.read_all() if isinstance(e, PreviewRefreshEvent)][
+                        -5:
+                    ]
                     for ev in recent:
                         payload = _enrich_event_payload(ev)
-                        yield (
-                            f"event: preview_refresh\n"
-                            f"data: {json.dumps(payload)}\n\n"
-                        )
+                        yield (f"event: preview_refresh\ndata: {json.dumps(payload)}\n\n")
                 except (OSError, ImportError, AttributeError):  # noqa: BLE001 — observability metric source unavailable; skip
                     pass
 
@@ -832,14 +893,11 @@ def create_observability_router(
                         yield ": keepalive\n\n"
                         continue
                     payload = _enrich_event_payload(event)
-                    yield (
-                        f"event: preview_refresh\n"
-                        f"data: {json.dumps(payload)}\n\n"
-                    )
+                    yield (f"event: preview_refresh\ndata: {json.dumps(payload)}\n\n")
             finally:
                 unsubscribe()
 
-        return StreamingResponse(_gen(), media_type="text/event-stream")
+        return StreamingResponse(_gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
     @router.get("/api/files/stream")
     def api_files_stream() -> Any:
@@ -857,16 +915,11 @@ def create_observability_router(
             try:
                 try:
                     from runtime.memory.journal import FileOpEvent
-                    recent = [
-                        e for e in journal.read_all()
-                        if isinstance(e, FileOpEvent)
-                    ][-20:]
+
+                    recent = [e for e in journal.read_all() if isinstance(e, FileOpEvent)][-20:]
                     for ev in recent:
                         payload = _enrich_event_payload(ev)
-                        yield (
-                            f"event: file_op\n"
-                            f"data: {json.dumps(payload)}\n\n"
-                        )
+                        yield (f"event: file_op\ndata: {json.dumps(payload)}\n\n")
                 except (OSError, ImportError, AttributeError):  # noqa: BLE001 — observability metric source unavailable; skip
                     pass
 
@@ -878,14 +931,11 @@ def create_observability_router(
                         yield ": keepalive\n\n"
                         continue
                     payload = _enrich_event_payload(event)
-                    yield (
-                        f"event: file_op\n"
-                        f"data: {json.dumps(payload)}\n\n"
-                    )
+                    yield (f"event: file_op\ndata: {json.dumps(payload)}\n\n")
             finally:
                 unsubscribe()
 
-        return StreamingResponse(_gen(), media_type="text/event-stream")
+        return StreamingResponse(_gen(), media_type="text/event-stream", headers=_SSE_HEADERS)
 
     # ═══════════════════════════════════════════════════════
     # Observability panels · feed the /workspace/observability UI
@@ -952,10 +1002,7 @@ def create_observability_router(
         limit: int = Query(default=50, ge=1, le=500),
     ) -> dict[str, Any]:
         events = journal.read_by_type("file_rollback")[-limit:]
-        serialized = [
-            _serialize_file_rollback_event(event)
-            for event in reversed(events)
-        ]
+        serialized = [_serialize_file_rollback_event(event) for event in reversed(events)]
         return {
             "count": len(serialized),
             "events": serialized,
@@ -977,6 +1024,7 @@ def create_observability_router(
             get_blackboard,
             list_active_turns,
         )
+
         if not turn_id:
             return {"turns": list_active_turns()}
         bb = get_blackboard(turn_id)
@@ -1016,6 +1064,7 @@ def create_observability_router(
         from runtime.memory.hemolymph.composer import (
             get_recent_compose_snapshots,
         )
+
         snaps = get_recent_compose_snapshots(limit=limit)
         return {
             "count": len(snaps),
@@ -1038,6 +1087,7 @@ def create_observability_router(
         small count fields the UI renders as a tile.
         """
         from runtime.memory.journal import TrajectoryEvent
+
         # Trajectory counts · drive most producers' freshness signal
         traj_total = 0
         traj_failures = 0
@@ -1059,15 +1109,13 @@ def create_observability_router(
         memories_count = 0
         if planner is not None:
             rules_count = sum(
-                1 for ln in (
-                    getattr(planner, "learned_rules_section", "") or ""
-                ).splitlines()
+                1
+                for ln in (getattr(planner, "learned_rules_section", "") or "").splitlines()
                 if ln.lstrip().startswith("- [")
             )
             memories_count = sum(
-                1 for ln in (
-                    getattr(planner, "learned_memories_section", "") or ""
-                ).splitlines()
+                1
+                for ln in (getattr(planner, "learned_memories_section", "") or "").splitlines()
                 if ln.lstrip().startswith("- [")
             )
 
@@ -1086,6 +1134,7 @@ def create_observability_router(
         try:
             from runtime.memory.knowledge_graph import KnowledgeGraph
             from runtime.safety.recovery import KGUpdater
+
             kg = KnowledgeGraph()
             KGUpdater(journal, kg).update()
             kg_size = kg.count()
@@ -1098,6 +1147,7 @@ def create_observability_router(
             from runtime.core.cerebrum.react_loop import (
                 get_react_variant_stats,
             )
+
             recipes_count = len(get_react_variant_stats())
         except (OSError, ImportError, AttributeError):  # noqa: BLE001 — observability metric source unavailable; skip
             pass
@@ -1160,18 +1210,18 @@ def create_observability_router(
                 tokens = 0
                 usd = 0.0
                 if cost is not None:
-                    tokens = int(
-                        getattr(cost, "tokens_in", 0)
-                        + getattr(cost, "tokens_out", 0)
-                    )
+                    tokens = int(getattr(cost, "tokens_in", 0) + getattr(cost, "tokens_out", 0))
                     usd = float(getattr(cost, "usd", 0.0))
-                entry = per_task.setdefault(tid, {
-                    "task_id": tid,
-                    "tokens": 0,
-                    "usd": 0.0,
-                    "commit_count": 0,
-                    "last_ts": None,
-                })
+                entry = per_task.setdefault(
+                    tid,
+                    {
+                        "task_id": tid,
+                        "tokens": 0,
+                        "usd": 0.0,
+                        "commit_count": 0,
+                        "last_ts": None,
+                    },
+                )
                 entry["tokens"] += tokens
                 entry["usd"] = round(entry["usd"] + usd, 6)
                 entry["commit_count"] += 1
@@ -1218,7 +1268,9 @@ def create_observability_router(
 
         immunity = TrustEngine(trusted_sources=["skill://public/*"])
         executor = ToolExecutor(
-            registry=registry, immunity=immunity, journal=journal,
+            registry=registry,
+            immunity=immunity,
+            journal=journal,
         )
         runtime = GraphRuntime(executor=executor, journal=journal)
         planner = StaticPlanner(
@@ -1234,7 +1286,9 @@ def create_observability_router(
         )
 
         intent = ParsedIntent(
-            raw=goal, intent_type="task", normalized_goal=goal,
+            raw=goal,
+            intent_type="task",
+            normalized_goal=goal,
         )
         graph = planner.plan(intent)
         budget = Budget(
@@ -1242,8 +1296,10 @@ def create_observability_router(
             limits=BudgetLimits(tokens=10_000, usd=0.10),
         )
         traj = runtime.run(
-            graph, budget=budget,
-            caller="arms/ui", arm_id=ArmId("ui_arm"),
+            graph,
+            budget=budget,
+            caller="arms/ui",
+            arm_id=ArmId("ui_arm"),
         )
         return {
             "success": traj.outcome.success,

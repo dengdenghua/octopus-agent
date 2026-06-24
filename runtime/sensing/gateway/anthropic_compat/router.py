@@ -64,9 +64,11 @@ def _adapt_notify(method_str: str, params: dict[str, Any]) -> list[OutboundEvent
     elif method_str == "item/reasoning/textDelta":
         delta = params.get("delta") or ""
         if delta:
-            return [AgentThinkingEvent(
-                content=[{"type": "thinking", "thinking": delta}],
-            )]
+            return [
+                AgentThinkingEvent(
+                    content=[{"type": "thinking", "thinking": delta}],
+                )
+            ]
     return []
 
 
@@ -117,24 +119,29 @@ class _SseEmitter:
         )
         # Surface the request over SSE so the client knows to confirm, then go
         # idle with stop_reason=requires_action (Anthropic protocol).
-        await self._manager.publish(self._session_id, AgentCustomToolUseEvent(
-            tool_name=str(params.get("tool") or ""),
-            tool_use_id=item_id,
-            input={
-                "args_preview": str(
-                    params.get("argsPreview") or params.get("detail") or "",
-                ),
-            },
-        ))
         await self._manager.publish(
-            self._session_id, requires_action_event(blocking_event_ids=[item_id]),
+            self._session_id,
+            AgentCustomToolUseEvent(
+                tool_name=str(params.get("tool") or ""),
+                tool_use_id=item_id,
+                input={
+                    "args_preview": str(
+                        params.get("argsPreview") or params.get("detail") or "",
+                    ),
+                },
+            ),
+        )
+        await self._manager.publish(
+            self._session_id,
+            requires_action_event(blocking_event_ids=[item_id]),
         )
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         self._pending[item_id] = fut
         try:
             return await asyncio.wait_for(
-                fut, timeout=timeout or self._approval_timeout,
+                fut,
+                timeout=timeout or self._approval_timeout,
             )
         except TimeoutError:
             # Fail-closed: no confirmation arrived → DENY (the old MVP stub
@@ -201,7 +208,9 @@ def create_anthropic_compat_router(
             from runtime.sensing.gateway.openai_gateway import _resolve_actor
 
             return _resolve_actor(
-                request, identity_store, require_auth,
+                request,
+                identity_store,
+                require_auth,
                 jwt_secret=jwt_secret,
                 jwt_issuer=jwt_issuer,
                 jwt_audience=jwt_audience,
@@ -213,6 +222,16 @@ def create_anthropic_compat_router(
                 raise HTTPException(401, "auth required") from exc
             return None
 
+    def _owned_or_404(state: Any, actor: str | None) -> None:
+        # Ownership gate · a session may only be read or driven by the actor
+        # who created it. ``list_sessions`` already scopes by creator_actor;
+        # the per-session routes must do the same, or any authenticated caller
+        # could read/drive another user's session by guessing its id. We raise
+        # 404 (not 403) so a non-owner can't even confirm the session exists.
+        # Single-user/dev mode (require_auth off → actor is None) skips the gate.
+        if actor is not None and state.creator_actor is not None and state.creator_actor != actor:
+            raise HTTPException(404, "session not found")
+
     # ── POST /v1/sessions ────────────────────────────────────
 
     @router.post("/v1/sessions")
@@ -222,8 +241,10 @@ def create_anthropic_compat_router(
             body = CreateSessionRequest.model_validate(await request.json())
         except Exception as exc:
             raise HTTPException(400, f"invalid body: {exc}") from exc
-        agent_id = body.agent if isinstance(body.agent, str) else (
-            body.agent.get("id") if isinstance(body.agent, dict) else None
+        agent_id = (
+            body.agent
+            if isinstance(body.agent, str)
+            else (body.agent.get("id") if isinstance(body.agent, dict) else None)
         )
         state = await manager.create(
             agent_id=agent_id,
@@ -236,10 +257,11 @@ def create_anthropic_compat_router(
 
     @router.get("/v1/sessions/{session_id}")
     async def get_session(session_id: str, request: Request) -> dict[str, Any]:
-        _auth(request)
+        actor = _auth(request)
         state = await manager.get(session_id)
         if state is None:
             raise HTTPException(404, "session not found")
+        _owned_or_404(state, actor)
         return manager.to_response(state).model_dump(mode="json")
 
     # ── GET /v1/sessions ─────────────────────────────────────
@@ -258,6 +280,7 @@ def create_anthropic_compat_router(
         state = await manager.get(session_id)
         if state is None:
             raise HTTPException(404, "session not found")
+        _owned_or_404(state, actor)
         try:
             body = SendEventsRequest.model_validate(await request.json())
         except Exception as exc:
@@ -308,10 +331,11 @@ def create_anthropic_compat_router(
 
     @router.get("/v1/sessions/{session_id}/events/stream")
     async def stream_events(session_id: str, request: Request) -> Any:
-        _auth(request)
+        actor = _auth(request)
         state = await manager.get(session_id)
         if state is None:
             raise HTTPException(404, "session not found")
+        _owned_or_404(state, actor)
         queue = await manager.subscribe(session_id)
         if queue is None:
             raise HTTPException(404, "session not found")
@@ -346,10 +370,11 @@ def create_anthropic_compat_router(
 
     @router.get("/v1/sessions/{session_id}/events")
     async def list_events(session_id: str, request: Request) -> list[dict[str, Any]]:
-        _auth(request)
+        actor = _auth(request)
         state = await manager.get(session_id)
         if state is None:
             raise HTTPException(404, "session not found")
+        _owned_or_404(state, actor)
         return [e.model_dump(mode="json") for e in state.history[-200:]]
 
     # ── Internal: run a turn ─────────────────────────────────
@@ -389,7 +414,8 @@ def create_anthropic_compat_router(
             await runtime.start_turn(params, emitter)
 
             await manager.publish(
-                session_id, turn_completed_event(interrupted=emitter.interrupted),
+                session_id,
+                turn_completed_event(interrupted=emitter.interrupted),
             )
 
         except Exception as exc:
