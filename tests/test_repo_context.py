@@ -1,4 +1,5 @@
 """Auto-retrieval of project-wiki context for planner grounding."""
+
 from __future__ import annotations
 
 import json
@@ -25,16 +26,24 @@ def _make_wiki(root: Path, pages: list[tuple[str, str, str]]) -> Path:
         (auto / rel).write_text(body, encoding="utf-8")
         tree.append({"type": "doc", "title": title, "path": rel})
     (auto / "index.json").write_text(
-        json.dumps({"version": 2, "tree": tree}), encoding="utf-8",
+        json.dumps({"version": 2, "tree": tree}),
+        encoding="utf-8",
     )
     return auto
 
 
 def test_retrieves_most_relevant_page(tmp_path: Path) -> None:
-    auto = _make_wiki(tmp_path, [
-        ("Cerebrum planning", "cerebrum.md", "The planner builds a ReAct loop with tool calls."),
-        ("Browser automation", "browser.md", "Playwright drives chromium via skills."),
-    ])
+    auto = _make_wiki(
+        tmp_path,
+        [
+            (
+                "Cerebrum planning",
+                "cerebrum.md",
+                "The planner builds a ReAct loop with tool calls.",
+            ),
+            ("Browser automation", "browser.md", "Playwright drives chromium via skills."),
+        ],
+    )
     out = retrieve_repo_context("how does the planner cerebrum work", wiki_dir=auto)
     assert out is not None
     assert "Cerebrum planning" in out and "ReAct loop" in out
@@ -44,9 +53,13 @@ def test_retrieves_most_relevant_page(tmp_path: Path) -> None:
 def test_nested_tree_is_flattened() -> None:
     tree = [
         {"type": "doc", "title": "A", "path": "a.md"},
-        {"type": "dir", "title": "D", "children": [
-            {"type": "doc", "title": "B", "path": "d/b.md"},
-        ]},
+        {
+            "type": "dir",
+            "title": "D",
+            "children": [
+                {"type": "doc", "title": "B", "path": "d/b.md"},
+            ],
+        },
     ]
     assert _flatten(tree) == [("A", "a.md"), ("B", "d/b.md")]
 
@@ -94,11 +107,42 @@ def test_identifier_tokenization_splits_camel_and_snake() -> None:
     assert "规划" in _tokenize("cerebrum 规划")
 
 
+def test_cjk_run_emits_bigrams_and_whole_run() -> None:
+    # A CJK run yields its adjacent bigrams (partial-overlap signal) AND the
+    # whole run (exact-match signal). ADR-009 Phase 0: whole-run-only made BM25
+    # weak on Chinese — a CN goal shares bigrams, not whole runs, with a CN doc.
+    toks = set(_tokenize("简历优化"))
+    assert {"简历", "历优", "优化"} <= toks  # bigrams
+    assert "简历优化" in toks  # whole run still present
+    # 2-char run: its only bigram is itself, so single domain words still surface
+    assert "规划" in _tokenize("规划")
+
+
+def test_retrieves_chinese_page_by_bigram_overlap(tmp_path: Path) -> None:
+    # No shared *whole* CJK run and no shared English token between goal and the
+    # target page — only shared bigrams (简历 / 关键 / 键词). Whole-run-only
+    # tokenization missed this; bigrams retrieve it.
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("简历助手", "resume.md", "简历优化与关键词匹配分析"),
+            ("浏览器", "b.md", "playwright chromium 自动化测试"),
+        ],
+    )
+    out = retrieve_repo_context("帮我改简历做关键词", wiki_dir=auto)
+    assert out is not None
+    assert "简历助手" in out
+    assert "浏览器" not in out
+
+
 def test_word_goal_matches_camelcase_identifier(tmp_path: Path) -> None:
-    auto = _make_wiki(tmp_path, [
-        ("Engine", "e.md", "The ToolEngine executes skills via execute_token."),
-        ("Other", "o.md", "unrelated browser playwright content"),
-    ])
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("Engine", "e.md", "The ToolEngine executes skills via execute_token."),
+            ("Other", "o.md", "unrelated browser playwright content"),
+        ],
+    )
     out = retrieve_repo_context("how does the tool engine execute", wiki_dir=auto)
     assert out is not None and "ToolEngine" in out
 
@@ -109,10 +153,13 @@ def test_bm25_length_normalization_beats_long_page(tmp_path: Path) -> None:
     # BM25 length-normalizes so the short on-topic page wins.
     short = "Cerebrum planner: plans tool calls."
     longp = "cerebrum planner " + ("catalog skill registry module export summary " * 300)
-    auto = _make_wiki(tmp_path, [
-        ("Cerebrum planning", "cere.md", short),
-        ("Skills catalog", "cat.md", longp),
-    ])
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("Cerebrum planning", "cere.md", short),
+            ("Skills catalog", "cat.md", longp),
+        ],
+    )
     out = retrieve_repo_context("cerebrum planner", wiki_dir=auto, max_pages=1)
     assert out is not None
     assert "Cerebrum planning" in out
@@ -153,10 +200,13 @@ def test_render_codebase_context_empty_goal_and_env_off(monkeypatch) -> None:
 
 
 def test_sink_captures_chosen_doc_faithfully(tmp_path: Path) -> None:
-    auto = _make_wiki(tmp_path, [
-        ("Cerebrum planning", "cerebrum.md", "The planner builds a ReAct loop."),
-        ("Browser automation", "browser.md", "Playwright drives chromium."),
-    ])
+    auto = _make_wiki(
+        tmp_path,
+        [
+            ("Cerebrum planning", "cerebrum.md", "The planner builds a ReAct loop."),
+            ("Browser automation", "browser.md", "Playwright drives chromium."),
+        ],
+    )
     sink: list[dict[str, str]] = []
     out = retrieve_repo_context("how does the planner cerebrum work", wiki_dir=auto, _sink=sink)
     assert out is not None

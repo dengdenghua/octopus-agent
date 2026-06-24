@@ -121,11 +121,22 @@ Conformance deltas (what "adopt OKF" concretely means here):
 
 Phased, with the cheapest validation first:
 
-- **Phase 0 — validate the merge direction, zero format change.** Point
-  `repo_context` at the agent's own markdown knowledge (memory + `SKILL.md`)
-  in addition to `docs/auto`, still BM25. If retrieval quality on real
-  goals improves, the gbrain "one graph beats siloed stores" thesis holds
-  for us before we pay for any migration. If it doesn't, stop here.
+- **Phase 0 — DONE (2026-06-24): validated by pitting the two existing
+  rankers against each other; no format change.** The repo already has two
+  relevance rankers over two corpora — the composer's word-overlap + CJK-bigram
+  over skills, and `repo_context`'s BM25 over the wiki. Rather than duplicate
+  skill surfacing (the original plan here), Phase 0 measured them head-to-head
+  on skill selection (15 bilingual goal→skill labels). They tied on top-1 but
+  **split by language**: BM25 won on English/identifier goals (length-norm +
+  idf), composer won on Chinese — `repo_context` kept CJK runs *whole* and so
+  catastrophically missed e.g. `resume-craft` @85, `cn-finance-data` @23.
+  Folding **CJK bigrams** into `repo_context`'s tokenizer fixed both (→ rank 1)
+  while keeping the English wins, lifting the unified BM25 *above both*
+  (MRR 0.762→**0.824** vs composer 0.793; top-3 0.80→**0.93**). **Conclusion:
+  one engine does beat two siloed rankers — but the win is in *merging* their
+  signals, not picking one.** The CJK-bigram change shipped to the live
+  retriever (improves Chinese wiki grounding independent of the rest of OKF);
+  pinned by `tests/test_repo_context.py`.
 - **Phase 1 — format.** `gen_wiki` emits OKF (frontmatter + `index.md` +
   links + `timestamp`); keep `index.json` derived. CI freshness gate
   extends to per-page.

@@ -18,6 +18,7 @@ no shared token (planner→cerebrum) still needs embeddings — out of scope her
 Self-gating: no wiki (no ``docs/auto/index.json``) → returns ``None`` and the
 planner omits the section.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -31,20 +32,62 @@ from typing import Any
 
 # Short / structural tokens carry no retrieval signal — drop them so scoring
 # keys on meaningful identifiers (module names, domain nouns).
-_STOPWORDS = frozenset({
-    "the", "and", "for", "with", "this", "that", "from", "into", "your", "you",
-    "are", "use", "add", "fix", "run", "get", "set", "how", "why", "what",
-    "where", "when", "make", "new", "all", "any", "can", "should", "would",
-    "does", "did", "its", "our", "out", "via",
-    "的", "了", "在", "和", "是", "把", "给", "做", "加", "改", "怎么", "如何",
-})
+_STOPWORDS = frozenset(
+    {
+        "the",
+        "and",
+        "for",
+        "with",
+        "this",
+        "that",
+        "from",
+        "into",
+        "your",
+        "you",
+        "are",
+        "use",
+        "add",
+        "fix",
+        "run",
+        "get",
+        "set",
+        "how",
+        "why",
+        "what",
+        "where",
+        "when",
+        "make",
+        "new",
+        "all",
+        "any",
+        "can",
+        "should",
+        "would",
+        "does",
+        "did",
+        "its",
+        "our",
+        "out",
+        "via",
+        "的",
+        "了",
+        "在",
+        "和",
+        "是",
+        "把",
+        "给",
+        "做",
+        "加",
+        "改",
+        "怎么",
+        "如何",
+    }
+)
 
 # Runs of alnum or CJK, separators (incl. ``_``) drop out — so snake_case is
 # already split. Camel/acronym/number boundaries are split by _SUBWORD_RE.
 _WORD_RE = re.compile(r"[A-Za-z0-9]+|[一-鿿]+")
-_SUBWORD_RE = re.compile(
-    r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+|[一-鿿]+"
-)
+_SUBWORD_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+|[一-鿿]+")
 
 # BM25 params (standard defaults).
 _BM25_K1 = 1.5
@@ -59,13 +102,26 @@ _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 def _tokenize(text: str) -> list[str]:
     """Identifier-aware tokens: split camelCase / snake_case / acronyms into
-    sub-words so ``ToolEngine`` and ``tool_engine`` both yield {tool, engine};
-    CJK runs are kept whole."""
+    sub-words so ``ToolEngine`` and ``tool_engine`` both yield {tool, engine}.
+
+    A CJK run emits both the **whole run** (exact-match signal) and its
+    **adjacent-char bigrams** (partial-overlap signal). Keeping only the whole
+    run made BM25 weak on Chinese: a CN goal and a CN description rarely share a
+    whole run but do share bigrams (脱靶实测见 ADR-009 Phase 0 — "优化简历…" vs
+    skill 描述). Bigrams mirror the composer's CJK signal so the two rankers
+    converge on one engine."""
     out: list[str] = []
     for word in _WORD_RE.findall(text):
         if "一" <= word[0] <= "鿿":
             if word not in _STOPWORDS:
                 out.append(word)
+            # Adjacent-char bigrams within the run · cross-lingual overlap that
+            # whole-run matching misses (a 2-char run's only bigram is itself,
+            # so single domain words like 规划 still surface).
+            for i in range(len(word) - 1):
+                bg = word[i : i + 2]
+                if bg not in _STOPWORDS:
+                    out.append(bg)
             continue
         for part in _SUBWORD_RE.findall(word):
             p = part.lower()
