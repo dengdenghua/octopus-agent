@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -80,13 +79,15 @@ OFFICIAL_MODELS: list[dict[str, Any]] = [
 def _official_model_payload(*, include_auto: bool = False) -> dict[str, Any]:
     data: list[dict[str, Any]] = []
     if include_auto:
-        data.append({
-            "id": "molili",
-            "object": "model",
-            "created": 0,
-            "owned_by": "molili",
-            "display_name": "Molili (auto)",
-        })
+        data.append(
+            {
+                "id": "molili",
+                "object": "model",
+                "created": 0,
+                "owned_by": "molili",
+                "display_name": "Molili (auto)",
+            }
+        )
     data.extend(dict(m) for m in OFFICIAL_MODELS)
     return {"object": "list", "data": data}
 
@@ -118,7 +119,9 @@ def create_proxy_router(
         from runtime.adapters.web_auth import _resolve_actor
 
         actor = _resolve_actor(
-            request, identity_store, require_auth,
+            request,
+            identity_store,
+            require_auth,
             jwt_secret=config.jwt_secret or jwt_secret,
             jwt_issuer=config.jwt_issuer or jwt_issuer,
             jwt_audience=jwt_audience,
@@ -156,7 +159,6 @@ def create_proxy_router(
         _link_or_404(actor)
         return _official_model_payload(include_auto=True)
 
-
     @router.post("/chat/completions")
     def proxy_chat_completions(request: Request) -> Any:
         _require_enabled()
@@ -175,7 +177,13 @@ def create_proxy_router(
 
         upstream_url = f"{config.base_url.rstrip('/')}/chat/completions"
         headers = {
-            "Authorization": f"Bearer {link.molili_user_id}",
+            # Molili upstream authenticates with a ``Token`` header carrying the
+            # link's molili_token — see runtime/adapters/integrations/molili/
+            # client.py (``headers = {"Token": token}``). The prior
+            # ``Authorization: Bearer {molili_user_id}`` was wrong on both axes:
+            # wrong header name *and* it sent the user id instead of the token,
+            # so every proxied completion 401'd upstream.
+            "Token": link.molili_token,
             "Content-Type": "application/json",
         }
 
@@ -183,20 +191,24 @@ def create_proxy_router(
         if client is None:
             if not HTTPX_AVAILABLE:
                 raise HTTPException(
-                    503, "httpx not installed · add 'web' extra",
+                    503,
+                    "httpx not installed · add 'web' extra",
                 )
             client = httpx
 
         if not stream:
             try:
                 r = client.post(
-                    upstream_url, headers=headers, content=body_bytes,
+                    upstream_url,
+                    headers=headers,
+                    content=body_bytes,
                     timeout=config.request_timeout_seconds,
                 )
                 status = getattr(r, "status_code", 0)
                 if status >= 400:
                     raise HTTPException(
-                        status, getattr(r, "text", "") or "upstream error",
+                        status,
+                        getattr(r, "text", "") or "upstream error",
                     )
                 return r.json()
             except HTTPException:
@@ -207,19 +219,24 @@ def create_proxy_router(
         def _iter() -> Iterator[bytes]:
             try:
                 with client.stream(
-                    "POST", upstream_url, headers=headers, content=body_bytes,
+                    "POST",
+                    upstream_url,
+                    headers=headers,
+                    content=body_bytes,
                     timeout=None,
                 ) as r:
                     if getattr(r, "status_code", 0) >= 400:
                         err = r.read() if hasattr(r, "read") else b""
                         yield (
                             b"data: "
-                            + json.dumps({
-                                "error": {
-                                    "status": r.status_code,
-                                    "body": err.decode("utf-8", "replace"),
-                                },
-                            }).encode("utf-8")
+                            + json.dumps(
+                                {
+                                    "error": {
+                                        "status": r.status_code,
+                                        "body": err.decode("utf-8", "replace"),
+                                    },
+                                }
+                            ).encode("utf-8")
                             + b"\n\n"
                         )
                         yield b"data: [DONE]\n\n"
@@ -229,9 +246,7 @@ def create_proxy_router(
                             yield chunk
             except Exception as exc:  # noqa: BLE001
                 yield (
-                    b"data: "
-                    + json.dumps({"error": {"body": str(exc)}}).encode("utf-8")
-                    + b"\n\n"
+                    b"data: " + json.dumps({"error": {"body": str(exc)}}).encode("utf-8") + b"\n\n"
                 )
                 yield b"data: [DONE]\n\n"
 
