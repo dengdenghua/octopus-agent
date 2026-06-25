@@ -1,0 +1,57 @@
+"""Unit tests for small pure helpers extracted out of ``stream_react_loop``.
+
+``_finish_reason_is_length_limited`` (PHASE 6c) and ``_tool_call_succeeded``
+(PHASE 6d) used to be inlined and duplicated inside the loop body; pulling them
+out makes their contracts testable in isolation.
+"""
+
+import pytest
+
+from runtime.core.cerebrum import react_loop
+from runtime.core.cerebrum.react_loop import (
+    _finish_reason_is_length_limited,
+    _tool_call_succeeded,
+)
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "length",
+        "max_tokens",
+        "max_output_tokens",
+        "output_limit",
+        "token_limit",
+        "LENGTH",
+        "  Max_Tokens  ",
+    ],
+)
+def test_length_limited_finish_reasons(reason):
+    assert _finish_reason_is_length_limited(reason) is True
+
+
+@pytest.mark.parametrize("reason", ["stop", "end_turn", "", None, "tool_use"])
+def test_non_length_limited_finish_reasons(reason):
+    assert _finish_reason_is_length_limited(reason) is False
+
+
+def test_tool_success_plain_observation():
+    assert _tool_call_succeeded("all good", None) is True
+
+
+def test_tool_success_none_observation():
+    assert _tool_call_succeeded(None, None) is True
+
+
+@pytest.mark.parametrize("obs", ["(工具失败) boom", "(工具执行异常) trace"])
+def test_tool_failure_prefixed_observation(obs):
+    assert _tool_call_succeeded(obs, None) is False
+
+
+def test_beak_step_verdict_overrides_observation(monkeypatch):
+    # A successful beak step wins even over a failure-prefixed observation.
+    monkeypatch.setattr(react_loop, "_beak_step_effective_success", lambda s: True)
+    assert _tool_call_succeeded("(工具失败) boom", object()) is True
+    # A failed beak step overrides a clean-looking observation.
+    monkeypatch.setattr(react_loop, "_beak_step_effective_success", lambda s: False)
+    assert _tool_call_succeeded("looks fine", object()) is False
