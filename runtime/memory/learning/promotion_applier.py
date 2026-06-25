@@ -25,6 +25,10 @@ _VALID_TARGETS = {
     "policy_review",
     "rule_candidate",
     "browser_desktop_repair_recipe",
+    # Active single-demo forge: a human picks one successful run in review and
+    # mints a skill now (bypasses SkillForge's min_hits≥3 statistical gate;
+    # the immune gate still quarantines dangerous macros).
+    "forged_skill",
 }
 
 
@@ -38,11 +42,16 @@ class PromotionApplier:
         experience_ledger: ExperienceLedger,
         proposal_ledger: ProposalLedger,
         audit_path: str | Path,
+        journal: Any = None,
+        registry: Any = None,
     ) -> None:
         self.review_queue = review_queue
         self.experience_ledger = experience_ledger
         self.proposal_ledger = proposal_ledger
         self.audit_path = Path(audit_path)
+        # Optional: required only for the "forged_skill" target (active forge).
+        self.journal = journal
+        self.registry = registry
 
     def plan(
         self,
@@ -58,10 +67,7 @@ class PromotionApplier:
             for record in records
             if record.get("status") == "applied"
         }
-        actions = [
-            _planned_action(item, applied_keys=applied_keys)
-            for item in items
-        ]
+        actions = [_planned_action(item, applied_keys=applied_keys) for item in items]
         return {
             "schema": _SCHEMA,
             "dry_run": True,
@@ -147,16 +153,13 @@ class PromotionApplier:
     ) -> dict[str, Any]:
         rows = self._audit_records()
         if item_id:
-            rows = [
-                row for row in rows
-                if str(row.get("review_queue_item_id") or "") == item_id
-            ]
+            rows = [row for row in rows if str(row.get("review_queue_item_id") or "") == item_id]
         if target:
             rows = [row for row in rows if str(row.get("target") or "") == target]
         total = len(rows)
         return {
             "schema": _AUDIT_SCHEMA,
-            "records": rows[offset: offset + limit],
+            "records": rows[offset : offset + limit],
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -306,7 +309,48 @@ class PromotionApplier:
                 "kind": proposal.kind,
                 "status": proposal.status.value,
             }
+        if target == "forged_skill":
+            return self._forge_from_review_item(item)
         raise ValueError(f"unsupported promotion target: {target}")
+
+    def _forge_from_review_item(self, item: dict[str, Any]) -> dict[str, Any]:
+        """Active forge: distil the review item's successful trajectory into a
+        reusable skill *now* (single demo, no ``min_hits`` wait). Reuses
+        :class:`SkillForge` end-to-end, so shadow validation + the immune gate
+        (dangerous-macro quarantine for human approval) still apply."""
+        if self.journal is None or self.registry is None:
+            raise ValueError(
+                "forged_skill promotion requires journal+registry wiring on PromotionApplier"
+            )
+        task_ids = {str(t) for t in (item.get("source_task_ids") or []) if t}
+        if not task_ids:
+            raise ValueError(
+                "forged_skill promotion requires source_task_ids (the trajectory to forge)"
+            )
+        from runtime.memory.journal.journal import TrajectoryEvent
+        from runtime.safety.recovery.skill_forge import SkillForge
+
+        trajs = [
+            e.trajectory
+            for e in self.journal.read_by_type("trajectory")
+            if isinstance(e, TrajectoryEvent)
+            and str(e.trajectory.task_id) in task_ids
+            and e.trajectory.outcome.success
+        ]
+        if not trajs:
+            raise ValueError(
+                f"no successful trajectory found for source_task_ids={sorted(task_ids)}"
+            )
+        result = SkillForge(journal=self.journal, registry=self.registry).forge_selected(trajs)
+        return {
+            "type": "skill_forge",
+            "promoted": list(result.promoted),
+            "quarantined": list(result.quarantined),
+            "shadow_failed": list(result.shadow_failed),
+            "retired": list(result.retired),
+            "candidates_total": result.candidates_total,
+            "source_task_ids": sorted(task_ids),
+        }
 
     def _audit_records(self) -> list[dict[str, Any]]:
         return list(self._read_audit_payload().get("records") or [])
@@ -340,35 +384,42 @@ def _normalize_audit_payload(raw: dict[str, Any]) -> dict[str, Any]:
         target = _target_text(record.get("target"))
         if not item_id or not target:
             continue
-        records.append({
-            "id": _clean_text(record.get("id"), limit=100) or _promotion_id(
-                item_id=item_id,
-                target=target,
-            ),
-            "event_type": _clean_text(record.get("event_type"), limit=80),
-            "review_queue_item_id": item_id,
-            "agent_id": _clean_text(record.get("agent_id"), limit=120),
-            "target": target,
-            "status": _clean_text(record.get("status"), limit=40) or "applied",
-            "applied_at": _clean_text(record.get("applied_at"), limit=80),
-            "artifact": record.get("artifact") if isinstance(record.get("artifact"), dict) else {},
-            "decision_context": (
-                record.get("decision_context")
-                if isinstance(record.get("decision_context"), dict)
-                else {}
-            ),
-            "item_snapshot": (
-                record.get("item_snapshot")
-                if isinstance(record.get("item_snapshot"), dict)
-                else {}
-            ),
-        })
-    payload.update({
-        "schema": _AUDIT_SCHEMA,
-        "version": 1,
-        "lastUpdated": _clean_text(raw.get("lastUpdated"), limit=80),
-        "records": sorted(records, key=lambda row: str(row.get("applied_at") or "")),
-    })
+        records.append(
+            {
+                "id": _clean_text(record.get("id"), limit=100)
+                or _promotion_id(
+                    item_id=item_id,
+                    target=target,
+                ),
+                "event_type": _clean_text(record.get("event_type"), limit=80),
+                "review_queue_item_id": item_id,
+                "agent_id": _clean_text(record.get("agent_id"), limit=120),
+                "target": target,
+                "status": _clean_text(record.get("status"), limit=40) or "applied",
+                "applied_at": _clean_text(record.get("applied_at"), limit=80),
+                "artifact": record.get("artifact")
+                if isinstance(record.get("artifact"), dict)
+                else {},
+                "decision_context": (
+                    record.get("decision_context")
+                    if isinstance(record.get("decision_context"), dict)
+                    else {}
+                ),
+                "item_snapshot": (
+                    record.get("item_snapshot")
+                    if isinstance(record.get("item_snapshot"), dict)
+                    else {}
+                ),
+            }
+        )
+    payload.update(
+        {
+            "schema": _AUDIT_SCHEMA,
+            "version": 1,
+            "lastUpdated": _clean_text(raw.get("lastUpdated"), limit=80),
+            "records": sorted(records, key=lambda row: str(row.get("applied_at") or "")),
+        }
+    )
     return payload
 
 
@@ -405,7 +456,9 @@ def _planned_action(
 
 
 def _review_from_queue_item(item: dict[str, Any], *, target: str) -> dict[str, Any]:
-    source_task_ids = item.get("source_task_ids") if isinstance(item.get("source_task_ids"), list) else []
+    source_task_ids = (
+        item.get("source_task_ids") if isinstance(item.get("source_task_ids"), list) else []
+    )
     thread_ids = item.get("thread_ids") if isinstance(item.get("thread_ids"), list) else []
     turn_ids = item.get("turn_ids") if isinstance(item.get("turn_ids"), list) else []
     agent_ids = item.get("agent_ids") if isinstance(item.get("agent_ids"), list) else []
@@ -428,21 +481,25 @@ def _review_from_queue_item(item: dict[str, Any], *, target: str) -> dict[str, A
     text = _clean_text(item.get("text"), limit=1200)
     priority = _clean_text(item.get("priority"), limit=20) or "P2"
     if target == "experiment_backlog":
-        review["backlog_candidates"] = [{
-            "priority": priority,
-            "experiment": title,
-            "hypothesis": text,
-            "minimal_implementation": _metadata_text(item, "minimal_implementation"),
-            "validation_metric": _metadata_text(item, "validation_metric"),
-        }]
+        review["backlog_candidates"] = [
+            {
+                "priority": priority,
+                "experiment": title,
+                "hypothesis": text,
+                "minimal_implementation": _metadata_text(item, "minimal_implementation"),
+                "validation_metric": _metadata_text(item, "validation_metric"),
+            }
+        ]
     else:
-        review["learning_candidates"] = [{
-            "kind": _clean_text(item.get("candidate_kind"), limit=80) or "learning_candidate",
-            "priority": priority,
-            "memory_bucket": target,
-            "title": title,
-            "text": text,
-        }]
+        review["learning_candidates"] = [
+            {
+                "kind": _clean_text(item.get("candidate_kind"), limit=80) or "learning_candidate",
+                "priority": priority,
+                "memory_bucket": target,
+                "title": title,
+                "text": text,
+            }
+        ]
     return review
 
 
@@ -508,8 +565,7 @@ def _has_policy_review_evidence(
     replay = evidence.get("replay") if isinstance(evidence.get("replay"), dict) else {}
     gate = evidence.get("replay_gate") if isinstance(evidence.get("replay_gate"), dict) else {}
     return bool(
-        (replay.get("case_id") and replay.get("replayable") is True)
-        or gate.get("passed") is True
+        (replay.get("case_id") and replay.get("replayable") is True) or gate.get("passed") is True
     )
 
 
@@ -521,11 +577,7 @@ def _policy_review_evidence(
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
     replay = metadata.get("replay") if isinstance(metadata.get("replay"), dict) else {}
     context = decision_context if isinstance(decision_context, dict) else {}
-    replay_gate = (
-        context.get("replay_gate")
-        if isinstance(context.get("replay_gate"), dict)
-        else {}
-    )
+    replay_gate = context.get("replay_gate") if isinstance(context.get("replay_gate"), dict) else {}
     if not replay_gate and isinstance(metadata.get("replay_gate"), dict):
         replay_gate = metadata["replay_gate"]
     return {
@@ -544,15 +596,9 @@ def _policy_review_evidence(
 def _browser_desktop_recipe_evidence(item: dict[str, Any]) -> dict[str, Any]:
     metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
     recipe = metadata.get("recipe") if isinstance(metadata.get("recipe"), dict) else {}
-    gate = (
-        recipe.get("promotion_gate")
-        if isinstance(recipe.get("promotion_gate"), dict)
-        else {}
-    )
+    gate = recipe.get("promotion_gate") if isinstance(recipe.get("promotion_gate"), dict) else {}
     verification_plan = (
-        recipe.get("verification_plan")
-        if isinstance(recipe.get("verification_plan"), dict)
-        else {}
+        recipe.get("verification_plan") if isinstance(recipe.get("verification_plan"), dict) else {}
     )
     return {
         "schema": "octopus.browser_desktop_repair_recipe_promotion_evidence.v1",
@@ -560,9 +606,7 @@ def _browser_desktop_recipe_evidence(item: dict[str, Any]) -> dict[str, Any]:
         "candidate_kind": recipe.get("candidate_kind"),
         "occurrences": int(recipe.get("occurrences") or 0),
         "case_ids": [
-            str(case_id)
-            for case_id in recipe.get("case_ids") or []
-            if str(case_id or "")
+            str(case_id) for case_id in recipe.get("case_ids") or [] if str(case_id or "")
         ],
         "fingerprints": [
             str(fingerprint)
@@ -570,9 +614,7 @@ def _browser_desktop_recipe_evidence(item: dict[str, Any]) -> dict[str, Any]:
             if str(fingerprint or "")
         ],
         "recommended_steps": [
-            str(step)
-            for step in recipe.get("recommended_steps") or []
-            if str(step or "")
+            str(step) for step in recipe.get("recommended_steps") or [] if str(step or "")
         ],
         "verification_plan": verification_plan,
         "promotion_gate": gate,

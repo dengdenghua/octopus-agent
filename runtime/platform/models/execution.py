@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -19,7 +18,6 @@ from .primitives import (
 
 
 class ToolCall(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     call_id: UUID = Field(default_factory=new_id)
@@ -28,7 +26,6 @@ class ToolCall(BaseModel):
     args: dict[str, Any] = Field(default_factory=dict)
     predicted_cost: CostEntry | None = None  # Implementation note.
     ts: datetime = Field(default_factory=now_utc)
-
 
 
 ExecutionStatus = Literal[
@@ -42,7 +39,6 @@ ExecutionStatus = Literal[
 
 
 class ExecutionResult(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     call_id: UUID
@@ -75,10 +71,7 @@ class ExecutionResult(BaseModel):
         return sum(signals) >= 2
 
 
-
-
 class Step(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     step_id: int = Field(..., ge=0)
@@ -103,10 +96,7 @@ class Step(BaseModel):
         return self.result.status == "success"
 
 
-
-
 class TrajectoryOutcome(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     success: bool
@@ -116,11 +106,14 @@ class TrajectoryOutcome(BaseModel):
 
 
 class Trajectory(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     trajectory_id: TrajectoryId = Field(default_factory=lambda: TrajectoryId(new_id()))
     task_id: TaskId
+    # Conversation this run belongs to (when known). Lets a chat thread be
+    # traced back to its trajectories — e.g. the REC button forging a skill
+    # from "this conversation". Optional + backward-compatible.
+    thread_id: str | None = None
     arm_id: ArmId
     strategy_id: str = "default"
     recipe_id: str | None = None

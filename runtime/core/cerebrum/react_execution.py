@@ -144,6 +144,13 @@ def _execute_action_via_beak(
                 "code_mode",
                 "agent_mode",
                 "project_signals",
+                "mode_preset",
+                "workflow_preset",
+                "skill_pack_profile",
+                "verification_policy",
+                "default_skill_packs",
+                "default_plugins",
+                "mode_contract",
                 "sandbox_mode",
                 "permission_mode",
                 "approval_policy",
@@ -215,10 +222,7 @@ def _execute_action_via_beak(
             f"{command_result.rendered}\n"
             "Analyze the failure next, then fix it, change commands, or report the verification blocker."
         ), step
-    return (
-        f"(real tool execution succeeded) {skill_name}\n"
-        f"{normalized_result.rendered}"
-    ), step
+    return (f"(real tool execution succeeded) {skill_name}\n{normalized_result.rendered}"), step
 
 
 def _normalized_tool_call_from_react_action(
@@ -406,9 +410,19 @@ def _persist_react_trajectory(
     except ImportError:
         return
 
+    thread_id: str | None = None
+    try:
+        from runtime.platform.process.session import current_session
+
+        _sess = current_session()
+        thread_id = _sess.thread_id if _sess else None
+    except Exception:  # noqa: BLE001 — thread tagging is best-effort
+        thread_id = None
+
     try:
         traj = Trajectory(
             task_id=react_task_id,
+            thread_id=thread_id,
             arm_id=ArmId("react_arm"),
             strategy_id="react_loop",
             steps=list(beak_steps),

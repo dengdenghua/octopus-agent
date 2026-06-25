@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import hashlib
@@ -59,7 +58,6 @@ def path_of(traj: Trajectory) -> list[str]:
 
 
 class ForgedSkillCandidate(BaseModel):
-
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     candidate_id: str = Field(..., min_length=8)
@@ -82,7 +80,6 @@ class ForgedSkillCandidate(BaseModel):
 
 
 class SkillForgeResult(BaseModel):
-
     model_config = ConfigDict(frozen=True)
 
     candidates_total: int
@@ -115,7 +112,6 @@ class ForgeConfig:
 
 
 class SkillForge:
-
     def __init__(
         self,
         journal: Journal,
@@ -154,16 +150,12 @@ class SkillForge:
                     continue
                 candidates.append(self._make_candidate(sig, cluster, success_rate))
 
-            candidates.sort(
-                key=lambda c: -(c.source_sample_count * c.source_success_rate)
-            )
+            candidates.sort(key=lambda c: -(c.source_sample_count * c.source_success_rate))
             return candidates[: self.config.max_candidates_per_run]
 
     # ─── shadow ─────────────────────────────────────
 
-    def shadow_validate(
-        self, candidate: ForgedSkillCandidate
-    ) -> tuple[bool, SkillTestReport]:
+    def shadow_validate(self, candidate: ForgedSkillCandidate) -> tuple[bool, SkillTestReport]:
         with trace_stage("regeneration.skill_forge.shadow_validate"):
             handler = self._build_meta_handler(candidate)
             test_skill = Skill(
@@ -194,9 +186,7 @@ class SkillForge:
 
     # ─── promote ────────────────────────────────────
 
-    def promote_to_public(
-        self, candidate: ForgedSkillCandidate
-    ) -> SkillTestReport:
+    def promote_to_public(self, candidate: ForgedSkillCandidate) -> SkillTestReport:
         dangerous = self._dangerous_underlying_skills(candidate)
         if dangerous:
             names = ", ".join(dangerous)
@@ -215,9 +205,46 @@ class SkillForge:
         )
         return self.registry.register(skill)  # type: ignore[return-value]
 
-
     def run(self) -> SkillForgeResult:
-        candidates = self.propose()
+        # Autonomous path: cluster repeated journal trajectories, then forge.
+        return self._forge_candidates(self.propose())
+
+    def forge_selected(
+        self,
+        trajectories: list[Trajectory],
+        *,
+        min_steps: int = 2,
+    ) -> SkillForgeResult:
+        """Active single-demo forge: distil human-chosen successful trajectories
+        into skills *now*, bypassing the ``min_hits``/``min_success_rate``
+        statistical gate.
+
+        Rationale: when a person actively demonstrates a process to teach the
+        agent, requiring them to repeat it ``min_hits`` (3) times is absurd —
+        one good demo should mint a (provisional) skill, and the *existing*
+        evolution machinery (turn scoring, success-rate tracking, the
+        autonomous :meth:`run` re-clustering as the skill gets re-used) refines
+        it over the next few self-runs.
+
+        Safety is NOT bypassed: each candidate still goes through shadow
+        validation and the immune gate, so a macro over dangerous primitives is
+        routed to governed quarantine for human approval — never auto-granted.
+        """
+        clusters: dict[str, list[Trajectory]] = {}
+        for t in trajectories:
+            if t.step_count < min_steps:
+                continue  # a <2-step "macro" is not a reusable skill
+            clusters.setdefault(pattern_signature(t), []).append(t)
+
+        candidates: list[ForgedSkillCandidate] = []
+        for sig, cluster in clusters.items():
+            success_rate = sum(1 for t in cluster if t.outcome.success) / len(cluster)
+            candidates.append(self._make_candidate(sig, cluster, success_rate))
+        return self._forge_candidates(candidates)
+
+    def _forge_candidates(self, candidates: list[ForgedSkillCandidate]) -> SkillForgeResult:
+        """Shared promote/quarantine pipeline for both the autonomous
+        (:meth:`run`) and active (:meth:`forge_selected`) forge paths."""
         promoted: list[str] = []
         retired: list[str] = []
         shadow_failed: list[str] = []
@@ -245,6 +272,7 @@ class SkillForge:
                 self._maybe_persist(cand)
                 try:
                     from runtime.safety.evolution.canary import CanaryManager
+
                     CanaryManager().register(cand.name)
                 except Exception as _exc:
                     _LOG.debug("canary register after forge failed: %s", _exc)
@@ -260,7 +288,8 @@ class SkillForge:
                 dangerous = self._dangerous_underlying_skills(cand)
                 _LOG.info(
                     "forge candidate %s quarantined; dangerous underlying: %s",
-                    cand.name, ", ".join(dangerous) or "(affinity)",
+                    cand.name,
+                    ", ".join(dangerous) or "(affinity)",
                 )
                 quarantined.append(cand.name)
                 retired.append(cand.name)
@@ -272,7 +301,9 @@ class SkillForge:
                 # UnsafeSkillPromotionError, so it used to escape this except
                 # and crash the whole regeneration tick.
                 _LOG.debug(
-                    "forge promote skipped (%s): %s", type(exc).__name__, exc,
+                    "forge promote skipped (%s): %s",
+                    type(exc).__name__,
+                    exc,
                 )
                 shadow_failed.append(cand.name)
                 retired.append(cand.name)
@@ -315,9 +346,7 @@ class SkillForge:
         except Exception as _exc:  # noqa: BLE001 — recording must not break tick
             _LOG.debug("forge quarantine decision not recorded: %s", _exc)
 
-    def _dangerous_underlying_skills(
-        self, candidate: ForgedSkillCandidate
-    ) -> list[str]:
+    def _dangerous_underlying_skills(self, candidate: ForgedSkillCandidate) -> list[str]:
         dangerous: list[str] = []
         for name in candidate.underlying_sequence:
             if is_dangerous_tool(name):
@@ -331,7 +360,6 @@ class SkillForge:
             if "dangerous" in affinity:
                 dangerous.append(name)
         return dangerous
-
 
     def _collect_successful_trajectories(self) -> list[Trajectory]:
         events = self.journal.read_by_type("trajectory")
@@ -382,21 +410,14 @@ class SkillForge:
                 case_name = result.case_name
                 if len(reports) > 1:
                     case_name = f"run{run_idx}:{case_name}"
-                merged_results.append(
-                    result.model_copy(update={"case_name": case_name})
-                )
+                merged_results.append(result.model_copy(update={"case_name": case_name}))
 
         per_tier: dict[str, list[bool]] = defaultdict(list)
         for result in merged_results:
             per_tier[result.tier].append(result.passed)
 
-        tier_rates = {
-            tier: sum(outcomes) / len(outcomes)
-            for tier, outcomes in per_tier.items()
-        }
-        tier_counts = {
-            tier: len(outcomes) for tier, outcomes in per_tier.items()
-        }
+        tier_rates = {tier: sum(outcomes) / len(outcomes) for tier, outcomes in per_tier.items()}
+        tier_counts = {tier: len(outcomes) for tier, outcomes in per_tier.items()}
 
         return SkillTestReport(
             skill_name=skill_name,
@@ -422,10 +443,7 @@ class SkillForge:
         # trajectories, direct-executor constructions) have
         # ``args_template == {}``; we record them as-is and let the
         # handler's fallback logic handle the "all empty" case.
-        step_templates = [
-            dict(getattr(s, "args_template", {}) or {})
-            for s in sample.steps
-        ]
+        step_templates = [dict(getattr(s, "args_template", {}) or {}) for s in sample.steps]
 
         return ForgedSkillCandidate(
             candidate_id=signature,
@@ -440,9 +458,7 @@ class SkillForge:
             step_templates=step_templates,
         )
 
-    def _generate_golden_tests(
-        self, cluster: list[Trajectory]
-    ) -> list[SkillTestCase]:
+    def _generate_golden_tests(self, cluster: list[Trajectory]) -> list[SkillTestCase]:
         if not cluster:
             return []
         sample = cluster[0]
@@ -467,7 +483,6 @@ class SkillForge:
             )
         ]
 
-
     def _maybe_persist(self, candidate: ForgedSkillCandidate) -> None:
         if self.auto_persist_dir is None:
             return
@@ -478,9 +493,7 @@ class SkillForge:
         except (ImportError, AttributeError, OSError, ValueError, TypeError) as exc:
             _LOG.debug("Forged skill persistence skipped: %s", exc)
 
-    def _build_meta_handler(
-        self, candidate: ForgedSkillCandidate
-    ) -> Callable[..., Any]:
+    def _build_meta_handler(self, candidate: ForgedSkillCandidate) -> Callable[..., Any]:
         """Build the composite skill's handler.
 
         Two call-time strategies · chosen per candidate:
@@ -517,10 +530,7 @@ class SkillForge:
 
         # Normalize: a template list shorter than the sequence, or
         # all-empty, means "not available" — use fallback.
-        has_templates = (
-            len(templates) == len(sequence)
-            and any(t for t in templates)
-        )
+        has_templates = len(templates) == len(sequence) and any(t for t in templates)
 
         def _meta(**kwargs: Any) -> dict[str, Any]:
             # Import locally to avoid pulling ganglia at module load
@@ -580,9 +590,10 @@ class SkillForge:
                     else:
                         # MVP fallback: kwargs + _prev hint.
                         call_args = dict(kwargs)
-                        if i > 0 and f"n{i-1}" in outputs:
+                        if i > 0 and f"n{i - 1}" in outputs:
                             call_args.setdefault(
-                                "_prev", outputs[f"n{i-1}"],
+                                "_prev",
+                                outputs[f"n{i - 1}"],
                             )
 
                     # Safety chokepoint. This in-process composite handler
@@ -595,8 +606,11 @@ class SkillForge:
                     from runtime.execution.tool_engine.skill_gate import (
                         gate_inner_dispatch,
                     )
+
                     _block = gate_inner_dispatch(
-                        skill, call_args, caller="forged_composite",
+                        skill,
+                        call_args,
+                        caller="forged_composite",
                     )
                     if _block is not None:
                         success = False

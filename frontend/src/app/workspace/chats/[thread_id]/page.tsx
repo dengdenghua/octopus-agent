@@ -1,4 +1,5 @@
 import {
+  CircleDotIcon,
   Code2Icon,
   FileTextIcon,
   ListChecksIcon,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import {
@@ -65,6 +66,7 @@ import { screenBlocksForAgent } from "@/components/workspace/agent-workbench-sna
 import { buildReplayFromBlocks } from "@/components/workspace/replay-from-blocks";
 import { buildReplayHtml } from "@/core/sharing/replay-html";
 import { downloadTextFile, shareSlug } from "@/core/sharing/download";
+import { modePresetForAgentMode } from "@/core/agent-modes/presets";
 import { TodoPanel } from "@/components/workspace/todo-panel";
 import { Welcome } from "@/components/workspace/welcome";
 import {
@@ -77,16 +79,25 @@ import {
 } from "@/components/workspace/use-thread-page";
 import { swallow } from "@/core/utils/log";
 import { SubtasksProvider } from "@/core/tasks/context";
+import { getAPIClient } from "@/core/api";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
+import type { ReasoningEffort } from "@/core/threads";
 import {
   normalizePermissionMode,
   permissionRuntimeConfig,
 } from "@/core/permissions";
 import { startDeepResearch, type ResearchJob } from "@/core/research/api";
+import {
+  getRecordingStatus,
+  startRecording,
+  stopRecording,
+} from "@/core/teach-repeat/api";
+import type { RecordingStatus } from "@/core/teach-repeat/types";
 import { ACTIVE_AGENT_EVENT, ACTIVE_AGENT_KEY } from "@/core/agents/active";
 import { useAgent } from "@/core/agents/hooks";
-import { useEvent } from "@/core/events";
+import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import { emitAgentChanged, useEvent } from "@/core/events";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, type Message } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -96,6 +107,7 @@ import {
 } from "@/core/messages/utils";
 import { useModels } from "@/core/models/hooks";
 import { resolveModelContextWindow } from "@/core/models/context-window";
+import { getBackendBaseURL } from "@/core/config";
 import {
   extractCodeBlocks,
   hasPreviewableBlocks,
@@ -110,6 +122,53 @@ const BOOKMARKLET_AGENT_IDS = new Set([
   "vibe_selling",
   "ecommerce_mind",
 ]);
+
+function normalizeReasoningEffortForUi(
+  effort: ReasoningEffort | undefined,
+): ReasoningEffort | undefined {
+  return effort === "max" ? "xhigh" : effort;
+}
+
+const CHAT_WORKDIR_KEY = "chat:workdir:lastUsed";
+const CODE_WORKDIR_KEY = "code:workdir:lastUsed";
+const RECENT_WORKDIRS_KEY = "octopus:recentWorkdirs";
+const MAX_RECENT_WORKDIRS = 6;
+
+type ThreadRouteState = {
+  threadOwnerAgentId?: string;
+  workspacePath?: string;
+};
+
+function normalizeWorkDirKey(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function rememberChatWorkDir(dir: string) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!dir || !isAbsolutePath(dir)) {
+      window.localStorage.removeItem(CHAT_WORKDIR_KEY);
+      return;
+    }
+    window.localStorage.setItem(CHAT_WORKDIR_KEY, dir);
+    window.localStorage.setItem(CODE_WORKDIR_KEY, dir);
+
+    const raw = window.localStorage.getItem(RECENT_WORKDIRS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    const current = Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
+    const next = [
+      dir,
+      ...current.filter(
+        (item) => normalizeWorkDirKey(item) !== normalizeWorkDirKey(dir),
+      ),
+    ].slice(0, MAX_RECENT_WORKDIRS);
+    window.localStorage.setItem(RECENT_WORKDIRS_KEY, JSON.stringify(next));
+  } catch (e) {
+    swallow(e, "storage");
+  }
+}
 
 type CompactResult = {
   compacted: boolean;
@@ -327,6 +386,178 @@ function recordFromUnknown(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function threadOwnerAgentFromMetadata(
+  metadata?: Record<string, unknown> | null,
+  values?: Record<string, unknown> | null,
+): string {
+  return firstString(
+    metadata?.agent,
+    metadata?.agent_name,
+    metadata?.agent_id,
+    metadata?.lead_agent_name,
+    metadata?.current_agent,
+    values?.current_speaker,
+    values?.agent_name,
+  );
+}
+
+function ChatHeaderAgentBadge({
+  agent,
+  agentId,
+}: {
+  agent: ReturnType<typeof useAgent>["agent"];
+  agentId: string;
+}) {
+  const label = agent?.display_name?.trim() || agent?.name?.trim() || agentId;
+  const icon = agent?.icon?.trim() || "";
+  const initial = label.trim().charAt(0).toUpperCase() || "A";
+  const avatarUrl = agent?.avatar_url
+    ? withAgentAvatarVersion(
+        agent.avatar_url.startsWith("http://") ||
+          agent.avatar_url.startsWith("https://")
+          ? agent.avatar_url
+          : `${getBackendBaseURL()}${agent.avatar_url}`,
+      )
+    : "";
+  if (!label || label === "general") return null;
+  return (
+    <div
+      className="inline-flex h-8 max-w-[180px] shrink-0 items-center gap-1.5 rounded-lg px-1.5 text-[12px] text-foreground/88 transition-colors hover:bg-muted/45"
+      title={label}
+    >
+      <span className="flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={label} className="size-full object-cover" />
+        ) : icon ? (
+          icon
+        ) : (
+          initial
+        )}
+      </span>
+      <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+function ChatHeaderRecButton({
+  threadId,
+  title,
+}: {
+  threadId: string;
+  title: string;
+}) {
+  const [status, setStatus] = useState<RecordingStatus>({
+    recording: false,
+    step_count: 0,
+    name: "",
+  });
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!threadId || threadId === "new") return;
+    try {
+      setStatus(await getRecordingStatus(threadId));
+    } catch (error) {
+      swallow(error, "teach-repeat-status");
+    }
+  }, [threadId]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!status.recording) return;
+    const timer = window.setInterval(() => void refresh(), 3000);
+    return () => window.clearInterval(timer);
+  }, [refresh, status.recording]);
+
+  const toggleRecording = useCallback(async () => {
+    if (!threadId || threadId === "new" || busy) return;
+    if (!status.recording) {
+      const confirmed = window.confirm(
+        "开始录制本轮对话与操作？录制内容会用于生成可复用的回放/学习技能；未确认前不会录制。",
+      );
+      if (!confirmed) return;
+      setBusy(true);
+      try {
+        await startRecording({
+          thread_id: threadId,
+          name: title?.trim() || "对话回放学习",
+          description: "用户手动开启的对话区 REC 录制。",
+        });
+        await refresh();
+        toast.success("REC 已开始");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "REC 启动失败");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    const confirmed = window.confirm("停止录制并生成可复用工作流？");
+    if (!confirmed) return;
+    setBusy(true);
+    try {
+      const result = await stopRecording({ thread_id: threadId, use_llm: true });
+      await refresh();
+      const forged = result.forged?.length ? result.forged.join("、") : "";
+      if (result.status === "promoted" && forged) {
+        toast.success(`已从本轮对话锻造技能：${forged}`);
+      } else if (result.status === "quarantined") {
+        toast.success("已生成技能候选（含敏感操作，待人工审批）");
+      } else if (result.status === "no_successful_trajectory") {
+        toast.message("本轮暂无可锻造的成功操作轨迹");
+      } else {
+        toast.success(`录制完成：${result.name}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "REC 停止失败");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, refresh, status.recording, threadId, title]);
+
+  return (
+    <button
+      type="button"
+      onClick={() => void toggleRecording()}
+      disabled={!threadId || threadId === "new" || busy}
+      title={
+        status.recording
+          ? `录制中 · ${status.step_count} 步，点击停止`
+          : "REC：确认后录制本轮对话并学习为可复用回放技能"
+      }
+      className={cn(
+        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        status.recording
+          ? "bg-red-500/12 text-red-600 hover:bg-red-500/18 dark:text-red-400"
+          : "bg-muted/45 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+        busy && "opacity-60",
+      )}
+    >
+      <CircleDotIcon
+        className={cn("size-3.5", status.recording && "animate-pulse")}
+      />
+      <span>REC</span>
+      {status.recording && (
+        <span className="font-mono text-[10px] opacity-70">
+          {status.step_count}
+        </span>
+      )}
+    </button>
+  );
+}
+
 function latestArtifactFocusPathFromEvents(
   events: Array<{ input?: unknown }>,
 ): string | null {
@@ -393,29 +624,74 @@ function ChatsPageContent({
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   const [projectAgentMode, setProjectAgentMode] =
-    useState<AgentModeName>("coder");
+    useState<AgentModeName>("develop");
   const [projectDetection, setProjectDetection] =
     useState<DetectResponse | null>(null);
   // Work directory for Agent project/code state. Empty means personal
   // Agent chat; selecting a local folder promotes this page into code
   // mode without mixing it with the separate Team workspace.
-  const [workDir, setWorkDir] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    try {
-      return window.localStorage.getItem("chat:workdir:lastUsed") ?? "";
-    } catch {
-      return "";
-    }
-  });
+  const [workDir, setWorkDir] = useState<string>(() => "");
+  const localStartedThreadIdRef = useRef<string | null>(null);
   const handleWorkDirChange = useCallback((dir: string) => {
     setWorkDir(dir);
-    try {
-      if (dir) window.localStorage.setItem("chat:workdir:lastUsed", dir);
-      else window.localStorage.removeItem("chat:workdir:lastUsed");
-    } catch (e) {
-      swallow(e);
-    }
+    rememberChatWorkDir(dir);
   }, []);
+  const threadWorkspaceQuery = useQuery({
+    queryKey: ["thread", "workspace-path", threadId],
+    enabled:
+      !isNewThread &&
+      Boolean(threadId) &&
+      localStartedThreadIdRef.current !== threadId,
+    queryFn: async () => {
+      const state = await getAPIClient().threads.getState(threadId);
+      const workspacePath = state.metadata?.["workspace_path"];
+      return typeof workspacePath === "string" && isAbsolutePath(workspacePath)
+        ? workspacePath
+        : "";
+    },
+    refetchOnWindowFocus: false,
+  });
+  const threadIdentityQuery = useQuery({
+    queryKey: ["thread", "identity", threadId],
+    enabled:
+      !isNewThread &&
+      Boolean(threadId) &&
+      localStartedThreadIdRef.current !== threadId,
+    queryFn: async () => getAPIClient().threads.get(threadId),
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const persistedThreadWorkspacePath = threadWorkspaceQuery.data ?? "";
+
+  useEffect(() => {
+    if (
+      isNewThread ||
+      threadWorkspaceQuery.isPending ||
+      localStartedThreadIdRef.current === threadId
+    ) {
+      return;
+    }
+    if (!persistedThreadWorkspacePath) {
+      setWorkDir("");
+      rememberChatWorkDir("");
+      return;
+    }
+    setWorkDir((current) => {
+      if (
+        normalizeWorkDirKey(current) ===
+        normalizeWorkDirKey(persistedThreadWorkspacePath)
+      ) {
+        return current;
+      }
+      rememberChatWorkDir(persistedThreadWorkspacePath);
+      return persistedThreadWorkspacePath;
+    });
+  }, [
+    isNewThread,
+    persistedThreadWorkspacePath,
+    threadId,
+    threadWorkspaceQuery.isPending,
+  ]);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -441,6 +717,7 @@ function ChatsPageContent({
 
   const navigate = useNavigate();
   const location = useLocation();
+  const routeState = (location.state as ThreadRouteState | null) ?? null;
   const params = useParams<{ agentName?: string }>();
   const qc = useQueryClient();
   const searchParams = useMemo(
@@ -469,10 +746,48 @@ function ChatsPageContent({
   // route-scoped to `/workspace/agents/:agent/chats/...`.
   const activeAgentId = routeAgentName || bookmarkletAgent || "general";
   const { agent: activeAgent } = useAgent(activeAgentId);
+  const hintedThreadOwnerAgentId = routeState?.threadOwnerAgentId?.trim() || "";
+  const hintedWorkspacePath =
+    typeof routeState?.workspacePath === "string" &&
+    isAbsolutePath(routeState.workspacePath)
+      ? routeState.workspacePath
+      : "";
+  const threadOwnerAgentId = useMemo(
+    () =>
+      threadOwnerAgentFromMetadata(
+        threadIdentityQuery.data?.metadata,
+        threadIdentityQuery.data?.values,
+      ),
+    [threadIdentityQuery.data],
+  );
+  const resolvedThreadOwnerAgentId =
+    threadOwnerAgentId || hintedThreadOwnerAgentId;
+  const effectiveAgentId = resolvedThreadOwnerAgentId || activeAgentId;
+  const { agent: threadOwnerAgent } = useAgent(
+    resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
+      ? resolvedThreadOwnerAgentId
+      : null,
+  );
+  const displayAgent =
+    resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
+      ? threadOwnerAgent
+      : activeAgent;
+  const effectiveReasoningEffort = normalizeReasoningEffortForUi(
+    settings.context.reasoning_effort,
+  );
   const routeMode = settings.context.mode;
-  const projectWorkspacePath = workDir.trim();
+  const effectiveWorkDir =
+    !isNewThread &&
+    threadWorkspaceQuery.isPending &&
+    localStartedThreadIdRef.current !== threadId &&
+    hintedWorkspacePath
+      ? hintedWorkspacePath
+      : workDir;
+  const projectWorkspacePath = effectiveWorkDir.trim();
   const isProjectCodeMode = !!projectWorkspacePath;
-  const codeModeUnlocked = Boolean(activeAgent?.capabilities?.code_mode_unlock);
+  const codeModeUnlocked = Boolean(
+    displayAgent?.capabilities?.code_mode_unlock,
+  );
   // Local CLI partner (Codex / Claude Code): driven by spawning its own CLI, so
   // its model comes from the CLI's config, not the Octopus model picker.
   const partnerCaps = activeAgent?.capabilities as
@@ -509,6 +824,10 @@ function ChatsPageContent({
       signals: compact,
     };
   }, [isProjectCodeMode, projectDetection, projectWorkspacePath]);
+  const projectModePreset = useMemo(
+    () => modePresetForAgentMode(projectAgentMode),
+    [projectAgentMode],
+  );
   const effectiveMode: ReasoningMode = isProjectCodeMode
     ? "code"
     : isAgentRoute && routeMode === "deep"
@@ -575,6 +894,24 @@ function ChatsPageContent({
     }
   }, [bookmarkletAgent, routeAgentName]);
   useEffect(() => {
+    if (
+      !resolvedThreadOwnerAgentId ||
+      resolvedThreadOwnerAgentId === activeAgentId
+    ) {
+      return;
+    }
+    try {
+      window.dispatchEvent(
+        new CustomEvent(ACTIVE_AGENT_EVENT, {
+          detail: { name: resolvedThreadOwnerAgentId, source: "thread" },
+        }),
+      );
+    } catch (e) {
+      swallow(e, "event");
+    }
+    emitAgentChanged(resolvedThreadOwnerAgentId, "thread");
+  }, [activeAgentId, resolvedThreadOwnerAgentId]);
+  useEffect(() => {
     const context = settings.context as typeof settings.context & {
       page_agent_memory_mode?: string;
     };
@@ -600,7 +937,8 @@ function ChatsPageContent({
 
   useEvent(
     "agent:changed",
-    ({ name }) => {
+    ({ name, source }) => {
+      if (source === "thread") return;
       if (!name || name === activeAgentId) return;
       qc.invalidateQueries({ queryKey: ["threads", "search"] });
       navigate(`/workspace/agents/${encodeURIComponent(name)}/chats/new`, {
@@ -625,13 +963,33 @@ function ChatsPageContent({
     // started sending the wrong id before this fix.
     context: {
       ...settings.context,
+      reasoning_effort: effectiveReasoningEffort,
       mode: effectiveMode,
       workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
       capability_mode: isProjectCodeMode ? "code" : undefined,
       code_mode: isProjectCodeMode ? "solo" : undefined,
       agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
+      mode_preset: isProjectCodeMode ? projectModePreset.id : undefined,
+      workflow_preset: isProjectCodeMode
+        ? projectModePreset.workflowPreset
+        : undefined,
+      skill_pack_profile: isProjectCodeMode
+        ? projectModePreset.skillPackProfile
+        : undefined,
+      verification_policy: isProjectCodeMode
+        ? projectModePreset.verificationPolicy
+        : undefined,
+      default_skill_packs: isProjectCodeMode
+        ? projectModePreset.defaultSkillPacks
+        : undefined,
+      default_plugins: isProjectCodeMode
+        ? projectModePreset.defaultPlugins
+        : undefined,
+      mode_contract: isProjectCodeMode
+        ? projectModePreset.promptContract
+        : undefined,
       project_signals: projectSignals,
-      agent_name: activeAgentId,
+      agent_name: effectiveAgentId,
       // Local CLI partner model override → passed to the CLI via -m. Empty/absent
       // ⇒ the CLI keeps its own configured default. Kept separate from
       // model_name (octopus's namespace) on purpose.
@@ -644,6 +1002,7 @@ function ChatsPageContent({
           : undefined,
     },
     onStart: (startedThreadId) => {
+      localStartedThreadIdRef.current = startedThreadId;
       setIsNewThread(false);
       const targetPath = threadRouteFor(startedThreadId);
       const currentPath =
@@ -1136,7 +1495,7 @@ function ChatsPageContent({
         const job = await startDeepResearch({
           topic: clean,
           thread_id: threadId,
-          lead_agent_name: activeAgentId,
+          lead_agent_name: effectiveAgentId,
           depth: "deep",
           max_subagents: options?.maxSubagents,
           max_searches: options?.maxSearches ?? 274,
@@ -1169,7 +1528,7 @@ function ChatsPageContent({
         setResearchLoading(false);
       }
     },
-    [activeAgentId, researchLoading, threadId],
+    [effectiveAgentId, researchLoading, threadId],
   );
 
   // Implementation note.
@@ -1339,6 +1698,11 @@ function ChatsPageContent({
               <>
                 <ChatHeaderMenuButton
                   onClick={() => setChatsDrawerOpen(true)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2"
+                />
+                <ChatHeaderAgentBadge
+                  agent={displayAgent}
+                  agentId={effectiveAgentId}
                 />
                 <div className="min-w-0 flex-1">
                   <ThreadTitle
@@ -1348,6 +1712,10 @@ function ChatsPageContent({
                   />
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1">
+                  <ChatHeaderRecButton
+                    threadId={threadId}
+                    title={thread?.values?.title || initialPrompt || ""}
+                  />
                   {(thread?.values?.title || initialPrompt) && (
                     <ShareMenu
                       iconOnly
@@ -1393,17 +1761,21 @@ function ChatsPageContent({
                 }
                 paddingBottom={
                   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM +
-                  (hasCurrentTodos ? 96 : 0)
+                  (hasCurrentTodos ? 64 : 0)
                 }
                 mode={effectiveMode}
                 liveToolEvents={lastTurnToolEvents}
                 lastTurnToolEvents={lastTurnToolEvents}
                 completedAgentOutput={hasCompletedAgentOutput}
                 currentAgent={{
-                  name: activeAgentId,
-                  display_name: activeAgent?.display_name || activeAgentId,
-                  avatar_url: activeAgent?.avatar_url || null,
-                  icon: activeAgent?.icon || null,
+                  name: effectiveAgentId,
+                  display_name: displayAgent?.display_name || effectiveAgentId,
+                  avatar_url:
+                    displayAgent?.avatar_url ||
+                    (threadOwnerAgentId
+                      ? `/api/agents/${encodeURIComponent(threadOwnerAgentId)}/avatar`
+                      : null),
+                  icon: displayAgent?.icon || null,
                 }}
                 footer={
                   <>
@@ -1444,7 +1816,7 @@ function ChatsPageContent({
                       (isAgentRoute ? (
                         <AgentWelcome
                           agent={activeAgent}
-                          agentName={activeAgentId}
+                          agentName={effectiveAgentId}
                         />
                       ) : (
                         <Welcome mode={effectiveMode} />
@@ -1462,6 +1834,7 @@ function ChatsPageContent({
                       <TodoPanel
                         liveToolEvents={currentTodoEvents}
                         className="relative z-10"
+                        defaultOpen={false}
                       />
                     )}
                     <ChatInputBox
@@ -1478,10 +1851,11 @@ function ChatsPageContent({
                       partnerModel={partnerModel}
                       onPartnerModelChange={setPartnerModel}
                       mode={effectiveMode}
-                      reasoningEffort={settings.context.reasoning_effort}
+                      reasoningEffort={effectiveReasoningEffort}
                       threadId={threadId}
                       disabled={researchLoading}
-                      workDir={workDir}
+                      workDir={effectiveWorkDir}
+                      displayAgent={displayAgent ?? null}
                       showWorkDirSelector
                       onWorkDirChange={handleWorkDirChange}
                       codeModeUnlocked={codeModeUnlocked}
@@ -1502,7 +1876,8 @@ function ChatsPageContent({
                       onReasoningEffortChange={(reasoningEffort) =>
                         setSettings("context", {
                           ...settings.context,
-                          reasoning_effort: reasoningEffort,
+                          reasoning_effort:
+                            normalizeReasoningEffortForUi(reasoningEffort),
                         })
                       }
                       onModeChange={handleModeChange}

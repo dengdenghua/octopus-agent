@@ -77,11 +77,20 @@ export interface StopRecordingRequest {
 }
 
 export interface StopRecordingResponse {
-  template_id: string;
   name: string;
-  description: string;
-  step_count: number;
-  param_count: number;
+  // Active-forge result (REC stop now forges a skill from the conversation's
+  // trajectory): "promoted" | "quarantined" | "shadow_failed" |
+  // "no_candidate" | "no_successful_trajectory" | "no_runtime".
+  status?: string;
+  forged?: string[];
+  quarantined?: string[];
+  candidates_total?: number;
+  thread_id?: string;
+  step_count?: number;
+  // Legacy stub fields (no longer returned by the forge-backed stop):
+  template_id?: string;
+  description?: string;
+  param_count?: number;
 }
 
 export interface RecordingStatus {
