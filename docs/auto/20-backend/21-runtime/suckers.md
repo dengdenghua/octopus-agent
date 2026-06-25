@@ -63,8 +63,6 @@ tier: "core"
 | `delegation_budget.py` | Smart per-turn delegation budget. |
 | `delegation_skills.py` | — |
 | `desktop_grounding.py` | Semantic grounding for the desktop vision loop. |
-| `echo_skills.py` | ECHO Universe Engine 叙事 Ganglion 接入. |
-| `enterprise_skills.py` | Octopus Enterprise 企业服务 Arm 接入. |
 | `ephemeral_agents.py` | Ephemeral sub-agent roles · lightweight personas for one-shot delegation tasks (``researcher`` / ``debugger`` / ``reviewer`` / …). |
 | `ephemeral_injection_gate.py` | Prompt-injection taint gate for ephemeral sub-agent tool calls. |
 | `ephemeral_runner.py` | LLM-backed runner for ephemeral sub-agent roles. |
@@ -94,7 +92,7 @@ tier: "core"
 
 ## Who imports this
 
-**43** file(s) reference this package:
+**42** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/mcp_client/bridge.py`
@@ -134,13 +132,13 @@ tier: "core"
   - `runtime/safety/hooks/tool_edge_hooks.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/skill_forge.py`
-- **`runtime/sensing/`** · 15 file(s)
+- **`runtime/sensing/`** · 14 file(s)
   - `runtime/sensing/gateway/agent_world_router.py`
   - `runtime/sensing/gateway/computer_router.py`
   - `runtime/sensing/gateway/debug_router.py`
   - `runtime/sensing/gateway/evolution_ops_router.py`
   - `runtime/sensing/gateway/index_router.py`
-  - _… and 10 more_
+  - _… and 9 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

@@ -112,6 +112,7 @@ tier: "standard"
 | `stub_router.py` | — |
 | `subagents_router.py` | Subagent FastAPI router. |
 | `system_router.py` | System-level local maintenance endpoints. |
+| `teach_repeat_router.py` | Teach & Repeat API. |
 | `team_role_models_router.py` | Team role-model settings router · ``/api/team/role-models``. |
 | `team_rooms_router.py` | Persistent team rooms API. |
 | `team_rooms_ws.py` | Realtime Team Room WebSocket handler. |

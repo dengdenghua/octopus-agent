@@ -15,7 +15,6 @@ tier: "core"
 
 - `CONSTITUTION_SUMMARY`
 - `ConstitutionViolationEvent`
-- `HARD_FLOOR`
 - `Judge`
 - `JudgeVerdict`
 - `ProfileName`
@@ -26,7 +25,6 @@ tier: "core"
 - `get_constitution_summary`
 - `get_judge`
 - `get_profile`
-- `is_hard_floor`
 - `null_judge`
 - `reset_profile_for_tests`
 - `scan_pii`

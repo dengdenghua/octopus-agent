@@ -21,10 +21,6 @@ tier: "standard"
 - `shell`
 - `desktop_operator`
 
-## Capabilities（能力 flags）
-
-- ✅ `code_mode_unlock`
-
 ## Affinity keywords（路由亲和度）
 
 `assistant`, `general`, `help`, `question`, `summary`, `desktop`, `screenshot`, `click`, `keyboard`, `research`, `report`, `document`, `docx`, `market`

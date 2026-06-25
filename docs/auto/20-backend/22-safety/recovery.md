@@ -19,11 +19,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 
 - `CollectorConfig`
 - `ExtractorConfig`
-- `EvolutionPath`
-- `EvolutionRouter`
-- `EvolutionVerdict`
 - `ForgeConfig`
-- `ForgedReflexCandidate`
 - `ForgedSkillCandidate`
 - `GenomeRegistry`
 - `GenomeRegistryConfig`
@@ -69,9 +65,6 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 - `TurnReplayReport`
 - `filter_memories_for_agent`
 - `format_memories_for_prompt`
-- `ReflexForge`
-- `ReflexForgeConfig`
-- `ReflexForgeResult`
 - `RuleExtractionReport`
 - `RuleExtractor`
 - `ShadowConfig`
@@ -119,7 +112,6 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | --- | --- |
 | `evolution_constraints.py` | — |
 | `evolution_dataset.py` | Unified dataset builder for regeneration and prompt evolution. |
-| `evolution_router.py` | EvolutionRouter · route evolution candidates to the right forge. |
 | `external_importers.py` | — |
 | `forge_auto_tick.py` | RecipeForge auto-promote scheduler · the last-mile autonomy knob. |
 | `genome_registry.py` | Genome Registry — versioned JSON snapshot store for system configuration. |
@@ -139,7 +131,6 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | `native_turn_replay.py` | — |
 | `optimizer_backends.py` | Pluggable prompt-optimizer backends for Octopus evolution. |
 | `recipe_evaluator.py` | — |
-| `reflex_forge.py` | ReflexForge · auto-generate reflex rules from successful turns. |
 | `rule_extractor.py` | — |
 | `scheduler.py` | — |
 | `skill_forge.py` | — |
@@ -149,7 +140,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 
 ## Who imports this
 
-**19** file(s) reference this package:
+**20** file(s) reference this package:
 
 - **`runtime/cli.py/`** · 1 file(s)
   - `runtime/cli.py`
@@ -171,11 +162,11 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
   - `runtime/safety/evolution/auto_trigger.py`
   - `runtime/safety/evolution/drift_monitor.py`
   - `runtime/safety/experiments/prompt_optimizer.py`
-- **`runtime/sensing/`** · 6 file(s)
+- **`runtime/sensing/`** · 7 file(s)
   - `runtime/sensing/gateway/agents_router.py`
   - `runtime/sensing/gateway/evolution_ops/recipe_forge.py`
   - `runtime/sensing/gateway/evolution_ops/skill_forge.py`
   - `runtime/sensing/gateway/evolution_ops/utils.py`
   - `runtime/sensing/gateway/evolution_ops_router.py`
-  - `runtime/sensing/gateway/observability_router.py`
+  - _… and 2 more_
 

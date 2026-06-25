@@ -31,7 +31,7 @@ tier: "core"
 
 ## Who imports this
 
-**9** file(s) reference this package:
+**10** file(s) reference this package:
 
 - **`runtime/cli_core.py/`** · 1 file(s)
   - `runtime/cli_core.py`
@@ -42,10 +42,11 @@ tier: "core"
   - `runtime/execution/suckers/code_intelligence_skills.py`
 - **`runtime/platform/`** · 1 file(s)
   - `runtime/platform/config/builder.py`
-- **`runtime/sensing/`** · 3 file(s)
+- **`runtime/sensing/`** · 4 file(s)
   - `runtime/sensing/gateway/local_brain.py`
   - `runtime/sensing/gateway/observability_router.py`
   - `runtime/sensing/gateway/retrieve_router.py`
+  - `runtime/sensing/gateway/wiki_router.py`
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 
