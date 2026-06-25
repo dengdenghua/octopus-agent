@@ -25,6 +25,7 @@ from runtime.execution.tool_engine import ToolExecutor
 from runtime.memory.hemolymph import ContextComposer
 from runtime.memory.journal import InMemoryJournal, Journal, JSONLJournal
 from runtime.platform.models import BudgetSpec, SkillId
+from runtime.platform.observability.redactor import Redactor
 from runtime.safety.auth import TrustEngine
 
 from .schema import AgentConfig
@@ -105,8 +106,15 @@ def build_from_config(config: AgentConfig) -> BuiltStack:
             mcp_clients.append(client)
 
     # 3. Journal
+    # Default-on secret redaction: the journal is the source-of-truth audit log
+    # and records tool args/outputs, so run every payload through the redactor
+    # before persistence to keep accidental secrets (.env values, keys) off disk.
     journal: Journal
-    journal = JSONLJournal(config.journal_file) if config.journal_file else InMemoryJournal()
+    journal = (
+        JSONLJournal(config.journal_file, redactor=Redactor())
+        if config.journal_file
+        else InMemoryJournal()
+    )
 
     # 4. Immunity
     from runtime.safety.auth.attack_memory import AttackMemory
