@@ -6,6 +6,7 @@ import re
 import time
 import uuid
 from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from runtime.core.cerebrum.react_checkpointing import (
@@ -118,6 +119,29 @@ if TYPE_CHECKING:
     from runtime.execution.agents.base import Agent
 
 _logger = logging.getLogger(__name__)
+
+
+_LENGTH_LIMITED_FINISH_REASONS = frozenset(
+    {"length", "max_tokens", "max_output_tokens", "output_limit", "token_limit"}
+)
+
+
+def _finish_reason_is_length_limited(reason: str | None) -> bool:
+    """True when ``finish_reason`` signals the model was cut off by the output
+    token ceiling rather than finishing on its own. Centralizes the set that
+    PHASE 6c previously inlined in two identical places."""
+    return (reason or "").strip().lower() in _LENGTH_LIMITED_FINISH_REASONS
+
+
+def _tool_call_succeeded(observation: str | None, beak_step: Step | None) -> bool:
+    """Whether a single tool call succeeded. A beak step's effective-success
+    verdict wins when present; otherwise sniff the failure-prefixed observation
+    text. PHASE 6d uses this for both the initial call and its auto-retry."""
+    if beak_step is not None:
+        return _beak_step_effective_success(beak_step)
+    return not (
+        observation is not None and observation.startswith(("(工具失败)", "(工具执行异常)"))
+    )
 
 
 def _looks_like_observation_echo(text: str) -> bool:
@@ -282,6 +306,136 @@ def _load_trace_resume_checkpoint_snapshot(
     }
 
 
+@dataclass
+class _ResumeState:
+    """Loop state rebuilt from a resume checkpoint. Aggregating the ~9 values
+    PHASE 5 used to assign inline lets the rebuild live in a pure, unit-testable
+    function (``_compute_resume_state``) instead of being welded into the loop's
+    closure."""
+
+    resume_from_iter: int
+    messages: list[Any]
+    steps: list[ReActStep]
+    working_set: dict[str, dict[str, Any]]
+    progress_summary: str
+    current_phase: str
+    final_answer: str | None
+    terminated_reason: str
+    resume_event: dict[str, Any]
+
+
+def _compute_resume_state(
+    stack: StackProtocol,
+    intent: ParsedIntent,
+    resume_task_id: TaskId,
+    *,
+    base_messages: list[Any],
+    base_working_set: dict[str, dict[str, Any]],
+    base_progress_summary: str,
+    base_current_phase: str,
+    max_iterations: int,
+) -> _ResumeState | None:
+    """Load + validate a resume checkpoint and rebuild loop state from it.
+
+    Pure except for logging: no ``yield``, no mutation of caller state. Returns
+    ``None`` when there is nothing to resume (the caller keeps its defaults).
+    Raises ``ValueError`` on an unsafe checkpoint — the caller catches it (along
+    with the AttributeError/KeyError/TypeError a malformed snapshot can raise)
+    and falls back to a fresh run.
+    """
+    last = _load_resume_checkpoint_snapshot(stack, intent, resume_task_id)
+    if last is None:
+        return None
+
+    from runtime.core.cerebrum.checkpoint_integrity import validate_checkpoint_state
+
+    checkpoint_iteration = int(last["iteration_completed"] or 0)
+    integrity = validate_checkpoint_state(
+        {
+            "messages_snapshot": last["messages_snapshot"],
+            "steps_snapshot": last["steps_snapshot"],
+            "working_set_snapshot": last["working_set_snapshot"],
+            "progress_summary": last["progress_summary"],
+            "current_phase": last["current_phase"],
+        },
+        iteration=checkpoint_iteration,
+    )
+    if not integrity.resume_safe:
+        _logger.warning(
+            "react_loop resume checkpoint rejected (task %s): %s",
+            resume_task_id,
+            ", ".join(integrity.errors),
+        )
+        raise ValueError("unsafe checkpoint")
+
+    resume_from_iter = checkpoint_iteration
+    messages = base_messages
+    steps: list[ReActStep] = []
+    working_set = base_working_set
+    progress_summary = base_progress_summary
+    current_phase = base_current_phase
+    final_answer: str | None = None
+    terminated_reason = "max_iter"
+
+    if last["messages_snapshot"]:
+        messages = _restore_messages_from_checkpoint(last["messages_snapshot"])
+    if last["steps_snapshot"]:
+        steps = [
+            ReActStep(
+                iteration=s.get("iteration", 0),
+                thought=s.get("thought", ""),
+                action=s.get("action", ""),
+                observation=s.get("observation", ""),
+            )
+            for s in last["steps_snapshot"]
+            if isinstance(s, dict)
+        ]
+        messages = _rehydrate_messages_from_steps(messages, steps)
+    if last["working_set_snapshot"]:
+        working_set = {
+            f["path"]: f
+            for f in last["working_set_snapshot"]
+            if isinstance(f, dict) and f.get("path")
+        }
+    if last["progress_summary"]:
+        progress_summary = last["progress_summary"]
+    if last["current_phase"]:
+        current_phase = last["current_phase"]
+    if last["has_final_answer"] and last["final_answer"]:
+        final_answer = str(last["final_answer"])
+        terminated_reason = "final_answer"
+        resume_from_iter = max_iterations
+
+    resume_event = {
+        "type": "react_resumed",
+        "task_id": str(resume_task_id),
+        "checkpoint_iteration": checkpoint_iteration,
+        "resume_from_iteration": resume_from_iter,
+        "restored_step_count": len(steps),
+        "has_final_answer": bool(final_answer),
+        "current_phase": current_phase,
+        "progress_summary": progress_summary,
+        "checkpoint_source": last.get("source"),
+    }
+    _logger.info(
+        "react_loop resuming from iteration %d (task %s, source=%s)",
+        resume_from_iter,
+        resume_task_id,
+        last.get("source"),
+    )
+    return _ResumeState(
+        resume_from_iter=resume_from_iter,
+        messages=messages,
+        steps=steps,
+        working_set=working_set,
+        progress_summary=progress_summary,
+        current_phase=current_phase,
+        final_answer=final_answer,
+        terminated_reason=terminated_reason,
+        resume_event=resume_event,
+    )
+
+
 # Re-exports for tests/test_react_loop.py and friends — the helpers live
 # in react_parsing / react_execution / react_guards / react_context /
 # react_checkpointing / react_loop_controls / react_parallel_dispatch
@@ -363,21 +517,21 @@ def stream_react_loop(
     # ║ stream_react_loop · navigation map (comment-only; do not split). ║
     # ║                                                                  ║
     # ║   PHASE 1 · entry guards / router resolution     (this section)  ║
-    # ║   PHASE 2 · mode + budget detection              ~L1037          ║
-    # ║   PHASE 3 · system + volatile prompt assembly    ~L1049          ║
-    # ║   PHASE 4 · message bootstrap + start yield      ~L1640          ║
-    # ║   PHASE 5 · pre-loop state init + resume         ~L1664          ║
-    # ║   PHASE 6 · main iteration loop                  ~L1835          ║
-    # ║       6a · cancel / pause guard                  ~L1836          ║
-    # ║       6b · LLM call + Final-Answer anchor stream ~L1901          ║
-    # ║       6c · parse step / format-violation         ~L2148          ║
-    # ║       6d · action dispatch + observation         ~L2258          ║
-    # ║       6e · nudges + guards + step yield          ~L2594          ║
-    # ║       6f · auto-checkpoint + step evaluator      ~L2694          ║
-    # ║       6g · housekeeping (msg append / continue)  ~L2778          ║
-    # ║   PHASE 7 · post-loop terminal handling          ~L2954          ║
+    # ║   PHASE 2 · mode + budget detection              ~L611           ║
+    # ║   PHASE 3 · system + volatile prompt assembly    ~L629           ║
+    # ║   PHASE 4 · message bootstrap + start yield      ~L1370          ║
+    # ║   PHASE 5 · pre-loop state init + resume         ~L1495          ║
+    # ║   PHASE 6 · main iteration loop                  ~L1629          ║
+    # ║       6a · cancel / pause guard                  ~L1630          ║
+    # ║       6b · LLM call + Final-Answer anchor stream ~L1700          ║
+    # ║       6c · parse step / format-violation         ~L1952          ║
+    # ║       6d · action dispatch + observation         ~L2079          ║
+    # ║       6e · nudges + guards + step yield          ~L2509          ║
+    # ║       6f · auto-checkpoint + step evaluator      ~L2606          ║
+    # ║       6g · housekeeping (msg append / continue)  ~L2698          ║
+    # ║   PHASE 7 · post-loop terminal handling          ~L2884          ║
     # ║       (pause / cancel / forced max-iter convergence)             ║
-    # ║   PHASE 8 · finalization + react_completed yield ~L3063          ║
+    # ║   PHASE 8 · finalization + react_completed yield ~L2993          ║
     # ║                                                                  ║
     # ║ Why one big function: closure state (~25 vars) + interleaved     ║
     # ║ yield points + checkpoint/resume coupling make extraction        ║
@@ -1408,78 +1562,27 @@ def stream_react_loop(
 
     if resume_task_id is not None:
         try:
-            last = _load_resume_checkpoint_snapshot(stack, intent, resume_task_id)
-            if last is not None:
-                from runtime.core.cerebrum.checkpoint_integrity import (
-                    validate_checkpoint_state,
-                )
-
-                _checkpoint_state = {
-                    "messages_snapshot": last["messages_snapshot"],
-                    "steps_snapshot": last["steps_snapshot"],
-                    "working_set_snapshot": last["working_set_snapshot"],
-                    "progress_summary": last["progress_summary"],
-                    "current_phase": last["current_phase"],
-                }
-                _checkpoint_iteration = int(last["iteration_completed"] or 0)
-                _integrity = validate_checkpoint_state(
-                    _checkpoint_state,
-                    iteration=_checkpoint_iteration,
-                )
-                if not _integrity.resume_safe:
-                    _logger.warning(
-                        "react_loop resume checkpoint rejected (task %s): %s",
-                        resume_task_id,
-                        ", ".join(_integrity.errors),
-                    )
-                    raise ValueError("unsafe checkpoint")
-                resume_from_iter = _checkpoint_iteration
-                if last["messages_snapshot"]:
-                    messages = _restore_messages_from_checkpoint(last["messages_snapshot"])
-                if last["steps_snapshot"]:
-                    steps = [
-                        ReActStep(
-                            iteration=s.get("iteration", 0),
-                            thought=s.get("thought", ""),
-                            action=s.get("action", ""),
-                            observation=s.get("observation", ""),
-                        )
-                        for s in last["steps_snapshot"]
-                        if isinstance(s, dict)
-                    ]
-                    messages = _rehydrate_messages_from_steps(messages, steps)
-                if last["working_set_snapshot"]:
-                    _working_set = {
-                        f["path"]: f
-                        for f in last["working_set_snapshot"]
-                        if isinstance(f, dict) and f.get("path")
-                    }
-                if last["progress_summary"]:
-                    _progress_summary = last["progress_summary"]
-                if last["current_phase"]:
-                    _current_phase = last["current_phase"]
-                if last["has_final_answer"] and last["final_answer"]:
-                    final_answer = str(last["final_answer"])
-                    terminated_reason = "final_answer"
-                    resume_from_iter = max_iterations
+            _rs = _compute_resume_state(
+                stack,
+                intent,
+                resume_task_id,
+                base_messages=messages,
+                base_working_set=_working_set,
+                base_progress_summary=_progress_summary,
+                base_current_phase=_current_phase,
+                max_iterations=max_iterations,
+            )
+            if _rs is not None:
+                resume_from_iter = _rs.resume_from_iter
+                messages = _rs.messages
+                steps = _rs.steps
+                _working_set = _rs.working_set
+                _progress_summary = _rs.progress_summary
+                _current_phase = _rs.current_phase
+                final_answer = _rs.final_answer
+                terminated_reason = _rs.terminated_reason
                 react_task_id = resume_task_id
-                _resume_event = {
-                    "type": "react_resumed",
-                    "task_id": str(resume_task_id),
-                    "checkpoint_iteration": _checkpoint_iteration,
-                    "resume_from_iteration": resume_from_iter,
-                    "restored_step_count": len(steps),
-                    "has_final_answer": bool(final_answer),
-                    "current_phase": _current_phase,
-                    "progress_summary": _progress_summary,
-                    "checkpoint_source": last.get("source"),
-                }
-                _logger.info(
-                    "react_loop resuming from iteration %d (task %s, source=%s)",
-                    resume_from_iter,
-                    resume_task_id,
-                    last.get("source"),
-                )
+                _resume_event = _rs.resume_event
         except (AttributeError, KeyError, TypeError, ValueError):
             _logger.debug("resume checkpoint loading failed", exc_info=True)
 
@@ -1881,13 +1984,7 @@ def stream_react_loop(
         ):
             step.observation = text
         _finish_reason = (getattr(resp, "finish_reason", "") or "").strip().lower()
-        _length_limited = _finish_reason in {
-            "length",
-            "max_tokens",
-            "max_output_tokens",
-            "output_limit",
-            "token_limit",
-        }
+        _length_limited = _finish_reason_is_length_limited(_finish_reason)
         _length_limit_should_continue = False
         if maybe_final and not _final_stream_started:
             # Fall-through emission for routers that don't actually
@@ -1929,13 +2026,9 @@ def stream_react_loop(
             # not because it broke the protocol — the continuation
             # branch below will inject a "Continue exactly where it
             # stopped" nudge and the next iteration will finish.
-            _is_length_truncated = (getattr(resp, "finish_reason", "") or "").strip().lower() in {
-                "length",
-                "max_tokens",
-                "max_output_tokens",
-                "output_limit",
-                "token_limit",
-            }
+            _is_length_truncated = _finish_reason_is_length_limited(
+                getattr(resp, "finish_reason", "")
+            )
             if _is_length_truncated:
                 # Surface the partial text so the user sees streaming
                 # progress; don't count it against bail-at.
@@ -2238,12 +2331,7 @@ def stream_react_loop(
                         pass
                     _was_cancelled = bool(_ct_post and _ct_post.is_cancelled)
 
-                    tool_ok = not (
-                        observation is not None
-                        and observation.startswith(("(工具失败)", "(工具执行异常)"))
-                    )
-                    if beak_step is not None:
-                        tool_ok = _beak_step_effective_success(beak_step)
+                    tool_ok = _tool_call_succeeded(observation, beak_step)
                     if _was_cancelled:
                         yield {
                             "type": "tool_end",
@@ -2277,12 +2365,7 @@ def stream_react_loop(
                                 set_injection_gate_handled(False)
                         if retry_step is not None:
                             executed_beak_steps.append(retry_step)
-                        retry_ok = not (
-                            retry_obs is not None
-                            and retry_obs.startswith(("(工具失败)", "(工具执行异常)"))
-                        )
-                        if retry_step is not None:
-                            retry_ok = _beak_step_effective_success(retry_step)
+                        retry_ok = _tool_call_succeeded(retry_obs, retry_step)
                         if retry_ok:
                             observation = retry_obs
                             beak_step = retry_step
