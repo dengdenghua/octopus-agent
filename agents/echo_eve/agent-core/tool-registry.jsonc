@@ -1,0 +1,19 @@
+// arms reference octopus-agent runtime/execution/arms/presets.py.
+// ECHO character agents default to read-only tools; expand per agent after review.
+
+{
+  "arms": [
+    "web_read"
+  ],
+  "extra_affinity": [
+    "echo-universe",
+    "character-agent",
+    "roleplay",
+    "story",
+    "canon",
+    "soulpunk",
+    "CHASER",
+    "Siren"
+  ],
+  "private_skills": []
+}
