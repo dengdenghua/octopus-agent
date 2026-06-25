@@ -144,6 +144,26 @@ def _tool_call_succeeded(observation: str | None, beak_step: Step | None) -> boo
     )
 
 
+# Affinity tags that mark a tool as having side effects, so a failed call must
+# NOT be silently auto-retried (a partial write, or a shell command that ran
+# before its result failed to parse, would be doubled). Mirrors the executor's
+# ``_mutates_files`` set plus ``delete`` (file-safety) — the union of every
+# side-effecting tag the runtime recognises.
+_NON_IDEMPOTENT_AFFINITY = frozenset({"write", "edit", "exec", "delete", "dangerous"})
+
+
+def _retry_safe_affinity(affinity: list[str] | None) -> bool:
+    """Whether a failed tool may be auto-retried once.
+
+    Only idempotent tools qualify: the affinity must be KNOWN and carry none of
+    the side-effecting tags. Unknown affinity (``None``) is treated as unsafe
+    (fail-closed) so the loop never re-runs a tool whose first attempt may have
+    already mutated state."""
+    if affinity is None:
+        return False
+    return not (set(affinity) & _NON_IDEMPOTENT_AFFINITY)
+
+
 def _looks_like_observation_echo(text: str) -> bool:
     """True when model prose is leaked tool/protocol text, not an answer."""
     stripped = (text or "").lstrip()
@@ -2345,33 +2365,53 @@ def stream_react_loop(
                         terminated_reason = "cancelled"
                         break
                     if not tool_ok and observation:
-                        _logger.info(
-                            "react_loop iter %d · tool %s failed, auto-retrying once",
-                            i + 1,
-                            resolved_name,
-                        )
-                        with _sink_scope():
-                            set_injection_gate_handled(True)
-                            try:
-                                retry_obs, retry_step = _execute_action_via_beak(
-                                    stack,
-                                    step.action,
-                                    react_task_id=react_task_id,
-                                    react_step_counter=i + 1,
-                                    agent=agent,
-                                    intent=intent,
-                                )
-                            finally:
-                                set_injection_gate_handled(False)
-                        if retry_step is not None:
-                            executed_beak_steps.append(retry_step)
-                        retry_ok = _tool_call_succeeded(retry_obs, retry_step)
-                        if retry_ok:
-                            observation = retry_obs
-                            beak_step = retry_step
-                            tool_ok = True
+                        # C2: only auto-retry idempotent tools. Re-running a
+                        # write/edit/exec/delete/dangerous tool whose first
+                        # attempt already had side effects (a partial write, a
+                        # shell command that ran before its result failed to
+                        # parse) would double them, so non-idempotent failures
+                        # surface to the model instead of silently re-executing.
+                        _retry_affinity: list[str] | None = None
+                        try:
+                            if executor.registry.has(resolved_name):
+                                _retry_affinity = executor.registry.get(
+                                    resolved_name,
+                                ).affinity
+                        except (KeyError, AttributeError):
+                            _retry_affinity = None
+                        if not _retry_safe_affinity(_retry_affinity):
+                            observation = observation + (
+                                "\n[写/执行类工具失败，未自动重试以避免重复副作用；"
+                                "请检查状态后再决定是否重试或换方法]"
+                            )
                         else:
-                            observation = observation + "\n[自动重试仍失败，请换方法或调整参数]"
+                            _logger.info(
+                                "react_loop iter %d · tool %s failed, auto-retrying once",
+                                i + 1,
+                                resolved_name,
+                            )
+                            with _sink_scope():
+                                set_injection_gate_handled(True)
+                                try:
+                                    retry_obs, retry_step = _execute_action_via_beak(
+                                        stack,
+                                        step.action,
+                                        react_task_id=react_task_id,
+                                        react_step_counter=i + 1,
+                                        agent=agent,
+                                        intent=intent,
+                                    )
+                                finally:
+                                    set_injection_gate_handled(False)
+                            if retry_step is not None:
+                                executed_beak_steps.append(retry_step)
+                            retry_ok = _tool_call_succeeded(retry_obs, retry_step)
+                            if retry_ok:
+                                observation = retry_obs
+                                beak_step = retry_step
+                                tool_ok = True
+                            else:
+                                observation = observation + "\n[自动重试仍失败，请换方法或调整参数]"
                     _background_task = (
                         _background_task_info_from_observation(observation)
                         if tool_ok and resolved_name in {"background_exec", "exec_shell"}
