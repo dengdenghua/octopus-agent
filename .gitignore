@@ -50,6 +50,9 @@ test-results/
 *.sqlite3
 *.db
 *.log
+# Agent-core write locks / backups (runtime artifacts, never committed)
+agents/**/*.lock
+agents/**/*.bak
 
 # Environment files
 .env
@@ -190,3 +193,9 @@ evidence/
 
 # Avatar-generation intermediate backups — keep on disk, not in git
 agents/*/visuals/backups/
+
+# Runtime-generated SOUL.md change snapshots (used by revert_soul)
+agents/*/agent-core/.soul_history/
+
+# Skill install state (written by skill hub at runtime)
+runtime/execution/all_skills/.preinstalled

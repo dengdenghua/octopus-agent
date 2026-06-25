@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -129,62 +128,6 @@ class TestNoDistGracefulDegradation:
         r = TestClient(app).get("/")
         assert r.status_code == 200
         assert "octopus" in r.text.lower()
-
-
-class TestFrontendArtifacts:
-    """Implementation note."""
-
-    def test_package_json_valid(self):
-        # Implementation note.
-        # Implementation note.
-        pkg = Path(__file__).resolve().parent.parent / "frontend" / "package.json"
-        assert pkg.exists()
-        data = json.loads(pkg.read_text(encoding="utf-8"))
-        assert data["name"] == "octopus-frontend"
-        assert "build" in data["scripts"]
-        assert "react" in data["dependencies"]
-        assert "react-router-dom" in data["dependencies"]
-
-    def test_tsconfig_strict(self):
-        cfg = Path(__file__).resolve().parent.parent / "frontend" / "tsconfig.json"
-        text = cfg.read_text(encoding="utf-8")
-        assert '"strict": true' in text
-
-    def test_vite_base_path(self):
-        # Implementation note.
-        # Implementation note.
-        cfg = Path(__file__).resolve().parent.parent / "frontend" / "vite.config.ts"
-        assert cfg.exists()
-        text = cfg.read_text(encoding="utf-8")
-        assert "defineConfig" in text
-        assert "react" in text
-
-    def test_pages_exist(self):
-        # Implementation note.
-        # Implementation note.
-        # Implementation note.
-        frontend_src = Path(__file__).resolve().parent.parent / "frontend" / "src"
-        app_dir = frontend_src / "app"
-        assert app_dir.is_dir(), "frontend/src/app (route root) missing"
-        # Implementation note.
-        must_have_routes = ["login", "workspace"]
-        existing = {p.name for p in app_dir.iterdir() if p.is_dir()}
-        missing = [r for r in must_have_routes if r not in existing]
-        assert not missing, f"missing core route dirs: {missing}"
-        # Implementation note.
-        assert (frontend_src / "pages" / "Login.tsx").exists()
-
-    def test_api_client_and_types_exist(self):
-        # Implementation note.
-        # Implementation note.
-        src = Path(__file__).resolve().parent.parent / "frontend" / "src"
-        core_api = src / "core" / "api"
-        assert core_api.is_dir(), "frontend/src/core/api missing"
-        assert (core_api / "types.ts").exists()
-        # Implementation note.
-        # Implementation note.
-        ts_files = [p for p in core_api.iterdir() if p.suffix == ".ts"]
-        assert len(ts_files) >= 2, f"too few .ts files in core/api: {ts_files}"
 
 
 # cleanup env var to avoid test pollution

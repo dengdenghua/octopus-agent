@@ -118,8 +118,14 @@ def main() -> int:
         print(f"events.py not found at {EVENTS_PY}", file=sys.stderr)
         return 1
     if not REDUCER_TS.is_file():
-        print(f"reducer.ts not found at {REDUCER_TS}", file=sys.stderr)
-        return 1
+        # Frontend may live in a separate repo (post-split). Skip
+        # gracefully instead of failing — the Python-side enum is
+        # still validated by other linters.
+        print(
+            f"SKIP · reducer.ts not found at {REDUCER_TS} "
+            "(frontend may be in a separate repo)"
+        )
+        return 0
 
     server_methods = _python_enum_values(EVENTS_PY, "ServerMethod")
     reducer_methods = _reducer_methods(REDUCER_TS)

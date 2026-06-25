@@ -164,7 +164,17 @@ def install_skill(
 
 
 def default_catalog_dir() -> Path:
-    """The default skill catalog Octopus auto-merges (``all_skills/``)."""
+    """The default skill catalog Octopus auto-merges.
+
+    Prefers the external ``skills/public/`` location (preferred post-migration
+    home). Falls back to the legacy in-package ``all_skills/`` directory when
+    the external resources root is unavailable (e.g. bare wheel install).
+    """
+    from runtime.platform.process.paths import resources_root
+
+    external = resources_root() / "skills" / "public"
+    if external.is_dir():
+        return external
     return Path(__file__).resolve().parents[2] / "execution" / "all_skills"
 
 

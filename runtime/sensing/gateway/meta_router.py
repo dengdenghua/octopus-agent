@@ -155,6 +155,8 @@ def create_meta_router(
     local_auth_config: Any = None,
     identity_store: Any = None,
     molili_jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> Any:
     """Build the FastAPI router.
 
@@ -204,6 +206,49 @@ def create_meta_router(
         if default_library not in _skill_library_dirs:
             _skill_library_dirs.append(default_library)
 
+    def _require_admin(request: Request, *, purpose: str) -> None:
+        """Require an authenticated admin actor for high-risk operations."""
+        try:
+            from runtime.sensing.gateway.openai_gateway import _resolve_actor
+
+            actor = _resolve_actor(
+                request,
+                identity_store,
+                True,
+                jwt_secret=molili_jwt_secret,
+                jwt_issuer=jwt_issuer,
+                jwt_audience=jwt_audience,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(401, "auth required") from exc
+
+        if identity_store is None or not actor:
+            raise HTTPException(401, "auth required")
+
+        auth_header = request.headers.get("Authorization") or ""
+        if not auth_header.lower().startswith("bearer "):
+            raise HTTPException(401, "missing Authorization: Bearer <token>")
+
+        token = auth_header[7:].strip()
+        identity = None
+        if molili_jwt_secret and token.count(".") == 2:
+            with suppress(Exception):
+                identity = identity_store.verify_jwt(
+                    token,
+                    secret=molili_jwt_secret,
+                    required_issuer=jwt_issuer,
+                    required_audience=jwt_audience,
+                )
+        if identity is None:
+            with suppress(Exception):
+                identity = identity_store.verify_api_key(token)
+
+        roles = getattr(identity, "roles", ()) or ()
+        if "admin" not in {str(r).lower() for r in roles}:
+            raise HTTPException(403, f"admin role required to {purpose}")
+
     # ─── Feedback ───────────────────────────────────────────
 
     @router.post("/api/feedback", response_model=FeedbackPostResponse)
@@ -222,6 +267,8 @@ def create_meta_router(
             actor = _resolve_actor(  # AUTH-OK: actor-agnostic — optional attribution for feedback log
                 request, identity_store, False,
                 jwt_secret=molili_jwt_secret,
+                jwt_issuer=jwt_issuer,
+                jwt_audience=jwt_audience,
             )
         except Exception as exc:
             import logging as _logging
@@ -250,6 +297,7 @@ def create_meta_router(
 
     @router.get("/api/feedback", response_model=FeedbackListResponse)
     def api_feedback_list(
+        request: Request,
         limit: int = Query(default=50, ge=1, le=500),
         thread_id: str | None = Query(default=None),
     ) -> dict[str, Any]:
@@ -260,6 +308,7 @@ def create_meta_router(
         this ever becomes a hot path, replace with tail-read +
         LRU cache.
         """
+        _require_admin(request, purpose="read feedback")
         if not _feedback_path.exists():
             return {"entries": []}
         try:
@@ -398,7 +447,8 @@ def create_meta_router(
         return filtered
 
     @router.post("/api/skills/{skill_name}/enable")
-    def api_enable_skill(skill_name: str) -> dict[str, Any]:
+    def api_enable_skill(request: Request, skill_name: str) -> dict[str, Any]:
+        _require_admin(request, purpose="modify skills")
         try:
             registry.enable(skill_name)
         except KeyError as exc:
@@ -406,7 +456,8 @@ def create_meta_router(
         return {"ok": True, "name": skill_name, "enabled": True}
 
     @router.post("/api/skills/{skill_name}/disable")
-    def api_disable_skill(skill_name: str) -> dict[str, Any]:
+    def api_disable_skill(request: Request, skill_name: str) -> dict[str, Any]:
+        _require_admin(request, purpose="modify skills")
         try:
             registry.disable(skill_name)
         except KeyError as exc:
@@ -417,7 +468,8 @@ def create_meta_router(
     #
     #
     @router.post("/api/skills-market/{skill_id}/enable")
-    def api_market_enable(skill_id: str) -> dict[str, Any]:
+    def api_market_enable(request: Request, skill_id: str) -> dict[str, Any]:
+        _require_admin(request, purpose="modify skills")
         if not registry.has(skill_id):
             from runtime.execution.suckers.market_skills import (
                 load_single_market_skill,
@@ -435,7 +487,8 @@ def create_meta_router(
         return {"ok": True, "skill_id": skill_id, "enabled": True}
 
     @router.post("/api/skills-market/{skill_id}/disable")
-    def api_market_disable(skill_id: str) -> dict[str, Any]:
+    def api_market_disable(request: Request, skill_id: str) -> dict[str, Any]:
+        _require_admin(request, purpose="modify skills")
         try:
             registry.disable(skill_id)
         except KeyError as exc:
@@ -453,37 +506,7 @@ def create_meta_router(
         #   1. authenticated caller (require_auth=True regardless of
         #      router config)
         #   2. admin role
-        try:
-            from runtime.sensing.gateway.openai_gateway import _resolve_actor
-
-            actor = _resolve_actor(
-                request, identity_store, True,
-                jwt_secret=molili_jwt_secret,
-            )
-        except HTTPException:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(401, "auth required") from exc
-
-        # Admin gate: re-resolve the full Identity to check roles.
-        if identity_store is not None and actor:
-            auth_header = request.headers.get("Authorization") or ""
-            if auth_header.lower().startswith("bearer "):
-                token = auth_header[7:].strip()
-                identity = None
-                if molili_jwt_secret and token.count(".") == 2:
-                    with suppress(Exception):
-                        identity = identity_store.verify_jwt(
-                            token, secret=molili_jwt_secret,
-                        )
-                if identity is None:
-                    with suppress(Exception):
-                        identity = identity_store.verify_api_key(token)
-                roles = getattr(identity, "roles", ()) or ()
-                if "admin" not in {str(r).lower() for r in roles}:
-                    raise HTTPException(
-                        403, "admin role required to install skills",
-                    )
+        _require_admin(request, purpose="install skills")
 
         try:
             body = await request.json()
@@ -584,7 +607,8 @@ def create_meta_router(
         return {"ok": True, "name": skill_name, "path": str(target)}
 
     @router.delete("/api/skills/{skill_name}/uninstall")
-    def api_uninstall_skill(skill_name: str) -> dict[str, Any]:
+    def api_uninstall_skill(request: Request, skill_name: str) -> dict[str, Any]:
+        _require_admin(request, purpose="uninstall skills")
         import shutil
         target = Path("skills/public") / skill_name
         if not target.exists():
@@ -614,9 +638,11 @@ def create_meta_router(
         response_model=CapabilityPermissionWire,
     )
     def api_capability_permission_update(
+        request: Request,
         group: str,
         body: dict[str, Any],
     ) -> dict[str, Any]:
+        _require_admin(request, purpose="modify capability permissions")
         from runtime.execution.misc.capability_permissions import (
             list_capability_permissions,
             set_capability_group_enabled,
@@ -1176,6 +1202,16 @@ _FRONTMATTER_PATTERN = re.compile(
 
 
 def _default_skill_library_dir() -> Path:
+    """Preferred skill library directory (``skills/public/``).
+
+    Falls back to the legacy in-package ``all_skills/`` directory when the
+    external resources root is unavailable.
+    """
+    from runtime.platform.process.paths import resources_root
+
+    external = resources_root() / "skills" / "public"
+    if external.is_dir():
+        return external
     return Path(__file__).resolve().parents[2] / "execution" / "all_skills"
 
 
