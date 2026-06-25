@@ -1,6 +1,6 @@
 # ADR-010 · Swarm Resource Contention（网状编排的争用模型）
 
-Status: Accepted (Phase 1 · mechanism) · Date: 2026-06-25
+Status: Accepted (Phase 1 机制 ✅ · Phase 2 skill 声明+desktop 填充 ✅ · 消费侧避让待做) · Date: 2026-06-25
 
 ## Context
 
@@ -77,8 +77,13 @@ finally:
 - **Phase 1（本 ADR，机制）**：`exclusive_resources` 字段 + `_run_one` 接线 +
   claim/release helper + 测试（claim 等待释放、release、空资源不 claim）。**默认
   无人声明 → 零影响**。
-- **Phase 2（填充）**：给真正独占的 skill（browser / desktop / mobile / 文件写）
-  在 plan 切分时填 `exclusive_resources`；接 `_on_step` 消费侧避让。
+- **Phase 2（填充）· 部分 ✅**：`Skill.exclusive_resource` 自声明字段 + splitter
+  经 registry 解析填 `assignment.exclusive_resources`（`SwarmRuntime(skill_resources=…)`
+  ← `run_swarm(registry=…)` ← team-stream 注入)。已填 **desktop 控制类**
+  （`mouse_click/mouse_move/keyboard_type/keyboard_press` → `device:desktop`,单块
+  物理屏；读类 `screen_*` 不标,避免过度串行)。**核实后 browser_get/extract/navigate
+  各自 `launch()` 独立浏览器、不共享 → 不标**（盲贴会过度串行)。**剩余**：mobile
+  设备 / 文件写的逐 skill 资源审计 + `_on_step` 消费侧避让。
 - **Phase 3（调度）**：Boids Alignment（同 affinity 分片同 tick 启动）/ Cohesion
   （idle 腕靠拢最忙簇）——真正的"涌现秩序"，依赖本争用底座。
 

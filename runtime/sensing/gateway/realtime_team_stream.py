@@ -736,6 +736,7 @@ async def _drive_swarm_mesh(
                 graph, budget, arm_pool=pool, signal_bus=sb,
                 journal=stack.journal, split_strategy=strategy,
                 on_signal=signals.append,
+                registry=stack.registry,  # ADR-010 Phase 2 · skill-declared exclusivity
             )
             return result, len(signals)
 

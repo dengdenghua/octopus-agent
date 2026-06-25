@@ -107,3 +107,102 @@ def test_contention_timeout_degrades_without_deadlock():
     # rather than blocking the pool forever.
     held = rt._claim_resources(ArmId("B"), ["device:desktop"])  # noqa: SLF001
     assert held == []
+
+
+# --------------------------------------------------------------------------- #
+# Phase 2 · skill-declared exclusivity → assignment.exclusive_resources       #
+# --------------------------------------------------------------------------- #
+
+
+def _graph_with_skill(skill_ref: str):
+    from runtime.platform.models import BudgetSpec, TaskGraph, TaskNode
+
+    return TaskGraph(
+        nodes=[TaskNode(node_id="n1", skill_ref=skill_ref)],
+        budget=BudgetSpec(tokens=1000, usd=0.01),
+        task_type="test",
+    )
+
+
+def test_with_resources_populates_from_resolver():
+    from runtime.execution.swarm.runtime import _split_per_node
+
+    rt = SwarmRuntime(
+        arm_pool=ArmPool([]),
+        max_workers=2,
+        skill_resources=lambda ref: ["device:desktop"] if ref == "mouse_click" else [],
+    )
+    [assignment] = _split_per_node(_graph_with_skill("mouse_click"))
+    out = rt._with_resources(assignment)  # noqa: SLF001
+    assert out.exclusive_resources == ["device:desktop"]
+
+
+def test_with_resources_noop_for_undeclared_skill():
+    from runtime.execution.swarm.runtime import _split_per_node
+
+    rt = SwarmRuntime(
+        arm_pool=ArmPool([]), max_workers=2, skill_resources=lambda ref: []
+    )
+    [assignment] = _split_per_node(_graph_with_skill("read_file"))
+    assert rt._with_resources(assignment).exclusive_resources == []  # noqa: SLF001
+
+
+def test_split_assignment_has_no_resources_by_default():
+    from runtime.execution.swarm.runtime import _split_per_node
+
+    # Without Phase-2 population (no resolver), a freshly split assignment
+    # declares nothing — the mechanism is strictly opt-in.
+    [assignment] = _split_per_node(_graph_with_skill("mouse_click"))
+    assert assignment.exclusive_resources == []
+
+
+def test_registry_resolver_reads_declared_resource():
+    # Mirrors the resolver run_swarm() builds from the registry.
+    from runtime.execution.suckers.registry import Skill, SkillRegistry
+
+    reg = SkillRegistry()
+    reg.register(
+        Skill(
+            name="grab_screen",
+            trusted_source="builtin://grab_screen",
+            handler=lambda **k: {},
+            exclusive_resource="device:desktop",
+        ),
+        verify_tests=False,
+    )
+    reg.register(
+        Skill(
+            name="read_file",
+            trusted_source="builtin://read_file",
+            handler=lambda **k: {},
+        ),
+        verify_tests=False,
+    )
+
+    def resolver(ref: str) -> list[str]:
+        try:
+            res = reg.get(ref).exclusive_resource
+        except Exception:
+            return []
+        return [res] if res else []
+
+    assert resolver("grab_screen") == ["device:desktop"]
+    assert resolver("read_file") == []  # declared None
+    assert resolver("nonexistent") == []  # not in registry
+
+
+def test_computer_control_skills_declare_desktop():
+    import pytest
+
+    from runtime.execution.suckers.computer_skills import register_computer_skills
+    from runtime.execution.suckers.registry import SkillRegistry
+
+    reg = SkillRegistry()
+    if register_computer_skills(reg, verify_tests=False) == 0:
+        pytest.skip("pyautogui not installed — computer skills not registered")
+    # Control skills drive the single physical screen/mouse/keyboard ⇒ exclusive.
+    for name in ("mouse_click", "mouse_move", "keyboard_type", "keyboard_press"):
+        assert reg.get(name).exclusive_resource == "device:desktop", name
+    # Read-only observers don't contend ⇒ no claim.
+    for name in ("screen_capture", "screen_info"):
+        assert reg.get(name).exclusive_resource is None, name

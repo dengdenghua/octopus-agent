@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import contextlib
 import time
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -167,6 +168,7 @@ class SwarmRuntime:
         boids: BoidsArbitrator | None = None,
         journal: Journal | None = None,
         max_workers: int = _DEFAULT_MAX_WORKERS,
+        skill_resources: Callable[[str], list[str]] | None = None,
     ) -> None:
         if max_workers < 1:
             raise ValueError(f"max_workers must be >= 1, got {max_workers}")
@@ -175,6 +177,11 @@ class SwarmRuntime:
         self._boids = boids
         self._journal = journal
         self._max_workers = max_workers
+        # ADR-010 Phase 2 · resolves a node's skill_ref → its exclusive
+        # resource URIs (built from the SkillRegistry at the call site). None
+        # ⇒ assignments keep whatever exclusive_resources they were split with
+        # (empty by default), so behaviour is unchanged.
+        self._skill_resources = skill_resources
 
 
     def run(
@@ -192,6 +199,8 @@ class SwarmRuntime:
             span.set_attribute("octopus.swarm.max_workers", self._max_workers)
 
             layers = self._split_layers(graph, split_strategy)
+            if self._skill_resources is not None:
+                layers = [[self._with_resources(a) for a in lyr] for lyr in layers]
             total_assignments = sum(len(lyr) for lyr in layers)
             span.set_attribute("octopus.swarm.assignment_count", total_assignments)
             span.set_attribute("octopus.swarm.layer_count", len(layers))
@@ -574,6 +583,25 @@ class SwarmRuntime:
         for uri in resources:
             with contextlib.suppress(Exception):
                 self._boids.release(arm_id, uri)
+
+    def _with_resources(self, assignment: ArmAssignment) -> ArmAssignment:
+        """Populate ``exclusive_resources`` from the skills the assignment's
+        nodes use (ADR-010 Phase 2). Returns the assignment unchanged when no
+        node declares a resource, so the common case allocates nothing."""
+        uris: list[str] = []
+        for node in assignment.subgraph.nodes:
+            ref = getattr(node, "skill_ref", None)
+            if ref is None:
+                continue
+            with contextlib.suppress(Exception):
+                uris.extend(self._skill_resources(str(ref)))
+        if not uris:
+            return assignment
+        # dedupe, preserve first-seen order; merge with any pre-set resources.
+        merged = list(assignment.exclusive_resources) + uris
+        return assignment.model_copy(
+            update={"exclusive_resources": list(dict.fromkeys(merged))}
+        )
 
 
     def _publish(self, topic: str, payload: dict[str, Any]) -> None:

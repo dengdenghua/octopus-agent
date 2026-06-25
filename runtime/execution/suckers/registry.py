@@ -38,6 +38,13 @@ class Skill(BaseModel):
     trusted_source: str = Field(..., min_length=1)  # "builtin://x" / "skill://public/y" / "mcp://z"
     handler: Callable[..., Any]
     tests: list[SkillTestCase] = Field(default_factory=list)
+    # ADR-010 · the exclusive resource this skill must hold while running, e.g.
+    # ``device:desktop`` (pyautogui drives the one physical screen/mouse/keyboard,
+    # so two parallel arms can't). The swarm splitter copies it onto the
+    # ArmAssignment, which serialises via the BoidsArbitrator. ``None`` (the
+    # default, and the vast majority) ⇒ no claim ⇒ unchanged behaviour. Use a
+    # ``…:read`` suffix for shared readers (they coexist).
+    exclusive_resource: str | None = None
 
     @property
     def has_tests(self) -> bool:
