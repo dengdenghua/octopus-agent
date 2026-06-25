@@ -82,3 +82,23 @@ def test_wiki_graph_returns_nodes_and_edges() -> None:
     assert len(d["nodes"]) > 0  # the repo ships a generated wiki
     for e in d["edges"]:
         assert {"from", "to", "type"} <= e.keys()
+
+
+def test_wiki_okf_bundle_is_a_valid_tarball() -> None:
+    import io
+    import tarfile
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.sensing.gateway.wiki_router import create_wiki_router
+
+    app = FastAPI()
+    app.include_router(create_wiki_router())
+    r = TestClient(app).get("/api/wiki/okf-bundle")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/gzip"
+    with tarfile.open(fileobj=io.BytesIO(r.content), mode="r:gz") as tar:
+        names = tar.getnames()
+    assert "index.json" in names  # the OKF manifest is in the bundle
+    assert any(n.endswith(".md") for n in names)  # markdown pages too

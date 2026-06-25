@@ -204,10 +204,18 @@ Phased, with the cheapest validation first:
   renders it in the workspace Knowledge → Wiki tab. Verified: endpoint returns
   41 nodes / 50 edges (`tests/test_wiki_qa.py`), component type-checks, and the
   graph renders cleanly (cerebrum + gateway carry the highest fan-out).
-- **Still out (one genuine boundary):** the **cross-repo Storage OKF export**
-  lives in the `octopus-storage` repo. The in-repo half — exposing octopus's
-  own wiki as a portable OKF bundle for the family to consume — is the next
-  step here.
+- **OKF export — in-repo half DONE (2026-06-24).** `GET /api/wiki/okf-bundle`
+  streams the wiki as a portable `tar.gz` OKF bundle (markdown + frontmatter +
+  index.json + edges) — the family lingua franca: any OKF-aware consumer
+  (Storage, mobile, os) fetches and ingests it with no proprietary SDK. Pinned
+  by `tests/test_wiki_qa.py`. The remaining half — the `octopus-storage` repo
+  *consuming* this bundle (and emitting its own doc-KB as OKF) — is that repo's
+  work, genuinely outside this one.
+
+With Phases 0–3, the reranker, the graph UI, and the OKF export all landed, the
+in-repo catch-up to gbrain's knowledge layer is complete; what remains lives in
+other repos (Storage) or needs an external model service (a heavier reranker) —
+not in this codebase.
 
 ## Alternatives considered
 

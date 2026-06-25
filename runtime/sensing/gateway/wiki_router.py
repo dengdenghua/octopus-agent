@@ -320,6 +320,31 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
             "generated_at": manifest.get("generated_at"),
         }
 
+    @router.get("/api/wiki/okf-bundle")
+    def api_wiki_okf_bundle() -> Any:
+        """Export the wiki as a portable OKF bundle — a ``tar.gz`` of
+        ``docs/auto`` (markdown + frontmatter + index.json + edges). The family
+        lingua franca (ADR-009): any OKF-aware consumer (Storage, mobile, os)
+        fetches and ingests it without a proprietary SDK."""
+        import io
+        import tarfile
+
+        from fastapi.responses import Response
+
+        base = _auto_dir()
+        if not base.is_dir():
+            raise HTTPException(404, "no wiki bundle · run scripts/gen_wiki.py")
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            for f in sorted(base.rglob("*")):
+                if f.is_file() and not f.is_symlink():
+                    tar.add(str(f), arcname=f.relative_to(base).as_posix())
+        return Response(
+            content=buf.getvalue(),
+            media_type="application/gzip",
+            headers={"Content-Disposition": "attachment; filename=octopus-wiki-okf.tar.gz"},
+        )
+
     @router.get("/api/wiki/status")
     def api_wiki_status(root: str | None = Query(None)) -> dict[str, Any]:
         """Frontend consumes ``{exists, status, generated_at, ...}``
