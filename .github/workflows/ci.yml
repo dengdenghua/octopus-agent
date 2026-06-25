@@ -268,6 +268,10 @@ jobs:
             exit 1
           fi
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
       - name: Regenerate TS types
         working-directory: frontend
         run: pnpm exec openapi-typescript ../docs/openapi-snapshot.json -o src/core/api/openapi-types.ts

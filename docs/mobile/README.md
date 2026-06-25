@@ -78,8 +78,8 @@ Octopus Mobile 是 [octopus-agent](../README.md) 的**移动端与跨端编排�
 | [getting-started.md](getting-started.md) | 5 分钟跑通"Runtime 控制手机点一下" |
 
 补充：
-- 仿生学：[../biomimetic/tentacle/README.md](../biomimetic/tentacle/README.md) — "触手"器官的设计哲学
-- 决策记录：[../adr/008-octopus-mobile.md](../adr/008-octopus-mobile.md)
+- 仿生学：[../architecture/organs/tentacle.md](../architecture/organs/tentacle.md) — "触手"器官的设计哲学
+- 决策记录：[../adr/011-octopus-mobile.md](../adr/011-octopus-mobile.md)
 
 ---
 

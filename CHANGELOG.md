@@ -6,6 +6,84 @@ Versions follow [SemVer](https://semver.org/), pre-1.0 so breaking changes are a
 
 ---
 
+## [Unreleased] — 2026-06 · repo hygiene + structural decoupling
+
+Non-breaking cleanup pass: skill system migration, frontend decoupling,
+doc-code alignment, and dependency pruning.
+
+### Skill system migration (all_skills/ → skills/public/)
+
+- `runtime/execution/suckers/agent_doc_skills.py` · `builtins.py` ·
+  `runtime/memory/skills_lib/agentskills.py` ·
+  `runtime/sensing/gateway/meta_router.py` — all now load from
+  `skills/public/` as the canonical catalog dir (with fallback).
+- `tools/lint/skill_cross_dir_check.py` baseline ratcheted 47 → 4.
+- `skills/local/` retired (was empty after migration).
+
+### Frontend decoupling
+
+- `tests/test_webui_mount.py` — removed `TestFrontendArtifacts` class
+  (hard lock on frontend build artifacts → soft coupling).
+- `tools/lint/protocol_method_drift.py` — returns 0 when frontend
+  missing (skips instead of failing).
+
+### Protocols doc-code alignment
+
+- 15 `protocols/*.md` files gained YAML frontmatter
+  (`implementation_status: implemented | partial | spec_only | dormant`).
+- `protocols/README.md` gained an "实装" column.
+- `tools/lint/doc_claims_check.py` extended to validate frontmatter
+  fields + protocol counts.
+
+### ADR renumbering
+
+- `docs/adr/008-octopus-mobile.md` → `011-octopus-mobile.md` (008
+  was shared with `008-constitution-profiles.md`).
+- All 14 cross-references updated (mkdocs nav, roadmap, mobile docs,
+  tentacle module, arm presets).
+- `docs/adr/README.md` index补 ADR-010 + ADR-011.
+
+### Terminology
+
+- Hearts: "三心 HA 互备" → "双循环隔离 + 上下文泵" across roadmap +
+  architecture docs (HA is a derived capability, not the primary
+  responsibility).
+
+### Dependencies
+
+- `bcrypt` moved from core `dependencies` to opt-in `[local-auth]`
+  extra (only `local_auth` module, default-off, uses it).
+- `[langfuse]` extra removed (zero runtime imports; was dead weight
+  in `[all]`).
+
+### i18n
+
+- `ja.yaml` + `ko.yaml` — added missing `cli.help.lang` key (was 374
+  keys vs en/zh-CN 375).
+- `tests/test_i18n_yaml.py` — added `TestLocaleParity` to prevent
+  future key drift.
+
+### CI
+
+- `openapi-contract` job — added `pnpm install --frozen-lockfile`
+  before `pnpm exec openapi-typescript` (was calling an uninstalled
+  binary).
+
+### Roadmap accuracy
+
+- IM integration task marked `[x]` (6 channels already shipped).
+- Hearts phase 4 description updated to match dual-cycle isolation
+  model.
+
+### Retired artifacts
+
+- 18 files + 1 stash + 6 one-off scripts removed (legacy root files,
+  `scripts/refactor/` directory, orphan stash).
+- `docs/architecture.md` + `docs/biomimetic/` removed (superseded by
+  `docs/architecture/` + `docs/vision/`).
+
+---
+
 ## [Unreleased] — 2026-05 · multi-author audit sweep
 
 Non-breaking cleanup pass across backend + frontend + infra after the

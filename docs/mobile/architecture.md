@@ -306,7 +306,7 @@ Cerebrum DAG 分解：
 
 ## 7. 对桌面端架构的影响
 
-详见 [ADR-008](../adr/008-octopus-mobile.md) 与 `runtime/tentacle/README.md`。
+详见 [ADR-011](../adr/011-octopus-mobile.md) 与 `runtime/tentacle/README.md`。
 
 **核心结论**：
 - 桌面端现有代码路径**一字不改**
@@ -341,7 +341,7 @@ Cerebrum DAG 分解：
 ## 10. 方案 F · 轻量 LLM + SKILL.md 单一源
 
 > **2026-06-06 优化** —— 推翻原方案 C 的"双内核"假设，改用"纯执行器 + 轻量 LLM"。
-> 完整决策见 [ADR-008](../adr/008-octopus-mobile.md)。本章聚焦**实现细节**。
+> 完整决策见 [ADR-011](../adr/011-octopus-mobile.md)。本章聚焦**实现细节**。
 
 ### 10.1 设计哲学
 

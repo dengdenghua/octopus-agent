@@ -14,7 +14,6 @@ classifiers = [
 ]
 dependencies = [
     "pydantic>=2.12.0",
-    "bcrypt>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -33,8 +32,8 @@ tracing = [
     "opentelemetry-api>=1.25",
     "opentelemetry-sdk>=1.25",
 ]
-langfuse = [
-    "langfuse>=2.0,<3.0",
+local-auth = [
+    "bcrypt>=4.0",
 ]
 serve = [
     "fastapi>=0.115,<1.0",
@@ -126,8 +125,6 @@ all = [
     # observability
     "opentelemetry-api>=1.25",
     "opentelemetry-sdk>=1.25",
-    # langfuse (pinned <3.0 — v3 SDK API 不兼容)
-    "langfuse>=2.0,<3.0",
     # Implementation note.
     "cryptography>=42.0",
     # Implementation note.
