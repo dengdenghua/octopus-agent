@@ -7,12 +7,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from runtime.platform.plugins.plugin_hub import PluginHub
 
 
-def create_plugin_hub_router(hub: PluginHub | None = None) -> APIRouter:
+def create_plugin_hub_router(
+    hub: PluginHub | None = None,
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
     """Create a FastAPI router with PluginHub management endpoints.
 
     Parameters
@@ -23,7 +31,25 @@ def create_plugin_hub_router(hub: PluginHub | None = None) -> APIRouter:
     if hub is None:
         hub = PluginHub.get()
 
-    router = APIRouter(prefix="/api/plugin-hub", tags=["plugin-hub"])
+    def _auth_dep(request: Request) -> None:
+        # Plugin lifecycle/config control is an operator-only surface in
+        # shared deployments. Dev mode remains open when require_auth is off.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        prefix="/api/plugin-hub",
+        tags=["plugin-hub"],
+        dependencies=[Depends(_auth_dep)],
+    )
 
     # ── List / Discover ────────────────────────────────────────
 

@@ -64,6 +64,7 @@
 "cli.help.status": "Environment capability audit"
 "cli.help.ui": "Start FastAPI Web Dashboard"
 "cli.help.serve": "Persistent service entry (scheduler + UI + reflection)"
+"cli.help.lang": "UI language (auto / en / zh / ja / ko, default from LANG env)"
 "cli.help.loop": "Active-learning outer loop: reflect → learn → plan → execute × N"
 "cli.help.optimize": "Auto prompt evolution: generate + apply + score + retire + boost"
 "cli.help.resume": "Resume from checkpoint"

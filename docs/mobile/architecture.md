@@ -306,7 +306,7 @@ Cerebrum DAG 分解：
 
 ## 7. 对桌面端架构的影响
 
-详见 [ADR-008](../adr/008-octopus-mobile.md) 与 `runtime/tentacle/README.md`。
+详见 [ADR-011](../adr/011-octopus-mobile.md) 与 `runtime/tentacle/README.md`。
 
 **核心结论**：
 - 桌面端现有代码路径**一字不改**
@@ -341,7 +341,7 @@ Cerebrum DAG 分解：
 ## 10. 方案 F · 轻量 LLM + SKILL.md 单一源
 
 > **2026-06-06 优化** —— 推翻原方案 C 的"双内核"假设，改用"纯执行器 + 轻量 LLM"。
-> 完整决策见 [ADR-008](../adr/008-octopus-mobile.md)。本章聚焦**实现细节**。
+> 完整决策见 [ADR-011](../adr/011-octopus-mobile.md)。本章聚焦**实现细节**。
 
 ### 10.1 设计哲学
 
@@ -554,7 +554,7 @@ pytest tests/test_tentacle_mobile.py -v
 
 - **Phase 1**：Python 端 LightweightLlmClient（✅ 已完成）
 - **Phase 2**：Kotlin 端 LightweightLlmClient + 30 SKILL.md 同步到 assets（🔄 进行中）
-- **Phase 3**：BrainModeSelector 接入 DUAL 模式（待 Octopus Mobile 集成）
+- **Phase 3**：BrainModeSelector 接入 DUAL 模式（✅ 已完成 · `BrainModeSelector.kt` ~292 行 + 单测，接线到 `TaskOrchestrator.kt` / `AppViewModel.kt`）
 - **Phase 4**：远程 SKILL.md 推送（Regeneration 自进化联动）
 - **Phase 5**：token 优化（prompt 缓存、prefix caching、批处理）
 

@@ -206,6 +206,25 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
     _active_participant = ctx.active_participant
     from .team_rooms_router import TeamParticipantWire
 
+    async def _emit_to_peers_or_self(payload: dict[str, Any]) -> None:
+        """Relay participant-originated events without blocking multi-peer
+        rooms on sender self-echo.
+
+        Cursor events already exclude the sender. Chat/message events used
+        to branch on a pre-send socket count, which is brittle under
+        TestClient's per-WebSocket portals. Broadcasting to peers first keeps
+        the normal multi-client path deterministic; a lone socket still gets
+        an echo so single-participant governance tests and clients work.
+        """
+        await _broadcast(team_id, payload, exclude=participant_id)
+        with lock:
+            has_peer = any(
+                pid != participant_id
+                for pid in live_sockets.get(team_id, {})
+            )
+        if not has_peer:
+            await ws.send_json(payload)
+
     actor: str | None = None
     auth_error: str | None = None
     try:
@@ -386,21 +405,19 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                     )
                     continue
                 msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
-                await _broadcast(
-                    team_id,
-                    {
-                        "type": "message",
-                        "team_id": team_id,
-                        "thread_id": msg_thread_id,
-                        "message_id": f"room-msg-{uuid4().hex}",
-                        "participant_id": speaker.id,
-                        "display_name": speaker.display_name,
-                        "spoken_by": spoken_by,
-                        "via": _normalize_speak_mode(speaker.speak_mode) if spoken_by else None,
-                        "text": text[:4000],
-                        "created_at": _now(),
-                    },
-                )
+                payload = {
+                    "type": "message",
+                    "team_id": team_id,
+                    "thread_id": msg_thread_id,
+                    "message_id": f"room-msg-{uuid4().hex}",
+                    "participant_id": speaker.id,
+                    "display_name": speaker.display_name,
+                    "spoken_by": spoken_by,
+                    "via": _normalize_speak_mode(speaker.speak_mode) if spoken_by else None,
+                    "text": text[:4000],
+                    "created_at": _now(),
+                }
+                await _emit_to_peers_or_self(payload)
                 # Keep the spoken line in the room's transcript window so a
                 # twin asked to speak next has context. Only when twins are
                 # wired — otherwise the message path is unchanged (no buffer).
@@ -429,18 +446,16 @@ async def team_room_ws(ctx: TeamRoomWsContext, ws: WebSocket, team_id: str) -> N
                 msg_thread_id = str(msg.get("thread_id") or thread_id or "").strip() or None
                 if not msg_thread_id:
                     continue
-                await _broadcast(
-                    team_id,
-                    {
-                        "type": "thread:update",
-                        "team_id": team_id,
-                        "thread_id": msg_thread_id,
-                        "participant_id": participant_id,
-                        "display_name": display_name,
-                        "reason": str(msg.get("reason") or "updated")[:80],
-                        "created_at": _now(),
-                    },
-                )
+                payload = {
+                    "type": "thread:update",
+                    "team_id": team_id,
+                    "thread_id": msg_thread_id,
+                    "participant_id": participant_id,
+                    "display_name": display_name,
+                    "reason": str(msg.get("reason") or "updated")[:80],
+                    "created_at": _now(),
+                }
+                await _emit_to_peers_or_self(payload)
             elif msg_type == "floor:request":
                 # Raise hand — only meaningful in moderated mode; queued
                 # for the moderator to grant. No-op under other policies.

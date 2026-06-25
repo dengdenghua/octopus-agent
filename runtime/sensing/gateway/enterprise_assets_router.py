@@ -17,7 +17,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 
 def _enterprise_base() -> str:
@@ -125,14 +125,37 @@ def _scaffold_local_agent(asset: dict[str, Any]) -> tuple[str, Path]:
 
 
 def create_enterprise_assets_router(
-    *, registry: Any = None, runtime: Any = None
+    *,
+    registry: Any = None,
+    runtime: Any = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     router = APIRouter(tags=["agent-market-enterprise"])
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.get("/api/agent-market/enterprise")
     def list_enterprise_assets(
+        request: Request,
         category: str | None = None, search: str | None = None
     ) -> dict[str, Any]:
+        _auth(request)
         params: dict[str, Any] = {}
         if category:
             params["category"] = category
@@ -145,7 +168,8 @@ def create_enterprise_assets_router(
         return {"available": True, "items": items or [], "error": res.get("error")}
 
     @router.get("/api/agent-market/enterprise/{asset_id}")
-    def get_enterprise_asset(asset_id: str) -> dict[str, Any]:
+    def get_enterprise_asset(request: Request, asset_id: str) -> dict[str, Any]:
+        _auth(request)
         res = _enterprise_get(f"/api/v1/agent-assets/{asset_id}")
         if not res.get("available"):
             return {"available": False, "asset": None, "error": res.get("error")}
@@ -156,7 +180,8 @@ def create_enterprise_assets_router(
         }
 
     @router.post("/api/agent-market/enterprise/{asset_id}/install")
-    def install_enterprise_asset(asset_id: str) -> dict[str, Any]:
+    def install_enterprise_asset(request: Request, asset_id: str) -> dict[str, Any]:
+        _auth(request)
         """把企业版角色资产导入本地:取 body → scaffold → load+register。"""
         res = _enterprise_get(f"/api/v1/agent-assets/{asset_id}")
         if not res.get("available"):

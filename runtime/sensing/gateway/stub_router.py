@@ -88,7 +88,7 @@ def create_stub_router(
             token = auth[7:].strip()
             if token.count(".") == 2:
                 try:
-                    from runtime.safety.auth.identity import verify_jwt_hs256
+                    from runtime.safety.auth.identity import JWTError, verify_jwt_hs256
 
                     claims = verify_jwt_hs256(
                         token,
@@ -127,7 +127,7 @@ def create_stub_router(
                         "roles": ["user"],
                         "permissions": [],
                     }
-                except (ValueError, TypeError, AttributeError):  # noqa: BLE001 — stub envelope wrap; pass through original on failure
+                except (ValueError, TypeError, AttributeError, JWTError):  # noqa: BLE001 — stub envelope wrap; pass through original on failure
                     pass
 
         return {

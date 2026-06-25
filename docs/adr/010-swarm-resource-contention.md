@@ -106,5 +106,5 @@ finally:
 
 - `runtime/safety/chromatophores/boids.py` — `BoidsArbitrator` / `ResourceClaim`
 - `runtime/execution/swarm/runtime.py` — `_run_one` 派发边界
-- [architecture.md](../architecture.md) §Chromatophores（⚠️ mesh 休眠说明）
+- [vision/biomimetic-architecture.md](../vision/biomimetic-architecture.md) §Chromatophores（⚠️ mesh 休眠说明）
 - protocols/swarm.md

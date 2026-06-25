@@ -94,16 +94,11 @@ RoleCaller = Callable[..., dict[str, Any]]
 # reasoning roles (planner / generator / synthesizer) keep the parent's
 # primary model. This is the team_runner equivalent of the per-spec
 # ``cheap`` flag in ``call_agent_parallel``.
-_PRIMARY_MODEL_ROLES: frozenset[Role] = frozenset({
-    Role.PLANNER,
-    Role.GENERATOR,
-    Role.SYNTHESIZER,
-})
-
-
 def _role_uses_cheap_model(role: Role) -> bool:
     """Return True when ``role`` should run on the cheap subagent model."""
-    return role not in _PRIMARY_MODEL_ROLES
+    from runtime.safety.organization.team_role_models import role_uses_cheap
+
+    return role_uses_cheap(role)
 
 
 def _default_role_caller(

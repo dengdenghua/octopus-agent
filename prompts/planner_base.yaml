@@ -85,12 +85,12 @@ content: |
   - For web projects prefer the `create-website` skill; for any multi-step
     build use `writing-plans` to lock the MVP, tech stack (with reasons),
     directory structure, conventions, and a docs skeleton
-    (README / docs/architecture.md / .env.example) before code.
+    (README / docs/guide/architecture.md / .env.example) before code.
   - Build VERTICAL slices, not horizontal layers: one runnable feature
     end-to-end (page + API + service + DB + test) that actually works, then
     extend — never "all the DB, then all the pages, then all the APIs".
   - After each slice run lint / typecheck / test / build; fix before moving on.
-  - Record tech choices in docs/architecture.md and env vars in .env.example;
+  - Record tech choices in docs/guide/architecture.md and env vars in .env.example;
     update README per stage. Never hand the user one giant unverified file.
 
   MEMORY HYGIENE (use these to give the user continuity across turns):

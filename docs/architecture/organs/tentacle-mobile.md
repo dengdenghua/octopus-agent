@@ -1,4 +1,4 @@
-﻿# 📱 Tentacle · Mobile · 手机触手
+# 📱 Tentacle · Mobile · 手机触手
 
 > **章鱼伸向 Android 设备的物理触手**
 
@@ -62,7 +62,7 @@ Mobile Tentacle 是 Octopus Mobile 的一等公民。它让章鱼的中枢（Cer
 3. **设备锁必须互斥**：同一时刻一根触手只允许一个 Arm 操作
 4. **失败必须可降级**：Runtime 不可达时无缝降级到 LOCAL 模式
 
-详见 [ADR-008](../../adr/008-octopus-mobile.md) 第 "关键不变量" 节。
+详见 [ADR-011](../../adr/011-octopus-mobile.md) 第 "关键不变量" 节。
 
 ## 启动模式详解
 

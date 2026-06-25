@@ -1,9 +1,9 @@
-# 器官分层 · 20 不是契约，**分层才是**
+# 器官分层 · 数字不是契约，**分层才是**
 
-> 本文不是推翻 [naming.md](../naming.md) 和 [architecture.md](../architecture.md) ——
+> 本文不是推翻 [naming.md](../naming.md) 和 [vision/biomimetic-architecture.md](../vision/biomimetic-architecture.md) ——
 > 那两份文档里"数字是诗意不是契约"的原则已经写得很好。
 >
-> 本文做的是**下一步**：把 20 个器官再切三层，声明清楚**哪些是一等公民**、
+> 本文做的是**下一步**：把 22 个器官再切三层，声明清楚**哪些是一等公民**、
 > **哪些是辅助器官**、**哪些其实是基础设施只是恰好起了个生物名**。
 >
 > 目的：新同学上来能一眼看出核心在哪；新增功能知道该不该开新器官。
@@ -12,7 +12,7 @@
 
 ## 为什么需要分层
 
-20 器官 flat 列表会产生两个问题：
+22 器官 flat 列表会产生两个问题：
 
 1. **规模失衡隐形** —— `sensing/siphon` 10k 行跟 `safety/ink` 300 行在同一张表里并列，
    看不出核心 vs 外围
@@ -151,7 +151,7 @@
 | 文档 | 角色 | 本文件的关系 |
 | :--- | :--- | :----------- |
 | [`principles.md`](../principles.md) | 六大原则 | 本文不改原则，只定义落地分层 |
-| [`architecture.md`](../architecture.md) | 总架构 + 器官映射 | 本文是其**补充**（tiering 层）|
+| [`vision/biomimetic-architecture.md`](../vision/biomimetic-architecture.md) | 总架构 + 器官映射 | 本文是其**补充**（tiering 层）|
 | [`naming.md`](../naming.md) | 双轨命名契约 | 本文不改命名，只给 20 个名字分**级**|
 | [`architecture/organs/*.md`](./organs/) | 每器官详述 | 本文的"基础设施"类目建议**不再**给它们写 organ.md |
 

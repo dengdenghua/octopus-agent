@@ -9,9 +9,9 @@ English readers: [README.en.md](README.en.md)
 1. [10-minute golden path](docs/GOLDEN_PATH.md)
 2. [Quickstart](QUICKSTART.md)
 3. [Concepts](docs/CONCEPTS.md)
-4. [Architecture](docs/architecture.md)
-5. [Main Path Audit](docs/main-path-audit.md)
-6. [Self-Evolution Minimum Loop](docs/self-evolution-min-loop.md)
+4. [Architecture](docs/guide/architecture.md)
+5. [Main Path Audit](docs/archive/main-path-audit.md)
+6. [Self-Evolution Minimum Loop](docs/archive/react-self-evolution.md)
 
 当前结构：
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.apps_router import create_apps_router, discover_apps
 
 
@@ -108,3 +109,32 @@ def test_apps_router_skips_broken_plugin_pack(
     r = client.get("/api/apps")
     assert r.status_code == 200
     assert [item["id"] for item in r.json()] == ["good"]
+
+
+def test_apps_router_requires_auth_when_enabled(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugins" / "research-console"
+    write(
+        plugin_dir / ".codex-plugin" / "plugin.json",
+        json.dumps({"name": "research-console", "version": "0.1.0"}),
+    )
+    write(
+        plugin_dir / "octopus-app.jsonc",
+        '{"apps":{"research-console":{"title":"Research Console","route":"/apps/research-console"}}}',
+    )
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_apps_router(
+            app_roots=[tmp_path / "plugins"],
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/apps").status_code == 401
+    assert client.get(
+        "/api/apps",
+        headers={"Authorization": "Bearer sk-alice"},
+    ).status_code == 200

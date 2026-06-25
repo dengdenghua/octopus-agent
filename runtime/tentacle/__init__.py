@@ -2,9 +2,9 @@
 
 Octopus Mobile 的核心抽象。详见：
 
-- ``docs/biomimetic/tentacle/README.md`` —— 触手器官设计哲学
+- ``docs/architecture/organs/tentacle.md`` —— 触手器官设计哲学
 - ``docs/mobile/architecture.md`` —— 三层三端架构
-- ``docs/adr/008-octopus-mobile.md`` —— 架构决策记录
+- ``docs/adr/011-octopus-mobile.md`` —— 架构决策记录
 - ``docs/naming.md`` —— 双轨命名契约
 
 公开 API（双轨命名，参见 ADR-001）::

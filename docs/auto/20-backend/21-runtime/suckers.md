@@ -11,6 +11,10 @@ tier: "core"
 
 **Source**: `runtime/execution/suckers/`
 
+## Package summary
+
+Suckers = skill pool.
+
 ## Exports
 
 - `ATOMIC_SKILL_NAMES`
@@ -38,7 +42,7 @@ tier: "core"
 
 | Module | Summary |
 | --- | --- |
-| `agent_doc_skills.py` | Agent documentation skills loaded from ``all_skills``. |
+| `agent_doc_skills.py` | Agent documentation skills loaded from ``skills/public``. |
 | `agent_meta_skills.py` | — |
 | `ask_user_question.py` | ask_user_question · pause-and-ask skill. |
 | `blackboard_skills.py` | blackboard_skills · expose the turn-scoped shared dict as 3 skills. |
@@ -63,6 +67,8 @@ tier: "core"
 | `delegation_budget.py` | Smart per-turn delegation budget. |
 | `delegation_skills.py` | — |
 | `desktop_grounding.py` | Semantic grounding for the desktop vision loop. |
+| `echo_skills.py` | ECHO Universe Engine 叙事 Ganglion 接入. |
+| `enterprise_skills.py` | Octopus Enterprise 企业服务 Arm 接入. |
 | `ephemeral_agents.py` | Ephemeral sub-agent roles · lightweight personas for one-shot delegation tasks (``researcher`` / ``debugger`` / ``reviewer`` / …). |
 | `ephemeral_injection_gate.py` | Prompt-injection taint gate for ephemeral sub-agent tool calls. |
 | `ephemeral_runner.py` | LLM-backed runner for ephemeral sub-agent roles. |
@@ -92,7 +98,7 @@ tier: "core"
 
 ## Who imports this
 
-**42** file(s) reference this package:
+**43** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/mcp_client/bridge.py`
@@ -109,9 +115,10 @@ tier: "core"
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/react_context.py`
   - `runtime/core/cerebrum/react_execution.py`
-- **`runtime/execution/`** · 5 file(s)
+- **`runtime/execution/`** · 6 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
+  - `runtime/execution/loops/verifiers.py`
   - `runtime/execution/misc/skill_policy.py`
   - `runtime/execution/subagents/bridge.py`
   - `runtime/execution/tool_engine/executor.py`

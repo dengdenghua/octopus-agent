@@ -10,24 +10,47 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query, Request
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment,misc]
+    Depends = None  # type: ignore[assignment,misc]
     HTTPException = None  # type: ignore[assignment,misc]
     Query = None  # type: ignore[assignment,misc]
     Request = None  # type: ignore[assignment,misc]
 
 
-def create_memory_router() -> Any:
+def create_memory_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
     from runtime.memory import user_store
 
-    router = APIRouter(tags=["memory"])
+    def _auth_dep(request: Request) -> None:
+        # Local memory is effectively an operator control panel. Keep
+        # dev mode open, but when auth is enabled require a valid actor
+        # before exposing or mutating the persisted user memory state.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["memory"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/memory")
     def api_memory_get() -> dict[str, Any]:

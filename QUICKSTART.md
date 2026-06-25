@@ -6,7 +6,7 @@
 2. 怎么跑起来？
 3. 跑起来后先看哪里？
 
-更完整的架构说明见 [README.md](README.md)、[docs/GOLDEN_PATH.md](docs/GOLDEN_PATH.md)、[docs/architecture.md](docs/architecture.md)。
+更完整的架构说明见 [README.md](README.md)、[docs/GOLDEN_PATH.md](docs/GOLDEN_PATH.md)、[docs/guide/architecture.md](docs/guide/architecture.md)。
 
 ## 30 秒理解
 

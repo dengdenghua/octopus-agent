@@ -225,6 +225,14 @@ def _probe_process(pid: int | None) -> tuple[bool, int | None]:
         except Exception:  # noqa: BLE001
             return True, None
     try:
+        waited_pid, status = os.waitpid(pid, os.WNOHANG)
+        if waited_pid == pid:
+            return False, os.waitstatus_to_exitcode(status)
+    except ChildProcessError:
+        return False, None
+    except OSError:
+        return False, None
+    try:
         os.kill(pid, 0)
     except OSError:
         return False, None
@@ -246,6 +254,14 @@ def _snapshot_background_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         running, probed_exit = _probe_process(pid)
         if probed_exit is not None:
             exit_code = probed_exit
+            metadata["exit_code"] = exit_code
+            with contextlib.suppress(Exception):
+                _write_background_metadata(
+                    _background_paths(task_id)["metadata"],
+                    metadata,
+                )
+        elif not running:
+            exit_code = 0
             metadata["exit_code"] = exit_code
             with contextlib.suppress(Exception):
                 _write_background_metadata(

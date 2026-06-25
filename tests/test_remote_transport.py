@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.platform import feature_flags as ff
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.remote_backends_router import (
     create_remote_backends_router,
 )
@@ -248,6 +249,21 @@ def client(store_path: Path) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture
+def secured_client(store_path: Path) -> tuple[TestClient, dict[str, str]]:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_remote_backends_router(
+            store_path=store_path,
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    return TestClient(app), {"Authorization": "Bearer sk-alice"}
+
+
 def test_get_works_with_flag_off(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -258,6 +274,18 @@ def test_get_works_with_flag_off(
     assert r.status_code == 200
     assert r.json()["enabled"] is False
     assert r.json()["backends"] == []
+
+
+def test_get_requires_auth_when_enabled(
+    secured_client: tuple[TestClient, dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, headers = secured_client
+    monkeypatch.delenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", raising=False)
+    ff.reload()
+
+    assert client.get("/api/remote-backends").status_code == 401
+    assert client.get("/api/remote-backends", headers=headers).status_code == 200
 
 
 def test_post_blocked_when_flag_off(

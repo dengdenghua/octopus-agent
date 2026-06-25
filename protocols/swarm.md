@@ -1,8 +1,23 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/safety/chromatophores/boids.py
+  - runtime/safety/chromatophores/signal_bus.py
+  - runtime/execution/swarm/runtime.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Swarm (群体协作 · Boids 三原则)
 
+> ⚠️ **实装状态:三原则全部已实装(程度不同)。**
+> - **Separation**(资源宣称仲裁):`BoidsArbitrator.arbitrate()` 完整实装,含优先级/TTL/只读共享。
+> - **Alignment**(同 affinity 同 tick 启动):`BoidsArbitrator.alignment_groups()` 实装,SwarmRuntime 在 `_dispatch` 中按 affinity 分组并发布 `arm.alignment` 事件。
+> - **Cohesion**(idle 腕靠拢最忙簇):`BoidsArbitrator.cohesion_rebalance()` 实装,SwarmRuntime 在每层结束后计算负载、发布 `arm.cohesion` 重定向建议。
+> - `config.example.yaml` 中无 `chromatophores:` 配置段(三原则参数为代码内默认值,未来可抽取)。
+
 > **原则 ② 去中心协作** 的具体算法。
-> Chromatophores 的第二层语义：**腕间涌现秩序**，不靠中枢仲裁。
-> 核心不变量：**所有 Boids 规则纯函数 + 本地执行 + 无全局锁**。
+> Chromatophores 的第二层语义:**腕间涌现秩序**,不靠中枢仲裁。
+> 核心不变量:**所有 Boids 规则纯函数 + 本地执行 + 无全局锁**。
 
 ---
 

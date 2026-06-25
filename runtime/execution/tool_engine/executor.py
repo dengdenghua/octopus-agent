@@ -212,6 +212,33 @@ class ToolExecutor:
             )
             sig = antigen_for(skill)
 
+            allowed_by_task_capability, task_capability_reason = (
+                _check_task_capability_permission(sucker_id)
+            )
+            if not allowed_by_task_capability:
+                self.journal.write_immune(
+                    verdict="reject",
+                    signature=sig,
+                    task_id=task_id,
+                    arm_id=arm_id,
+                    actor=actor,
+                    reason=task_capability_reason or "task capability disabled",
+                )
+                span.set_attribute("octopus.immunity.verdict", "reject")
+                span.set_attribute(
+                    "octopus.task_capability.blocked",
+                    task_capability_reason or "task capability disabled",
+                )
+                step = _make_reject_step(
+                    step_id,
+                    node_id,
+                    call,
+                    "immune_reject",
+                    task_capability_reason or "task capability disabled",
+                )
+                self.journal.write_step(task_id, arm_id, step, actor=actor)
+                return step
+
             allowed_by_capability, capability_reason = _check_capability_permission(
                 sucker_id,
             )
@@ -1168,6 +1195,28 @@ def _check_capability_permission(skill_id: SkillId) -> tuple[bool, str | None]:
         return is_skill_allowed(str(skill_id))
     except (ImportError, AttributeError, TypeError, RuntimeError):  # noqa: BLE001 - permission layer must fail closed
         return False, "capability permission check failed"
+
+
+def _check_task_capability_permission(skill_id: SkillId) -> tuple[bool, str | None]:
+    try:
+        from runtime.execution.misc.capability_permissions import permission_group_for_skill
+        from runtime.platform.process.session import current_session
+        from runtime.platform.process.task_supervisor import manifest_from_session_metadata
+
+        session = current_session()
+        manifest = manifest_from_session_metadata(
+            session.metadata if session is not None else None
+        )
+        if manifest is None:
+            return True, None
+        group = permission_group_for_skill(str(skill_id))
+        if manifest.allows_group(group):
+            return True, None
+        task_id = str(session.metadata.get("task_id") or "") if session is not None else ""
+        suffix = f" for task {task_id}" if task_id else ""
+        return False, f"task capability group disabled: {group}{suffix}"
+    except (ImportError, AttributeError, TypeError, RuntimeError):  # noqa: BLE001 - legacy paths without session metadata should continue
+        return True, None
 
 
 

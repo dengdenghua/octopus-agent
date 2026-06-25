@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/execution/suckers/testing.py
+  - runtime/safety/recovery/skill_forge.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Skill Testing (技能回归测试)
 
 > **自进化系统不塌方的唯一保险。**

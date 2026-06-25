@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/platform/models/pipeline.py
+  - runtime/core/nerves/reflex/reflex_router.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Digestion (消化流水线)
 
 > **原则 ⑥ Pipeline** 的具体协议。

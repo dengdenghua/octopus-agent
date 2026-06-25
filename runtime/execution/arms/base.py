@@ -35,6 +35,7 @@ class Worker:
         soul: str = "",
         icon: str = "",
         signal_bus: SignalBus | None = None,
+        decision_cache: Any = None,
     ) -> None:
         self.arm_id: ArmId = arm_id
         self.affinity: list[str] = list(affinity)
@@ -44,6 +45,7 @@ class Worker:
         self.description: str = description
         self.soul: str = soul
         self.icon: str = icon
+        self.decision_cache = decision_cache
         # ─── Mesh communication (网状 Arm 互通 阶段 1) ──────
         # When a signal_bus is injected, the Arm subscribes to its own
         # mailbox topic (``arm.mailbox.<arm_id>``) and can both receive

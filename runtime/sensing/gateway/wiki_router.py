@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, HTTPException, Query, Request
     from fastapi.responses import JSONResponse
 
     FASTAPI_AVAILABLE = True
@@ -18,6 +18,7 @@ except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     JSONResponse = None  # type: ignore[assignment, misc]
 
 
@@ -273,7 +274,16 @@ def _answer_from_wiki(question: str, *, model_router: Any, model: str | None) ->
     }
 
 
-def create_wiki_router(*, model_router: Any = None, model: str | None = None) -> Any:
+def create_wiki_router(
+    *,
+    model_router: Any = None,
+    model: str | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     """Build + return the FastAPI router. Call site:
     ``app.include_router(create_wiki_router(model_router=..., model=...))``.
 
@@ -284,12 +294,27 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
 
     router = APIRouter(tags=["wiki"])
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     # Lazy-import the generic generator so the router file stays the
     # only place that knows about the dual-mode dispatch.
     from . import wiki_generic
 
     @router.post("/api/wiki/ask")
-    def api_wiki_ask(body: dict[str, Any]) -> dict[str, Any]:
+    def api_wiki_ask(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _auth(request)
         """Synthesis Q&A over the project wiki — retrieve + compose a cited
         answer (ADR-009 · gbrain-style). Returns ``{answer, citations, grounded,
         reason?}``; ``grounded=False`` when no model is configured or the wiki
@@ -300,7 +325,8 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         return _answer_from_wiki(question, model_router=model_router, model=model)
 
     @router.get("/api/wiki/graph")
-    def api_wiki_graph() -> dict[str, Any]:
+    def api_wiki_graph(request: Request) -> dict[str, Any]:
+        _auth(request)
         """Wiki dependency graph (ADR-009): the page nodes + the zero-LLM
         page→page import edges from index.json, for a graph visualiser."""
 
@@ -321,7 +347,8 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         }
 
     @router.get("/api/wiki/okf-bundle")
-    def api_wiki_okf_bundle() -> Any:
+    def api_wiki_okf_bundle(request: Request) -> Any:
+        _auth(request)
         """Export the wiki as a portable OKF bundle — a ``tar.gz`` of
         ``docs/auto`` (markdown + frontmatter + index.json + edges). The family
         lingua franca (ADR-009): any OKF-aware consumer (Storage, mobile, os)
@@ -346,7 +373,8 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         )
 
     @router.get("/api/wiki/status")
-    def api_wiki_status(root: str | None = Query(None)) -> dict[str, Any]:
+    def api_wiki_status(request: Request, root: str | None = Query(None)) -> dict[str, Any]:
+        _auth(request)
         """Frontend consumes ``{exists, status, generated_at, ...}``
         and switches between "generate CTA" / "content shell".
 
@@ -391,9 +419,11 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
 
     @router.get("/api/wiki/docs")
     def api_wiki_docs_list(
+        request: Request,
         lang: str = Query("zh"),
         root: str | None = Query(None),
     ) -> dict[str, Any]:
+        _auth(request)
         """Flat WikiDocEntry list · frontend builds the tree via
         ``path.split('/')`` so we don't need to pre-structure here."""
         user_root = _validate_user_root(root)
@@ -403,9 +433,11 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
 
     @router.get("/api/wiki/docs/{doc_path:path}")
     def api_wiki_doc_read(
+        request: Request,
         doc_path: str,
         root: str | None = Query(None),
     ) -> dict[str, Any]:
+        _auth(request)
         user_root = _validate_user_root(root)
         if user_root is not None:
             try:
@@ -433,7 +465,12 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         }
 
     @router.put("/api/wiki/docs/{doc_path:path}")
-    def api_wiki_doc_write(doc_path: str, body: dict[str, Any]) -> dict[str, Any]:
+    def api_wiki_doc_write(
+        request: Request,
+        doc_path: str,
+        body: dict[str, Any],
+    ) -> dict[str, Any]:
+        _auth(request)
         """Overwrite a generated doc · used by the inline editor in
         the frontend. Note: edits are lost on next ``generate`` run ·
         the generator is the source of truth."""
@@ -448,7 +485,8 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         return {"ok": True, "path": doc_path, "size": path.stat().st_size}
 
     @router.post("/api/wiki/generate")
-    def api_wiki_generate(root: str | None = Query(None)) -> dict[str, Any]:
+    def api_wiki_generate(request: Request, root: str | None = Query(None)) -> dict[str, Any]:
+        _auth(request)
         """User-triggered generation. For per-project mode (``root``
         passed) we run synchronously since the generic generator is
         bounded (≤2s on typical repos)."""
@@ -465,7 +503,8 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         return {"ok": True, "started_at": _STATE.started_at}
 
     @router.post("/api/wiki/update")
-    def api_wiki_update(root: str | None = Query(None)) -> dict[str, Any]:
+    def api_wiki_update(request: Request, root: str | None = Query(None)) -> dict[str, Any]:
+        _auth(request)
         """Alias for generate · frontend uses this button when the
         wiki is already present but needs a refresh."""
         user_root = _validate_user_root(root)
@@ -495,7 +534,8 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         }
 
     @router.get("/api/wiki/settings")
-    def api_wiki_settings_get(root: str = Query(...)) -> dict[str, Any]:
+    def api_wiki_settings_get(request: Request, root: str = Query(...)) -> dict[str, Any]:
+        _auth(request)
         """Per-project wiki settings · currently just the autosync
         flag. ``root`` is required (settings only meaningful in
         per-project mode). The response also reflects whether the
@@ -518,9 +558,11 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
 
     @router.post("/api/wiki/settings")
     def api_wiki_settings_set(
+        request: Request,
         body: dict[str, Any],
         root: str = Query(...),
     ) -> dict[str, Any]:
+        _auth(request)
         """Persist autosync + arm/disarm the file watcher in one call.
 
         Watcher lifecycle is bound to the persisted flag so a backend
@@ -540,7 +582,8 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
         return result
 
     @router.get("/api/wiki/progress")
-    def api_wiki_progress() -> dict[str, Any]:
+    def api_wiki_progress(request: Request) -> dict[str, Any]:
+        _auth(request)
         snap = _STATE.snapshot()
         total = max(len(_flat_docs()), 1)
         if snap["status"] == "running":

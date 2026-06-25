@@ -80,6 +80,21 @@ def client(isolated_cwd: Path) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture
+def secured_client(isolated_cwd: Path) -> tuple[TestClient, dict[str, str]]:
+    """Same app surface, but with auth required so router-level config
+    auth can be pinned independently of any outer middleware."""
+    from runtime.safety.auth import Identity, IdentityStore
+
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = create_app(
+        cocoloop_require_auth=True,
+        cocoloop_identity_store=store,
+    )
+    return TestClient(app), {"Authorization": "Bearer sk-alice"}
+
+
 # ═══════════════════════════════════════════════════════════
 # GET /api/config/identity-lock
 # ═══════════════════════════════════════════════════════════
@@ -149,6 +164,33 @@ class TestIdentityLockPut:
             "/api/config/identity-lock", json={"locked": "yes"},
         )
         assert r.status_code == 400
+
+
+class TestConfigAuth:
+    def test_identity_lock_requires_auth_when_enabled(
+        self, secured_client: tuple[TestClient, dict[str, str]],
+    ) -> None:
+        client, headers = secured_client
+
+        assert client.get("/api/config/identity-lock").status_code == 401
+        assert client.get(
+            "/api/config/identity-lock", headers=headers,
+        ).status_code == 200
+
+    def test_custom_model_put_requires_auth_when_enabled(
+        self, secured_client: tuple[TestClient, dict[str, str]],
+    ) -> None:
+        client, headers = secured_client
+        payload = {"provider": "anthropic", "model": "claude-sonnet-4-6"}
+
+        assert client.put(
+            "/api/config/custom-models/claude-mirror", json=payload,
+        ).status_code == 401
+        assert client.put(
+            "/api/config/custom-models/claude-mirror",
+            json=payload,
+            headers=headers,
+        ).status_code == 200
 
 
 # ═══════════════════════════════════════════════════════════

@@ -64,7 +64,7 @@ We keep **both** vocabularies and bind them at explicit seams.
   `SpinalCord` whose docstring says "this is the reflex fast path
   that short-circuits the planner for sub-50ms tasks" costs no
   engineering readability while preserving the concept.
-- **Documentation** (`docs/biomimetic/*`, `docs/invariants.md`).
+- **Documentation** (`docs/vision/biomimetic-architecture.md`, `docs/invariants.md`).
   Anywhere we're talking *about* the system, biology wins.
 
 ## Alternatives considered

@@ -42,6 +42,7 @@ from fastapi.testclient import TestClient
 from runtime.execution.arms.tool_registry import ToolRegistry
 from runtime.execution.suckers.registry import Skill, SkillRegistry
 from runtime.platform.ui.app import create_app
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.meta_router import create_meta_router
 
 
@@ -66,6 +67,33 @@ def isolated_cwd(
 def client(isolated_cwd: Path) -> Iterator[TestClient]:
     with TestClient(create_app()) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def secured_meta_client(
+    isolated_cwd: Path,
+) -> Iterator[tuple[TestClient, dict[str, dict[str, str]], SkillRegistry]]:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice", roles=("admin",)), api_key_plaintext="sk-alice")
+    store.add(Identity(actor_id="bob", roles=("user",)), api_key_plaintext="sk-bob")
+    registry = SkillRegistry()
+    registry.register(Skill(
+        name="demo_skill",
+        description="Demo skill",
+        trusted_source="skill://public/demo_skill",
+        handler=lambda **_kw: {"ok": True},
+    ), verify_tests=False)
+
+    app = FastAPI()
+    app.include_router(create_meta_router(
+        registry=registry,
+        identity_store=store,
+    ))
+    with TestClient(app) as test_client:
+        yield test_client, {
+            "admin": {"Authorization": "Bearer sk-alice"},
+            "user": {"Authorization": "Bearer sk-bob"},
+        }, registry
 
 
 # ═══════════════════════════════════════════════════════════
@@ -146,34 +174,53 @@ class TestFeedbackPost:
 
 
 class TestFeedbackList:
-    def test_empty_when_no_file(self, client: TestClient) -> None:
+    def test_requires_auth_when_no_credentials(self, client: TestClient) -> None:
         r = client.get("/api/feedback")
-        assert r.status_code == 200
-        assert r.json() == {"entries": []}
+        assert r.status_code == 401
+
+    def test_requires_admin_role(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, _registry = secured_meta_client
+        client.post("/api/feedback", json={"sentiment": "liked", "message_id": "m1"})
+
+        r = client.get("/api/feedback", headers=headers["user"])
+        assert r.status_code == 403
 
     def test_returns_entries_newest_first(
-        self, client: TestClient,
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
     ) -> None:
+        client, headers, _registry = secured_meta_client
         for i in range(3):
             client.post(
                 "/api/feedback",
                 json={"sentiment": "liked", "message_id": f"m{i}"},
             )
-        data = client.get("/api/feedback").json()
+        data = client.get("/api/feedback", headers=headers["admin"]).json()
         # Reverse order — newest first (m2, m1, m0)
         ids = [e["message_id"] for e in data["entries"]]
         assert ids == ["m2", "m1", "m0"]
 
-    def test_limit_respected(self, client: TestClient) -> None:
+    def test_limit_respected(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, _registry = secured_meta_client
         for i in range(10):
             client.post(
                 "/api/feedback",
                 json={"sentiment": "liked", "message_id": f"m{i}"},
             )
-        data = client.get("/api/feedback?limit=3").json()
+        data = client.get("/api/feedback?limit=3", headers=headers["admin"]).json()
         assert len(data["entries"]) == 3
 
-    def test_thread_id_filter(self, client: TestClient) -> None:
+    def test_thread_id_filter(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, _registry = secured_meta_client
         for i in range(5):
             client.post(
                 "/api/feedback",
@@ -183,7 +230,10 @@ class TestFeedbackList:
                     "thread_id": "t_a" if i < 2 else "t_b",
                 },
             )
-        data = client.get("/api/feedback?thread_id=t_a").json()
+        data = client.get(
+            "/api/feedback?thread_id=t_a",
+            headers=headers["admin"],
+        ).json()
         assert {e["message_id"] for e in data["entries"]} == {"m0", "m1"}
 
 
@@ -589,3 +639,119 @@ class TestAuthProviders:
         local = next(p for p in data["providers"] if p["id"] == "local")
         # password_required reflects whether users dict is non-empty
         assert local["password_required"] is True
+
+
+class TestAdminMetaMutations:
+    def test_skill_enable_disable_requires_admin(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, registry = secured_meta_client
+
+        assert client.post("/api/skills/demo_skill/disable").status_code == 401
+        assert client.post(
+            "/api/skills/demo_skill/disable",
+            headers=headers["user"],
+        ).status_code == 403
+
+        disabled = client.post(
+            "/api/skills/demo_skill/disable",
+            headers=headers["admin"],
+        )
+        assert disabled.status_code == 200
+        assert registry.is_enabled("demo_skill") is False
+
+        enabled = client.post(
+            "/api/skills/demo_skill/enable",
+            headers=headers["admin"],
+        )
+        assert enabled.status_code == 200
+        assert registry.is_enabled("demo_skill") is True
+
+    def test_skill_market_toggle_requires_admin(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, registry = secured_meta_client
+
+        assert client.post("/api/skills-market/demo_skill/disable").status_code == 401
+        assert client.post(
+            "/api/skills-market/demo_skill/disable",
+            headers=headers["user"],
+        ).status_code == 403
+
+        disabled = client.post(
+            "/api/skills-market/demo_skill/disable",
+            headers=headers["admin"],
+        )
+        assert disabled.status_code == 200
+        assert registry.is_enabled("demo_skill") is False
+
+        enabled = client.post(
+            "/api/skills-market/demo_skill/enable",
+            headers=headers["admin"],
+        )
+        assert enabled.status_code == 200
+        assert registry.is_enabled("demo_skill") is True
+
+    def test_skill_uninstall_requires_admin(
+        self,
+        isolated_cwd: Path,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, _registry = secured_meta_client
+        skill_dir = isolated_cwd / "skills" / "public" / "demo_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text("name: demo\n", encoding="utf-8")
+
+        assert client.delete("/api/skills/demo_skill/uninstall").status_code == 401
+        assert client.delete(
+            "/api/skills/demo_skill/uninstall",
+            headers=headers["user"],
+        ).status_code == 403
+
+        removed = client.delete(
+            "/api/skills/demo_skill/uninstall",
+            headers=headers["admin"],
+        )
+        assert removed.status_code == 200
+        assert skill_dir.exists() is False
+
+    def test_capability_permission_update_requires_admin(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, _registry = secured_meta_client
+
+        assert client.put(
+            "/api/capability-permissions/not-a-group",
+            json={"enabled": False},
+        ).status_code == 401
+        assert client.put(
+            "/api/capability-permissions/not-a-group",
+            json={"enabled": False},
+            headers=headers["user"],
+        ).status_code == 403
+        assert client.put(
+            "/api/capability-permissions/not-a-group",
+            json={"enabled": False},
+            headers=headers["admin"],
+        ).status_code == 404
+
+    def test_skill_install_requires_admin_before_body_validation(
+        self,
+        secured_meta_client: tuple[TestClient, dict[str, dict[str, str]], SkillRegistry],
+    ) -> None:
+        client, headers, _registry = secured_meta_client
+
+        assert client.post("/api/skills/install", json={}).status_code == 401
+        assert client.post(
+            "/api/skills/install",
+            json={},
+            headers=headers["user"],
+        ).status_code == 403
+        assert client.post(
+            "/api/skills/install",
+            json={},
+            headers=headers["admin"],
+        ).status_code == 400

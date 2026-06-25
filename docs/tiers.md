@@ -2,7 +2,7 @@
 
 > **把"研究笔记"变成"工程蓝图"。**
 >
-> 现状：20 器官 + 15 协议 + 139 不变量 = 完整体系，但不是可立刻开工的蓝图。
+> 现状：完整器官 + 15 协议 + 139 不变量 = 完整体系，但不是可立刻开工的蓝图。
 > 本文的使命：**三档切分，让 MVP 有最短可跑路径**。
 
 ---
@@ -13,7 +13,7 @@
 |---|---|---|---|
 | **MVP** | 0–3 月 | 跑通一条闭环：INGEST → STORE，可断点续跑 | 8 器官 / 4 协议 / 14 不变量 |
 | **Core** | 3–9 月 | 生产级治理 + 基础自进化 | 13 器官 / 9 协议 / ~40 不变量 |
-| **Full** | 9 月+ | 完整自进化实体 | 20 器官 / 15 协议 / 139 不变量 |
+| **Full** | 9 月+ | 完整自进化实体 | 完整器官 / 15 协议 / 139 不变量 |
 
 **铁律**：禁止在 MVP 阶段"顺手实现"Core/Full 的东西 —— 那是复杂度失控的开始。
 
@@ -272,7 +272,7 @@ MVP config 只包含：
 → 只读：本文档 + [forklist.md](forklist.md) + [protocols/digestion.md](protocols/digestion.md) + [naming.md](naming.md)
 
 ### "我要理解全貌"
-→ 加读：[principles.md](principles.md) + [architecture.md](architecture.md) + [six-modules.md](six-modules.md)
+→ 加读：[principles.md](principles.md) + [vision/biomimetic-architecture.md](vision/biomimetic-architecture.md) + [six-modules.md](six-modules.md)
 
 ### "我要参与长期演化"
 → 加读：[genome.md](genome.md) + [fitness.md](fitness.md) + [gene-locks.md](gene-locks.md) + 全部 protocols/ + [invariants.md](invariants.md)

@@ -557,6 +557,23 @@
         "title": "BrowserDesktopStaleArtifactRejectionBody",
         "type": "object"
       },
+      "CancelLoopRunRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "CancelLoopRunRequest",
+        "type": "object"
+      },
       "CapabilitiesWire": {
         "properties": {
           "browser_automation": {
@@ -715,6 +732,59 @@
           "name"
         ],
         "title": "CreateAgentRequest",
+        "type": "object"
+      },
+      "CreateLoopRunRequest": {
+        "properties": {
+          "background": {
+            "default": false,
+            "title": "Background",
+            "type": "boolean"
+          },
+          "execute": {
+            "default": false,
+            "title": "Execute",
+            "type": "boolean"
+          },
+          "goal": {
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/LoopMode",
+            "default": "code"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LoopPolicy"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "workspace_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Path"
+          }
+        },
+        "required": [
+          "goal"
+        ],
+        "title": "CreateLoopRunRequest",
         "type": "object"
       },
       "CreateTeamInviteRequest": {
@@ -2054,6 +2124,538 @@
         "title": "LocalPartnerWire",
         "type": "object"
       },
+      "LoopAttempt": {
+        "properties": {
+          "attempt_index": {
+            "minimum": 1.0,
+            "title": "Attempt Index",
+            "type": "integer"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "completion_receipt": {
+            "additionalProperties": true,
+            "title": "Completion Receipt",
+            "type": "object"
+          },
+          "error": {
+            "default": "",
+            "title": "Error",
+            "type": "string"
+          },
+          "final_answer": {
+            "default": "",
+            "title": "Final Answer",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "default": "running",
+            "title": "Status",
+            "type": "string"
+          },
+          "success": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success"
+          },
+          "terminated_reason": {
+            "default": "",
+            "title": "Terminated Reason",
+            "type": "string"
+          },
+          "verifier_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifierResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "attempt_index",
+          "prompt"
+        ],
+        "title": "LoopAttempt",
+        "type": "object"
+      },
+      "LoopMode": {
+        "enum": [
+          "code"
+        ],
+        "title": "LoopMode",
+        "type": "string"
+      },
+      "LoopPolicy": {
+        "properties": {
+          "auto_approve": {
+            "default": true,
+            "title": "Auto Approve",
+            "type": "boolean"
+          },
+          "execution_environment": {
+            "default": "local",
+            "title": "Execution Environment",
+            "type": "string"
+          },
+          "max_attempts": {
+            "default": 2,
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Max Attempts",
+            "type": "integer"
+          },
+          "max_iterations": {
+            "default": 8,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Iterations",
+            "type": "integer"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "permission_mode": {
+            "default": "bypassPermissions",
+            "title": "Permission Mode",
+            "type": "string"
+          },
+          "sandbox_mode": {
+            "default": "full",
+            "title": "Sandbox Mode",
+            "type": "string"
+          },
+          "verifier_profile": {
+            "default": "python_repo_patch",
+            "title": "Verifier Profile",
+            "type": "string"
+          }
+        },
+        "title": "LoopPolicy",
+        "type": "object"
+      },
+      "LoopRun": {
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/LoopAttempt"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "cancel_reason": {
+            "default": "",
+            "title": "Cancel Reason",
+            "type": "string"
+          },
+          "cancel_requested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Requested At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "goal": {
+            "minLength": 1,
+            "title": "Goal",
+            "type": "string"
+          },
+          "last_error": {
+            "default": "",
+            "title": "Last Error",
+            "type": "string"
+          },
+          "last_review": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Review"
+          },
+          "last_review_queue_result": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Review Queue Result"
+          },
+          "last_verifier_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifierResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mode": {
+            "$ref": "#/components/schemas/LoopMode",
+            "default": "code"
+          },
+          "origin_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Run Id"
+          },
+          "owner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Id"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LoopPolicy"
+          },
+          "resume_checkpoint_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Checkpoint Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LoopRunStatus",
+            "default": "pending"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Path"
+          }
+        },
+        "required": [
+          "goal"
+        ],
+        "title": "LoopRun",
+        "type": "object"
+      },
+      "LoopRunListResponse": {
+        "properties": {
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/LoopRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "LoopRunListResponse",
+        "type": "object"
+      },
+      "LoopRunRuntimeStateResponse": {
+        "properties": {
+          "attempt_count": {
+            "default": 0,
+            "title": "Attempt Count",
+            "type": "integer"
+          },
+          "cancel_reason": {
+            "default": "",
+            "title": "Cancel Reason",
+            "type": "string"
+          },
+          "cancel_requested": {
+            "default": false,
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "cancel_requested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancel Requested At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "is_running": {
+            "default": false,
+            "title": "Is Running",
+            "type": "boolean"
+          },
+          "last_error": {
+            "default": "",
+            "title": "Last Error",
+            "type": "string"
+          },
+          "origin_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Run Id"
+          },
+          "parent_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Run Id"
+          },
+          "resume_checkpoint_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Checkpoint Id"
+          },
+          "review_available": {
+            "default": false,
+            "title": "Review Available",
+            "type": "boolean"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LoopRunStatus"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          },
+          "workspace_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Path"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "updated_at"
+        ],
+        "title": "LoopRunRuntimeStateResponse",
+        "type": "object"
+      },
+      "LoopRunStatus": {
+        "enum": [
+          "pending",
+          "running",
+          "verifying",
+          "repairing",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "LoopRunStatus",
+        "type": "string"
+      },
+      "LoopRunsOverviewResponse": {
+        "properties": {
+          "active_dispatches": {
+            "default": 0,
+            "title": "Active Dispatches",
+            "type": "integer"
+          },
+          "active_run_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Active Run Ids",
+            "type": "array"
+          },
+          "by_mode": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Mode",
+            "type": "object"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Status",
+            "type": "object"
+          },
+          "reviewed_runs": {
+            "default": 0,
+            "title": "Reviewed Runs",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "title": "LoopRunsOverviewResponse",
+        "type": "object"
+      },
       "LspDiagnosticsRequest": {
         "properties": {
           "path": {
@@ -2411,6 +3013,70 @@
           "deliverable"
         ],
         "title": "ResearchRole",
+        "type": "object"
+      },
+      "RestartLoopRunRequest": {
+        "properties": {
+          "background": {
+            "default": false,
+            "title": "Background",
+            "type": "boolean"
+          },
+          "execute": {
+            "default": false,
+            "title": "Execute",
+            "type": "boolean"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LoopPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reuse_workspace": {
+            "default": true,
+            "title": "Reuse Workspace",
+            "type": "boolean"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thread Id"
+          },
+          "workspace_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workspace Path"
+          }
+        },
+        "title": "RestartLoopRunRequest",
         "type": "object"
       },
       "ResumeTaskBody": {
@@ -3510,6 +4176,88 @@
         "title": "VerifierDriftQueueBody",
         "type": "object"
       },
+      "VerifierFinding": {
+        "properties": {
+          "command": {
+            "default": "",
+            "title": "Command",
+            "type": "string"
+          },
+          "duration_ms": {
+            "default": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "exit_code": {
+            "default": 0,
+            "title": "Exit Code",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "passed": {
+            "default": false,
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "stderr": {
+            "default": "",
+            "title": "Stderr",
+            "type": "string"
+          },
+          "stdout": {
+            "default": "",
+            "title": "Stdout",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "VerifierFinding",
+        "type": "object"
+      },
+      "VerifierResult": {
+        "properties": {
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/VerifierFinding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "kind": {
+            "default": "unknown",
+            "title": "Kind",
+            "type": "string"
+          },
+          "passed": {
+            "default": false,
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile"
+        ],
+        "title": "VerifierResult",
+        "type": "object"
+      },
       "VerifyDetectRequest": {
         "properties": {
           "workspace": {
@@ -4570,7 +5318,6 @@
     },
     "/api/agent-market/enterprise/{asset_id}/install": {
       "post": {
-        "description": "把企业版角色资产导入本地:取 body → scaffold → load+register。",
         "operationId": "install_enterprise_asset_api_agent_market_enterprise__asset_id__install_post",
         "parameters": [
           {
@@ -13220,7 +13967,7 @@
         ]
       },
       "put": {
-        "description": "Admin · toggle identity lock at runtime.\n\n``null`` clears the runtime override and defers to the env var\n/ default. No auth enforced here by design — gate at a higher\nlayer in production deploys.",
+        "description": "Admin · toggle identity lock at runtime.\n\n``null`` clears the runtime override and defers to the env var /\ndefault. Authentication, when enabled, is enforced once at the\nrouter level so every config endpoint stays aligned.",
         "operationId": "api_identity_lock_put_api_config_identity_lock_put",
         "requestBody": {
           "content": {
@@ -16467,6 +17214,57 @@
         ]
       }
     },
+    "/api/evolution/skills/forge-from-task": {
+      "post": {
+        "operationId": "forge_skill_from_task_api_evolution_skills_forge_from_task_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Forge Skill From Task Api Evolution Skills Forge From Task Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forge Skill From Task",
+        "tags": [
+          "evolution-ops"
+        ]
+      }
+    },
     "/api/evolution/skills/history": {
       "get": {
         "operationId": "evolution_skill_history_api_evolution_skills_history_get",
@@ -18795,7 +19593,6 @@
     },
     "/api/invariants": {
       "get": {
-        "description": "Catalog of every rule the running process knows about.\n\nWalks ``sys.modules`` once (then caches) and returns one entry\nper rule id seen on a function's ``__enforces__`` tuple.",
         "operationId": "api_invariants_list_api_invariants_get",
         "responses": {
           "200": {
@@ -18819,7 +19616,6 @@
     },
     "/api/invariants/refresh": {
       "post": {
-        "description": "Invalidate the cache and rebuild the catalog.\n\nUseful after a hot-reload pulls new safety-decorated modules\ninto ``sys.modules`` — without this the cache would still\nreflect the pre-reload snapshot.",
         "operationId": "api_invariants_refresh_api_invariants_refresh_post",
         "responses": {
           "200": {
@@ -18843,7 +19639,6 @@
     },
     "/api/invariants/{rule_id}": {
       "get": {
-        "description": "Return enforcers for a single rule, or 404 if unknown.\n\nShape matches one element of ``GET /api/invariants``'s\n``rules`` array, so frontend code can reuse the same renderer\nfor both list and detail views.",
         "operationId": "api_invariants_detail_api_invariants__rule_id__get",
         "parameters": [
           {
@@ -19511,7 +20306,6 @@
     },
     "/api/local-brain/status": {
       "get": {
-        "description": "Return the plain-language readiness checklist (5 items + summary).\nBest-effort: any probe failure surfaces as that item being not-ok with\na next step, never a 500.",
         "operationId": "api_local_brain_status_api_local_brain_status_get",
         "responses": {
           "200": {
@@ -19530,6 +20324,677 @@
         "summary": "Api Local Brain Status",
         "tags": [
           "local-brain"
+        ]
+      }
+    },
+    "/api/loops": {
+      "get": {
+        "operationId": "api_loop_list_api_loops_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRunListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop List",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/overview": {
+      "get": {
+        "operationId": "api_loop_overview_api_loops_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRunsOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Loop Overview",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/start": {
+      "post": {
+        "operationId": "api_loop_start_api_loops_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLoopRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Start",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}": {
+      "get": {
+        "operationId": "api_loop_get_api_loops__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Get",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/cancel": {
+      "post": {
+        "operationId": "api_loop_cancel_api_loops__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CancelLoopRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Cancel",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/dispatch": {
+      "post": {
+        "operationId": "api_loop_dispatch_api_loops__run_id__dispatch_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Dispatch",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/execute": {
+      "post": {
+        "operationId": "api_loop_execute_api_loops__run_id__execute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Execute",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/replay-case": {
+      "get": {
+        "operationId": "api_loop_replay_case_api_loops__run_id__replay_case_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Loop Replay Case Api Loops  Run Id  Replay Case Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Replay Case",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/replay-evaluation": {
+      "get": {
+        "operationId": "api_loop_replay_evaluation_api_loops__run_id__replay_evaluation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Loop Replay Evaluation Api Loops  Run Id  Replay Evaluation Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Replay Evaluation",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/restart": {
+      "post": {
+        "operationId": "api_loop_restart_api_loops__run_id__restart_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RestartLoopRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Restart",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/resume": {
+      "post": {
+        "operationId": "api_loop_resume_api_loops__run_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RestartLoopRunRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Resume",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/resume-proposal": {
+      "get": {
+        "operationId": "api_loop_resume_proposal_api_loops__run_id__resume_proposal_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Loop Resume Proposal Api Loops  Run Id  Resume Proposal Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Resume Proposal",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/review": {
+      "get": {
+        "operationId": "api_loop_review_api_loops__run_id__review_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Loop Review Api Loops  Run Id  Review Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Review",
+        "tags": [
+          "loops"
+        ]
+      }
+    },
+    "/api/loops/{run_id}/status": {
+      "get": {
+        "operationId": "api_loop_status_api_loops__run_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoopRunRuntimeStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Loop Status",
+        "tags": [
+          "loops"
         ]
       }
     },
@@ -23779,6 +25244,172 @@
         ]
       }
     },
+    "/api/task-runs": {
+      "get": {
+        "operationId": "api_task_runs_api_task_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Runs Api Task Runs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Runs",
+        "tags": [
+          "task-runs"
+        ]
+      }
+    },
+    "/api/task-runs/{task_id}": {
+      "get": {
+        "operationId": "api_task_run_api_task_runs__task_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Run Api Task Runs  Task Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Run",
+        "tags": [
+          "task-runs"
+        ]
+      }
+    },
     "/api/tasks": {
       "get": {
         "operationId": "parallel_list_tasks",
@@ -26742,7 +28373,6 @@
     },
     "/api/wiki/ask": {
       "post": {
-        "description": "Synthesis Q&A over the project wiki — retrieve + compose a cited\nanswer (ADR-009 · gbrain-style). Returns ``{answer, citations, grounded,\nreason?}``; ``grounded=False`` when no model is configured or the wiki\ndoesn't cover the question (no LLM call in those cases).",
         "operationId": "api_wiki_ask_api_wiki_ask_post",
         "requestBody": {
           "content": {
@@ -26788,7 +28418,6 @@
     },
     "/api/wiki/docs": {
       "get": {
-        "description": "Flat WikiDocEntry list · frontend builds the tree via\n``path.split('/')`` so we don't need to pre-structure here.",
         "operationId": "api_wiki_docs_list_api_wiki_docs_get",
         "parameters": [
           {
@@ -26908,7 +28537,6 @@
         ]
       },
       "put": {
-        "description": "Overwrite a generated doc · used by the inline editor in\nthe frontend. Note: edits are lost on next ``generate`` run ·\nthe generator is the source of truth.",
         "operationId": "api_wiki_doc_write_api_wiki_docs__doc_path__put",
         "parameters": [
           {
@@ -26965,7 +28593,6 @@
     },
     "/api/wiki/generate": {
       "post": {
-        "description": "User-triggered generation. For per-project mode (``root``\npassed) we run synchronously since the generic generator is\nbounded (≤2s on typical repos).",
         "operationId": "api_wiki_generate_api_wiki_generate_post",
         "parameters": [
           {
@@ -27017,7 +28644,6 @@
     },
     "/api/wiki/graph": {
       "get": {
-        "description": "Wiki dependency graph (ADR-009): the page nodes + the zero-LLM\npage→page import edges from index.json, for a graph visualiser.",
         "operationId": "api_wiki_graph_api_wiki_graph_get",
         "responses": {
           "200": {
@@ -27041,7 +28667,6 @@
     },
     "/api/wiki/okf-bundle": {
       "get": {
-        "description": "Export the wiki as a portable OKF bundle — a ``tar.gz`` of\n``docs/auto`` (markdown + frontmatter + index.json + edges). The family\nlingua franca (ADR-009): any OKF-aware consumer (Storage, mobile, os)\nfetches and ingests it without a proprietary SDK.",
         "operationId": "api_wiki_okf_bundle_api_wiki_okf_bundle_get",
         "responses": {
           "200": {
@@ -27086,7 +28711,6 @@
     },
     "/api/wiki/settings": {
       "get": {
-        "description": "Per-project wiki settings · currently just the autosync\nflag. ``root`` is required (settings only meaningful in\nper-project mode). The response also reflects whether the\nwatcher is currently running so the UI can show a\n\"watching\" indicator distinct from the persisted flag.\n\nAlso lazy-rehydrates · if autosync is persisted true but the\nwatcher isn't running (e.g. backend restarted), we start it\non the user's next visit. Saves us a separate startup-scan\n(the backend has no canonical list of \"all workspaces\" since\nthe frontend keys those by per-thread localStorage).",
         "operationId": "api_wiki_settings_get_api_wiki_settings_get",
         "parameters": [
           {
@@ -27129,7 +28753,6 @@
         ]
       },
       "post": {
-        "description": "Persist autosync + arm/disarm the file watcher in one call.\n\nWatcher lifecycle is bound to the persisted flag so a backend\nrestart can rehydrate (see ``boot_existing_watchers``). Failure\nto start the watcher (e.g. watchdog uninstalled) does NOT roll\nback the persisted flag · we return ``watching: false`` and let\nthe UI surface \"saved but not actively watching\".",
         "operationId": "api_wiki_settings_set_api_wiki_settings_post",
         "parameters": [
           {
@@ -27186,7 +28809,6 @@
     },
     "/api/wiki/status": {
       "get": {
-        "description": "Frontend consumes ``{exists, status, generated_at, ...}``\nand switches between \"generate CTA\" / \"content shell\".\n\n``root`` (optional, absolute path) routes to the per-project\n``<root>/.octopus-wiki/`` tree. When omitted we fall back to\nOctopus's own ``docs/auto/`` (legacy behaviour for the\nself-documenting use case).",
         "operationId": "api_wiki_status_api_wiki_status_get",
         "parameters": [
           {
@@ -27238,7 +28860,6 @@
     },
     "/api/wiki/update": {
       "post": {
-        "description": "Alias for generate · frontend uses this button when the\nwiki is already present but needs a refresh.",
         "operationId": "api_wiki_update_api_wiki_update_post",
         "parameters": [
           {

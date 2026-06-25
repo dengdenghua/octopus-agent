@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/safety/evolution/fitness.py
+  - runtime/safety/evolution/drift_monitor.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Evolution (再生 / 自进化协议)
 
 > **原则 ④ Variation + Selection** 的具体协议。

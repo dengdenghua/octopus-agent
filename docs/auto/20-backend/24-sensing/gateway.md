@@ -68,6 +68,7 @@ tier: "standard"
 | `journal_router.py` | Journal query router · ``/api/journal/*``. |
 | `local_brain.py` | One-glance local-brain readiness for the work-mode setup wizard. |
 | `local_brain_router.py` | Local-brain setup router · ``/api/local-brain/*``. |
+| `loop_router.py` | — |
 | `lsp_router.py` | Thin HTTP wrapper around the registered LSP skills. |
 | `mcp_router.py` | MCP router · declare / enable / disable MCP servers at runtime. |
 | `memory_router.py` | Local memory compatibility API. |
@@ -112,6 +113,7 @@ tier: "standard"
 | `stub_router.py` | — |
 | `subagents_router.py` | Subagent FastAPI router. |
 | `system_router.py` | System-level local maintenance endpoints. |
+| `task_runs_router.py` | — |
 | `teach_repeat_router.py` | Teach & Repeat API. |
 | `team_role_models_router.py` | Team role-model settings router · ``/api/team/role-models``. |
 | `team_rooms_router.py` | Persistent team rooms API. |

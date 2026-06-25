@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 
@@ -55,11 +55,31 @@ def create_teach_repeat_router(
     *,
     journal: Any = None,
     registry: Any = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.post("/api/teach-repeat/record/start")
-    def start_recording(body: StartRecordingRequest) -> dict[str, Any]:
+    def start_recording(request: Request, body: StartRecordingRequest) -> dict[str, Any]:
+        _auth(request)
         thread_id = body.thread_id.strip()
         if not thread_id:
             raise HTTPException(400, "thread_id is required")
@@ -74,7 +94,8 @@ def create_teach_repeat_router(
         return {"recording": True, "thread_id": thread_id, "name": name}
 
     @router.post("/api/teach-repeat/record/stop")
-    def stop_recording(body: StopRecordingRequest) -> dict[str, Any]:
+    def stop_recording(request: Request, body: StopRecordingRequest) -> dict[str, Any]:
+        _auth(request)
         thread_id = body.thread_id.strip()
         rec = _RECORDINGS.pop(thread_id, None)
         if rec is None:
@@ -135,7 +156,8 @@ def create_teach_repeat_router(
         }
 
     @router.get("/api/teach-repeat/record/status")
-    def recording_status(thread_id: str) -> dict[str, Any]:
+    def recording_status(request: Request, thread_id: str) -> dict[str, Any]:
+        _auth(request)
         rec = _RECORDINGS.get(thread_id)
         if rec is None:
             return {"recording": False, "step_count": 0, "name": ""}
@@ -146,7 +168,14 @@ def create_teach_repeat_router(
         }
 
     @router.get("/api/teach-repeat/templates")
-    def list_templates(skip: int = 0, limit: int = 100, search: str = "", tag: str = "") -> dict[str, Any]:
+    def list_templates(
+        request: Request,
+        skip: int = 0,
+        limit: int = 100,
+        search: str = "",
+        tag: str = "",
+    ) -> dict[str, Any]:
+        _auth(request)
         items = list(_TEMPLATES.values())
         if search:
             needle = search.lower()
@@ -181,14 +210,20 @@ def create_teach_repeat_router(
         }
 
     @router.get("/api/teach-repeat/templates/{template_id}")
-    def get_template(template_id: str) -> dict[str, Any]:
+    def get_template(request: Request, template_id: str) -> dict[str, Any]:
+        _auth(request)
         template = _TEMPLATES.get(template_id)
         if template is None:
             raise HTTPException(404, "Template not found")
         return template
 
     @router.put("/api/teach-repeat/templates/{template_id}")
-    def update_template(template_id: str, body: TemplateUpdateRequest) -> dict[str, Any]:
+    def update_template(
+        request: Request,
+        template_id: str,
+        body: TemplateUpdateRequest,
+    ) -> dict[str, Any]:
+        _auth(request)
         template = _TEMPLATES.get(template_id)
         if template is None:
             raise HTTPException(404, "Template not found")
@@ -202,12 +237,18 @@ def create_teach_repeat_router(
         return template
 
     @router.delete("/api/teach-repeat/templates/{template_id}")
-    def delete_template(template_id: str) -> dict[str, Any]:
+    def delete_template(request: Request, template_id: str) -> dict[str, Any]:
+        _auth(request)
         _TEMPLATES.pop(template_id, None)
         return {"ok": True}
 
     @router.post("/api/teach-repeat/templates/{template_id}/replay")
-    def replay_template(template_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def replay_template(
+        request: Request,
+        template_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _auth(request)
         if template_id not in _TEMPLATES:
             raise HTTPException(404, "Template not found")
         _TEMPLATES[template_id]["use_count"] = int(_TEMPLATES[template_id].get("use_count") or 0) + 1
@@ -224,11 +265,16 @@ def create_teach_repeat_router(
         }
 
     @router.post("/api/teach-repeat/templates/{template_id}/replay/adaptive")
-    def replay_template_adaptive(template_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        return replay_template(template_id, body)
+    def replay_template_adaptive(
+        request: Request,
+        template_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return replay_template(request, template_id, body)
 
     @router.post("/api/teach-repeat/templates/{template_id}/duplicate")
-    def duplicate_template(template_id: str) -> dict[str, Any]:
+    def duplicate_template(request: Request, template_id: str) -> dict[str, Any]:
+        _auth(request)
         template = _TEMPLATES.get(template_id)
         if template is None:
             raise HTTPException(404, "Template not found")

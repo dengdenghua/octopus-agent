@@ -228,7 +228,6 @@
 "cli.exec.running": "正在执行 {n} 步..."
 "cli.swarm.result": "{arm} · {status} · {ms:.1f}ms · ${usd:.4f} · {reason}"
 "cli.budget.display": "预算：{spent}/{limit} tokens · ${usd_spent:.4f} / ${usd_limit:.2f}"
-"cli.cost.display": "Cost breakdown:"
 "cli.cost.row": "{node} {skill} · {tokens:,} tok · ${usd:.4f} · {ms:.1f}ms"
 "cli.cost.total_display": "TOTAL · {tokens:,} tok · ${usd:.4f} · {ms:.1f}ms"
 "cli.cost.budget_pct": "预算使用: {pct:.1f}% ({tokens:,} tokens / ${usd:.2f})"

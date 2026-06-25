@@ -11,7 +11,6 @@ tier: "standard"
 
 ## 后端（Python）
 
-- `bcrypt>=4.0`
 - `pydantic>=2.12.0`
 
 ## 前端（React / Vite）

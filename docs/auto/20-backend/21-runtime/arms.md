@@ -49,6 +49,7 @@ tier: "core"
 - `make_coder_arm_v2`
 - `make_desktop_operator_arm`
 - `make_ecommerce_mind_arm`
+- `make_enterprise_arm`
 - `make_file_arm`
 - `make_general_arm`
 - `make_search_arm`
@@ -60,6 +61,7 @@ tier: "core"
 | Module | Summary |
 | --- | --- |
 | `base.py` | — |
+| `enterprise_cache.py` | Enterprise Arm 本地决策层(Ganglion). |
 | `extension_registry.py` | Dynamic extension registry — hot-pluggable skill registration. |
 | `lazy_loader.py` | Lazy loading patterns — on-demand resource initialization. |
 | `output_buffer.py` | Dual-layer output buffer for shell command output. |

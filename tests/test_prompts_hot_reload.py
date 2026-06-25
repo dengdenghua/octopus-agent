@@ -40,6 +40,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.platform.prompts.registry import PromptRegistry
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.prompts_router import create_prompts_router
 
 # ═══════════════════════════════════════════════════════════
@@ -82,6 +83,21 @@ def client(registry: PromptRegistry) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture
+def secured_client(registry: PromptRegistry) -> tuple[TestClient, dict[str, str]]:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_prompts_router(
+            registry,
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    return TestClient(app), {"Authorization": "Bearer sk-alice"}
+
+
 def _flag_on(monkeypatch: pytest.MonkeyPatch) -> None:
     """Switch ``ui.prompts_hot_reload`` ON and reload the snapshot."""
     from runtime.platform import feature_flags as _ff
@@ -114,6 +130,15 @@ class TestRoundTrip:
         registry.set("system_prompt", "You are Octopus.")
         body = registry.get("system_prompt")
         assert body.startswith("You are Octopus.")
+
+
+def test_prompts_router_requires_auth_when_enabled(
+    secured_client: tuple[TestClient, dict[str, str]],
+) -> None:
+    client, headers = secured_client
+
+    assert client.get("/api/prompts").status_code == 401
+    assert client.get("/api/prompts", headers=headers).status_code == 200
 
     def test_set_writes_md_file_to_disk(
         self, registry: PromptRegistry, prompts_dir: Path,

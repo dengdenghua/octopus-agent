@@ -15,11 +15,9 @@ CORE_DOCS = (
     "docs/index.md",
     "docs/GOLDEN_PATH.md",
     "docs/CONCEPTS.md",
-    "docs/architecture.md",
+    "docs/guide/architecture.md",
     "docs/architecture/core-path.md",
-    "docs/main-path-audit.md",
-    "docs/self-evolution-min-loop.md",
-    "docs/engineering-hygiene-plan.md",
+    "docs/implementation-status.md",
 )
 
 MOJIBAKE_MARKERS = (

@@ -190,6 +190,37 @@ class TestArtifactServe:
         assert r.status_code == 200
         assert r.content == b"hello from artifact"
 
+    def test_absolute_path_inside_thread_upload_root_still_serves(
+        self, client: TestClient, isolated_cwd: Path,
+    ) -> None:
+        client.post(
+            "/api/threads/art_abs/uploads",
+            files={"files": ("a.txt", b"hello from artifact", "text/plain")},
+        )
+        absolute = (
+            isolated_cwd
+            / "data"
+            / "workspaces"
+            / "art_abs"
+            / "upload"
+            / "a.txt"
+        ).resolve()
+
+        r = client.get(f"/api/threads/art_abs/artifacts/{absolute}")
+
+        assert r.status_code == 200
+        assert r.content == b"hello from artifact"
+
+    def test_absolute_path_outside_thread_upload_root_returns_404(
+        self, client: TestClient, isolated_cwd: Path,
+    ) -> None:
+        secret = isolated_cwd / "secret.txt"
+        secret.write_text("nope", encoding="utf-8")
+
+        r = client.get(f"/api/threads/art_abs/artifacts/{secret.resolve()}")
+
+        assert r.status_code == 404
+
     def test_missing_artifact_returns_404(
         self, client: TestClient,
     ) -> None:

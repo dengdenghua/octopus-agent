@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from runtime.execution.suckers import computer_skills, computer_uia_skills
 from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.safety.replay.browser_desktop_replay import computer_activity_replay_identity
 from runtime.sensing.gateway.computer_router import create_computer_router
 
@@ -97,6 +98,19 @@ def _app() -> FastAPI:
     return app
 
 
+def _secured_app() -> FastAPI:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_computer_router(
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    return app
+
+
 def test_uia_status_endpoint_reports_unavailable(monkeypatch):
     monkeypatch.setattr(platform, "system", lambda: "Windows")
     monkeypatch.setattr(computer_uia_skills, "UIA_AVAILABLE", False)
@@ -107,6 +121,16 @@ def test_uia_status_endpoint_reports_unavailable(monkeypatch):
     assert data["ok"] is False
     assert data["available"] is False
     assert "uiautomation not installed" in data["error"]
+
+
+def test_router_requires_auth_when_enabled() -> None:
+    client = TestClient(_secured_app())
+
+    assert client.get("/api/computer/status").status_code == 401
+    assert client.get(
+        "/api/computer/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    ).status_code == 200
 
 
 def test_uia_tree_and_find_endpoints(monkeypatch):

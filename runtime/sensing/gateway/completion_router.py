@@ -12,11 +12,13 @@ import logging
 from typing import Any
 
 try:
-    from fastapi import APIRouter
+    from fastapi import APIRouter, HTTPException, Request
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    HTTPException = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
 
 _logger = logging.getLogger(__name__)
 
@@ -37,14 +39,36 @@ def _build_prompt(prefix: str, suffix: str, language: str) -> str:
     )
 
 
-def create_completion_router() -> Any:
+def create_completion_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
     router = APIRouter(tags=["completion"])
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.post("/api/complete")
-    async def complete(body: dict[str, Any]) -> dict[str, Any]:
+    async def complete(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+        _auth(request)
         prefix = body.get("prefix", "")
         suffix = body.get("suffix", "")
         language = body.get("language", "")

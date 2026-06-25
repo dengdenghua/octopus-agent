@@ -38,7 +38,7 @@ HTTP request
 > **默认路径 vs 条件路径（避免误读）**
 > 一次**普通对话轮次**实际走的是**中心化 ReAct loop**（`_drive_react`，见 `runtime/sensing/gateway/realtime_turn_lifecycle.py`）——Cerebrum 直接驱动 Arms/Beak，并不一定经过 Ganglia 的多节点图调度。
 > 上面图里的 **GraphRuntime / SwarmRuntime（Ganglia 多臂并行 + 腕间 SignalBus）** 是**按条件启用的次路径**：仅当任务是多代理 / 图编排 / 团队协作（`_drive_swarm_mesh` / `_drive_team_topology`）时才激活。
-> 同理 **Hearts 三心 HA**：fencing 租约 + etcd/redis 选举 + 每通道熔断**已实装**，但单机默认回退到 `_AlwaysLeaderGuard`，多节点互备需显式部署协调器。
+> 同理 **Hearts 双循环隔离**：fencing 租约 + etcd/redis 选举 + 每通道熔断**已实装**，但单机默认回退到 `_AlwaysLeaderGuard`，多节点互备需显式部署协调器。
 > 一句话:**这些分布式器官"代码已具备、机制可用",但默认运行拓扑是中心化 ReAct;mesh/HA 是条件启用,不是"未实装"。**
 
 ---
@@ -115,4 +115,4 @@ Beak 每次 `execute_step` 都会经过这 3 个关卡：
 
 ## 一句话总结
 
-> **仿生是设计灵感，不是架构枷锁。** 主路径 Cerebrum → Ganglia → Arms → Suckers → Beak，治理 Immunity + Ink + Genome，其余按需读。20 个器官，8 个是核心。
+> **仿生是设计灵感，不是架构枷锁。** 主路径 Cerebrum → Ganglia → Arms → Suckers → Beak，治理 Immunity + Ink + Genome，其余按需读。22 个器官，8 个是核心。

@@ -3225,7 +3225,11 @@ def register_delegation_skills(registry: SkillRegistry) -> int:
         ),
         replace=True,
     )
-    return 5
+    # 8 delegation/orchestration skills registered above (call_agent,
+    # call_agent_parallel, call_agent_vote, run_orchestration,
+    # verdict_repair, tournament, cli_team, run_pipeline). Bump when adding
+    # another — the count had drifted to a stale 5.
+    return 8
 
 
 __all__ = ["register_delegation_skills"]

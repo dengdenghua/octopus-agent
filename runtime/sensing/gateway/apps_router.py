@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from runtime.execution.misc.agent_packs import scan_agent_pack
 from runtime.platform.process.paths import project_root
@@ -76,8 +76,28 @@ def discover_apps(roots: list[Path] | None = None) -> list[dict[str, Any]]:
     return sorted(apps.values(), key=lambda item: str(item["name"]).lower())
 
 
-def create_apps_router(*, app_roots: list[Path] | None = None) -> APIRouter:
-    router = APIRouter(tags=["apps"])
+def create_apps_router(
+    *,
+    app_roots: list[Path] | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
+    def _auth_dep(request: Request) -> None:
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["apps"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/apps")
     def _apps() -> list[dict[str, Any]]:

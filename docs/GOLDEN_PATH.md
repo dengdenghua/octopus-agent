@@ -120,5 +120,5 @@ Do not start by reading the biomimetic architecture. Start with the work trace.
 
 - Plain concepts: [CONCEPTS.md](CONCEPTS.md)
 - Setup details: [getting-started.md](getting-started.md)
-- Architecture: [architecture.md](architecture.md)
+- Architecture: [guide/architecture.md](guide/architecture.md)
 - Naming rules: [naming.md](naming.md)

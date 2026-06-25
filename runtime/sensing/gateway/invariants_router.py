@@ -48,13 +48,14 @@ import threading
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException
+    from fastapi import APIRouter, HTTPException, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
 
 
 # ═══════════════════════════════════════════════════════════
@@ -220,7 +221,15 @@ def _invalidate_cache() -> None:
 # ═══════════════════════════════════════════════════════════
 
 
-def create_invariants_router(*, stack: Any = None) -> Any:
+def create_invariants_router(
+    *,
+    stack: Any = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     """Build the FastAPI router for the invariants catalog.
 
     Parameters
@@ -239,6 +248,20 @@ def create_invariants_router(*, stack: Any = None) -> Any:
 
     router = APIRouter(tags=["invariants"])
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     def _format_catalog() -> dict[str, Any]:
         rules_map = _build_or_get_cache()
         rule_ids_sorted = sorted(rules_map.keys())
@@ -254,7 +277,8 @@ def create_invariants_router(*, stack: Any = None) -> Any:
         }
 
     @router.get("/api/invariants")
-    def api_invariants_list() -> dict[str, Any]:
+    def api_invariants_list(request: Request) -> dict[str, Any]:
+        _auth(request)
         """Catalog of every rule the running process knows about.
 
         Walks ``sys.modules`` once (then caches) and returns one entry
@@ -263,7 +287,8 @@ def create_invariants_router(*, stack: Any = None) -> Any:
         return _format_catalog()
 
     @router.get("/api/invariants/{rule_id}")
-    def api_invariants_detail(rule_id: str) -> dict[str, Any]:
+    def api_invariants_detail(request: Request, rule_id: str) -> dict[str, Any]:
+        _auth(request)
         """Return enforcers for a single rule, or 404 if unknown.
 
         Shape matches one element of ``GET /api/invariants``'s
@@ -279,7 +304,8 @@ def create_invariants_router(*, stack: Any = None) -> Any:
         }
 
     @router.post("/api/invariants/refresh")
-    def api_invariants_refresh() -> dict[str, Any]:
+    def api_invariants_refresh(request: Request) -> dict[str, Any]:
+        _auth(request)
         """Invalidate the cache and rebuild the catalog.
 
         Useful after a hot-reload pulls new safety-decorated modules

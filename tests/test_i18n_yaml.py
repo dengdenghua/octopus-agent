@@ -241,5 +241,41 @@ class TestDetectLang(unittest.TestCase):
                 os.environ["LANG"] = saved
 
 
+class TestLocaleParity(unittest.TestCase):
+    """All locale YAML files must expose the same set of cli.* keys.
+
+    Only the ``cli.*`` namespace is auto-extracted from the codebase and
+    must be parity-checked. ``safety.relax_markers_*`` are intentionally
+    locale-specific (union-ed at runtime), and ``common.*`` may have
+    minor cross-locale drift.
+    """
+
+    def setUp(self) -> None:
+        reload_locales()
+
+    def test_all_locales_have_identical_cli_keys(self) -> None:
+        import yaml
+
+        from runtime.platform import i18n as i18n_mod
+
+        locale_dir = i18n_mod._LOCALE_DIR
+        locales = ["en", "zh-CN", "ja", "ko"]
+        key_sets: dict[str, set[str]] = {}
+        for loc in locales:
+            path = locale_dir / f"{loc}.yaml"
+            with path.open(encoding="utf-8") as f:
+                data = yaml.safe_load(f) or {}
+            key_sets[loc] = {k for k in data if k.startswith("cli.")}
+
+        en_keys = key_sets["en"]
+        for loc, keys in key_sets.items():
+            self.assertEqual(
+                keys,
+                en_keys,
+                f"locale '{loc}' cli.* key set differs from 'en': "
+                f"missing={en_keys - keys} extra={keys - en_keys}",
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

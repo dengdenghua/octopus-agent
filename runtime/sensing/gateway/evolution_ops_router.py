@@ -262,6 +262,68 @@ def create_evolution_ops_router(
     def evolution_skill_performance() -> list[dict[str, Any]]:
         return _skill_performance_rows(journal, registry)
 
+    @router.post("/api/evolution/skills/forge-from-task")
+    def forge_skill_from_task(body: dict[str, Any] | None = None) -> dict[str, Any]:
+        task_id = str((body or {}).get("task_id") or "").strip()
+        if not task_id:
+            return {
+                "ok": False,
+                "status": "missing_task_id",
+                "promoted": [],
+                "quarantined": [],
+            }
+        if journal is None or registry is None:
+            return {
+                "ok": False,
+                "status": "no_runtime",
+                "task_id": task_id,
+                "promoted": [],
+                "quarantined": [],
+            }
+
+        try:
+            from runtime.memory.journal.journal import TrajectoryEvent
+            from runtime.safety.recovery.skill_forge import SkillForge
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(503, f"forge unavailable: {exc}") from exc
+
+        trajectories = [
+            event.trajectory
+            for event in journal.read_by_type("trajectory")
+            if isinstance(event, TrajectoryEvent)
+            and str(getattr(event.trajectory, "task_id", "")) == task_id
+            and getattr(event.trajectory.outcome, "success", False)
+        ]
+        if not trajectories:
+            return {
+                "ok": False,
+                "status": "no_successful_trajectory",
+                "task_id": task_id,
+                "promoted": [],
+                "quarantined": [],
+                "step_count": 0,
+            }
+
+        result = SkillForge(journal=journal, registry=registry).forge_selected(trajectories)
+        status = (
+            "promoted"
+            if result.promoted
+            else "quarantined"
+            if result.quarantined
+            else "shadow_failed"
+            if result.shadow_failed
+            else "no_candidate"
+        )
+        return {
+            "ok": bool(result.promoted),
+            "status": status,
+            "task_id": task_id,
+            "promoted": list(result.promoted),
+            "quarantined": list(result.quarantined),
+            "candidates_total": result.candidates_total,
+            "step_count": sum(trajectory.step_count for trajectory in trajectories),
+        }
+
     @router.get("/api/evolution/memory/growth")
     def evolution_memory_growth(
         days: int = Query(default=30, ge=1, le=365),

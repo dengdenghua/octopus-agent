@@ -337,6 +337,11 @@ def run_serve(
         logging.getLogger(__name__).debug("channel manager init failed: %s", exc)
         channel_manager = None
 
+    require_ui_auth = bool(
+        getattr(getattr(cfg, "molili", None), "enabled", False)
+        or getattr(getattr(cfg, "local_auth", None), "enabled", False)
+    )
+
     app = create_app(
         journal=stack.journal,
         registry=stack.registry,
@@ -346,6 +351,7 @@ def run_serve(
         channel_manager=channel_manager,
         molili_config=cfg.molili,
         local_auth_config=cfg.local_auth,
+        cocoloop_require_auth=require_ui_auth,
     )
     try:
         from runtime.cli_core import _build_reflex_router

@@ -5,6 +5,7 @@ from runtime.core.graph_runtime import GraphRuntime
 from runtime.platform.models import ArmId, SkillId
 
 from .base import Worker
+from .enterprise_cache import EnterpriseDecisionCache
 
 # ═══════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════
@@ -40,6 +41,11 @@ Android for web automation. You favor stable selectors, respect anti-bot \
 boundaries, and check page-load state before interacting. When a flow breaks, \
 you describe what you saw and propose a different selector strategy rather \
 than retrying blindly."""
+
+_ENTERPRISE_SOUL = """You are an enterprise operations coordinator. \
+You read task, approval, and people context before acting, prefer auditable \
+state transitions, and keep local cached context useful when enterprise \
+services are temporarily unavailable."""
 
 #
 
@@ -95,7 +101,7 @@ _SHELL_EXEC = [
 ]
 
 # Octopus Mobile · Phase 0 概念验证
-# 详见 docs/mobile/skills.md 与 docs/adr/008-octopus-mobile.md
+# 详见 docs/mobile/skills.md 与 docs/adr/011-octopus-mobile.md
 _MOBILE_OPS = [
     # 基础操作
     SkillId("android.tap"),
@@ -143,6 +149,16 @@ _MOBILE_BROWSER_OPS = [
     SkillId("android.browser.type"),
     SkillId("android.browser.screenshot"),
     SkillId("android.browser.evaluate"),
+]
+
+_ENTERPRISE_OPS = [
+    SkillId("enterprise.list_tasks"),
+    SkillId("enterprise.create_task"),
+    SkillId("enterprise.update_task"),
+    SkillId("enterprise.list_approvals"),
+    SkillId("enterprise.approve_request"),
+    SkillId("enterprise.reject_request"),
+    SkillId("enterprise.list_persons"),
 ]
 
 
@@ -258,7 +274,7 @@ def make_desktop_operator_arm(runtime: GraphRuntime) -> Worker:
 
 # ═══════════════════════════════════════════════════════════
 #  Octopus Mobile · 移动操作 Arm（Phase 0 概念验证）
-#  详见 docs/mobile/architecture.md 与 docs/adr/008-octopus-mobile.md
+#  详见 docs/mobile/architecture.md 与 docs/adr/011-octopus-mobile.md
 # ═══════════════════════════════════════════════════════════
 
 
@@ -304,6 +320,25 @@ def make_mobile_browser_operator_arm(runtime: GraphRuntime) -> Worker:
         ),
         soul=_MOBILE_BROWSER_OPERATOR_SOUL,
         icon="🌐",
+    )
+
+
+def make_enterprise_arm(runtime: GraphRuntime) -> Worker:
+    cache = EnterpriseDecisionCache()
+    cache.start()
+    return Worker(
+        arm_id=ArmId("enterprise_arm"),
+        affinity=["enterprise", "approval", "workflow", "people", "task"],
+        allowed_skills=[*_ENTERPRISE_OPS],
+        runtime=runtime,
+        display_name="Enterprise Arm",
+        description=(
+            "Enterprise operations arm with a local Ganglion decision cache "
+            "for tasks, approvals, and people data."
+        ),
+        soul=_ENTERPRISE_SOUL,
+        icon="🏢",
+        decision_cache=cache,
     )
 
 

@@ -18,13 +18,15 @@ import os
 from typing import Any
 
 try:
-    from fastapi import APIRouter
+    from fastapi import APIRouter, Depends, Request
     from pydantic import BaseModel
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
 
@@ -33,12 +35,35 @@ class CliTeamRunRequest(BaseModel):
     repo_root: str | None = None
 
 
-def create_cli_team_router() -> Any:
+def create_cli_team_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     """Build + return the router. ``app.include_router(create_cli_team_router())``."""
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
-    router = APIRouter(tags=["cli-team"])
+    def _auth_dep(request: Request) -> None:
+        # The CLI-team panel can spawn external coding CLIs across
+        # isolated worktrees. That is operator-only surface area in
+        # deployed mode, while local dev keeps the old friction-free
+        # behavior when require_auth=False.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["cli-team"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/cli-team/status")
     def api_cli_team_status() -> dict[str, Any]:

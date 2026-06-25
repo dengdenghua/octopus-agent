@@ -13,7 +13,7 @@ Start here:
 - [quick start](QUICKSTART.md)
 - [concept map](docs/CONCEPTS.md)
 - [root layout](ROOT_LAYOUT.md)
-- [architecture](docs/architecture.md)
+- [architecture](docs/guide/architecture.md)
 
 Chinese readers: [README.md](README.md)
 

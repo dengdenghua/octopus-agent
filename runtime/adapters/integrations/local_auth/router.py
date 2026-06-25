@@ -143,6 +143,8 @@ def create_local_auth_router(
             }
             if config.jwt_issuer:
                 claims["iss"] = config.jwt_issuer
+            if config.jwt_audience:
+                claims["aud"] = config.jwt_audience
             access_token = encode_jwt_hs256(claims, secret=config.jwt_secret)
             expires_in = config.jwt_expire_seconds
 
@@ -186,6 +188,7 @@ def create_local_auth_router(
             require_auth=True,
             jwt_secret=config.jwt_secret,
             jwt_issuer=config.jwt_issuer,
+            jwt_audience=config.jwt_audience,
         )
         if not actor:
             raise HTTPException(401, "not authenticated")

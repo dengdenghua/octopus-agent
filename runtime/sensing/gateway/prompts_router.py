@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from runtime.platform.prompts.registry import PromptRegistry
 
@@ -45,13 +45,33 @@ def _require_flag() -> None:
         )
 
 
-def create_prompts_router(registry: PromptRegistry) -> APIRouter:
+def create_prompts_router(
+    registry: PromptRegistry,
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
     """Factory.  Bind a router to a specific ``PromptRegistry`` instance.
 
     Tests inject an in-tmp-dir registry; production wires the
     application-wide one.
     """
-    router = APIRouter()
+    def _auth_dep(request: Request) -> None:
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/prompts")
     def list_prompts() -> dict[str, Any]:
