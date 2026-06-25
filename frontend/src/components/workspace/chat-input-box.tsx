@@ -233,7 +233,7 @@ export function ChatInputBox({
   permissionMode,
   codeModeUnlocked = false,
   projectAgentMode = "develop",
-  projectDetection,
+  projectDetection: _projectDetection,
   reasoningEffort,
   partnerId,
   partnerModel,
@@ -362,7 +362,7 @@ export function ChatInputBox({
   const hasWorkDir = Boolean(workDir?.trim());
   const showModeSegment = isProjectMode;
   const showWorkDirSegment = isProjectMode || hasWorkDir;
-  const isDefaultGeneralAgent =
+  const _isDefaultGeneralAgent =
     !hasWorkDir &&
     !isProjectMode &&
     (displayAgentName === "general" || displayAgentLabel === "Agent");

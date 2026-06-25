@@ -24,7 +24,6 @@ import {
   type AgentPhase,
   type AgentPhaseStatus,
 } from "./agent-phases";
-import type { LiveToolEvent } from "./live-tool-timeline";
 import {
   pickCurrentWorkBlock,
   type WorkBlock,

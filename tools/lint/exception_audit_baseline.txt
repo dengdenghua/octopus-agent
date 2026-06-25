@@ -3,5 +3,5 @@
 # When you justify a site (add a noqa or logger line), DELETE it
 # here. New silent swallows not on this list will fail strict mode.
 
-runtime/execution/suckers/builtins.py:321
-runtime/sensing/siphon/agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/ib-check-deck/scripts/extract_numbers.py:151
+runtime/execution/suckers/builtins.py:322
+runtime/sensing/gateway/agent_market_sources/financial-services/agent-plugins/pitch-agent/skills/ib-check-deck/scripts/extract_numbers.py:151

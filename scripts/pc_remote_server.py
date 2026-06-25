@@ -17,8 +17,9 @@ import logging
 import struct
 import sys
 from fractions import Fraction
+from pathlib import Path
 
-sys.path.insert(0, "/Users/dangbei/Public/octopus/octopus-agent")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import mss  # noqa: E402
 import pyautogui  # noqa: E402
 from PIL import Image  # noqa: E402

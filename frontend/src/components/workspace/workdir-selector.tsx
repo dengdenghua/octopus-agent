@@ -248,7 +248,7 @@ export function WorkDirSelector({
   const triggerTitle = isEmpty
     ? emptyTriggerLabel
     : `${t.codeMode.chooseWorkspaceFolder}: ${workDir}`;
-  const menuToggleTitle = isMutedVariant
+  const _menuToggleTitle = isMutedVariant
     ? t.codeMode.chooseWorkspaceFolder
     : t.codeMode.recentWorkspaces;
   const emptyTriggerClass = isMutedVariant
@@ -438,7 +438,7 @@ export function WorkDirSelector({
     const rect = containerRef.current.getBoundingClientRect();
     const targetWidth = isMutedVariant ? 136 : MENU_WIDTH;
     const minWidth = isMutedVariant ? 128 : 280;
-    const estimatedHeight = isMutedVariant ? 56 : 260;
+    const _estimatedHeight = isMutedVariant ? 56 : 260;
     const minHeight = isMutedVariant ? 48 : 240;
     const width = Math.min(
       targetWidth,
