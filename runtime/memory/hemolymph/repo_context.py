@@ -107,11 +107,43 @@ _BM25_B = 0.75
 _RRF_K = 60  # standard RRF damping
 _FUSION_POOL = 12  # lexical top-N handed to the semantic lane (bounds embed cost)
 _GRAPH_SEEDS = 3  # top lexical hits whose import-neighbours seed the graph lane
+_RERANK_POOL = 8  # fused top-N a real reranker (Cohere) reorders, when configured
 
 # Source-tier boost (ADR-009): a core subsystem page outranks an equally-relevant
 # peripheral one. Multiplicative on the BM25 score, small. Tier comes from the
 # page's OKF frontmatter; absent/unknown → 1.0 (no effect).
 _TIER_WEIGHT = {"core": 1.15, "standard": 1.0}
+
+
+def _maybe_rerank(
+    query: str, scored: list[tuple[float, dict[str, Any]]]
+) -> list[tuple[float, dict[str, Any]]]:
+    """Final stage (ADR-009): a real cross-encoder reorders the fused top-pool.
+
+    Uses octopus's own ``research.rerank`` (Cohere Rerank v3 when COHERE_API_KEY
+    is set). Gated on the key because rerank's zero-dep BM25 backend would just
+    echo the lexical lane. Dormant + free otherwise; never breaks retrieval."""
+    if len(scored) < 2 or not os.environ.get("COHERE_API_KEY"):
+        return scored
+    pool = scored[:_RERANK_POOL]
+    sources = [
+        {"url": p["path"], "title": p["title"], "content": (p["body"] or "")[:2000]}
+        for _s, p in pool
+    ]
+    try:
+        # Import the function from the submodule explicitly — runtime.research
+        # re-exports ``rerank`` as a name, so ``from runtime.research import
+        # rerank`` would shadow the module with the function.
+        from runtime.research.rerank import rerank as _rerank_fn
+
+        result = _rerank_fn(query, sources)
+    except Exception:  # noqa: BLE001 — reranking must never break retrieval
+        return scored
+    if result.backend != "cohere":  # fell back to bm25 (no key / network) → keep
+        return scored
+    by_path = {p["path"]: (s, p) for s, p in pool}
+    reranked = [by_path[h.source.url] for h in result.hits if h.source.url in by_path]
+    return reranked + scored[_RERANK_POOL:] if reranked else scored
 
 
 def _rrf(rankings: list[list[str]], k: int = _RRF_K) -> dict[str, float]:
@@ -419,6 +451,8 @@ def retrieve_repo_context(
         ((fused.get(p["path"], 0.0), p) for _s, p in lexical),
         key=lambda sp: (-sp[0], sp[1]["path"]),
     )
+    # Optional final cross-encoder rerank (dormant unless COHERE_API_KEY is set).
+    scored = _maybe_rerank(query, scored)
 
     # ~4 chars/token; split the body budget across the chosen pages.
     per_page_chars = max(400, (budget_tokens * 4) // max(1, max_pages))

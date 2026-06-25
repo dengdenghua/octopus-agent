@@ -325,6 +325,46 @@ def test_semantic_lane_off_without_embedder(tmp_path: Path, monkeypatch) -> None
     assert [s["path"] for s in sink] == ["a.md", "b.md", "c.md"]
 
 
+def test_reranker_reorders_when_cohere_configured(tmp_path: Path, monkeypatch) -> None:
+    # Three pages tie on BM25 → fused order is path-sorted [a, b, c]. With a real
+    # reranker configured (COHERE_API_KEY), the cross-encoder reorders them
+    # [c, a, b] and that becomes the final order.
+    import importlib
+
+    _rr_mod = importlib.import_module("runtime.research.rerank")  # the module, not the re-export
+    auto = _make_wiki(
+        tmp_path,
+        [("Alpha", "a.md", "planner"), ("Beta", "b.md", "planner"), ("Gamma", "c.md", "planner")],
+    )
+    monkeypatch.setenv("COHERE_API_KEY", "test-key")
+
+    class _Src:
+        def __init__(self, url: str) -> None:
+            self.url = url
+
+    class _Hit:
+        def __init__(self, url: str) -> None:
+            self.source = _Src(url)
+
+    class _Res:
+        backend = "cohere"
+        hits = [_Hit("c.md"), _Hit("a.md"), _Hit("b.md")]
+
+    monkeypatch.setattr(_rr_mod, "rerank", lambda query, sources, **k: _Res())
+    sink: list[dict[str, str]] = []
+    retrieve_repo_context("planner", wiki_dir=auto, max_pages=3, _sink=sink)
+    assert [s["path"] for s in sink] == ["c.md", "a.md", "b.md"]
+
+
+def test_reranker_skipped_without_cohere(tmp_path: Path, monkeypatch) -> None:
+    # No COHERE_API_KEY → reranker dormant → plain fused (lexical) order.
+    monkeypatch.delenv("COHERE_API_KEY", raising=False)
+    auto = _make_wiki(tmp_path, [("Alpha", "a.md", "planner"), ("Beta", "b.md", "planner")])
+    sink: list[dict[str, str]] = []
+    retrieve_repo_context("planner", wiki_dir=auto, max_pages=2, _sink=sink)
+    assert [s["path"] for s in sink] == ["a.md", "b.md"]
+
+
 def test_real_wiki_smoke() -> None:
     # the repo ships a generated wiki under docs/auto
     out = retrieve_repo_context("cerebrum planner tool engine skills", wiki_dir="docs/auto")

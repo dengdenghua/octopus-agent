@@ -190,9 +190,17 @@ Phased, with the cheapest validation first:
   rules from the journal and runs `MemoryConsolidator` / SkillForge / KG-updater
   — the autonomous-consolidation role gbrain's dream cycle plays. We do not
   duplicate it.
-- **Still out (genuine boundaries):** a cross-encoder **reranker** (needs a
-  cross-encoder model service), the **graph-visualisation UI** (frontend), and
-  the **cross-repo Storage OKF export** (a different repo).
+- **Reranker — DONE (2026-06-24): gated cross-encoder rerank stage.**
+  `repo_context` adds a final `_maybe_rerank` stage that reorders the fused
+  top-pool through octopus's own `research.rerank` — its **Cohere Rerank v3**
+  cross-encoder backend when `COHERE_API_KEY` is set. Gated on the key (rerank's
+  zero-dep BM25 backend would just echo the lexical lane), wrapped so it never
+  breaks retrieval, and pinned by `tests/test_repo_context.py`. (Fixed en route:
+  `runtime.research` re-exports `rerank`, so the import had to come from the
+  submodule or it silently no-op'd.)
+- **Still out (genuine boundaries):** the **graph-visualisation UI** (frontend)
+  and the **cross-repo Storage OKF export** (a different repo) — both being
+  taken up next.
 
 ## Alternatives considered
 
