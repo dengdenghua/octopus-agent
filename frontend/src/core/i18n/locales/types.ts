@@ -200,6 +200,8 @@ export interface Translations {
     revertSuccess: (n: number) => string;
     revertFailed: string;
     reviewAssigned: (label: string) => string;
+    taskCompleted: string;
+    taskOutputs: string;
     artifactsSummary: string;
     changesSummary: string;
     auditActions: string;
@@ -324,7 +326,6 @@ export interface Translations {
     projectStatusTitle: string;
     projectStatusDescUnlocked: string;
     projectStatusDescLocked: string;
-    projectVerificationLabel: string;
     permissionFullAccess: string;
     permissionAcceptEdits: string;
     permissionConfirm: string;
@@ -453,6 +454,13 @@ export interface Translations {
     viewProcessSummary: string;
     viewNSavedSteps: (n: number) => string;
     countItems: (n: number) => string;
+    liveProcess: string;
+    liveProcessRunning: string;
+    liveProcessWaiting: string;
+    liveProcessError: string;
+    liveProcessDone: string;
+    liveProcessPending: string;
+    liveProcessHistory: (n: number) => string;
     reasoningFallback: string;
     callTeammate: string;
     searchSources: string;
@@ -1166,6 +1174,7 @@ export interface Translations {
     navMcp: string;
     navStore: string;
     navEvolution: string;
+    navReplay: string;
     navPlugins: string;
     navHR: string;
     navComputer: string;
@@ -1192,6 +1201,8 @@ export interface Translations {
     lockedAgentTooltip: (name: string) => string;
     adminAgentName: string;
     switchAgentLabel: string;
+    switchAgentMenuTitle: string;
+    openAgentHud: string;
     currentAgent: string;
     soloChat: string;
     localCliPartners: string;
@@ -2419,12 +2430,16 @@ export interface Translations {
       materialLiquid: string;
       materialLiquidDescription: string;
       materialIntensityTitle: string;
+      materialIntensityCrystal: string;
+      materialIntensityCrystalDescription: string;
       materialIntensityClear: string;
       materialIntensityClearDescription: string;
       materialIntensityBalanced: string;
       materialIntensityBalancedDescription: string;
       materialIntensityDeep: string;
       materialIntensityDeepDescription: string;
+      materialIntensityFrosted: string;
+      materialIntensityFrostedDescription: string;
       languageTitle: string;
       languageDescription: string;
       languageEnglish: string;
@@ -2443,8 +2458,11 @@ export interface Translations {
       cornerPill: string;
       uiDensityTitle: string;
       uiDensityDescription: string;
+      densityRelaxed: string;
       densityComfortable: string;
       densityCompact: string;
+      densityDense: string;
+      densityUltraDense: string;
     };
     tools: {
       title: string;
@@ -2931,6 +2949,7 @@ export interface Translations {
       marketTab: string;
       localTitle: string;
       localDesc: string;
+      catalogCount: (count: number) => string;
       searchAria: string;
       searchPlaceholder: string;
       loading: string;
@@ -3319,6 +3338,7 @@ export interface Translations {
     tabBar: {
       close: string;
       newTab: string;
+      homeTabShort: string;
     };
     urlBar: {
       back: string;
@@ -3368,6 +3388,15 @@ export interface Translations {
       openBrowserExtensions: string;
       extensionsLabel: string;
       aiAssistant: string;
+      moreActions: string;
+      pageActions: string;
+      findInPage: string;
+      findPrompt: string;
+      zoom: string;
+      zoomOut: string;
+      zoomIn: string;
+      resetZoom: string;
+      devicePreview: string;
     };
   };
 
@@ -3442,6 +3471,10 @@ export interface Translations {
     deselectTitle: string;
     failureCount: (count: number) => string;
     coordinateCount: (count: number) => string;
+    attachScreenshotToComposer: string;
+    attachScreenshotSource: string;
+    attachScreenshotSuccess: string;
+    attachScreenshotFailed: string;
   };
 
   // Browser Home
@@ -3486,9 +3519,10 @@ export interface Translations {
     categoryDev: string;
     switchSearchEngine: string;
     commonCategories: string;
-    bookmarksLabel: string;
-    bookmarkCount: (count: number) => string;
     recentVisits: string;
+    recentVisitCount: (count: number) => string;
+    historyOnly: string;
+    noRecentVisits: string;
     commonEntries: string;
     addToDock: string;
     todoPlaceholder: string;
@@ -3531,22 +3565,61 @@ export interface Translations {
   modes: {
     builder: string;
     coder: string;
+    develop: string;
+    audit: string;
+    uxui: string;
     architect: string;
+    ultra: string;
     teamCoder: string;
     admin: string;
     builderTooltip: string;
     coderTooltip: string;
+    developTooltip: string;
+    auditTooltip: string;
+    uxuiTooltip: string;
     architectTooltip: string;
+    ultraTooltip: string;
     teamCoderTooltip: string;
     adminTooltip: string;
     builderDesc: string;
     coderDesc: string;
+    developDesc: string;
+    auditDesc: string;
+    uxuiDesc: string;
     architectDesc: string;
+    ultraDesc: string;
+    builderEffect: string;
+    coderEffect: string;
+    developEffect: string;
+    auditEffect: string;
+    uxuiEffect: string;
+    architectEffect: string;
+    ultraEffect: string;
+    strategyNote: string;
+    autoShort: string;
+    manualOverrideShort: string;
+    autoDetectedMode: (mode: string) => string;
+    autoDetecting: string;
+    autoModeNote: string;
+    autoModeNoteCompact: string;
+    manualOverrideNote: string;
+    followAuto: string;
+    projectKind: string;
+    projectKindNew: string;
+    projectKindExisting: string;
+    projectKindArchitecture: string;
     teamCoderDesc: string;
     adminDesc: string;
     autoDetected: string;
     projectTemplates: string;
     projectSignals: string;
+    viewDetectionBasis: string;
+    signalFiles: (count: number) => string;
+    signalTechStack: (count: number) => string;
+    signalLocks: (count: number) => string;
+    signalCommits: (count: number) => string;
+    signalReadme: string;
+    signalSummaryEmpty: string;
   };
 
   // Code page tabs
@@ -4607,6 +4680,7 @@ export interface Translations {
     internalSkill: string;
     visibilityDuplicate: string;
     visibilityProvider: string;
+    visibilitySpecialized: string;
     visibilityDeprecated: string;
     visibilityInternal: string;
     enabled: string;
@@ -6328,10 +6402,21 @@ export interface Translations {
     noSkillsFound: string;
     permissionsLabel: string;
     permissionsHint: string;
+    permissionEffectiveCount: (enabled: number, total: number) => string;
+    permissionGlobalGate: string;
+    permissionAgentGrant: string;
+    permissionEffective: string;
     permissionEnabled: string;
     permissionDisabled: string;
     permissionAvailable: string;
     permissionUnavailable: string;
+    permissionAgentDefault: string;
+    permissionAgentGranted: string;
+    permissionAgentDenied: string;
+    permissionEffectiveHint: string;
+    permissionBlockedByGlobal: string;
+    permissionBlockedByAgent: string;
+    permissionDefaultGrantHint: string;
     permissionUpdateFailed: (msg: string) => string;
     budgetLabel: string;
     budgetOverride: string;

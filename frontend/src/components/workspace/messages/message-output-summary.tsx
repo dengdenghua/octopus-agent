@@ -12,6 +12,7 @@ import {
 } from "@/core/utils/files";
 import { cn } from "@/lib/utils";
 import {
+  CheckCircle2Icon,
   ChevronDownIcon,
   DownloadIcon,
   ExternalLinkIcon,
@@ -53,8 +54,6 @@ type OutputSummary = {
   artifacts: OutputArtifact[];
   changes: OutputChange[];
 };
-
-
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
@@ -316,6 +315,32 @@ export function MessageOutputSummary({
 
   return (
     <div className={cn("mt-4 flex w-full flex-col gap-2", className)}>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.055] px-3 py-2 text-xs">
+        <CheckCircle2Icon className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-foreground">
+            {t.message.taskOutputs}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {t.message.taskCompleted}
+            {summary.changes.length > 0 ? ` · ${changeSummaryLabel}` : ""}
+            {summary.artifacts.length > 0
+              ? ` · ${t.message.artifactsCreated(summary.artifacts.length)}`
+              : ""}
+          </div>
+        </div>
+        {summary.changes.length > 0 && (
+          <div className="shrink-0 rounded-full bg-background/75 px-2 py-1 font-mono text-[11px] shadow-sm">
+            <span className="text-emerald-600 dark:text-emerald-400">
+              +{totalAdded}
+            </span>
+            <span className="mx-1 text-muted-foreground"> </span>
+            <span className="text-red-600 dark:text-red-400">
+              -{totalRemoved}
+            </span>
+          </div>
+        )}
+      </div>
       {summary.artifacts.length > 0 && (
         <section aria-label={t.message.artifactsSummary} className="space-y-2">
           <div className="text-sm font-semibold text-foreground">
@@ -632,7 +657,9 @@ function HunkDecisionRow({
                   : "bg-red-500/15 text-red-700 dark:text-red-400",
               )}
             >
-              {decision === "accepted" ? t.message.accepted : t.message.rejected}
+              {decision === "accepted"
+                ? t.message.accepted
+                : t.message.rejected}
             </span>
           )}
         </div>

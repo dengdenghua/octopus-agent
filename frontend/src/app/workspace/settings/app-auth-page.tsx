@@ -180,8 +180,8 @@ function StatusBadge({ status }: { status: Authorization["status"] }) {
     },
     revoked: {
       icon: XCircle,
-      color: "text-gray-600",
-      bg: "bg-gray-50",
+      color: "text-muted-foreground",
+      bg: "bg-muted",
       label: t.appAuth.statusRevoked,
     },
     error: {
@@ -486,7 +486,7 @@ function BrowserCaptureDialog({
       : status === "failed"
         ? "text-red-600"
         : status === "cancelled"
-          ? "text-gray-600"
+          ? "text-muted-foreground"
           : "text-blue-600";
 
   const statusText =

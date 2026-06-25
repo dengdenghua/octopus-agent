@@ -1,7 +1,12 @@
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { toWorkBlocks, type WorkBlock } from "./work-blocks";
 
-export type AgentPhaseStatus = "pending" | "running" | "done" | "error";
+export type AgentPhaseStatus =
+  | "pending"
+  | "running"
+  | "waiting_approval"
+  | "done"
+  | "error";
 
 export interface AgentPhase {
   id: string;
@@ -52,6 +57,7 @@ export function progressForPhases(phases: AgentPhase[], current: AgentPhase) {
 
 export function phaseStatusText(status: AgentPhaseStatus): string {
   if (status === "running") return "进行中";
+  if (status === "waiting_approval") return "等待确认";
   if (status === "error") return "异常";
   if (status === "done") return "已完成";
   return "待开始";
@@ -59,6 +65,7 @@ export function phaseStatusText(status: AgentPhaseStatus): string {
 
 function pickCurrentPhase(phases: AgentPhase[]) {
   return (
+    phases.find((phase) => phase.status === "waiting_approval") ??
     phases.find((phase) => phase.status === "running") ??
     phases.find((phase) => phase.status === "error") ??
     phases.find((phase) => phase.status === "pending") ??
@@ -100,9 +107,13 @@ function extractTodoPhases(
         title: phaseTitle(displayTitle, index),
         status,
         blockIds:
-          status === "running"
+          status === "running" || status === "waiting_approval"
             ? blocks
-                .filter((block) => block.status === "running")
+                .filter(
+                  (block) =>
+                    block.status === "running" ||
+                    block.status === "waiting_approval",
+                )
                 .map((block) => block.id)
             : [],
       };
@@ -135,7 +146,7 @@ function buildGenericPhases(
       id: "generic:deliver",
       title: "整理结果与交付",
       blocks: blocks.filter((block) =>
-        /todo|write|report|artifact/i.test(
+        /todo|write|report|artifact|verification/i.test(
           `${block.event.name} ${block.kind} ${block.title}`,
         ),
       ),
@@ -155,7 +166,6 @@ function statusFromBlockList(
   blocks: WorkBlock[],
   options: DeriveAgentPhasesOptions,
 ): AgentPhaseStatus {
-  if (blocks.some((block) => block.status === "error")) return "error";
   if (
     options.runSettled &&
     blocks.some((block) => block.status === "waiting_approval") &&
@@ -163,14 +173,13 @@ function statusFromBlockList(
   ) {
     return "done";
   }
-  if (
-    blocks.some(
-      (block) =>
-        block.status === "running" || block.status === "waiting_approval",
-    )
-  ) {
+  if (blocks.some((block) => block.status === "waiting_approval")) {
+    return "waiting_approval";
+  }
+  if (blocks.some((block) => block.status === "running")) {
     return "running";
   }
+  if (blocks.some((block) => block.status === "error")) return "error";
   return "done";
 }
 
@@ -181,16 +190,23 @@ function normalizePhaseStatus(
 ): AgentPhaseStatus {
   if (options.paused) return status;
   if (!options.runSettled) return status;
-  if (options.runFailed && status === "running") return "error";
+  if (
+    options.runFailed &&
+    (status === "running" || status === "waiting_approval")
+  )
+    return "error";
   if (options.runFailed && status === "pending") return "pending";
   if (
     !options.runFailed &&
     options.hasAnswer &&
-    (status === "running" || status === "pending")
+    (status === "running" ||
+      status === "waiting_approval" ||
+      status === "pending")
   ) {
     return "done";
   }
   if (status === "pending") return "pending";
+  if (status === "waiting_approval") return status;
   if (status !== "running") return status;
   return blocks.length === 0 ||
     blocks.every((block) => block.status === "waiting_approval")
@@ -216,13 +232,17 @@ function markFailedTodoPhase(
       marked = true;
       return { ...phase, status: "error" };
     }
-    return phase.status === "running" ? { ...phase, status: "pending" } : phase;
+    return phase.status === "running" || phase.status === "waiting_approval"
+      ? { ...phase, status: "pending" }
+      : phase;
   });
 }
 
 function todoStatus(value: unknown): AgentPhaseStatus {
   if (value === "completed" || value === "done") return "done";
   if (value === "in_progress" || value === "running") return "running";
+  if (value === "waiting_approval" || value === "awaiting_approval")
+    return "waiting_approval";
   if (value === "error" || value === "failed") return "error";
   return "pending";
 }
@@ -233,10 +253,14 @@ function phaseTitle(title: string, index: number) {
 }
 
 function normalizePhaseOrdering(phases: AgentPhase[]): AgentPhase[] {
-  const currentIndex = phases.findIndex((phase) => phase.status === "running");
+  const currentIndex = phases.findIndex(
+    (phase) =>
+      phase.status === "running" || phase.status === "waiting_approval",
+  );
   if (currentIndex < 0) return phases;
   return phases.map((phase, index) =>
-    index > currentIndex && phase.status === "running"
+    index > currentIndex &&
+    (phase.status === "running" || phase.status === "waiting_approval")
       ? { ...phase, status: "pending" }
       : phase,
   );

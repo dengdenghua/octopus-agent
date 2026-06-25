@@ -303,6 +303,82 @@ export interface AgentTraceReplayGate {
   filters?: Record<string, unknown>;
 }
 
+export interface AgentTraceReplayCase {
+  schema: string;
+  case_id: string;
+  fingerprint: string;
+  source: {
+    task_id?: string | null;
+    thread_id?: string | null;
+    turn_id?: string | null;
+    agent_id?: string | null;
+    status?: string | null;
+  };
+  replay: {
+    case_id?: string;
+    fingerprint?: string;
+    replayable?: boolean;
+    step_count?: number;
+    steps?: Array<Record<string, unknown>>;
+  };
+  expectations: {
+    status?: string | null;
+    score?: number | null;
+    finding_types?: string[];
+    tool_error_count?: number;
+  };
+  resume: {
+    available: boolean;
+    source?: string | null;
+    latest_checkpoint_id?: string | null;
+  };
+  safety: {
+    raw_messages_included: boolean;
+    raw_checkpoint_state_included: boolean;
+    tool_outputs_truncated: boolean;
+  };
+}
+
+export interface AgentTraceReplayEvaluationCheck {
+  name: string;
+  passed: boolean;
+  description: string;
+}
+
+export interface AgentTraceReplayEvaluation {
+  schema: string;
+  case_id: string;
+  fingerprint: string;
+  passed: boolean;
+  score: number;
+  checks: AgentTraceReplayEvaluationCheck[];
+  source: {
+    task_id?: string | null;
+    thread_id?: string | null;
+    turn_id?: string | null;
+    agent_id?: string | null;
+    status?: string | null;
+  };
+}
+
+export interface AgentTraceReplayCaseCorpus {
+  schema: string;
+  cases: AgentTraceReplayCase[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AgentTraceReplayEvaluationCorpus {
+  schema: string;
+  passed: number;
+  failed: number;
+  total: number;
+  limit: number;
+  offset: number;
+  evaluations: AgentTraceReplayEvaluation[];
+}
+
 export interface AgentTracePromotionAuditSummary {
   schema: string;
   total: number;
@@ -1308,6 +1384,42 @@ export async function fetchAgentTraceReplayGate(
   if (scope?.status) params.set("status", scope.status);
   return fetchJson<AgentTraceReplayGate>(
     `/api/agent-trace/replay-gate?${params.toString()}`,
+  );
+}
+
+export async function fetchAgentTraceReplayCases(
+  scope?: Pick<AgentTraceScope, "threadId" | "turnId" | "agentId"> & {
+    status?: string;
+    limit?: number;
+    offset?: number;
+  },
+): Promise<AgentTraceReplayCaseCorpus> {
+  const params = new URLSearchParams({
+    limit: String(scope?.limit ?? 100),
+    offset: String(Math.max(0, scope?.offset ?? 0)),
+  });
+  appendScope(params, scope);
+  if (scope?.status) params.set("status", scope.status);
+  return fetchJson<AgentTraceReplayCaseCorpus>(
+    `/api/agent-trace/replay-cases?${params.toString()}`,
+  );
+}
+
+export async function fetchAgentTraceReplayEvaluations(
+  scope?: Pick<AgentTraceScope, "threadId" | "turnId" | "agentId"> & {
+    status?: string;
+    limit?: number;
+    offset?: number;
+  },
+): Promise<AgentTraceReplayEvaluationCorpus> {
+  const params = new URLSearchParams({
+    limit: String(scope?.limit ?? 100),
+    offset: String(Math.max(0, scope?.offset ?? 0)),
+  });
+  appendScope(params, scope);
+  if (scope?.status) params.set("status", scope.status);
+  return fetchJson<AgentTraceReplayEvaluationCorpus>(
+    `/api/agent-trace/replay-evaluations?${params.toString()}`,
   );
 }
 

@@ -17,12 +17,14 @@ interface EvolutionIndicatorProps {
   /* Implementation note. */
   showWhenEmpty?: boolean;
   compact?: boolean;
+  quiet?: boolean;
 }
 
 export function EvolutionIndicator({
   className,
   showWhenEmpty = false,
   compact = false,
+  quiet = false,
 }: EvolutionIndicatorProps) {
   const { t } = useI18n();
   const { data } = useQuery<EvolutionStatus, Error>({
@@ -61,6 +63,7 @@ export function EvolutionIndicator({
   const rules = data.rules_count ?? 0;
   const memories = data.memories_count ?? 0;
   if (!showWhenEmpty && rules === 0 && memories === 0) return null;
+  if (quiet && !delta) return null;
   const summary = t.evolutionIndicator.rulesAndMemories(rules, memories);
 
   const animating = delta !== null;
@@ -101,7 +104,7 @@ export function EvolutionIndicator({
       ) : (
         <span>{summary}</span>
       )}
-      {compact && (
+      {compact && !quiet && (
         <span
           key={`${rules}-${memories}`}
           className={cn(

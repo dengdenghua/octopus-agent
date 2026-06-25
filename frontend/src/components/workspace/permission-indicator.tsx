@@ -16,22 +16,23 @@ const PERMISSION_OPTIONS: PermissionMode[] = [
   "default",
   "acceptEdits",
   "bypassPermissions",
-  "plan",
 ];
 
 interface PermissionIndicatorProps {
   mode: PermissionMode;
   onModeChange: (mode: PermissionMode) => void;
   className?: string;
+  compact?: boolean;
 }
 
 const PERMISSION_TRIGGER_TONE =
-  "bg-muted/45 text-muted-foreground hover:bg-muted/70 hover:text-foreground";
+  "border border-border/70 bg-background/90 text-muted-foreground shadow-sm hover:bg-muted/70 hover:text-foreground";
 
 export function PermissionIndicator({
   mode,
   onModeChange,
   className,
+  compact = false,
 }: PermissionIndicatorProps) {
   const { t } = useI18n();
   const labels: Record<PermissionMode, { label: string; description: string }> =
@@ -62,16 +63,18 @@ export function PermissionIndicator({
           type="button"
           data-testid="permission-mode-trigger"
           className={cn(
-            "flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors",
-            PERMISSION_TRIGGER_TONE,
+            "flex items-center gap-1.5 text-[11px] font-medium transition-colors",
+            compact
+              ? "h-6 rounded-md px-0.5 text-muted-foreground hover:text-foreground"
+              : cn("h-8 rounded-full px-2.5", PERMISSION_TRIGGER_TONE),
             className,
           )}
           title={`${t.chatInputBox.permissionModeLabel}: ${current.description}`}
           aria-label={`${t.chatInputBox.permissionModeLabel}: ${current.label}`}
         >
-          <ShieldCheckIcon className="size-3" />
+          <ShieldCheckIcon className="size-3 opacity-75" />
           <span>{current.label}</span>
-          <ChevronDownIcon className="size-3 opacity-70" />
+          <ChevronDownIcon className="size-3 opacity-35" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent

@@ -35,7 +35,7 @@ describe("workspace sidebar route activation", () => {
     ).toBe(false);
   });
 
-  test("keeps the people pool active on normal agent routes", () => {
+  test("keeps the Hub active on normal agent routes", () => {
     expect(
       __testing.isNavRouteActive("/workspace/agents", "/workspace/agents"),
     ).toBe(true);
@@ -44,7 +44,7 @@ describe("workspace sidebar route activation", () => {
     ).toBe(true);
   });
 
-  test("keeps agent library in the surface selected by the sidebar entry", () => {
+  test("keeps Hub in the surface selected by the sidebar entry", () => {
     expect(
       __testing.isCompanySurfaceActive("/workspace/agents", "?surface=chat"),
     ).toBe(false);

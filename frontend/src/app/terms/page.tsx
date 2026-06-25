@@ -28,7 +28,7 @@ const sections = [
 
 export default function TermsPage() {
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900">
+    <main className="min-h-screen bg-muted px-4 py-8 text-foreground">
       <div className="mx-auto max-w-3xl">
         <Button asChild variant="ghost" className="mb-4 px-0">
           <Link to="/login">
@@ -37,12 +37,12 @@ export default function TermsPage() {
           </Link>
         </Button>
 
-        <article className="rounded-lg border border-slate-200 bg-white px-6 py-7 shadow-sm">
-          <p className="text-xs font-medium uppercase text-slate-500">
+        <article className="rounded-lg border border-border bg-white px-6 py-7 shadow-sm">
+          <p className="text-xs font-medium uppercase text-muted-foreground">
             Octopus Agent OS
           </p>
           <h1 className="mt-2 text-2xl font-semibold">用户协议</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">
             欢迎使用
             Octopus。以下条款用于说明你与服务之间的基本权利、责任和使用边界。
           </p>
@@ -51,14 +51,14 @@ export default function TermsPage() {
             {sections.map((section) => (
               <section key={section.title}>
                 <h2 className="text-base font-semibold">{section.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {section.body}
                 </p>
               </section>
             ))}
           </div>
 
-          <p className="mt-6 border-t border-slate-200 pt-4 text-xs leading-5 text-slate-500">
+          <p className="mt-6 border-t border-border pt-4 text-xs leading-5 text-muted-foreground">
             本页面为产品内公开说明，后续若接入正式法务文本，可在此路由替换为完整版本。
           </p>
         </article>

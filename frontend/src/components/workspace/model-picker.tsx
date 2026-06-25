@@ -88,7 +88,6 @@ const REASONING_EFFORT_OPTIONS: ReasoningEffort[] = [
   "medium",
   "high",
   "xhigh",
-  "max",
 ];
 
 function reasoningEffortLabel(
@@ -121,7 +120,7 @@ function ReasoningEffortSetting({
   onChange: (effort: ReasoningEffort) => void;
 }) {
   const { t } = useI18n();
-  const current = value ?? "medium";
+  const current = value === "max" ? "xhigh" : (value ?? "medium");
   const title = t.inputBox.reasoningEffort;
 
   return (

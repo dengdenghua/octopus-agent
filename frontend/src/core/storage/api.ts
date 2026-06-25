@@ -1,3 +1,5 @@
+import { getBackendBaseURL } from "@/core/config";
+
 export type NASMode = "efficiency" | "privacy";
 
 export interface NASManifest {
@@ -79,9 +81,17 @@ export interface NASAnswerResponse {
   message: string;
 }
 
+export interface NASServiceStartResponse {
+  ok: boolean;
+  status: "started" | "already_running" | "not_found" | "error" | string;
+  base_url: string;
+  auth_token?: string | null;
+}
+
 const DEFAULT_STORAGE_URL = "http://127.0.0.1:8767";
 const STORAGE_KEY = "octopus.storage.base-url";
 const LEGACY_STORAGE_KEY = "octopus.nas.base-url";
+const STORAGE_TOKEN_KEY = "octopus.storage.auth-token";
 
 function normalizeBaseURL(value: string | null | undefined): string {
   if (!value) return DEFAULT_STORAGE_URL;
@@ -116,10 +126,25 @@ export function setNASBaseURL(value: string): string {
   return normalized;
 }
 
+export function setNASAuthToken(value: string | null | undefined): void {
+  if (typeof window === "undefined" || !value) return;
+  window.sessionStorage.setItem(STORAGE_TOKEN_KEY, value);
+}
+
+function getNASAuthHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const token = window.sessionStorage.getItem(STORAGE_TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${getNASBaseURL()}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...getNASAuthHeaders(),
+      ...(init?.headers ?? {}),
+    },
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -129,6 +154,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+export async function startNASService(): Promise<NASServiceStartResponse> {
+  const response = await fetch(
+    `${getBackendBaseURL()}/api/local-brain/storage/start`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Storage start failed: ${response.status}${text ? ` - ${text}` : ""}`,
+    );
+  }
+  const body = (await response.json()) as NASServiceStartResponse;
+  setNASAuthToken(body.auth_token);
+  return body;
 }
 
 export function getNASManifest(): Promise<NASManifest> {

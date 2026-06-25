@@ -315,7 +315,7 @@ function ReportCover({
   return (
     <div
       className={cn(
-        "relative isolate overflow-hidden rounded-lg border border-border/60 bg-slate-950 text-white shadow-sm",
+        "relative isolate overflow-hidden rounded-lg border border-border/60 bg-foreground text-white shadow-sm",
         compact ? "h-20" : "h-36",
       )}
     >
@@ -819,7 +819,8 @@ export function IntelligencePanel() {
                           )
                         }
                         disabled={
-                          draft.cadence === t.intelligencePanel.cadenceHighFrequency
+                          draft.cadence ===
+                          t.intelligencePanel.cadenceHighFrequency
                         }
                         className="h-7 bg-background/75 text-xs"
                       />

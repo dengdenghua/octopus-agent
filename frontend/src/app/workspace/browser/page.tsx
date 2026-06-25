@@ -5,6 +5,8 @@ import {
   TabletIcon,
   XIcon,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   BrowserPanel,
   BrowserProvider,
@@ -17,6 +19,7 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
+import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 
 interface DeviceSpec {
@@ -41,38 +44,43 @@ function BrowserPageBody() {
   const isPhone = mode !== "desktop";
 
   const devicePicker = (
-    <div className="flex items-center rounded-lg border border-border/60 bg-muted/35 p-0.5 shadow-sm">
+    <ToggleGroup
+      type="single"
+      value={mode}
+      onValueChange={(value) => {
+        if (value) setMode(value as DevicePreset);
+      }}
+      spacing={0}
+      className="rounded-lg border border-border/60 bg-muted/35 p-0.5 shadow-sm"
+    >
       {PRESET_ORDER.map((preset) => {
         const Icon = DEVICE_SPECS[preset].Icon;
-        const active = mode === preset;
+        const label =
+          preset === "desktop"
+            ? t.browser.deviceDesktop
+            : preset === "tablet"
+              ? t.browser.deviceTablet
+              : t.browser.deviceMobile;
         return (
-          <button
+          <ToggleGroupItem
             key={preset}
-            onClick={() => setMode(preset)}
-            className={
-              active
-                ? "rounded-md bg-background px-2 py-1 shadow-sm"
-                : "rounded-md px-2 py-1 hover:bg-background/70"
-            }
-            title={
-              preset === "desktop"
-                ? t.browser.deviceDesktop
-                : preset === "tablet"
-                  ? t.browser.deviceTablet
-                  : t.browser.deviceMobile
-            }
+            value={preset}
+            size="sm"
+            aria-label={label}
+            className="rounded-md px-2 py-1 data-[state=on]:bg-background data-[state=on]:shadow-sm"
           >
             <Icon
-              className={
-                active
-                  ? "size-3.5 text-foreground"
-                  : "size-3.5 text-muted-foreground"
-              }
+              className={cn(
+                "size-3.5",
+                mode === preset
+                  ? "text-foreground"
+                  : "text-muted-foreground",
+              )}
             />
-          </button>
+          </ToggleGroupItem>
         );
       })}
-    </div>
+    </ToggleGroup>
   );
 
   return (
@@ -93,18 +101,20 @@ function BrowserPageBody() {
         </div>
         <div className="flex shrink-0 items-center justify-end gap-1">
           {devicePicker}
-          <button
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={toggle}
-            className="rounded-lg border border-transparent p-1.5 hover:border-border/60 hover:bg-muted"
             aria-label="关闭浏览器预览"
+            className="rounded-lg"
           >
             <XIcon className="size-4 text-muted-foreground" />
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Implementation note. */}
-      <div className="flex flex-1 items-center justify-center overflow-hidden">
+      <div className="flex flex-1 items-center justify-center overflow-auto md:overflow-hidden">
         <div
           className={
             isPhone

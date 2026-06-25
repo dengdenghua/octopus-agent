@@ -6,11 +6,7 @@ import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useI18n } from "@/core/i18n/hooks";
 
 /**
- * Any direct link to ``/realtime/:threadId`` (old bookmarks, external
- * deep-links, historical emails) gets redirected into the workspace
- * shell at ``/workspace/realtime/:threadId``. The in-app migration
- * banner that used to point here is gone now that every workspace
- * route already runs over the WebSocket.
+ * Redirect old /realtime/:id bookmarks into the workspace shell.
  */
 function RealtimeRedirect() {
   const { threadId } = useParams<{ threadId: string }>();
@@ -91,17 +87,12 @@ const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
 const StoragePage = lazy(() => import("./app/workspace/storage/page"));
 const EvolutionPage = lazy(() => import("./app/workspace/evolution/page"));
 const WorkflowsPage = lazy(() => import("./app/workspace/workflows/page"));
-// Reflex monitor + YAML editor · ports the inline-HTML
-// /admin/reflex pages into the workspace shell so they pick up
-// theming + sidebar nav. See app/workspace/reflex/page.tsx.
+// Standalone replay surface. See app/workspace/replay/page.tsx.
+const ReplayPage = lazy(() => import("./app/workspace/replay/page"));
+// Reflex monitor + YAML editor. See app/workspace/reflex/page.tsx.
 const ReflexMonitorPage = lazy(() => import("./app/workspace/reflex/page"));
 const ReflexEditorPage = lazy(() => import("./app/workspace/reflex/edit/page"));
-// Realtime thread surface — the long-term JSON-RPC WebSocket UI that
-// replaces the SSE-based chat path. Lives outside the /workspace shell
-// on purpose: this route intentionally has zero legacy chrome, so it's
-// the shortest possible end-to-end path from WebSocket envelope to
-// rendered item. Kept mountable at /realtime so developers can iterate
-// without touching the workspace layout.
+// Standalone realtime index (outside workspace shell).
 const RealtimeIndexPage = lazy(() => import("./app/realtime/page"));
 
 function PageLoading() {
@@ -126,19 +117,12 @@ export function AppRouter() {
           <Route path="/privacy" element={<PrivacyPage />} />
 
           <Route element={<ProtectedRoute />}>
-            {/* Implementation note. */}
             <Route path="/desktop" element={<DesktopPage />} />
             <Route path="/browser" element={<TopBrowserPage />} />
             <Route path="/plugins" element={<PluginsPage />} />
 
-            {/* Realtime *index* page (no thread id) — list of threads.
-                Stays outside ``/workspace`` because it's a thin index
-                without a chat shell. */}
             <Route path="/realtime" element={<RealtimeIndexPage />} />
-            {/* Redirect old /realtime/:id bookmarks into the workspace
-                shell. Inside the shell every route already runs over the
-                WebSocket, so this is a backwards-compat helper — not a
-                transport toggle. */}
+            {/* Backwards-compat: old /realtime/:id bookmarks */}
             <Route path="/realtime/:threadId" element={<RealtimeRedirect />} />
             <Route
               path="/workspace/swarm"
@@ -147,15 +131,13 @@ export function AppRouter() {
 
             <Route path="/workspace" element={<WorkspaceLayout />}>
               <Route index element={<Navigate to="realtime/new" replace />} />
-              {/* Realtime per-thread page — hosted INSIDE the workspace
-                  layout so it gets the WorkspaceSidebar and the
-                  SidebarProvider that the chat shell depends on. */}
               <Route
                 path="realtime"
                 element={<Navigate to="/workspace/realtime/new" replace />}
               />
               <Route path="realtime/:threadId" element={<ChatPage />} />
               <Route path="chats/:threadId" element={<ChatPage />} />
+              {/* Legacy code routes → realtime */}
               <Route
                 path="code"
                 element={<HashRedirect to="/workspace/realtime/new" />}
@@ -192,9 +174,6 @@ export function AppRouter() {
               <Route path="channels" element={<ChannelsPage />} />
               <Route path="architecture" element={<ArchitecturePage />} />
               <Route path="observability" element={<ObservabilityPage />} />
-              {/* Sidebar-linked pages · see workspace-sidebar.tsx
-                  TOOL_ITEMS / ADVANCED_ITEMS. Fully implemented on
-                  disk; were not registered here until now. */}
               <Route path="intelligence" element={<IntelligencePage />} />
               <Route
                 path="swarm"
@@ -205,6 +184,7 @@ export function AppRouter() {
               <Route path="nas" element={<StorageRedirect />} />
               <Route path="database" element={<StorageRedirect />} />
               <Route path="evolution" element={<EvolutionPage />} />
+              <Route path="replay" element={<ReplayPage />} />
               <Route path="workflows" element={<WorkflowsPage />} />
               <Route path="reflex" element={<ReflexMonitorPage />} />
               <Route path="reflex/edit" element={<ReflexEditorPage />} />

@@ -177,7 +177,7 @@ export function LocalSkillDirectoryPanel({
       className="h-8 shrink-0 rounded-full px-3 text-xs"
       onClick={() => handleCategorySelect("all")}
     >
-      {t.unifiedStore.skills.all}
+      {t.unifiedStore.skills.catalogCount(localSkills.length)}
       <span className="ml-1 text-muted-foreground">{localSkills.length}</span>
     </Button>
   );
@@ -290,7 +290,9 @@ export function LocalSkillDirectoryPanel({
                 >
                   {showInternalSkills
                     ? t.localSkillDirectory.hideInternalSkills
-                    : t.localSkillDirectory.showInternalSkills(hiddenSkillCount)}
+                    : t.localSkillDirectory.showInternalSkills(
+                        hiddenSkillCount,
+                      )}
                 </button>
               )}
             </div>
@@ -342,17 +344,20 @@ export function LocalSkillDirectoryPanel({
                               title={
                                 skill.canonical_skill
                                   ? `${skill.market_reason ?? t.localSkillDirectory.marketReasonMerged}：${skill.canonical_skill}`
-                                  : (skill.market_reason ?? t.localSkillDirectory.internalSkill)
+                                  : (skill.market_reason ??
+                                    t.localSkillDirectory.internalSkill)
                               }
-                              className="rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-300"
+                              className="rounded-full bg-muted-foreground/10 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
                             >
                               {skill.market_visibility === "duplicate"
                                 ? t.localSkillDirectory.visibilityDuplicate
                                 : skill.market_visibility === "provider"
                                   ? t.localSkillDirectory.visibilityProvider
-                                  : skill.market_visibility === "deprecated"
-                                    ? t.localSkillDirectory.visibilityDeprecated
-                                    : t.localSkillDirectory.visibilityInternal}
+                                  : skill.market_visibility === "specialized"
+                                    ? t.localSkillDirectory.visibilitySpecialized
+                                    : skill.market_visibility === "deprecated"
+                                      ? t.localSkillDirectory.visibilityDeprecated
+                                      : t.localSkillDirectory.visibilityInternal}
                             </span>
                           )}
                         </div>

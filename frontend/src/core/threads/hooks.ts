@@ -417,6 +417,9 @@ export function useThreads(
       return threads;
     },
     refetchOnWindowFocus: false,
+    staleTime: 5 * 60_000, // 5 min — thread list changes infrequently; avoids
+    // re-fetching every time the drawer opens. Mutations (delete, rename)
+    // invalidate via onSettled/onSuccess.
   });
 }
 

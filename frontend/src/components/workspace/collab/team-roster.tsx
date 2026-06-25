@@ -24,7 +24,9 @@ export function TeamRoster({
   onMention,
   className,
 }: TeamRosterProps) {
-  const humans = (team?.participants ?? []).filter((p) => p.status !== "removed");
+  const humans = (team?.participants ?? []).filter(
+    (p) => p.status !== "removed",
+  );
   const agents = team?.members ?? [];
   const onlineHumans = humans.filter((p) => p.status === "active").length;
 

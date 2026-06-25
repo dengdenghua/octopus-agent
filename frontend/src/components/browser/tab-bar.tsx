@@ -6,7 +6,8 @@ import { useState, type DragEvent, type MouseEvent } from "react";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-import { useBrowserStore } from "./browser-store";
+import { liquidGlassClass } from "./liquid-glass";
+import { BROWSER_HOME_URL, useBrowserStore } from "./browser-store";
 
 export function TabBar() {
   const { t } = useI18n();
@@ -67,6 +68,8 @@ export function TabBar() {
       {state.tabs.map((tab, idx) => {
         const active = state.activeId === tab.id;
         const dragOver = dragOverIdx === idx && dragId !== tab.id;
+        const isHomeTab = tab.url === BROWSER_HOME_URL;
+        const tabLabel = isHomeTab ? tb.homeTabShort : tab.title || tab.url;
         return (
           <div
             key={tab.id}
@@ -78,17 +81,18 @@ export function TabBar() {
             onClick={() => activateTab(tab.id)}
             onAuxClick={(e) => handleAuxClick(e, tab.id)}
             className={cn(
-              "group relative flex h-8 min-w-[132px] max-w-[220px] cursor-pointer items-center gap-2 rounded-[14px] border px-2.5 text-[12px] transition-[background-color,border-color,box-shadow,color]",
+              "group relative flex h-8 min-w-[92px] max-w-[168px] cursor-pointer items-center gap-1.5 rounded-[14px] px-2 text-[12px] transition-[background-color,border-color,box-shadow,color,transform]",
+              isHomeTab && "min-w-[78px] max-w-[112px]",
               active
-                ? "border-white/65 bg-white/72 text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_20px_rgba(15,23,42,0.08)] ring-1 ring-black/5"
-                : "border-transparent bg-white/20 text-muted-foreground hover:border-white/45 hover:bg-white/46 hover:text-foreground",
+                ? cn(liquidGlassClass("thin", true), "text-foreground")
+                : "border border-transparent bg-background/18 text-muted-foreground hover:border-border/35 hover:bg-background/42 hover:text-foreground",
               dragOver && "ring-2 ring-primary ring-offset-0",
             )}
             // Implementation note.
             // Implementation note.
             style={
               {
-                flex: "0 1 220px",
+                flex: isHomeTab ? "0 1 112px" : "0 1 168px",
                 WebkitAppRegion: "no-drag",
               } as React.CSSProperties
             }
@@ -106,9 +110,7 @@ export function TabBar() {
             ) : (
               <GlobeIcon className="size-3.5 shrink-0 opacity-60" />
             )}
-            <span className="min-w-0 flex-1 truncate">
-              {tab.title || tab.url}
-            </span>
+            <span className="min-w-0 flex-1 truncate">{tabLabel}</span>
             <button
               type="button"
               onClick={(e) => {
@@ -127,7 +129,10 @@ export function TabBar() {
       <button
         type="button"
         onClick={() => openTab()}
-        className="ml-0.5 grid size-8 shrink-0 place-items-center rounded-[14px] border border-transparent text-muted-foreground transition-colors hover:border-white/45 hover:bg-white/46 hover:text-foreground"
+        className={cn(
+          "ml-0.5 grid size-8 shrink-0 place-items-center rounded-[14px] text-muted-foreground hover:text-foreground",
+          liquidGlassClass("thin", true),
+        )}
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         title={tb.newTab}
       >

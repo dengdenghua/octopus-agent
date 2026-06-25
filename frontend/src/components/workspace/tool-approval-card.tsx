@@ -105,7 +105,7 @@ export function ToolApprovalCard({
     approvalData.tool_name;
   const toolColor =
     TOOL_COLORS[approvalData.tool_name] ??
-    "bg-gray-500/10 text-gray-600 dark:text-gray-400";
+    "bg-muted-foreground/10 text-muted-foreground";
 
   return (
     <div

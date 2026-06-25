@@ -98,6 +98,47 @@ describe("work blocks", () => {
     });
   });
 
+  test("treats manual verification-required audit as waiting, not a hard failure", () => {
+    const blocks = toWorkBlocks([
+      event({
+        id: "verify-required",
+        name: "verification:manual",
+        status: "error",
+        input: { command: "verification required" },
+        output: {
+          summary:
+            "Code changes were produced but no verification step was recorded before final answer.",
+        },
+      }),
+    ]);
+
+    expect(blocks[0]).toMatchObject({
+      id: "verify-required",
+      title: "等待验证",
+      status: "waiting_approval",
+      subtitle: "等待确认",
+    });
+  });
+
+  test("keeps real read failures red", () => {
+    const blocks = toWorkBlocks([
+      event({
+        id: "read-error",
+        name: "read_file",
+        status: "error",
+        input: { path: "missing.ts" },
+        output: { error: "ENOENT" },
+      }),
+    ]);
+
+    expect(blocks[0]).toMatchObject({
+      id: "read-error",
+      kind: "read",
+      status: "error",
+      title: "阅读 missing.ts",
+    });
+  });
+
   test("classifies swarm dispatch and document skills as workflow blocks", () => {
     const blocks = toWorkBlocks([
       event({

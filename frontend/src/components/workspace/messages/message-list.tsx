@@ -6,7 +6,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, memo } from "react";
 
 import {
   Conversation,
@@ -24,6 +24,7 @@ import {
   hasContent,
   hasPresentFiles,
   hasReasoning,
+  type MessageGroup as CoreMessageGroup,
 } from "@/core/messages/utils";
 import { useRehypeSplitWordsIntoSpans } from "@/core/rehype";
 import type { Subtask } from "@/core/tasks";
@@ -33,6 +34,12 @@ import { cn } from "@/lib/utils";
 
 import { ArtifactFileList } from "../artifacts/artifact-file-list";
 import type { LiveToolEvent } from "../live-tool-timeline";
+import {
+  type AgentRunState,
+  agentRunAvatarAnimationClass,
+  agentRunStatusLightClass,
+  agentRunStatusLightPulseClass,
+} from "../agent-run-status";
 
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 
@@ -63,7 +70,7 @@ interface TurnMarker {
   label: string;
   number: number;
 }
-type TurnLocatorRunState = "done" | "error" | "pending" | "running";
+type TurnLocatorRunState = AgentRunState;
 
 const TURN_LOCATOR_VISIBLE_LIMIT = 17;
 const TURN_SCROLL_VIEWPORT_CLASS = "message-list-scroll-viewport";
@@ -166,6 +173,75 @@ export function turnMarkerKindFromMessages(
 }
 
 /**
+ * Memoized wrapper around a single message group. Only the group that
+ * contains the currently-streaming message (or the latest group while
+ * loading) will re-render on every token chunk; all completed groups
+ * are frozen by React.memo and skip reconciliation entirely.
+ */
+const MemoizedGroup = memo(
+  function MemoizedGroup({
+    group,
+    index,
+    groupKey,
+    isLatestGroup,
+    groupHasStreamingMessage,
+    keepGroupOpen,
+    enableClarificationActions,
+    deferGroupOutputs,
+    groupAuditNotice,
+    renderGroupContent,
+  }: {
+    group: CoreMessageGroup;
+    index: number;
+    groupKey: string;
+    isLatestGroup: boolean;
+    groupHasStreamingMessage: boolean;
+    keepGroupOpen: boolean;
+    enableClarificationActions: boolean;
+    deferGroupOutputs: boolean;
+    groupAuditNotice: string | null;
+    renderGroupContent: (
+      group: CoreMessageGroup,
+      beforeAssistantContent?: ReactNode,
+      enableClarificationActions?: boolean,
+      keepOpen?: boolean,
+      deferOutputs?: boolean,
+      auditNotice?: string | null,
+    ) => ReactNode;
+  }) {
+    return (
+      <div
+        data-turn-key={group.type === "human" ? groupKey : undefined}
+        className={cn(
+          index === 0 ? "pt-1" : undefined,
+          group.type === "human" ? "scroll-mt-6" : undefined,
+        )}
+      >
+        {renderGroupContent(
+          group,
+          undefined,
+          enableClarificationActions,
+          keepGroupOpen,
+          deferGroupOutputs,
+          groupAuditNotice,
+        )}
+      </div>
+    );
+  },
+  (prev, next) =>
+    // Only re-render if the group itself changed or it is the active streaming group.
+    // For non-streaming groups, shallow-equal the stable props.
+    prev.groupKey === next.groupKey &&
+    prev.group === next.group &&
+    prev.isLatestGroup === next.isLatestGroup &&
+    prev.groupHasStreamingMessage === next.groupHasStreamingMessage &&
+    prev.keepGroupOpen === next.keepGroupOpen &&
+    prev.enableClarificationActions === next.enableClarificationActions &&
+    prev.deferGroupOutputs === next.deferGroupOutputs &&
+    prev.groupAuditNotice === next.groupAuditNotice,
+);
+
+/**
  * Unified chat message list.
  *
  * Previous versions virtualized rows via ``@tanstack/react-virtual`` to
@@ -244,10 +320,11 @@ export function MessageList({
   }, [agentRoster]);
 
   const messages = thread.messages;
-  const progressFingerprint = useMemo(() => {
-    const streamText = thread.streamingMessage
-      ? extractTextFromMessage(thread.streamingMessage).trim()
-      : "";
+
+  // Structural fingerprint: changes when the message list topology changes
+  // (new messages, new/removed tool events). Used to gate scroll-listener
+  // rebuilds — avoids re-attaching listeners on every streaming token.
+  const structuralFingerprint = useMemo(() => {
     const liveEvents = [
       ...(liveToolEvents ?? []),
       ...(lastTurnToolEvents ?? []),
@@ -257,19 +334,13 @@ export function MessageList({
           event.id,
           event.name,
           event.status,
-          event.startedAt,
           event.finishedAt ?? "",
-          event.iteration,
-          event.agentId ?? "",
-          event.subAgentRole ?? "",
-          event.parentToolUseId ?? "",
         ].join(":"),
       )
       .join("|");
     return [
       thread.isLoading ? "loading" : "idle",
       thread.streamingMessage?.id ?? "",
-      streamText.slice(-240),
       messages.length,
       liveEvents,
     ].join("::");
@@ -280,6 +351,19 @@ export function MessageList({
     thread.isLoading,
     thread.streamingMessage,
   ]);
+
+  // Content fingerprint: includes the tail of the streaming text so the
+  // loading-age timer resets when new content arrives.
+  const contentFingerprint = useMemo(() => {
+    const streamText = thread.streamingMessage
+      ? extractTextFromMessage(thread.streamingMessage).trim()
+      : "";
+    return [
+      structuralFingerprint,
+      streamText.slice(-240),
+    ].join("::");
+  }, [structuralFingerprint, thread.streamingMessage]);
+
   useEffect(() => {
     if (!thread.isLoading) {
       loadingProgressAtRef.current = null;
@@ -293,7 +377,7 @@ export function MessageList({
       setLoadingAgeMs(Date.now() - progressAt);
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [thread.isLoading, progressFingerprint]);
+  }, [thread.isLoading, contentFingerprint]);
 
   // Suppress the warning when at least one tool call is still in-progress
   // (e.g. the agent is writing a large file and producing no streaming text;
@@ -307,7 +391,7 @@ export function MessageList({
     if (completedAgentOutput && !thread.isLoading) return "done";
     if (thread.error && !thread.isLoading) return "error";
     if (events.some((event) => event.status === "waiting_approval")) {
-      return "pending";
+      return "waiting";
     }
     if (
       thread.isLoading ||
@@ -507,7 +591,7 @@ export function MessageList({
       window.removeEventListener("resize", scheduleUpdate);
       resizeObserver?.disconnect();
     };
-  }, [progressFingerprint, turnMarkers]);
+  }, [structuralFingerprint, turnMarkers]);
 
   const scrollToTurn = (key: string) => {
     setActiveTurnKey(key);
@@ -925,20 +1009,19 @@ export function MessageList({
                   delete groupRefs.current[groupKey];
                 }
               }}
-              data-turn-key={group.type === "human" ? groupKey : undefined}
-              className={cn(
-                index === 0 ? "pt-1" : undefined,
-                group.type === "human" ? "scroll-mt-6" : undefined,
-              )}
             >
-              {renderGroupContent(
-                group,
-                undefined,
-                enableGroupClarificationActions,
-                keepGroupOpen,
-                deferGroupOutputs,
-                groupAuditNotice,
-              )}
+              <MemoizedGroup
+                group={group}
+                index={index}
+                groupKey={groupKey}
+                isLatestGroup={isLatestGroup}
+                groupHasStreamingMessage={groupHasStreamingMessage}
+                keepGroupOpen={keepGroupOpen}
+                enableClarificationActions={enableGroupClarificationActions}
+                deferGroupOutputs={deferGroupOutputs}
+                groupAuditNotice={groupAuditNotice}
+                renderGroupContent={renderGroupContent}
+              />
             </div>
           );
         })}
@@ -1104,8 +1187,7 @@ function TurnMarkerAvatar({
       data-turn-marker-avatar="true"
       className={cn(
         "pointer-events-none absolute flex size-5 items-center justify-center rounded-full bg-transparent drop-shadow-[0_1px_1px_rgba(0,0,0,0.18)]",
-        runState === "running" && "animate-[breathing_2s_ease-in-out_infinite]",
-        runState === "pending" && "animate-pulse",
+        agentRunAvatarAnimationClass(runState),
       )}
     >
       {avatarUrl ? (
@@ -1130,13 +1212,8 @@ function TurnMarkerStatusLight({
 }: {
   runState: Exclude<TurnLocatorRunState, "done">;
 }) {
-  const live = runState === "running" || runState === "pending";
-  const color =
-    runState === "running"
-      ? "bg-emerald-500"
-      : runState === "pending"
-        ? "bg-amber-500"
-        : "bg-red-500";
+  const pulseClassName = agentRunStatusLightPulseClass(runState);
+  const color = agentRunStatusLightClass(runState);
   return (
     <span
       aria-hidden="true"
@@ -1146,12 +1223,12 @@ function TurnMarkerStatusLight({
       )}
       data-turn-marker-status={runState}
     >
-      {live && (
+      {pulseClassName && (
         <span
           className={cn(
             "absolute inset-0 rounded-full opacity-70",
             color,
-            runState === "running" ? "animate-ping" : "animate-pulse",
+            pulseClassName,
           )}
         />
       )}

@@ -1,4 +1,5 @@
 import {
+  ArrowLeftIcon,
   BotIcon,
   CheckIcon,
   ChevronDownIcon,
@@ -24,7 +25,11 @@ import {
   type AgentPhaseStatus,
 } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
-import { pickCurrentWorkBlock, type WorkBlock } from "./work-blocks";
+import {
+  pickCurrentWorkBlock,
+  type WorkBlock,
+  type WorkBlockStatus,
+} from "./work-blocks";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
@@ -49,7 +54,7 @@ export function StatusGlyph({
   status,
   className,
 }: {
-  status: LiveToolEvent["status"] | AgentPhaseStatus;
+  status: WorkBlockStatus | AgentPhaseStatus;
   className?: string;
 }) {
   const Icon = statusIcon(status);
@@ -59,6 +64,7 @@ export function StatusGlyph({
         "size-4 shrink-0",
         status === "running" && "animate-spin text-foreground",
         status === "done" && "text-emerald-500",
+        status === "warning" && "text-amber-500",
         status === "error" && "text-destructive",
         status === "pending" && "text-muted-foreground/45",
         status === "waiting_approval" && "text-amber-500",
@@ -99,7 +105,9 @@ export function WorkBlockDetailSection({
                 open && "rotate-180",
               )}
             />
-            {open ? t.agentWorkbenchPages.collapse : t.agentWorkbenchPages.expandDetails}
+            {open
+              ? t.agentWorkbenchPages.collapse
+              : t.agentWorkbenchPages.expandDetails}
           </button>
         )}
       </div>
@@ -168,13 +176,13 @@ function SummaryDiffEntryList({
   const { t } = useI18n();
   const Icon = kind === "artifact" ? FilePlus2Icon : FileTextIcon;
   return (
-    <ul className="max-h-48 divide-y divide-border/20 overflow-y-auto">
+    <ul className="max-h-48 overflow-y-auto">
       {entries.map((entry) => (
         <li key={entry.id}>
           <button
             type="button"
             onClick={() => onOpenEntry?.(entry, kind)}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex w-full items-center gap-3 py-2 text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             aria-label={
               kind === "artifact"
                 ? t.agentWorkbenchPages.openArtifact(entry.title)
@@ -184,12 +192,14 @@ function SummaryDiffEntryList({
           >
             <Icon
               className={cn(
-                "size-3.5 shrink-0",
-                kind === "artifact" ? "text-emerald-500" : "text-blue-500",
+                "size-4 shrink-0",
+                kind === "artifact"
+                  ? "text-foreground/80"
+                  : "text-muted-foreground",
               )}
             />
-            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">
-              {entry.title}
+            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+              {basename(entry.title || entry.path)}
             </span>
             <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/55" />
           </button>
@@ -313,7 +323,12 @@ function referenceTabForBlock(block: WorkBlock): ObservedReferenceTabId {
   }
   if (block.kind === "file" || block.kind === "read") return "files";
   if (block.kind === "todo") return "plans";
-  if (block.kind === "search" || block.kind === "browser") return "web";
+  if (
+    (block.kind === "search" || block.kind === "browser") &&
+    hasHttpReference(block)
+  ) {
+    return "web";
+  }
   return "other";
 }
 
@@ -379,10 +394,10 @@ function webReferenceItems(block: WorkBlock): ObservedReferenceItem[] {
   const pages = dedupeWebPages([
     ...webPagesFromValue(block.event.output),
     ...webPagesFromValue(block.event.input?.output),
-  ]);
+  ]).filter((page) => isHttpUrl(page.url));
   if (pages.length === 0) {
     const url = firstInputString(block.event.input, ["url"]);
-    if (url) {
+    if (isHttpUrl(url)) {
       const host = hostLabel(url);
       return [
         {
@@ -416,6 +431,14 @@ function webReferenceItems(block: WorkBlock): ObservedReferenceItem[] {
       url: page.url || undefined,
     };
   });
+}
+
+function hasHttpReference(block: WorkBlock): boolean {
+  if (isHttpUrl(firstInputString(block.event.input, ["url"]))) return true;
+  return dedupeWebPages([
+    ...webPagesFromValue(block.event.output),
+    ...webPagesFromValue(block.event.input?.output),
+  ]).some((page) => isHttpUrl(page.url));
 }
 
 type WebReferencePage = {
@@ -456,7 +479,7 @@ function webPagesFromValue(value: unknown): WebReferencePage[] {
       "ogImage",
       "previewUrl",
     ]);
-    if (!url && !title) return [];
+    if (!isHttpUrl(url)) return [];
     return [
       {
         title: cleanWebText(title),
@@ -510,7 +533,7 @@ function webPagesFromText(text: string): WebReferencePage[] {
     for (const match of text.matchAll(pattern)) {
       const title = cleanWebText(match[1] ?? "");
       const url = cleanWebText(match[2] ?? "");
-      if (!title && !url) continue;
+      if (!isHttpUrl(url)) continue;
       pages.push({ title: title || pageTitleFromUrl(url), url });
     }
   }
@@ -627,6 +650,7 @@ function referenceStatusLabel(
   if (status === "running") return t.agentWorkbenchPages.statusRunning;
   if (status === "waiting_approval")
     return t.agentWorkbenchPages.statusWaitingApproval;
+  if (status === "warning") return "已恢复";
   if (status === "error") return t.agentWorkbenchPages.statusError;
   return t.agentWorkbenchPages.statusDone;
 }
@@ -648,6 +672,16 @@ function pageTitleFromUrl(url: string): string {
     return parsed.hostname.replace(/^www\./, "") || url;
   } catch {
     return url;
+  }
+}
+
+function isHttpUrl(url: string | undefined): url is string {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
   }
 }
 
@@ -711,8 +745,7 @@ function ReferenceIcon({
   return (
     <span
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/45 bg-muted/45",
-        tabId === "web" && "bg-background shadow-sm",
+        "flex size-5 shrink-0 items-center justify-center overflow-hidden text-muted-foreground",
       )}
     >
       {canShowImage ? (
@@ -721,7 +754,7 @@ function ReferenceIcon({
           alt={item.host ? `${item.host} icon` : ""}
           className={cn(
             "size-full object-cover",
-            item.thumbnailUrl ? "" : "p-1.5",
+            item.thumbnailUrl ? "rounded-sm" : "",
           )}
           loading="lazy"
           referrerPolicy="no-referrer"
@@ -732,7 +765,7 @@ function ReferenceIcon({
           {hostInitial}
         </span>
       ) : (
-        <Icon className={cn("size-3.5", fallbackClassName)} />
+        <Icon className={cn("size-4", fallbackClassName)} />
       )}
     </span>
   );
@@ -756,7 +789,7 @@ export function AgentSummaryPage({
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["progress", "artifacts", "references", "operations", "subagents"]),
+    new Set(["artifacts"]),
   );
   const [refTab, setRefTab] = useState<ObservedReferenceTabId>("files");
   const artifactDiffEntries = useMemo(
@@ -770,7 +803,14 @@ export function AgentSummaryPage({
   const openDiffEntry = (_entry: DiffEntry, kind: "artifact" | "change") => {
     onSelectTab?.(kind === "artifact" ? "files" : "diff");
   };
-
+  const donePhaseCount = phases.filter((phase) => phase.status === "done").length;
+  const errorPhaseCount = phases.filter(
+    (phase) => phase.status === "error",
+  ).length;
+  const runningPhase = phases.find(
+    (phase) =>
+      phase.status === "running" || phase.status === "waiting_approval",
+  );
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev);
@@ -876,36 +916,128 @@ export function AgentSummaryPage({
   }, [blocks, t]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70">
-      <div className="mx-auto w-full max-w-2xl divide-y divide-border/30">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
+      <div className="mx-auto w-full max-w-2xl px-5 py-4">
+        {(phases.length === 0 &&
+          (diffEntries.length > 0 ||
+          totalReferenceItems > 0 ||
+            agentTiles.length > 0)) && (
+          <section className="border-b border-border/25 pb-4">
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold text-foreground">
+                  {runningPhase?.title ??
+                    (errorPhaseCount > 0
+                      ? t.agentWorkbenchPages.progress
+                      : t.agentWorkbenchPages.dashboardOverview)}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground/85">
+                  {phases.length > 0 && (
+                    <span>
+                      {donePhaseCount}/{phases.length} {phaseStatusText("done")}
+                    </span>
+                  )}
+                  {errorPhaseCount > 0 && (
+                    <span className="text-destructive">
+                      {errorPhaseCount} {phaseStatusText("error")}
+                    </span>
+                  )}
+                  {diffEntries.length > 0 && (
+                    <span>
+                      {t.agentWorkbenchPages.artifacts} {diffEntries.length}
+                    </span>
+                  )}
+                  {totalReferenceItems > 0 && (
+                    <span>
+                      {t.agentWorkbenchPages.sourceCount(totalReferenceItems)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              {contextStats.percentage > 0 && (
+                <span className="shrink-0 text-[10px] text-muted-foreground">
+                  {t.agentWorkbenchPages.estimatePercentage(
+                    contextStats.percentage,
+                  )}
+                </span>
+              )}
+            </div>
+            {phases.length > 0 && (
+              <div className="mt-2 h-px overflow-hidden bg-border/35">
+                <div
+                  className={cn(
+                    "h-full transition-all",
+                    errorPhaseCount > 0
+                      ? "bg-destructive"
+                      : runningPhase?.status === "waiting_approval"
+                        ? "bg-amber-500"
+                        : "bg-emerald-500",
+                  )}
+                  style={{
+                    width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
+                  }}
+                />
+              </div>
+            )}
+          </section>
+        )}
         {/* 进展 */}
         {phases.length > 0 && (
-          <section className="bg-background/85">
+          <section className="border-b border-border/25 py-4">
             <button
               type="button"
               onClick={() => toggleSection("progress")}
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-muted/30"
+              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
             >
-              <h3 className="text-xs font-medium text-foreground">{t.agentWorkbenchPages.progress}</h3>
+              <h3 className="text-xs font-medium text-foreground">
+                {t.agentWorkbenchPages.progress}
+              </h3>
+              <span className="ml-auto truncate text-[10px] text-muted-foreground">
+                {donePhaseCount}/{phases.length} {phaseStatusText("done")}
+                {errorPhaseCount > 0
+                  ? ` · ${errorPhaseCount} ${phaseStatusText("error")}`
+                  : ""}
+                {diffEntries.length > 0
+                  ? ` · ${t.agentWorkbenchPages.artifacts} ${diffEntries.length}`
+                  : ""}
+                {totalReferenceItems > 0
+                  ? ` · ${t.agentWorkbenchPages.sourceCount(totalReferenceItems)}`
+                  : ""}
+                {contextStats.percentage > 0
+                  ? ` · ${t.agentWorkbenchPages.estimatePercentage(
+                      contextStats.percentage,
+                    )}`
+                  : ""}
+              </span>
               {expandedSections.has("progress") ? (
-                <ChevronDownIcon className="ml-auto size-3.5 text-muted-foreground" />
+                <ChevronDownIcon className="size-3.5 text-muted-foreground" />
               ) : (
-                <ChevronRightIcon className="ml-auto size-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               )}
             </button>
+            <div className="mt-2 h-px overflow-hidden bg-border/35">
+              <div
+                className="h-full bg-muted-foreground/35 transition-all"
+                style={{
+                  width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
+                }}
+              />
+            </div>
             {expandedSections.has("progress") && (
-              <ul className="max-h-48 divide-y divide-border/20 overflow-y-auto border-t border-border/30">
+              <ul className="mt-3 space-y-2">
                 {phases.map((phase) => (
                   <li
                     key={phase.id}
-                    className="flex items-center gap-2 px-3 py-1.5"
+                    className="flex items-center gap-2"
                   >
                     {phase.status === "done" ? (
-                      <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted">
+                      <span className="flex size-4 shrink-0 items-center justify-center">
                         <CheckIcon className="size-2.5 text-muted-foreground" />
                       </span>
                     ) : phase.status === "running" ? (
                       <Loader2Icon className="size-3.5 shrink-0 animate-spin text-primary" />
+                    ) : phase.status === "waiting_approval" ? (
+                      <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
                     ) : (
                       <CircleIcon className="size-3.5 shrink-0 text-muted-foreground/40" />
                     )}
@@ -924,25 +1056,38 @@ export function AgentSummaryPage({
 
         {/* 产物 */}
         {diffEntries.length > 0 && (
-          <section className="bg-background/85">
+          <section className="border-b border-border/25 py-4">
             <button
               type="button"
               onClick={() => toggleSection("artifacts")}
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-muted/30"
+              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
             >
-              <h3 className="text-xs font-medium text-foreground">{t.agentWorkbenchPages.artifacts}</h3>
+              <h3 className="text-xs font-medium text-foreground">
+                {t.agentWorkbenchPages.artifacts}
+              </h3>
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                {artifactDiffEntries.length > 0
+                  ? `${t.agentWorkbenchPages.generatedArtifacts} ${artifactDiffEntries.length}`
+                  : ""}
+                {artifactDiffEntries.length > 0 && changedFileEntries.length > 0
+                  ? " · "
+                  : ""}
+                {changedFileEntries.length > 0
+                  ? `${t.agentWorkbenchPages.changedFiles} ${changedFileEntries.length}`
+                  : ""}
+              </span>
               {expandedSections.has("artifacts") ? (
-                <ChevronDownIcon className="ml-auto size-3.5 text-muted-foreground" />
+                <ChevronDownIcon className="size-3.5 text-muted-foreground" />
               ) : (
-                <ChevronRightIcon className="ml-auto size-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               )}
             </button>
-            {expandedSections.has("artifacts") && (
-              <div className="border-t border-border/30">
+            {expandedSections.has("artifacts") ? (
+              <div className="mt-3">
                 {artifactDiffEntries.length > 0 && (
                   <>
-                    <div className="flex items-center gap-1.5 border-b border-border/20 px-3 py-1.5">
-                      <span className="text-[11px] font-medium text-foreground">
+                    <div className="mb-1 flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-muted-foreground">
                         {t.agentWorkbenchPages.generatedArtifacts}
                       </span>
                       <span className="text-[10px] text-muted-foreground">
@@ -960,9 +1105,9 @@ export function AgentSummaryPage({
                   <>
                     <div
                       className={cn(
-                        "flex items-center gap-1.5 border-b border-border/20 px-3 py-1.5",
+                        "mb-1 mt-3 flex items-center gap-1.5",
                         artifactDiffEntries.length > 0 &&
-                          "border-t border-border/20",
+                          "border-t border-border/20 pt-3",
                       )}
                     >
                       <span className="text-[11px] font-medium text-foreground">
@@ -980,33 +1125,45 @@ export function AgentSummaryPage({
                   </>
                 )}
               </div>
+            ) : (
+              <SummaryDiffEntryList
+                entries={diffEntries.slice(0, 3)}
+                kind={artifactDiffEntries.length > 0 ? "artifact" : "change"}
+                onOpenEntry={openDiffEntry}
+              />
             )}
           </section>
         )}
 
         {/* 子智能体 */}
         {agentTiles.length > 0 && (
-          <section className="bg-background/85">
+          <section className="border-b border-border/25 py-4">
             <button
               type="button"
               onClick={() => toggleSection("subagents")}
-              className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-muted/30"
+              className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
             >
-              <h3 className="text-xs font-medium text-foreground">{t.agentWorkbenchPages.subagents}</h3>
+              <h3 className="text-xs font-medium text-foreground">
+                {t.agentWorkbenchPages.subagents}
+              </h3>
+              <span className="ml-auto text-[10px] text-muted-foreground">
+                {t.agentWorkbenchPages.subagentsCompleted(
+                  agentHealth.done,
+                  agentHealth.total,
+                )}
+              </span>
               {expandedSections.has("subagents") ? (
-                <ChevronDownIcon className="ml-auto size-3.5 text-muted-foreground" />
+                <ChevronDownIcon className="size-3.5 text-muted-foreground" />
               ) : (
-                <ChevronRightIcon className="ml-auto size-3.5 text-muted-foreground" />
+                <ChevronRightIcon className="size-3.5 text-muted-foreground" />
               )}
             </button>
-            {expandedSections.has("subagents") && (
-              <div className="border-t border-border/30">
+            {expandedSections.has("subagents") ? (
+              <div className="mt-3">
                 <div
                   className={cn(
-                    "border-b border-border/20 px-3 py-2 text-[11px]",
-                    agentHealth.failed > 0
-                      ? "bg-destructive/5"
-                      : "bg-emerald-500/5",
+                    "pb-2 text-[11px]",
+                    agentHealth.failed > 0 && "text-destructive",
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -1026,17 +1183,23 @@ export function AgentSummaryPage({
                     </span>
                     {agentHealth.failed > 0 && (
                       <span className="font-medium text-destructive">
-                        {t.agentWorkbenchPages.subagentsFailed(agentHealth.failed)}
+                        {t.agentWorkbenchPages.subagentsFailed(
+                          agentHealth.failed,
+                        )}
                       </span>
                     )}
                     {agentHealth.running > 0 && (
                       <span className="text-muted-foreground">
-                        {t.agentWorkbenchPages.subagentsRunning(agentHealth.running)}
+                        {t.agentWorkbenchPages.subagentsRunning(
+                          agentHealth.running,
+                        )}
                       </span>
                     )}
                     {agentHealth.pending > 0 && (
                       <span className="text-muted-foreground">
-                        {t.agentWorkbenchPages.subagentsPending(agentHealth.pending)}
+                        {t.agentWorkbenchPages.subagentsPending(
+                          agentHealth.pending,
+                        )}
                       </span>
                     )}
                   </div>
@@ -1048,13 +1211,13 @@ export function AgentSummaryPage({
                     </div>
                   )}
                 </div>
-                <ul className="max-h-48 divide-y divide-border/20 overflow-y-auto">
+                <ul className="max-h-48 space-y-3 overflow-y-auto">
                   {agentTiles.map((tile) => (
                     <li
                       key={tile.id}
-                      className="flex items-start gap-2 px-3 py-2"
+                      className="flex items-start gap-3"
                     >
-                      <span className="flex size-5 shrink-0 items-center justify-center rounded bg-amber-100 text-amber-700">
+                      <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
                         <BotIcon className="size-3" />
                       </span>
                       <span className="min-w-0 flex-1">
@@ -1072,9 +1235,11 @@ export function AgentSummaryPage({
                                 ? "bg-destructive"
                                 : tile.status === "running"
                                   ? "bg-emerald-500"
+                                  : tile.status === "waiting_approval"
+                                    ? "bg-amber-500"
                                   : tile.status === "done"
                                     ? "bg-muted-foreground/45"
-                                    : "bg-amber-400",
+                                    : "bg-muted-foreground/35",
                             )}
                             aria-hidden="true"
                           />
@@ -1094,75 +1259,85 @@ export function AgentSummaryPage({
                   ))}
                 </ul>
               </div>
+            ) : (
+              <div className="mt-2 text-[10px] text-muted-foreground">
+                {agentHealth.running > 0
+                  ? t.agentWorkbenchPages.subagentsRunning(agentHealth.running)
+                  : agentHealth.failed > 0
+                    ? t.agentWorkbenchPages.subagentsFailed(agentHealth.failed)
+                    : t.agentWorkbenchPages.subagentsCompleted(
+                        agentHealth.done,
+                        agentHealth.total,
+                      )}
+              </div>
             )}
           </section>
         )}
 
         {/* 上下文（只展示本轮事件流里可确认的内容） */}
-        <section className="mt-2 border-t-4 border-muted/80 bg-background/90">
+        <section className="py-4">
           <button
             type="button"
             onClick={() => toggleSection("references")}
-            className="flex w-full items-start gap-2 px-3 py-3 text-left transition-colors hover:bg-muted/30"
+            className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
           >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {t.agentWorkbenchPages.context}
-                </h3>
-                <span className="rounded-md border border-border/45 bg-muted/35 px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                  {t.agentWorkbenchPages.observableThisRound}
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {t.agentWorkbenchPages.sourceCount(totalReferenceItems)}
-                </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {t.agentWorkbenchPages.estimatePercentage(contextStats.percentage)}
-                </span>
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-                {observedReferenceTabs.length === 0 ? (
-                  <span>{t.agentWorkbenchPages.noSources}</span>
-                ) : (
-                  observedReferenceTabs.map((tab) => {
-                    const meta = OBSERVED_REFERENCE_META[tab.id];
-                    return (
-                      <span key={tab.id} className="flex items-center gap-1">
-                        <span
-                          className={cn(
-                            "inline-block size-2 rounded-sm",
-                            meta.dotClassName,
-                          )}
-                        />
-                        {tab.label} {tab.items.length}
-                      </span>
-                    );
-                  })
-                )}
-                {contextStats.totalTokens > 0 && (
-                  <span className="font-mono">
-                    {t.agentWorkbenchPages.estimatedTokens(contextStats.totalTokens)}
-                  </span>
-                )}
-              </div>
-            </div>
+            <h3 className="text-xs font-medium text-foreground">
+              {t.agentWorkbenchPages.context}
+            </h3>
+            <span className="ml-auto truncate text-[10px] text-muted-foreground">
+              {totalReferenceItems > 0
+                ? t.agentWorkbenchPages.sourceCount(totalReferenceItems)
+                : t.agentWorkbenchPages.noSources}
+              {contextStats.percentage > 0
+                ? ` · ${t.agentWorkbenchPages.estimatePercentage(
+                    contextStats.percentage,
+                  )}`
+                : ""}
+            </span>
             {expandedSections.has("references") ? (
-              <ChevronDownIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+              <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRightIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
             )}
           </button>
           {expandedSections.has("references") && (
-            <div className="border-t border-border/30">
+            <div className="mt-3">
               {/* 上下文来源进度条 */}
-              <div className="px-3 py-2">
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted/50">
+              <div>
+                <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                  {observedReferenceTabs.length === 0 ? (
+                    <span>{t.agentWorkbenchPages.noSources}</span>
+                  ) : (
+                    observedReferenceTabs.map((tab) => {
+                      const meta = OBSERVED_REFERENCE_META[tab.id];
+                      return (
+                        <span key={tab.id} className="flex items-center gap-1">
+                          <span
+                            className={cn(
+                              "inline-block size-2 rounded-sm",
+                              meta.dotClassName,
+                            )}
+                          />
+                          {tab.label} {tab.items.length}
+                        </span>
+                      );
+                    })
+                  )}
+                  {contextStats.totalTokens > 0 && (
+                    <span className="font-mono">
+                      {t.agentWorkbenchPages.estimatedTokens(
+                        contextStats.totalTokens,
+                      )}
+                    </span>
+                  )}
+                </div>
+                <div className="h-px overflow-hidden bg-border/35">
                   <div
                     className="flex h-full"
                     style={{ width: `${contextStats.percentage}%` }}
                   >
                     {contextStats.segments.length === 0 ? (
-                      <div className="h-full w-full bg-muted-foreground/30" />
+                      <div className="h-full w-full bg-muted-foreground/25" />
                     ) : (
                       contextStats.segments.map((segment) => (
                         <div
@@ -1181,7 +1356,7 @@ export function AgentSummaryPage({
               </div>
               {/* 标签页切换 */}
               {observedReferenceTabs.length > 0 && (
-                <div className="flex gap-1.5 overflow-x-auto border-b border-border/20 px-3 pb-2">
+                <div className="mt-3 flex gap-4 overflow-x-auto border-b border-border/20 pb-2">
                   {observedReferenceTabs.map((tab) => {
                     const meta = OBSERVED_REFERENCE_META[tab.id];
                     const TabIcon = meta.Icon;
@@ -1195,17 +1370,17 @@ export function AgentSummaryPage({
                         )}
                         onClick={() => setRefTab(tab.id)}
                         className={cn(
-                          "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
+                          "inline-flex shrink-0 items-center gap-1.5 border-b border-transparent pb-1 text-[11px] font-medium transition-colors",
                           activeRefTab === tab.id
-                            ? "border-primary/45 bg-primary/10 text-foreground"
-                            : "border-border/45 bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                            ? "border-foreground/60 text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
                         )}
                       >
                         <TabIcon
                           className={cn("size-3.5", meta.iconClassName)}
                         />
                         <span>{tab.label}</span>
-                        <span className="rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground">
+                        <span className="font-mono text-[9px] text-muted-foreground">
                           {tab.items.length}
                         </span>
                       </button>
@@ -1214,16 +1389,16 @@ export function AgentSummaryPage({
                 </div>
               )}
               {/* 上下文列表 */}
-              <ul className="max-h-48 divide-y divide-border/20 overflow-y-auto">
+              <ul className="mt-3 max-h-48 space-y-3 overflow-y-auto">
                 {observedReferenceTabs.length === 0 ? (
-                  <li className="px-3 py-4 text-center text-[11px] text-muted-foreground">
+                  <li className="py-4 text-center text-[11px] text-muted-foreground">
                     {t.agentWorkbenchPages.noObservableReferences}
                   </li>
                 ) : (
                   activeRefItems.map((ref) => (
                     <li
                       key={ref.id}
-                      className="flex items-center gap-2 px-3 py-2"
+                      className="flex items-center gap-3"
                     >
                       <ReferenceIcon
                         fallbackClassName={activeRefMeta.iconClassName}
@@ -1235,14 +1410,9 @@ export function AgentSummaryPage({
                         <span className="block truncate text-[11px] text-foreground">
                           {ref.title}
                         </span>
-                        {ref.subtitle && (
-                          <span className="block truncate text-[10px] text-muted-foreground">
-                            {ref.subtitle}
-                          </span>
-                        )}
                       </div>
                       {ref.tag && (
-                        <span className="shrink-0 rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
+                        <span className="shrink-0 text-[9px] text-muted-foreground/70">
                           {ref.tag}
                         </span>
                       )}
@@ -1298,6 +1468,9 @@ export function AgentSubagentsPage({
 
   const active = selectedAgent ?? agents[0];
   const running = agents.filter((agent) => agent.status === "running").length;
+  const waiting = agents.filter(
+    (agent) => agent.status === "waiting_approval",
+  ).length;
   const done = agents.filter((agent) => agent.status === "done").length;
   const errors = agents.filter((agent) => agent.status === "error").length;
 
@@ -1305,9 +1478,18 @@ export function AgentSubagentsPage({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70 p-3">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
         <section className="grid grid-cols-3 gap-2">
-          <AgentMetric label={t.agentWorkbenchPages.metricRunning} value={running} />
-          <AgentMetric label={t.agentWorkbenchPages.metricCompleted} value={done} />
-          <AgentMetric label={t.agentWorkbenchPages.metricError} value={errors} />
+          <AgentMetric
+            label={t.agentWorkbenchPages.metricRunning}
+            value={waiting > 0 ? `${running} / ${waiting}` : running}
+          />
+          <AgentMetric
+            label={t.agentWorkbenchPages.metricCompleted}
+            value={done}
+          />
+          <AgentMetric
+            label={t.agentWorkbenchPages.metricError}
+            value={errors}
+          />
         </section>
 
         <section className="grid gap-2 md:grid-cols-2">
@@ -1366,7 +1548,11 @@ export function AgentSubagentsPage({
                       "h-full rounded-full transition-all",
                       agent.status === "error"
                         ? "bg-destructive"
-                        : "bg-emerald-500",
+                        : agent.status === "waiting_approval"
+                          ? "bg-amber-500"
+                          : agent.status === "pending"
+                            ? "bg-muted-foreground/45"
+                            : "bg-emerald-500",
                     )}
                     style={{ width: `${percent}%` }}
                   />
@@ -1422,7 +1608,9 @@ export function AgentSubagentsPage({
                 />
                 <AgentMetric
                   label={t.agentWorkbenchPages.parentTaskLabel}
-                  value={active.parentToolUseId ?? t.agentWorkbenchPages.noneYet}
+                  value={
+                    active.parentToolUseId ?? t.agentWorkbenchPages.noneYet
+                  }
                 />
               </div>
 
@@ -1488,6 +1676,7 @@ export function AgentCreationCard({
     agent.currentTool ??
     t.agentWorkbenchPages.defaultMotto;
   const active = agent.status === "running";
+  const waiting = agent.status === "waiting_approval";
 
   return (
     <section className="overflow-hidden rounded-lg border border-border/55 bg-background shadow-sm">
@@ -1495,10 +1684,8 @@ export function AgentCreationCard({
         {t.agentWorkbenchPages.agentClusterCreateAssistant}
       </div>
       <div className="flex justify-center bg-[color:color-mix(in_oklch,var(--muted)_38%,var(--background))] px-4 py-5">
-        <div className="relative w-full max-w-sm">
-          <div className="absolute left-1/2 -top-7 h-10 w-7 -translate-x-1/2 rounded-b border-x border-border bg-foreground/90" />
-          <div className="absolute left-1/2 top-1 h-2 w-16 -translate-x-1/2 rounded-full bg-background shadow-sm" />
-          <div className="min-h-[28rem] rounded-xl border border-border/70 bg-background px-5 py-5 shadow-lg">
+        <div className="w-full max-w-sm">
+          <div className="min-h-[28rem] rounded-xl border border-border/70 bg-background px-5 py-5 shadow-md">
             {showBrief ? (
               <div className="flex h-full min-h-[25rem] flex-col">
                 <div className="flex items-center gap-3">
@@ -1577,7 +1764,11 @@ export function AgentCreationCard({
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium",
                       agentStatusClass(agent.status),
-                      active ? "bg-emerald-500/10" : "bg-muted",
+                      active
+                        ? "bg-emerald-500/10"
+                        : waiting
+                          ? "bg-amber-500/10"
+                          : "bg-muted",
                     )}
                   >
                     {active && <Loader2Icon className="size-3 animate-spin" />}
@@ -1585,7 +1776,9 @@ export function AgentCreationCard({
                   </span>
                   {agent.iterationCount !== undefined && (
                     <span className="text-xs text-muted-foreground">
-                      {t.agentWorkbenchPages.iterationRound(agent.iterationCount)}
+                      {t.agentWorkbenchPages.iterationRound(
+                        agent.iterationCount,
+                      )}
                     </span>
                   )}
                 </div>
@@ -1684,10 +1877,12 @@ export function friendlyRoleName(role: string | undefined | null): string {
 }
 
 export function AgentFilesPage({
+  onBackToSummary,
   recentFileEvents,
   threadId,
   workDir,
 }: {
+  onBackToSummary?: () => void;
   recentFileEvents: FileTreeEvent[];
   threadId?: string | null;
   workDir?: string;
@@ -1703,6 +1898,21 @@ export function AgentFilesPage({
   }
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background/70 p-2">
+      {onBackToSummary && (
+        <div className="mb-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onBackToSummary}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            {t.agentWorkbenchPages.dashboardOverview}
+          </button>
+          <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+            {FILES_TAB_LABEL}
+          </span>
+        </div>
+      )}
       <FileTree
         workDir={workDir}
         threadId={threadId}
@@ -1742,7 +1952,13 @@ export function DiffText({ text }: { text: string }) {
   );
 }
 
-export function AgentDiffPage({ entries }: { entries: DiffEntry[] }) {
+export function AgentDiffPage({
+  entries,
+  onBackToSummary,
+}: {
+  entries: DiffEntry[];
+  onBackToSummary?: () => void;
+}) {
   const { t } = useI18n();
   if (entries.length === 0) {
     return (
@@ -1755,6 +1971,21 @@ export function AgentDiffPage({ entries }: { entries: DiffEntry[] }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/70 p-3">
       <div className="mx-auto w-full max-w-2xl space-y-3">
+        {onBackToSummary && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onBackToSummary}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            >
+              <ArrowLeftIcon className="size-3.5" />
+              {t.agentWorkbenchPages.dashboardOverview}
+            </button>
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground">
+              {DIFF_TAB_LABEL}
+            </span>
+          </div>
+        )}
         {entries.map((entry) => (
           <section
             key={entry.id}
@@ -1763,8 +1994,11 @@ export function AgentDiffPage({ entries }: { entries: DiffEntry[] }) {
             <div className="flex items-center gap-2 border-b border-border/45 px-3 py-2">
               <StatusGlyph status={entry.status} />
               <GitBranchIcon className="size-4 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
-                {entry.title}
+              <span
+                className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground"
+                title={entry.path}
+              >
+                {basename(entry.title || entry.path)}
               </span>
             </div>
             <DiffText text={entry.text} />

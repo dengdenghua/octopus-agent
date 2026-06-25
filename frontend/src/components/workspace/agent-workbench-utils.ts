@@ -1,4 +1,5 @@
 import {
+  AlertCircleIcon,
   CheckCircle2Icon,
   ClockIcon,
   FileTextIcon,
@@ -18,6 +19,7 @@ import {
   normalizeEventsForSettledDisplay,
   toWorkBlocks,
   type WorkBlock,
+  type WorkBlockStatus,
 } from "./work-blocks";
 
 // ── Type definitions ──────────────────────────────────────────────────
@@ -26,7 +28,7 @@ export interface AgentTile {
   id: string;
   name: string;
   label: string;
-  status: "running" | "done" | "pending" | "error";
+  status: "running" | "waiting_approval" | "done" | "pending" | "error";
   task: string;
   /** Full prompt or mission brief when available. */
   prompt?: string;
@@ -97,7 +99,7 @@ export interface DiffEntry {
   title: string;
   op?: string | null;
   text: string;
-  status: LiveToolEvent["status"];
+  status: WorkBlockStatus;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -170,8 +172,9 @@ export function blockIcon(kind: WorkBlock["kind"]) {
   return MonitorIcon;
 }
 
-export function statusIcon(status: LiveToolEvent["status"] | AgentPhaseStatus) {
+export function statusIcon(status: WorkBlockStatus | AgentPhaseStatus) {
   if (status === "running") return Loader2Icon;
+  if (status === "warning") return AlertCircleIcon;
   if (status === "error") return XCircleIcon;
   if (status === "done") return CheckCircle2Icon;
   return ClockIcon;
@@ -358,6 +361,7 @@ export function compactDetail(text: string, max = 160) {
 export function agentProgressPercent(status: AgentTile["status"]) {
   if (status === "done") return 100;
   if (status === "running") return 48;
+  if (status === "waiting_approval") return 48;
   if (status === "error") return 100;
   return 0;
 }

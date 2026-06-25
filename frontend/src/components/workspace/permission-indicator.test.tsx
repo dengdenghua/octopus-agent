@@ -23,9 +23,9 @@ describe("<PermissionIndicator />", () => {
 
     const trigger = screen.getByTestId("permission-mode-trigger");
     expect(trigger).toBeInTheDocument();
-    expect(trigger).toHaveAccessibleName("Permissions: Trusted");
-    expect(trigger).toHaveTextContent("Trusted");
-    expect(trigger.className).toContain("bg-muted/45");
+    expect(trigger).toHaveAccessibleName("Permissions: Full access");
+    expect(trigger).toHaveTextContent("Full access");
+    expect(trigger.className).toContain("bg-background/90");
     expect(trigger.className).not.toContain("amber");
 
     openPermissionMenu(trigger);
@@ -35,44 +35,44 @@ describe("<PermissionIndicator />", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByTestId("permission-mode-option-default"),
-    ).toHaveTextContent("Confirm");
+    ).toHaveTextContent("Ask first");
     expect(
       screen.getByTestId("permission-mode-option-acceptEdits"),
-    ).toHaveTextContent("Edit files");
-    expect(screen.getByText("Edit files")).toBeInTheDocument();
-    expect(screen.getAllByText("Trusted").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Plan")).toBeInTheDocument();
+    ).toHaveTextContent("Auto-edit files");
+    expect(screen.getByText("Auto-edit files")).toBeInTheDocument();
+    expect(screen.getAllByText("Full access").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Plan only")).not.toBeInTheDocument();
 
     expect(
       screen.getByText(
-        "Allow file edits automatically; still confirm other risky actions.",
+        "Apply file edits automatically; still ask before risky commands.",
       ),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Edit files"));
+    fireEvent.click(screen.getByText("Auto-edit files"));
 
     await waitFor(() => {
       expect(onModeChange).toHaveBeenCalledWith("acceptEdits");
     });
   });
 
-  it("shows mode descriptions directly in the menu", async () => {
+  it("keeps legacy plan mode out of the menu", async () => {
     renderWithProviders(
-      <PermissionIndicator mode="plan" onModeChange={vi.fn()} />,
+      <PermissionIndicator mode="default" onModeChange={vi.fn()} />,
     );
 
     openPermissionMenu(
-      screen.getByRole("button", { name: "Permissions: Plan" }),
+      screen.getByRole("button", { name: "Permissions: Ask first" }),
     );
 
-    const confirmItem = await screen.findByText("Confirm");
+    const confirmItem = await screen.findByTestId("permission-mode-option-default");
     expect(confirmItem).toBeInTheDocument();
-    expect(screen.getByTestId("permission-mode-option-plan")).toHaveTextContent(
-      "Plan",
-    );
+    expect(
+      screen.queryByTestId("permission-mode-option-plan"),
+    ).not.toBeInTheDocument();
 
     expect(
-      screen.getByText("Confirm before risky tool use."),
+      screen.getByText("Ask before sensitive actions."),
     ).toBeInTheDocument();
   });
 });

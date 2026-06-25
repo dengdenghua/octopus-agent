@@ -290,7 +290,35 @@ describe("EvolutionControlPanel — integration", () => {
         },
       ],
       "GET /api/intel-evolution/protocols/repair/proposals?status=pending":
-        () => [],
+        () => [
+          {
+            id: 9,
+            drift_event_id: 11,
+            protocol_id: "learned_rule:read_before_write_guard",
+            created_at: "2026-04-15T00:00:00Z",
+            suggested_diff: "Insert read_file before edit_file.",
+            rationale: "planner learned the rule but needs a hard guard",
+            status: "pending",
+            source: "learned_rules",
+            repair_tasks: [
+              {
+                id: 12,
+                proposal_id: 9,
+                protocol_id: "learned_rule:read_before_write_guard",
+                priority: "high",
+                title: "Harden read-before-write planning guard for edit_file",
+                target_layer: "planner/tool preflight",
+                target_modules: [
+                  "runtime/execution/tool_engine/executor.py",
+                  "runtime/core/cerebrum/react_execution.py",
+                ],
+                verification_commands: [
+                  ".venv/bin/python -m pytest tests/test_write_skills.py -q",
+                ],
+              },
+            ],
+          },
+        ],
       "POST /api/intel-evolution/protocols/drift/scan": (_u) => {
         scanCalls.push(1);
         return { ok: true };
@@ -310,6 +338,16 @@ describe("EvolutionControlPanel — integration", () => {
 
     expect(await screen.findByText("proto.x")).toBeInTheDocument();
     expect(screen.getByText("schema drift detected")).toBeInTheDocument();
+    expect(
+      screen.getByText("learned_rule:read_before_write_guard"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Harden read-before-write planning guard for edit_file"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("high")).toBeInTheDocument();
+    expect(
+      screen.getByText(/runtime\/execution\/tool_engine\/executor.py/),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "立即扫描" }));
     await user.click(screen.getByRole("button", { name: "生成修复" }));

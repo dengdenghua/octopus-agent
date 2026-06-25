@@ -40,7 +40,7 @@ export function normalizePermissionMode(value: unknown): PermissionMode {
   ) {
     return "bypassPermissions";
   }
-  if (normalized === "plan") return "plan";
+  if (normalized === "plan") return "default";
   return "default";
 }
 
@@ -61,7 +61,6 @@ export function permissionRuntimeConfig(
       planningMode: false,
     };
   }
-  const planningMode = mode === "plan";
   return {
     mode,
     approvalPolicy: "on-request",
@@ -71,6 +70,6 @@ export function permissionRuntimeConfig(
     },
     execution_environment: "sandbox",
     sandbox_mode: "sandbox",
-    planningMode,
+    planningMode: false,
   };
 }

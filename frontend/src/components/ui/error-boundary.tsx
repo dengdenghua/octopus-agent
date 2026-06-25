@@ -124,3 +124,30 @@ export class ErrorBoundary extends Component<
     return this.props.children;
   }
 }
+
+/**
+ * HOC that wraps a component with an ErrorBoundary.
+ * Useful for isolating individual route pages or panels
+ * so one crash does not take down the entire workspace.
+ *
+ * @example
+ * const SafePage = withErrorBoundary(MyPage, {
+ *   fallback: <PanelErrorFallback />,
+ * });
+ */
+export function withErrorBoundary<P extends object>(
+  WrappedComponent: React.ComponentType<P>,
+  options?: Omit<ErrorBoundaryProps, "children">,
+) {
+  function WithErrorBoundaryWrapper(props: P) {
+    return (
+      <ErrorBoundary {...options}>
+        <WrappedComponent {...props} />
+      </ErrorBoundary>
+    );
+  }
+  WithErrorBoundaryWrapper.displayName = `withErrorBoundary(${
+    WrappedComponent.displayName || WrappedComponent.name || "Component"
+  })`;
+  return WithErrorBoundaryWrapper;
+}

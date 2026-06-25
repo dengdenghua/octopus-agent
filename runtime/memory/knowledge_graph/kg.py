@@ -78,6 +78,7 @@ class KnowledgeGraph:
 
                 superseded: list[UUID] = []
                 blocked_by: Triple | None = None
+                tied_with: Triple | None = None
                 for e in existing_actives:
                     new_wins = (
                         triple.confidence > e.confidence
@@ -85,9 +86,33 @@ class KnowledgeGraph:
                         and triple.ts > e.ts
                     )
                     if not new_wins:
+                        # A genuine tie — equal confidence AND equal timestamp,
+                        # so neither dominates — on a single-valued predicate
+                        # with a DIFFERENT object (exact duplicates were handled
+                        # above) is a real contradiction, not "lower confidence".
+                        # Surface it as ``disputed`` (the verdict/status that
+                        # triple.py + Verdict declare but the resolver never
+                        # produced) per protocols/conflict_resolution.md §Direct.
+                        if triple.confidence == e.confidence and triple.ts == e.ts:
+                            tied_with = e
                         blocked_by = e
                         break
                     superseded.append(e.triple_id)
+
+                if tied_with is not None:
+                    # Non-destructive: leave the incumbent active and don't store
+                    # the newcomer — we can't auto-pick a winner, so we flag the
+                    # contradiction for later resolution instead of silently
+                    # mislabelling it ``ignored_lower_conf``.
+                    return AddResult(
+                        verdict="disputed",
+                        new_triple_id=triple.triple_id,
+                        reason=(
+                            f"unresolvable tie with {tied_with.triple_id}: equal "
+                            f"confidence {triple.confidence:.2f} and timestamp, "
+                            f"different object ({tied_with.object!r} vs {triple.object!r})"
+                        ),
+                    )
 
                 if blocked_by is not None:
                     return AddResult(

@@ -1,31 +1,29 @@
 /**
- * Builder / Coder mode selector for Code mode.
+ * Task-oriented mode selector for Agent project/code mode.
  *
- * - Toggles between Builder (greenfield) and Coder (brownfield) modes.
- * - Auto-detects the recommended mode based on workspace contents.
- * - Shows mode-specific context (Builder -> templates, Coder -> project info).
+ * Project detection decides whether the workspace is new or existing.
+ * User-facing modes decide the work strategy: develop, audit, UX/UI, architect.
  */
 
 import {
   BuildingIcon,
+  ChevronDownIcon,
   CodeIcon,
-  HammerIcon,
   LoaderIcon,
-  SparklesIcon,
+  PaletteIcon,
+  ShieldCheckIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-import { swallow } from "@/core/utils/log";
-import { getBackendBaseURL } from "@/core/config";
 import { authHeaders } from "@/core/auth/api";
+import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type AgentModeName = "builder" | "coder" | "architect";
+export type AgentModeName = "develop" | "audit" | "uxui" | "architect";
+export type DetectedProjectKind = "builder" | "coder" | "architect";
 
 export interface VerificationCommand {
   kind: string;
@@ -47,32 +45,43 @@ export interface DetectionSignals {
 }
 
 export interface DetectResponse {
-  recommended_mode: AgentModeName;
+  recommended_mode: DetectedProjectKind;
   confidence: number;
   reason: string;
   signals: DetectionSignals;
 }
 
-interface TemplateInfo {
+interface ModeInfo {
   name: string;
   display_name: string;
   description: string;
-  language: string;
-  framework: string;
-  tags: string[];
-}
-
-interface ModeInfo {
-  name: AgentModeName;
-  display_name: string;
-  description: string;
   icon: string;
-  templates?: TemplateInfo[] | null;
 }
 
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
+type PanelRect = {
+  left: number;
+  width: number;
+  maxHeight: number;
+  top?: number;
+  bottom?: number;
+};
+
+type ModeOption = {
+  name: AgentModeName;
+  icon: typeof CodeIcon;
+  tone: string;
+  activeTone: string;
+  ring: string;
+  label: string;
+  desc: string;
+  effect: string;
+  tooltip: string;
+};
+
+const PANEL_WIDTH = 340;
+const PANEL_GAP = 6;
+const PANEL_MARGIN = 12;
+const PANEL_MIN_HEIGHT = 180;
 
 async function fetchDetection(workspacePath: string): Promise<DetectResponse> {
   const url = `${getBackendBaseURL()}/api/agent-modes/detect?workspace_path=${encodeURIComponent(workspacePath)}`;
@@ -101,14 +110,13 @@ async function setModeOnServer(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 interface ModeSelectorProps {
   workDir: string;
   sessionId: string;
   mode: AgentModeName;
+  codeModeUnlocked?: boolean;
+  chromeless?: boolean;
+  permissionLabel?: string;
   onModeChange: (mode: AgentModeName) => void;
   onDetectionChange?: (detection: DetectResponse | null) => void;
   className?: string;
@@ -118,6 +126,9 @@ export function ModeSelector({
   workDir,
   sessionId,
   mode,
+  codeModeUnlocked = false,
+  chromeless = false,
+  permissionLabel,
   onModeChange,
   onDetectionChange,
   className,
@@ -128,11 +139,34 @@ export function ModeSelector({
   const [expanded, setExpanded] = useState(false);
   const [modes, setModes] = useState<ModeInfo[]>([]);
   const panelRef = useRef<HTMLDivElement>(null);
-  const prevWorkDir = useRef(workDir);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const prevWorkDir = useRef<string | null>(null);
+  const manualOverrideRef = useRef(false);
+  const [manualOverride, setManualOverride] = useState(false);
+  const [panelRect, setPanelRect] = useState<PanelRect | null>(null);
 
-  // Auto-detect on mount and when workDir changes
+  const modeOptions = getModeOptions(t);
+  const activeOption = modeOptions.find((option) => option.name === mode) ?? {
+    name: "develop",
+    icon: CodeIcon,
+    tone: "bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:bg-sky-900/30 dark:text-sky-400",
+    activeTone:
+      "bg-sky-500/15 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 ring-1 ring-sky-500/20",
+    ring: "ring-sky-500/20",
+    label: t.modes.develop,
+    desc: t.modes.developDesc,
+    effect: t.modes.developEffect,
+    tooltip: t.modes.developTooltip,
+  };
+
   useEffect(() => {
     if (!workDir) return;
+    const workspaceChanged = prevWorkDir.current !== workDir;
+    if (workspaceChanged) {
+      prevWorkDir.current = workDir;
+      manualOverrideRef.current = false;
+      setManualOverride(false);
+    }
 
     let cancelled = false;
     const doDetect = async () => {
@@ -143,46 +177,44 @@ export function ModeSelector({
         setDetection(result);
         onDetectionChange?.(result);
 
-        // Only auto-switch on initial load or workspace change
-        if (prevWorkDir.current !== workDir) {
-          prevWorkDir.current = workDir;
-          onModeChange(result.recommended_mode);
+        if (!manualOverrideRef.current) {
+          onModeChange(modeFromProjectKind(result.recommended_mode));
         }
       } catch (e) {
         swallow(e);
         if (!cancelled) onDetectionChange?.(null);
-        // Silently fall back — keep current mode
       } finally {
         if (!cancelled) setDetecting(false);
       }
     };
 
-    doDetect();
+    void doDetect();
     return () => {
       cancelled = true;
     };
   }, [onDetectionChange, onModeChange, workDir]);
 
-  // Fetch available modes (templates etc.)
   useEffect(() => {
     let cancelled = false;
     fetchModes()
       .then((m) => {
         if (!cancelled) setModes(m);
       })
-      .catch(() => {
-        /* ignore */
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Close panel on outside click
   useEffect(() => {
     if (!expanded) return;
     const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setExpanded(false);
       }
     };
@@ -190,8 +222,52 @@ export function ModeSelector({
     return () => document.removeEventListener("mousedown", handler);
   }, [expanded]);
 
+  const updatePanelPosition = useCallback(() => {
+    const trigger = panelRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(PANEL_WIDTH, viewportWidth - PANEL_MARGIN * 2);
+    const left = Math.min(
+      Math.max(PANEL_MARGIN, rect.right - width),
+      viewportWidth - PANEL_MARGIN - width,
+    );
+    const spaceBelow = viewportHeight - rect.bottom - PANEL_MARGIN;
+    const spaceAbove = rect.top - PANEL_MARGIN;
+    const openUp = spaceAbove > spaceBelow;
+    const maxHeight = Math.max(
+      PANEL_MIN_HEIGHT,
+      openUp ? spaceAbove - PANEL_GAP : spaceBelow - PANEL_GAP,
+    );
+    setPanelRect({
+      left,
+      width,
+      maxHeight,
+      ...(openUp
+        ? { bottom: viewportHeight - rect.top + PANEL_GAP }
+        : { top: rect.bottom + PANEL_GAP }),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!expanded) {
+      setPanelRect(null);
+      return;
+    }
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [expanded, updatePanelPosition]);
+
   const handleToggle = useCallback(
     (newMode: AgentModeName) => {
+      manualOverrideRef.current = true;
+      setManualOverride(true);
       onModeChange(newMode);
       void setModeOnServer(newMode, sessionId);
       setExpanded(false);
@@ -199,232 +275,187 @@ export function ModeSelector({
     [onModeChange, sessionId],
   );
 
-  const isBuilder = mode === "builder";
-  const isArchitect = mode === "architect";
-  const modeInfo = modes.find((m) => m.name === mode);
-  const builderTemplates =
-    modes.find((m) => m.name === "builder")?.templates ?? [];
-
-  const modeColorClass = isArchitect
-    ? "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:bg-amber-900/30 dark:text-amber-400"
-    : isBuilder
-      ? "bg-violet-500/15 text-violet-700 hover:bg-violet-500/25 dark:bg-violet-900/30 dark:text-violet-400"
-      : "bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:bg-sky-900/30 dark:text-sky-400";
+  const autoMode = detection
+    ? modeFromProjectKind(detection.recommended_mode)
+    : null;
+  const isManualOverride =
+    manualOverride || Boolean(autoMode && autoMode !== mode);
+  const ActiveIcon = detecting ? LoaderIcon : activeOption.icon;
+  const activeLabel = activeOption.label;
+  const modeInfo = modes.find((item) => item.name === mode);
+  const workspaceLabel = compactWorkspaceLabel(workDir);
 
   return (
     <div ref={panelRef} className={cn("relative", className)}>
       <button
         onClick={() => setExpanded(!expanded)}
         className={cn(
-          "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all duration-200 ring-1",
-          modeColorClass,
-          isArchitect
-            ? "ring-amber-500/20"
-            : isBuilder
-              ? "ring-violet-500/20"
-              : "ring-sky-500/20",
+          "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors duration-150",
+          chromeless
+            ? "h-6 rounded-md px-0.5 hover:text-foreground"
+            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border/50 hover:bg-muted/55",
         )}
-        title={isBuilder ? t.modes.builderTooltip : t.modes.coderTooltip}
+        title={activeOption.tooltip}
       >
-        {detecting ? (
-          <LoaderIcon className="size-3 animate-spin" />
-        ) : isBuilder ? (
-          <HammerIcon className="size-3" />
-        ) : isArchitect ? (
-          <BuildingIcon className="size-3" />
-        ) : (
-          <CodeIcon className="size-3" />
-        )}
-        {isArchitect
-          ? (t.modes.architect ?? "Architect")
-          : isBuilder
-            ? t.modes.builder
-            : t.modes.coder}
-        {detection && (
+        <ActiveIcon className={cn("size-3", detecting && "animate-spin")} />
+        <span className={cn("truncate", chromeless ? "max-w-[42px]" : "max-w-[72px]")}>
+          {activeLabel}
+        </span>
+        {!chromeless && detection && isManualOverride && (
           <span className="text-[9px] opacity-50">
-            {detection.recommended_mode === mode ? "" : "(override)"}
+            {t.modes.manualOverrideShort}
           </span>
         )}
+        <span
+          className={cn(
+            "size-1.5 rounded-full transition-all duration-200",
+            codeModeUnlocked
+              ? "bg-emerald-500/90 shadow-[0_0_6px_rgba(16,185,129,0.28)] animate-pulse"
+              : "bg-amber-500/85 shadow-[0_0_6px_rgba(245,158,11,0.24)] animate-pulse",
+          )}
+          aria-hidden="true"
+        />
+        <ChevronDownIcon className="size-3 opacity-35 transition-opacity group-hover:opacity-60" />
       </button>
 
-      {/* Expanded panel */}
-      {expanded && (
-        <div className="absolute top-full right-0 z-50 mt-1.5 w-80 overflow-hidden rounded-xl border bg-background shadow-xl ring-1 ring-border/30">
-          <div className="flex gap-1 border-b p-2">
-            <button
-              onClick={() => handleToggle("builder")}
-              className={cn(
-                "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-200",
-                mode === "builder"
-                  ? "bg-violet-500/15 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300 ring-1 ring-violet-500/20"
-                  : "text-muted-foreground hover:bg-muted",
-              )}
+      {expanded && panelRect && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="fixed z-[100] overflow-hidden rounded-xl border bg-background shadow-xl ring-1 ring-border/30"
+              style={{
+                left: `${panelRect.left}px`,
+                width: `${panelRect.width}px`,
+                maxHeight: `${panelRect.maxHeight}px`,
+                top:
+                  panelRect.top !== undefined
+                    ? `${panelRect.top}px`
+                    : undefined,
+                bottom:
+                  panelRect.bottom !== undefined
+                    ? `${panelRect.bottom}px`
+                    : undefined,
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
             >
-              <HammerIcon className="size-4 shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold">{t.modes.builder}</div>
-                <div className="text-[10px] opacity-70">
-                  {t.modes.builderDesc}
+              <div className="max-h-[inherit] overflow-y-auto">
+                <div className="space-y-1 p-2">
+                  {modeOptions.map((option) => {
+                    const Icon = option.icon;
+                    return (
+                      <button
+                        key={option.name}
+                        onClick={() => handleToggle(option.name)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-lg py-2 text-xs transition-all duration-200",
+                          "px-3",
+                          mode === option.name
+                            ? option.activeTone
+                            : "text-muted-foreground hover:bg-muted",
+                        )}
+                        title={option.effect}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <div className="flex min-w-0 items-center gap-2 text-left">
+                          <span className="font-semibold">{option.label}</span>
+                          <span className="truncate text-[10px] opacity-70">
+                            {option.desc}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
-              </div>
-            </button>
 
-            <button
-              onClick={() => handleToggle("coder")}
-              className={cn(
-                "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-200",
-                mode === "coder"
-                  ? "bg-sky-500/15 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 ring-1 ring-sky-500/20"
-                  : "text-muted-foreground hover:bg-muted",
-              )}
-            >
-              <CodeIcon className="size-4 shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold">{t.modes.coder}</div>
-                <div className="text-[10px] opacity-70">
-                  {t.modes.coderDesc}
-                </div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => handleToggle("architect")}
-              className={cn(
-                "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-200",
-                mode === "architect"
-                  ? "bg-amber-500/15 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-500/20"
-                  : "text-muted-foreground hover:bg-muted",
-              )}
-            >
-              <BuildingIcon className="size-4 shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold">
-                  {t.modes.architect ?? "Architect"}
-                </div>
-                <div className="text-[10px] opacity-70">
-                  {t.modes.architectDesc ?? "Safe system integration"}
-                </div>
-              </div>
-            </button>
-          </div>
-
-          {/* Detection info */}
-          {detection && (
-            <div className="border-b px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px]">
-                <SparklesIcon className="size-3 text-amber-500" />
-                <span className="font-medium text-muted-foreground">
-                  {t.modes.autoDetected}:
-                </span>
-                <span
-                  className={cn(
-                    "font-semibold",
-                    detection.recommended_mode === "builder"
-                      ? "text-violet-600"
-                      : "text-sky-600",
-                  )}
-                >
-                  {detection.recommended_mode === "builder"
-                    ? t.modes.builder
-                    : t.modes.coder}
-                </span>
-                <span className="text-muted-foreground">
-                  ({Math.round(detection.confidence * 100)}%)
-                </span>
-              </div>
-              <p className="mt-0.5 text-[10px] text-muted-foreground leading-tight">
-                {detection.reason}
-              </p>
-              {/* Signal details */}
-              <div className="mt-1 flex flex-wrap gap-1">
-                {detection.signals.file_count != null && (
-                  <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                    {detection.signals.file_count} files
-                  </span>
-                )}
-                {detection.signals.git_commits != null &&
-                  detection.signals.git_commits > 0 && (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                      {detection.signals.git_commits} commits
-                    </span>
-                  )}
-                {detection.signals.manifests?.map((m) => (
-                  <span
-                    key={m}
-                    className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground"
-                  >
-                    {m}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Builder-specific: template list */}
-          {mode === "builder" && builderTemplates.length > 0 && (
-            <div className="max-h-48 overflow-y-auto px-3 py-2">
-              <div className="mb-1 text-[10px] font-medium text-muted-foreground">
-                {t.modes.projectTemplates}
-              </div>
-              <div className="space-y-1">
-                {builderTemplates.map((tpl) => (
-                  <div
-                    key={tpl.name}
-                    className="rounded-lg bg-muted/50 px-2 py-1.5 text-[11px]"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{tpl.display_name}</span>
-                      <span className="text-[9px] text-muted-foreground">
-                        {tpl.language}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">
-                      {tpl.description}
-                    </p>
+                {modeInfo && (
+                  <div className="border-t px-3 py-2 text-[10px] text-muted-foreground leading-tight">
+                    {modeInfo.description}
                   </div>
-                ))}
+                )}
+                {workspaceLabel && (
+                  <div className="flex min-w-0 items-center gap-2 border-t px-3 py-2 text-[10px] text-muted-foreground">
+                    <span
+                      className="min-w-0 truncate font-mono text-foreground/75"
+                      title={workDir}
+                    >
+                      {workspaceLabel}
+                    </span>
+                    {permissionLabel && (
+                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {permissionLabel}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
-
-          {/* Coder-specific: workspace signals */}
-          {mode === "coder" && detection?.signals && (
-            <div className="px-3 py-2">
-              <div className="mb-1 text-[10px] font-medium text-muted-foreground">
-                {t.modes.projectSignals}
-              </div>
-              <div className="space-y-0.5 text-[10px] text-muted-foreground">
-                {detection.signals.manifests &&
-                  detection.signals.manifests.length > 0 && (
-                    <div>
-                      Tech stack: {detection.signals.manifests.join(", ")}
-                    </div>
-                  )}
-                {detection.signals.structure_dirs &&
-                  detection.signals.structure_dirs.length > 0 && (
-                    <div>
-                      Directories: {detection.signals.structure_dirs.join(", ")}
-                    </div>
-                  )}
-                {detection.signals.lock_files &&
-                  detection.signals.lock_files.length > 0 && (
-                    <div>
-                      Lock files: {detection.signals.lock_files.join(", ")}
-                    </div>
-                  )}
-                {detection.signals.has_readme && <div>README found</div>}
-              </div>
-            </div>
-          )}
-
-          {/* Mode description */}
-          {modeInfo && (
-            <div className="border-t px-3 py-2 text-[10px] text-muted-foreground leading-tight">
-              {modeInfo.description}
-            </div>
-          )}
-        </div>
-      )}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
+}
+
+function compactWorkspaceLabel(path: string): string {
+  const normalized = path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalized) return "";
+  return normalized.split("/").filter(Boolean).pop() ?? normalized;
+}
+
+function modeFromProjectKind(kind: DetectedProjectKind): AgentModeName {
+  return kind === "architect" ? "architect" : "develop";
+}
+
+function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {
+  return [
+    {
+      name: "develop",
+      icon: CodeIcon,
+      tone: "bg-sky-500/15 text-sky-700 hover:bg-sky-500/25 dark:bg-sky-900/30 dark:text-sky-400",
+      activeTone:
+        "bg-sky-500/15 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 ring-1 ring-sky-500/20",
+      ring: "ring-sky-500/20",
+      label: t.modes.develop,
+      desc: t.modes.developDesc,
+      effect: t.modes.developEffect,
+      tooltip: t.modes.developTooltip,
+    },
+    {
+      name: "audit",
+      icon: ShieldCheckIcon,
+      tone: "bg-rose-500/15 text-rose-700 hover:bg-rose-500/25 dark:bg-rose-900/30 dark:text-rose-400",
+      activeTone:
+        "bg-rose-500/15 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300 ring-1 ring-rose-500/20",
+      ring: "ring-rose-500/20",
+      label: t.modes.audit,
+      desc: t.modes.auditDesc,
+      effect: t.modes.auditEffect,
+      tooltip: t.modes.auditTooltip,
+    },
+    {
+      name: "uxui",
+      icon: PaletteIcon,
+      tone: "bg-fuchsia-500/15 text-fuchsia-700 hover:bg-fuchsia-500/25 dark:bg-fuchsia-900/30 dark:text-fuchsia-400",
+      activeTone:
+        "bg-fuchsia-500/15 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300 ring-1 ring-fuchsia-500/20",
+      ring: "ring-fuchsia-500/20",
+      label: t.modes.uxui,
+      desc: t.modes.uxuiDesc,
+      effect: t.modes.uxuiEffect,
+      tooltip: t.modes.uxuiTooltip,
+    },
+    {
+      name: "architect",
+      icon: BuildingIcon,
+      tone: "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:bg-amber-900/30 dark:text-amber-400",
+      activeTone:
+        "bg-amber-500/15 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-500/20",
+      ring: "ring-amber-500/20",
+      label: t.modes.architect,
+      desc: t.modes.architectDesc,
+      effect: t.modes.architectEffect,
+      tooltip: t.modes.architectTooltip,
+    },
+  ];
 }

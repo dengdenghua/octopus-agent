@@ -23,6 +23,10 @@ import type { Translations } from "@/core/i18n/locales/types";
 import { cn } from "@/lib/utils";
 
 import { emitAgentWorkbenchFocus } from "./agent-workbench-events";
+import {
+  agentRunBadgeClass,
+  agentRunStatusLightPulseClass,
+} from "./agent-run-status";
 import { stripToolEnvelope } from "./messages/trace-labels";
 import { getProcessTraceEvents } from "./process-trace-events";
 import { isSkillToolName } from "./tool-action-kind";
@@ -741,10 +745,7 @@ function codeLogText(
       "summary",
     ]);
     return {
-      label: actionStatusLabel(
-        event,
-        t.liveToolTimeline.planningNextStep,
-      ),
+      label: actionStatusLabel(event, t.liveToolTimeline.planningNextStep),
       detail: request
         ? compactMiddle(request, 180)
         : t.liveToolTimeline.modelOrganizingNextStep,
@@ -776,10 +777,7 @@ function codeLogText(
     const seconds = elapsedSeconds(event.input);
     if (event.status === "running") {
       return {
-        label: actionStatusLabel(
-          event,
-          t.liveToolTimeline.planningNextStep,
-        ),
+        label: actionStatusLabel(event, t.liveToolTimeline.planningNextStep),
         detail:
           seconds > 0
             ? t.liveToolTimeline.modelOrganizingNextStepWithWait(seconds)
@@ -888,7 +886,9 @@ function codeLogText(
     return {
       label: actionStatusLabel(
         event,
-        creating ? t.liveToolTimeline.creatingFile : t.liveToolTimeline.writingFile,
+        creating
+          ? t.liveToolTimeline.creatingFile
+          : t.liveToolTimeline.writingFile,
         compactMiddle(path || "file"),
       ),
       detail: t.liveToolTimeline.writeFileContent,
@@ -914,26 +914,17 @@ function codeLogText(
 
   if (event.name === "git_status") {
     return {
-      label: actionStatusLabel(
-        event,
-        t.liveToolTimeline.readingGitStatus,
-      ),
+      label: actionStatusLabel(event, t.liveToolTimeline.readingGitStatus),
     };
   }
   if (event.name === "git_diff") {
     return {
-      label: actionStatusLabel(
-        event,
-        t.liveToolTimeline.readingGitDiff,
-      ),
+      label: actionStatusLabel(event, t.liveToolTimeline.readingGitDiff),
     };
   }
   if (event.name === "git_commit") {
     return {
-      label: actionStatusLabel(
-        event,
-        t.liveToolTimeline.committingGit,
-      ),
+      label: actionStatusLabel(event, t.liveToolTimeline.committingGit),
     };
   }
 
@@ -1030,12 +1021,7 @@ function statusText(event: LiveToolEvent, t: TimelineT): string {
 }
 
 function statusClassName(status: LiveToolEvent["status"]): string {
-  if (status === "running") return "bg-primary/10 text-primary";
-  if (status === "error") return "bg-red-500/10 text-red-600 dark:text-red-400";
-  if (status === "waiting_approval") {
-    return "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400";
-  }
-  return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400";
+  return agentRunBadgeClass(status);
 }
 
 function detailTitle(
@@ -1174,13 +1160,13 @@ function ToolEventRow({
     >
       <div className="flex items-center gap-2">
         {event.status === "running" ? (
-          <Loader2Icon className="size-3.5 animate-spin text-primary shrink-0" />
+          <Loader2Icon className="size-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
         ) : event.status === "waiting_approval" ? (
-          <ShieldAlertIcon className="size-3.5 text-yellow-500 shrink-0 animate-pulse" />
+          <ShieldAlertIcon className="size-3.5 text-amber-500 shrink-0 animate-pulse" />
         ) : event.status === "error" ? (
-          <XCircleIcon className="size-3.5 text-red-500 shrink-0" />
+          <XCircleIcon className="size-3.5 text-destructive shrink-0" />
         ) : (
-          <CheckCircle2Icon className="size-3.5 text-green-500 shrink-0" />
+          <CheckCircle2Icon className="size-3.5 text-emerald-500 shrink-0" />
         )}
 
         <Icon className={cn("size-3.5 shrink-0", iconCfg.color)} />
@@ -1212,7 +1198,7 @@ function ToolEventRow({
           <span
             className={cn(
               "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-              event.status === "running" ? "animate-pulse" : "",
+              agentRunStatusLightPulseClass(event.status) ?? "",
               statusClassName(event.status),
             )}
           >

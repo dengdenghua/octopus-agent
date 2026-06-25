@@ -105,7 +105,7 @@ export const DIGITAL_TWIN_STATUS_STYLES: Record<DigitalTwinStatus, string> = {
   ready:
     "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   draft:
-    "border-slate-500/20 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+    "border-muted-foreground/20 bg-muted-foreground/10 text-foreground dark:text-muted-foreground",
   training:
     "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
 };

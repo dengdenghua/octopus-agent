@@ -118,7 +118,9 @@ export function KnowledgeGraphPanel() {
         </div>
         <div className="flex flex-wrap justify-center gap-2">
           <Button asChild size="sm">
-            <Link to="/workspace/realtime/new">{t.knowledgeGraph.startTask}</Link>
+            <Link to="/workspace/realtime/new">
+              {t.knowledgeGraph.startTask}
+            </Link>
           </Button>
           <Button
             type="button"
@@ -223,7 +225,10 @@ export function KnowledgeGraphPanel() {
           <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
             <span>
               {trimmedSearchQuery
-                ? t.knowledgeGraph.foundEntities(filteredEntities.length, entities.length)
+                ? t.knowledgeGraph.foundEntities(
+                    filteredEntities.length,
+                    entities.length,
+                  )
                 : t.knowledgeGraph.totalEntitiesCount(entities.length)}
             </span>
             {trimmedSearchQuery && (
@@ -261,12 +266,14 @@ export function KnowledgeGraphPanel() {
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 py-10 text-center">
-            <SearchIcon className="mx-auto mb-2 size-5 text-muted-foreground/50" />
-            <div className="text-sm font-medium">{t.knowledgeGraph.noMatchingEntities}</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t.knowledgeGraph.noMatchingEntitiesHint}
-            </p>
-          </div>
+              <SearchIcon className="mx-auto mb-2 size-5 text-muted-foreground/50" />
+              <div className="text-sm font-medium">
+                {t.knowledgeGraph.noMatchingEntities}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t.knowledgeGraph.noMatchingEntitiesHint}
+              </p>
+            </div>
           )}
 
           {/* Implementation note. */}

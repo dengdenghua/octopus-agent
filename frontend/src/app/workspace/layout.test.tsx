@@ -1,5 +1,6 @@
 import { act, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type * as ReactRouterDom from "react-router-dom";
 
 import { renderWithProviders } from "@/test/harness";
 import { STUB_RESPONSE_EVENT } from "@/core/api/client";
@@ -8,9 +9,7 @@ import WorkspaceLayout from "./layout";
 
 vi.mock("react-router-dom", async () => {
   const actual =
-    await vi.importActual<typeof import("react-router-dom")>(
-      "react-router-dom",
-    );
+    await vi.importActual<typeof ReactRouterDom>("react-router-dom");
   return {
     ...actual,
     Outlet: () => <div>workspace content</div>,

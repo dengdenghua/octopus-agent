@@ -134,6 +134,48 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
     return next;
   }, [permissionsQuery.data]);
 
+  const selectedArmSkills = useMemo(() => {
+    const next = new Set<string>();
+    for (const arm of arms) {
+      if (!selected.has(arm.arm_id)) continue;
+      for (const skill of arm.skills) next.add(skill);
+    }
+    return next;
+  }, [arms, selected]);
+
+  const permissionRows = useMemo(() => {
+    return (permissionsQuery.data ?? []).map((permission) => {
+      const agentSkills = permission.skill_names.filter(
+        (skill) =>
+          selectedArmSkills.has(skill) || selectedPrivateSkills.has(skill),
+      );
+      const defaultGranted =
+        permission.id === "builtin" || permission.id === "memory";
+      const agentGranted = defaultGranted || agentSkills.length > 0;
+      return {
+        ...permission,
+        agentSkills,
+        agentGranted,
+        defaultGranted,
+        effective: permission.enabled && agentGranted,
+      };
+    });
+  }, [permissionsQuery.data, selectedArmSkills, selectedPrivateSkills]);
+
+  const permissionSummary = useMemo(() => {
+    const globalEnabled = permissionRows.filter((item) => item.enabled).length;
+    const agentGranted = permissionRows.filter(
+      (item) => item.agentGranted,
+    ).length;
+    const effective = permissionRows.filter((item) => item.effective).length;
+    return {
+      globalEnabled,
+      agentGranted,
+      effective,
+      total: permissionRows.length,
+    };
+  }, [permissionRows]);
+
   const visibleArms = useMemo(() => {
     if (armFilter === "enabled") {
       return arms.filter((arm) => selected.has(arm.arm_id));
@@ -681,10 +723,38 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
               </div>
             </div>
             <Badge variant="outline" className="text-[10px]">
-              {permissionsQuery.data?.filter((item) => item.enabled).length ??
-                0}
-              /{permissionsQuery.data?.length ?? 0}
+              {t.armsEditor.permissionEffectiveCount(
+                permissionSummary.effective,
+                permissionSummary.total,
+              )}
             </Badge>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-3">
+            <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
+              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                {t.armsEditor.permissionGlobalGate}
+              </div>
+              <div className="mt-1 text-sm font-semibold">
+                {permissionSummary.globalEnabled}/{permissionSummary.total}
+              </div>
+            </div>
+            <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
+              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                {t.armsEditor.permissionAgentGrant}
+              </div>
+              <div className="mt-1 text-sm font-semibold">
+                {permissionSummary.agentGranted}/{permissionSummary.total}
+              </div>
+            </div>
+            <div className="rounded-sm border border-border bg-card/60 px-3 py-2">
+              <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                {t.armsEditor.permissionEffective}
+              </div>
+              <div className="mt-1 text-sm font-semibold">
+                {permissionSummary.effective}/{permissionSummary.total}
+              </div>
+            </div>
           </div>
 
           {permissionsQuery.isLoading ? (
@@ -702,75 +772,145 @@ export function ArmsEditor({ agentId, initialTab = "arms" }: Props) {
             </div>
           ) : (
             <div className="grid gap-3 lg:grid-cols-2">
-              {(permissionsQuery.data ?? []).map((permission) => (
-                <div
-                  key={permission.id}
-                  className={cn(
-                    "relative overflow-hidden rounded-sm border p-3 transition-colors",
-                    "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-2 before:w-2 before:border-l before:border-t",
-                    permission.enabled
-                      ? "border-primary/45 bg-primary/5 before:border-primary/70"
-                      : "border-border bg-card/55 before:border-border",
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <Switch
-                      checked={permission.enabled}
-                      disabled={updatePermission.isPending}
-                      onCheckedChange={(enabled) =>
-                        void togglePermission(permission.id, enabled)
-                      }
-                      className="mt-1 shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <div className="font-mono text-xs font-semibold uppercase tracking-[0.12em]">
-                          {permission.id}
+              {permissionRows.map((permission) => {
+                const shownAgentSkills = permission.agentSkills.slice(0, 8);
+                const shownPermissionSkills = permission.skill_names.slice(
+                  0,
+                  10,
+                );
+                return (
+                  <div
+                    key={permission.id}
+                    className={cn(
+                      "relative overflow-hidden rounded-sm border p-3 transition-colors",
+                      "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-2 before:w-2 before:border-l before:border-t",
+                      permission.effective
+                        ? "border-primary/45 bg-primary/5 before:border-primary/70"
+                        : "border-border bg-card/55 before:border-border",
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Switch
+                        checked={permission.enabled}
+                        disabled={updatePermission.isPending}
+                        onCheckedChange={(enabled) =>
+                          void togglePermission(permission.id, enabled)
+                        }
+                        className="mt-1 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-mono text-xs font-semibold uppercase tracking-[0.12em]">
+                            {permission.id}
+                          </div>
+                          <Badge
+                            variant={
+                              permission.available ? "outline" : "secondary"
+                            }
+                            className="rounded-sm text-[10px]"
+                          >
+                            {permission.available
+                              ? t.armsEditor.permissionAvailable
+                              : t.armsEditor.permissionUnavailable}
+                          </Badge>
+                          <Badge
+                            variant={
+                              permission.enabled ? "outline" : "secondary"
+                            }
+                            className={cn(
+                              "rounded-sm text-[10px]",
+                              !permission.enabled &&
+                                "border-destructive/30 text-destructive",
+                            )}
+                          >
+                            {t.armsEditor.permissionGlobalGate}:{" "}
+                            {permission.enabled
+                              ? t.armsEditor.permissionEnabled
+                              : t.armsEditor.permissionDisabled}
+                          </Badge>
+                          <Badge
+                            variant={
+                              permission.agentGranted
+                                ? "outline"
+                                : "secondary"
+                            }
+                            className={cn(
+                              "rounded-sm text-[10px]",
+                              !permission.agentGranted &&
+                                "border-amber-500/30 text-amber-600 dark:text-amber-300",
+                            )}
+                          >
+                            {permission.defaultGranted
+                              ? t.armsEditor.permissionAgentDefault
+                              : permission.agentGranted
+                                ? t.armsEditor.permissionAgentGranted
+                                : t.armsEditor.permissionAgentDenied}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant={
-                            permission.available ? "outline" : "secondary"
-                          }
-                          className="rounded-sm text-[10px]"
-                        >
-                          {permission.available
-                            ? t.armsEditor.permissionAvailable
-                            : t.armsEditor.permissionUnavailable}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className="rounded-sm text-[10px]"
-                        >
-                          {permission.enabled
-                            ? t.armsEditor.permissionEnabled
-                            : t.armsEditor.permissionDisabled}
-                        </Badge>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          {permission.effective
+                            ? t.armsEditor.permissionEffectiveHint
+                            : !permission.enabled
+                              ? t.armsEditor.permissionBlockedByGlobal
+                              : t.armsEditor.permissionBlockedByAgent}
+                        </div>
+                        {shownAgentSkills.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {shownAgentSkills.map((skill) => (
+                              <Badge
+                                key={skill}
+                                variant="outline"
+                                className="rounded-sm bg-background/70 text-[10px] font-mono"
+                              >
+                                {skill}
+                              </Badge>
+                            ))}
+                            {permission.agentSkills.length >
+                            shownAgentSkills.length ? (
+                              <Badge
+                                variant="secondary"
+                                className="rounded-sm text-[10px]"
+                              >
+                                +
+                                {permission.agentSkills.length -
+                                  shownAgentSkills.length}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : permission.defaultGranted ? (
+                          <div className="mt-2 text-[11px] text-muted-foreground">
+                            {t.armsEditor.permissionDefaultGrantHint}
+                          </div>
+                        ) : null}
+                        {permission.skill_names.length > 0 ? (
+                          <div className="mt-2 flex max-h-16 flex-wrap gap-1 overflow-hidden border-t border-border/50 pt-2">
+                            {shownPermissionSkills.map((skill) => (
+                              <Badge
+                                key={skill}
+                                variant="outline"
+                                className="rounded-sm bg-background/40 text-[10px] font-mono text-muted-foreground"
+                              >
+                                {skill}
+                              </Badge>
+                            ))}
+                            {permission.skill_names.length >
+                            shownPermissionSkills.length ? (
+                              <Badge
+                                variant="secondary"
+                                className="rounded-sm text-[10px]"
+                              >
+                                +
+                                {permission.skill_names.length -
+                                  shownPermissionSkills.length}
+                              </Badge>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
-                      {permission.skill_names.length > 0 ? (
-                        <div className="mt-2 flex max-h-20 flex-wrap gap-1 overflow-hidden">
-                          {permission.skill_names.slice(0, 12).map((skill) => (
-                            <Badge
-                              key={skill}
-                              variant="outline"
-                              className="rounded-sm bg-background/60 text-[10px] font-mono"
-                            >
-                              {skill}
-                            </Badge>
-                          ))}
-                          {permission.skill_names.length > 12 ? (
-                            <Badge
-                              variant="secondary"
-                              className="rounded-sm text-[10px]"
-                            >
-                              +{permission.skill_names.length - 12}
-                            </Badge>
-                          ) : null}
-                        </div>
-                      ) : null}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>

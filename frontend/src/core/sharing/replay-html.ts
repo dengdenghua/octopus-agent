@@ -30,7 +30,7 @@ export interface ReplayStep {
   body?: string;
   /** Block kind — drives the glyph. One of terminal/browser/file/read/search/todo/agent/skill/swarm. */
   kind?: string;
-  /** Status — drives the colour dot. done/error/running/waiting_approval/pending. */
+  /** Status — drives the colour dot. done/error/warning/running/waiting_approval/pending. */
   status?: string;
   /** Optional inlined screenshot as a data-URL. Remote URLs must be inlined by the caller. */
   image?: string;

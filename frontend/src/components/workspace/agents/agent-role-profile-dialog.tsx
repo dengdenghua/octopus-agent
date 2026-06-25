@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
@@ -132,27 +138,27 @@ const MAX_VISUAL_REFERENCE_IMAGES = 3;
 
 const VISUAL_PROMPT_OPTION_PROMPTS: Record<string, string> = {
   "game-character":
-    "premium game character illustration, polished character card art, readable silhouette",
+    "premium game HUD character illustration, polished live2D-adjacent key art, readable silhouette",
   "clean-anime":
-    "clean anime-inspired linework, delicate rendering, expressive face, refined costume details",
+    "clean anime-inspired linework, elegant facial rendering, refined hair shapes, controlled highlights",
   "semi-real":
-    "semi-realistic character concept art, natural proportions, cinematic but not photorealistic",
+    "semi-realistic character concept art, natural proportions, cinematic but not photorealistic, not painterly",
   "full-body":
-    "full body visible, standing pose, entire character contained inside canvas",
+    "full body visible, standing turnaround pose, entire character contained inside canvas, figure reads large in frame",
   "safe-headroom":
-    "full head visible with extra top margin, do not crop hair or head",
+    "full head visible with extra top margin, do not crop hair or head, preserve footroom too",
   "avatar-ready":
-    "face clear and centered enough for a high quality avatar crop from the front view",
+    "face clear and centered enough for a Zero-style large-face avatar crop from the front view",
   "three-view-consistency":
-    "front side and back views must keep the same face, hairstyle, outfit, colors, and proportions",
+    "front side and back views must keep the same face, hairstyle, outfit, colors, proportions, and facial appeal",
   transparent:
-    "transparent background, isolated character, no scenery, no colored backdrop",
+    "transparent background, isolated character, no scenery, no colored backdrop, no infographic layout",
   "soft-shadow":
-    "subtle grounding shadow only, no environment, suitable for UI overlay",
+    "subtle grounding shadow only when necessary, no environment, suitable for UI overlay",
   "high-resolution":
-    "high resolution, crisp edges, detailed outfit materials, sharp eyes, no blur",
+    "high resolution, crisp edges, detailed outfit materials, sharp eyes, clean hands, no blur",
   "no-artifacts":
-    "avoid extra fingers, distorted hands, asymmetrical eyes, duplicate limbs, messy text, watermark",
+    "avoid extra fingers, distorted hands, asymmetrical eyes, duplicate limbs, detached accessories, messy text, watermark",
 };
 
 const DEFAULT_VISUAL_PROMPT_OPTION_IDS = [
@@ -177,7 +183,9 @@ function buildVisualPrompt(
   return [
     basePrompt,
     "Use agent-visual-kit metaskill workflow.",
-    "Generate three high-definition character reference views for this Agent.",
+    "Generate three high-definition character turnaround views plus a separate square avatar for this Agent.",
+    "Visual target: premium Octopus Hub agent art, calm readable pose, attractive face, role-first costume language.",
+    "Composition rule: body should read large in the Hub, while the avatar should behave like Zero with the face filling most of the icon.",
     ...optionPrompts,
     customPrompt.trim() ? `user additions: ${customPrompt.trim()}` : "",
   ]
@@ -588,6 +596,21 @@ function AgentCoreVisual({
   const activeVisual = activeGeneratedVisual ?? activeAvatar;
   const isAvatarOnly = Boolean(activeVisual && !activeGeneratedVisual);
   const switchAgents = agents.length > 0 ? agents : [agent];
+  const activeSwitchAgentRef = useRef<HTMLButtonElement | null>(null);
+  const switchAgentEdgeSpacer = "calc(50% - 1.375rem)";
+
+  useEffect(() => {
+    const activeButton = activeSwitchAgentRef.current;
+    if (!activeButton) return;
+    const frame = window.requestAnimationFrame(() => {
+      activeButton.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [agent.id, switchAgents.length]);
 
   function toggleVisualPromptOption(id: string) {
     setSelectedVisualPromptIds((current) =>
@@ -723,6 +746,7 @@ function AgentCoreVisual({
                 )}
               >
                 <AuthenticatedImage
+                  key={activeVisual}
                   alt={`${agent.display_name} ${view}`}
                   className={cn(
                     "object-contain drop-shadow-2xl",
@@ -757,7 +781,15 @@ function AgentCoreVisual({
                 <span className="h-px w-10 bg-[#232323]/50" />
               </div>
             </div>
-            <div className="absolute -bottom-2 left-1/2 z-30 flex max-w-[92%] -translate-x-1/2 items-center gap-2 overflow-x-auto rounded-sm border border-white/10 bg-black/35 px-2 py-2 shadow-[0_12px_34px_rgba(0,0,0,0.28)] backdrop-blur [scrollbar-width:none]">
+            <div className="absolute -bottom-2 left-1/2 z-30 flex max-w-[92%] -translate-x-1/2 scroll-px-3 items-center gap-2 overflow-x-auto rounded-sm border border-white/10 bg-black/35 px-2 py-2 shadow-[0_12px_34px_rgba(0,0,0,0.28)] backdrop-blur [scrollbar-width:none]">
+              <span
+                aria-hidden="true"
+                className="block shrink-0"
+                style={{
+                  minWidth: switchAgentEdgeSpacer,
+                  width: switchAgentEdgeSpacer,
+                }}
+              />
               {switchAgents.map((candidate) => {
                 const active = candidate.id === agent.id;
                 const avatar = candidate.avatar_url
@@ -766,6 +798,7 @@ function AgentCoreVisual({
                 return (
                   <button
                     key={candidate.id}
+                    ref={active ? activeSwitchAgentRef : undefined}
                     type="button"
                     aria-label={t.agentRoleProfile.switchToAgent(
                       candidate.display_name,
@@ -809,6 +842,14 @@ function AgentCoreVisual({
                   <Plus className="size-4 transition-transform group-hover:scale-110" />
                 </button>
               ) : null}
+              <span
+                aria-hidden="true"
+                className="block shrink-0"
+                style={{
+                  minWidth: switchAgentEdgeSpacer,
+                  width: switchAgentEdgeSpacer,
+                }}
+              />
             </div>
           </div>
         </div>
@@ -895,7 +936,9 @@ function AgentCoreVisual({
                 <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                   <Textarea
                     className="min-h-[58px] resize-none border-white/10 bg-black/24 text-xs leading-5 text-white placeholder:text-white/28"
-                    placeholder={t.agentRoleProfile.referenceImageUrlPlaceholder}
+                    placeholder={
+                      t.agentRoleProfile.referenceImageUrlPlaceholder
+                    }
                     value={referenceImageInput}
                     onChange={(event) =>
                       setReferenceImageInput(event.target.value)
@@ -1114,13 +1157,28 @@ export function AgentRoleProfileDialog({
   const isLoading =
     agentQuery.isLoading || armsQuery.isLoading || registryQuery.isLoading;
   const isSaving = updateAgent.isPending || saveRegistry.isPending;
-  const permissionEnabledCount =
-    permissionsQuery.data?.filter((permission) => permission.enabled).length ??
-    0;
+  const desiredArmSet = new Set(form.arms);
+  const desiredSkillSet = new Set(desiredPrivateSkills);
+  const selectedArmSkillSet = new Set<string>();
+  for (const arm of armsQuery.data ?? []) {
+    if (!desiredArmSet.has(arm.arm_id)) continue;
+    for (const skill of arm.skills) selectedArmSkillSet.add(skill);
+  }
+  const permissionEffectiveCount =
+    permissionsQuery.data?.filter((permission) => {
+      if (!permission.enabled) return false;
+      if (permission.id === "builtin" || permission.id === "memory") {
+        return true;
+      }
+      return permission.skill_names.some(
+        (skill) =>
+          selectedArmSkillSet.has(skill) || desiredSkillSet.has(skill),
+      );
+    }).length ?? 0;
   const permissionTotalCount = permissionsQuery.data?.length ?? 0;
   const permissionSummary = permissionTotalCount
-    ? t.agentConfig.permissionCount(
-        permissionEnabledCount,
+    ? t.armsEditor.permissionEffectiveCount(
+        permissionEffectiveCount,
         permissionTotalCount,
       )
     : t.agentConfig.guarded;
@@ -1492,12 +1550,17 @@ export function AgentRoleProfileDialog({
                               type="button"
                               aria-label={action.label}
                               title={`${action.label} · ${action.hint}`}
-                              className="group flex h-8 min-w-0 items-center justify-center gap-1 rounded-sm border border-white/8 bg-white/[0.025] px-1.5 text-[11px] text-white/78 transition hover:border-primary/28 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                              className="group flex h-10 min-w-0 items-center gap-1 rounded-sm border border-white/8 bg-white/[0.025] px-1.5 text-white/78 transition hover:border-primary/28 hover:bg-white/[0.06] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                               onClick={action.onClick}
                             >
                               <Icon className="size-3.5 shrink-0 text-primary/82" />
-                              <span className="truncate">
-                                {action.shortLabel}
+                              <span className="min-w-0 flex-1 text-left">
+                                <span className="block truncate text-[11px] leading-4">
+                                  {action.shortLabel}
+                                </span>
+                                <span className="block truncate font-mono text-[9px] leading-3 text-white/42">
+                                  {action.metric}
+                                </span>
                               </span>
                             </button>
                           );

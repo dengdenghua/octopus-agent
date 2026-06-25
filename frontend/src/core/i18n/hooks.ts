@@ -12,6 +12,7 @@ export function useI18n() {
   const changeLocale = (newLocale: Locale) => {
     void setLocale(newLocale);
     setLocaleInCookie(newLocale);
+    document.documentElement.lang = newLocale.split("-")[0] ?? newLocale;
   };
 
   // Initialize locale on mount

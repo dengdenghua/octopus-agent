@@ -2,23 +2,18 @@ import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
   CalendarClockIcon,
-  ChevronDownIcon,
-  Code2Icon,
   FileTextIcon,
   FolderOpenIcon,
-  GitBranchIcon,
   ImageIcon,
   LinkIcon,
   LightbulbIcon,
   Loader2Icon,
-  LockIcon,
   ZapIcon,
   PaperclipIcon,
   PlusIcon,
   PresentationIcon,
   SearchIcon,
   SlidersHorizontalIcon,
-  SparklesIcon,
   SquareIcon,
   TableIcon,
   Trash2Icon,
@@ -29,15 +24,17 @@ import {
   MentionAutocompletePopup,
   useMentionAutocomplete,
 } from "./mention-autocomplete";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
 
 import { swallow } from "@/core/utils/log";
 import { currentActorId } from "@/core/auth/api";
+import { getBackendBaseURL } from "@/core/config";
+import {
+  consumeComposerImageEntries,
+  rememberLastComposerTarget,
+} from "@/core/composer-image-inbox";
+import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
+import type { Agent } from "@/core/agents/types";
 import { useModels } from "@/core/models/hooks";
 import { EvolutionIndicator } from "./evolution-indicator";
 import { ModelPicker, type PickerModel } from "./model-picker";
@@ -90,6 +87,7 @@ export interface ChatInputBoxProps {
   mode?: ReasoningMode;
   threadId?: string;
   workDir?: string;
+  displayAgent?: Pick<Agent, "name" | "display_name" | "avatar_url" | "icon"> | null;
   /** Show the workdir selector pill in the footer. Default false (chat
    * doesn't need a folder); pass true for code-flavored conversations
    * that read/edit local files. */
@@ -150,6 +148,31 @@ interface ComposerResearchMaterial {
   material: Partial<ResearchMaterial>;
 }
 
+interface ComposerImageInjectionDetail {
+  threadId?: string | null;
+  images?: File[] | null;
+  sourceLabel?: string | null;
+}
+
+function imageFileKey(file: File): string {
+  return `${file.name}|${file.size}`;
+}
+
+async function dataUrlToFile(
+  dataUrl: string,
+  filename: string,
+): Promise<File | null> {
+  try {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    return new File([blob], filename, {
+      type: blob.type || "image/png",
+    });
+  } catch {
+    return null;
+  }
+}
+
 const RESEARCH_SOURCE_OPTIONS: Array<{
   kind: ResearchSourceKind;
   label: string;
@@ -195,6 +218,7 @@ export function ChatInputBox({
   mode = "react",
   threadId,
   workDir,
+  displayAgent,
   showWorkDirSelector = false,
   onWorkDirChange,
   placeholder,
@@ -208,7 +232,7 @@ export function ChatInputBox({
   showInspirationToggle = false,
   permissionMode,
   codeModeUnlocked = false,
-  projectAgentMode = "coder",
+  projectAgentMode = "develop",
   projectDetection,
   reasoningEffort,
   partnerId,
@@ -251,6 +275,9 @@ export function ChatInputBox({
   const [pendingImages, setPendingImages] = useState<File[]>([]);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [pendingImagePreviews, setPendingImagePreviews] = useState<
+    Record<string, string>
+  >({});
+  const [pendingImageSources, setPendingImageSources] = useState<
     Record<string, string>
   >({});
 
@@ -300,23 +327,6 @@ export function ChatInputBox({
   const isBusy = disabled || uploadingMaterials;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
-  const projectModeHint = t.chatInputBox.projectModeHint;
-  const projectStatusTitle = t.chatInputBox.projectStatusTitle;
-  const projectStatusDesc = codeModeUnlocked
-    ? t.chatInputBox.projectStatusDescUnlocked
-    : t.chatInputBox.projectStatusDescLocked;
-  const projectSignalBadges = projectDetection
-    ? [
-        ...(projectDetection.signals.manifests ?? []).slice(0, 3),
-        ...(projectDetection.signals.lock_files ?? []).slice(0, 2),
-        ...(projectDetection.signals.has_readme
-          ? [t.chatInputBox.readme]
-          : []),
-      ]
-    : [];
-  const projectVerificationCommands =
-    projectDetection?.signals.commands?.slice(0, 4) ?? [];
-  const projectVerificationLabel = t.chatInputBox.projectVerificationLabel;
   const permissionLabel =
     resolvedPermissionMode === "bypassPermissions"
       ? t.chatInputBox.permissionFullAccess
@@ -333,6 +343,35 @@ export function ChatInputBox({
   const showContextCompressor =
     maxContextTokens > 0 &&
     (isCompressingContext || contextTokens / maxContextTokens >= 0.5);
+  const displayAgentAvatar = useMemo(() => {
+    const url = displayAgent?.avatar_url;
+    if (!url) return null;
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      return withAgentAvatarVersion(url);
+    }
+    return withAgentAvatarVersion(`${getBackendBaseURL()}${url}`);
+  }, [displayAgent?.avatar_url]);
+  const displayAgentLabel =
+    displayAgent?.display_name?.trim() ||
+    displayAgent?.name?.trim() ||
+    "Agent";
+  const displayAgentInitial =
+    displayAgentLabel.trim().charAt(0).toUpperCase() || "A";
+  const displayAgentIcon = displayAgent?.icon?.trim() || "";
+  const displayAgentName = displayAgent?.name?.trim() || "";
+  const hasWorkDir = Boolean(workDir?.trim());
+  const showModeSegment = isProjectMode;
+  const showWorkDirSegment = isProjectMode || hasWorkDir;
+  const isDefaultGeneralAgent =
+    !hasWorkDir &&
+    !isProjectMode &&
+    (displayAgentName === "general" || displayAgentLabel === "Agent");
+  const showAgentSegment = false;
+  const statusSegmentCount =
+    (showAgentSegment ? 1 : 0) +
+    (showWorkDirSegment ? 1 : 0) +
+    (showModeSegment ? 1 : 0);
+  const showStatusStrip = statusSegmentCount > 0;
 
   useEffect(() => {
     if (!canUseDeepResearch) setResearchConfigOpen(false);
@@ -420,7 +459,8 @@ export function ChatInputBox({
 
   const handleSubmit = useCallback(async () => {
     const text = draft.trim();
-    if (!text || isBusy || status === "streaming") return;
+    const hasImages = pendingImages.length > 0;
+    if ((!text && !hasImages) || isBusy || status === "streaming") return;
     // Fast path: client-side slash commands (mode/model/permission/
     // compact/settings) resolve locally with no LLM round-trip.
     // Falls through for anything not handled here.
@@ -459,6 +499,7 @@ export function ChatInputBox({
     if (pendingImages.length > 0) {
       setPendingImages([]);
       setPendingImagePreviews({});
+      setPendingImageSources({});
     }
   }, [
     draft,
@@ -582,19 +623,23 @@ export function ChatInputBox({
   // cleanup; previews are keyed by `name|size` so the UI keeps
   // referential stability across renders.
   const addPendingImages = useCallback(
-    (files: File[] | FileList | null | undefined) => {
+    (
+      files: File[] | FileList | null | undefined,
+      options?: { sourceLabel?: string | null },
+    ) => {
       if (!files) return;
       const arr = Array.from(files).filter((file) =>
         file.type.toLowerCase().startsWith("image/"),
       );
       if (arr.length === 0) return;
+      const sourceLabel = options?.sourceLabel?.trim() || "图片";
       setPendingImages((current) => {
         const known = new Set(
-          current.map((file) => `${file.name}|${file.size}`),
+          current.map((file) => imageFileKey(file)),
         );
         const next = [...current];
         for (const file of arr) {
-          const key = `${file.name}|${file.size}`;
+          const key = imageFileKey(file);
           if (!known.has(key)) {
             next.push(file);
             known.add(key);
@@ -605,8 +650,16 @@ export function ChatInputBox({
       setPendingImagePreviews((current) => {
         const next = { ...current };
         for (const file of arr) {
-          const key = `${file.name}|${file.size}`;
+          const key = imageFileKey(file);
           if (!next[key]) next[key] = URL.createObjectURL(file);
+        }
+        return next;
+      });
+      setPendingImageSources((current) => {
+        const next = { ...current };
+        for (const file of arr) {
+          const key = imageFileKey(file);
+          if (!next[key]) next[key] = sourceLabel;
         }
         return next;
       });
@@ -617,10 +670,14 @@ export function ChatInputBox({
     setPendingImages((current) => {
       const removed = current[index];
       if (!removed) return current;
-      const key = `${removed.name}|${removed.size}`;
+      const key = imageFileKey(removed);
       setPendingImagePreviews((prev) => {
         const url = prev[key];
         if (url) URL.revokeObjectURL(url);
+        const { [key]: _omit, ...rest } = prev;
+        return rest;
+      });
+      setPendingImageSources((prev) => {
         const { [key]: _omit, ...rest } = prev;
         return rest;
       });
@@ -634,8 +691,70 @@ export function ChatInputBox({
         for (const url of Object.values(current)) URL.revokeObjectURL(url);
         return {};
       });
+      setPendingImageSources({});
     };
   }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = window.location.hash || "";
+    if (!hash.startsWith("#/workspace/realtime/")) return;
+    rememberLastComposerTarget(hash);
+  }, [threadId]);
+  useEffect(() => {
+    const queued = consumeComposerImageEntries(threadId);
+    if (queued.length === 0) return;
+    void Promise.all(
+      queued.map(async (entry) => ({
+        file: await dataUrlToFile(entry.dataUrl, entry.filename),
+        sourceLabel: entry.sourceLabel?.trim() || "浏览器截图",
+      })),
+    ).then((entries) => {
+      const files = entries
+        .map((entry) => entry.file)
+        .filter((file): file is File => file instanceof File);
+      if (files.length === 0) return;
+      addPendingImages(files, {
+        sourceLabel:
+          entries.find((entry) => entry.file instanceof File)?.sourceLabel ||
+          "浏览器截图",
+      });
+    });
+  }, [addPendingImages, threadId]);
+  // Same recovery path for failed image-only sends: if the turn never
+  // started, hand the images back to the composer so the user doesn't
+  // have to paste or pick the screenshot again. We also expose the
+  // same lane for future host/browser-injected screenshots.
+  useEffect(() => {
+    const handler = (event: CustomEvent<ComposerImageInjectionDetail>) => {
+      const detail = event.detail;
+      if (detail?.threadId && threadId && detail.threadId !== threadId) {
+        return;
+      }
+      const images = Array.isArray(detail?.images)
+        ? detail.images.filter((file) => file instanceof File)
+        : [];
+      if (images.length === 0) return;
+      addPendingImages(images, {
+        sourceLabel: detail?.sourceLabel?.trim() || "浏览器截图",
+      });
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    };
+    window.addEventListener("octopus:send-failed", handler as EventListener);
+    window.addEventListener(
+      "octopus:inject-composer-images",
+      handler as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        "octopus:send-failed",
+        handler as EventListener,
+      );
+      window.removeEventListener(
+        "octopus:inject-composer-images",
+        handler as EventListener,
+      );
+    };
+  }, [addPendingImages, threadId]);
   const handlePasteImages = useCallback(
     (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
       const items = event.clipboardData?.items;
@@ -722,8 +841,9 @@ export function ChatInputBox({
         {pendingImages.length > 0 && (
           <div className="flex gap-2 overflow-x-auto px-3 pb-2 pt-1">
             {pendingImages.map((file, index) => {
-              const key = `${file.name}|${file.size}`;
+              const key = imageFileKey(file);
               const url = pendingImagePreviews[key];
+              const sourceLabel = pendingImageSources[key];
               return (
                 <div
                   key={key}
@@ -736,6 +856,11 @@ export function ChatInputBox({
                       className="h-full w-full object-cover"
                     />
                   )}
+                  {sourceLabel ? (
+                    <div className="absolute bottom-0 left-0 right-0 truncate bg-black/45 px-1 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
+                      {sourceLabel}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => removePendingImage(index)}
@@ -988,6 +1113,7 @@ export function ChatInputBox({
               <DropdownMenuContent
                 data-testid="chat-tools-menu"
                 align="start"
+                side="top"
                 sideOffset={8}
                 className="w-60 rounded-xl border-border/70 p-1.5 shadow-[0_16px_48px_-24px_rgba(0,0,0,0.35)]"
               >
@@ -1084,6 +1210,7 @@ export function ChatInputBox({
             <PermissionIndicator
               mode={resolvedPermissionMode}
               onModeChange={(nextMode) => onPermissionModeChange?.(nextMode)}
+              compact
             />
             {/* 上下文压缩指示器 */}
             {showContextCompressor && (
@@ -1164,7 +1291,7 @@ export function ChatInputBox({
                 type="button"
                 onClick={handleSubmit}
                 data-testid="chat-send-button"
-                disabled={!draft.trim() || isBusy}
+                disabled={(!draft.trim() && pendingImages.length === 0) || isBusy}
                 className={cn(
                   "flex size-7 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",
                   isDeepResearchMode
@@ -1185,101 +1312,76 @@ export function ChatInputBox({
           </div>
         </div>
       </div>
-      {showWorkDirSelector && (
-        <div className="flex flex-wrap items-center gap-2 px-2 pt-1">
-          <WorkDirSelector
-            workDir={workDir ?? ""}
-            onWorkDirChange={onWorkDirChange}
-            variant="muted"
-          />
-          {isProjectMode && (
-            <>
-              <ModeSelector
-                workDir={workDir ?? ""}
-                sessionId={threadId ?? "new"}
-                mode={projectAgentMode}
-                onModeChange={onProjectAgentModeChange ?? (() => undefined)}
-                onDetectionChange={onProjectDetectionChange}
-              />
-              <HoverCard openDelay={80} closeDelay={120}>
-                <HoverCardTrigger asChild>
-                  <button
-                    type="button"
-                    title={projectStatusTitle}
-                    aria-label={projectStatusTitle}
-                    className={cn(
-                      "inline-flex shrink-0 items-center gap-0.5 rounded-lg border px-1.5 py-1 text-[11px] font-medium transition-colors",
-                      codeModeUnlocked
-                        ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
-                        : "border-amber-500/25 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 dark:text-amber-300",
-                    )}
-                  >
-                    {codeModeUnlocked ? (
-                      <Code2Icon className="size-3" />
-                    ) : (
-                      <LockIcon className="size-3" />
-                    )}
-                    <span className="truncate">{projectStatusTitle}</span>
-                    <ChevronDownIcon className="size-3 opacity-60" />
-                  </button>
-                </HoverCardTrigger>
-                <HoverCardContent
-                  align="start"
-                  side="top"
-                  className="w-80 text-xs"
+      {showWorkDirSelector && showStatusStrip && (
+        <div className="flex min-h-7 flex-wrap items-center gap-2 px-2 pt-1 text-[11px] text-muted-foreground">
+          <div
+            className={cn(
+              "inline-flex max-w-full items-center gap-1.5",
+              statusSegmentCount > 1
+                ? "border-l border-border/35 pl-2"
+                : "pl-0",
+            )}
+          >
+            {showAgentSegment ? (
+              <>
+                <div
+                  className="inline-flex min-w-0 max-w-[124px] items-center gap-1.5 rounded-full px-2 py-1"
+                  title={displayAgentLabel}
                 >
-                  <div className="flex min-w-0 items-center gap-1.5 font-medium text-foreground">
-                    <span className="truncate">{projectStatusTitle}</span>
-                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                      {permissionLabel}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
-                    {workDir}
-                  </div>
-                  {projectSignalBadges.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {projectSignalBadges.map((badge) => (
-                        <span
-                          key={badge}
-                          className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                        >
-                          {badge}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {projectVerificationCommands.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        {projectVerificationLabel}
-                      </span>
-                      {projectVerificationCommands.map((item) => (
-                        <span
-                          key={`${item.kind}:${item.command}`}
-                          className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
-                          title={item.source}
-                        >
-                          <span className="font-sans uppercase text-foreground/60">
-                            {item.kind}
-                          </span>
-                          <span className="truncate">{item.command}</span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-5 text-muted-foreground">
-                    {codeModeUnlocked ? (
-                      <GitBranchIcon className="mt-0.5 size-3.5 shrink-0" />
+                  <span className="flex size-4 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[9px] font-semibold text-muted-foreground">
+                    {displayAgentAvatar ? (
+                      <img
+                        src={displayAgentAvatar}
+                        alt={displayAgentLabel}
+                        className="size-full object-cover"
+                      />
+                    ) : displayAgentIcon ? (
+                      displayAgentIcon
                     ) : (
-                      <SparklesIcon className="mt-0.5 size-3.5 shrink-0" />
+                      displayAgentInitial
                     )}
-                    <span>{projectStatusDesc}</span>
-                  </div>
-                </HoverCardContent>
-              </HoverCard>
-            </>
-          )}
+                  </span>
+                  <span className="truncate">{displayAgentLabel}</span>
+                </div>
+                {(showWorkDirSegment || showModeSegment) && (
+                  <span
+                    className="h-3 w-px shrink-0 bg-border/35"
+                    aria-hidden="true"
+                  />
+                )}
+              </>
+            ) : null}
+            {showWorkDirSegment ? (
+              <>
+                <WorkDirSelector
+                  workDir={workDir ?? ""}
+                  onWorkDirChange={onWorkDirChange}
+                  variant="muted"
+                  chromeless
+                />
+                {showModeSegment && (
+                  <>
+                    <span
+                      className="h-3 w-px shrink-0 bg-border/35"
+                      aria-hidden="true"
+                    />
+                    <ModeSelector
+                      workDir={workDir ?? ""}
+                      sessionId={threadId ?? "new"}
+                      mode={projectAgentMode}
+                      codeModeUnlocked={codeModeUnlocked}
+                      chromeless
+                      permissionLabel={permissionLabel}
+                      onModeChange={
+                        onProjectAgentModeChange ?? (() => undefined)
+                      }
+                      onDetectionChange={onProjectDetectionChange}
+                    />
+                  </>
+                )}
+              </>
+            ) : null}
+          </div>
         </div>
       )}
     </>

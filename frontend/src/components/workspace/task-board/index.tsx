@@ -82,8 +82,8 @@ const COLUMN_CONFIG: Record<
 > = {
   queued: {
     label: "Queued",
-    color: "text-slate-600 dark:text-slate-400",
-    bgColor: "bg-slate-500/5 border-slate-500/20",
+    color: "text-muted-foreground",
+    bgColor: "bg-muted-foreground/5 border-muted-foreground/20",
     icon: <ClockIcon className="size-3.5" />,
   },
   running: {

@@ -39,8 +39,6 @@ type LockStatus = {
   cooldowns_seconds?: Record<string, number>;
 };
 
-
-
 export function GeneLockBadge() {
   const { t } = useI18n();
   const g = t.geneLockBadge;
@@ -138,7 +136,7 @@ export function GeneLockBadge() {
   const levelColor = panic
     ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
     : lvl === 0
-      ? "bg-slate-500/20 text-slate-300 border-slate-500/40"
+      ? "bg-muted-foreground/20 text-muted-foreground border-muted-foreground/40"
       : lvl <= 2
         ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
         : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
@@ -167,7 +165,7 @@ export function GeneLockBadge() {
           {panic ? g.panicBadge : (g.levelNames[lvl] ?? "?")}
         </span>
         {status.mode === "production" && (
-          <Badge className="ml-1 h-4 bg-slate-900/40 px-1 text-[9px] uppercase tracking-wider text-slate-300">
+          <Badge className="ml-1 h-4 bg-foreground/40 px-1 text-[9px] uppercase tracking-wider text-muted-foreground">
             {g.productionBadge}
           </Badge>
         )}
@@ -181,7 +179,8 @@ export function GeneLockBadge() {
           </div>
           <div className="space-y-1 text-muted-foreground">
             <div>
-              {g.modeLabel}: <span className="text-foreground">{status.mode}</span>
+              {g.modeLabel}:{" "}
+              <span className="text-foreground">{status.mode}</span>
             </div>
             <div>
               {g.maturityLabel}:{" "}
@@ -252,15 +251,35 @@ export function GeneLockBadge() {
             <div className="mt-2 text-xs text-muted-foreground">{msg}</div>
           )}
           <div className="mt-2 border-t border-border/30 pt-2 text-[10px] text-muted-foreground">
-            {g.levelSummary(0, g.levelNames[0] ?? "", g.levelDescriptions[0] ?? "")}
+            {g.levelSummary(
+              0,
+              g.levelNames[0] ?? "",
+              g.levelDescriptions[0] ?? "",
+            )}
             <br />
-            {g.levelSummary(1, g.levelNames[1] ?? "", g.levelDescriptions[1] ?? "")}
+            {g.levelSummary(
+              1,
+              g.levelNames[1] ?? "",
+              g.levelDescriptions[1] ?? "",
+            )}
             <br />
-            {g.levelSummary(2, g.levelNames[2] ?? "", g.levelDescriptions[2] ?? "")}
+            {g.levelSummary(
+              2,
+              g.levelNames[2] ?? "",
+              g.levelDescriptions[2] ?? "",
+            )}
             <br />
-            {g.levelSummary(3, g.levelNames[3] ?? "", g.levelDescriptions[3] ?? "")}
+            {g.levelSummary(
+              3,
+              g.levelNames[3] ?? "",
+              g.levelDescriptions[3] ?? "",
+            )}
             <br />
-            {g.levelSummary(4, g.levelNames[4] ?? "", g.levelDescriptions[4] ?? "")}
+            {g.levelSummary(
+              4,
+              g.levelNames[4] ?? "",
+              g.levelDescriptions[4] ?? "",
+            )}
           </div>
         </div>
       )}

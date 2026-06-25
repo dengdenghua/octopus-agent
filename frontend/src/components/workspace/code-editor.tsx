@@ -236,14 +236,7 @@ export function CodeEditor({
     } finally {
       setIsSaving(false);
     }
-  }, [
-    filePath,
-    localValue,
-    onSave,
-    threadId,
-    workspacePath,
-    t.codeEditor,
-  ]);
+  }, [filePath, localValue, onSave, threadId, workspacePath, t.codeEditor]);
 
   const handleReset = useCallback(() => {
     setLocalValue(null);

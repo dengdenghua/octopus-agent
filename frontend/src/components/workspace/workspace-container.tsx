@@ -121,7 +121,7 @@ export function WorkspaceBody({
   return (
     <main
       className={cn(
-        "relative flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto pt-3",
+        "relative flex min-h-0 w-full flex-1 flex-col items-center overflow-y-auto overflow-x-hidden pt-3",
         className,
       )}
       {...props}
@@ -153,6 +153,7 @@ function nameOfSegment(
   if (segment === "nas" || segment === "database") return t.sidebar.navDatabase;
   if (segment === "knowledge") return t.sidebar.navKnowledgeGraph;
   if (segment === "evolution") return t.sidebar.evolution;
+  if (segment === "replay") return t.sidebar.navReplay;
   if (segment === "workflows") return "工作流";
   if (segment === "reflex") return t.sidebar.navReflex;
   if (segment === "observability") return t.sidebar.observability;

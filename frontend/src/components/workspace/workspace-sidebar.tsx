@@ -13,7 +13,6 @@ import {
   FolderPlusIcon,
   GlobeIcon,
   HardDriveIcon,
-  Loader2Icon,
   MessageSquarePlusIcon,
   NetworkIcon,
   PanelLeftCloseIcon,
@@ -28,7 +27,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { swallow } from "@/core/utils/log";
 import { uuid } from "@/core/utils/uuid";
-import { useEvent, eventBus, emitProjectsChanged } from "@/core/events";
+import {
+  useEvent,
+  eventBus,
+  emitAgentChanged,
+  emitProjectsChanged,
+} from "@/core/events";
 
 import { SettingsDialog } from "./settings";
 import { AgentFooter, TeamFooter } from "./sidebar-footer";
@@ -64,6 +68,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { StatusBadge, type StatusTone } from "@/components/ui/state";
 import { getAPIClient } from "@/core/api";
 import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
@@ -75,6 +80,7 @@ import { useTeamTasks } from "@/core/team-tasks";
 import type { TeamTask } from "@/core/team-tasks";
 import { useActiveAgentId } from "@/core/agents/active";
 import { formatRelativeTimestamp } from "@/core/utils/datetime";
+import { useAppearance } from "@/hooks/use-appearance";
 import { basename, isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
 
@@ -96,6 +102,11 @@ const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
 const COMPANY_WORKSPACE_ROUTE = "/workspace/team";
 
 const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
+  {
+    to: "/workspace/agents?surface=chat",
+    labelKey: "navHR",
+    icon: BotIcon,
+  },
   {
     to: "/workspace/intelligence?surface=chat",
     labelKey: "navIntelligence",
@@ -125,6 +136,11 @@ const COMPANY_ORG_ROUTES: NavRoute[] = [
 ];
 
 const COMPANY_CAPABILITY_ROUTES: NavRoute[] = [
+  {
+    to: "/workspace/agents?surface=company",
+    labelKey: "navHR",
+    icon: BotIcon,
+  },
   {
     to: "/workspace/intelligence?surface=company",
     labelKey: "navIntelligence",
@@ -166,10 +182,18 @@ type ThreadSummary = {
   updatedAt: string;
   mode: string;
   href: string;
+  workspacePath?: string;
   /** Agent ids associated with this thread · drives the WeChat-style
    *  avatar (single big avatar OR 2×2 / 3×3 grid for team threads). */
   agents: string[];
 };
+
+function syncThreadAgentSelection(agents: string[]) {
+  if (agents.length !== 1) return;
+  const agent = agents[0]?.trim();
+  if (!agent) return;
+  emitAgentChanged(agent, "thread");
+}
 
 type OngoingWorkItem = {
   id: string;
@@ -245,9 +269,21 @@ function buildOngoingWorkItems({
   return items.slice(0, 6);
 }
 
-function deriveThreadAgents(meta: Record<string, unknown>): string[] {
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function deriveThreadAgents(thread: {
+  metadata?: Record<string, unknown>;
+  values?: Record<string, unknown>;
+}): string[] {
+  const meta = thread.metadata ?? {};
+  const values = thread.values ?? {};
   // 1. team threads · ``agent_roster`` is an array of {agent_id, ...}
-  const roster = meta["agent_roster"];
+  const roster = meta["agent_roster"] ?? values["agent_roster"];
   if (Array.isArray(roster)) {
     const ids = roster
       .map((r) =>
@@ -261,7 +297,7 @@ function deriveThreadAgents(meta: Record<string, unknown>): string[] {
     if (ids.length > 0) return ids;
   }
   // 2. team_members (legacy field name · same shape)
-  const members = meta["team_members"];
+  const members = meta["team_members"] ?? values["team_members"];
   if (Array.isArray(members)) {
     const ids = members
       .map((r) =>
@@ -278,10 +314,16 @@ function deriveThreadAgents(meta: Record<string, unknown>): string[] {
   }
   // 3. solo agent · the ``agent`` field is set on every chat/code
   //    thread by the compat router (cf. metadata.agent='coder')
-  const single = meta["agent"];
-  if (typeof single === "string" && single.trim()) {
-    return [single.trim()];
-  }
+  const single = firstString(
+    meta["agent"],
+    meta["agent_name"],
+    meta["agent_id"],
+    meta["lead_agent_name"],
+    meta["current_agent"],
+    values["current_speaker"],
+    values["agent_name"],
+  );
+  if (single) return [single];
   return [];
 }
 
@@ -450,6 +492,7 @@ function readProjectGroupingEnabled(): boolean {
 export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const { pathname, search } = useLocation();
   const { t } = useI18n();
+  const { materialTheme } = useAppearance();
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
 
@@ -537,25 +580,13 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     return () => window.removeEventListener("octopus:close-settings", handler);
   }, []);
 
-  // Thread list is scoped to the currently-active agent (localStorage-
-  // backed, `octopus.active-agent` key). Switching agent in the footer
-  // dropdown updates localStorage + dispatches `octopus:active-agent`
-  // · we subscribe here so the list refetches with the new scope.
-  // Previously the sidebar showed ALL threads across all agents, so
-  // switching from Coder to a specialist kept showing Coder sessions
-  // — defeating the "per-agent history" that the backend already
-  // maintains (agents/<id>/sessions/<thread>.jsonl).
+  // Conversation history stays scoped to the currently-active agent
+  // so the left-bottom persona switch only affects the current chat lane.
+  // Project aggregation is intentionally handled separately below and
+  // stays global across agents within the same workspace.
   const activeAgentId = useActiveAgentId();
 
-  // Two thread feeds:
-  //   1. ``rawThreads`` — chat-mode threads, filtered by activeAgentId
-  // Implementation note.
-  //   2. ``rawCodeThreads`` — code project threads, NOT filtered by
-  //      agent · code workspaces are workspace-level so they should show up
-  //      regardless of which agent the user has selected. Without this
-  // Implementation note.
-  //      section and the user would think their projects vanished.
-  const { data: rawThreads } = useThreads(
+  const { data: rawConversationThreads } = useThreads(
     {
       limit: 30,
       sortBy: "updated_at",
@@ -565,13 +596,16 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     undefined,
     activeAgentId,
   );
-  const { data: rawCodeThreads } = useThreads({
-    limit: 30,
-    sortBy: "updated_at",
-    sortOrder: "desc",
-    select: ["thread_id", "updated_at", "values", "metadata"],
-    metadata: { mode: "code" },
-  });
+  const { data: rawProjectThreads } = useThreads(
+    {
+      limit: 30,
+      sortBy: "updated_at",
+      sortOrder: "desc",
+      select: ["thread_id", "updated_at", "values", "metadata"],
+    },
+    "code",
+    null,
+  );
   const { data: rawTeamThreads } = useThreads(
     {
       limit: 30,
@@ -582,15 +616,10 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     "team",
     null,
   );
-  // Merge the feeds into one list, deduping by thread_id. The
-  // chat feed (filtered by agent) wins on overlap so its metadata
-  // sticks · code feeds add cross-agent project threads on top.
-  const mergedRaw = (() => {
+
+  const mergedConversationRaw = (() => {
     const m = new Map<string, AgentThread>();
-    for (const t of rawThreads ?? []) m.set(t.thread_id, t);
-    for (const t of rawCodeThreads ?? []) {
-      if (!m.has(t.thread_id)) m.set(t.thread_id, t);
-    }
+    for (const t of rawConversationThreads ?? []) m.set(t.thread_id, t);
     for (const t of rawTeamThreads ?? []) {
       if (!m.has(t.thread_id)) m.set(t.thread_id, t);
     }
@@ -599,17 +628,52 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
   })();
 
-  const threads: ThreadSummary[] = mergedRaw.map((t) => ({
-    id: t.thread_id,
-    title: deriveThreadTitle(t),
-    updatedAt: t.updated_at,
-    mode:
-      typeof t.metadata?.["mode"] === "string"
-        ? (t.metadata["mode"] as string)
-        : "chat",
-    href: threadHref(t),
-    agents: deriveThreadAgents((t.metadata ?? {}) as Record<string, unknown>),
-  }));
+  const mergedProjectRaw = (() => {
+    const m = new Map<string, AgentThread>();
+    for (const t of rawProjectThreads ?? []) m.set(t.thread_id, t);
+    for (const t of rawTeamThreads ?? []) {
+      if (!m.has(t.thread_id)) m.set(t.thread_id, t);
+    }
+    return Array.from(m.values()).sort((a, b) =>
+      (b.updated_at || "").localeCompare(a.updated_at || ""),
+    );
+  })();
+
+  const conversationThreads: ThreadSummary[] = mergedConversationRaw
+    .map((t) => ({
+      id: t.thread_id,
+      title: deriveThreadTitle(t),
+      updatedAt: t.updated_at,
+      mode:
+        typeof t.metadata?.["mode"] === "string"
+          ? (t.metadata["mode"] as string)
+          : "chat",
+      href: threadHref(t),
+      workspacePath:
+        typeof t.metadata?.["workspace_path"] === "string"
+          ? (t.metadata["workspace_path"] as string)
+          : undefined,
+      agents: deriveThreadAgents(t),
+    }))
+    .filter((t) => isConversationThreadMode(t.mode));
+
+  const projectThreads: ThreadSummary[] = mergedProjectRaw
+    .map((t) => ({
+      id: t.thread_id,
+      title: deriveThreadTitle(t),
+      updatedAt: t.updated_at,
+      mode:
+        typeof t.metadata?.["mode"] === "string"
+          ? (t.metadata["mode"] as string)
+          : "chat",
+      href: threadHref(t),
+      workspacePath:
+        typeof t.metadata?.["workspace_path"] === "string"
+          ? (t.metadata["workspace_path"] as string)
+          : undefined,
+      agents: deriveThreadAgents(t),
+    }))
+    .filter((t) => isProjectThreadMode(t.mode));
 
   // User-defined projects (localStorage) — so an empty project still
   // shows in the sidebar before any threads are tagged with it.
@@ -758,11 +822,23 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // ad-hoc questions and made it impossible to find which thread
   // belonged to which project. Now they cluster under their actual
   // Implementation note.
-  const projectThreads = threads.filter((t) => isProjectThreadMode(t.mode));
-  const conversationThreads = threads.filter((t) =>
-    isConversationThreadMode(t.mode),
-  );
-  const teamTaskThreads = threads.filter((t) => t.mode === "team");
+  const teamTaskThreads = mergedProjectRaw
+    .map((t) => ({
+      id: t.thread_id,
+      title: deriveThreadTitle(t),
+      updatedAt: t.updated_at,
+      mode:
+        typeof t.metadata?.["mode"] === "string"
+          ? (t.metadata["mode"] as string)
+          : "chat",
+      href: threadHref(t),
+      workspacePath:
+        typeof t.metadata?.["workspace_path"] === "string"
+          ? (t.metadata["workspace_path"] as string)
+          : undefined,
+      agents: deriveThreadAgents(t),
+    }))
+    .filter((t) => t.mode === "team");
   const activeTeamThreadId = pathname.startsWith("/workspace/team/")
     ? (pathname.split("/").filter(Boolean)[2] ?? null)
     : null;
@@ -785,7 +861,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const byProject: Record<string, ThreadSummary[]> = {};
   const explicitProjectThreadIdsByProject: Record<string, string[]> = {};
   for (const name of userProjects) byProject[name] = [];
-  const rawThreadMap = new Map(mergedRaw.map((r) => [r.thread_id, r]));
+  const rawThreadMap = new Map(mergedProjectRaw.map((r) => [r.thread_id, r]));
   for (const t of projectThreads) {
     const raw = rawThreadMap.get(t.id);
     const meta = (raw?.metadata ?? {}) as Record<string, unknown>;
@@ -877,11 +953,15 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     <Sidebar
       variant="sidebar"
       collapsible="icon"
-      className="border-r border-border/40 bg-background/82 backdrop-blur"
+      className={cn(
+        materialTheme === "liquid"
+          ? "border-r-0 bg-transparent"
+          : "border-r bg-sidebar",
+      )}
       {...props}
     >
       {/* Implementation note. */}
-      <SidebarHeader className="relative h-11 shrink-0 items-center justify-center border-b border-border/45 bg-sidebar/65 px-2.5 py-0 group-data-[collapsible=icon]:h-20 group-data-[collapsible=icon]:justify-end group-data-[collapsible=icon]:pb-2 group-data-[collapsible=icon]:pt-2">
+      <SidebarHeader className="relative h-11 shrink-0 items-center justify-center border-b border-white/40 bg-transparent px-2.5 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
         <WorkspaceSurfaceSwitch
           active={
             browserSurfaceActive
@@ -891,7 +971,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 : "agent"
           }
         />
-        <div className="absolute right-0.5 top-1/2 -translate-y-1/2 group-data-[collapsible=icon]:left-1/2 group-data-[collapsible=icon]:right-auto group-data-[collapsible=icon]:top-2 group-data-[collapsible=icon]:-translate-x-[calc(50%+4px)] group-data-[collapsible=icon]:translate-y-0">
+        <div className="absolute right-0.5 top-1/2 -translate-y-1/2 group-data-[collapsible=icon]:left-1/2 group-data-[collapsible=icon]:right-auto group-data-[collapsible=icon]:-translate-x-1/2">
           <CollapseToggle compact />
         </div>
       </SidebarHeader>
@@ -899,8 +979,13 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       {/* Tight body: px-1.5 py-1.5 instead of default p-2/px-2 so groups
           sit closer to the header and we win a few rows of vertical
           space back. */}
-      <SidebarContent className="gap-1.5 px-2.5 py-2">
-        <SurfaceCreateButton companySurfaceActive={companySurfaceActive} />
+      <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
+        <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
+          <SurfaceCreateButton
+            companySurfaceActive={companySurfaceActive}
+            activeAgentId={activeAgentId}
+          />
+        </SidebarGroup>
         {companySurfaceActive ? (
           <>
             <NavSection
@@ -1036,9 +1121,16 @@ function LocalDatabaseSection({
       <SidebarMenu className="gap-0.5">
         <SidebarMenuItem className="justify-center">
           <SidebarMenuButton
-            asChild
             isActive={active}
             tooltip={title}
+            aria-current={active ? "page" : undefined}
+            aria-expanded={open}
+            aria-label={
+              open
+                ? t.sidebar.ariaCollapseLocalDatabase
+                : t.sidebar.ariaExpandLocalDatabase
+            }
+            onClick={() => setOpen((value) => !value)}
             className={cn(
               "group/nav relative h-9 w-full rounded-lg opacity-76 transition-[opacity,background-color,border-color] duration-150 text-[13px]",
               "border border-transparent hover:border-border/45 hover:bg-muted/32 hover:opacity-100",
@@ -1046,51 +1138,30 @@ function LocalDatabaseSection({
               "data-[active=true]:border-primary/14 data-[active=true]:bg-[color:color-mix(in_oklch,var(--sidebar-accent)_76%,transparent)]",
               "data-[active=true]:shadow-sm data-[active=true]:shadow-black/[0.025]",
               "data-[active=true]:before:absolute data-[active=true]:before:left-0 data-[active=true]:before:top-1.5 data-[active=true]:before:bottom-1.5 data-[active=true]:before:w-[2px] data-[active=true]:before:rounded-r data-[active=true]:before:bg-primary/75",
+              "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0",
             )}
           >
-            <Link
-              to="/workspace/storage?surface=company"
-              aria-current={active ? "page" : undefined}
-              className="flex w-full items-center gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0"
+            <span
+              className={cn(
+                "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
+                active
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground group-hover/nav:text-foreground",
+              )}
             >
-              <span
+              <DatabaseIcon className="size-[16px]" />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
+              {title}
+            </span>
+            <span className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover/nav:bg-muted/60 group-hover/nav:text-foreground group-data-[collapsible=icon]:hidden">
+              <ChevronRightIcon
                 className={cn(
-                  "flex size-6 shrink-0 items-center justify-center rounded-md transition-colors",
-                  active
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground group-hover/nav:text-foreground",
+                  "size-3.5 transition-transform",
+                  open && "rotate-90",
                 )}
-              >
-                <DatabaseIcon className="size-[16px]" />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">
-                {title}
-              </span>
-              <button
-                type="button"
-                aria-label={
-                  open
-                    ? t.sidebar.ariaCollapseLocalDatabase
-                    : t.sidebar.ariaExpandLocalDatabase
-                }
-                aria-expanded={open}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setOpen((value) => !value);
-                }}
-                className={cn(
-                  "flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground group-data-[collapsible=icon]:hidden",
-                )}
-              >
-                <ChevronRightIcon
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    open && "rotate-90",
-                  )}
-                />
-              </button>
-            </Link>
+              />
+            </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
         {open && (
@@ -1164,18 +1235,26 @@ function routeSearch(to: string): string {
   return index === -1 ? "" : to.slice(index);
 }
 
-function libraryFromSearch(search: string): string {
-  return new URLSearchParams(search).get("library") || "overview";
+function routeSearchFromLocation(pathname: string, search: string): string {
+  if (search) return search;
+  const index = pathname.indexOf("?");
+  return index === -1 ? "" : pathname.slice(index);
+}
+
+function libraryFromLocation(pathname: string, search: string): string {
+  const searchValue = routeSearchFromLocation(pathname, search);
+  return new URLSearchParams(searchValue).get("library") || "overview";
 }
 
 function isStorageRouteActive(pathname: string) {
+  const path = routePath(pathname);
   return (
-    pathname === "/workspace/storage" ||
-    pathname.startsWith("/workspace/storage/") ||
-    pathname === "/workspace/nas" ||
-    pathname.startsWith("/workspace/nas/") ||
-    pathname === "/workspace/database" ||
-    pathname.startsWith("/workspace/database/")
+    path === "/workspace/storage" ||
+    path.startsWith("/workspace/storage/") ||
+    path === "/workspace/nas" ||
+    path.startsWith("/workspace/nas/") ||
+    path === "/workspace/database" ||
+    path.startsWith("/workspace/database/")
   );
 }
 
@@ -1185,8 +1264,9 @@ function isStorageLibraryRouteActive(
   to: string,
 ) {
   if (!isStorageRouteActive(pathname)) return false;
-  const targetLibrary = libraryFromSearch(routeSearch(to));
-  return libraryFromSearch(search) === targetLibrary;
+  const targetLibrary = new URLSearchParams(routeSearch(to)).get("library");
+  if (!targetLibrary) return false;
+  return libraryFromLocation(pathname, search) === targetLibrary;
 }
 
 function isNavRouteActive(pathname: string, to: string) {
@@ -1294,6 +1374,7 @@ export function WorkspaceSurfaceSwitch({
   placement?: "sidebar" | "topbar";
 }) {
   const { t } = useI18n();
+  const { materialTheme } = useAppearance();
   const items = [
     {
       to: COMPANY_WORKSPACE_ROUTE,
@@ -1321,9 +1402,14 @@ export function WorkspaceSurfaceSwitch({
   return (
     <div
       className={cn(
-        "grid w-[150px] min-w-0 grid-cols-[30px_minmax(0,1fr)_30px] items-center gap-0.5 rounded-[14px] border border-border/45 bg-background/72 p-px shadow-[0_1px_2px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.42)]",
+        "grid min-w-0 grid-cols-[30px_minmax(0,1fr)_30px] items-center gap-0.5 rounded-[14px] p-px",
+        materialTheme === "liquid"
+          ? "octo-liquid-glass octo-liquid-glass--thin"
+          : "border border-border/70 bg-muted/70 shadow-[0_1px_2px_rgba(15,23,42,0.06)]",
+        placement === "sidebar" && "w-[150px]",
+        placement === "topbar" && "w-[150px] translate-x-0",
         placement === "sidebar" && "-translate-x-3",
-        "group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:translate-x-[-4px] group-data-[collapsible=icon]:grid-cols-1 group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:shadow-none",
+        "group-data-[collapsible=icon]:hidden",
       )}
     >
       {items.map((item) => {
@@ -1373,12 +1459,17 @@ export function WorkspaceSurfaceSwitch({
 }
 
 function SurfaceCreateButton({
+  activeAgentId,
   companySurfaceActive,
 }: {
+  activeAgentId: string | null;
   companySurfaceActive: boolean;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const chatRoute = activeAgentId
+    ? `/workspace/agents/${encodeURIComponent(activeAgentId)}/chats/new`
+    : PRIMARY_WORKSPACE_ROUTE;
   const createAction = companySurfaceActive
     ? {
         label: t.sidebar.actionNewTask,
@@ -1388,7 +1479,7 @@ function SurfaceCreateButton({
     : {
         label: t.sidebar.actionNewChat,
         icon: MessageSquarePlusIcon,
-        to: PRIMARY_WORKSPACE_ROUTE,
+        to: chatRoute,
       };
   const CreateIcon = createAction.icon;
 
@@ -1400,7 +1491,7 @@ function SurfaceCreateButton({
           title={createAction.label}
           aria-label={createAction.label}
           onClick={() => navigate(createAction.to)}
-          className="flex h-7 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-border/40 bg-background/48 px-3 text-[11px] font-medium text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[background-color,border-color,color,box-shadow] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:px-0"
+          className="flex h-7 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-border/40 bg-background/48 px-3 text-[11px] font-medium text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[background-color,border-color,color,box-shadow] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:px-0"
         >
           <CreateIcon className="size-4" />
           <span className="group-data-[collapsible=icon]:sr-only">
@@ -1726,6 +1817,12 @@ function ProjectGroup({
                 <li key={thread.id} className="group/thread relative">
                   <Link
                     to={thread.href}
+                    state={{
+                      threadOwnerAgentId:
+                        thread.agents.length === 1 ? thread.agents[0] : undefined,
+                      workspacePath: thread.workspacePath,
+                    }}
+                    onMouseDown={() => syncThreadAgentSelection(thread.agents)}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "flex min-h-8 items-center gap-2 rounded-md py-1 pl-2 pr-7 text-[13px] opacity-75 transition-[opacity,background-color] duration-150",
@@ -1881,8 +1978,8 @@ function SectionHeader({
           {actions.map((a) => {
             const Icon = a.icon;
             const cls = cn(
-              "flex size-6 items-center justify-center rounded-md text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors",
-              a.active && "bg-muted text-foreground",
+              "flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-muted/45 hover:text-foreground",
+              a.active && "text-foreground",
             );
             if (a.href) {
               return (
@@ -2081,22 +2178,30 @@ function OngoingTasksSection({
 }
 
 function OngoingStatusDot({ status }: { status: OngoingWorkItem["status"] }) {
-  if (status === "running") {
-    return (
-      <Loader2Icon className="size-3.5 shrink-0 animate-spin text-blue-600" />
-    );
-  }
+  const { t } = useI18n();
+  const toneByStatus: Record<OngoingWorkItem["status"], StatusTone> = {
+    current: "success",
+    failed: "error",
+    pending: "queued",
+    running: "running",
+  };
+  const label =
+    status === "running"
+      ? t.sidebar.taskStatusRunning
+      : status === "failed"
+        ? t.sidebar.taskStatusFailed
+        : status === "pending"
+          ? t.sidebar.taskStatusPending
+          : t.sidebar.currentTaskSession;
   return (
-    <span
-      className={cn(
-        "size-2.5 shrink-0 rounded-full",
-        status === "failed"
-          ? "bg-destructive"
-          : status === "pending"
-            ? "bg-amber-500"
-            : "bg-emerald-500",
-      )}
-    />
+    <StatusBadge
+      tone={toneByStatus[status]}
+      icon={status === "running"}
+      dot={status !== "running"}
+      className="h-5 max-w-[86px] px-1.5 text-[10px]"
+    >
+      {label}
+    </StatusBadge>
   );
 }
 
@@ -2188,7 +2293,7 @@ function ChatsSection({
   }, [navigate, newPath]);
   const sectionLabel = label ?? tr.sidebar.sectionChats;
   const actionLabel = newActionLabel ?? tr.sidebar.actionNewChat;
-  const visibleLimit = 8;
+  const visibleLimit = 20;
   const displayedThreads = useMemo(() => {
     const current = threads.find((thread) => pathname.includes(thread.id));
     const recent = threads.slice(0, visibleLimit);
@@ -2200,10 +2305,6 @@ function ChatsSection({
       ...recent.filter((thread) => thread.id !== current.id),
     ].slice(0, visibleLimit);
   }, [pathname, threads]);
-  const hiddenThreadCount = Math.max(
-    0,
-    threads.length - displayedThreads.length,
-  );
   return (
     <div className="mt-2 group-data-[collapsible=icon]:hidden">
       <SidebarGroup className="p-0 px-2 pb-1">
@@ -2236,6 +2337,12 @@ function ChatsSection({
                   <li key={t.id} className="group/thread relative">
                     <Link
                       to={t.href}
+                      state={{
+                        threadOwnerAgentId:
+                          t.agents.length === 1 ? t.agents[0] : undefined,
+                        workspacePath: t.workspacePath,
+                      }}
+                      onMouseDown={() => syncThreadAgentSelection(t.agents)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex min-h-7 items-center gap-2 rounded-md pl-2 pr-7 py-1 text-xs opacity-75 transition-[opacity,background-color] duration-150",
@@ -2267,14 +2374,6 @@ function ChatsSection({
                   </li>
                 );
               })}
-              {hiddenThreadCount > 0 && (
-                <li className="px-2 pt-1 text-[10px] leading-4 text-muted-foreground/55">
-                  {tr.sidebar.recentThreadsSummary(
-                    displayedThreads.length,
-                    hiddenThreadCount,
-                  )}
-                </li>
-              )}
             </ul>
           ))}
       </SidebarGroup>

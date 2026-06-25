@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
+import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
@@ -79,6 +80,18 @@ interface ActionLogEntry {
 interface PageInfo {
   url: string;
   title: string;
+}
+
+async function dataUrlToFile(
+  dataUrl: string,
+  filename: string,
+  fallbackMime = "image/png",
+): Promise<File> {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return new File([blob], filename, {
+    type: blob.type || fallbackMime,
+  });
 }
 
 interface BrowserSessionHealth {
@@ -494,13 +507,16 @@ function ActionIcon({ action }: { action: string }) {
     case "viewport":
       return <MonitorIcon className="size-3 text-cyan-500" />;
     case "scroll":
-      return <ArrowLeftIcon className="size-3 text-gray-500" />;
+      return <ArrowLeftIcon className="size-3 text-muted-foreground" />;
     default:
-      return <PlayIcon className="size-3 text-gray-400" />;
+      return <PlayIcon className="size-3 text-muted-foreground" />;
   }
 }
 
-function actionStatusLabel(entry: ActionLogEntry, t: { actionPending: string; actionSuccess: string; actionFailed: string }): string {
+function actionStatusLabel(
+  entry: ActionLogEntry,
+  t: { actionPending: string; actionSuccess: string; actionFailed: string },
+): string {
   if (!entry.status) return t.actionPending;
   if (entry.status === "ok") return t.actionSuccess;
   if (entry.status === "error") return t.actionFailed;
@@ -898,6 +914,48 @@ export function BrowserPreviewPanel({
     }
   }, [refreshSessionStatus, session, sessionId]);
 
+  const handleAttachScreenshotToComposer = useCallback(async () => {
+    try {
+      let screenshotDataUrl = screenshot
+        ? `data:image/png;base64,${screenshot}`
+        : "";
+      if (!screenshotDataUrl && session) {
+        const shotData = await browserApi.screenshotBase64(sessionId);
+        setScreenshot(shotData.base64);
+        setScreenshotSize({ width: shotData.width, height: shotData.height });
+        screenshotDataUrl = `data:image/png;base64,${shotData.base64}`;
+      }
+      if (!screenshotDataUrl) {
+        toast.error(bp.noReadableText);
+        return;
+      }
+      const host = (() => {
+        try {
+          return pageInfo.url ? new URL(pageInfo.url).hostname : "browser";
+        } catch {
+          return "browser";
+        }
+      })();
+      const file = await dataUrlToFile(
+        screenshotDataUrl,
+        `browser-shot-${host}-${Date.now()}.png`,
+      );
+      window.dispatchEvent(
+        new CustomEvent("octopus:inject-composer-images", {
+          detail: {
+            threadId,
+            images: [file],
+            sourceLabel: bp.attachScreenshotSource,
+          },
+        }),
+      );
+      toast.success(bp.attachScreenshotSuccess);
+    } catch (error) {
+      swallow(error);
+      toast.error(bp.attachScreenshotFailed);
+    }
+  }, [bp, pageInfo.url, screenshot, session, sessionId, threadId]);
+
   const handleBack = useCallback(async () => {
     if (!session) return;
     try {
@@ -1225,6 +1283,14 @@ export function BrowserPreviewPanel({
           title={t.browser.reload}
         >
           <RefreshCwIcon className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleAttachScreenshotToComposer()}
+          className="grid size-7 place-items-center rounded-md border border-transparent text-muted-foreground transition-colors hover:border-border/60 hover:bg-muted/65 hover:text-foreground"
+          title={bp.attachScreenshotToComposer}
+        >
+          <ImageIcon className="size-3.5" />
         </button>
 
         <form
@@ -1591,10 +1657,10 @@ export function BrowserPreviewPanel({
                         )}
                       >
                         {svc.type === "frontend"
-                        ? bp.serviceTypeFrontend
-                        : svc.type === "backend"
-                          ? bp.serviceTypeBackend
-                          : bp.serviceTypeOther}
+                          ? bp.serviceTypeFrontend
+                          : svc.type === "backend"
+                            ? bp.serviceTypeBackend
+                            : bp.serviceTypeOther}
                       </span>
                     </button>
                   ))}

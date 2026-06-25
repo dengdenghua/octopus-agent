@@ -5,6 +5,7 @@
  * `swarm/live-driver.ts` (Kimi-style workbench). Both now consume this module.
  */
 import { swallow } from "@/core/utils/log";
+import { getToken } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
 // ---------------------------------------------------------------------------
@@ -129,8 +130,6 @@ async function authedFetch(
   pathOrUrl: string,
   init?: RequestInit,
 ): Promise<Response> {
-  // Lazy import to avoid a hard dependency for SSR / tests.
-  const { getToken } = await import("@/core/auth/api");
   const token = getToken();
   return fetch(toBackendURL(pathOrUrl), {
     ...init,

@@ -333,6 +333,157 @@ describe("MessageGroup reasoning grouping", () => {
     expect(screen.getByText(/laser engraving market 2025/)).toBeInTheDocument();
   });
 
+  it("keeps completed code-mode traces behind the saved-steps disclosure", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "Inspect the user request before editing.",
+        },
+      },
+      {
+        id: "ai-2",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "search-1",
+            name: "web_search",
+            args: { query: "frontend route structure" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(<MessageGroup codeMode messages={messages as never} />, {
+      locale: "en-US",
+    });
+
+    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Inspect the user request before editing."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("frontend route structure"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("collapses a live code-mode trace when the same turn becomes historical", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "Inspect the user request before editing.",
+        },
+      },
+      {
+        id: "ai-2",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "search-1",
+            name: "web_search",
+            args: { query: "frontend route structure" },
+          },
+        ],
+      },
+    ];
+
+    const { rerender } = renderWithProviders(
+      <MessageGroup codeMode isLoading messages={messages as never} />,
+      {
+        locale: "en-US",
+      },
+    );
+
+    expect(screen.getByText("Hide process replay")).toBeInTheDocument();
+    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
+
+    rerender(<MessageGroup codeMode messages={messages as never} />);
+
+    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.queryByText("Hide saved steps")).not.toBeInTheDocument();
+    expect(screen.queryByText("Clarify task direction")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("live-process-strip")).not.toBeInTheDocument();
+  });
+
+  it("auto-expands code-mode traces while the turn is live", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        additional_kwargs: {
+          reasoning_content: "Inspect the user request before editing.",
+        },
+      },
+      {
+        id: "ai-2",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "search-1",
+            name: "web_search",
+            args: { query: "frontend route structure" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(
+      <MessageGroup codeMode isLoading messages={messages as never} />,
+      {
+        locale: "en-US",
+      },
+    );
+
+    expect(
+      screen.queryByText("Inspect the user request before editing."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
+    expect(screen.getByText("Live process")).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByText("1 replay step")).toBeInTheDocument();
+    expect(screen.getByText("Hide process replay")).toBeInTheDocument();
+    expect(screen.getByText("Clarify task direction")).toBeInTheDocument();
+    expect(screen.getAllByText(/frontend route structure/).length).toBe(2);
+  });
+
+  it("marks the live code process strip as waiting when user confirmation is needed", () => {
+    const messages: AIMessage[] = [
+      {
+        id: "ai-1",
+        type: "ai",
+        content: "",
+        tool_calls: [
+          {
+            id: "ask-1",
+            name: "ask_user_question",
+            args: { question: "是否继续写入文件？" },
+          },
+        ],
+      },
+    ];
+
+    renderWithProviders(
+      <MessageGroup codeMode isLoading messages={messages as never} />,
+      {
+        locale: "zh-CN",
+      },
+    );
+
+    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
+    expect(screen.getByText("实时进程")).toBeInTheDocument();
+    expect(screen.getByText("待确认")).toBeInTheDocument();
+    expect(screen.getByText("需要你的帮助")).toBeInTheDocument();
+  });
+
   it("keeps only the current frame visible when latest trace is kept open", () => {
     const messages: AIMessage[] = [
       {

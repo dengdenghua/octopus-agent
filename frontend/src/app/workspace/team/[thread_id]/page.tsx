@@ -905,6 +905,7 @@ export default function TeamPage() {
                         workDir={workDir}
                         onWorkDirChange={setWorkDir}
                         className="min-w-0 max-w-[min(46vw,24rem)]"
+                        variant="muted"
                       />
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

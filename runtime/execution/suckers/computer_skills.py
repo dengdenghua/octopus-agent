@@ -308,6 +308,7 @@ def register_computer_skills(
             cost_profile="low",
             trusted_source="skill://public/mouse_click",
             handler=_mouse_click,
+            exclusive_resource="device:desktop",  # ADR-010 · single physical screen
             tests=[
                 SkillTestCase(
                     name="invalid_button",
@@ -327,6 +328,7 @@ def register_computer_skills(
             cost_profile="low",
             trusted_source="skill://public/mouse_move",
             handler=_mouse_move,
+            exclusive_resource="device:desktop",  # ADR-010 · single physical screen
             tests=[],
         ),
         verify_tests=verify_tests,
@@ -339,6 +341,7 @@ def register_computer_skills(
             cost_profile="low",
             trusted_source="skill://public/keyboard_type",
             handler=_keyboard_type,
+            exclusive_resource="device:desktop",  # ADR-010 · single physical keyboard
             tests=[
                 SkillTestCase(
                     name="missing_text",
@@ -358,6 +361,7 @@ def register_computer_skills(
             cost_profile="low",
             trusted_source="skill://public/keyboard_press",
             handler=_keyboard_press,
+            exclusive_resource="device:desktop",  # ADR-010 · single physical keyboard
             tests=[
                 SkillTestCase(
                     name="empty_keys",

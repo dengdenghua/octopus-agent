@@ -190,7 +190,9 @@ export function ApplicationRegistryPanel() {
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2">
           <Package className="size-4 text-primary" />
-          <h3 className="text-sm font-semibold">{t.applicationRegistry.title}</h3>
+          <h3 className="text-sm font-semibold">
+            {t.applicationRegistry.title}
+          </h3>
           <Badge variant="secondary">{registryItems.length}</Badge>
           <Button
             aria-label={t.applicationRegistry.refreshAria}
@@ -350,7 +352,9 @@ export function ApplicationRegistryPanel() {
                       variant={plugin.enabled ? "secondary" : "outline"}
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {plugin.enabled ? t.applicationRegistry.enabledStatus : t.applicationRegistry.disabledStatus}
+                      {plugin.enabled
+                        ? t.applicationRegistry.enabledStatus
+                        : t.applicationRegistry.disabledStatus}
                     </Badge>
                   )}
                   {item.apps.length > 0 && (
@@ -374,7 +378,8 @@ export function ApplicationRegistryPanel() {
                       variant="outline"
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {plugin.capabilities.length} {t.applicationRegistry.capabilities}
+                      {plugin.capabilities.length}{" "}
+                      {t.applicationRegistry.capabilities}
                     </Badge>
                   )}
                   {primaryApp && (primaryApp.permissions?.length ?? 0) > 0 && (
@@ -382,7 +387,8 @@ export function ApplicationRegistryPanel() {
                       variant="outline"
                       className="h-5 rounded-full px-2 text-[10px]"
                     >
-                      {primaryApp!.permissions!.length} {t.applicationRegistry.permissions}
+                      {primaryApp!.permissions!.length}{" "}
+                      {t.applicationRegistry.permissions}
                     </Badge>
                   )}
                 </div>

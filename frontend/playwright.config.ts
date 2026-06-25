@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const frontendPort = process.env.FRONTEND_PORT || "3000";
+
 /**
  * Playwright E2E configuration for octopus-frontend.
  *
@@ -22,7 +24,7 @@ export default defineConfig({
   timeout: 30_000,
 
   use: {
-    baseURL: `http://localhost:${process.env.FRONTEND_PORT || "3000"}`,
+    baseURL: `http://127.0.0.1:${frontendPort}`,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
@@ -32,13 +34,16 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "firefox",
+      use: { ...devices["Desktop Firefox"] },
+    },
   ],
 
-  /* Optionally start the Vite dev server before tests. */
-  // webServer: {
-  //   command: "npm run dev",
-  //   port: 3000,
-  //   reuseExistingServer: !process.env.CI,
-  //   timeout: 30_000,
-  // },
+  webServer: {
+    command: `pnpm dev -- --host 127.0.0.1 --port ${frontendPort}`,
+    url: `http://127.0.0.1:${frontendPort}`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
+  },
 });

@@ -50,6 +50,7 @@ interface Props {
   tab: BrowserTab;
   active: boolean;
   onPatch: (patch: Partial<BrowserTab>) => void;
+  renderDevice?: BrowserTab["device"];
 }
 
 /* Implementation note. */
@@ -192,7 +193,7 @@ const DESKTOP_WIDGETS: BrowserDesktopWidget[] = [
     title: "research",
     subtitle: "researchSubtitle",
     icon: FileTextIcon,
-    color: "from-slate-700 to-slate-500",
+    color: "from-muted-foreground to-muted-foreground/70",
   },
   {
     title: "todayTasks",
@@ -276,7 +277,7 @@ function BackendBrowserTab({
   active,
   onPatch,
   imperativeRef,
-}: Props & {
+}: Omit<Props, "renderDevice"> & {
   imperativeRef: React.ForwardedRef<WebviewTabHandle>;
 }) {
   const sessionId = `browser-page:${tab.id}`;
@@ -716,6 +717,7 @@ function BackendBrowserTab({
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- retained while BrowserHome migration settles
 function BrowserDesktopHome({
   active,
   device,
@@ -863,12 +865,12 @@ function BrowserDesktopHome({
     >
       <div
         className={cn(
-          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] bg-black/20 py-4 shadow-2xl shadow-black/10 backdrop-blur-md",
+          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] border border-white/38 bg-white/18 py-4 shadow-xl shadow-black/10 backdrop-blur-md",
           compactDesktop && "left-3 top-4 h-[calc(100%-2rem)]",
           mobileDesktop && "left-2 w-11",
         )}
       >
-        <div className="grid size-8 place-items-center rounded-2xl bg-white/70 text-slate-700 shadow-sm">
+        <div className="grid size-8 place-items-center rounded-2xl bg-white/70 text-foreground shadow-sm">
           <BotIcon className="size-5" />
         </div>
         <div className="mt-8 flex flex-col gap-4">
@@ -927,7 +929,7 @@ function BrowserDesktopHome({
       >
         <div
           className={cn(
-            "mx-auto flex h-14 w-full max-w-[720px] items-center gap-3 rounded-[18px] bg-white/82 px-5 text-slate-600 shadow-xl shadow-black/10 backdrop-blur-xl",
+            "mx-auto flex h-14 w-full max-w-[720px] items-center gap-3 rounded-[18px] border border-white/45 bg-white/76 px-5 text-muted-foreground shadow-xl shadow-black/10 backdrop-blur-xl",
             compactDesktop && "max-w-none",
             tabletDesktop && "max-w-[760px]",
             mobileDesktop && "h-12 rounded-2xl px-4",
@@ -939,7 +941,7 @@ function BrowserDesktopHome({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onSearchKey}
             placeholder={wt.searchPlaceholder}
-            className="min-w-0 flex-1 bg-transparent text-lg font-medium text-slate-700 outline-none placeholder:text-slate-400"
+            className="min-w-0 flex-1 bg-transparent text-lg font-medium text-foreground outline-none placeholder:text-muted-foreground/70"
           />
         </div>
         <div
@@ -954,7 +956,7 @@ function BrowserDesktopHome({
             <button
               type="button"
               onClick={resetDesktopLayout}
-              className="rounded-full bg-white/55 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-lg shadow-black/10 backdrop-blur-xl transition hover:bg-white/75"
+              className="rounded-full bg-white/55 px-3 py-1.5 text-xs font-medium text-foreground shadow-lg shadow-black/10 backdrop-blur-xl transition hover:bg-white/75"
             >
               {wt.resetLayout}
             </button>
@@ -966,7 +968,7 @@ function BrowserDesktopHome({
               "rounded-full px-3 py-1.5 text-xs font-medium shadow-lg shadow-black/10 backdrop-blur-xl transition",
               editMode
                 ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "bg-white/55 text-slate-700 hover:bg-white/75",
+                : "bg-white/55 text-foreground hover:bg-white/75",
             )}
           >
             {editMode ? wt.finishEditing : wt.editDesktop}
@@ -1003,7 +1005,7 @@ function BrowserDesktopHome({
             )}
           >
             <div className="text-center">
-              <div className="flex overflow-hidden rounded-[20px] bg-white/90 text-slate-700 shadow-lg shadow-black/10">
+              <div className="flex overflow-hidden rounded-[20px] bg-white/90 text-foreground shadow-lg shadow-black/10">
                 <div
                   className={cn(
                     "grid w-24 place-items-center bg-white px-4 py-3 text-center",
@@ -1036,7 +1038,7 @@ function BrowserDesktopHome({
                   >
                     {month}
                   </div>
-                  <div className="text-sm text-slate-500">
+                  <div className="text-sm text-muted-foreground">
                     {wt.aiBrowserDesktop}
                   </div>
                 </div>
@@ -1049,7 +1051,7 @@ function BrowserDesktopHome({
             <div>
               <div
                 className={cn(
-                  "grid grid-cols-2 gap-4 rounded-[22px] bg-white/55 p-5 shadow-xl shadow-black/10 backdrop-blur-xl",
+                  "grid grid-cols-2 gap-4 rounded-[22px] border border-white/36 bg-white/38 p-5 shadow-xl shadow-black/10 backdrop-blur-xl",
                   mobileDesktop && "gap-3 rounded-[20px] p-4",
                 )}
               >
@@ -1079,7 +1081,7 @@ function BrowserDesktopHome({
             <div>
               <div
                 className={cn(
-                  "grid h-56 grid-cols-[220px_1fr] overflow-hidden rounded-[22px] bg-black/36 shadow-2xl shadow-black/10 backdrop-blur-xl",
+                  "grid h-56 grid-cols-[220px_1fr] overflow-hidden rounded-[22px] border border-white/32 bg-white/24 shadow-xl shadow-black/10 backdrop-blur-xl",
                   compactDesktop && "mx-auto h-auto max-w-[520px] grid-cols-1",
                   tabletDesktop && "h-52 max-w-none grid-cols-[190px_1fr]",
                   mobileDesktop && "max-w-[320px]",
@@ -1087,7 +1089,7 @@ function BrowserDesktopHome({
               >
                 <div
                   className={cn(
-                    "m-4 rounded-[16px] bg-white/25 p-5",
+                    "m-4 rounded-[16px] bg-white/24 p-5",
                     compactDesktop && "mb-0",
                     tabletDesktop && "mb-4",
                   )}
@@ -1199,7 +1201,7 @@ function BrowserDesktopHome({
 
         <div
           className={cn(
-            "mx-auto mb-7 flex max-w-[780px] items-center gap-5 rounded-[26px] bg-white/66 px-5 py-3 shadow-2xl shadow-black/16 backdrop-blur-xl",
+            "mx-auto mb-7 flex max-w-[780px] items-center gap-5 rounded-[26px] border border-white/38 bg-white/54 px-5 py-3 shadow-xl shadow-black/10 backdrop-blur-xl",
             compactDesktop &&
               "absolute bottom-5 left-20 right-5 z-10 mx-0 mb-0 justify-start gap-3 overflow-x-auto rounded-[22px] px-4 py-3",
             tabletDesktop &&
@@ -1291,16 +1293,16 @@ function DesktopControlPanel({
               : wt.panelTitleDesktopSettings;
 
   return (
-    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] overflow-hidden rounded-[28px] border border-white/30 bg-white/72 text-slate-800 shadow-2xl shadow-black/20 backdrop-blur-2xl">
-      <div className="flex items-center justify-between border-b border-white/45 px-5 py-4">
+    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] overflow-hidden rounded-[28px] border border-white/38 bg-white/70 text-foreground shadow-xl shadow-black/15 backdrop-blur-2xl">
+      <div className="flex items-center justify-between border-b border-white/32 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>
-          <div className="text-xs text-slate-500">{wt.panelSubtitle}</div>
+          <div className="text-xs text-muted-foreground">{wt.panelSubtitle}</div>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full bg-slate-900/8 px-3 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-900/14"
+          className="rounded-full bg-foreground/10 px-3 py-1 text-xs font-medium text-muted-foreground transition hover:bg-foreground/15"
         >
           {wt.panelClose}
         </button>
@@ -1316,14 +1318,14 @@ function DesktopControlPanel({
                 className={cn(
                   "flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition hover:bg-white/70",
                   index === 0
-                    ? "border-blue-400 bg-white/70"
-                    : "border-white/60 bg-white/38",
+                    ? "border-blue-400/60 bg-white/70"
+                    : "border-white/42 bg-white/38",
                 )}
               >
-                <span className="size-10 rounded-2xl bg-gradient-to-br from-slate-400 via-zinc-300 to-rose-300 shadow-inner" />
+                <span className="size-10 rounded-2xl bg-gradient-to-br from-muted-foreground via-zinc-300 to-rose-300 shadow-inner" />
                 <span>
                   <span className="block text-sm font-semibold">{name}</span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-xs text-muted-foreground">
                     {wt.themeDescs[index]}
                   </span>
                 </span>
@@ -1348,7 +1350,7 @@ function DesktopControlPanel({
                       <div className="text-sm font-semibold">
                         {wt.widgetPanelNames[index]}
                       </div>
-                      <div className="truncate text-xs text-slate-500">
+                      <div className="truncate text-xs text-muted-foreground">
                         {wt.widgetPanelDescs[index]}
                       </div>
                     </div>
@@ -1365,9 +1367,9 @@ function DesktopControlPanel({
         {panel === "wallpaper" && (
           <div className="grid grid-cols-2 gap-3">
             {[
-              "from-slate-400 via-zinc-300 to-rose-300",
-              "from-sky-300 via-indigo-300 to-slate-500",
-              "from-emerald-300 via-teal-400 to-slate-600",
+              "from-muted-foreground via-zinc-300 to-rose-300",
+              "from-sky-300 via-indigo-300 to-muted-foreground",
+              "from-emerald-300 via-teal-400 to-muted-foreground/80",
               "from-stone-500 via-neutral-400 to-orange-200",
             ].map((gradient, index) => (
               <button
@@ -1434,7 +1436,7 @@ function DesktopControlPanel({
                     <span className="block text-sm font-semibold">
                       {appNameMap[app.name] ?? app.name}
                     </span>
-                    <span className="block truncate text-xs text-slate-500">
+                    <span className="block truncate text-xs text-muted-foreground">
                       {app.url}
                     </span>
                   </span>
@@ -1449,7 +1451,7 @@ function DesktopControlPanel({
             {wt.settingNames.map((name, index) => (
               <div key={name} className="rounded-2xl bg-white/46 p-3">
                 <div className="text-sm font-semibold">{name}</div>
-                <div className="mt-1 text-xs text-slate-500">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {wt.settingDescs[index]}
                 </div>
               </div>
@@ -1529,7 +1531,7 @@ function DesktopAppIcon({
 }
 
 export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
-  function WebviewTab({ tab, active, onPatch }, imperativeRef) {
+  function WebviewTab({ tab, active, onPatch, renderDevice }, imperativeRef) {
     const ref = useRef<WebviewElement | null>(null);
     const { t } = useI18n();
     const wt = t.browser.webviewTab;
@@ -1773,11 +1775,12 @@ export const WebviewTab = forwardRef<WebviewTabHandle, Props>(
       setReloadSeed((s) => s + 1);
     };
 
+    const homeDevice = renderDevice ?? tab.device;
     if (tab.url === BROWSER_HOME_URL) {
       return (
         <BrowserHome
           active={active}
-          device={tab.device}
+          device={homeDevice}
           onOpen={(url) => onPatch({ url, title: url, isLoading: true })}
         />
       );

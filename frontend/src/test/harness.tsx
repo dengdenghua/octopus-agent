@@ -64,8 +64,7 @@ export function AllProviders({
     // Clear any stale locale cookie from previous tests before seeding the
     // expected locale, so ``getLocaleFromCookie()`` always reads the value
     // we intend for this render.
-    document.cookie =
-      "locale=; path=/; max-age=0; SameSite=Lax";
+    document.cookie = "locale=; path=/; max-age=0; SameSite=Lax";
     document.cookie = `locale=${encodeURIComponent(locale)}; path=/`;
   }
   return (

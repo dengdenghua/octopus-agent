@@ -159,9 +159,7 @@ describe("MessageList scroll-to-latest affordance", () => {
       }),
     ).toBeInTheDocument();
 
-    fireEvent.click(
-      within(rail).getByRole("button", { name: /Turn 2/ }),
-    );
+    fireEvent.click(within(rail).getByRole("button", { name: /Turn 2/ }));
 
     expect(scrollIntoViewMock).toHaveBeenCalledWith({
       behavior: "smooth",

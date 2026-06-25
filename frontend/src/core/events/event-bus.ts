@@ -11,7 +11,7 @@ import { useEffect, useCallback } from "react";
 // 事件类型定义
 export interface EventMap {
   // Agent 相关
-  "agent:changed": { name: string };
+  "agent:changed": { name: string; source?: "user" | "thread" | "system" };
 
   // 设置相关
   "settings:changed": void;
@@ -174,8 +174,11 @@ export function useEventCallback<T extends EventName>(
 }
 
 // 便捷函数：触发 agent 变更事件
-export function emitAgentChanged(name: string): void {
-  eventBus.emit("agent:changed", { name });
+export function emitAgentChanged(
+  name: string,
+  source: "user" | "thread" | "system" = "user",
+): void {
+  eventBus.emit("agent:changed", { name, source });
   // 同时更新 localStorage 保持兼容性
   try {
     window.localStorage.setItem("octopus.active-agent", name);
