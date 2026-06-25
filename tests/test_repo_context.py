@@ -286,28 +286,25 @@ def test_tier_boosts_core_over_standard(tmp_path: Path) -> None:
 
 def test_semantic_lane_fuses_when_embedder_present(tmp_path: Path, monkeypatch) -> None:
     # Three pages tie on BM25 (same body) → lexical order is path-sorted
-    # [a, b, c]. A configured embedder reranks them [c, a, b]; RRF fusion then
-    # pulls c above b. Proves the semantic lane participates in fusion.
+    # [a, b, c]. A configured embedder makes the query most similar to c, then a,
+    # then b; RRF fusion of [a,b,c] + [c,a,b] pulls c above b. Proves the cached
+    # semantic lane participates in fusion.
     import runtime.memory.hemolymph.embedding_backend as eb
-    import runtime.memory.hemolymph.semantic_rank as sr
 
     auto = _make_wiki(
         tmp_path,
         [("Alpha", "a.md", "planner"), ("Beta", "b.md", "planner"), ("Gamma", "c.md", "planner")],
     )
+    # Page vectors (a, b, c) plus the query vector — chosen so cosine ranks
+    # c > a > b. embed_texts is called once for the 3-page corpus, once for the
+    # 1-text query.
+    vecs = {
+        "Alpha\nplanner": [1.0, 0.0],
+        "Beta\nplanner": [0.0, 1.0],
+        "Gamma\nplanner": [1.0, 1.0],
+    }
     monkeypatch.setattr(eb, "available", lambda: True)
-    monkeypatch.setattr(
-        sr,
-        "rank",
-        lambda query, texts, **kw: {
-            "backend": "embed",
-            "ranked": [
-                {"index": 2, "score": 0.9, "text": texts[2]},
-                {"index": 0, "score": 0.5, "text": texts[0]},
-                {"index": 1, "score": 0.1, "text": texts[1]},
-            ],
-        },
-    )
+    monkeypatch.setattr(eb, "embed_texts", lambda texts: [vecs.get(t, [1.0, 0.9]) for t in texts])
     sink: list[dict[str, str]] = []
     retrieve_repo_context("planner", wiki_dir=auto, max_pages=3, _sink=sink)
     paths = [s["path"] for s in sink]

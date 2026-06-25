@@ -133,6 +133,11 @@ def _rrf(rankings: list[list[str]], k: int = _RRF_K) -> dict[str, float]:
 _CACHE_LOCK = threading.Lock()
 _CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
+# Page-embedding cache for the semantic lane (ADR-009 Phase 3): embed the corpus
+# once, keyed by index.json mtime, so a hot planner loop embeds only the per-call
+# query — the gbrain "precompute doc vectors" pattern. Empty when no embedder.
+_VEC_CACHE: dict[str, tuple[float, dict[str, list[float]]]] = {}
+
 
 def _tokenize(text: str) -> list[str]:
     """Identifier-aware tokens: split camelCase / snake_case / acronyms into
@@ -300,6 +305,33 @@ def _default_wiki_dir() -> Path:
     return Path.cwd() / "docs" / "auto"
 
 
+def _page_vectors(base: Path, idx: dict[str, Any]) -> dict[str, list[float]]:
+    """Embed every page once and cache by index.json mtime · ``{path: vector}``.
+    A hot planner loop then embeds only the per-call query, not the whole corpus
+    (gbrain's precompute pattern). Empty when no embedder, or when embedding
+    fails — the semantic lane then simply stays off."""
+    from runtime.memory.hemolymph import embedding_backend
+
+    try:
+        mtime = (base / "index.json").stat().st_mtime
+    except OSError:
+        return {}
+    key = str(base)
+    with _CACHE_LOCK:
+        hit = _VEC_CACHE.get(key)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    pages = idx["pages"]
+    texts = [f"{p['title']}\n{(p['body'] or '')[:600]}" for p in pages]
+    vecs = embedding_backend.embed_texts(texts) or []
+    out: dict[str, list[float]] = {}
+    if len(vecs) == len(pages):
+        out = {p["path"]: v for p, v in zip(pages, vecs, strict=False)}
+    with _CACHE_LOCK:
+        _VEC_CACHE[key] = (mtime, out)
+    return out
+
+
 def retrieve_repo_context(
     query: str,
     *,
@@ -342,19 +374,24 @@ def retrieve_repo_context(
     rankings: list[list[str]] = [lexical_order]
 
     # Lazy import keeps the semantic backend off the module-load path.
-    from runtime.memory.hemolymph import embedding_backend, semantic_rank
+    from runtime.memory.hemolymph import embedding_backend
+    from runtime.memory.hemolymph.semantic_code_index import _cosine
 
-    # ── Lane 2 · semantic — rerank the lexical top-pool by meaning ──────────
+    # ── Lane 2 · semantic — cached page vectors, only the query embedded ────
     # Bridges synonyms BM25 can't (the ceiling repo_context documented), using
-    # the OCTOPUS_EMBED_* embedder. Bounded to the pool; only when an embedder
-    # is actually configured, so the default path pays nothing.
-    pool = lexical_order[:_FUSION_POOL]
-    if len(pool) > 1 and embedding_backend.available():
-        cand = [pages_by_path[pth] for pth in pool]
-        texts = [f"{p['title']}\n{(p['body'] or '')[:600]}" for p in cand]
-        res = semantic_rank.rank(query, texts)
-        if res.get("backend") == "embed":
-            rankings.append([pool[r["index"]] for r in res["ranked"]])
+    # the OCTOPUS_EMBED_* embedder. The corpus is embedded once and cached (by
+    # index.json mtime); only the per-call query is embedded — gbrain's
+    # precompute pattern. Dormant + free when no embedder is configured.
+    if len(lexical) > 1 and embedding_backend.available():
+        page_vecs = _page_vectors(base, idx)
+        qv = embedding_backend.embed_texts([query]) if page_vecs else None
+        if qv:
+            q0 = qv[0]
+            pool = [pth for pth in lexical_order[:_FUSION_POOL] if pth in page_vecs]
+            if pool:
+                rankings.append(
+                    sorted(pool, key=lambda pth: _cosine(q0, page_vecs[pth]), reverse=True)
+                )
 
     # ── Lane 3 · graph — import-edge neighbours of the top lexical hits ─────
     # Only lexical-matched neighbours (never promotes a zero-overlap page).
