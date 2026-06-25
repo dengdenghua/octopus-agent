@@ -1,7 +1,7 @@
 # ADR-008 · Octopus Mobile（移动触手 / 跨端编排）
 
-Status: Accepted (Phase 0) · Updated: 2026-06-06 (方案 F 优化)
-Date: 2026-06-06 (initial) | Last revision: 2026-06-06 (F-optimization)
+Status: Accepted · 决策层已落地 octopus-mobile · Updated: 2026-06-25 (反向对齐实施现状)
+Date: 2026-06-06 (initial) | Last revision: 2026-06-25 (doc-lags-code 对齐：方案 F 决策层四件套已实装)
 
 ## Context
 
@@ -156,13 +156,20 @@ octopus-agent 已有 `desktop_operator_arm` —— 用 pyautogui / 屏幕截图 
 ### 方案 F 实施清单
 
 - [x] ADR-008 决策记录更新
-- [ ] `LightweightLlmClient.kt`（< 200 行，裸 OkHttp 调 LLM API）
-- [ ] `LightweightReAct.kt`（< 300 行，简易 ReAct 循环）
-- [ ] `BrainModeSelector.kt`（决策层切换器）
-- [ ] `SkillManifest.kt`（SKILL.md 解析器）
-- [ ] 30 SKILL.md 精简版（极致压缩，节省 50% token）
-- [ ] 集成测试 PoC（DeepSeek API + 简易 ReAct 跑通"打开微信"）
+- [x] `LightweightLlmClient.kt`（裸 OkHttp 调 LLM API；已实装 ~257 行，带 `LightweightLlmClientTest.kt`）
+- [x] `LightweightReAct.kt`（简易 ReAct 循环；已实装 ~263 行，带 `LightweightReActTest.kt`）
+- [x] `BrainModeSelector.kt`（决策层切换器：母体不可达 → `LOCAL_FALLBACK`；已实装 ~292 行，带 `BrainModeSelectorTest.kt`）
+- [x] `SkillManifest.kt`（SKILL.md 解析器；已实装 ~282 行，带 `SkillManifestTest.kt`）
+- [ ] 30 SKILL.md 精简版（极致压缩，节省 50% token）— 仓内有 ~50 份 skill md，"精简版"口径待核
+- [ ] 集成测试 PoC（DeepSeek API + 简易 ReAct 跑通"打开微信"）— 端到端 PoC 未核
 - [ ] Octopus Mobile 现有 LangChain4j 代码**保留但不再使用**（兜底）
+
+> **实施现状（2026-06-25 反向对齐）**：方案 F 的决策层核心**已在 `octopus-mobile` 仓落地**——
+> `BrainModeSelector.kt` / `LightweightReAct.kt` / `LightweightLlmClient.kt` / `SkillManifest.kt`
+> 四个文件均已实装(共 ~1090 行)且各带单测,并被 `TaskOrchestrator.kt` / `AppViewModel.kt` /
+> `ClawApplication.kt` 接线。此前清单长期停留在"未勾选",是文档落后于代码(doc-lags-code),
+> 非功能缺失。路径:`octopus-mobile/app/src/main/java/com/apk/claw/android/octopus_mobile/`。
+> 剩余两项(SKILL.md 精简口径、端到端"打开微信"PoC)尚未逐一核实,保留未勾选。
 
 ## Consequences
 
