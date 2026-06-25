@@ -424,7 +424,15 @@ async def _start_turn(
                     model=validated.model,
                 )
             else:
-                await runtime._drive_react(turn, log, emitter, intent, provider, agent)
+                await runtime._drive_react(
+                    turn,
+                    log,
+                    emitter,
+                    intent,
+                    provider,
+                    agent,
+                    model=validated.model,
+                )
         except Exception as exc:
             _logger.exception("CerebrumRuntime: react loop crashed")
             err = ErrorItem(message=str(exc) or exc.__class__.__name__)

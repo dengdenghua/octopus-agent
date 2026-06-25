@@ -923,8 +923,12 @@ class CerebrumRuntime:
         intent: ParsedIntent,
         provider: ApprovalProvider,
         agent: Any,
+        *,
+        model: str | None = None,
     ) -> None:
-        await _drive_react(self, turn, log, emitter, intent, provider, agent)
+        await _drive_react(
+            self, turn, log, emitter, intent, provider, agent, model=model,
+        )
 
     async def _apply_react_event(
         self,
