@@ -4,9 +4,7 @@ import {
   CheckCircle2Icon,
   Clock3Icon,
   GitBranchIcon,
-  GlobeIcon,
   ListChecksIcon,
-  MonitorIcon,
   RefreshCwIcon,
   ShieldAlertIcon,
   XCircleIcon,
@@ -86,10 +84,8 @@ import { cn } from "@/lib/utils";
 import {
   BrowserDesktopReplayReviewCard,
   GateStat,
-  MiniStat,
   ReplayEvidenceDrilldownCard,
   ReplayGateCard,
-  ReplayMetadataBadge,
   StatusDot,
   priorityClass,
 } from "./replay-panel";

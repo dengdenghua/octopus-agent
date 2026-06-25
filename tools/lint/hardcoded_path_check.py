@@ -86,6 +86,8 @@ SKIP_GLOBS = (
     "tests/test_tool_intent_heuristic.py",       # fixture data
     "tests/test_build_turn_session.py",          # fixture: /home/data placeholder
     "tests/test_stable_prompt_invariant.py",     # fixture: /home/x placeholder
+    "tests/test_prompt_injection.py",            # fixture: /Users/dev placeholder
+    "tests/test_reflex_forge.py",                # fixture: /Users/test placeholder
     "tools/lint/hardcoded_path_check.py",        # this file
     # Standard skill documentation that mentions Windows temp paths.
     "runtime/execution/all_skills/edge-tts/SKILL.md",

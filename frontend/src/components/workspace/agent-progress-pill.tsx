@@ -12,7 +12,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   deriveAgentPhases,
   progressForPhases,
-  type AgentPhaseStatus,
 } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import { normalizeEventsForSettledDisplay } from "./work-blocks";

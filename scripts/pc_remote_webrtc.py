@@ -16,8 +16,9 @@ import asyncio
 import json
 import logging
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "/Users/dangbei/Public/octopus/octopus-agent")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import av  # noqa: E402
 import mss  # noqa: E402
 import pyautogui  # noqa: E402

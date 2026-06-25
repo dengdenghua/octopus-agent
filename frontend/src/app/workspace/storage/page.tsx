@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -435,7 +435,7 @@ export default function StoragePage() {
     return { files, chunks, sources: sources.length };
   }, [sources]);
 
-  const refreshNAS = async () => {
+  const refreshNAS = useCallback(async () => {
     try {
       setServiceError(null);
       const [nextManifest, nextPolicy, nextSources] = await Promise.all([
@@ -453,9 +453,9 @@ export default function StoragePage() {
       setServiceError(error instanceof Error ? error.message : String(error));
       return false;
     }
-  };
+  }, []);
 
-  const ensureNASService = async () => {
+  const ensureNASService = useCallback(async () => {
     const startResult = await startNASService();
     for (let attempt = 0; attempt < 20; attempt += 1) {
       if (await refreshNAS()) return true;
@@ -473,7 +473,7 @@ export default function StoragePage() {
     }
     setServiceError(`本地知识库服务仍未连接：${getNASBaseURL()}`);
     return false;
-  };
+  }, [refreshNAS]);
 
   useEffect(() => {
     const init = async () => {
@@ -483,7 +483,7 @@ export default function StoragePage() {
       await ensureNASService();
     };
     void init();
-  }, []);
+  }, [ensureNASService, refreshNAS]);
 
   useEffect(() => {
     const reconnect = () => {
@@ -497,7 +497,7 @@ export default function StoragePage() {
       window.removeEventListener("focus", reconnect);
       document.removeEventListener("visibilitychange", reconnect);
     };
-  }, []);
+  }, [refreshNAS]);
 
   const addSource = async (path: string) => {
     const cleanPath = path.trim();

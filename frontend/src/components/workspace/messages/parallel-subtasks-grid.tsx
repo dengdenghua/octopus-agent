@@ -61,7 +61,7 @@ function MiniSubtaskRow({
   const task = useSubtask(taskId);
   const { t } = useI18n();
   const swarm = useOptionalSwarm();
-  const isActive = task ? isSubtaskActive(task.status) : false;
+  const _isActive = task ? isSubtaskActive(task.status) : false;
 
   if (!task) return null;
 
