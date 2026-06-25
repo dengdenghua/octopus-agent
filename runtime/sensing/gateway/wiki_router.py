@@ -299,6 +299,27 @@ def create_wiki_router(*, model_router: Any = None, model: str | None = None) ->
             raise HTTPException(400, "body.question must be a non-empty string")
         return _answer_from_wiki(question, model_router=model_router, model=model)
 
+    @router.get("/api/wiki/graph")
+    def api_wiki_graph() -> dict[str, Any]:
+        """Wiki dependency graph (ADR-009): the page nodes + the zero-LLM
+        page→page import edges from index.json, for a graph visualiser."""
+
+        def _nodes(tree: Any) -> list[dict[str, Any]]:
+            out: list[dict[str, Any]] = []
+            for node in tree or []:
+                if isinstance(node, dict):
+                    if node.get("type") == "doc" and node.get("path"):
+                        out.append({"path": node["path"], "title": node.get("title", "")})
+                    out.extend(_nodes(node.get("children")))
+            return out
+
+        manifest = _load_manifest()
+        return {
+            "nodes": _nodes(manifest.get("tree")),
+            "edges": manifest.get("edges", []),
+            "generated_at": manifest.get("generated_at"),
+        }
+
     @router.get("/api/wiki/status")
     def api_wiki_status(root: str | None = Query(None)) -> dict[str, Any]:
         """Frontend consumes ``{exists, status, generated_at, ...}``

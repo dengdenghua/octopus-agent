@@ -65,3 +65,20 @@ def test_ask_model_error_is_swallowed(monkeypatch) -> None:
     out = wr._answer_from_wiki("q", model_router=_Boom(), model="m")
     assert out["grounded"] is False
     assert out["reason"].startswith("model error")
+
+
+def test_wiki_graph_returns_nodes_and_edges() -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from runtime.sensing.gateway.wiki_router import create_wiki_router
+
+    app = FastAPI()
+    app.include_router(create_wiki_router())
+    r = TestClient(app).get("/api/wiki/graph")
+    assert r.status_code == 200
+    d = r.json()
+    assert isinstance(d.get("nodes"), list) and isinstance(d.get("edges"), list)
+    assert len(d["nodes"]) > 0  # the repo ships a generated wiki
+    for e in d["edges"]:
+        assert {"from", "to", "type"} <= e.keys()

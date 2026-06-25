@@ -198,9 +198,16 @@ Phased, with the cheapest validation first:
   breaks retrieval, and pinned by `tests/test_repo_context.py`. (Fixed en route:
   `runtime.research` re-exports `rerank`, so the import had to come from the
   submodule or it silently no-op'd.)
-- **Still out (genuine boundaries):** the **graph-visualisation UI** (frontend)
-  and the **cross-repo Storage OKF export** (a different repo) — both being
-  taken up next.
+- **Graph-visualisation UI — DONE (2026-06-24).** `GET /api/wiki/graph` serves
+  the page nodes + dependency edges from index.json; a dependency-free
+  `WikiGraphPanel` (circular SVG, hover-to-highlight, design-token theming)
+  renders it in the workspace Knowledge → Wiki tab. Verified: endpoint returns
+  41 nodes / 50 edges (`tests/test_wiki_qa.py`), component type-checks, and the
+  graph renders cleanly (cerebrum + gateway carry the highest fan-out).
+- **Still out (one genuine boundary):** the **cross-repo Storage OKF export**
+  lives in the `octopus-storage` repo. The in-repo half — exposing octopus's
+  own wiki as a portable OKF bundle for the family to consume — is the next
+  step here.
 
 ## Alternatives considered
 
