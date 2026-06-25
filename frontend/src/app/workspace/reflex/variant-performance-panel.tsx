@@ -332,7 +332,7 @@ function RecipeRow({
           {summary.variant_count} variants · total weight {summary.total_weight}
         </Badge>
         {summary.default_weight > 0 && (
-          <Badge className="bg-slate-500/15 text-[10px] text-slate-300 hover:bg-slate-500/15">
+          <Badge className="bg-muted-foreground/15 text-[10px] text-muted-foreground hover:bg-muted-foreground/15">
             control branch w={summary.default_weight}
           </Badge>
         )}
@@ -429,7 +429,7 @@ function RecipeRow({
             promote.applied
               ? "bg-emerald-500/10 text-emerald-300"
               : promote.skipped
-                ? "bg-slate-500/10 text-slate-300"
+                ? "bg-muted-foreground/10 text-muted-foreground"
                 : promote.ok
                   ? "bg-amber-500/10 text-amber-200"
                   : "bg-rose-500/10 text-rose-300",
@@ -516,9 +516,9 @@ function AutoTickBar({
             "text-[10px]",
             status.enabled
               ? "bg-emerald-500/15 text-emerald-300"
-              : "bg-slate-500/15 text-slate-400",
+              : "bg-muted-foreground/15 text-muted-foreground",
             "hover:" +
-              (status.enabled ? "bg-emerald-500/15" : "bg-slate-500/15"),
+              (status.enabled ? "bg-emerald-500/15" : "bg-muted-foreground/15"),
           )}
         >
           {status.enabled ? "ON" : "OFF"}
@@ -589,7 +589,7 @@ function AutoTickBar({
                   r.applied
                     ? "text-emerald-300"
                     : r.skipped
-                      ? "text-slate-400"
+                      ? "text-muted-foreground"
                       : r.error
                         ? "text-rose-300"
                         : "text-amber-300",

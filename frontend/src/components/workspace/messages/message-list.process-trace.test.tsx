@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 
 import type { AIMessage, Message } from "@/core/api/types";
@@ -200,6 +200,8 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
+    const savedStepToggles = screen.getAllByText("View 2 saved steps");
+    expect(savedStepToggles).toHaveLength(2);
     expect(screen.queryByText(/old market query/)).not.toBeInTheDocument();
     expect(
       screen.queryByText("Inspect the old market request."),
@@ -208,6 +210,11 @@ describe("MessageList process trace lifecycle", () => {
     expect(
       screen.queryByText("Inspect the latest market request."),
     ).not.toBeInTheDocument();
+
+    fireEvent.click(savedStepToggles[0]!);
+
+    expect(screen.getByText(/old market query/)).toBeInTheDocument();
+    expect(screen.queryByText(/latest market query/)).not.toBeInTheDocument();
   });
 
   test("expands only the actively streaming process trace", () => {
@@ -255,12 +262,13 @@ describe("MessageList process trace lifecycle", () => {
 
     renderMessageList({ thread });
 
+    expect(screen.getByText("View 2 saved steps")).toBeInTheDocument();
+    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
     expect(screen.queryByText(/old market query/)).not.toBeInTheDocument();
-    expect(screen.getByText(/active market query/)).toBeInTheDocument();
+    expect(screen.getAllByText(/active market query/).length).toBe(2);
     expect(
       screen.queryByText("Inspect the actively streaming market request."),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Replay 1 previous steps")).toBeInTheDocument();
   });
 
   test("does not mark a delivered run red for partial tool failures", () => {
@@ -434,9 +442,9 @@ describe("MessageList output summaries", () => {
     const settledThread = mockThread({ messages });
     rerender(messageListTree({ thread: settledThread }));
 
-    const summaryLabel = screen.getByText(
+    const summaryLabel = screen.getAllByText(
       /\u5df2\u7f16\u8f91 1 \u4e2a\u6587\u4ef6/,
-    );
+    )[0]!;
     expect(summaryLabel).toBeInTheDocument();
     expect(summaryLabel.closest(".ml-11")).toBeInTheDocument();
     expect(

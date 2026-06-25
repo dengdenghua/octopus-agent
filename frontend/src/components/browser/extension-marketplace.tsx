@@ -120,7 +120,7 @@ const catalog: ExtensionListing[] = [
     tagline: "Directly inspect elements, selectors, and accessibility tree",
     category: "development",
     icon: Code2,
-    accent: "from-slate-500 to-zinc-800",
+    accent: "from-muted-foreground to-foreground",
     rating: "4.9",
     installs: "9.1K",
     tags: ["Debug", "Selector", "Accessibility"],

@@ -58,11 +58,8 @@ vi.mock("@/core/i18n/hooks", () => {
       goalPlaceholder: "描述你想持续追踪的情报目标",
       noSubscriptionsYet: "还没有自动订阅",
       scheduleHighFrequency: (timezone: string) => `高频检查 · ${timezone}`,
-      scheduleWeekly: (
-        weekday: string,
-        time: string,
-        timezone: string,
-      ) => `每周 ${weekday} ${time} · ${timezone}`,
+      scheduleWeekly: (weekday: string, time: string, timezone: string) =>
+        `每周 ${weekday} ${time} · ${timezone}`,
       scheduleMonthly: (day: string, time: string, timezone: string) =>
         `每月 ${day} 号 ${time} · ${timezone}`,
       scheduleDaily: (time: string, timezone: string) =>

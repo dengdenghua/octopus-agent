@@ -32,11 +32,7 @@ import { useOptionalCollab } from "./collab";
 import { FloorBar } from "./collab/floor-bar";
 import { useSlashTypeahead } from "./use-slash-typeahead";
 import { WorkDirSelector } from "./workdir-selector";
-import {
-  TEAM_MODE_META,
-  TEAM_MODES,
-  type TeamMode,
-} from "./team-mode-picker";
+import { TEAM_MODE_META, TEAM_MODES, type TeamMode } from "./team-mode-picker";
 import { cn } from "@/lib/utils";
 
 interface TeamInputBoxProps {
@@ -56,7 +52,6 @@ interface TeamInputBoxProps {
   onStop?: () => void;
   submitBehavior?: "run" | "message";
 }
-
 
 export function TeamInputBox({
   status = "ready",
@@ -197,7 +192,9 @@ export function TeamInputBox({
   // @mention a roster member into the composer (fired from the 群成员 list).
   useEffect(() => {
     const onMention = (event: Event) => {
-      const name = (event as CustomEvent<{ name?: string }>).detail?.name?.trim();
+      const name = (
+        event as CustomEvent<{ name?: string }>
+      ).detail?.name?.trim();
       if (!name) return;
       const mention = `@${name} `;
       setInput((value) => {
@@ -208,7 +205,8 @@ export function TeamInputBox({
       window.setTimeout(() => textareaRef.current?.focus(), 0);
     };
     window.addEventListener("octopus:mention-member", onMention);
-    return () => window.removeEventListener("octopus:mention-member", onMention);
+    return () =>
+      window.removeEventListener("octopus:mention-member", onMention);
   }, []);
 
   return (
@@ -273,14 +271,19 @@ export function TeamInputBox({
                         <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted text-[11px] leading-none">
                           {agent.icon?.trim() || displayName.charAt(0)}
                         </span>
-                        <span className="truncate text-[13px]">{displayName}</span>
+                        <span className="truncate text-[13px]">
+                          {displayName}
+                        </span>
                       </DropdownMenuItem>
                     );
                   })}
                   <DropdownMenuSeparator />
                 </>
               )}
-              <DropdownMenuItem onSelect={() => summonLocalFileAgent()} className="gap-2">
+              <DropdownMenuItem
+                onSelect={() => summonLocalFileAgent()}
+                className="gap-2"
+              >
                 <DatabaseIcon className="size-3.5 text-muted-foreground" />
                 <span className="text-[13px]">检索本地数据库</span>
               </DropdownMenuItem>
@@ -291,6 +294,7 @@ export function TeamInputBox({
             <WorkDirSelector
               workDir={workDir}
               onWorkDirChange={onWorkDirChange}
+              variant="muted"
             />
           )}
           {/* The 全员 assignee picker is gone: address the group or a single
@@ -313,9 +317,7 @@ export function TeamInputBox({
             <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuRadioGroup
                 value={activeTeamMode}
-                onValueChange={(value) =>
-                  onTeamModeChange?.(value as TeamMode)
-                }
+                onValueChange={(value) => onTeamModeChange?.(value as TeamMode)}
               >
                 {TEAM_MODES.map((mode) => {
                   const meta = TEAM_MODE_META[mode];

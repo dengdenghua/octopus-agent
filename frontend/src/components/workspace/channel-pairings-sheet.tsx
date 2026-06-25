@@ -1,6 +1,6 @@
-/* Implementation note. */
 import { UserIcon, UsersIcon, InboxIcon, CopyIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 import { swallow } from "@/core/utils/log";
@@ -14,6 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { ErrorState, LoadingState } from "@/components/ui/state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -47,8 +55,7 @@ export function ChannelPairingsSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
+  const loadPairings = useCallback(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -74,7 +81,15 @@ export function ChannelPairingsSheet({
     return () => {
       cancelled = true;
     };
-  }, [open, channelId, t]);
+  }, [channelId, t.channelPairings.loadFailed]);
+
+  useEffect(() => {
+    if (!open) return;
+    const cleanup = loadPairings();
+    return () => {
+      cleanup();
+    };
+  }, [loadPairings, open]);
 
   const users = data?.users ?? [];
   const groups = data?.groups ?? [];
@@ -93,15 +108,16 @@ export function ChannelPairingsSheet({
           </DialogDescription>
         </DialogHeader>
 
-        {loading && (
-          <div className="py-8 text-center text-[12px] text-muted-foreground">
-            {t.channelPairings.loading}
-          </div>
-        )}
+        {loading && <LoadingState title={t.channelPairings.loading} />}
         {error && (
-          <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-600">
-            {error}
-          </div>
+          <ErrorState
+            title={t.channelPairings.loadFailed}
+            detail={error}
+            actionLabel={t.channelPairings.retry}
+            onAction={() => {
+              loadPairings();
+            }}
+          />
         )}
 
         {data && !loading && !error && (
@@ -147,7 +163,11 @@ export function ChannelPairingsSheet({
               className="flex-1 overflow-y-auto mt-3 outline-none"
             >
               {pending.length === 0 ? (
-                <EmptyState hint={t.channelPairings.noPending} />
+                <EmptyState
+                  icon={<InboxIcon />}
+                  title={t.channelPairings.noPendingTitle}
+                  hint={t.channelPairings.noPending}
+                />
               ) : (
                 <ul className="space-y-1">
                   {pending.map((p, i) => (
@@ -170,7 +190,15 @@ export function ChannelPairingsSheet({
 
 function IdList({ ids, emptyHint }: { ids: string[]; emptyHint: string }) {
   const { t } = useI18n();
-  if (ids.length === 0) return <EmptyState hint={emptyHint} />;
+  if (ids.length === 0) {
+    return (
+      <EmptyState
+        icon={<UserIcon />}
+        title={t.channelPairings.emptyListTitle}
+        hint={emptyHint}
+      />
+    );
+  }
   return (
     <ul className="space-y-1">
       {ids.map((id) => (
@@ -207,10 +235,22 @@ function IdList({ ids, emptyHint }: { ids: string[]; emptyHint: string }) {
   );
 }
 
-function EmptyState({ hint }: { hint: string }) {
+function EmptyState({
+  hint,
+  icon,
+  title,
+}: {
+  hint: string;
+  icon: ReactNode;
+  title: string;
+}) {
   return (
-    <div className="py-10 text-center text-[12px] text-muted-foreground italic">
-      {hint}
-    </div>
+    <Empty className="min-h-[220px] rounded-xl">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">{icon}</EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{hint}</EmptyDescription>
+      </EmptyHeader>
+    </Empty>
   );
 }

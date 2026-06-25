@@ -54,7 +54,10 @@ function partnerToAgent(p: DetectedPartner): Agent {
  * members. Empty when none are installed or the backend is offline — the
  * pickers just fall back to the built-in agents.
  */
-export function useLocalCliAgents(): { cliAgents: Agent[]; isLoading: boolean } {
+export function useLocalCliAgents(): {
+  cliAgents: Agent[];
+  isLoading: boolean;
+} {
   const { data, isLoading } = useQuery({
     queryKey: ["cli-team-status"],
     queryFn: async ({ signal }): Promise<CliTeamStatus | null> => {
@@ -73,4 +76,27 @@ export function useLocalCliAgents(): { cliAgents: Agent[]; isLoading: boolean } 
   });
   const cliAgents = (data?.detected ?? []).map(partnerToAgent);
   return { cliAgents, isLoading };
+}
+
+/**
+ * Dedupe the picker's agent list by `name`, keeping the first occurrence.
+ *
+ * A detected local CLI (e.g. `local_codex_cli`) is synthesized by
+ * {@link useLocalCliAgents} AND — once it has an on-disk profile — also comes
+ * back from the backend via `useAgents()`. Merging both sources lands two
+ * agents with the same `name`, which the pickers use as the React `key`,
+ * producing the "Encountered two children with the same key" error and risking
+ * dropped/duplicated rows. Callers merge as `[...mobile, ...cli, ...builtin]`,
+ * so first-wins keeps the synthetic CLI entry (purpose-built for the picker,
+ * shown only when the CLI is actually detected) when present, and otherwise
+ * falls back to the registered backend agent. Both share the same `name`, so
+ * routing is identical either way.
+ */
+export function dedupeAgentsByName(agents: Agent[]): Agent[] {
+  const seen = new Set<string>();
+  return agents.filter((a) => {
+    if (seen.has(a.name)) return false;
+    seen.add(a.name);
+    return true;
+  });
 }

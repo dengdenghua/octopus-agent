@@ -60,6 +60,10 @@ export interface AgentWorldAgent {
   private_skills?: string[];
   capabilities?: Record<string, unknown>;
   character_profile?: {
+    id?: string;
+    name?: string;
+    zh_name?: string;
+    codename?: string;
     gender?: string;
     apparent_age?: string;
     epithet?: string;

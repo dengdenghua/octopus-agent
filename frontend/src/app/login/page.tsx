@@ -35,10 +35,29 @@ import { toast } from "sonner";
 const SMS_COOLDOWN_SECONDS = 60;
 const AUTH_PROVIDER_RETRY_COUNT = 24;
 const AUTH_PROVIDER_RETRY_DELAY_MS = 500;
-const octopusLogoUrl = `${import.meta.env.BASE_URL}images/octopus.svg`;
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function BrandMark() {
+  return (
+    <span
+      aria-hidden="true"
+      className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/15 bg-[linear-gradient(145deg,rgba(59,130,246,0.32),rgba(14,165,233,0.16)_48%,rgba(15,23,42,0.82))] shadow-[inset_0_1px_0_rgba(255,255,255,0.28),0_14px_34px_rgba(37,99,235,0.24)] ring-1 ring-primary/25"
+    >
+      <span className="absolute inset-0 bg-[radial-gradient(circle_at_30%_22%,rgba(255,255,255,0.38),transparent_28%),radial-gradient(circle_at_72%_78%,rgba(34,211,238,0.25),transparent_32%)]" />
+      <span className="absolute left-1/2 top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-sky-200/75 bg-foreground/45 shadow-[0_0_18px_rgba(56,189,248,0.72)]" />
+      <span className="absolute left-1/2 top-[0.42rem] h-[1.05rem] w-px -translate-x-1/2 bg-sky-100/70" />
+      <span className="absolute bottom-[0.42rem] left-1/2 h-[1.05rem] w-px -translate-x-1/2 bg-sky-100/70" />
+      <span className="absolute left-[0.42rem] top-1/2 h-px w-[1.05rem] -translate-y-1/2 bg-sky-100/70" />
+      <span className="absolute right-[0.42rem] top-1/2 h-px w-[1.05rem] -translate-y-1/2 bg-sky-100/70" />
+      <span className="absolute left-[0.48rem] top-[0.48rem] size-1.5 rounded-full bg-cyan-200 shadow-[0_0_10px_rgba(125,211,252,0.82)]" />
+      <span className="absolute right-[0.48rem] top-[0.48rem] size-1.5 rounded-full bg-blue-200 shadow-[0_0_10px_rgba(147,197,253,0.82)]" />
+      <span className="absolute bottom-[0.48rem] left-[0.48rem] size-1.5 rounded-full bg-blue-300 shadow-[0_0_10px_rgba(96,165,250,0.82)]" />
+      <span className="absolute bottom-[0.48rem] right-[0.48rem] size-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.82)]" />
+    </span>
+  );
 }
 
 function isValidCnPhone(raw: string): boolean {
@@ -326,9 +345,7 @@ export default function LoginPage() {
       <div className="relative z-10 grid w-full max-w-6xl items-center gap-12 px-6 py-12 md:grid-cols-2 lg:gap-16">
         <div className="hidden flex-col justify-center space-y-8 md:flex">
           <div className="inline-flex items-center gap-2.5">
-            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
-              <img src={octopusLogoUrl} alt="" className="size-6" />
-            </div>
+            <BrandMark />
             <span className="text-base font-semibold tracking-tight text-foreground">
               Octopus Agent OS
             </span>
@@ -366,9 +383,7 @@ export default function LoginPage() {
 
         <div className="mx-auto w-full max-w-sm">
           <div className="mb-6 flex items-center justify-center gap-2 md:hidden">
-            <div className="flex size-9 items-center justify-center rounded-lg border border-border bg-card shadow-sm">
-              <img src={octopusLogoUrl} alt="" className="size-6" />
-            </div>
+            <BrandMark />
             <span className="text-sm font-semibold tracking-tight text-foreground">
               Octopus Agent OS
             </span>

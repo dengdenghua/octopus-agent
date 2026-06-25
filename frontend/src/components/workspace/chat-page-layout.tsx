@@ -92,6 +92,7 @@ export function ChatPageLayout({
     startX: number;
     startWidth: number;
     latest: number;
+    raf: number | null;
   } | null>(null);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -103,6 +104,7 @@ export function ChatPageLayout({
       startX: e.clientX,
       startWidth: rect.width,
       latest: rect.width,
+      raf: null,
     };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
@@ -124,11 +126,24 @@ export function ChatPageLayout({
         Math.min(MAX_SIDEBAR_PX, resizeRef.current.startWidth + delta),
       );
       resizeRef.current.latest = newWidth;
-      setCustomWidth(newWidth);
+      // Throttle React state updates to animation frames to avoid
+      // triggering reconciliation on every mousemove event.
+      if (!resizeRef.current.raf) {
+        resizeRef.current.raf = requestAnimationFrame(() => {
+          resizeRef.current!.raf = null;
+          setCustomWidth(resizeRef.current!.latest);
+        });
+      }
     };
 
     const handleMouseUp = () => {
       if (resizeRef.current) {
+        // Flush any pending RAF update before persisting.
+        if (resizeRef.current.raf) {
+          cancelAnimationFrame(resizeRef.current.raf);
+          resizeRef.current.raf = null;
+          setCustomWidth(resizeRef.current.latest);
+        }
         // Persist only at drag-end (not per mousemove) to avoid thrashing
         // localStorage.
         writeStoredSidebarWidth(resizeRef.current.latest);
@@ -150,8 +165,6 @@ export function ChatPageLayout({
       <div className="relative flex min-h-0 flex-1">
         <header
           className={cn(
-            // Implementation note.
-            // Implementation note.
             "absolute top-0 right-0 left-0 z-30 flex h-11 shrink-0 items-center justify-between overflow-hidden pl-12 pr-3",
             isNewThread
               ? "border-b border-border/20"
@@ -194,26 +207,41 @@ export function ChatPageLayout({
         {sidebar && (
           <aside
             aria-hidden={!showSidebar}
-            style={{ width: drawerWidth }}
+            style={
+              isNarrowViewport
+                ? { height: "min(58vh, 520px)", width: "100%" }
+                : { width: drawerWidth }
+            }
             className={cn(
               // Overlay drawer from the right, same language as the
               // artifact drawer in ChatBox — slides in regardless of
               // viewport width, with frosted glass + left shadow edge.
-              "absolute top-0 right-0 bottom-0 z-20 flex flex-col overflow-hidden pt-11",
-              "border-l border-border/60 bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)]",
-              "backdrop-blur-[10px] shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
+              "absolute z-20 flex flex-col overflow-hidden",
+              "bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)] backdrop-blur-[10px]",
               "transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              showSidebar
-                ? "translate-x-0 opacity-100"
-                : "translate-x-full opacity-0 pointer-events-none",
+              isNarrowViewport
+                ? cn(
+                    "right-0 bottom-0 left-0 z-40 rounded-t-2xl border-t border-border/60 pt-0 shadow-[0_-18px_42px_-24px_rgba(0,0,0,0.28)]",
+                    showSidebar
+                      ? "translate-y-0 opacity-100"
+                      : "translate-y-full opacity-0 pointer-events-none",
+                  )
+                : cn(
+                    "top-0 right-0 bottom-0 z-20 border-l border-border/60 pt-11 shadow-[-12px_0_32px_-16px_rgba(0,0,0,0.12)]",
+                    showSidebar
+                      ? "translate-x-0 opacity-100"
+                      : "translate-x-full opacity-0 pointer-events-none",
+                  ),
             )}
           >
             {/* Resize handle on left edge */}
-            <div
-              onMouseDown={handleMouseDown}
-              className="absolute top-0 left-0 bottom-0 z-30 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
-              aria-label={t.sidebar.ariaResizeSidebar}
-            />
+            {!isNarrowViewport && (
+              <div
+                onMouseDown={handleMouseDown}
+                className="absolute top-0 left-0 bottom-0 z-30 w-1 cursor-col-resize transition-colors hover:bg-primary/30 active:bg-primary/50"
+                aria-label={t.sidebar.ariaResizeSidebar}
+              />
+            )}
             {sidebar}
           </aside>
         )}

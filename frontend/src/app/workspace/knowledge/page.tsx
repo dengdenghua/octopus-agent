@@ -9,7 +9,6 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import { KnowledgeGraphPanel } from "@/components/workspace/knowledge-graph-panel";
-import { WikiGraphPanel } from "@/components/workspace/wiki-graph-panel";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -22,6 +21,15 @@ function MemoryTab() {
     <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
       <BrainIcon className="size-8 text-muted-foreground/40" />
       <p className="text-sm text-muted-foreground">记忆管理 · 即将上线</p>
+    </div>
+  );
+}
+
+function WikiTab() {
+  return (
+    <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-12 text-center">
+      <FileTextIcon className="size-8 text-muted-foreground/40" />
+      <p className="text-sm text-muted-foreground">Wiki 文档 · 即将上线</p>
     </div>
   );
 }
@@ -68,7 +76,7 @@ export default function KnowledgePage() {
           <div className="workspace-panel ui-density-panel rounded-[1.75rem]">
             {activeTab === "graph" && <KnowledgeGraphPanel />}
             {activeTab === "memory" && <MemoryTab />}
-            {activeTab === "wiki" && <WikiGraphPanel />}
+            {activeTab === "wiki" && <WikiTab />}
             {activeTab === "files" && <FilesTab />}
           </div>
         </div>

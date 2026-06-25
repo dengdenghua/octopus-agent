@@ -21,6 +21,15 @@ import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 
 import { deriveAgentPhases, progressForPhases } from "../agent-phases";
 import { emitAgentWorkbenchFocus } from "../agent-workbench-events";
+import {
+  type AgentRunState,
+  agentRunAvatarAnimationClass,
+  agentRunBadgeClass,
+  agentRunHue,
+  agentRunIconClass,
+  agentRunPanelClass,
+  agentRunProgressBarClass,
+} from "../agent-run-status";
 import { LiveToolTimeline, type LiveToolEvent } from "../live-tool-timeline";
 import { getProcessTraceEvents } from "../process-trace-events";
 
@@ -33,7 +42,7 @@ type MessageAgentRow = {
   id: string;
   name: string;
   label: string;
-  status: "running" | "done" | "pending" | "error";
+  status: AgentRunState;
   task: string;
   prompt?: string;
   role?: string;
@@ -151,6 +160,7 @@ export function ProcessTrace({
               agents={parallelAgents.slice(0, open ? 12 : 4)}
               statusLabels={{
                 running: t.message.statusViewing,
+                waiting: t.message.statusWaiting,
                 done: t.message.statusCompleted,
                 error: t.message.statusError,
                 pending: t.message.statusWaiting,
@@ -167,7 +177,9 @@ export function ProcessTrace({
                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm"
               >
                 {phase.status === "running" ? (
-                  <Loader2Icon className="size-3.5 shrink-0 animate-spin text-foreground" />
+                  <Loader2Icon className="size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+                ) : phase.status === "waiting_approval" ? (
+                  <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
                 ) : phase.status === "done" ? (
                   <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
                 ) : (
@@ -257,10 +269,8 @@ function AgentClusterRow({
   agent: MessageAgentRow;
   statusLabel: string;
 }) {
-  const active = agent.status === "running";
-  const failed = agent.status === "error";
   const progress = agentProgress(agent);
-  const progressHue = failed ? 8 : 118;
+  const progressHue = agentRunHue(agent.status);
   return (
     <div className="group/agent-row relative">
       <button
@@ -271,8 +281,7 @@ function AgentClusterRow({
         <span
           className={cn(
             "flex size-7 shrink-0 items-center justify-center rounded-md border bg-background",
-            active && "border-emerald-500/35 bg-emerald-500/10",
-            failed && "border-destructive/35 bg-destructive/10",
+            agentRunPanelClass(agent.status),
           )}
         >
           {agent.avatar ? (
@@ -283,10 +292,7 @@ function AgentClusterRow({
             <BotIcon
               className={cn(
                 "size-4",
-                active
-                  ? "text-emerald-600 dark:text-emerald-300"
-                  : "text-muted-foreground",
-                failed && "text-destructive",
+                agentRunIconClass(agent.status),
               )}
             />
           )}
@@ -304,13 +310,7 @@ function AgentClusterRow({
             <span
               className={cn(
                 "ml-auto rounded-full px-2 py-0.5 text-[10px]",
-                active
-                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : failed
-                    ? "bg-destructive/10 text-destructive"
-                    : agent.status === "done"
-                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                      : "bg-muted text-muted-foreground",
+                agentRunBadgeClass(agent.status),
               )}
             >
               {statusLabel}
@@ -329,16 +329,18 @@ function AgentClusterRow({
                 hue={progressHue}
                 cols={16}
                 rows={3}
-                className={cn(active && "animate-pulse")}
+                className={cn(agentRunAvatarAnimationClass(agent.status))}
               />
             </div>
           </div>
         </div>
-        {active ? (
-          <Loader2Icon className="size-3.5 shrink-0 animate-spin text-foreground" />
+        {agent.status === "running" ? (
+          <Loader2Icon className="size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+        ) : agent.status === "waiting" ? (
+          <CircleIcon className="size-3.5 shrink-0 text-amber-500" />
         ) : agent.status === "done" ? (
           <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-500" />
-        ) : failed ? (
+        ) : agent.status === "error" ? (
           <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
         ) : (
           <CircleIcon className="size-3.5 shrink-0 text-muted-foreground/45" />
@@ -418,13 +420,14 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         ? NetworkIcon
         : SquareActivityIcon;
   const status = section.events.some(
-    (event) =>
-      event.status === "running" || event.status === "waiting_approval",
+    (event) => event.status === "error",
   )
-    ? "running"
-    : section.events.some((event) => event.status === "error")
-      ? "error"
-      : "done";
+    ? "error"
+    : section.events.some((event) => event.status === "waiting_approval")
+      ? "waiting"
+      : section.events.some((event) => event.status === "running")
+        ? "running"
+        : "done";
 
   return (
     <div className="rounded-xl border border-border/55 bg-background/85 px-3 py-2 shadow-sm">
@@ -434,7 +437,9 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         className="flex w-full items-center gap-2 text-left"
       >
         {status === "running" ? (
-          <Loader2Icon className="size-4 shrink-0 animate-spin text-primary" />
+          <Loader2Icon className="size-4 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+        ) : status === "waiting" ? (
+          <CircleIcon className="size-4 shrink-0 text-amber-500" />
         ) : status === "error" ? (
           <XCircleIcon className="size-4 shrink-0 text-destructive" />
         ) : (
@@ -454,7 +459,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
             <div
               className={cn(
                 "h-full transition-all",
-                status === "error" ? "bg-destructive" : "bg-foreground/55",
+                agentRunProgressBarClass(status),
               )}
               style={{ width: `${section.events.length > 0 ? 100 : 0}%` }}
             />
@@ -508,7 +513,9 @@ function TraceEventLine({ event }: { event: LiveToolEvent }) {
   return (
     <div className="flex items-start gap-2 text-[12px] text-muted-foreground">
       {event.status === "running" ? (
-        <Loader2Icon className="mt-0.5 size-3.5 shrink-0 animate-spin text-primary" />
+        <Loader2Icon className="mt-0.5 size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
+      ) : event.status === "waiting_approval" ? (
+        <CircleIcon className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
       ) : event.status === "error" ? (
         <XCircleIcon className="mt-0.5 size-3.5 shrink-0 text-destructive" />
       ) : (
@@ -625,9 +632,11 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
         ? "error"
         : event.status === "done"
           ? "done"
-          : event.status === "running" || event.status === "waiting_approval"
-            ? "running"
-            : "pending";
+          : event.status === "waiting_approval"
+            ? "waiting"
+            : event.status === "running"
+              ? "running"
+              : "pending";
     const prompt =
       firstString(event.input, ["prompt", "task", "description", "query"]) ||
       event.thought ||
@@ -642,7 +651,10 @@ function deriveMessageAgentRows(events: LiveToolEvent[]): MessageAgentRow[] {
         event.subAgentRole ??
         id,
       label: existing?.label ?? String(byId.size + 1).padStart(2, "0"),
-      status: existing?.status === "running" ? existing.status : status,
+      status:
+        existing?.status === "running" || existing?.status === "waiting"
+          ? existing.status
+          : status,
       task: existing?.task || prompt || event.name.replace(/[_-]+/g, " "),
       prompt: prompt || existing?.prompt,
       role: event.subAgentRole ?? existing?.role,

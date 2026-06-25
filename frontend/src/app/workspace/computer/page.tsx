@@ -621,7 +621,7 @@ export default function ComputerAutomationPage() {
               </div>
             </div>
 
-            <div className="grid gap-3 lg:grid-cols-[1.1fr_1.2fr_1fr]">
+            <div className="grid gap-3 md:grid-cols-[1.1fr_1.2fr_1fr]">
               <DeviceStatePanel state={deviceState} />
               <PermissionGuardPanel
                 hasScreenshot={Boolean(screenshot?.data_url)}
@@ -634,7 +634,7 @@ export default function ComputerAutomationPage() {
               <CurrentActionPanel action={activeAction} />
             </div>
 
-            <div className="grid gap-3 md:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
               <StatusTile
                 label="确认方式"
                 value={status?.mode ? "先预演再确认" : "加载中"}
@@ -681,7 +681,7 @@ export default function ComputerAutomationPage() {
             )}
           </section>
 
-          <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1.35fr_0.95fr]">
+          <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[1.35fr_0.95fr]">
             <section className="workspace-panel flex min-h-0 flex-col overflow-hidden rounded-[1.75rem] p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">屏幕观察</h2>
@@ -699,13 +699,37 @@ export default function ComputerAutomationPage() {
               >
                 {screenshot?.data_url ? (
                   <>
+                    <p id="screenshot-help" className="sr-only">
+                      点击截图选择坐标；按 Enter 可选择屏幕中心点。
+                    </p>
                     <img
                       ref={screenshotImageRef}
                       src={screenshot.data_url}
-                      alt="Current screen capture"
-                      className="max-h-full max-w-full cursor-crosshair object-contain"
+                      alt="当前屏幕截图"
+                      aria-describedby="screenshot-help"
+                      role="button"
+                      tabIndex={0}
+                      className="max-h-full max-w-full cursor-crosshair object-contain focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       onLoad={measureScreenshotImage}
                       onClick={selectScreenshotPoint}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        const img = screenshotImageRef.current;
+                        if (!img || !img.naturalWidth || !img.naturalHeight)
+                          return;
+                        const cx = Math.floor(img.naturalWidth / 2);
+                        const cy = Math.floor(img.naturalHeight / 2);
+                        setSelectedPoint({ x: cx, y: cy });
+                        setActionKind("click");
+                        setX(String(cx));
+                        setY(String(cy));
+                        addLog({
+                          title: "已从截图选中坐标",
+                          detail: `${cx}, ${cy}`,
+                          tone: "ok",
+                        });
+                      }}
                     />
                     <ScreenshotActionOverlay
                       cursor={cursorPoint}
@@ -787,7 +811,7 @@ export default function ComputerAutomationPage() {
                     </div>
                   ) : null}
                   {selectedPoint && (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Button
                         variant="outline"
                         onClick={() => {
@@ -817,7 +841,7 @@ export default function ComputerAutomationPage() {
                   <h2 className="text-sm font-semibold">视觉输出</h2>
                 </div>
                 <div className="flex flex-col gap-3">
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                  <div className="flex flex-col gap-2 sm:grid sm:grid-cols-[1fr_auto]">
                     {visionModels.length > 0 ? (
                       <Select
                         value={visionModelId}
@@ -1271,7 +1295,7 @@ function ScreenshotActionOverlay({
           className="absolute -translate-x-1/2 -translate-y-1/2"
           style={{ left: cursorPosition.left, top: cursorPosition.top }}
         >
-          <span className="block size-2.5 rounded-full bg-slate-950 shadow-sm ring-2 ring-white dark:bg-white dark:ring-slate-950" />
+          <span className="block size-2.5 rounded-full bg-foreground shadow-sm ring-2 ring-white dark:bg-white dark:ring-background" />
           <span className="absolute left-3 top-2 whitespace-nowrap rounded-md bg-background/90 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm">
             当前鼠标
           </span>

@@ -17,8 +17,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
+import { emitAgentChanged } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
-import { useActiveAgentId } from "@/core/agents/active";
 import { useDeleteThread, useThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
 import { formatRelativeTimestamp } from "@/core/utils/datetime";
@@ -85,6 +85,30 @@ function threadHref(thread: AgentThread): string {
   return `/workspace/realtime/${thread.thread_id}`;
 }
 
+function threadOwnerAgent(thread: AgentThread): string {
+  const meta = (thread.metadata ?? {}) as Record<string, unknown>;
+  const values = (thread.values ?? {}) as Record<string, unknown>;
+  const candidates = [
+    meta["agent"],
+    meta["agent_name"],
+    meta["agent_id"],
+    meta["lead_agent_name"],
+    meta["current_agent"],
+    values["current_speaker"],
+    values["agent_name"],
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function threadWorkspacePath(thread: AgentThread): string {
+  const meta = (thread.metadata ?? {}) as Record<string, unknown>;
+  const path = meta["workspace_path"];
+  return typeof path === "string" ? path.trim() : "";
+}
+
 interface ChatsDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -94,11 +118,11 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const activeAgentId = useActiveAgentId();
   const deleteThread = useDeleteThread();
   const [query, setQuery] = useState("");
 
-  // Implementation note.
+  // The drawer is the global history surface, so it should not follow
+  // the footer agent filter.
   const { data: threads = [] } = useThreads(
     {
       limit: 50,
@@ -107,7 +131,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
       select: ["thread_id", "updated_at", "values", "metadata"],
     },
     undefined,
-    activeAgentId,
+    null,
   );
 
   const filteredThreads = useMemo(() => {
@@ -202,6 +226,14 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                   <li key={thread.thread_id} className="group/thread relative">
                     <Link
                       to={href}
+                      state={{
+                        threadOwnerAgentId: threadOwnerAgent(thread) || undefined,
+                        workspacePath: threadWorkspacePath(thread) || undefined,
+                      }}
+                      onMouseDown={() => {
+                        const owner = threadOwnerAgent(thread);
+                        if (owner) emitAgentChanged(owner, "thread");
+                      }}
                       onClick={() => onOpenChange(false)}
                       aria-current={active ? "page" : undefined}
                       className={cn(

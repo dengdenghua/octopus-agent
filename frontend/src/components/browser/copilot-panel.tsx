@@ -564,7 +564,15 @@ export function CopilotPanel({ webviewHandle }: Props) {
     send(buildRecorderTask(goal));
     setResearchGoal("");
     setInput("");
-  }, [activeTab?.url, buildRecorderTask, input, researchGoal, send, t, researchPlatforms]);
+  }, [
+    activeTab?.url,
+    buildRecorderTask,
+    input,
+    researchGoal,
+    send,
+    t,
+    researchPlatforms,
+  ]);
 
   const addPageToResearchLog = useCallback(async () => {
     setBusy(true);
@@ -798,7 +806,9 @@ export function CopilotPanel({ webviewHandle }: Props) {
         <QuickAction
           icon={LanguagesIcon}
           label={t.browser.copilot.translateToChinese}
-          onClick={() => askWithPage(t.browser.copilot.translateToChinesePrompt)}
+          onClick={() =>
+            askWithPage(t.browser.copilot.translateToChinesePrompt)
+          }
           disabled={busy}
         />
       </div>
@@ -1308,7 +1318,9 @@ function buildResearchBrief(
 
   for (const entry of ordered) {
     lines.push(`### ${entry.platform} · ${entry.title}`);
-    lines.push(c.researchBriefEntryTime(new Date(entry.createdAt).toLocaleString()));
+    lines.push(
+      c.researchBriefEntryTime(new Date(entry.createdAt).toLocaleString()),
+    );
     if (entry.url) lines.push(`- URL: ${entry.url}`);
     lines.push(c.researchBriefEntryRecordLabel);
     for (const line of entry.note

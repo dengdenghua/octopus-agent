@@ -47,7 +47,9 @@ export function LocalAgentConnectDialog({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [aliases, setAliases] = useState<Record<string, string>>({});
 
-  const partnerBadge = (partner: LocalAgentPartner): {
+  const partnerBadge = (
+    partner: LocalAgentPartner,
+  ): {
     label: string;
     className: string;
   } => {
@@ -107,7 +109,9 @@ export function LocalAgentConnectDialog({
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : t.localAgentConnect.registerFailed,
+        error instanceof Error
+          ? error.message
+          : t.localAgentConnect.registerFailed,
       );
     },
   });

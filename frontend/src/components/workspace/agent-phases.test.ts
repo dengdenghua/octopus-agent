@@ -46,7 +46,7 @@ describe("agent phases", () => {
       }),
     ]);
 
-    expect(state.currentPhase?.status).toBe("running");
+    expect(state.currentPhase?.status).toBe("waiting_approval");
     expect(progressForPhases(state.phases, state.currentPhase!)).toEqual({
       current: 1,
       total: 2,
@@ -236,6 +236,61 @@ describe("agent phases", () => {
     expect(state.phases[0]?.id).toBe("generic:execute");
     expect(state.phases[1]?.id).toBe("generic:deliver");
     expect(statuses).toEqual(["running", "pending"]);
+  });
+
+  test("prioritizes waiting approval over running in generic phases", () => {
+    const state = deriveAgentPhases([
+      event({
+        id: "ev-search-running",
+        name: "web_search",
+        status: "running",
+        input: { query: "market signal" },
+      }),
+      event({
+        id: "ev-fetch-approval",
+        name: "fetch_url",
+        status: "waiting_approval",
+        input: { url: "https://example.com/report" },
+      }),
+    ]);
+
+    expect(state.currentPhase?.status).toBe("waiting_approval");
+    expect(state.phases.map((phase) => phase.status)).toEqual([
+      "waiting_approval",
+    ]);
+  });
+
+  test("treats manual verification-required audit as waiting in generic phases", () => {
+    const state = deriveAgentPhases([
+      event({
+        id: "read-package",
+        name: "read_file",
+        status: "done",
+        input: { path: "package.json" },
+      }),
+      event({
+        id: "verify-required",
+        name: "verification:manual",
+        status: "error",
+        input: { command: "verification required" },
+        output: {
+          summary:
+            "Code changes were produced but no verification step was recorded before final answer.",
+        },
+      }),
+    ]);
+
+    expect(state.blocks.map((block) => [block.id, block.status])).toEqual([
+      ["read-package", "done"],
+      ["verify-required", "waiting_approval"],
+    ]);
+    expect(state.currentPhase?.status).toBe("waiting_approval");
+    expect(state.phases.map((phase) => phase.status)).toEqual([
+      "done",
+      "waiting_approval",
+    ]);
+    expect(state.phases[0]?.blockIds).toEqual(["read-package"]);
+    expect(state.phases[1]?.blockIds).toEqual(["verify-required"]);
   });
 
   test("settled research-shaped events still resolve through generic phases", () => {

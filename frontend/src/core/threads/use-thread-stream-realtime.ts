@@ -803,12 +803,12 @@ export function useThreadStreamRealtime(
   const sendMessage = useCallback<SendMessageFn>(
     (_threadId, message) => {
       const text = (message?.text ?? "").trim();
-      if (!text) return;
+      const files = message.files ?? [];
+      if (!text && files.length === 0) return;
       const effectiveThreadId =
         _threadId && _threadId !== "new" ? _threadId : threadId;
       void (async () => {
         setSendError(null);
-        const files = message.files ?? [];
         setIsUploading(files.length > 0);
         try {
           const attachments =
@@ -871,11 +871,15 @@ export function useThreadStreamRealtime(
         // the user's text. Hand it back — the box restores the draft
         // when it is still empty.
         if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("octopus:send-failed", {
-              detail: { threadId: effectiveThreadId, text },
-            }),
-          );
+          void extractImageFiles(files)
+            .catch(() => [])
+            .then((images) => {
+              window.dispatchEvent(
+                new CustomEvent("octopus:send-failed", {
+                  detail: { threadId: effectiveThreadId, text, images },
+                }),
+              );
+            });
         }
       });
     },
@@ -1002,4 +1006,16 @@ function readFileAsDataUrl(file: File): Promise<string> {
       reject(reader.error ?? new Error("FileReader failed"));
     reader.readAsDataURL(file);
   });
+}
+
+async function extractImageFiles(
+  fileParts: PromptInputMessage["files"],
+): Promise<File[]> {
+  const recovered = await Promise.all(
+    fileParts.map((part) => promptInputFilePartToFile(part)),
+  );
+  return recovered.filter(
+    (file): file is File =>
+      file instanceof File && isImageMime(file.type || "image/*"),
+  );
 }

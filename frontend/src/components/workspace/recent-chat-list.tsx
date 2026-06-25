@@ -50,6 +50,7 @@ import {
 import { getAPIClient } from "@/core/api";
 import { useActiveAgentId } from "@/core/agents/active";
 import { copyTextToClipboard } from "@/core/clipboard";
+import { emitAgentChanged } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   useDeleteProject,
@@ -67,7 +68,7 @@ import {
   useThreads,
 } from "@/core/threads/hooks";
 import type { AgentThread, AgentThreadState } from "@/core/threads/types";
-import { pathOfThread, titleOfThread } from "@/core/threads/utils";
+import { titleOfThread } from "@/core/threads/utils";
 import { env } from "@/env";
 import { isIMEComposing } from "@/lib/ime";
 
@@ -83,6 +84,48 @@ type ThreadGroup = {
   threads: AgentThread[];
 };
 
+function routeForThread(thread: AgentThread) {
+  const mode =
+    typeof thread.metadata?.mode === "string" ? thread.metadata.mode : "chat";
+  if (mode === "team") return `/workspace/team/${thread.thread_id}`;
+  if (mode === "react" || mode === "deep" || mode === "agent") {
+    const agent =
+      typeof thread.metadata?.agent === "string" && thread.metadata.agent.trim()
+        ? thread.metadata.agent.trim()
+        : typeof thread.metadata?.agent_name === "string" &&
+            thread.metadata.agent_name.trim()
+          ? thread.metadata.agent_name.trim()
+          : "";
+    if (agent) {
+      return `/workspace/agents/${encodeURIComponent(agent)}/chats/${thread.thread_id}`;
+    }
+  }
+  return `/workspace/realtime/${thread.thread_id}`;
+}
+
+function ownerAgentForThread(thread: AgentThread): string {
+  const meta = (thread.metadata ?? {}) as Record<string, unknown>;
+  const values = (thread.values ?? {}) as Record<string, unknown>;
+  const candidates = [
+    meta["agent"],
+    meta["agent_name"],
+    meta["agent_id"],
+    meta["lead_agent_name"],
+    meta["current_agent"],
+    values["current_speaker"],
+    values["agent_name"],
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function workspacePathForThread(thread: AgentThread): string {
+  const path = thread.metadata?.workspace_path;
+  return typeof path === "string" ? path.trim() : "";
+}
+
 export function RecentChatList() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -91,13 +134,15 @@ export function RecentChatList() {
   const threadIdFromPath = params.threadId ?? params.thread_id;
   const currentMode = pathname.startsWith("/workspace/team")
     ? ("team" as const)
-    : undefined; // chat shows ALL threads (including those without mode tag)
+    : pathname.startsWith("/workspace/realtime")
+      ? ("code" as const)
+      : undefined; // chat shows this agent's chat/react/deep history
 
-  // Scope by active agent when in chat mode · code/team have their own
-  // persona routing (code picks by agentMode, team by leader), so we
-  // only filter by active-agent on the chat path.
+  // Scope personal chat/code history by active agent; team remains a shared
+  // surface. Without this, switching a historical conversation can show the
+  // wrong persona avatar/header while the list still contains another agent.
   const activeAgentId = useActiveAgentId();
-  const agentFilter = currentMode === undefined ? activeAgentId : null;
+  const agentFilter = currentMode === "team" ? null : activeAgentId;
   const { data: threads = [] } = useThreads(
     undefined,
     currentMode,
@@ -246,13 +291,22 @@ export function RecentChatList() {
   }, [currentMode, threads, projects, threadProjectMap, t]);
 
   const renderThreadItem = (thread: AgentThread) => {
-    const isActive = pathOfThread(thread.thread_id) === pathname;
+    const href = routeForThread(thread);
+    const isActive = href === pathname;
     return (
       <SidebarMenuItem key={thread.thread_id} className="group/side-menu-item">
         <SidebarMenuButton isActive={isActive} asChild>
           <Link
-            to={pathOfThread(thread.thread_id)}
+            to={href}
+            state={{
+              threadOwnerAgentId: ownerAgentForThread(thread) || undefined,
+              workspacePath: workspacePathForThread(thread) || undefined,
+            }}
             title={titleOfThread(thread)}
+            onMouseDown={() => {
+              const owner = ownerAgentForThread(thread);
+              if (owner) emitAgentChanged(owner, "thread");
+            }}
           >
             <span>{titleOfThread(thread)}</span>
           </Link>

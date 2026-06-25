@@ -1,4 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom";
+import { LoadingState } from "@/components/ui/state";
 import { useAuth } from "@/providers/AuthProvider";
 
 /**
@@ -12,11 +13,7 @@ export function ProtectedRoute() {
 
   // Still loading auth status — show nothing to avoid flash
   if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-muted-foreground text-sm">Loading...</div>
-      </div>
-    );
+    return <LoadingState className="h-screen" title="Loading workspace" />;
   }
 
   // Auth disabled on backend — let everyone through

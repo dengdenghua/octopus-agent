@@ -2,6 +2,7 @@
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
+import { FileTextIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 
 import {
@@ -9,6 +10,14 @@ import {
   WorkspaceContainer,
   WorkspaceHeader,
 } from "@/components/workspace/workspace-container";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { ErrorState, LoadingState } from "@/components/ui/state";
 import { cn } from "@/lib/utils";
 
 const LazyStreamdown = lazy(
@@ -49,6 +58,7 @@ export default function ArchitecturePage() {
   const [content, setContent] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   // Implementation note.
   useEffect(() => {
@@ -96,9 +106,13 @@ export default function ArchitecturePage() {
     return () => {
       cancelled = true;
     };
-  }, [activeId]);
+  }, [activeId, reloadToken]);
 
   const availableIds = useMemo(() => new Set(docs.map((d) => d.id)), [docs]);
+  const reloadActiveDocument = () => {
+    if (!activeId) return;
+    setReloadToken((current) => current + 1);
+  };
 
   return (
     <WorkspaceContainer>
@@ -157,21 +171,27 @@ export default function ArchitecturePage() {
           <main className="flex-1 min-w-0 overflow-y-auto">
             <div className="max-w-4xl mx-auto px-6 py-6">
               {loading && (
-                <div className="text-[12px] text-muted-foreground">
-                  Loading...
-                </div>
+                <LoadingState
+                  title={t.architecture.loading}
+                  variant="skeleton"
+                  className="rounded-xl"
+                />
               )}
               {error && (
-                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-600">
-                  {error}
-                </div>
+                <ErrorState
+                  title={t.architecture.loadFailed}
+                  detail={error}
+                  actionLabel={t.architecture.retry}
+                  onAction={reloadActiveDocument}
+                />
               )}
               {!loading && !error && content && (
                 <Suspense
                   fallback={
-                    <div className="text-[12px] text-muted-foreground">
-                      rendering...
-                    </div>
+                    <LoadingState
+                      title={t.architecture.rendering}
+                      className="min-h-[180px]"
+                    />
                   }
                 >
                   <LazyStreamdown
@@ -181,6 +201,19 @@ export default function ArchitecturePage() {
                     {content}
                   </LazyStreamdown>
                 </Suspense>
+              )}
+              {!loading && !error && !content && (
+                <Empty className="min-h-[260px]">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <FileTextIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>{t.architecture.emptyTitle}</EmptyTitle>
+                    <EmptyDescription>
+                      {t.architecture.emptyDescription}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
             </div>
           </main>

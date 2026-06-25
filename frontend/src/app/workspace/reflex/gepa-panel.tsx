@@ -691,7 +691,7 @@ export function GepaPanel() {
                 {t.recipeForge.elapsedSeconds(run.elapsed_s ?? 0)}
               </span>
             </div>
-            <Badge className="w-fit bg-slate-500/15 text-[10px] text-slate-300 hover:bg-slate-500/15">
+            <Badge className="w-fit bg-muted-foreground/15 text-[10px] text-muted-foreground hover:bg-muted-foreground/15">
               {run.optimizer_backend || "native_gepa"}
             </Badge>
 
@@ -1185,7 +1185,7 @@ function PastRunRow({
             {t.recipeForge.recipePrefix}: {run.recipe_id.slice(0, 12)}
           </span>
         )}
-        <Badge className="bg-slate-500/15 text-[10px] text-slate-300 hover:bg-slate-500/15">
+        <Badge className="bg-muted-foreground/15 text-[10px] text-muted-foreground hover:bg-muted-foreground/15">
           {run.optimizer_backend || "native_gepa"}
         </Badge>
         {lifecyclePhase && (

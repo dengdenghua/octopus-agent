@@ -18,6 +18,7 @@ import type { LiveToolEvent } from "./live-tool-timeline";
 import { normalizeEventsForSettledDisplay } from "./work-blocks";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+import { agentRunBeadTone } from "./agent-run-status";
 
 const minimizedPlanByScope = new Map<string, string>();
 
@@ -46,7 +47,10 @@ function StatusIcon({
 }: {
   status: LiveToolEvent["status"] | "pending";
 }) {
-  if (status === "running" || status === "waiting_approval") {
+  if (status === "waiting_approval") {
+    return <CircleIcon className="size-4 shrink-0 text-amber-500" />;
+  }
+  if (status === "running") {
     return (
       <Loader2Icon className="size-4 shrink-0 animate-spin text-primary" />
     );
@@ -58,41 +62,6 @@ function StatusIcon({
     return <XCircleIcon className="size-4 shrink-0 text-destructive" />;
   }
   return <CheckCircle2Icon className="size-4 shrink-0 text-emerald-500" />;
-}
-
-function progressBeadTone({
-  paused,
-  runFailed,
-  status,
-  waiting,
-}: {
-  paused?: boolean;
-  runFailed?: boolean;
-  status: AgentPhaseStatus | LiveToolEvent["status"];
-  waiting?: boolean;
-}) {
-  if (runFailed || status === "error") {
-    return {
-      bead: "bg-destructive/75 shadow-destructive/15",
-      halo: null,
-    };
-  }
-  if (paused || status === "waiting_approval" || waiting) {
-    return {
-      bead: "bg-amber-500/70 shadow-amber-500/15",
-      halo: null,
-    };
-  }
-  if (status === "running") {
-    return {
-      bead: "bg-primary/70 shadow-primary/15",
-      halo: "bg-primary/15 animate-pulse",
-    };
-  }
-  return {
-    bead: "bg-muted-foreground/45 shadow-black/10",
-    halo: null,
-  };
 }
 
 export function AgentProgressPill({
@@ -196,7 +165,7 @@ export function AgentProgressPill({
     Math.max(0, progress.current - 4),
     progress.current + 1,
   );
-  const beadTone = progressBeadTone({
+  const beadTone = agentRunBeadTone({
     paused,
     runFailed,
     status: displayPhase.status,

@@ -86,16 +86,20 @@ export default function CliTeamPanel() {
 
   const detected = status?.detected ?? [];
   const notGit = status != null && !status.is_git_repo;
-  const canRun = detected.length > 0 && !notGit && goal.trim().length > 0 && !running;
+  const canRun =
+    detected.length > 0 && !notGit && goal.trim().length > 0 && !running;
 
   return (
     <div className="rounded-lg border border-border/55 bg-card p-4">
       <div className="mb-3 flex items-center gap-2">
         <UsersIcon className="size-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold">CLI 团队 · 让你装的编码 agent 一起干</h2>
+          <h2 className="text-sm font-semibold">
+            CLI 团队 · 让你装的编码 agent 一起干
+          </h2>
           <p className="mt-0.5 text-xs text-muted-foreground leading-snug">
-            探测到的本地 coding CLI 各自隔离 worktree + 共享黑板并行,完事各给一份 diff 供你挑(不自动合并)。
+            探测到的本地 coding CLI 各自隔离 worktree +
+            共享黑板并行,完事各给一份 diff 供你挑(不自动合并)。
           </p>
         </div>
       </div>
@@ -132,16 +136,25 @@ export default function CliTeamPanel() {
             if (e.key === "Enter" && canRun) void run();
           }}
         />
-        <Button onClick={() => void run()} disabled={!canRun} className="shrink-0">
+        <Button
+          onClick={() => void run()}
+          disabled={!canRun}
+          className="shrink-0"
+        >
           {running ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-          <span className={running ? "ml-1.5" : ""}>{running ? "运行中…" : "开跑"}</span>
+          <span className={running ? "ml-1.5" : ""}>
+            {running ? "运行中…" : "开跑"}
+          </span>
         </Button>
       </div>
 
       {error && <p className="mb-2 text-[11px] text-red-600">{error}</p>}
 
       {result?.members?.map((m) => (
-        <div key={m.agent_id} className="mt-2 overflow-hidden rounded-md border border-border/40">
+        <div
+          key={m.agent_id}
+          className="mt-2 overflow-hidden rounded-md border border-border/40"
+        >
           <div className="flex items-center gap-2 px-3 py-1.5">
             {m.ok ? (
               <CheckCircle2Icon className="size-3.5 shrink-0 text-emerald-600" />

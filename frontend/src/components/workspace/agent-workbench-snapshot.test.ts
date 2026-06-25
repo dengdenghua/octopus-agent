@@ -182,6 +182,178 @@ describe("agent workbench snapshot", () => {
     ]);
   });
 
+  test("preserves server waiting approval phase status", () => {
+    const snapshot = buildAgentWorkbenchSnapshot(
+      [
+        event({
+          id: "approval-snapshot",
+          name: "todo_write",
+          input: {
+            workbenchSnapshot: {
+              schemaVersion: 2,
+              version: 8,
+              status: "waiting_approval",
+              phases: [
+                {
+                  id: "phase-approval",
+                  index: 1,
+                  total: 1,
+                  title: "Phase 1: Confirm file write",
+                  status: "waiting_approval",
+                  activeItemId: "write-approval",
+                },
+              ],
+              currentPhaseId: "phase-approval",
+              currentItemId: "write-approval",
+              workspaceFocus: {
+                itemId: "write-approval",
+                view: "approval",
+                title: "Confirm write",
+              },
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          },
+        }),
+        event({
+          id: "write-approval",
+          name: "write_text_file",
+          status: "waiting_approval",
+          startedAt: 2000,
+          input: { path: "plan.md" },
+        }),
+      ],
+      { deriveAgentTiles },
+    );
+
+    expect(snapshot.currentPhase?.status).toBe("waiting_approval");
+    expect(snapshot.phases[0]?.status).toBe("waiting_approval");
+    expect(snapshot.currentBlock?.id).toBe("write-approval");
+  });
+
+  test("keeps manual verification-required audit out of completed read phase", () => {
+    const snapshot = buildAgentWorkbenchSnapshot(
+      [
+        event({
+          id: "snapshot-1",
+          name: "todo_write",
+          input: {
+            workbenchSnapshot: {
+              schemaVersion: 2,
+              version: 10,
+              status: "error",
+              phases: [
+                {
+                  id: "phase-read",
+                  index: 1,
+                  total: 2,
+                  title: "Phase 1: 理解任务与准备上下文",
+                  status: "done",
+                  activeItemId: "read-package",
+                },
+                {
+                  id: "phase-deliver",
+                  index: 2,
+                  total: 2,
+                  title: "Phase 2: 整理结果与交付",
+                  status: "waiting_approval",
+                  activeItemId: "verify-required",
+                },
+              ],
+              currentPhaseId: "phase-deliver",
+              currentItemId: "verify-required",
+              updatedAt: "2026-01-01T00:00:00.000Z",
+            },
+          },
+        }),
+        event({
+          id: "read-package",
+          name: "read_file",
+          status: "done",
+          startedAt: 1500,
+          input: { path: "package.json" },
+        }),
+        event({
+          id: "verify-required",
+          name: "verification:manual",
+          status: "error",
+          startedAt: 2000,
+          input: { command: "verification required" },
+          output: {
+            summary:
+              "Code changes were produced but no verification step was recorded before final answer.",
+          },
+        }),
+      ],
+      { deriveAgentTiles },
+    );
+
+    expect(snapshot.blocks.map((block) => [block.id, block.status])).toEqual([
+      ["snapshot-1", "done"],
+      ["read-package", "done"],
+      ["verify-required", "waiting_approval"],
+    ]);
+    expect(snapshot.phases.map((phase) => [phase.id, phase.status])).toEqual([
+      ["phase-read", "done"],
+      ["phase-deliver", "waiting_approval"],
+    ]);
+    expect(snapshot.phases[0]?.blockIds).toEqual(["read-package"]);
+    expect(snapshot.phases[1]?.blockIds).toEqual(["verify-required"]);
+    expect(snapshot.currentPhase?.id).toBe("phase-deliver");
+    expect(snapshot.currentBlock?.id).toBe("verify-required");
+  });
+
+  test("downgrades recovered tool failures after a successful final answer", () => {
+    const snapshot = buildAgentWorkbenchSnapshot(
+      [
+        event({
+          id: "read-package",
+          name: "read_file",
+          status: "done",
+          startedAt: 1000,
+          input: { path: "frontend/package.json" },
+        }),
+        event({
+          id: "search-failed",
+          name: "code_search",
+          status: "error",
+          startedAt: 1200,
+          input: { query: "useState" },
+          output:
+            "(工具失败) status=failed error=TypeError\n请在下一轮 Thought 中分析失败原因，然后换一种方式重试",
+        }),
+        event({
+          id: "read-failed",
+          name: "read_file",
+          status: "error",
+          startedAt: 1300,
+          input: { path: "frontend/src/app/workspace/page.tsx" },
+          output:
+            "(工具失败) status=failed error=TypeError\n请在下一轮 Thought 中分析失败原因，然后换一种方式重试",
+        }),
+        event({
+          id: "fallback-read",
+          name: "ipython",
+          status: "done",
+          startedAt: 1500,
+          input: { command: "Path('frontend/src').rglob('*.tsx')" },
+          output: "frontend/src/app/workspace/page.tsx",
+        }),
+      ],
+      { deriveAgentTiles, hasAnswer: true, runSettled: true },
+    );
+
+    expect(snapshot.blocks.map((block) => [block.id, block.status])).toEqual([
+      ["read-package", "done"],
+      ["search-failed", "warning"],
+      ["read-failed", "warning"],
+      ["fallback-read", "done"],
+    ]);
+    expect(snapshot.phases.every((phase) => phase.status !== "error")).toBe(
+      true,
+    );
+    expect(snapshot.phases.map((phase) => phase.status)).toContain("done");
+  });
+
   test("settled final answers ignore stale server current phase ids", () => {
     const snapshot = buildAgentWorkbenchSnapshot(
       [

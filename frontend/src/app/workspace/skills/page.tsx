@@ -13,6 +13,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { ErrorState, LoadingState } from "@/components/ui/state";
 import { CapabilityQualityStrip } from "@/components/workspace/capability-quality-strip";
 import {
   WorkspaceBody,
@@ -169,34 +177,30 @@ function InstalledSkillsPanel() {
   const hiddenSkillCount = Math.max(0, skills.length - marketSkills.length);
 
   if (loading) {
-    return (
-      <div className="text-sm text-muted-foreground">
-        {t.skillsPage.loadingSkills}
-      </div>
-    );
+    return <LoadingState title={t.skillsPage.loadingSkills} />;
   }
 
   if (error) {
     return (
-      <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-        {error}
-      </div>
+      <ErrorState
+        title={t.skillsPage.loadingSkills}
+        detail={error}
+        className="min-h-[260px]"
+      />
     );
   }
 
   if (skills.length === 0) {
     return (
-      <div className="workspace-panel mx-auto flex max-w-xl flex-col items-center justify-center gap-3 rounded-[1.75rem] px-6 py-10 text-center">
-        <div className="rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 p-3 text-primary">
-          <PuzzleIcon className="size-5" />
-        </div>
-        <div className="space-y-1">
-          <div className="font-medium">{t.skillsPage.noInstalledTitle}</div>
-          <p className="text-muted-foreground text-sm leading-6">
-            {t.skillsPage.noInstalledHint}
-          </p>
-        </div>
-      </div>
+      <Empty className="mx-auto min-h-[320px] max-w-xl border-0">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <PuzzleIcon className="size-5" />
+          </EmptyMedia>
+          <EmptyTitle>{t.skillsPage.noInstalledTitle}</EmptyTitle>
+          <EmptyDescription>{t.skillsPage.noInstalledHint}</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
@@ -253,9 +257,14 @@ function InstalledSkillsPanel() {
           ),
         )}
         {totalFiltered === 0 && (
-          <div className="rounded-xl border border-dashed border-border/60 px-6 py-8 text-center text-sm text-muted-foreground">
-            {t.skillsPage.noMatch(query)}
-          </div>
+          <Empty className="min-h-[260px]">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <SearchIcon />
+              </EmptyMedia>
+              <EmptyTitle>{t.skillsPage.noMatch(query)}</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
         )}
       </div>
     </div>

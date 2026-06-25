@@ -596,6 +596,88 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(payload).not.toHaveProperty("planningMode");
   });
 
+  it("allows attachment-only turns so pasted screenshots still reach the model", async () => {
+    const startTurn = mockRealtime();
+    const file = new File(["img"], "screen.png", { type: "image/png" });
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "new",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("new", {
+        text: "",
+        files: [
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "screen.png",
+            url: "data:image/png;base64,AAAA",
+            file,
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    expect(startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: "",
+        attachments: [
+          expect.objectContaining({
+            filename: "screen.png",
+            mediaType: "image/png",
+            data_url: expect.stringMatching(/^data:image\/png;base64,/),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("dispatches failed image attachments back to the composer on send error", async () => {
+    const startTurn = vi.fn().mockRejectedValue(new Error("socket dropped"));
+    mockRealtime(startTurn);
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    const file = new File(["img"], "screen.png", { type: "image/png" });
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", {
+        text: "",
+        files: [
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "screen.png",
+            url: "data:image/png;base64,AAAA",
+            file,
+          },
+        ],
+      });
+    });
+
+    await waitFor(() =>
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "octopus:send-failed",
+          detail: expect.objectContaining({
+            threadId: "th-test",
+            text: "",
+            images: [expect.objectContaining({ name: "screen.png" })],
+          }),
+        }),
+      ),
+    );
+    dispatchSpy.mockRestore();
+  });
+
   it("marks first-screen realtime turns as coding-agent turns", async () => {
     const startTurn = mockRealtime();
     const { result } = renderHook(() =>

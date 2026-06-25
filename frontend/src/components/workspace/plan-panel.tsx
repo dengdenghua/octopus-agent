@@ -310,7 +310,13 @@ export function PlanPanel({
         inProgress: t.planPanel.inProgress,
         pending: t.planPanel.pending,
       }),
-    [messages, todos, t.planPanel.completed, t.planPanel.inProgress, t.planPanel.pending],
+    [
+      messages,
+      todos,
+      t.planPanel.completed,
+      t.planPanel.inProgress,
+      t.planPanel.pending,
+    ],
   );
 
   const completedCount = steps.filter((s) => s.status === "completed").length;

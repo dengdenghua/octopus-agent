@@ -204,7 +204,7 @@ export default function DesktopShellPage() {
         subtitle: t.desktop.apps.terminalLogs.subtitle,
         route: "/workspace/observability",
         icon: TerminalSquareIcon,
-        color: "from-slate-700 to-slate-500",
+        color: "from-muted-foreground to-muted-foreground/70",
       },
       {
         name: t.desktop.apps.settings.name,
@@ -226,21 +226,21 @@ export default function DesktopShellPage() {
         subtitle: t.desktop.placeholders.subtitle,
         route: "/workspace/store",
         icon: GlobeIcon,
-        color: "from-white to-slate-100 text-slate-700",
+        color: "from-white to-muted text-foreground",
       },
       {
         name: t.desktop.placeholders.communication,
         subtitle: t.desktop.placeholders.subtitle,
         route: "/workspace/store",
         icon: AppWindowIcon,
-        color: "from-white to-slate-100 text-slate-700",
+        color: "from-white to-muted text-foreground",
       },
       {
         name: t.desktop.placeholders.notes,
         subtitle: t.desktop.placeholders.subtitle,
         route: "/workspace/store",
         icon: FileTextIcon,
-        color: "from-white to-slate-100 text-slate-700",
+        color: "from-white to-muted text-foreground",
       },
     ],
     [t.desktop.placeholders],
@@ -614,7 +614,7 @@ export default function DesktopShellPage() {
               className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-0.5 transition hover:bg-white/32"
               title={t.desktop.header.workspaceTooltip}
             >
-              <span className="grid size-6 place-items-center rounded-md bg-white/50 text-slate-700 shadow-sm ring-1 ring-white/35">
+              <span className="grid size-6 place-items-center rounded-md bg-white/50 text-foreground shadow-sm ring-1 ring-white/35">
                 <BotIcon className="size-4" />
               </span>
               <span className="font-semibold">{t.desktop.header.brand}</span>
@@ -622,7 +622,7 @@ export default function DesktopShellPage() {
             <button
               type="button"
               onClick={() => navigate("/workspace")}
-              className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-slate-700 transition hover:bg-white/34 md:flex"
+              className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-foreground transition hover:bg-white/34 md:flex"
               title={t.desktop.header.accountModels}
             >
               <UserCircleIcon className="size-3.5" />
@@ -631,7 +631,7 @@ export default function DesktopShellPage() {
             <button
               type="button"
               onClick={() => setDesktopDrawerOpen(true)}
-              className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-slate-700 transition hover:bg-white/34 sm:flex"
+              className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-foreground transition hover:bg-white/34 sm:flex"
               title={t.desktop.header.desktopAssistant}
             >
               <FolderIcon className="size-3.5" />
@@ -642,7 +642,7 @@ export default function DesktopShellPage() {
             <button
               type="button"
               onClick={() => navigate("/workspace/store")}
-              className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-slate-700 transition hover:bg-white/34 md:flex"
+              className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-foreground transition hover:bg-white/34 md:flex"
               title={t.desktop.header.market}
             >
               <StoreIcon className="size-3.5" />
@@ -650,7 +650,7 @@ export default function DesktopShellPage() {
             </button>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 text-slate-700">
+          <div className="flex shrink-0 items-center gap-2 text-foreground">
             <button
               type="button"
               onClick={() => navigate("/workspace/observability")}
@@ -715,7 +715,7 @@ export default function DesktopShellPage() {
           <div className="mx-auto flex h-full max-w-[760px] flex-col items-center justify-center pb-12">
             <div
               data-desktop-interactive
-              className="flex h-12 w-full max-w-[620px] items-center gap-3 rounded-2xl border border-white/36 bg-white/68 px-4 text-slate-700 shadow-2xl shadow-black/12 backdrop-blur-2xl"
+              className="flex h-12 w-full max-w-[620px] items-center gap-3 rounded-2xl border border-white/36 bg-white/68 px-4 text-foreground shadow-2xl shadow-black/12 backdrop-blur-2xl"
             >
               <SearchIcon className="size-5 shrink-0 text-blue-600" />
               <input
@@ -723,12 +723,12 @@ export default function DesktopShellPage() {
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder={t.desktop.searchPlaceholder}
-                className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-slate-400"
+                className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none placeholder:text-muted-foreground/70"
               />
               <button
                 type="button"
                 onClick={submit}
-                className="rounded-full bg-slate-900 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-slate-700"
+                className="rounded-full bg-foreground px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-muted-foreground"
               >
                 {t.desktop.open}
               </button>
@@ -755,7 +755,7 @@ export default function DesktopShellPage() {
           <section
             ref={drawerRef}
             className={cn(
-              "absolute inset-x-8 bottom-28 top-14 mx-auto max-w-[760px] rounded-[28px] border border-white/34 bg-white/72 p-5 text-slate-800 shadow-2xl shadow-black/24 backdrop-blur-2xl transition-all duration-300 ease-out",
+              "absolute inset-x-8 bottom-28 top-14 mx-auto max-w-[760px] rounded-[28px] border border-white/34 bg-white/72 p-5 text-foreground shadow-2xl shadow-black/24 backdrop-blur-2xl transition-all duration-300 ease-out",
               desktopDrawerOpen
                 ? "translate-y-0 opacity-100"
                 : "translate-y-4 opacity-0",
@@ -766,7 +766,7 @@ export default function DesktopShellPage() {
                 <h2 className="text-base font-semibold">
                   {t.desktop.drawer.title}
                 </h2>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {loadingItems
                     ? t.desktop.drawer.loading
                     : itemsError
@@ -801,20 +801,18 @@ export default function DesktopShellPage() {
                     type="button"
                     onClick={handleUndo}
                     disabled={undoing || loadingItems}
-                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 text-[11px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-white px-2.5 text-[11px] font-medium text-muted-foreground transition hover:bg-muted/50 disabled:opacity-50"
                     title={t.desktop.drawer.undoTooltip}
                   >
                     <RotateCcwIcon className="size-3" />
-                    {undoing
-                      ? t.desktop.drawer.undoing
-                      : t.desktop.drawer.undo}
+                    {undoing ? t.desktop.drawer.undoing : t.desktop.drawer.undo}
                   </button>
                 )}
                 <button
                   ref={closeButtonRef}
                   type="button"
                   onClick={() => setDesktopDrawerOpen(false)}
-                  className="grid size-8 place-items-center rounded-full bg-slate-900/8 text-lg leading-none text-slate-600 transition hover:bg-slate-900/14"
+                  className="grid size-8 place-items-center rounded-full bg-foreground/10 text-lg leading-none text-muted-foreground transition hover:bg-foreground/15"
                   aria-label={t.desktop.drawer.closeAria}
                 >
                   ×
@@ -843,18 +841,18 @@ export default function DesktopShellPage() {
             {!itemsError && (
               <>
                 <div className="mt-4 flex items-center gap-2 rounded-2xl border border-white/45 bg-white/56 px-3 py-2">
-                  <SearchIcon className="size-4 shrink-0 text-slate-400" />
+                  <SearchIcon className="size-4 shrink-0 text-muted-foreground/70" />
                   <input
                     value={desktopSearch}
                     onChange={(event) => setDesktopSearch(event.target.value)}
                     placeholder={t.desktop.drawer.searchPlaceholder}
-                    className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
                   />
                   {desktopSearch && (
                     <button
                       type="button"
                       onClick={() => setDesktopSearch("")}
-                      className="grid size-4 place-items-center rounded-full text-slate-400 transition hover:text-slate-600"
+                      className="grid size-4 place-items-center rounded-full text-muted-foreground/70 transition hover:text-muted-foreground"
                     >
                       <XIcon className="size-3" />
                     </button>
@@ -902,18 +900,16 @@ export default function DesktopShellPage() {
                             refreshDesktopItems();
                             toast.success(t.desktop.toasts.fileMoved);
                           } else {
-                            toast.error(
-                              result.error || t.desktop.errors.move,
-                            );
+                            toast.error(result.error || t.desktop.errors.move);
                           }
                         }}
                         className={cn(
                           "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition",
                           desktopCategory === category.key
-                            ? "bg-slate-900 text-white"
+                            ? "bg-foreground text-white"
                             : dragOverCategory === category.key
                               ? "bg-blue-500 text-white ring-2 ring-blue-300"
-                              : "bg-white/56 text-slate-600 hover:bg-white/80",
+                              : "bg-white/56 text-muted-foreground hover:bg-white/80",
                         )}
                       >
                         {category.label}
@@ -927,8 +923,8 @@ export default function DesktopShellPage() {
                   {loadingItems ? (
                     <div className="grid h-56 place-items-center">
                       <div className="text-center">
-                        <Loader2Icon className="mx-auto size-8 animate-spin text-slate-400" />
-                        <p className="mt-3 text-sm font-medium text-slate-500">
+                        <Loader2Icon className="mx-auto size-8 animate-spin text-muted-foreground/70" />
+                        <p className="mt-3 text-sm font-medium text-muted-foreground">
                           {t.desktop.loadingItems}
                         </p>
                       </div>
@@ -949,7 +945,7 @@ export default function DesktopShellPage() {
                           ]
                       ).map((group) => (
                         <div key={group.key}>
-                          <div className="mb-2 text-xs font-semibold text-slate-500">
+                          <div className="mb-2 text-xs font-semibold text-muted-foreground">
                             {group.title}
                           </div>
                           <div className="grid grid-cols-5 gap-3">
@@ -1000,12 +996,12 @@ export default function DesktopShellPage() {
                                               ? "bg-gradient-to-br from-blue-500 to-indigo-500"
                                               : category === "package"
                                                 ? "bg-gradient-to-br from-rose-500 to-orange-500"
-                                                : "bg-gradient-to-br from-slate-600 to-slate-500",
+                                                : "bg-gradient-to-br from-muted-foreground to-muted-foreground/70",
                                     )}
                                   >
                                     <Icon className="size-6" />
                                   </span>
-                                  <span className="line-clamp-2 max-w-24 text-[11px] font-medium leading-tight text-slate-700">
+                                  <span className="line-clamp-2 max-w-24 text-[11px] font-medium leading-tight text-foreground">
                                     {item.name}
                                   </span>
                                 </button>
@@ -1016,17 +1012,17 @@ export default function DesktopShellPage() {
                       ))}
                     </div>
                   ) : (
-                    <div className="grid h-56 place-items-center rounded-3xl border border-dashed border-slate-300/80 bg-white/32 text-center">
+                    <div className="grid h-56 place-items-center rounded-3xl border border-dashed border-border/80 bg-white/32 text-center">
                       <div>
-                        <SearchIcon className="mx-auto size-8 text-slate-400" />
-                        <p className="mt-3 text-sm font-medium text-slate-600">
+                        <SearchIcon className="mx-auto size-8 text-muted-foreground/70" />
+                        <p className="mt-3 text-sm font-medium text-muted-foreground">
                           {desktopSearch.trim()
                             ? t.desktop.empty.noSearchResults
                             : nativeDesktopItems.length === 0
                               ? t.desktop.empty.noDesktopFiles
                               : t.desktop.empty.noFilesInCategory}
                         </p>
-                        <p className="mt-1 text-xs text-slate-400">
+                        <p className="mt-1 text-xs text-muted-foreground/70">
                           {desktopSearch.trim()
                             ? t.desktop.empty.tryAnotherKeyword
                             : t.desktop.empty.dropFilesHere}
@@ -1043,13 +1039,13 @@ export default function DesktopShellPage() {
         {contextMenu && (
           <div
             data-desktop-interactive
-            className="fixed z-50 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
+            className="fixed z-50 w-40 rounded-lg border border-border bg-card py-1 shadow-xl"
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button
               type="button"
               onClick={() => handleContextMenuAction("open", contextMenu.item)}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 transition hover:bg-slate-100"
+              className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground transition hover:bg-muted"
             >
               <ExternalLinkIcon className="size-3.5" />
               {t.desktop.contextMenu.open}
@@ -1060,13 +1056,13 @@ export default function DesktopShellPage() {
                 onClick={() =>
                   handleContextMenuAction("archive", contextMenu.item)
                 }
-                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 transition hover:bg-slate-100"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground transition hover:bg-muted"
               >
                 <FolderInputIcon className="size-3.5" />
                 {t.desktop.contextMenu.archiveToCategory}
               </button>
             )}
-            <div className="my-1 h-px bg-slate-200" />
+            <div className="my-1 h-px bg-muted" />
             <button
               type="button"
               onClick={() =>
@@ -1101,7 +1097,7 @@ export default function DesktopShellPage() {
               </button>
             );
           })}
-          <span className="mx-1 h-10 w-px bg-slate-700/16" />
+          <span className="mx-1 h-10 w-px bg-foreground/15" />
           {localAppPlaceholders.map((app) => {
             const Icon = app.icon;
             return (
@@ -1119,7 +1115,7 @@ export default function DesktopShellPage() {
               </button>
             );
           })}
-          <span className="mx-1 h-10 w-px bg-slate-700/16" />
+          <span className="mx-1 h-10 w-px bg-foreground/15" />
           <button
             type="button"
             onClick={() => setDesktopDrawerOpen(true)}
@@ -1136,7 +1132,7 @@ export default function DesktopShellPage() {
               "grid size-[54px] place-items-center rounded-[15px] shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110",
               showWidget
                 ? "bg-blue-500 text-white ring-2 ring-blue-300"
-                : "bg-white/76 text-slate-700",
+                : "bg-white/76 text-foreground",
             )}
           >
             <CpuIcon className="size-6" />
@@ -1145,7 +1141,7 @@ export default function DesktopShellPage() {
             type="button"
             onClick={() => navigate("/workspace")}
             title={t.desktop.dock.settings}
-            className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-slate-700 shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
+            className="grid size-[54px] place-items-center rounded-[15px] bg-white/76 text-foreground shadow-lg shadow-black/12 transition hover:-translate-y-2 hover:scale-110"
           >
             <SettingsIcon className="size-6" />
           </button>
@@ -1153,16 +1149,16 @@ export default function DesktopShellPage() {
         {showWidget && systemInfo && (
           <div
             data-desktop-interactive
-            className="absolute bottom-24 right-8 z-20 w-64 rounded-2xl border border-white/34 bg-white/78 p-4 text-slate-800 shadow-2xl shadow-black/24 backdrop-blur-2xl"
+            className="absolute bottom-24 right-8 z-20 w-64 rounded-2xl border border-white/34 bg-white/78 p-4 text-foreground shadow-2xl shadow-black/24 backdrop-blur-2xl"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500">
+              <span className="text-xs font-semibold text-muted-foreground">
                 {t.desktop.systemWidget.title}
               </span>
               <button
                 type="button"
                 onClick={() => setShowWidget(false)}
-                className="grid size-5 place-items-center rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-slate-600"
+                className="grid size-5 place-items-center rounded-full text-muted-foreground/70 transition hover:bg-muted hover:text-muted-foreground"
               >
                 <XIcon className="size-3" />
               </button>
@@ -1170,12 +1166,12 @@ export default function DesktopShellPage() {
             <div className="mt-3 space-y-3">
               <div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1 text-slate-600">
+                  <span className="flex items-center gap-1 text-muted-foreground">
                     <CpuIcon className="size-3" /> {t.desktop.systemWidget.cpu}
                   </span>
                   <span className="font-medium">{systemInfo.cpu.usage}%</span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all",
@@ -1188,14 +1184,14 @@ export default function DesktopShellPage() {
                     style={{ width: `${systemInfo.cpu.usage}%` }}
                   />
                 </div>
-                <div className="mt-0.5 text-[10px] text-slate-400">
+                <div className="mt-0.5 text-[10px] text-muted-foreground/70">
                   {systemInfo.cpu.model.split(" ").slice(0, 3).join(" ")} ·{" "}
                   {systemInfo.cpu.cores} {t.desktop.systemWidget.cores}
                 </div>
               </div>
               <div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1 text-slate-600">
+                  <span className="flex items-center gap-1 text-muted-foreground">
                     <HardDriveIcon className="size-3" />{" "}
                     {t.desktop.systemWidget.memory}
                   </span>
@@ -1203,7 +1199,7 @@ export default function DesktopShellPage() {
                     {systemInfo.memory.percent}%
                   </span>
                 </div>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200">
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn(
                       "h-full rounded-full transition-all",
@@ -1216,11 +1212,11 @@ export default function DesktopShellPage() {
                     style={{ width: `${systemInfo.memory.percent}%` }}
                   />
                 </div>
-                <div className="mt-0.5 text-[10px] text-slate-400">
+                <div className="mt-0.5 text-[10px] text-muted-foreground/70">
                   {systemInfo.memory.used} / {systemInfo.memory.total} GB
                 </div>
               </div>
-              <div className="text-[10px] text-slate-400">
+              <div className="text-[10px] text-muted-foreground/70">
                 {t.desktop.systemWidget.uptime(
                   Math.floor(systemInfo.uptime / 60),
                   systemInfo.uptime % 60,

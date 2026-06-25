@@ -7,9 +7,7 @@ import { renderWithProviders } from "@/test/harness";
 
 import { GroundingChip } from "./grounding-chip";
 
-function aiWithGrounding(
-  grounding: unknown,
-): Message {
+function aiWithGrounding(grounding: unknown): Message {
   return {
     type: "ai",
     content: "answer",
@@ -27,8 +25,16 @@ describe("GroundingChip", () => {
 
   it("shows a plain-language count, collapsed, then expands the exact sources", async () => {
     const grounding = [
-      { kind: "doc", title: "Hemolymph (Context)", path: "23-memory/hemolymph.md" },
-      { kind: "source", title: "react_loop.py", path: "runtime/react_loop.py:501" },
+      {
+        kind: "doc",
+        title: "Hemolymph (Context)",
+        path: "23-memory/hemolymph.md",
+      },
+      {
+        kind: "source",
+        title: "react_loop.py",
+        path: "runtime/react_loop.py:501",
+      },
     ];
     renderWithProviders(<GroundingChip message={aiWithGrounding(grounding)} />);
 

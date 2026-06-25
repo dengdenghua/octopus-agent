@@ -15,6 +15,7 @@
  */
 
 import { swallow } from "@/core/utils/log";
+import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -182,13 +183,20 @@ function withMemberMentions(
     })
     .map((m) => {
       const label = m.display_name ?? m.name;
+      // Local CLI partners may lack an avatar_url here — fall back to their
+      // registered brand avatar endpoint so they match the chat + roster.
+      const rawAvatar =
+        m.avatar_url ??
+        (m.name.startsWith("local_") ? `/api/agents/${m.name}/avatar` : null);
       return {
         type: "agent",
         label,
         value: label,
         description: m.description || "群成员",
         icon: m.icon?.trim() || "bot",
-        avatarUrl: resolveMentionAvatar(m.avatar_url),
+        avatarUrl: resolveMentionAvatar(
+          rawAvatar ? withAgentAvatarVersion(rawAvatar) : null,
+        ),
       };
     })
     .filter((m) => !existing.has(m.value));

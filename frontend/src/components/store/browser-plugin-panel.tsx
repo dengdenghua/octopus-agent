@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Loader2, Package, Puzzle, RefreshCw } from "lucide-react";
+import { Package, Puzzle, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { ErrorState, LoadingState } from "@/components/ui/state";
 import { listPlugins } from "@/core/plugins/api";
 import type { PluginInfo } from "@/core/plugins/types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -77,15 +85,14 @@ export function BrowserPluginPanel() {
       </div>
 
       {loading ? (
-        <div className="flex min-h-[220px] items-center justify-center text-sm text-muted-foreground">
-          <Loader2 className="mr-2 size-4 animate-spin" />
-          {t.plugins.pageLoading}
-        </div>
+        <LoadingState title={t.plugins.pageLoading} />
       ) : error ? (
-        <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-destructive">
-          <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <ErrorState
+          title={t.unifiedStore.browserPlugins.listFailed}
+          detail={error}
+          actionLabel={t.unifiedStore.browserPlugins.refreshAria}
+          onAction={refresh}
+        />
       ) : plugins.length ? (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {plugins.map((plugin) => (
@@ -151,10 +158,17 @@ export function BrowserPluginPanel() {
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-8 text-center text-sm text-muted-foreground">
-          <Puzzle className="mx-auto mb-2 size-8 text-muted-foreground/40" />
-          {t.plugins.emptyTitle}
-        </div>
+        <Empty className="min-h-[220px]">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Puzzle />
+            </EmptyMedia>
+            <EmptyTitle>{t.plugins.emptyTitle}</EmptyTitle>
+            <EmptyDescription>
+              {t.unifiedStore.browserPlugins.title}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
     </div>
   );

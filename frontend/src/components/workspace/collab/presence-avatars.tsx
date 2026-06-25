@@ -27,7 +27,10 @@ interface PresenceAvatarsProps {
 const MAX_HUMANS = 4;
 const MAX_AGENTS = 5;
 
-export function PresenceAvatars({ className, agents = [] }: PresenceAvatarsProps) {
+export function PresenceAvatars({
+  className,
+  agents = [],
+}: PresenceAvatarsProps) {
   const { t } = useI18n();
   const { users, currentUser } = useCollab();
 
@@ -79,7 +82,9 @@ export function PresenceAvatars({ className, agents = [] }: PresenceAvatarsProps
                 +{remainingUsers}
               </div>
             </TooltipTrigger>
-            <TooltipContent>{t.collab.onlineCount(remainingUsers)}</TooltipContent>
+            <TooltipContent>
+              {t.collab.onlineCount(remainingUsers)}
+            </TooltipContent>
           </Tooltip>
         )}
 

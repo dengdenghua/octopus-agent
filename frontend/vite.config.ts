@@ -30,6 +30,11 @@ function safeChunkName(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "-").replace(/-+/g, "-");
 }
 
+function chunkFileStem(id: string): string {
+  const filename = id.replace(/\\/g, "/").split("/").pop() ?? "chunk";
+  return filename.replace(/\.[cm]?js$/, "");
+}
+
 const proxyConfig = {
   "/api/files/stream": {
     target: gatewayTarget,
@@ -134,7 +139,7 @@ export default defineConfig({
       ),
       "mermaid-real": fileURLToPath(
         new URL(
-          "./node_modules/mermaid/dist/mermaid.core.mjs",
+          "./node_modules/mermaid/dist/mermaid.esm.min.mjs",
           import.meta.url,
         ),
       ),
@@ -188,14 +193,23 @@ export default defineConfig({
           if (pkg?.startsWith("@uiw/codemirror-theme-")) {
             return "codemirror-themes";
           }
+          if (pkg?.startsWith("@codemirror/lang-")) {
+            return safeChunkName(pkg.replace("@", ""));
+          }
+          if (pkg === "@codemirror/language-data") {
+            return "codemirror-language-data";
+          }
+          if (pkg === "@codemirror/merge") {
+            return "codemirror-merge";
+          }
           if (pkg?.startsWith("@codemirror/")) {
-            return "codemirror-vendor";
+            return "codemirror-core";
           }
           if (pkg === "codemirror") {
-            return "codemirror-vendor";
+            return "codemirror-core";
           }
           if (pkg?.startsWith("@lezer/")) {
-            return "codemirror-vendor";
+            return safeChunkName(pkg.replace("@", ""));
           }
           if (id.includes("node_modules/@tanstack/")) {
             return "query-virtual";
@@ -215,14 +229,21 @@ export default defineConfig({
           ) {
             return "markdown-plugins";
           }
+          if (pkg?.startsWith("d3")) {
+            return "mermaid-d3";
+          }
           if (
-            pkg === "mermaid" ||
-            pkg?.startsWith("d3") ||
             pkg === "cytoscape" ||
             pkg === "dagre-d3-es" ||
             pkg === "elkjs" ||
             pkg === "khroma"
           ) {
+            return "mermaid-layout";
+          }
+          if (id.includes("/node_modules/mermaid/dist/chunks/")) {
+            return `mermaid-${safeChunkName(chunkFileStem(id))}`;
+          }
+          if (pkg === "mermaid") {
             return "mermaid";
           }
           if (id.includes("node_modules/@xyflow/")) {

@@ -186,6 +186,19 @@ interface RepairProposal {
   suggested_diff: string;
   rationale: string;
   status: string;
+  source?: string;
+  repair_tasks?: RepairTask[];
+}
+
+interface RepairTask {
+  id: number;
+  proposal_id: number;
+  protocol_id: string;
+  priority: string;
+  title: string;
+  target_layer: string;
+  target_modules: string[];
+  verification_commands: string[];
 }
 
 type DispatchSnapshot = Record<
@@ -1131,6 +1144,28 @@ function ProtocolDriftSection() {
             <div className="text-[11px] text-muted-foreground">
               {r.rationale}
             </div>
+            {r.repair_tasks?.length ? (
+              <div className="mt-1 rounded-md border border-border/60 bg-muted/40 px-2 py-1.5">
+                {r.repair_tasks.slice(0, 2).map((task) => (
+                  <div key={task.id} className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                      <span className="font-medium text-foreground">
+                        {task.title}
+                      </span>
+                      <span className="rounded border border-border/60 px-1.5 py-0.5 font-mono text-muted-foreground">
+                        {task.priority}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {task.target_layer}
+                      </span>
+                    </div>
+                    <div className="truncate font-mono text-[10px] text-muted-foreground">
+                      {task.target_modules.slice(0, 3).join(" · ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
             <details className="mt-1">
               <summary className="cursor-pointer text-[10px] text-primary">
                 {t.evolutionControl.drift.diffSummary}

@@ -143,7 +143,9 @@ export default function LocalBrainSetup() {
       {expanded && (
         <div className="space-y-1.5 border-t border-border/40 px-3 py-2">
           {error && (
-            <p className="text-[11px] text-red-600">检测失败:{error}(后端没起?)</p>
+            <p className="text-[11px] text-red-600">
+              检测失败:{error}(后端没起?)
+            </p>
           )}
           {status?.items.map((it, i) => (
             <div key={it.id} className="flex items-start gap-2.5">

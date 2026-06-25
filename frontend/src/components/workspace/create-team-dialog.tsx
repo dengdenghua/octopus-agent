@@ -13,7 +13,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import TeamRoleModelsPanel from "@/components/workspace/team-role-models-panel";
-import { useAgents, useLocalCliAgents, useMobileDevices } from "@/core/agents";
+import {
+  dedupeAgentsByName,
+  useAgents,
+  useLocalCliAgents,
+  useMobileDevices,
+} from "@/core/agents";
 import type { Agent } from "@/core/agents/types";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -41,7 +46,7 @@ export function CreateTeamDialog({
   const { mobileAgents } = useMobileDevices();
   // Detected local CLIs + connected phones join the picker as members.
   const userAgents = useMemo(
-    () => [...mobileAgents, ...cliAgents, ...builtinAgents],
+    () => dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
     [mobileAgents, cliAgents, builtinAgents],
   );
   const [search, setSearch] = useState("");

@@ -54,7 +54,7 @@ export function SwarmPanel() {
     () => ({
       pending: {
         icon: <CircleDotIcon className="h-4 w-4 text-muted-foreground" />,
-        className: "bg-gray-500/10 text-gray-600",
+        className: "bg-muted-foreground/10 text-muted-foreground",
         label: t.swarmPanel.panelStatusPending,
       },
       running: {

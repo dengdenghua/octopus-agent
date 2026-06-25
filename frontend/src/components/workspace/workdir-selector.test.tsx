@@ -74,6 +74,55 @@ describe("<WorkDirSelector />", () => {
     expect(onWorkDirChange).not.toHaveBeenCalled();
   });
 
+  it("maps a browser-picked folder name back to a recent absolute workspace", async () => {
+    const onWorkDirChange = vi.fn();
+    localStorage.setItem(
+      "octopus:recentWorkdirs",
+      JSON.stringify(["/Users/dangbei/Public"]),
+    );
+    vi.stubGlobal(
+      "showDirectoryPicker",
+      vi.fn().mockResolvedValue({ name: "Public" }),
+    );
+
+    renderWithProviders(
+      <WorkDirSelector
+        workDir=""
+        onWorkDirChange={onWorkDirChange}
+        variant="muted"
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Personal space"));
+
+    await waitFor(() => {
+      expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/Public");
+    });
+  });
+
+  it("falls back to manual path input when browser folder picker has no path match", async () => {
+    const onWorkDirChange = vi.fn();
+    vi.stubGlobal(
+      "showDirectoryPicker",
+      vi.fn().mockResolvedValue({ name: "UnknownFolder" }),
+    );
+
+    renderWithProviders(
+      <WorkDirSelector
+        workDir=""
+        onWorkDirChange={onWorkDirChange}
+        variant="muted"
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Personal space"));
+
+    expect(
+      await screen.findByPlaceholderText("Enter workspace directory path:"),
+    ).toHaveValue("UnknownFolder");
+    expect(onWorkDirChange).not.toHaveBeenCalled();
+  });
+
   it("uses the Electron native folder picker when available", async () => {
     const onWorkDirChange = vi.fn();
     vi.stubGlobal("octopus", {
@@ -128,7 +177,7 @@ describe("<WorkDirSelector />", () => {
     expect(onWorkDirChange).toHaveBeenCalledWith("F:/");
   });
 
-  it("keeps the muted empty state as personal space with one folder action", async () => {
+  it("keeps the muted empty state as personal space with one workspace action", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -138,9 +187,11 @@ describe("<WorkDirSelector />", () => {
 
     expect(screen.getByText("Personal space")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle("Choose folder"));
+    fireEvent.click(screen.getByTitle("Choose workspace folder"));
 
-    expect(await screen.findByText("Choose folder")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Choose workspace folder"),
+    ).toBeInTheDocument();
     expect(
       screen.queryByPlaceholderText("Enter workspace directory path:"),
     ).not.toBeInTheDocument();
@@ -149,7 +200,7 @@ describe("<WorkDirSelector />", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("opens the desktop folder picker from the muted folder action", async () => {
+  it("opens the desktop folder picker from the muted workspace action", async () => {
     const onWorkDirChange = vi.fn();
     const open = vi.fn().mockResolvedValue({
       canceled: false,
@@ -169,15 +220,46 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTitle("Choose folder"));
-    fireEvent.click(await screen.findByText("Choose folder"));
+    fireEvent.click(screen.getByTitle("Choose workspace folder"));
+    fireEvent.click(await screen.findByText("Choose workspace folder"));
 
     await waitFor(() => {
       expect(open).toHaveBeenCalledWith({
-        properties: ["openDirectory"],
+        properties: ["openDirectory", "createDirectory"],
         defaultPath: "",
       });
       expect(onWorkDirChange).toHaveBeenCalledWith("F:\\picked\\space");
+    });
+  });
+
+  it("opens the desktop folder picker from the muted primary trigger", async () => {
+    const onWorkDirChange = vi.fn();
+    const open = vi.fn().mockResolvedValue({
+      canceled: false,
+      filePaths: ["F:\\picked\\primary"],
+    });
+    vi.stubGlobal("octopus", {
+      dialog: {
+        open,
+      },
+    });
+
+    renderWithProviders(
+      <WorkDirSelector
+        workDir=""
+        onWorkDirChange={onWorkDirChange}
+        variant="muted"
+      />,
+    );
+
+    fireEvent.click(screen.getByTitle("Personal space"));
+
+    await waitFor(() => {
+      expect(open).toHaveBeenCalledWith({
+        properties: ["openDirectory", "createDirectory"],
+        defaultPath: "",
+      });
+      expect(onWorkDirChange).toHaveBeenCalledWith("F:\\picked\\primary");
     });
   });
 });

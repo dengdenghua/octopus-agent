@@ -3,6 +3,11 @@ import type { AgentPhase } from "./agent-phases";
 import type { LiveToolEvent } from "./live-tool-timeline";
 import type { WorkBlock } from "./work-blocks";
 import {
+  agentRunBadgeClass,
+  agentRunDotClass,
+  agentRunTextClass,
+} from "./agent-run-status";
+import {
   type AgentTile,
   avatarForRole,
   agentEventGroupId,
@@ -43,9 +48,10 @@ export function useAgentWorkbenchI18n() {
       } else if (event.status === "done") {
         status = "done";
       } else if (
-        event.status === "running" ||
         event.status === "waiting_approval"
       ) {
+        status = "waiting_approval";
+      } else if (event.status === "running") {
         status = "running";
       } else {
         status = "pending";
@@ -154,44 +160,56 @@ export function useAgentWorkbenchI18n() {
 
   function agentStatusLabel(status: AgentTile["status"]) {
     if (status === "running") return t.agentWorkbench.statusProcessing;
+    if (status === "waiting_approval")
+      return t.agentWorkbenchPages.statusWaitingApproval;
     if (status === "done") return t.agentWorkbench.statusCompleted;
     if (status === "error") return t.agentWorkbench.statusError;
     return t.agentWorkbench.waitingToStart;
   }
 
   function agentStatusClass(status: AgentTile["status"]) {
-    if (status === "running") return "text-foreground";
-    if (status === "done") return "text-emerald-600 dark:text-emerald-300";
-    if (status === "error") return "text-destructive";
-    return "text-muted-foreground";
+    return agentRunTextClass(status);
   }
 
   function workbenchStatus(blocks: WorkBlock[], phases: AgentPhase[]) {
+    if (
+      phases.some((phase) => phase.status === "error") ||
+      blocks.some((block) => block.status === "error")
+    ) {
+      return {
+        label: t.agentWorkbench.statusError,
+        className: agentRunBadgeClass("error"),
+        dotClassName: agentRunDotClass("error"),
+      };
+    }
+    if (
+      phases.some((phase) => phase.status === "waiting_approval") ||
+      blocks.some((block) => block.status === "waiting_approval")
+    ) {
+      return {
+        label: t.agentWorkbenchPages.statusWaitingApproval,
+        className: agentRunBadgeClass("waiting"),
+        dotClassName: agentRunDotClass("waiting"),
+      };
+    }
     if (phases.some((phase) => phase.status === "running")) {
       return {
         label: t.agentWorkbench.executingTask,
-        className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-        dotClassName: "bg-emerald-500",
-      };
-    }
-    if (blocks.some((block) => block.status === "error")) {
-      return {
-        label: t.agentWorkbench.statusError,
-        className: "bg-destructive/10 text-destructive",
-        dotClassName: "bg-destructive",
+        className: agentRunBadgeClass("running"),
+        dotClassName: agentRunDotClass("running"),
       };
     }
     if (phases.some((phase) => phase.status === "pending")) {
       return {
         label: t.agentWorkbench.waitingToContinue,
-        className: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-        dotClassName: "bg-amber-500",
+        className: agentRunBadgeClass("pending"),
+        dotClassName: agentRunDotClass("pending"),
       };
     }
     return {
       label: t.agentWorkbench.statusCompleted,
-      className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-      dotClassName: "bg-emerald-500",
+      className: agentRunBadgeClass("done"),
+      dotClassName: agentRunDotClass("done"),
     };
   }
 
@@ -496,6 +514,7 @@ function dispatchSpecsFromEvent(
 function dispatchStatus(status: LiveToolEvent["status"]): AgentTile["status"] {
   if (status === "error") return "error";
   if (status === "done") return "done";
-  if (status === "running" || status === "waiting_approval") return "running";
+  if (status === "waiting_approval") return "waiting_approval";
+  if (status === "running") return "running";
   return "pending";
 }

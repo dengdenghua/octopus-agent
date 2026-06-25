@@ -2,6 +2,8 @@
 
 import { useCallback, useRef, useState, type KeyboardEvent } from "react";
 import { ArrowLeftIcon, ArrowRightIcon, RefreshCwIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useI18n } from "@/core/i18n/hooks";
 import { useBrowserPanel } from "./browser-context";
 import { WebviewRenderer, type WebviewHandle } from "./webview-renderer";
@@ -91,37 +93,44 @@ export function BrowserPanel() {
     <div className="flex h-full flex-col rounded-lg border bg-background">
       {/* Implementation note. */}
       <div className="flex items-center gap-1 border-b px-2 py-1.5">
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={goBack}
           disabled={!canGoBack}
-          className="rounded p-1 hover:bg-muted disabled:opacity-30"
-          title={t.browser.back}
+          aria-label={t.browser.back}
+          className="size-8"
         >
           <ArrowLeftIcon className="size-4 text-muted-foreground" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={goForward}
           disabled={!canGoForward}
-          className="rounded p-1 hover:bg-muted disabled:opacity-30"
-          title={t.browser.forward}
+          aria-label={t.browser.forward}
+          className="size-8"
         >
           <ArrowRightIcon className="size-4 text-muted-foreground" />
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={handleRefresh}
-          className="rounded p-1 hover:bg-muted"
-          title={t.browser.reload}
+          aria-label={t.browser.reload}
+          className="size-8"
         >
           <RefreshCwIcon className="size-4 text-muted-foreground" />
-        </button>
-        <input
+        </Button>
+        <Input
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={handleNavigate}
           placeholder={t.browser.urlPlaceholder}
-          className="flex-1 rounded bg-muted px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-primary"
+          aria-label={t.browser.urlPlaceholder}
+          className="flex-1 border-0 bg-muted px-2 py-1 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-primary"
         />
       </div>
 

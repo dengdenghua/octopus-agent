@@ -635,7 +635,7 @@ export default function ModelSettingsPage() {
                           {m.display_name || m.name}
                         </div>
                         <span
-                          className="shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-400"
+                          className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground"
                           title={t.settings.model.modelList.hint}
                         >
                           {t.settings.model.modelCount(list.length)}
@@ -1455,7 +1455,8 @@ function EditModelForm({
                 onClick={handleTest}
                 disabled={testStatus === "testing" || loading}
               >
-                <WifiIcon className="mr-1 h-3 w-3" /> {t.settings.model.diagnose}
+                <WifiIcon className="mr-1 h-3 w-3" />{" "}
+                {t.settings.model.diagnose}
               </Button>
             </div>
           </div>
@@ -1665,7 +1666,8 @@ function AddModelForm({
 
       <div>
         <label className="text-sm font-medium">
-          <span className="text-destructive">*</span> {t.settings.model.provider}
+          <span className="text-destructive">*</span>{" "}
+          {t.settings.model.provider}
         </label>
         <select
           className="mt-1 flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -2091,7 +2093,7 @@ function LocalModelsSection({ onImported }: { onImported?: () => void }) {
               </span>
             )}
             {scanStatus === "done" && services.length === 0 && (
-              <span className="inline-flex items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:border-slate-500/40 dark:bg-slate-500/10 dark:text-slate-400">
+              <span className="inline-flex items-center rounded-md border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground dark:border-muted-foreground/40 dark:bg-muted-foreground/10 dark:text-muted-foreground">
                 {t.settings.model.localModels.empty}
               </span>
             )}

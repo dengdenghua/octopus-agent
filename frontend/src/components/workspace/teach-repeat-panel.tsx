@@ -61,10 +61,10 @@ function StatusBadge({ status }: { status: string }) {
       "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
     failed: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
     running: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    pending: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    pending: "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground/70",
     success:
       "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    skipped: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+    skipped: "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground/70",
   };
 
   return (
@@ -88,9 +88,9 @@ function StepResultIcon({ status }: { status: string }) {
     case "failed":
       return <XCircleIcon className="size-3.5 text-red-500" />;
     case "skipped":
-      return <CircleIcon className="size-3.5 text-gray-400" />;
+      return <CircleIcon className="size-3.5 text-muted-foreground/70" />;
     default:
-      return <CircleDotIcon className="size-3.5 text-gray-400" />;
+      return <CircleDotIcon className="size-3.5 text-muted-foreground/70" />;
   }
 }
 
