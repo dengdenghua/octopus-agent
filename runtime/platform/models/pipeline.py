@@ -204,6 +204,11 @@ class ArmAssignment(BaseModel):
     subgraph: TaskGraph
     context_ref: ContextPacketRef
     deadline: datetime
+    # Exclusive resources this assignment must hold while running (ADR-010).
+    # Empty (the default) ⇒ no BoidsArbitrator claim ⇒ behaviour unchanged.
+    # URIs follow the convention in ADR-010 (e.g. ``device:desktop``,
+    # ``file:/abs/path``, ``api:openai``; ``<uri>:read`` for shared readers).
+    exclusive_resources: list[str] = Field(default_factory=list)
 
 
 

@@ -489,6 +489,9 @@ class SwarmRuntime:
         arm_id = getattr(arm, "arm_id", ArmId("unknown"))
         task_id = assignment.subgraph.task_id
 
+        # ADR-010 · serialise on declared exclusive resources. Empty list (the
+        # default) ⇒ no claim ⇒ this is exactly the prior behaviour.
+        claimed = self._claim_resources(arm_id, assignment.exclusive_resources)
         self._publish(
             "arm.busy",
             {"arm_id": str(arm_id), "task_id": str(task_id)},
@@ -518,6 +521,59 @@ class SwarmRuntime:
                 "arm.idle",
                 {"arm_id": str(arm_id), "task_id": str(task_id)},
             )
+            self._release_resources(arm_id, claimed)
+
+    # ─── ADR-010 · resource contention ────────────────────────
+
+    # ttl generous enough to cover a normal handle(); ``finally`` releases
+    # promptly on any exit, so the ttl only bounds a hard crash that skips it.
+    _CLAIM_TTL_MS = 600_000
+    _CLAIM_TIMEOUT_S = 30.0
+    _CLAIM_POLL_S = 0.02
+
+    def _claim_resources(
+        self, arm_id: ArmId, resources: list[str]
+    ) -> list[str]:
+        """Claim each exclusive resource via the BoidsArbitrator, serialising on
+        ``lose`` (poll until the holder releases, bounded by a timeout).
+
+        Returns the URIs actually held (to release later). No-op — returns
+        ``[]`` — when no arbitrator is wired or nothing is declared, so the hot
+        path is untouched for the common case.
+        """
+        if self._boids is None or not resources:
+            return []
+        from runtime.safety.chromatophores.boids import ResourceClaim
+
+        held: list[str] = []
+        for uri in resources:
+            deadline = time.monotonic() + self._CLAIM_TIMEOUT_S
+            while True:
+                verdict = self._boids.arbitrate(
+                    ResourceClaim(
+                        arm_id=arm_id, resource_uri=uri, ttl_ms=self._CLAIM_TTL_MS
+                    )
+                )
+                if verdict in ("win", "coexist"):
+                    held.append(uri)
+                    break
+                if time.monotonic() >= deadline:
+                    # Degrade rather than deadlock the pool: proceed without the
+                    # claim but make the contention observable (ADR-010 v1 policy).
+                    self._publish(
+                        "alert.contention",
+                        {"arm_id": str(arm_id), "resource_uri": uri},
+                    )
+                    break
+                time.sleep(self._CLAIM_POLL_S)
+        return held
+
+    def _release_resources(self, arm_id: ArmId, resources: list[str]) -> None:
+        if self._boids is None or not resources:
+            return
+        for uri in resources:
+            with contextlib.suppress(Exception):
+                self._boids.release(arm_id, uri)
 
 
     def _publish(self, topic: str, payload: dict[str, Any]) -> None:
