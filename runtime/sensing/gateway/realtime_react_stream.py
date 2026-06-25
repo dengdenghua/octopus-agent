@@ -348,6 +348,8 @@ async def _drive_react(
     intent: ParsedIntent,
     provider: ApprovalProvider,
     agent: Any,
+    *,
+    model: str | None = None,
 ) -> None:
     """Pump the react_loop iterator, mapping each event to ``item/*``.
 
@@ -489,6 +491,7 @@ async def _drive_react(
                         approval_provider=provider,
                         output_chunk_sink=_push_chunk,
                         planning_mode=_planning_mode,
+                        model=model,
                         reasoning_effort=(intent.user_context or {}).get(
                             "reasoning_effort",
                         ),
