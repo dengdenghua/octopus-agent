@@ -158,6 +158,23 @@ class TestAdd:
         assert r.verdict == "superseded_old"
         assert kg.query(subject="x")[0].object == "new"
 
+    def test_exact_tie_is_disputed(self):
+        # Equal confidence AND equal timestamp, different object on a
+        # single-valued predicate — neither side dominates, so it's a genuine
+        # contradiction. Surfaced as ``disputed`` (the declared-but-previously-
+        # never-returned verdict) rather than the misleading ``ignored_lower_conf``.
+        # Non-destructive: the incumbent stays active and the newcomer is not stored.
+        kg = KnowledgeGraph()
+        ts = now_utc()
+        kg.add(_t("x", "is", "A", confidence=0.7, ts=ts))
+        r = kg.add(_t("x", "is", "B", confidence=0.7, ts=ts))
+        assert r.verdict == "disputed"
+        assert "tie" in r.reason
+        actives = kg.query(subject="x", predicate="is")
+        assert len(actives) == 1
+        assert actives[0].object == "A"  # incumbent preserved
+        assert kg.count() == 1
+
     def test_different_predicates_coexist(self):
         kg = KnowledgeGraph()
         kg.add(_t("claude", "version", "4.7"))

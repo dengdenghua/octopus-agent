@@ -505,27 +505,32 @@ function BlackboardPanel() {
             </div>
           )}
           {list.data.turns.map((tr) => (
-            <button
+            <Button
               key={tr.turn_id}
+              variant="ghost"
               onClick={() => setSelected(tr.turn_id)}
+              aria-pressed={selected === tr.turn_id}
+              aria-label={`黑板回合 ${tr.turn_id.slice(0, 18)}`}
               className={cn(
-                "block w-full rounded-md px-2 py-1.5 text-left text-[11px] transition-colors",
+                "h-auto w-full justify-start rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors hover:text-foreground",
                 selected === tr.turn_id
-                  ? "bg-primary/10 border border-primary/40"
-                  : "bg-muted/30 hover:bg-muted/60 border border-transparent",
+                  ? "border-primary/40 bg-primary/10 hover:bg-primary/10"
+                  : "border-transparent bg-muted/30 hover:bg-muted/60",
               )}
             >
-              <div className="font-mono text-[10px] truncate">
-                {tr.turn_id.slice(0, 18)}
+              <div className="w-full">
+                <div className="font-mono text-[10px] truncate">
+                  {tr.turn_id.slice(0, 18)}
+                </div>
+                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <span>
+                    {tr.key_count} {t.observabilityPage.keyCount}
+                  </span>
+                  <span>·</span>
+                  <span>{formatAge(tr.age_seconds)}</span>
+                </div>
               </div>
-              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <span>
-                  {tr.key_count} {t.observabilityPage.keyCount}
-                </span>
-                <span>·</span>
-                <span>{formatAge(tr.age_seconds)}</span>
-              </div>
-            </button>
+            </Button>
           ))}
         </CardContent>
       </Card>
@@ -670,6 +675,7 @@ function JournalPanel() {
             <Button
               size="sm"
               variant="ghost"
+              aria-pressed={paused}
               onClick={() => setPaused((p) => !p)}
             >
               {paused ? t.observabilityPage.resume : t.observabilityPage.pause}
@@ -699,7 +705,7 @@ function JournalPanel() {
             hint={t.observabilityPage.noEventsHint}
           />
         )}
-        <div className="max-h-[60vh] overflow-y-auto font-mono text-[11px]">
+        <div className="max-h-[60vh] overflow-auto font-mono text-[11px]">
           {events
             .slice()
             .reverse()
@@ -772,7 +778,7 @@ function JournalPanel() {
                         href={`${getBackendBaseURL()}${e.url}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary underline-offset-2 hover:underline truncate max-w-[18rem]"
+                        className="text-primary underline-offset-2 hover:underline truncate max-w-[12rem] sm:max-w-[18rem]"
                         title={e.caption || e.filename}
                       >
                         {e.filename ?? t.observabilityPage.eventArtifact}
@@ -802,12 +808,12 @@ function JournalPanel() {
                             e.filename ||
                             t.observabilityPage.eventArtifactScreenshot
                           }
-                          className="max-h-32 max-w-[20rem] rounded-md border border-border/40 object-contain"
+                          className="max-h-32 max-w-[12rem] sm:max-w-[20rem] rounded-md border border-border/40 object-contain"
                           loading="lazy"
                         />
                       </a>
                       {e.caption && (
-                        <div className="mt-1 text-[10px] text-muted-foreground italic truncate max-w-[20rem]">
+                        <div className="mt-1 text-[10px] text-muted-foreground italic truncate max-w-[12rem] sm:max-w-[20rem]">
                           {e.caption}
                         </div>
                       )}
@@ -1065,7 +1071,7 @@ function HemolymphPanel() {
                 </span>
               </div>
               <Progress value={latest.utilization * 100} />
-              <div className="mt-2 grid grid-cols-4 gap-2">
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {buckets.map((b) => {
                   const info = latest.by_bucket[b] ?? { used: 0, alloc: 1 };
                   const pct =
@@ -1113,7 +1119,7 @@ function HemolymphPanel() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="max-h-[50vh] overflow-y-auto">
+          <div className="max-h-[50vh] overflow-auto">
             <table className="w-full text-[11px]">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
@@ -1233,7 +1239,7 @@ function CostPanel() {
             />
           )}
           {data.tasks.length > 0 && (
-            <div className="max-h-[60vh] overflow-y-auto">
+            <div className="max-h-[60vh] overflow-auto">
               <table className="w-full text-[11px]">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">

@@ -33,6 +33,19 @@ function renderWorkbench(ui: ReactElement) {
   return renderWithProviders(ui, { locale: "zh-CN" });
 }
 
+function expandSummarySection(name: RegExp) {
+  fireEvent.click(screen.getByRole("button", { name }));
+}
+
+function listAfterSummaryLabel(label: string): HTMLElement {
+  const labelElement = screen.getAllByText(label).find((element) => {
+    const next = element.closest("div")?.nextElementSibling;
+    return next instanceof HTMLElement && next.tagName.toLowerCase() === "ul";
+  });
+  expect(labelElement).toBeTruthy();
+  return labelElement?.closest("div")?.nextElementSibling as HTMLElement;
+}
+
 describe("<AgentWorkbenchPanel />", () => {
   test("reports no workbench content for low-level transport events only", () => {
     expect(
@@ -66,11 +79,13 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "机器人" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /文件/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Diff/ })).toBeInTheDocument();
     expect(
-      screen.getByText("当前没有正在运行的机器人过程。"),
+      screen.getByRole("button", { name: "主控 · 等待中" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /文件/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("当前没有活跃中的主控执行过程。"),
     ).toBeInTheDocument();
     expect(screen.queryByText("等待开机")).not.toBeInTheDocument();
   });
@@ -126,6 +141,40 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByText("summary lane")).toBeInTheDocument();
   });
 
+  test("keeps the main workstation status independent from subagent failures", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "main-approval",
+            name: "write_text_file",
+            status: "waiting_approval",
+            input: { path: "docs/notes.md" },
+          }),
+          event({
+            id: "agent-error",
+            name: "read_file",
+            status: "error",
+            parentToolUseId: "dispatch-1",
+            subAgentRole: "reviewer",
+            subagentCodename: "Review-03",
+            input: { path: "missing/replay.json" },
+            output: { error: "Replay artifact was not found" },
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByTitle("主控 · 待确认")).toBeInTheDocument();
+    expect(screen.queryByTitle("主控 · 遇到问题")).not.toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "查看 Review-03 独立进程" }),
+    );
+
+    expect(screen.getByText("Agent 集群 - 独立进程")).toBeInTheDocument();
+    expect(screen.getAllByText("异常").length).toBeGreaterThan(0);
+  });
+
   test("surfaces call_agent_parallel result outputs and failures", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
@@ -170,11 +219,13 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expandSummarySection(/子智能体/);
+
     expect(
       screen.getByText("Pricing lane result is ready."),
     ).toBeInTheDocument();
     expect(screen.getByText("ROUND_CAP_EXCEEDED")).toBeInTheDocument();
-    expect(screen.getByText("1/2 已完成")).toBeInTheDocument();
+    expect(screen.getAllByText("1/2 已完成").length).toBeGreaterThan(0);
     expect(screen.getByText("1 异常")).toBeInTheDocument();
     expect(screen.getByText(/失败 lane: risk lane/)).toBeInTheDocument();
   });
@@ -226,7 +277,8 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /看板/ })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: /看板/ })).toBeInTheDocument();
+    expandSummarySection(/进展/);
     expect(
       screen.getAllByText("Phase 2: 执行与收集证据").length,
     ).toBeGreaterThan(0);
@@ -239,7 +291,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("src/app.tsx")).not.toBeInTheDocument();
     expect(screen.queryByText("stream connection")).not.toBeInTheDocument();
     expect(screen.queryByText("搜索 Agent Workspace")).not.toBeInTheDocument();
-    expect(screen.getByTitle("执行任务中...")).toBeInTheDocument();
+    expect(screen.getByTitle("主控 · 执行任务中...")).toBeInTheDocument();
   });
 
   test("groups screen frames by phase while keeping phase titles visible", () => {
@@ -344,6 +396,102 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.getByText(/src\/context\.ts/)).toBeInTheDocument();
   });
 
+  test("shows verification-required audit as waiting instead of many failed reads", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "read-package",
+            name: "read_file",
+            status: "done",
+            input: { path: "package.json" },
+          }),
+          event({
+            id: "read-context",
+            name: "read_file",
+            status: "done",
+            startedAt: 1200,
+            input: { path: "src/context.tsx" },
+          }),
+          event({
+            id: "verify-required",
+            name: "verification:manual",
+            status: "error",
+            startedAt: 2000,
+            input: { command: "verification required" },
+            output: {
+              summary:
+                "Code changes were produced but no verification step was recorded before final answer.",
+            },
+          }),
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("电脑视图"));
+
+    expect(
+      screen.getByRole("button", {
+        name: /Phase 1: 理解任务与准备上下文\s*2 帧/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: /Phase 2: 整理结果与交付\s*1 帧/,
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("等待验证")).toBeInTheDocument();
+    expect(screen.getByTitle("主控 · 待确认")).toBeInTheDocument();
+    expect(screen.queryByTitle("主控 · 遇到问题")).not.toBeInTheDocument();
+  });
+
+  test("shows recovered tool failures as warnings instead of failing the phase", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        events={[
+          event({
+            id: "read-package",
+            name: "read_file",
+            status: "done",
+            input: { path: "frontend/package.json" },
+          }),
+          event({
+            id: "read-page-failed",
+            name: "read_file",
+            status: "error",
+            startedAt: 1200,
+            input: { path: "frontend/src/app/workspace/page.tsx" },
+            output:
+              "(工具失败) status=failed error=TypeError\n请在下一轮 Thought 中分析失败原因，然后换一种方式重试",
+          }),
+          event({
+            id: "fallback-read",
+            name: "ipython",
+            status: "done",
+            startedAt: 1400,
+            input: { command: "read via pathlib" },
+            output: "frontend/src/app/workspace/page.tsx",
+          }),
+        ]}
+        hasAnswer
+        runSettled
+      />,
+    );
+
+    fireEvent.click(screen.getByText("电脑视图"));
+
+    expect(screen.getByText(/已恢复/)).toBeInTheDocument();
+    expect(
+      screen
+        .getByRole("button", {
+          name: /Phase 1: 理解任务与准备上下文\s*2 帧 · 已恢复/,
+        })
+        .querySelector(".text-amber-500"),
+    ).toBeTruthy();
+    expect(screen.getByTitle("主控 · 已完成")).toBeInTheDocument();
+    expect(screen.queryByTitle("主控 · 遇到问题")).not.toBeInTheDocument();
+  });
+
   test("shows only observed context categories in the summary", () => {
     renderWorkbench(
       <AgentWorkbenchPanel
@@ -426,6 +574,8 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expandSummarySection(/上下文/);
+
     expect(screen.getByText("\u4e0a\u4e0b\u6587")).toBeInTheDocument();
     expect(screen.queryByText("Repo Wiki")).not.toBeInTheDocument();
     expect(screen.queryByText("\u77e5\u8bc6\u5361")).not.toBeInTheDocument();
@@ -445,11 +595,8 @@ describe("<AgentWorkbenchPanel />", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("context.ts")).toBeInTheDocument();
-    expect(screen.getByText("src/context.ts")).toBeInTheDocument();
     expect(screen.getByText("market_report.md")).toBeInTheDocument();
-    expect(screen.getByText("reports/market_report.md")).toBeInTheDocument();
     expect(screen.getByText("analyze.py")).toBeInTheDocument();
-    expect(screen.getByText("scripts/analyze.py")).toBeInTheDocument();
     expect(screen.getByText("MD")).toBeInTheDocument();
     expect(screen.getByText("PY")).toBeInTheDocument();
 
@@ -460,13 +607,13 @@ describe("<AgentWorkbenchPanel />", () => {
     );
     expect(screen.getByText("AI Market Size Report")).toBeInTheDocument();
     expect(
-      screen.getByText("https://example.com/ai-market-size"),
-    ).toBeInTheDocument();
+      screen.queryByText("https://example.com/ai-market-size"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Industry Forecast")).toBeInTheDocument();
     expect(screen.getByText("Eight Sleep raises $50M")).toBeInTheDocument();
     expect(
-      screen.getByText("https://techcrunch.com/eight-sleep-funding"),
-    ).toBeInTheDocument();
+      screen.queryByText("https://techcrunch.com/eight-sleep-funding"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Oura Ring 5 review")).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -474,10 +621,10 @@ describe("<AgentWorkbenchPanel />", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "https://qubittool.com/zh/blog/enterprise-ai-agent-status-2026",
       ),
-    ).toBeInTheDocument();
+    ).not.toBeInTheDocument();
     expect(screen.queryByText("AI market")).not.toBeInTheDocument();
     expect(screen.queryByText("sleep tech")).not.toBeInTheDocument();
   });
@@ -682,10 +829,7 @@ describe("<AgentWorkbenchPanel />", () => {
       "aria-selected",
       "true",
     );
-    expect(screen.getByRole("tab", { name: "Diff" })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    );
+    expect(screen.queryByRole("tab", { name: "Diff" })).not.toBeInTheDocument();
   });
 
   test("maps terminal workspace focus to the terminal tab", () => {
@@ -790,7 +934,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("tab", { name: "\u5b50\u667a\u80fd\u4f53" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByTitle("执行任务中...")).toBeInTheDocument();
+    expect(screen.getByTitle("主控 · 执行任务中...")).toBeInTheDocument();
     expect(screen.getByText("工位")).toBeInTheDocument();
   });
 
@@ -953,20 +1097,18 @@ describe("<AgentWorkbenchPanel />", () => {
 
     const generatedLabel = "\u751f\u6210\u4ea7\u7269";
     const changedLabel = "\u53d8\u66f4\u6587\u4ef6";
-    const generatedList = screen.getByText(generatedLabel).closest("div")
-      ?.nextElementSibling as HTMLElement;
-    const changedList = screen.getByText(changedLabel).closest("div")
-      ?.nextElementSibling as HTMLElement;
+    const generatedList = listAfterSummaryLabel(generatedLabel);
+    const changedList = listAfterSummaryLabel(changedLabel);
 
     expect(
-      within(generatedList).getByText("reports/nas_market_research_plan.md"),
+      within(generatedList).getByText("nas_market_research_plan.md"),
     ).toBeInTheDocument();
     expect(
-      within(generatedList).queryByText("src/app.tsx"),
+      within(generatedList).queryByText("app.tsx"),
     ).not.toBeInTheDocument();
-    expect(within(changedList).getByText("src/app.tsx")).toBeInTheDocument();
+    expect(within(changedList).getByText("app.tsx")).toBeInTheDocument();
     expect(
-      within(changedList).queryByText("reports/nas_market_research_plan.md"),
+      within(changedList).queryByText("nas_market_research_plan.md"),
     ).not.toBeInTheDocument();
     expect(
       within(generatedList).queryByText("--- /dev/null"),
@@ -1009,13 +1151,10 @@ describe("<AgentWorkbenchPanel />", () => {
 
     const generatedLabel = "\u751f\u6210\u4ea7\u7269";
     const changedLabel = "\u53d8\u66f4\u6587\u4ef6";
-    const generatedList = screen.getByText(generatedLabel).closest("div")
-      ?.nextElementSibling as HTMLElement;
+    const generatedList = listAfterSummaryLabel(generatedLabel);
 
     expect(
-      within(generatedList).getByText(
-        "data/workspaces/thread-1/output/final/nas_market_research_plan.md",
-      ),
+      within(generatedList).getByText("nas_market_research_plan.md"),
     ).toBeInTheDocument();
     expect(screen.queryByText(changedLabel)).not.toBeInTheDocument();
   });
@@ -1061,8 +1200,7 @@ describe("<AgentWorkbenchPanel />", () => {
 
     const generatedLabel = "\u751f\u6210\u4ea7\u7269";
     const changedLabel = "\u53d8\u66f4\u6587\u4ef6";
-    const generatedList = screen.getByText(generatedLabel).closest("div")
-      ?.nextElementSibling as HTMLElement;
+    const generatedList = listAfterSummaryLabel(generatedLabel);
 
     expect(within(generatedList).getAllByRole("listitem")).toHaveLength(1);
     expect(screen.queryByText(changedLabel)).not.toBeInTheDocument();
@@ -1109,6 +1247,8 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expandSummarySection(/进展/);
+
     expect(screen.getAllByText(/Phase 2:/).length).toBeGreaterThan(0);
     // Summary page shows phases with StatusGlyph icons instead of text
   });
@@ -1139,6 +1279,8 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
+    expandSummarySection(/进展/);
+
     expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
     expect(screen.queryByText("待开始")).not.toBeInTheDocument();
   });
@@ -1159,6 +1301,7 @@ describe("<AgentWorkbenchPanel />", () => {
       <AgentWorkbenchPanel events={[phaseOne]} />,
     );
 
+    expandSummarySection(/进展/);
     expect(screen.getAllByText(/Phase 1/).length).toBeGreaterThan(0);
 
     rerender(

@@ -412,8 +412,8 @@ export default function MobilePage() {
   );
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 p-0 sm:p-4 dark:from-slate-950 via-slate-900 to-slate-950">
-      <div className="relative flex h-screen w-full max-w-[480px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-slate-950 sm:h-[min(900px,calc(100vh-2rem))] sm:rounded-[2.5rem]">
+    <div className="flex min-h-screen w-full items-center justify-center bg-gradient-to-br from-muted via-background to-muted p-0 sm:p-4 dark:from-background dark:via-card dark:to-background">
+      <div className="relative flex h-screen w-full max-w-[480px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-background sm:h-[min(900px,calc(100vh-2rem))] sm:rounded-[2.5rem]">
         <StatusBar />
 
         <div className="relative flex-1 overflow-hidden">
@@ -502,14 +502,14 @@ import { useMemo } from "react";
 
 function StatusBar() {
   return (
-    <div className="flex h-8 items-center justify-between bg-white px-4 text-xs text-slate-900 dark:bg-slate-950 dark:text-white">
+    <div className="flex h-8 items-center justify-between bg-white px-4 text-xs text-foreground dark:bg-background dark:text-white">
       <span className="font-mono">{fmtTime(Date.now() / 1000)}</span>
       <div className="flex items-center gap-1">
         <WifiIcon className="size-3" />
         <span className="font-mono text-[10px]">5G</span>
         <div className="ml-1 flex items-center">
-          <div className="h-2 w-5 rounded-sm border border-slate-900 dark:border-white">
-            <div className="h-full w-4/5 rounded-sm bg-slate-900 dark:bg-white" />
+          <div className="h-2 w-5 rounded-sm border border-foreground">
+            <div className="h-full w-4/5 rounded-sm bg-foreground dark:bg-white" />
           </div>
         </div>
       </div>
@@ -535,11 +535,11 @@ function TopBar({
   const DeviceIcon = deviceKindIcon(activeDevice.kind);
 
   return (
-    <div className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+    <div className="flex items-center justify-between border-b border-border bg-white px-4 py-3 dark:border-border dark:bg-background">
       <div className="flex items-center gap-3">
         <button
           onClick={onOpenDrawer}
-          className="rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="rounded-lg p-1.5 hover:bg-muted dark:hover:bg-muted-foreground"
           aria-label="打开侧边栏"
         >
           <MenuIcon className="size-5" />
@@ -550,12 +550,12 @@ function TopBar({
           </h1>
           <button
             onClick={onOpenDeviceSwitcher}
-            className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+            className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-muted-foreground dark:hover:text-muted-foreground/50"
           >
             <span
               className={cn(
                 "size-1.5 rounded-full",
-                activeDevice.online ? "bg-green-500" : "bg-slate-300",
+                activeDevice.online ? "bg-green-500" : "bg-muted-foreground/30",
               )}
             />
             <DeviceIcon className="size-3" />
@@ -567,7 +567,7 @@ function TopBar({
 
       <button
         onClick={onOpenDevicePreview}
-        className="relative rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+        className="relative rounded-lg p-1.5 hover:bg-muted dark:hover:bg-muted-foreground"
         title="设备预览"
       >
         <MonitorSmartphoneIcon className="size-5" />
@@ -636,15 +636,15 @@ function Drawer({
         onClick={onClose}
       />
       {/* Drawer panel */}
-      <div className="absolute left-0 top-0 z-50 flex h-full w-[78%] max-w-[360px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-slate-900 animate-in slide-in-from-left duration-200">
+      <div className="absolute left-0 top-0 z-50 flex h-full w-[78%] max-w-[360px] flex-col overflow-hidden bg-white shadow-2xl dark:bg-card animate-in slide-in-from-left duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3 dark:border-border">
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold">{APP_NAME}</h2>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-lg p-1 hover:bg-muted dark:hover:bg-muted-foreground"
             aria-label="关闭"
           >
             <XIcon className="size-4" />
@@ -656,9 +656,9 @@ function Drawer({
             {/* 新建对话 */}
             <button
               onClick={onNewConversation}
-              className="flex w-full items-center gap-3 rounded-xl bg-slate-50 px-3 py-3 text-left transition-colors hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700"
+              className="flex w-full items-center gap-3 rounded-xl bg-muted/50 px-3 py-3 text-left transition-colors hover:bg-muted dark:bg-muted dark:hover:bg-muted"
             >
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-foreground text-white dark:bg-white dark:text-foreground">
                 <MessageSquarePlusIcon className="size-3.5" />
               </div>
               <span className="flex-1 text-sm font-medium">新建对话</span>
@@ -675,7 +675,7 @@ function Drawer({
             {/* 最近对话 */}
             {recentList.length > 0 && (
               <>
-                <div className="px-2 pb-1 pt-4 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                <div className="px-2 pb-1 pt-4 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
                   最近对话
                 </div>
                 {recentList.map((c) => (
@@ -690,13 +690,13 @@ function Drawer({
                       "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors",
                       c.isActive
                         ? "bg-blue-50 dark:bg-blue-500/10"
-                        : "hover:bg-slate-50 dark:hover:bg-slate-800",
+                        : "hover:bg-muted/50 dark:hover:bg-muted-foreground",
                     )}
                   >
                     <MessageCircleIcon
                       className={cn(
                         "size-3.5 shrink-0",
-                        c.isActive ? "text-blue-500" : "text-slate-400",
+                        c.isActive ? "text-blue-500" : "text-muted-foreground/70",
                       )}
                     />
                     <span
@@ -704,7 +704,7 @@ function Drawer({
                         "flex-1 truncate text-[13px]",
                         c.isActive
                           ? "font-medium text-blue-600 dark:text-blue-400"
-                          : "text-slate-700 dark:text-slate-300",
+                          : "text-muted-foreground dark:text-muted-foreground",
                       )}
                     >
                       {c.title}
@@ -715,10 +715,10 @@ function Drawer({
                         className="opacity-0 transition-opacity hover:text-red-500 group-hover:opacity-100"
                         title="删除对话"
                       >
-                        <Trash2Icon className="size-3 text-slate-400" />
+                        <Trash2Icon className="size-3 text-muted-foreground/70" />
                       </button>
                     )}
-                    <ChevronRightIcon className="size-3 shrink-0 text-slate-300" />
+                    <ChevronRightIcon className="size-3 shrink-0 text-muted-foreground/50" />
                   </button>
                 ))}
               </>
@@ -742,11 +742,11 @@ function DrawerEntry({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted/50 dark:hover:bg-muted-foreground"
     >
-      <Icon className="size-4 text-slate-500 dark:text-slate-400" />
+      <Icon className="size-4 text-muted-foreground dark:text-muted-foreground/70" />
       <span className="flex-1 text-sm">{label}</span>
-      <ChevronRightIcon className="size-3.5 text-slate-300" />
+      <ChevronRightIcon className="size-3.5 text-muted-foreground/50" />
     </button>
   );
 }
@@ -773,8 +773,8 @@ function DeviceSwitcher({
   return (
     <>
       <div className="absolute inset-0 z-40 bg-black/20" onClick={onClose} />
-      <div className="absolute left-3 right-3 top-[72px] z-50 overflow-hidden rounded-xl border border-slate-100 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900">
-        <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-slate-400">
+      <div className="absolute left-3 right-3 top-[72px] z-50 overflow-hidden rounded-xl border border-border bg-white shadow-xl dark:border-border dark:bg-card">
+        <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
           切换设备
         </div>
         <div className="max-h-56 overflow-y-auto">
@@ -803,7 +803,7 @@ function DeviceSwitcher({
             onClick={() => onSelect(PC_DEVICE)}
           />
           {devices.length > 0 && (
-            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-slate-300">
+            <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-muted-foreground/50">
               其他设备
             </div>
           )}
@@ -854,7 +854,7 @@ function DeviceItem({
         "flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors",
         active
           ? "bg-blue-50 dark:bg-blue-500/10"
-          : "hover:bg-slate-50 dark:hover:bg-slate-800",
+          : "hover:bg-muted/50 dark:hover:bg-muted-foreground",
       )}
     >
       <div
@@ -862,7 +862,7 @@ function DeviceItem({
           "flex size-8 shrink-0 items-center justify-center rounded-lg",
           active
             ? "bg-blue-500 text-white"
-            : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+            : "bg-muted text-muted-foreground dark:bg-muted dark:text-muted-foreground",
         )}
       >
         <Icon className="size-3.5" />
@@ -872,14 +872,14 @@ function DeviceItem({
           {label}
         </div>
         {sub && (
-          <div className="truncate text-[10px] text-slate-400">{sub}</div>
+          <div className="truncate text-[10px] text-muted-foreground/70">{sub}</div>
         )}
       </div>
       <div className="flex items-center gap-1.5">
         <span
           className={cn(
             "size-1.5 rounded-full",
-            online ? "bg-green-500" : "bg-slate-300",
+            online ? "bg-green-500" : "bg-muted-foreground/30",
           )}
         />
         {active && <CheckCircle2Icon className="size-3.5 text-blue-500" />}
@@ -911,15 +911,15 @@ function DevicePreviewModal({
         className="absolute inset-0 z-40 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="absolute bottom-0 left-0 right-0 z-50 max-h-[60%] overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-slate-900 animate-in slide-in-from-bottom duration-200">
+      <div className="absolute bottom-0 left-0 right-0 z-50 max-h-[60%] overflow-hidden rounded-t-3xl bg-white shadow-2xl dark:bg-card animate-in slide-in-from-bottom duration-200">
         <div className="flex justify-center pt-2 pb-1">
-          <div className="h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />
+          <div className="h-1 w-10 rounded-full bg-muted-foreground/30 dark:bg-muted" />
         </div>
         <div className="flex items-center justify-between px-4 pb-2">
           <h3 className="text-sm font-semibold">选择设备</h3>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-lg p-1 hover:bg-muted dark:hover:bg-muted-foreground"
           >
             <XIcon className="size-4" />
           </button>
@@ -993,17 +993,17 @@ function PreviewCard({
       className={cn(
         "group flex w-full items-center gap-2.5 overflow-hidden rounded-xl border p-2.5 text-left transition-colors",
         disabled
-          ? "border-dashed border-slate-200 bg-slate-50 opacity-60 dark:border-slate-800 dark:bg-slate-950"
-          : "border-slate-200 bg-white hover:border-blue-500 hover:bg-blue-50/50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-blue-500/10",
+          ? "border-dashed border-border bg-muted/50 opacity-60 dark:border-border dark:bg-background"
+          : "border-border bg-white hover:border-blue-500 hover:bg-blue-50/50 dark:border-border dark:bg-muted dark:hover:bg-blue-500/10",
       )}
     >
-      <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+      <div className="relative flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted dark:bg-muted">
         <Icon className="size-4" />
         {online !== undefined && (
           <span
             className={cn(
-              "absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white dark:border-slate-800",
-              online ? "bg-green-500" : "bg-slate-300",
+              "absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-white dark:border-border",
+              online ? "bg-green-500" : "bg-muted-foreground/30",
             )}
           />
         )}
@@ -1012,14 +1012,14 @@ function PreviewCard({
         <div className="truncate text-[13px] font-medium leading-tight">
           {label}
         </div>
-        <div className="truncate text-[10px] text-slate-400">{sub}</div>
+        <div className="truncate text-[10px] text-muted-foreground/70">{sub}</div>
       </div>
       <div
         className={cn(
           "rounded-full px-2.5 py-0.5 text-[10px] font-medium transition-colors",
           disabled
-            ? "bg-slate-100 text-slate-400 dark:bg-slate-700"
-            : "bg-slate-900 text-white group-hover:bg-blue-500 dark:bg-white dark:text-slate-900",
+            ? "bg-muted text-muted-foreground/70 dark:bg-muted"
+            : "bg-foreground text-white group-hover:bg-blue-500 dark:bg-white dark:text-foreground",
         )}
       >
         {disabled ? "未连接" : "进入"}
@@ -1043,7 +1043,7 @@ function BottomTabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   ];
 
   return (
-    <div className="border-t border-slate-100 bg-white px-2 py-2 dark:border-slate-800 dark:bg-slate-950">
+    <div className="border-t border-border bg-white px-2 py-2 dark:border-border dark:bg-background">
       <div className="flex items-center justify-around">
         {tabs.map(({ key, label, icon: Icon }) => {
           const active = tab === key;
@@ -1054,14 +1054,14 @@ function BottomTabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
               className={cn(
                 "flex flex-1 flex-col items-center gap-1 rounded-lg py-1 transition-colors",
                 active
-                  ? "text-slate-900 dark:text-white"
-                  : "text-slate-400 dark:text-slate-500",
+                  ? "text-foreground dark:text-white"
+                  : "text-muted-foreground/70 dark:text-muted-foreground",
               )}
             >
               <Icon
                 className={cn(
                   "size-5",
-                  active && "fill-slate-900 dark:fill-white",
+                  active && "fill-foreground",
                 )}
               />
               <span className="text-[11px] font-medium">{label}</span>
@@ -1069,7 +1069,7 @@ function BottomTabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
           );
         })}
       </div>
-      <div className="mx-auto mt-1 h-1 w-32 rounded-full bg-slate-300 dark:bg-slate-700" />
+      <div className="mx-auto mt-1 h-1 w-32 rounded-full bg-muted-foreground/30 dark:bg-muted" />
     </div>
   );
 }
@@ -1141,7 +1141,7 @@ function ChatTab({
           {showWelcome ? (
             <div className="flex flex-col gap-6 px-4 py-8">
               <div className="flex justify-center">
-                <div className="size-20 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                <div className="size-20 overflow-hidden rounded-full bg-muted dark:bg-muted">
                   <img
                     src="/images/octopus.svg"
                     alt="avatar"
@@ -1161,7 +1161,7 @@ function ChatTab({
                     <button
                       key={i}
                       onClick={() => send(task.label)}
-                      className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3.5 text-left transition-colors hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800"
+                      className="flex w-full items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3.5 text-left transition-colors hover:bg-muted/50 dark:border-border dark:bg-card dark:hover:bg-muted-foreground"
                     >
                       <Icon className="size-5 shrink-0" />
                       <span className="text-sm">{task.label}</span>
@@ -1176,7 +1176,7 @@ function ChatTab({
                 <MessageBubble key={msg.id} message={msg} />
               ))}
               {submitting && (
-                <div className="flex items-center gap-2 px-2 text-sm text-slate-500">
+                <div className="flex items-center gap-2 px-2 text-sm text-muted-foreground">
                   <LoaderIcon className="size-4 animate-spin" />
                   Octopus 正在思考...
                 </div>
@@ -1185,8 +1185,8 @@ function ChatTab({
           )}
         </ScrollArea>
 
-        <div className="border-t border-slate-100 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-950">
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 dark:border-slate-700 dark:bg-slate-900">
+        <div className="border-t border-border bg-white px-3 py-3 dark:border-border dark:bg-background">
+          <div className="flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 dark:border-border dark:bg-card">
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -1199,7 +1199,7 @@ function ChatTab({
               disabled={submitting}
               className="flex-1 border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
-            <button className="shrink-0 text-slate-400 hover:text-slate-600">
+            <button className="shrink-0 text-muted-foreground/70 hover:text-muted-foreground">
               <MicIcon className="size-5" />
             </button>
           </div>
@@ -1217,12 +1217,12 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         className={cn(
           "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
           isUser
-            ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
-            : "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white",
+            ? "bg-foreground text-white dark:bg-white dark:text-foreground"
+            : "bg-muted text-foreground dark:bg-muted dark:text-white",
         )}
       >
         <div className="whitespace-pre-wrap break-words">{message.content}</div>
-        <div className="mt-1 text-[10px] text-slate-400">
+        <div className="mt-1 text-[10px] text-muted-foreground/70">
           {fmtTime(message.timestamp)}
         </div>
       </div>
@@ -1266,14 +1266,14 @@ function TasksTab({
               <h3 className="text-lg font-medium">开启你的第一个自动任务吧</h3>
               <Button
                 size="lg"
-                className="h-12 rounded-full bg-slate-900 px-6 text-sm font-medium text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                className="h-12 rounded-full bg-foreground px-6 text-sm font-medium text-white hover:bg-muted-foreground dark:bg-white dark:text-foreground"
               >
                 <PlusIcon className="size-4" />
                 新建自动任务
               </Button>
 
               <div className="mt-12 w-full space-y-3">
-                <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                <h4 className="text-sm font-medium text-muted-foreground dark:text-muted-foreground">
                   推荐任务
                 </h4>
                 {SUGGESTED_SKILLS.map((task, i) => {
@@ -1281,11 +1281,11 @@ function TasksTab({
                   return (
                     <div
                       key={i}
-                      className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3.5 dark:bg-slate-900"
+                      className="flex items-center gap-3 rounded-2xl bg-muted/50 px-4 py-3.5 dark:bg-card"
                     >
-                      <Icon className="size-5 shrink-0 text-slate-600 dark:text-slate-400" />
+                      <Icon className="size-5 shrink-0 text-muted-foreground dark:text-muted-foreground/70" />
                       <span className="flex-1 text-sm">{task.label}</span>
-                      <span className="text-xs text-slate-400">{task.tag}</span>
+                      <span className="text-xs text-muted-foreground/70">{task.tag}</span>
                     </div>
                   );
                 })}
@@ -1296,7 +1296,7 @@ function TasksTab({
               {tasks.map((task) => (
                 <div
                   key={task.task_id}
-                  className="rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+                  className="rounded-2xl border border-border bg-white p-4 dark:border-border dark:bg-card"
                 >
                   <div className="flex items-start gap-3">
                     {task.success ? (
@@ -1306,7 +1306,7 @@ function TasksTab({
                     )}
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium">{task.task}</div>
-                      <div className="mt-1 text-[11px] text-slate-500">
+                      <div className="mt-1 text-[11px] text-muted-foreground">
                         {fmtTime(task.timestamp)} · {task.steps} 步 ·{" "}
                         {task.duration_ms}ms
                       </div>
@@ -1371,10 +1371,10 @@ function SkillsTab({
         <div className="space-y-2 px-4 py-4">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <LoaderIcon className="size-6 animate-spin text-slate-400" />
+              <LoaderIcon className="size-6 animate-spin text-muted-foreground/70" />
             </div>
           ) : skills.length === 0 ? (
-            <div className="py-12 text-center text-sm text-slate-400">
+            <div className="py-12 text-center text-sm text-muted-foreground/70">
               暂无可用技能
             </div>
           ) : (
@@ -1383,22 +1383,22 @@ function SkillsTab({
               return (
                 <div
                   key={skill.name}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3.5 dark:border-slate-800 dark:bg-slate-900"
+                  className="flex items-center gap-3 rounded-2xl border border-border bg-white p-3.5 dark:border-border dark:bg-card"
                 >
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
-                    <Icon className="size-5 text-slate-700 dark:text-slate-300" />
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-muted dark:bg-muted">
+                    <Icon className="size-5 text-muted-foreground dark:text-muted-foreground" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">
                       {skill.name}
                     </div>
                     {skill.description && (
-                      <div className="truncate text-[11px] text-slate-500">
+                      <div className="truncate text-[11px] text-muted-foreground">
                         {skill.description}
                       </div>
                     )}
                   </div>
-                  <ChevronRightIcon className="size-4 shrink-0 text-slate-300" />
+                  <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground/50" />
                 </div>
               );
             })
@@ -1431,11 +1431,11 @@ function MeTab({
 }) {
   return (
     <>
-      <div className="flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950">
+      <div className="flex items-center justify-between border-b border-border bg-white px-4 py-3 dark:border-border dark:bg-background">
         <div className="flex items-center gap-3">
           <button
             onClick={onOpenDrawer}
-            className="rounded-lg p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="rounded-lg p-1.5 hover:bg-muted dark:hover:bg-muted-foreground"
           >
             <MenuIcon className="size-5" />
           </button>
@@ -1446,7 +1446,7 @@ function MeTab({
       <ScrollArea className="h-[calc(100%-3.5rem-3.5rem-2.5rem)]">
         <div className="space-y-3 px-4 py-4">
           <div className="flex items-center gap-3 px-2 py-2">
-            <div className="size-10 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+            <div className="size-10 overflow-hidden rounded-full bg-muted dark:bg-muted">
               <div className="flex size-full items-center justify-center text-sm font-medium">
                 登
               </div>
@@ -1454,9 +1454,9 @@ function MeTab({
             <div className="text-sm font-medium">登华</div>
           </div>
 
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="rounded-2xl border border-border bg-white p-4 dark:border-border dark:bg-card">
             <div className="flex items-center gap-3">
-              <div className="size-16 overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
+              <div className="size-16 overflow-hidden rounded-xl bg-muted dark:bg-muted">
                 <img
                   src="/images/octopus.svg"
                   alt="logo"
@@ -1465,7 +1465,7 @@ function MeTab({
               </div>
               <div className="flex-1">
                 <div className="text-base font-bold">{APP_NAME}</div>
-                <div className="text-xs text-slate-500">
+                <div className="text-xs text-muted-foreground">
                   为你24小时在线，有问题随时来找我吧。
                 </div>
               </div>
@@ -1479,15 +1479,15 @@ function MeTab({
                 rightText={`已连接 ${totalDevices} 台设备`}
                 onClick={onOpenDevicePreview}
               />
-              <div className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-xs dark:bg-slate-800">
+              <div className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2.5 text-xs dark:bg-muted">
                 <span className="size-1.5 rounded-full bg-green-500" />
-                <span className="text-slate-500">当前:</span>
+                <span className="text-muted-foreground">当前:</span>
                 <span className="font-medium">{activeDevice.name}</span>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-100 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="rounded-2xl border border-border bg-white p-4 dark:border-border dark:bg-card">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <MonitorIcon className="size-4" />
@@ -1496,7 +1496,7 @@ function MeTab({
               <div
                 className={cn(
                   "text-[11px]",
-                  pcScreenStats?.running ? "text-green-500" : "text-slate-400",
+                  pcScreenStats?.running ? "text-green-500" : "text-muted-foreground/70",
                 )}
               >
                 {pcScreenStats?.running ? "运行中" : "未启动"}
@@ -1528,13 +1528,13 @@ function MeTab({
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-slate-100 bg-white dark:border-slate-800 dark:bg-slate-900">
+          <div className="rounded-2xl border border-border bg-white dark:border-border dark:bg-card">
             <MeRow
               icon={HelpCircleIcon}
               label="帮助与反馈"
               onClick={() => {}}
             />
-            <hr className="mx-4 border-slate-100 dark:border-slate-800" />
+            <hr className="mx-4 border-border dark:border-border" />
             <MeRow
               icon={InfoIcon}
               label="关于"
@@ -1543,7 +1543,7 @@ function MeTab({
             />
           </div>
 
-          <button className="w-full rounded-2xl bg-white py-3.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:bg-slate-900 dark:hover:bg-red-500/10">
+          <button className="w-full rounded-2xl bg-white py-3.5 text-sm font-medium text-red-500 hover:bg-red-50 dark:bg-card dark:hover:bg-red-500/10">
             退出登录
           </button>
         </div>
@@ -1568,10 +1568,10 @@ function MeRow({
       onClick={onClick}
       className="flex w-full items-center gap-3 px-1 py-2 text-left"
     >
-      <Icon className="size-4 shrink-0 text-slate-600 dark:text-slate-400" />
+      <Icon className="size-4 shrink-0 text-muted-foreground dark:text-muted-foreground/70" />
       <span className="flex-1 text-sm">{label}</span>
-      {rightText && <span className="text-xs text-slate-400">{rightText}</span>}
-      <ChevronRightIcon className="size-4 text-slate-300" />
+      {rightText && <span className="text-xs text-muted-foreground/70">{rightText}</span>}
+      <ChevronRightIcon className="size-4 text-muted-foreground/50" />
     </button>
   );
 }

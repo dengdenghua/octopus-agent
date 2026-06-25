@@ -21,7 +21,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useAgents, useLocalCliAgents, useMobileDevices } from "@/core/agents";
+import {
+  dedupeAgentsByName,
+  useAgents,
+  useLocalCliAgents,
+  useMobileDevices,
+} from "@/core/agents";
 import { MobileJoinSection } from "./mobile-join-section";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import type { Agent } from "@/core/agents/types";
@@ -78,7 +83,7 @@ export function InviteDialog({
   // Detected local CLIs + connected phones sit alongside built-in agents in
   // the picker, so 拉群 can pull them in like any other member.
   const agents = useMemo(
-    () => [...mobileAgents, ...cliAgents, ...builtinAgents],
+    () => dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
     [mobileAgents, cliAgents, builtinAgents],
   );
   const [copied, setCopied] = useState(false);

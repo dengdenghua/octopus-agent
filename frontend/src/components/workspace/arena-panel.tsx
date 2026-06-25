@@ -602,7 +602,7 @@ function LeaderboardView() {
                       className={cn(
                         "size-4",
                         entry.rank === 1 && "text-yellow-500",
-                        entry.rank === 2 && "text-gray-400",
+                        entry.rank === 2 && "text-muted-foreground",
                         entry.rank === 3 && "text-amber-700",
                       )}
                     />

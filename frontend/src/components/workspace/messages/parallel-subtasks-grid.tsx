@@ -9,6 +9,12 @@ import {
 } from "@/core/tasks/types";
 import { cn } from "@/lib/utils";
 import {
+  agentRunHue,
+  agentRunPanelClass,
+  agentRunStatusLightPulseClass,
+  type AgentRunState,
+} from "../agent-run-status";
+import {
   CheckCircleIcon,
   Loader2Icon,
   PauseCircleIcon,
@@ -19,18 +25,28 @@ import {
 
 function getStatusIcon(status: SubtaskStatus) {
   if (status === "completed")
-    return <CheckCircleIcon className="size-3 text-green-500" />;
+    return <CheckCircleIcon className="size-3 text-emerald-500" />;
   if (status === "failed")
-    return <XCircleIcon className="size-3 text-red-500" />;
+    return <XCircleIcon className="size-3 text-destructive" />;
   if (status === "cancelled")
-    return <BanIcon className="size-3 text-yellow-500" />;
+    return <BanIcon className="size-3 text-amber-500" />;
   if (status === "timed_out")
-    return <ClockIcon className="size-3 text-orange-500" />;
+    return <ClockIcon className="size-3 text-destructive" />;
   if (status === "pending")
-    return <PauseCircleIcon className="size-3 text-muted-foreground" />;
+    return <PauseCircleIcon className="size-3 text-amber-500" />;
   if (isSubtaskActive(status))
-    return <Loader2Icon className="size-3 animate-spin text-primary" />;
+    return (
+      <Loader2Icon className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+    );
   return null;
+}
+
+function subtaskRunState(status: SubtaskStatus): AgentRunState {
+  if (status === "completed") return "done";
+  if (status === "failed" || status === "timed_out") return "error";
+  if (status === "pending" || status === "cancelled") return "waiting";
+  if (isSubtaskActive(status)) return "running";
+  return "pending";
 }
 
 function MiniSubtaskRow({
@@ -52,8 +68,8 @@ function MiniSubtaskRow({
   const rawLabel = t.subagents[task.status as keyof typeof t.subagents];
   const statusLabel = typeof rawLabel === "string" ? rawLabel : task.status;
   const progress = subtaskProgress(task);
-  const progressHue =
-    task.status === "failed" || task.status === "timed_out" ? 8 : 118;
+  const runState = subtaskRunState(task.status);
+  const progressHue = agentRunHue(runState);
 
   const handleClick = () => {
     if (swarm) {
@@ -70,8 +86,8 @@ function MiniSubtaskRow({
         onClick={handleClick}
         className={cn(
           "flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-all",
-          isActive
-            ? "border-emerald-500/30 bg-emerald-500/5"
+          runState === "running"
+            ? agentRunPanelClass("running")
             : "border-border bg-muted/30",
           onClick && "cursor-pointer hover:bg-muted/50",
         )}
@@ -108,7 +124,7 @@ function MiniSubtaskRow({
             hue={progressHue}
             cols={16}
             rows={3}
-            className={cn(isActive && "animate-pulse")}
+            className={cn(agentRunStatusLightPulseClass(runState))}
           />
         </div>
       </button>
@@ -126,7 +142,10 @@ function SubtaskHoverPreview({
 }) {
   const { t } = useI18n();
   const body =
-    task.prompt || task.description || task.result || t.message.noTaskDescription;
+    task.prompt ||
+    task.description ||
+    task.result ||
+    t.message.noTaskDescription;
   return (
     <div
       className="pointer-events-none absolute left-8 top-[calc(100%+0.5rem)] z-40 hidden w-[min(42rem,calc(100vw-5rem))] rounded-xl border border-border/60 bg-background/95 p-4 text-left shadow-2xl shadow-black/15 backdrop-blur-xl group-hover/subtask-row:block"
@@ -153,9 +172,7 @@ function SubtaskHoverPreview({
           <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
             <span>{statusLabel}</span>
             <span>·</span>
-            <span>
-              {t.message.processRecords(task.messages?.length ?? 0)}
-            </span>
+            <span>{t.message.processRecords(task.messages?.length ?? 0)}</span>
             {task.tokenUsed !== undefined && (
               <>
                 <span>·</span>

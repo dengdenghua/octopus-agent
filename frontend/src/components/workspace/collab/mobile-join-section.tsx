@@ -23,9 +23,12 @@ export function MobileJoinSection() {
     queryKey: ["tentacle-join-info"],
     queryFn: async ({ signal }): Promise<JoinInfo | null> => {
       try {
-        const res = await fetch(`${getBackendBaseURL()}/api/tentacle/join-info`, {
-          signal,
-        });
+        const res = await fetch(
+          `${getBackendBaseURL()}/api/tentacle/join-info`,
+          {
+            signal,
+          },
+        );
         if (!res.ok) return null;
         return (await res.json()) as JoinInfo;
       } catch {
@@ -72,8 +75,17 @@ export function MobileJoinSection() {
               <code className="min-w-0 flex-1 truncate rounded-md border border-border/60 bg-background px-2 py-1.5 text-[11px]">
                 {data.connect_string}
               </code>
-              <Button onClick={handleCopy} variant="outline" size="icon" className="shrink-0">
-                {copied ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+              <Button
+                onClick={handleCopy}
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+              >
+                {copied ? (
+                  <CheckIcon className="size-4" />
+                ) : (
+                  <CopyIcon className="size-4" />
+                )}
               </Button>
             </div>
           </div>
@@ -81,7 +93,8 @@ export function MobileJoinSection() {
             或手动填:地址 <code className="text-foreground">{data.ws_url}</code>
             {data.token ? (
               <>
-                {" "}· 口令 <code className="text-foreground">{data.token}</code>
+                {" "}
+                · 口令 <code className="text-foreground">{data.token}</code>
               </>
             ) : null}
           </div>

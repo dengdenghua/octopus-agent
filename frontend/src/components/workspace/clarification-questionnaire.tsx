@@ -245,7 +245,8 @@ export function ClarificationQuestionnaire({
   const current = payload.questions[step] ?? payload.questions[0];
   const selected = current ? answers[current.id] : undefined;
   const isLast = step >= payload.questions.length - 1;
-  const submitLabel = payload.submitLabel ?? t.clarificationQuestionnaire.continueLabel;
+  const submitLabel =
+    payload.submitLabel ?? t.clarificationQuestionnaire.continueLabel;
 
   useEffect(() => {
     if (!active) return;

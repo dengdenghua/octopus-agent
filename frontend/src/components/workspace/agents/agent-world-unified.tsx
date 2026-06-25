@@ -70,13 +70,47 @@ import {
   type AgentCategoryFilter,
 } from "./agent-world-data";
 
-function normalizeAgentDisplayKey(agent: AgentWorldAgent): string {
-  return (agent.display_name || agent.name || agent.id)
+const ECHO_CHARACTER_DISPLAY_NAMES = new Set([
+  "eve",
+  "kane",
+  "leon",
+  "luna",
+  "mira voss",
+  "noah",
+  "raven",
+  "shion",
+  "zero",
+]);
+
+function normalizeAgentNameKey(value: string): string {
+  return value
     .toLowerCase()
     .replace(/[_-]+/g, " ")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+export function agentWorldIdentityKey(agent: AgentWorldAgent): string {
+  const profile = agent.character_profile as
+    | { name?: unknown; codename?: unknown }
+    | null
+    | undefined;
+  const profileName =
+    typeof profile?.name === "string" ? normalizeAgentNameKey(profile.name) : "";
+  if (profileName) return profileName;
+
+  const displayName = agent.display_name || agent.name || agent.id;
+  const slashBaseName = displayName.split(/\s*\/\s*/)[0] ?? "";
+  const slashBaseKey = normalizeAgentNameKey(slashBaseName);
+  if (
+    displayName.includes("/") &&
+    ECHO_CHARACTER_DISPLAY_NAMES.has(slashBaseKey)
+  ) {
+    return slashBaseKey;
+  }
+
+  return normalizeAgentNameKey(displayName);
 }
 
 function scoreAgentForDisplay(agent: AgentWorldAgent): number {
@@ -91,10 +125,12 @@ function scoreAgentForDisplay(agent: AgentWorldAgent): number {
   return score;
 }
 
-function dedupeAgentWorldAgents(agents: AgentWorldAgent[]): AgentWorldAgent[] {
+export function dedupeAgentWorldAgents(
+  agents: AgentWorldAgent[],
+): AgentWorldAgent[] {
   const byName = new Map<string, AgentWorldAgent>();
   for (const agent of agents) {
-    const key = normalizeAgentDisplayKey(agent);
+    const key = agentWorldIdentityKey(agent);
     if (!key) continue;
     const current = byName.get(key);
     if (
@@ -487,13 +523,12 @@ function AgentsTab({
 // Main Unified Component
 // ---------------------------------------------------------------------------
 
-// 角色库(本地智能体库)暂时隐藏 —— 资产正迁往企业版 registry,本地仅保留 AOI 等
-// 少量核心角色;企业版 tab 是新的浏览/安装入口。置 true 即可恢复角色库入口。
+// Hub keeps the local, ready-to-run agents on this page. Enterprise assets can
+// be re-enabled as a separate tab when that registry is connected.
 const SHOW_LOCAL_AGENT_LIBRARY = true;
-// 企业版资产 tab 暂不在消费侧展示;现在 agents 页只展示本地角色库。
-// 置 true 可恢复企业版 tab。
+// Enterprise assets tab is hidden on the consumer surface for now.
 const SHOW_ENTERPRISE_ASSETS = false;
-// 角色库只展示本地已加入的角色；市场模板保持在安装入口里，不混入本地列表。
+// Hub only shows locally joined agents; marketplace templates stay in install flows.
 const LOCAL_LIBRARY_INSTALLED_ONLY = true;
 const HIDDEN_LOCAL_AGENT_IDS = new Set(["admin", "desktop_operator"]);
 
@@ -505,10 +540,7 @@ export function AgentWorldUnified() {
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState(() => {
-    // 仅角色库可见,默认且唯一入口。
-    return "agents";
-  });
+  const [activeTab, setActiveTab] = useState(() => "agents");
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
   const [importOpen, setImportOpen] = useState(false);
@@ -546,7 +578,7 @@ export function AgentWorldUnified() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
-    // 仅角色库可见,任何 tab 参数都落回角色库。
+    // Hub is the only visible tab for now; legacy tab params land here.
     if (tab === "agents" || tab === "enterprise") {
       setActiveTab("agents");
     }
@@ -557,9 +589,10 @@ export function AgentWorldUnified() {
 
   // Filter agents
   const dedupedAgents = useMemo(() => {
-    const deduped = dedupeAgentWorldAgents(agents).filter(
+    const visibleAgents = agents.filter(
       (agent) => !HIDDEN_LOCAL_AGENT_IDS.has(agent.id),
     );
+    const deduped = dedupeAgentWorldAgents(visibleAgents);
     return LOCAL_LIBRARY_INSTALLED_ONLY
       ? deduped.filter((a) => a.is_installed)
       : deduped;

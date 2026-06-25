@@ -28,6 +28,7 @@ interface WorkDirSelectorProps {
   onWorkDirChange?: (dir: string) => void;
   className?: string;
   variant?: "default" | "muted";
+  chromeless?: boolean;
 }
 
 type FsTreeEntry = components["schemas"]["FsTreeEntry"];
@@ -46,7 +47,7 @@ async function openNativeFolderPicker(
   if (api?.dialog?.open) {
     try {
       const result = await api.dialog.open({
-        properties: ["openDirectory"],
+        properties: ["openDirectory", "createDirectory"],
         defaultPath: currentDir,
       });
       if (!result.canceled && result.filePaths.length > 0) {
@@ -58,6 +59,22 @@ async function openNativeFolderPicker(
   }
 
   return null;
+}
+
+async function openBrowserFolderPicker(): Promise<string | null> {
+  type DirectoryPicker = () => Promise<{ name?: string }>;
+  const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker })
+    .showDirectoryPicker;
+  if (typeof picker !== "function") return null;
+  try {
+    const handle = await picker();
+    return typeof handle?.name === "string" && handle.name.trim()
+      ? handle.name.trim()
+      : null;
+  } catch (error) {
+    swallow(error);
+    return null;
+  }
 }
 
 function readRecentWorkdirs(): string[] {
@@ -154,11 +171,25 @@ function entryDisplayName(entry: FsTreeEntry): string {
   return fromPath || entry.name || entry.path;
 }
 
+function matchingRecentWorkDirByName(
+  folderName: string,
+  recentWorkdirs: string[],
+): string | null {
+  const normalizedName = normalizePathKey(folderName);
+  if (!normalizedName) return null;
+  return (
+    recentWorkdirs.find(
+      (dir) => normalizePathKey(basename(dir)) === normalizedName,
+    ) ?? null
+  );
+}
+
 export function WorkDirSelector({
   workDir,
   onWorkDirChange,
   className,
   variant = "default",
+  chromeless = false,
 }: WorkDirSelectorProps) {
   const isMutedVariant = variant === "muted";
   const { t } = useI18n();
@@ -196,6 +227,7 @@ export function WorkDirSelector({
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const manualInputRef = useRef<HTMLInputElement>(null);
+  const pendingBrowserPickedNameRef = useRef("");
   const folderName = useMemo(
     () => (workDir ? basename(workDir) : ""),
     [workDir],
@@ -204,18 +236,27 @@ export function WorkDirSelector({
   const emptyTriggerLabel = isMutedVariant
     ? t.codeMode.personalSpace
     : t.codeMode.chooseWorkspaceFolder;
+  const triggerLabel =
+    !isEmpty && isMutedVariant
+      ? folderName
+      : isEmpty
+        ? emptyTriggerLabel
+        : folderName;
   const folderPickerLabel = isMutedVariant
-    ? t.codeMode.selectFolder
+    ? t.codeMode.chooseWorkspaceFolder
     : t.codeMode.openFolderCta;
   const triggerTitle = isEmpty
     ? emptyTriggerLabel
     : `${t.codeMode.chooseWorkspaceFolder}: ${workDir}`;
   const menuToggleTitle = isMutedVariant
-    ? t.codeMode.selectFolder
+    ? t.codeMode.chooseWorkspaceFolder
     : t.codeMode.recentWorkspaces;
   const emptyTriggerClass = isMutedVariant
-    ? "bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-    : "bg-transparent text-amber-700 hover:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15";
+    ? "text-muted-foreground"
+    : "text-muted-foreground";
+  const activeTriggerClass = isMutedVariant
+    ? "text-foreground"
+    : "text-foreground";
 
   const applyWorkDir = useCallback(
     (dir: string) => {
@@ -316,7 +357,9 @@ export function WorkDirSelector({
 
   useEffect(() => {
     if (!showMenu) return;
-    setManualPath(workDir);
+    const pendingName = pendingBrowserPickedNameRef.current;
+    pendingBrowserPickedNameRef.current = "";
+    setManualPath(pendingName || workDir);
     if (!workDir && !isMutedVariant) setBrowserOpen(true);
   }, [isMutedVariant, showMenu, workDir]);
 
@@ -338,14 +381,21 @@ export function WorkDirSelector({
   const handlePrimaryAction = useCallback(async () => {
     if (isPicking) return;
     if (!window.octopus?.dialog?.open) {
-      // No Electron bridge (plain browser) — surface the manual-input path
-      // explicitly so the click does SOMETHING, even in the muted/compact
-      // variant. Without this, muted callers (composer "选择工作区") looked
-      // broken because they silently swallowed the click.
+      const selectedName = await openBrowserFolderPicker();
+      const matchedPath = selectedName
+        ? matchingRecentWorkDirByName(selectedName, recentWorkdirs)
+        : null;
+      if (matchedPath) {
+        applyWorkDir(matchedPath);
+        return;
+      }
+      if (selectedName) pendingBrowserPickedNameRef.current = selectedName;
       setShowMenu(true);
       setBrowserOpen(true);
       setNoBridgeHint(true);
-      requestAnimationFrame(() => manualInputRef.current?.focus());
+      requestAnimationFrame(() => {
+        manualInputRef.current?.focus();
+      });
       return;
     }
     setIsPicking(true);
@@ -356,11 +406,16 @@ export function WorkDirSelector({
         return;
       }
       setShowMenu(true);
-      setBrowserOpen(true);
+      if (!isMutedVariant) setBrowserOpen(true);
     } finally {
       setIsPicking(false);
     }
-  }, [applyWorkDir, isMutedVariant, isPicking, workDir]);
+  }, [applyWorkDir, isMutedVariant, isPicking, recentWorkdirs, workDir]);
+
+  const handleMenuToggle = useCallback(() => {
+    if (isPicking) return;
+    setShowMenu((v) => !v);
+  }, [isPicking]);
 
   const handleManualSubmit = useCallback(
     (event: FormEvent) => {
@@ -371,7 +426,8 @@ export function WorkDirSelector({
   );
 
   const [menuRect, setMenuRect] = useState<{
-    top: number;
+    top?: number;
+    bottom?: number;
     left: number;
     width: number;
     maxHeight: number;
@@ -380,27 +436,33 @@ export function WorkDirSelector({
   const updateMenuPosition = useCallback(() => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const targetWidth = isMutedVariant ? 176 : MENU_WIDTH;
-    const minWidth = isMutedVariant ? 160 : 280;
+    const targetWidth = isMutedVariant ? 136 : MENU_WIDTH;
+    const minWidth = isMutedVariant ? 128 : 280;
     const estimatedHeight = isMutedVariant ? 56 : 260;
     const minHeight = isMutedVariant ? 48 : 240;
     const width = Math.min(
       targetWidth,
       Math.max(minWidth, window.innerWidth - MENU_MARGIN * 2),
     );
+    const preferredLeft = isMutedVariant ? rect.left : rect.right - width;
     const left = Math.min(
-      Math.max(MENU_MARGIN, rect.right - width),
+      Math.max(MENU_MARGIN, preferredLeft),
       window.innerWidth - MENU_MARGIN - width,
     );
-    const top = Math.min(
-      rect.bottom + 6,
-      Math.max(MENU_MARGIN, window.innerHeight - MENU_MARGIN - estimatedHeight),
+    const spaceBelow = window.innerHeight - rect.bottom - MENU_MARGIN;
+    const spaceAbove = rect.top - MENU_MARGIN;
+    const openUp = spaceAbove > spaceBelow;
+    const maxHeight = Math.max(
+      minHeight,
+      openUp ? spaceAbove - 6 : spaceBelow - 6,
     );
     setMenuRect({
-      top,
       left,
       width,
-      maxHeight: Math.max(minHeight, window.innerHeight - top - MENU_MARGIN),
+      maxHeight,
+      ...(openUp
+        ? { bottom: window.innerHeight - rect.top + 6 }
+        : { top: rect.bottom + 6 }),
     });
   }, [isMutedVariant]);
 
@@ -432,12 +494,21 @@ export function WorkDirSelector({
   // for "open folder", info popups for the unimplemented ones).
   const handleOpenFolderCta = useCallback(async () => {
     if (!window.octopus?.dialog?.open) {
-      // Same web-fallback shape as handlePrimaryAction — don't silently swallow
-      // the click on the muted variant.
+      const selectedName = await openBrowserFolderPicker();
+      const matchedPath = selectedName
+        ? matchingRecentWorkDirByName(selectedName, recentWorkdirs)
+        : null;
+      if (matchedPath) {
+        applyWorkDir(matchedPath);
+        return;
+      }
+      if (selectedName) pendingBrowserPickedNameRef.current = selectedName;
       setShowMenu(true);
       setBrowserOpen(true);
       setNoBridgeHint(true);
-      requestAnimationFrame(() => manualInputRef.current?.focus());
+      requestAnimationFrame(() => {
+        manualInputRef.current?.focus();
+      });
       return;
     }
     setIsPicking(true);
@@ -447,14 +518,12 @@ export function WorkDirSelector({
         applyWorkDir(selected);
         return;
       }
-      if (!isMutedVariant) {
-        setBrowserOpen(true);
-        requestAnimationFrame(() => manualInputRef.current?.focus());
-      }
+      setBrowserOpen(true);
+      requestAnimationFrame(() => manualInputRef.current?.focus());
     } finally {
       setIsPicking(false);
     }
-  }, [applyWorkDir, isMutedVariant, workDir]);
+  }, [applyWorkDir, recentWorkdirs, workDir]);
 
   // CTA tile for the implemented workspace picker entry point.
   const cta = (opts: {
@@ -715,44 +784,36 @@ export function WorkDirSelector({
   return (
     <div
       ref={containerRef}
-      className={cn("relative flex items-center gap-1", className)}
+      className={cn("relative flex items-center gap-1.5", className)}
     >
       <button
         className={cn(
-          "flex items-center gap-1 rounded-lg px-1.5 py-0.5 text-[10px] transition-all",
+          "group flex items-center gap-1.5 text-[11px] font-medium shadow-none transition-colors duration-150",
+          chromeless
+            ? "h-6 rounded-md px-0.5 hover:text-foreground"
+            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border/50 hover:bg-muted/55",
           isEmpty
             ? emptyTriggerClass
-            : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+            : activeTriggerClass,
           isPicking && "cursor-wait opacity-50",
         )}
-        onClick={handlePrimaryAction}
+        onClick={workDir ? handleMenuToggle : handlePrimaryAction}
         disabled={isPicking}
         title={triggerTitle}
         type="button"
       >
-        <FolderOpenIcon className="size-3" />
+        <FolderOpenIcon className="size-3 shrink-0 opacity-70" />
         <span
           className={cn(
-            "max-w-[160px] truncate",
-            isEmpty && isMutedVariant ? "font-medium" : "font-mono",
+            isMutedVariant
+              ? "max-w-[120px] truncate"
+              : "max-w-[160px] truncate",
+            isEmpty ? "font-medium" : "tracking-normal",
           )}
         >
-          {isEmpty ? emptyTriggerLabel : folderName}
+          {triggerLabel}
         </span>
-      </button>
-
-      <button
-        className="flex items-center justify-center rounded-md p-0.5 text-[10px] text-muted-foreground/60 transition-colors hover:bg-muted/50 hover:text-muted-foreground"
-        onClick={() => setShowMenu((v) => !v)}
-        title={menuToggleTitle}
-        type="button"
-      >
-        <ChevronDownIcon
-          className={cn(
-            "size-3 transition-transform",
-            showMenu && "rotate-180",
-          )}
-        />
+        <ChevronDownIcon className="size-3 shrink-0 opacity-35 transition-opacity group-hover:opacity-60" />
       </button>
 
       {menuRect && typeof document !== "undefined"
@@ -761,7 +822,14 @@ export function WorkDirSelector({
               ref={menuRef}
               className="fixed z-[100]"
               style={{
-                top: `${menuRect.top}px`,
+                top:
+                  menuRect.top !== undefined
+                    ? `${menuRect.top}px`
+                    : undefined,
+                bottom:
+                  menuRect.bottom !== undefined
+                    ? `${menuRect.bottom}px`
+                    : undefined,
                 left: `${menuRect.left}px`,
                 width: `${menuRect.width}px`,
                 maxHeight: `${menuRect.maxHeight}px`,

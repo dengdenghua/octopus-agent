@@ -3,12 +3,10 @@
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 import {
-  BotIcon,
   ClockIcon,
   CopyIcon,
   GlobeIcon,
   MenuIcon,
-  MonitorIcon,
   PlusIcon,
   SearchIcon,
   StarIcon,
@@ -17,9 +15,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { CopilotPanel } from "@/components/browser/copilot-panel";
+import { LiquidGlass } from "@/components/browser/liquid-glass";
+import { LiquidGlassField } from "@/components/browser/liquid-glass-field";
 import { TabBar } from "@/components/browser/tab-bar";
 import { UrlBar } from "@/components/browser/url-bar";
 import {
+  BROWSER_HOME_URL,
   BROWSER_OPEN_URL_REQUEST_KEY,
   BrowserStoreProvider,
   setAppMode,
@@ -31,6 +32,7 @@ import {
   type WebviewTabHandle,
 } from "@/components/browser/webview-tab";
 import { WorkspaceSurfaceSwitch } from "@/components/workspace/workspace-sidebar";
+import { useAppearance } from "@/hooks/use-appearance";
 
 const isWindows = (): boolean =>
   typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -68,6 +70,7 @@ const DEVICE_STAGE = {
 } as const;
 
 function BrowserShell() {
+  const { materialTheme } = useAppearance();
   const {
     state,
     activeTab,
@@ -124,9 +127,16 @@ function BrowserShell() {
   }, [activeTabId]);
 
   const activeDevice = activeTab?.device ?? "desktop";
-  const activeStage = DEVICE_STAGE[activeDevice];
+  const renderDevice =
+    activeTabUrl === BROWSER_HOME_URL &&
+    activeDevice === "desktop" &&
+    stageSize.width > 0 &&
+    stageSize.width < 640
+      ? "mobile"
+      : activeDevice;
+  const activeStage = DEVICE_STAGE[renderDevice];
   const activeScale =
-    activeDevice === "desktop"
+    renderDevice === "desktop"
       ? 1
       : Math.min(
           1,
@@ -359,6 +369,7 @@ function BrowserShell() {
 
   return (
     <div className="relative flex h-screen overflow-hidden bg-[linear-gradient(135deg,hsl(var(--muted))_0%,hsl(var(--background))_42%,hsl(var(--muted))_100%)]">
+      {materialTheme === "liquid" ? <LiquidGlassField /> : null}
       <BrowserSidePanel
         open={sidePanelOpen}
         pinned={sidePanelPinned}
@@ -366,106 +377,91 @@ function BrowserShell() {
         onMouseLeave={scheduleSidePanelClose}
       />
       {/* Implementation note. */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div
-          className="flex h-11 shrink-0 items-center gap-1 border-b border-border/45 bg-sidebar/65 px-2 shadow-[inset_0_-1px_0_rgba(255,255,255,0.36)] backdrop-blur-2xl"
-          style={
-            {
-              paddingLeft: 18,
-              paddingRight: isWindows() && electron ? 160 : 8,
-              WebkitAppRegion: "drag",
-            } as React.CSSProperties
-          }
-        >
-          <div
-            className="flex h-8 w-[150px] shrink-0 items-center"
+      <div className="relative z-[1] flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="relative z-[80] shrink-0">
+          <LiquidGlass
+            material="dock"
+            blur={44}
+            chroma={1.82}
+            depth={1.34}
+            displacement={2.6}
+            className="flex h-11 shrink-0 items-center gap-1 rounded-none border-x-0 border-t-0 border-border/35 px-2"
             style={
               {
-                WebkitAppRegion: "no-drag",
+                paddingLeft: 14.5,
+                paddingRight: isWindows() && electron ? 160 : 8,
+                WebkitAppRegion: "drag",
               } as React.CSSProperties
             }
           >
-            <WorkspaceSurfaceSwitch active="browser" placement="topbar" />
-          </div>
-          <div className="flex h-8 min-w-0 flex-1 items-center">
-            <TabBar />
-          </div>
-          <button
-            type="button"
-            title={sidePanelPinned ? "取消固定标签工作区" : "展开标签工作区"}
-            aria-label={
-              sidePanelPinned ? "取消固定标签工作区" : "展开标签工作区"
-            }
-            onMouseEnter={showSidePanel}
-            onMouseLeave={scheduleSidePanelClose}
-            onClick={() => {
-              clearSidePanelCloseTimer();
-              setSidePanelPinned((value) => {
-                const nextPinned = !value;
-                setSidePanelHovered(nextPinned);
-                return nextPinned;
-              });
-            }}
-            className={cn(
-              "grid size-8 shrink-0 place-items-center rounded-[14px] border border-border/55 bg-background/55 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_8px_22px_rgba(15,23,42,0.08)] transition-colors hover:bg-background/70 hover:text-foreground",
-              sidePanelOpen && "bg-background text-foreground",
-            )}
-            style={
-              {
-                WebkitAppRegion: "no-drag",
-              } as React.CSSProperties
-            }
-          >
-            <MenuIcon className="size-4" />
-          </button>
+            <div
+              className="flex h-8 w-[154px] shrink-0 items-center justify-start"
+              style={
+                {
+                  WebkitAppRegion: "no-drag",
+                } as React.CSSProperties
+              }
+            >
+              <WorkspaceSurfaceSwitch active="browser" placement="topbar" />
+            </div>
+            <div className="flex h-8 min-w-0 flex-1 items-center">
+              <TabBar />
+            </div>
+            <button
+              type="button"
+              title={sidePanelPinned ? "取消固定标签工作区" : "展开标签工作区"}
+              aria-label={
+                sidePanelPinned ? "取消固定标签工作区" : "展开标签工作区"
+              }
+              onMouseEnter={showSidePanel}
+              onMouseLeave={scheduleSidePanelClose}
+              onClick={() => {
+                clearSidePanelCloseTimer();
+                setSidePanelPinned((value) => {
+                  const nextPinned = !value;
+                  setSidePanelHovered(nextPinned);
+                  return nextPinned;
+                });
+              }}
+              className={cn(
+                "grid size-8 shrink-0 place-items-center rounded-[14px] border border-border/35 bg-background/55 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_16px_rgba(15,23,42,0.045)] transition-colors hover:bg-background/70 hover:text-foreground",
+                sidePanelOpen && "bg-background text-foreground",
+              )}
+              style={
+                {
+                  WebkitAppRegion: "no-drag",
+                } as React.CSSProperties
+              }
+            >
+              <MenuIcon className="size-4" />
+            </button>
+          </LiquidGlass>
+
+          {/* URL bar */}
+          <UrlBar
+            webviewHandle={activeHandle}
+            onOpenExtensions={openExtensionsStore}
+          />
         </div>
 
-        {/* URL bar */}
-        <UrlBar
-          webviewHandle={activeHandle}
-          onOpenExtensions={openExtensionsStore}
-        />
-
-        <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
-          <div className="flex h-8 shrink-0 items-center justify-between rounded-[16px] border border-border/55 bg-background/55 px-3 text-[11px] text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.42)] backdrop-blur-xl">
-            <div className="flex min-w-0 items-center gap-2">
-              <MonitorIcon className="size-3.5 shrink-0" />
-              <span className="truncate font-medium text-foreground">
-                {activeTabTitle || activeTabUrl || "AI 浏览器桌面"}
-              </span>
-              <span className="hidden text-muted-foreground/70 sm:inline">
-                {activeTabLoading ? "加载中" : "已保留"}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {state.copilotOpen && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">
-                  <BotIcon className="size-3" />
-                  AI Copilot
-                </span>
-              )}
-              <span className="rounded-full bg-muted/70 px-2 py-0.5">
-                {activeStage.label}
-                {activeDevice !== "desktop"
-                  ? ` · ${activeStage.description} · ${Math.round(activeScale * 100)}%`
-                  : ""}
-              </span>
-              <span className="hidden rounded-full bg-muted/70 px-2 py-0.5 md:inline">
-                {state.tabs.length} 个标签
-              </span>
-            </div>
-          </div>
-
-          <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-background/95 shadow-[0_18px_48px_rgba(15,23,42,0.12)]">
+        <div className="relative z-0 flex min-h-0 flex-1 flex-col p-3">
+          <LiquidGlass
+            material="sheet"
+            blur={40}
+            chroma={1.76}
+            depth={1.22}
+            displacement={2}
+            className="flex min-h-0 flex-1 overflow-hidden rounded-xl border-border/35"
+          >
             {state.copilotOpen && (
               <div
-                className="flex min-h-0 border-r border-border/60 bg-background"
+                className="flex min-h-0 border-r border-border/35 bg-background"
                 style={{
                   flex:
-                    activeDevice !== "desktop"
+                    renderDevice !== "desktop"
                       ? "1 1 0"
                       : `0 0 ${state.copilotWidth}px`,
-                  minWidth: activeDevice !== "desktop" ? 280 : undefined,
+                  minWidth: renderDevice !== "desktop" ? 280 : undefined,
                 }}
               >
                 <CopilotPanel webviewHandle={activeHandle} />
@@ -475,7 +471,7 @@ function BrowserShell() {
               ref={stageRef}
               className={cn(
                 "relative min-w-0 overflow-hidden bg-background",
-                activeDevice === "desktop"
+                renderDevice === "desktop"
                   ? "flex-1"
                   : "flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,hsl(var(--muted))_0%,hsl(var(--background))_58%)] p-5",
               )}
@@ -483,12 +479,12 @@ function BrowserShell() {
               <div
                 className={cn(
                   "relative overflow-hidden bg-background",
-                  activeDevice === "desktop"
+                  renderDevice === "desktop"
                     ? "h-full w-full"
-                    : "h-full max-h-full max-w-full rounded-[28px] border-[6px] border-foreground/80 shadow-[0_26px_80px_rgba(15,23,42,0.28)]",
+                    : "h-full max-h-full max-w-full rounded-[28px] border-[6px] border-foreground/22 shadow-[0_22px_64px_rgba(15,23,42,0.18)]",
                 )}
                 style={
-                  activeDevice === "desktop"
+                  renderDevice === "desktop"
                     ? undefined
                     : {
                         width: activeStage.width,
@@ -504,6 +500,9 @@ function BrowserShell() {
                     key={tab.id}
                     tab={tab}
                     active={tab.id === state.activeId}
+                    renderDevice={
+                      tab.id === state.activeId ? renderDevice : tab.device
+                    }
                     onPatch={(patch) => patchTab(tab.id, patch)}
                     ref={(handle) => {
                       if (handle) {
@@ -519,7 +518,7 @@ function BrowserShell() {
                 ))}
               </div>
             </div>
-          </div>
+          </LiquidGlass>
         </div>
       </div>
     </div>
@@ -616,11 +615,16 @@ function BrowserSidePanel({
   }, [activeTab, closeTab, state.tabs]);
 
   return (
-    <aside
+    <LiquidGlass
+      material="sheet"
+      blur={42}
+      chroma={1.8}
+      depth={1.28}
+      displacement={2.2}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        "absolute right-3 top-[6.75rem] z-40 hidden h-[calc(100vh-7.5rem)] w-[280px] flex-col rounded-2xl border border-white/60 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted))_100%)] px-3 py-3 shadow-[0_24px_70px_rgba(15,23,42,0.20)] backdrop-blur-xl transition-[opacity,transform] duration-160 md:flex",
+        "absolute right-3 top-[6.75rem] z-[40] hidden h-[calc(100vh-7.5rem)] w-[280px] flex-col rounded-2xl px-3 py-3 transition-[opacity,transform] duration-160 md:flex",
         open ? "pointer-events-auto" : "pointer-events-none",
       )}
       style={{
@@ -636,7 +640,7 @@ function BrowserSidePanel({
           } as React.CSSProperties
         }
       >
-        <div className="grid size-7 place-items-center rounded-lg bg-background/80 text-foreground shadow-sm ring-1 ring-border/60">
+        <div className="octo-liquid-glass octo-liquid-glass--thin grid size-7 place-items-center rounded-lg text-foreground">
           <MenuIcon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -647,7 +651,7 @@ function BrowserSidePanel({
         </div>
       </div>
 
-      <div className="mt-4 flex h-9 items-center gap-2 rounded-full bg-background/72 px-3 text-xs text-muted-foreground shadow-sm ring-1 ring-border/50">
+      <div className="octo-liquid-glass octo-liquid-glass--input mt-4 flex h-9 items-center gap-2 rounded-full px-3 text-xs text-muted-foreground">
         <SearchIcon className="size-4 shrink-0" />
         <input
           value={query}
@@ -658,7 +662,7 @@ function BrowserSidePanel({
       </div>
 
       {activeTab && (
-        <div className="mt-3 rounded-2xl border border-border/55 bg-background/58 p-2.5 shadow-sm">
+        <div className="octo-liquid-glass octo-liquid-glass--card mt-3 rounded-2xl p-2.5">
           <div className="flex items-start gap-2">
             {activeTab.favicon ? (
               <img
@@ -720,7 +724,7 @@ function BrowserSidePanel({
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-3 rounded-xl bg-background/50 p-1 text-[11px] font-medium text-muted-foreground ring-1 ring-border/50">
+      <div className="octo-liquid-glass octo-liquid-glass--thin mt-3 grid grid-cols-3 rounded-xl p-1 text-[11px] font-medium text-muted-foreground">
         {[
           { id: "tabs", label: "标签", icon: MenuIcon },
           { id: "history", label: "最近", icon: ClockIcon },
@@ -888,12 +892,12 @@ function BrowserSidePanel({
       <button
         type="button"
         onClick={() => openTab()}
-        className="mt-3 flex h-10 items-center justify-center gap-2 rounded-xl border border-border/60 bg-background/72 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-background"
+        className="octo-liquid-glass octo-liquid-glass--thin octo-liquid-glass--interactive mt-3 flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-medium text-foreground"
       >
         <PlusIcon className="size-4" />
         新建标签页
       </button>
-    </aside>
+    </LiquidGlass>
   );
 }
 

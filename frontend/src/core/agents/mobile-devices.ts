@@ -36,7 +36,10 @@ function deviceToAgent(d: TentacleDevice): Agent {
  * addable team members. Empty when none are connected or the bridge is offline
  * — the pickers just fall back to the built-in agents.
  */
-export function useMobileDevices(): { mobileAgents: Agent[]; isLoading: boolean } {
+export function useMobileDevices(): {
+  mobileAgents: Agent[];
+  isLoading: boolean;
+} {
   const { data, isLoading } = useQuery({
     queryKey: ["tentacle-devices"],
     queryFn: async ({ signal }): Promise<TentacleDevice[] | null> => {

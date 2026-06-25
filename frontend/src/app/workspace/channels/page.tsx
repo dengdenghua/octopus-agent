@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   MessageCircleIcon,
   PlusIcon,
+  SearchIcon,
   SettingsIcon,
   XIcon,
 } from "lucide-react";
@@ -20,6 +21,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { ErrorState, LoadingState, StatusBadge } from "@/components/ui/state";
 import { ChannelCredentialDialog } from "@/components/workspace/channel-credential-dialog";
 import { ChannelPairingsSheet } from "@/components/workspace/channel-pairings-sheet";
 import {
@@ -51,6 +61,8 @@ type AgentLite = {
   display_name?: string;
   avatar_url?: string | null;
 };
+
+type ChannelFilter = "all" | "connected" | "unlinked";
 
 // Implementation note.
 const PLATFORM_COLORS: Record<string, string> = {
@@ -153,6 +165,8 @@ export default function ChannelsPage() {
   const [agents, setAgents] = useState<AgentLite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<ChannelFilter>("all");
   /* Implementation note. */
   const [assigningId, setAssigningId] = useState<string | null>(null);
   /* Implementation note. */
@@ -236,6 +250,63 @@ export default function ChannelsPage() {
     () => rows.filter((r) => r.connected).length,
     [rows],
   );
+  const filteredRows = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (filter === "connected" && !row.connected) return false;
+      if (filter === "unlinked" && row.connected) return false;
+      if (!term) return true;
+      const assignedAgent = agents.find((a) => a.id === row.assigned_agent_id);
+      return [
+        row.display_name,
+        row.description,
+        row.platform,
+        row.type,
+        row.channel_id,
+        row.assigned_agent_id ?? "",
+        assignedAgent?.display_name ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [agents, filter, query, rows]);
+
+  const channelSections = useMemo(() => {
+    const grouped: Record<string, ChannelRow[]> = {};
+    const otherRows: ChannelRow[] = [];
+    for (const row of filteredRows) {
+      const cat = PLATFORM_CATEGORY_MAP[row.platform];
+      if (cat) {
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(row);
+      } else {
+        otherRows.push(row);
+      }
+    }
+    const sections: {
+      key: string;
+      label: string;
+      items: ChannelRow[];
+    }[] = [];
+    for (const cat of CATEGORY_ORDER) {
+      if (grouped[cat] && grouped[cat].length > 0) {
+        sections.push({
+          key: cat,
+          label: PLATFORM_CATEGORIES[cat] ?? cat,
+          items: grouped[cat],
+        });
+      }
+    }
+    if (otherRows.length > 0) {
+      sections.push({
+        key: "other",
+        label: t.channels.categoryOther,
+        items: otherRows,
+      });
+    }
+    return sections;
+  }, [filteredRows, t.channels.categoryOther]);
 
   return (
     <WorkspaceContainer>
@@ -297,83 +368,111 @@ export default function ChannelsPage() {
           </section>
 
           {loading && (
-            <div className="text-sm text-muted-foreground">
-              {t.channels.loading}
-            </div>
+            <LoadingState
+              title={t.channels.loading}
+              variant="skeleton"
+              className="workspace-panel rounded-[1.75rem] p-5"
+            />
           )}
 
           {error && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-600">
-              {error}
-            </div>
+            <ErrorState
+              title={t.channels.loadFailed}
+              detail={error}
+              actionLabel={t.channels.retry}
+              onAction={() => void loadAll()}
+              className="workspace-panel rounded-[1.75rem]"
+            />
           )}
 
           {!loading && !error && rows.length === 0 && (
-            <div className="rounded-xl border border-dashed border-border/60 px-6 py-10 text-center text-sm text-muted-foreground">
-              {t.channels.noRegistered}
-            </div>
+            <Empty className="workspace-panel min-h-[260px] rounded-[1.75rem]">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <MessageCircleIcon />
+                </EmptyMedia>
+                <EmptyTitle>{t.channels.noRegistered}</EmptyTitle>
+                <EmptyDescription>
+                  {t.channels.noRegisteredDescription}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
 
-          {!loading &&
-            !error &&
-            rows.length > 0 &&
-            (() => {
-              const grouped: Record<string, ChannelRow[]> = {};
-              const otherRows: ChannelRow[] = [];
-              for (const row of rows) {
-                const cat = PLATFORM_CATEGORY_MAP[row.platform];
-                if (cat) {
-                  if (!grouped[cat]) grouped[cat] = [];
-                  grouped[cat].push(row);
-                } else {
-                  otherRows.push(row);
-                }
-              }
-              const sections: {
-                key: string;
-                label: string;
-                items: ChannelRow[];
-              }[] = [];
-              for (const cat of CATEGORY_ORDER) {
-                if (grouped[cat] && grouped[cat].length > 0) {
-                  sections.push({
-                    key: cat,
-                    label: PLATFORM_CATEGORIES[cat] ?? cat,
-                    items: grouped[cat],
-                  });
-                }
-              }
-              if (otherRows.length > 0) {
-                sections.push({
-                  key: "other",
-                  label: "其他",
-                  items: otherRows,
-                });
-              }
-              return sections.map((section) => (
-                <div key={section.key}>
-                  <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
-                    {section.label}
-                  </h2>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {section.items.map((row, index) => (
-                      <ChannelCard
-                        key={row.channel_id || `${row.platform}-${index}`}
-                        row={row}
-                        agents={agents}
-                        onRequestAssign={() => setAssigningId(row.channel_id)}
-                        onRequestCredential={() =>
-                          setCredPlatform(row.platform)
-                        }
-                        onRequestPairings={() =>
-                          setPairingsForId(row.channel_id)
-                        }
-                      />
-                    ))}
-                  </div>
+          {!loading && !error && rows.length > 0 && (
+            <>
+              <section className="workspace-panel flex flex-col gap-3 rounded-[1.25rem] p-3 md:flex-row md:items-center md:justify-between">
+                <div className="relative min-w-0 flex-1">
+                  <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t.channels.searchPlaceholder}
+                    className="h-10 rounded-xl pl-9"
+                  />
                 </div>
-              ));
-            })()}
+                <div className="grid shrink-0 grid-cols-3 gap-1 rounded-xl border border-border/60 bg-muted/25 p-1">
+                  {[
+                    { value: "all", label: t.channels.filterAll },
+                    { value: "connected", label: t.channels.filterConnected },
+                    { value: "unlinked", label: t.channels.filterUnlinked },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setFilter(item.value as ChannelFilter)}
+                      className={cn(
+                        "h-8 rounded-lg px-3 text-xs font-medium transition-colors",
+                        filter === item.value
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {channelSections.length === 0 ? (
+                <Empty className="workspace-panel min-h-[240px] rounded-[1.75rem]">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <SearchIcon />
+                    </EmptyMedia>
+                    <EmptyTitle>{t.channels.noSearchResults}</EmptyTitle>
+                    <EmptyDescription>
+                      {t.channels.noSearchResultsDescription}
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
+              ) : (
+                channelSections.map((section) => (
+                  <div key={section.key}>
+                    <h2 className="mb-3 text-sm font-semibold text-muted-foreground">
+                      {section.label}
+                    </h2>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {section.items.map((row, index) => (
+                        <ChannelCard
+                          key={row.channel_id || `${row.platform}-${index}`}
+                          row={row}
+                          agents={agents}
+                          onRequestAssign={() => setAssigningId(row.channel_id)}
+                          onRequestCredential={() =>
+                            setCredPlatform(row.platform)
+                          }
+                          onRequestPairings={() =>
+                            setPairingsForId(row.channel_id)
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </>
+          )}
         </div>
       </WorkspaceBody>
 
@@ -429,9 +528,11 @@ export default function ChannelsPage() {
 
           <div className="overflow-y-auto flex-1 mt-2">
             {agents.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border/60 px-4 py-8 text-center text-[12px] text-muted-foreground">
-                {t.channels.noAgentsAvailable}
-              </div>
+              <Empty className="min-h-[180px] rounded-lg px-4 py-8">
+                <EmptyHeader>
+                  <EmptyTitle>{t.channels.noAgentsAvailable}</EmptyTitle>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <ul className="space-y-1">
                 {agents.map((a, index) => {
@@ -576,16 +677,12 @@ function ChannelCard({
             </div>
           </div>
         </div>
-        <span
-          className={cn(
-            "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-            row.connected
-              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "border-border/60 bg-muted/60 text-muted-foreground",
-          )}
+        <StatusBadge
+          tone={row.connected ? "success" : "idle"}
+          className="h-6 shrink-0 rounded-full px-2 text-[10px]"
         >
           {row.connected ? t.channels.connectedBadge : t.channels.notLinked}
-        </span>
+        </StatusBadge>
       </div>
 
       {/* Implementation note. */}

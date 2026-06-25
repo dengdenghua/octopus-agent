@@ -241,11 +241,11 @@ Arms 一天的 trajectory
 
 ### Chromatophores 色素细胞
 
-> ⚠️ **部分实装** — pub/sub 广播 + Boids Separation 已接线；Alignment/Cohesion 未实装；Worker 未接入 signal_bus。依据 [implementation-status.md](implementation-status.md#分布式与编排)。
+> ⚠️ **部分实装（mesh 协调休眠）** — pub/sub 广播 + Boids Separation 类（`boids.py` 的 ResourceClaim 仲裁）已实装；Alignment/Cohesion 未实装。Worker 在 `swarm/drive.py` 路径**已注入 signal_bus 并订阅自身 mailbox**（`arms/base.py`），但 mesh 协调逻辑全部休眠：`boids.arbitrate` / `send_to_arm` / `_on_step` 的 mailbox 消费**均无生产调用方**——因 swarm 按 `per_node` **预分配**子图，运行时**无资源争用**。故"网状编排通水"的真正前置是**争用/调度模型**（架构级），不是接一个调用方的"最后一步"。依据 [implementation-status.md](implementation-status.md#分布式与编排)。
 
 - **轻量级 pub/sub**，只传**状态变更**而非数据本身
 - 事件类型：`arm.busy` / `arm.idle` / `sucker.grabbed` / `alert.budget` / `alert.loop`
-- Arms 订阅感兴趣的话题，避免事事回汇报 — ❌ 当前无 Arm 订阅
+- Arms 订阅感兴趣的话题，避免事事回汇报 — ⚠️ Worker 构造时已订阅自身 `arm.mailbox.<id>`，但无生产发送方（`send_to_arm` 未被调用）
 - 进程内实现（非 Redis pub/sub 或 NATS subject）
 
 ### Ink Sac 墨囊 ★（成本治理核心）

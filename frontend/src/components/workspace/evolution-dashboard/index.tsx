@@ -372,7 +372,10 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   if (data.length === 0) {
     return (
       <section className="rounded-xl border border-border/60 bg-card p-4">
-        <SectionTitle icon={TrendingUpIcon} title={t.evolutionDashboard.capabilityTrend} />
+        <SectionTitle
+          icon={TrendingUpIcon}
+          title={t.evolutionDashboard.capabilityTrend}
+        />
         <EmptyStory text={t.evolutionDashboard.noTrendYet} />
       </section>
     );
@@ -393,7 +396,10 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
   return (
     <section className="rounded-xl border border-border/60 bg-card p-4">
       <div className="flex items-start justify-between gap-4">
-        <SectionTitle icon={TrendingUpIcon} title={t.evolutionDashboard.capabilityTrend} />
+        <SectionTitle
+          icon={TrendingUpIcon}
+          title={t.evolutionDashboard.capabilityTrend}
+        />
         <div className="text-right">
           <div
             className={cn(
@@ -413,7 +419,10 @@ function LearningStory({ data }: { data: LearningCurvePoint[] }) {
       </div>
 
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <MiniStat label={t.evolutionDashboard.currentSuccessRate} value={formatPercent(lastRate, 0)} />
+        <MiniStat
+          label={t.evolutionDashboard.currentSuccessRate}
+          value={formatPercent(lastRate, 0)}
+        />
         <MiniStat
           label={t.evolutionDashboard.avgDuration}
           value={
@@ -470,7 +479,10 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
   if (data.length === 0) {
     return (
       <section className="rounded-xl border border-border/60 bg-card p-4">
-        <SectionTitle icon={BrainCircuitIcon} title={t.evolutionDashboard.strongerSkills} />
+        <SectionTitle
+          icon={BrainCircuitIcon}
+          title={t.evolutionDashboard.strongerSkills}
+        />
         <EmptyStory text={t.evolutionDashboard.noSkillPerformanceYet} />
       </section>
     );
@@ -478,7 +490,10 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
 
   return (
     <section className="rounded-xl border border-border/60 bg-card p-4">
-      <SectionTitle icon={BrainCircuitIcon} title={t.evolutionDashboard.strongerSkills} />
+      <SectionTitle
+        icon={BrainCircuitIcon}
+        title={t.evolutionDashboard.strongerSkills}
+      />
       <div className="mt-4 space-y-3">
         {data.map((skill) => {
           const rate = numberOrZero(skill.success_rate);
@@ -512,7 +527,9 @@ function SkillStory({ data }: { data: SkillPerformance[] }) {
               </div>
               <div className="flex justify-between text-[10px] text-muted-foreground">
                 <span>
-                  {t.evolutionDashboard.skillCalls(numberOrZero(skill.usage_count))}
+                  {t.evolutionDashboard.skillCalls(
+                    numberOrZero(skill.usage_count),
+                  )}
                 </span>
                 <span>{skill.source}</span>
               </div>
@@ -529,7 +546,10 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
   if (data.length === 0) {
     return (
       <section className="rounded-xl border border-border/60 bg-card p-4">
-        <SectionTitle icon={LightbulbIcon} title={t.evolutionDashboard.howToImproveNext} />
+        <SectionTitle
+          icon={LightbulbIcon}
+          title={t.evolutionDashboard.howToImproveNext}
+        />
         <EmptyStory text={t.evolutionDashboard.noPendingRecommendations} />
       </section>
     );
@@ -537,7 +557,10 @@ function RecommendationsStory({ data }: { data: Recommendation[] }) {
 
   return (
     <section className="rounded-xl border border-border/60 bg-card p-4">
-      <SectionTitle icon={LightbulbIcon} title={t.evolutionDashboard.howToImproveNext} />
+      <SectionTitle
+        icon={LightbulbIcon}
+        title={t.evolutionDashboard.howToImproveNext}
+      />
       <div className="mt-3 grid gap-3 lg:grid-cols-3">
         {data.slice(0, 3).map((rec, index) => (
           <div

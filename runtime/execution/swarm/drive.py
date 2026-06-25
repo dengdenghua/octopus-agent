@@ -103,20 +103,34 @@ def run_swarm(
     max_workers: int = 4,
     split_strategy: str = "per_node",
     on_signal: Callable[[Any], None] | None = None,
+    registry: Any = None,
 ) -> Any:
     """Drive ``graph`` through the mesh swarm and return its ``SwarmResult``.
 
     ``arm_pool`` must have been built with ``signal_bus`` so arms and swarm
     share one bus (= the mesh). ``on_signal`` receives every ``SignalEvent``
-    the swarm publishes — the live Arm-to-Arm mesh coordination.
+    the swarm publishes — the live Arm-to-Arm mesh coordination. ``registry``,
+    when given, lets the swarm read each skill's declared exclusive resource
+    (ADR-010 Phase 2) so e.g. two parallel desktop ops serialise on the screen.
     """
     if on_signal is not None:
         signal_bus.subscribe("*", on_signal)
+
+    skill_resources = None
+    if registry is not None:
+        def skill_resources(skill_ref: str) -> list[str]:
+            try:
+                res = registry.get(skill_ref).exclusive_resource
+            except Exception:
+                return []
+            return [res] if res else []
+
     swarm = SwarmRuntime(
         arm_pool=arm_pool,
         signal_bus=signal_bus,
         boids=BoidsArbitrator(signal_bus=signal_bus),
         journal=journal,
         max_workers=max_workers,
+        skill_resources=skill_resources,
     )
     return swarm.run(graph, budget, split_strategy=split_strategy)

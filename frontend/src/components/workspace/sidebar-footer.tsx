@@ -30,6 +30,10 @@ import {
 } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
+import {
+  LOCAL_AGENT_IDS,
+  LOCAL_AGENT_RANK,
+} from "@/components/workspace/agents/agent-world-data";
 import { getAuthProviders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 import { useI18n } from "@/core/i18n/hooks";
@@ -75,6 +79,17 @@ function getAccountDisplayName(user: {
     (!isPlaceholderUsername(user.username) ? user.username : "") ||
     user.actor_id ||
     ""
+  );
+}
+
+function isHubDefaultAgent(agent: Agent): boolean {
+  return LOCAL_AGENT_IDS.has(agent.name);
+}
+
+function sortHubDefaultAgents(left: Agent, right: Agent): number {
+  return (
+    (LOCAL_AGENT_RANK.get(left.name) ?? Number.MAX_SAFE_INTEGER) -
+    (LOCAL_AGENT_RANK.get(right.name) ?? Number.MAX_SAFE_INTEGER)
   );
 }
 
@@ -196,6 +211,11 @@ export function AgentFooter() {
   const [activeName, setActiveName] = useState<string | null>(() =>
     readActiveAgentName(),
   );
+  useEffect(() => {
+    return eventBus.on("agent:changed", ({ name }) => {
+      setActiveName(name);
+    });
+  }, []);
 
   const [authProviders, setAuthProviders] = useState<string[]>([]);
   useEffect(() => {
@@ -232,10 +252,21 @@ export function AgentFooter() {
   // agent carrying the `local_partner` capability flag.
   const isLocalCliAgent = (a: Agent) =>
     a.name.startsWith("local_") || Boolean(a.capabilities?.local_partner);
-  const personaAgents = useMemo(
-    () => footerAgents.filter((a) => !isLocalCliAgent(a)),
-    [footerAgents],
-  );
+  const personaAgents = useMemo(() => {
+    const hubAgents = footerAgents
+      .filter((a) => !isLocalCliAgent(a) && isHubDefaultAgent(a))
+      .sort(sortHubDefaultAgents);
+    if (
+      activeName &&
+      !hubAgents.some((agent) => agent.name === activeName)
+    ) {
+      const activeCustomAgent = footerAgents.find(
+        (agent) => !isLocalCliAgent(agent) && agent.name === activeName,
+      );
+      if (activeCustomAgent) return [activeCustomAgent, ...hubAgents];
+    }
+    return hubAgents;
+  }, [activeName, footerAgents]);
   const cliPartnerAgents = useMemo(
     () => footerAgents.filter(isLocalCliAgent),
     [footerAgents],
@@ -358,7 +389,7 @@ export function AgentFooter() {
           className="w-72 rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10"
         >
           <DropdownMenuLabel className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-            {t.sidebar.switchAgentLabel}
+            {t.sidebar.switchAgentMenuTitle}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {footerAgents.length === 0 ? (
@@ -387,7 +418,7 @@ export function AgentFooter() {
                 className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-muted-foreground focus:bg-muted/60 focus:text-foreground"
               >
                 <UsersRoundIcon className="size-4 shrink-0" />
-                <span>{t.sidebar.switchAgent}</span>
+                <span>{t.sidebar.openAgentHud}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
@@ -458,6 +489,11 @@ export function TeamFooter() {
   const [activeName, setActiveName] = useState<string | null>(() =>
     readActiveAgentName(),
   );
+  useEffect(() => {
+    return eventBus.on("agent:changed", ({ name }) => {
+      setActiveName(name);
+    });
+  }, []);
   const [teams, setTeams] = useState<SidebarTeam[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(() =>
     readPreferredTeamId(),

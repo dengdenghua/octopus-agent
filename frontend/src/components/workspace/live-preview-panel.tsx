@@ -155,7 +155,14 @@ export function LivePreviewPanel({
 
   useEffect(() => {
     resetDiagnostics();
-  }, [previewUrl, htmlContent, cssContent, jsContent, reloadNonce, resetDiagnostics]);
+  }, [
+    previewUrl,
+    htmlContent,
+    cssContent,
+    jsContent,
+    reloadNonce,
+    resetDiagnostics,
+  ]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {

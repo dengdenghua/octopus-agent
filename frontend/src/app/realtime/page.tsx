@@ -101,9 +101,7 @@ export default function RealtimeIndex() {
     <div className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 p-8">
       <header className="flex flex-col gap-2 border-b pb-6">
         <h1 className="text-2xl font-semibold">{t.realtime.title}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t.realtime.subtitle}
-        </p>
+        <p className="text-sm text-muted-foreground">{t.realtime.subtitle}</p>
       </header>
 
       <section className="flex items-center gap-3">
@@ -156,9 +154,7 @@ function ThreadGrid(props: {
   }
   if (threads === null) {
     return (
-      <div className="text-sm text-muted-foreground">
-        {t.realtime.loading}
-      </div>
+      <div className="text-sm text-muted-foreground">{t.realtime.loading}</div>
     );
   }
   if (threads.length === 0) {

@@ -1,0 +1,212 @@
+import type { AgentPhase, AgentPhaseStatus } from "./agent-phases";
+import type { LiveToolEvent } from "./live-tool-timeline";
+import type { WorkBlock, WorkBlockStatus } from "./work-blocks";
+
+export type AgentRunState =
+  | "running"
+  | "waiting"
+  | "error"
+  | "pending"
+  | "done";
+
+export type AgentRunStatusInput =
+  | AgentRunState
+  | AgentPhaseStatus
+  | LiveToolEvent["status"]
+  | WorkBlockStatus
+  | "completed"
+  | "waiting_approval";
+
+export function agentRunStateFromStatus(
+  status: AgentRunStatusInput,
+): AgentRunState {
+  if (status === "waiting" || status === "waiting_approval") {
+    return "waiting";
+  }
+  if (status === "warning") return "done";
+  if (status === "completed") return "done";
+  return status;
+}
+
+export function workbenchRunState({
+  blocks,
+  paused,
+  phases,
+}: {
+  blocks: WorkBlock[];
+  paused?: boolean;
+  phases: AgentPhase[];
+}): AgentRunState {
+  if (
+    blocks.some((block) => block.status === "error") ||
+    phases.some((phase) => phase.status === "error")
+  ) {
+    return "error";
+  }
+  if (
+    paused ||
+    blocks.some((block) => block.status === "waiting_approval") ||
+    phases.some((phase) => phase.status === "waiting_approval")
+  ) {
+    return "waiting";
+  }
+  if (
+    blocks.some((block) => block.status === "running") ||
+    phases.some((phase) => phase.status === "running")
+  ) {
+    return "running";
+  }
+  if (phases.some((phase) => phase.status === "pending")) {
+    return "pending";
+  }
+  return "done";
+}
+
+export function agentRunDotClass(status: AgentRunStatusInput): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "error") return "bg-destructive";
+  if (state === "running") return "bg-emerald-500";
+  if (state === "waiting") return "bg-amber-500";
+  if (state === "done") return "bg-muted-foreground/50";
+  return "bg-muted-foreground/35";
+}
+
+export function agentRunStatusLightClass(
+  status: AgentRunStatusInput,
+): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "pending") return "bg-amber-500";
+  return agentRunDotClass(state);
+}
+
+export function agentRunStatusLightPulseClass(
+  status: AgentRunStatusInput,
+): string | null {
+  const state = agentRunStateFromStatus(status);
+  if (state === "running") return "animate-ping";
+  if (state === "waiting" || state === "pending") return "animate-pulse";
+  return null;
+}
+
+export function agentRunProgressBarClass(status: AgentRunStatusInput): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "error") return "bg-destructive";
+  if (state === "waiting") return "bg-amber-500";
+  if (state === "pending") return "bg-muted-foreground/45";
+  return "bg-emerald-500";
+}
+
+export function agentRunBadgeClass(status: AgentRunStatusInput): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "running") {
+    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+  }
+  if (state === "waiting") {
+    return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  if (state === "error") return "bg-destructive/10 text-destructive";
+  return "bg-muted text-muted-foreground";
+}
+
+export function agentRunTextClass(status: AgentRunStatusInput): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "running") return "text-foreground";
+  if (state === "waiting") return "text-amber-700 dark:text-amber-300";
+  if (state === "done") return "text-emerald-600 dark:text-emerald-300";
+  if (state === "error") return "text-destructive";
+  return "text-muted-foreground";
+}
+
+export function agentRunIconClass(status: AgentRunStatusInput): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "running") return "text-emerald-600 dark:text-emerald-400";
+  if (state === "waiting") return "text-amber-600 dark:text-amber-400";
+  if (state === "error") return "text-destructive";
+  if (state === "done") return "text-sky-600 dark:text-sky-400";
+  return "text-muted-foreground";
+}
+
+export function agentRunPanelClass(status: AgentRunStatusInput): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "running") {
+    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+  }
+  if (state === "waiting") {
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  if (state === "error") {
+    return "border-destructive/35 bg-destructive/10 text-destructive";
+  }
+  if (state === "done") {
+    return "border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400";
+  }
+  return "border-border/70 bg-muted/45 text-muted-foreground";
+}
+
+export function agentRunRobotButtonClass(status: AgentRunStatusInput): string {
+  const state = agentRunStateFromStatus(status);
+  if (state === "running") {
+    return "border-emerald-500/40 bg-emerald-500/10 animate-[breathing_2s_ease-in-out_infinite]";
+  }
+  if (state === "waiting") return "border-amber-500/40 bg-amber-500/10";
+  if (state === "error") return "border-destructive/50 bg-destructive/10";
+  if (state === "done") return "border-sky-500/30 bg-sky-500/8";
+  return "border-border/60 bg-muted/35";
+}
+
+export function agentRunAvatarAnimationClass(
+  status: AgentRunStatusInput,
+): string | null {
+  const state = agentRunStateFromStatus(status);
+  if (state === "running") return "animate-[breathing_2s_ease-in-out_infinite]";
+  if (state === "waiting" || state === "pending") return "animate-pulse";
+  return null;
+}
+
+export function agentRunHue(status: AgentRunStatusInput): number {
+  const state = agentRunStateFromStatus(status);
+  if (state === "error") return 8;
+  if (state === "waiting" || state === "pending") return 42;
+  return 118;
+}
+
+export function agentRunBeadTone({
+  paused,
+  runFailed,
+  status,
+  waiting,
+}: {
+  paused?: boolean;
+  runFailed?: boolean;
+  status: AgentRunStatusInput;
+  waiting?: boolean;
+}): { bead: string; halo: string | null } {
+  const state =
+    runFailed || agentRunStateFromStatus(status) === "error"
+      ? "error"
+      : paused || waiting
+        ? "waiting"
+        : agentRunStateFromStatus(status);
+  if (state === "error") {
+    return {
+      bead: "bg-destructive/75 shadow-destructive/15",
+      halo: null,
+    };
+  }
+  if (state === "waiting") {
+    return {
+      bead: "bg-amber-500/70 shadow-amber-500/15",
+      halo: null,
+    };
+  }
+  if (state === "running") {
+    return {
+      bead: "bg-emerald-500/70 shadow-emerald-500/15",
+      halo: "bg-emerald-500/15 animate-pulse",
+    };
+  }
+  return {
+    bead: "bg-muted-foreground/45 shadow-black/10",
+    halo: null,
+  };
+}

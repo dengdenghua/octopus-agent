@@ -30,6 +30,12 @@ import {
 } from "@/core/tasks/types";
 import { explainLastToolCall } from "@/core/tools/utils";
 import { cn } from "@/lib/utils";
+import {
+  type AgentRunState,
+  agentRunHue,
+  agentRunIconClass,
+  agentRunStatusLightPulseClass,
+} from "../agent-run-status";
 
 import { CitationLink } from "../citations/citation-link";
 import { FlipDisplay } from "../flip-display";
@@ -42,18 +48,32 @@ const LazyStreamdown = lazy(
 );
 
 function getStatusIcon(status: SubtaskStatus) {
-  if (status === "completed") return <CheckCircleIcon className="size-3" />;
+  const runState = subtaskRunState(status);
+  if (status === "completed")
+    return (
+      <CheckCircleIcon className={cn("size-3", agentRunIconClass(runState))} />
+    );
   if (status === "failed")
-    return <XCircleIcon className="size-3 text-red-500" />;
+    return <XCircleIcon className="size-3 text-destructive" />;
   if (status === "cancelled")
-    return <XCircleIcon className="size-3 text-yellow-500" />;
+    return <XCircleIcon className="size-3 text-amber-500" />;
   if (status === "timed_out")
-    return <XCircleIcon className="size-3 text-orange-500" />;
+    return <XCircleIcon className="size-3 text-destructive" />;
   if (status === "pending")
-    return <PauseCircleIcon className="size-3 text-muted-foreground" />;
+    return <PauseCircleIcon className="size-3 text-amber-500" />;
   if (isSubtaskActive(status))
-    return <Loader2Icon className="size-3 animate-spin" />;
+    return (
+      <Loader2Icon className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
+    );
   return <ClipboardListIcon className="size-3" />;
+}
+
+function subtaskRunState(status: SubtaskStatus): AgentRunState {
+  if (status === "completed") return "done";
+  if (status === "failed" || status === "timed_out") return "error";
+  if (status === "pending" || status === "cancelled") return "waiting";
+  if (isSubtaskActive(status)) return "running";
+  return "pending";
 }
 
 function getStatusLabel(
@@ -91,6 +111,7 @@ export function SubtaskCard({
     [task],
   );
   const isActive = task ? isSubtaskActive(task.status) : false;
+  const runState = task ? subtaskRunState(task.status) : "pending";
 
   // Hoisted above the ``if (!task) return`` guard so the hook fires
   // every render. When ``task`` flipped from null → loaded the old
@@ -192,9 +213,10 @@ export function SubtaskCard({
                 {isActive && task.hue != null && (
                   <DotProgress
                     progress={task.progress}
-                    hue={task.hue}
+                    hue={agentRunHue(runState)}
                     cols={10}
                     rows={2}
+                    className={cn(agentRunStatusLightPulseClass(runState))}
                   />
                 )}
                 <ChevronUp
@@ -238,9 +260,9 @@ export function SubtaskCard({
                       label={explainLastToolCall(msg, t)}
                       icon={
                         idx === task.messages!.length - 1 && isActive ? (
-                          <Loader2Icon className="size-4 animate-spin" />
+                          <Loader2Icon className="size-4 animate-spin text-emerald-600 dark:text-emerald-400" />
                         ) : (
-                          <CheckCircleIcon className="size-4 text-green-500 dark:text-green-400" />
+                          <CheckCircleIcon className="size-4 text-emerald-500 dark:text-emerald-400" />
                         )
                       }
                     />

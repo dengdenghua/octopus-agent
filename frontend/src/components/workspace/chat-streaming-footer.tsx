@@ -1,5 +1,6 @@
 import {
   ChevronDownIcon,
+  CircleIcon,
   Loader2Icon,
   MessageCircleIcon,
   UsersIcon,
@@ -14,6 +15,11 @@ import { cn } from "@/lib/utils";
 import { LiveToolTimeline, type LiveToolEvent } from "./live-tool-timeline";
 import { getProcessTraceEvents } from "./process-trace-events";
 import type { ReasoningMode } from "./reasoning-mode";
+import {
+  type AgentRunState,
+  agentRunBadgeClass,
+  agentRunPanelClass,
+} from "./agent-run-status";
 
 export interface ChatStreamingFooterProps {
   thread: BaseStream<AgentThreadState>;
@@ -54,8 +60,8 @@ export function ChatStreamingFooter({
     semanticWorkEvents.length > 0;
   const shouldShow = isWaitingForAssistantMessage || hasLiveSignals;
   const [isMounted, setIsMounted] = useState(shouldShow);
-  const [detailsOpen, setDetailsOpen] = useState(hasLiveSignals);
-  const autoOpenedForRunRef = useRef(hasLiveSignals);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const autoOpenedForRunRef = useRef(false);
 
   useEffect(() => {
     if (shouldShow) {
@@ -75,11 +81,14 @@ export function ChatStreamingFooter({
       return;
     }
 
-    if (!autoOpenedForRunRef.current) {
+    if (
+      !autoOpenedForRunRef.current &&
+      (isDeepMode || isTeamMode || normalizedMode === "code")
+    ) {
       setDetailsOpen(true);
       autoOpenedForRunRef.current = true;
     }
-  }, [hasLiveSignals]);
+  }, [hasLiveSignals, isDeepMode, isTeamMode, normalizedMode]);
 
   if (!isMounted) return null;
 
@@ -100,7 +109,7 @@ export function ChatStreamingFooter({
       )}
     >
       {hasLiveSignals && (
-        <div className="w-full border-l border-border/60 pl-4">
+        <div className="w-full">
           <ProcessHeader
             mode={normalizedMode}
             events={semanticWorkEvents}
@@ -108,7 +117,7 @@ export function ChatStreamingFooter({
             onToggle={() => setDetailsOpen((value) => !value)}
           />
           {detailsOpen && (
-            <div className="mt-1.5">
+            <div className="mt-1.5 border-l border-border/55 pl-4">
               <LiveToolTimeline
                 events={displayEvents}
                 className="py-0"
@@ -171,6 +180,9 @@ function ProcessHeader({
   const running = visibleEvents.filter(
     (event) => event.status === "running",
   ).length;
+  const waiting = visibleEvents.filter(
+    (event) => event.status === "waiting_approval",
+  ).length;
   const done = visibleEvents.filter((event) => event.status === "done").length;
   const error = visibleEvents.filter(
     (event) => event.status === "error",
@@ -181,11 +193,21 @@ function ProcessHeader({
   const phase = currentPhase(visibleEvents, mode, t);
   const participants = realAgentParticipants(visibleEvents);
   const total = visibleEvents.length;
+  const headerState: AgentRunState =
+    error > 0
+      ? "error"
+      : waiting > 0
+        ? "waiting"
+        : running > 0
+          ? "running"
+          : done > 0
+            ? "done"
+            : "pending";
 
   return (
     <button
       type="button"
-      className="group flex w-full items-center justify-between gap-3 rounded-lg px-1 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/25"
+      className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/70 px-2.5 py-2 text-left text-xs text-muted-foreground shadow-sm shadow-black/[0.025] backdrop-blur transition-colors hover:bg-muted/25"
       onClick={onToggle}
       aria-expanded={expanded}
     >
@@ -193,14 +215,12 @@ function ProcessHeader({
         <span
           className={cn(
             "flex size-6 items-center justify-center rounded-lg border",
-            isDeep
-              ? "border-primary/25 bg-primary/10 text-primary"
-              : isTeam
-                ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600"
-                : "border-border/70 bg-muted/45 text-muted-foreground",
+            agentRunPanelClass(headerState),
           )}
         >
-          {running > 0 ? (
+          {waiting > 0 ? (
+            <CircleIcon className="size-3.5" />
+          ) : running > 0 ? (
             <Loader2Icon className="size-3.5 animate-spin" />
           ) : (
             <Icon className="size-3.5" />
@@ -218,17 +238,30 @@ function ProcessHeader({
           </span>
         )}
         {running > 0 && (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
+          <span
+            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("running"))}
+          >
             {running} {t.chatStreamingFooter.running}
           </span>
         )}
+        {waiting > 0 && (
+          <span
+            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("waiting"))}
+          >
+            {waiting} {t.chatStreamingFooter.awaitingConfirmation}
+          </span>
+        )}
         {done > 0 && (
-          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">
+          <span
+            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("done"))}
+          >
             {done} {t.chatStreamingFooter.done}
           </span>
         )}
         {error > 0 && (
-          <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-destructive">
+          <span
+            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("error"))}
+          >
             {error} {t.chatStreamingFooter.error}
           </span>
         )}

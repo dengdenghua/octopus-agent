@@ -286,6 +286,7 @@ function currentPhaseFromServerSnapshot(
     if (explicit) return explicit;
   }
   return (
+    phases.find((phase) => phase.status === "waiting_approval") ??
     phases.find((phase) => phase.status === "running") ??
     phases.find((phase) => phase.status === "error") ??
     phases.find((phase) => phase.status === "pending") ??
@@ -330,9 +331,8 @@ function serverPhaseStatus(
   ) {
     return "done";
   }
-  if (status === "running" || status === "waiting_approval") {
-    return "running";
-  }
+  if (status === "waiting_approval") return "waiting_approval";
+  if (status === "running") return "running";
   return "pending";
 }
 

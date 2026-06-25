@@ -15,6 +15,7 @@ import {
   getUser as getStoredUser,
   login as loginApi,
   logout as logoutApi,
+  moliliSmsVerify,
   refreshToken,
   register as registerApi,
   _writeToken,
@@ -226,7 +227,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const smsLogin = useCallback(async (phone: string, code: string) => {
-    const { moliliSmsVerify } = await import("@/core/auth/api");
     const response = await moliliSmsVerify(phone, code);
     if (response.user) {
       const normalized = normalizeUserIdentity(

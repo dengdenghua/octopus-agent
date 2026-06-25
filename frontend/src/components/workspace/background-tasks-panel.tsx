@@ -56,7 +56,7 @@ const STATUS_CONFIG: Record<
 > = {
   queued: {
     label: "Queued",
-    color: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
+    color: "bg-muted-foreground/15 text-muted-foreground",
     icon: <ClockIcon className="size-3" />,
   },
   running: {
@@ -81,7 +81,7 @@ const STATUS_CONFIG: Record<
   },
   cancelled: {
     label: "Cancelled",
-    color: "bg-gray-500/15 text-gray-600 dark:text-gray-400",
+    color: "bg-muted-foreground/15 text-muted-foreground",
     icon: <XIcon className="size-3" />,
   },
   interrupted: {
@@ -277,7 +277,13 @@ function TaskDetailView({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center gap-2 border-b px-4 py-3">
-        <Button variant="ghost" size="icon" className="size-7" onClick={onBack} aria-label="Back">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-7"
+          onClick={onBack}
+          aria-label="Back"
+        >
           <ChevronLeftIcon className="size-4" />
         </Button>
         <div className="min-w-0 flex-1">

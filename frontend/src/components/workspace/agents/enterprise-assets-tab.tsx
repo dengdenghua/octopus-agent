@@ -76,9 +76,7 @@ export function EnterpriseAssetsTab({ query }: { query?: string }) {
         {t.enterpriseAssetsTab.notAvailableTitle}
         <br />
         {t.enterpriseAssetsTab.notAvailableHintPrefix}{" "}
-        <code className="rounded bg-muted/50 px-1">
-          OCTOPUS_ENTERPRISE_URL
-        </code>{" "}
+        <code className="rounded bg-muted/50 px-1">OCTOPUS_ENTERPRISE_URL</code>{" "}
         {t.enterpriseAssetsTab.notAvailableHintSuffix}
       </div>
     );

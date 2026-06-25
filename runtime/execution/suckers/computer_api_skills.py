@@ -176,6 +176,10 @@ def register_computer_api_skills(registry: SkillRegistry) -> int:
             cost_profile="high",
             trusted_source="skill://computer/execute_token",
             handler=_computer_execute_token,
+            # ADR-010 · executes a queued action on the one physical desktop
+            # (via /api/computer/actions/execute) ⇒ serialise. observe/plan/
+            # preview don't touch the screen, so they stay unmarked.
+            exclusive_resource="device:desktop",
         ),
     ]
     for item in items:

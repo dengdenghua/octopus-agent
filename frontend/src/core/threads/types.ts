@@ -72,6 +72,13 @@ export interface AgentThreadContext extends Record<string, unknown> {
   subagent_enabled: boolean;
   reasoning_effort?: ReasoningEffort;
   interaction_mode?: "office" | "coding";
+  mode_preset?: string;
+  workflow_preset?: string;
+  skill_pack_profile?: string;
+  verification_policy?: "light" | "standard" | "strict" | "visual";
+  default_skill_packs?: string[];
+  default_plugins?: string[];
+  mode_contract?: string;
   agent_name?: string;
   permission_mode?:
     | "default"

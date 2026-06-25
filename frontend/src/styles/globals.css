@@ -92,14 +92,6 @@
     }
   }
 
-  --animate-bouncing: bouncing 0.5s infinite alternate;
-  @keyframes bouncing {
-    to {
-      opacity: 0.1;
-      transform: translateY(-8px);
-    }
-  }
-
   --animate-streaming-bounce: streaming-bounce 1.4s ease-in-out infinite;
   @keyframes streaming-bounce {
     0%,
@@ -121,18 +113,6 @@
     to {
       opacity: 1;
       transform: scaleX(1);
-    }
-  }
-
-  --animate-suggestion-in: suggestion-in 0.2s ease-out forwards;
-  @keyframes suggestion-in {
-    from {
-      opacity: 0;
-      transform: translateY(-1.25rem);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
     }
   }
 
@@ -184,47 +164,6 @@
     }
   }
 
-  --animate-wave: wave 0.6s ease-in-out 2;
-  @keyframes wave {
-    0%,
-    100% {
-      transform: rotate(0deg);
-    }
-    25% {
-      transform: rotate(20deg);
-    }
-    50% {
-      transform: rotate(0deg);
-    }
-    75% {
-      transform: rotate(20deg);
-    }
-  }
-
-  --animate-slide-in-up: slide-in-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  @keyframes slide-in-up {
-    from {
-      opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  --animate-scale-in: scale-in 0.15s ease-out forwards;
-  @keyframes scale-in {
-    from {
-      opacity: 0;
-      transform: scale(0.97);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-
   --animate-pulse-soft: pulse-soft 2.5s ease-in-out infinite;
   @keyframes pulse-soft {
     0%,
@@ -236,47 +175,12 @@
     }
   }
 
-  --animate-shimmer: shimmer 2s linear infinite;
   @keyframes shimmer {
     from {
       background-position: -200% 0;
     }
     to {
       background-position: 200% 0;
-    }
-  }
-
-  --animate-float: float 3s ease-in-out infinite;
-  @keyframes float {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-6px);
-    }
-  }
-
-  --animate-spin-slow: spin 3s linear infinite;
-
-  --animate-glow: glow 2s ease-in-out infinite alternate;
-  @keyframes glow {
-    from {
-      box-shadow: 0 0 8px var(--primary) / 20;
-    }
-    to {
-      box-shadow: 0 0 20px var(--primary) / 40;
-    }
-  }
-
-  /* Breathing light effect for bot icon status indicator */
-  @keyframes breathing {
-    0%,
-    100% {
-      box-shadow: 0 0 0 0 rgb(16 185 129 / 0%);
-    }
-    50% {
-      box-shadow: 0 0 12px 2px rgb(16 185 129 / 35%);
     }
   }
 
@@ -419,8 +323,7 @@
     var(--foreground) 25%
   );
 
-  /* Compact density switch (Codex uses a tighter 14px base).
-     Apply via <html data-density="compact">. */
+  /* Density scale. Apply via <html data-density="...">. */
   --density-base-font-size: 15px;
   --density-row-padding-y: calc(var(--spacing) * 1.5);
   --density-row-padding-x: calc(var(--spacing) * 2.5);
@@ -548,12 +451,12 @@
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
   --shadow-card:
-    0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.06);
+    0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
   --shadow-elevated:
-    0 2px 6px rgba(15, 23, 42, 0.06), 0 18px 44px rgba(15, 23, 42, 0.12);
+    0 2px 6px rgba(0, 0, 0, 0.06), 0 18px 44px rgba(0, 0, 0, 0.12);
   --shadow-floating:
-    0 6px 18px rgba(15, 23, 42, 0.1), 0 28px 70px rgba(15, 23, 42, 0.18);
-  --shadow-modal: 0 18px 60px rgba(15, 23, 42, 0.22);
+    0 6px 18px rgba(0, 0, 0, 0.1), 0 28px 70px rgba(0, 0, 0, 0.18);
+  --shadow-modal: 0 18px 60px rgba(0, 0, 0, 0.22);
 }
 
 .dark.apple {
@@ -606,6 +509,20 @@
     @apply bg-background text-foreground antialiased;
   }
 
+  /* Consistent focus-visible ring for all interactive elements.
+     Individual components (Button, Input, etc.) define their own
+     focus styles, but this provides a baseline for custom elements
+     that use tabIndex or are natively focusable (a, button, etc.). */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+  }
+
   .desktop-overlay,
   .desktop-overlay body,
   .desktop-overlay #root {
@@ -635,15 +552,23 @@
     }
   }
 
-  /* Base font size */
   html {
-    font-size: 15px;
+    font-size: var(--density-base-font-size);
   }
 
-  /* Density switch: tight 14px base for info-dense Codex feel.
-     Opt in with <html data-density="compact"> or on a subtree. */
+  [data-density="relaxed"] {
+    --density-base-font-size: 16px;
+    --density-row-padding-y: calc(var(--spacing) * 1.75);
+    --density-row-padding-x: calc(var(--spacing) * 3);
+    --density-gap: calc(var(--spacing) * 5);
+    --density-page-padding: calc(var(--spacing) * 5);
+    --density-panel-padding: calc(var(--spacing) * 5);
+    --density-header-padding-y: calc(var(--spacing) * 3.5);
+    --density-header-padding-x: calc(var(--spacing) * 5.5);
+    --density-card-min-height: 204px;
+  }
+
   [data-density="compact"] {
-    font-size: 14px;
     --density-base-font-size: 14px;
     --density-row-padding-y: calc(var(--spacing) * 1.25);
     --density-row-padding-x: calc(var(--spacing) * 2);
@@ -654,7 +579,38 @@
     --density-header-padding-x: calc(var(--spacing) * 4);
     --density-card-min-height: 168px;
   }
+
+  [data-density="dense"] {
+    --density-base-font-size: 13px;
+    --density-row-padding-y: calc(var(--spacing) * 1);
+    --density-row-padding-x: calc(var(--spacing) * 1.75);
+    --density-gap: calc(var(--spacing) * 2.5);
+    --density-page-padding: calc(var(--spacing) * 3);
+    --density-panel-padding: calc(var(--spacing) * 3);
+    --density-header-padding-y: calc(var(--spacing) * 2);
+    --density-header-padding-x: calc(var(--spacing) * 3.5);
+    --density-card-min-height: 152px;
+  }
+
+  [data-density="ultradense"] {
+    --density-base-font-size: 12.5px;
+    --density-row-padding-y: calc(var(--spacing) * 0.75);
+    --density-row-padding-x: calc(var(--spacing) * 1.5);
+    --density-gap: calc(var(--spacing) * 2);
+    --density-page-padding: calc(var(--spacing) * 2.5);
+    --density-panel-padding: calc(var(--spacing) * 2.5);
+    --density-header-padding-y: calc(var(--spacing) * 1.75);
+    --density-header-padding-x: calc(var(--spacing) * 3);
+    --density-card-min-height: 136px;
+  }
+
   [data-density="compact"] .ui-dense-row {
+    padding-block: var(--density-row-padding-y);
+    padding-inline: var(--density-row-padding-x);
+  }
+  [data-density="relaxed"] .ui-dense-row,
+  [data-density="dense"] .ui-dense-row,
+  [data-density="ultradense"] .ui-dense-row {
     padding-block: var(--density-row-padding-y);
     padding-inline: var(--density-row-padding-x);
   }
@@ -750,7 +706,7 @@
   /* Skeleton: muted base with a diagonal shimmer band. */
   .codex-skeleton {
     position: relative;
-    overflow: hidden;
+    overflow: visible;
     background: color-mix(in oklch, var(--muted) 65%, transparent);
   }
   .codex-skeleton::before {
@@ -941,6 +897,278 @@
     }
   }
 
+  /* Landing page: deep-sea / bioluminescent OS aesthetic */
+  .octo-landing-root {
+    position: relative;
+    isolation: isolate;
+    min-height: 100vh;
+    width: 100%;
+    overflow-x: hidden;
+    background:
+      radial-gradient(
+        ellipse 80% 60% at 50% -10%,
+        color-mix(in oklch, var(--primary) 18%, transparent),
+        transparent 70%
+      ),
+      radial-gradient(
+        ellipse 60% 50% at 90% 80%,
+        color-mix(in oklch, oklch(0.55 0.22 190) 12%, transparent),
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 50% 40% at 10% 70%,
+        color-mix(in oklch, oklch(0.5 0.18 280) 10%, transparent),
+        transparent 55%
+      ),
+      var(--background);
+  }
+
+  .octo-landing-root::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background-image:
+      radial-gradient(
+        circle at 20% 30%,
+        rgba(56, 189, 248, 0.08) 0,
+        transparent 28%
+      ),
+      radial-gradient(
+        circle at 80% 20%,
+        rgba(124, 58, 237, 0.07) 0,
+        transparent 26%
+      ),
+      radial-gradient(
+        circle at 60% 85%,
+        rgba(34, 211, 238, 0.06) 0,
+        transparent 24%
+      );
+    filter: blur(60px);
+    animation: octo-landing-aurora 18s ease-in-out infinite alternate;
+  }
+
+  .octo-landing-root::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.35;
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in oklch, var(--foreground) 4%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklch, var(--foreground) 4%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+    -webkit-mask-image: radial-gradient(
+      ellipse at center,
+      black 30%,
+      transparent 80%
+    );
+  }
+
+  @keyframes octo-landing-aurora {
+    0% {
+      transform: scale(1) rotate(0deg);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.08) rotate(2deg);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1.04) rotate(-1deg);
+      opacity: 0.85;
+    }
+  }
+
+  .octo-landing-core {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .octo-landing-core::before,
+  .octo-landing-core::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+
+  .octo-landing-core::before {
+    inset: -20%;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      color-mix(in oklch, var(--primary) 35%, transparent) 60deg,
+      transparent 120deg,
+      color-mix(in oklch, oklch(0.55 0.2 190) 28%, transparent) 180deg,
+      transparent 240deg,
+      color-mix(in oklch, oklch(0.55 0.18 280) 25%, transparent) 300deg,
+      transparent 360deg
+    );
+    filter: blur(28px);
+    animation: spin 14s linear infinite;
+    opacity: 0.55;
+  }
+
+  .octo-landing-core::after {
+    inset: -8%;
+    background: radial-gradient(
+      circle at center,
+      color-mix(in oklch, var(--primary) 18%, transparent),
+      transparent 70%
+    );
+    filter: blur(16px);
+    animation: octo-core-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes octo-core-pulse {
+    0%,
+    100% {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.9;
+      transform: scale(1.06);
+    }
+  }
+
+  .octo-landing-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-xl);
+    border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+    background: color-mix(in oklch, var(--card) 72%, transparent);
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
+    box-shadow:
+      0 1px 2px color-mix(in oklch, var(--foreground) 3%, transparent),
+      0 12px 32px color-mix(in oklch, var(--background) 80%, transparent);
+    transition:
+      transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+
+  .octo-landing-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      color-mix(in oklch, var(--primary) 18%, transparent),
+      transparent 40%
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+
+  .octo-landing-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
+    box-shadow:
+      0 1px 2px color-mix(in oklch, var(--foreground) 4%, transparent),
+      0 20px 48px color-mix(in oklch, var(--background) 70%, transparent),
+      0 0 0 1px color-mix(in oklch, var(--primary) 12%, transparent);
+  }
+
+  .octo-landing-card:hover::before {
+    opacity: 1;
+  }
+
+  .octo-landing-loop-line {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklch, var(--primary) 40%, transparent),
+      color-mix(in oklch, oklch(0.55 0.2 190) 40%, transparent),
+      transparent
+    );
+    transform: translateY(-50%);
+  }
+
+  .octo-landing-loop-dot {
+    position: absolute;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    box-shadow: 0 0 12px color-mix(in oklch, var(--primary) 70%, transparent);
+    transform: translate(-50%, -50%);
+    animation: octo-loop-travel 8s linear infinite;
+  }
+
+  @keyframes octo-loop-travel {
+    0% {
+      left: 0;
+      opacity: 0;
+    }
+    5% {
+      opacity: 1;
+    }
+    95% {
+      opacity: 1;
+    }
+    100% {
+      left: 100%;
+      opacity: 0;
+    }
+  }
+
+  .octo-landing-float {
+    animation: octo-landing-float 5s ease-in-out infinite;
+  }
+
+  @keyframes octo-landing-float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-8px);
+    }
+  }
+
+  .octo-landing-shimmer {
+    background: linear-gradient(
+      110deg,
+      color-mix(in oklch, var(--foreground) 55%, transparent) 0%,
+      color-mix(in oklch, var(--primary) 75%, transparent) 35%,
+      color-mix(in oklch, oklch(0.55 0.2 190) 70%, transparent) 65%,
+      color-mix(in oklch, var(--foreground) 55%, transparent) 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: octo-landing-shimmer 5s linear infinite;
+  }
+
+  @keyframes octo-landing-shimmer {
+    to {
+      background-position: 200% center;
+    }
+  }
+
   .container-md {
     width: 100%;
     @media (width >= 40rem) {
@@ -1112,8 +1340,8 @@
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     box-shadow:
-      0 1px 2px rgba(15, 23, 42, 0.04),
-      0 8px 22px rgba(15, 23, 42, 0.05);
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 8px 22px rgba(0, 0, 0, 0.05);
     transition:
       box-shadow 0.2s ease,
       border-color 0.2s ease;
@@ -1122,8 +1350,8 @@
   .workspace-panel:hover {
     border-color: color-mix(in oklch, var(--border) 76%, var(--primary) 24%);
     box-shadow:
-      0 2px 4px rgba(15, 23, 42, 0.05),
-      0 12px 28px rgba(15, 23, 42, 0.08);
+      0 2px 4px rgba(0, 0, 0, 0.05),
+      0 12px 28px rgba(0, 0, 0, 0.08);
   }
 
   .workspace-panel-subtle {
@@ -1139,7 +1367,7 @@
 
   .workspace-panel-subtle:hover {
     border-color: color-mix(in oklch, var(--border) 72%, var(--primary) 28%);
-    box-shadow: 0 1px 8px rgba(15, 23, 42, 0.06);
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
   }
 
   .dark .workspace-panel {
@@ -1313,7 +1541,7 @@
   }
 
   .apple [data-slot="button"] {
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   }
 
   .apple [data-slot="button"][data-variant="default"] {
@@ -1446,6 +1674,1424 @@
     background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
     border: 2px solid transparent;
     background-clip: padding-box;
+  }
+
+  :root[data-material-theme="liquid"] {
+    --global-glass-blur: 24px;
+    --global-glass-saturate: 1.58;
+    --global-glass-contrast: 1.045;
+    --global-glass-depth: 1;
+    --global-glass-field-opacity: 0.42;
+    --global-glass-field-saturate: 1.1;
+    --global-glass-control-blur: 16px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 54%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 66%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 38%,
+      transparent
+    );
+    --global-glass-border: color-mix(in oklch, var(--border) 58%, white 18%);
+    --global-glass-highlight: color-mix(in oklch, white 62%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 40%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 12%, transparent) inset,
+      0 18px 46px rgb(15 23 42 / 0.12);
+    --liquid-glass-bg: color-mix(in oklch, white 22%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 18%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 22%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 21%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 25%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 30%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 64%, transparent);
+    --liquid-glass-noise: 0.016;
+    --liquid-glass-displacement: 1.5px;
+    --liquid-glass-shadow: 0 24px 70px rgb(15 23 42 / 0.13);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="crystal"] {
+    --global-glass-blur: 13px;
+    --global-glass-saturate: 1.22;
+    --global-glass-contrast: 1.012;
+    --global-glass-depth: 0.58;
+    --global-glass-field-opacity: 0.16;
+    --global-glass-field-saturate: 0.92;
+    --global-glass-control-blur: 8px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 20%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 28%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 12%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 32%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 24%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 5%, transparent) inset,
+      0 8px 22px rgb(15 23 42 / 0.055);
+    --liquid-glass-bg: color-mix(in oklch, white 8%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 6%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 8%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 10%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 12%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 16%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 42%, transparent);
+    --liquid-glass-noise: 0.004;
+    --liquid-glass-displacement: 0.7px;
+    --liquid-glass-shadow: 0 12px 34px rgb(15 23 42 / 0.07);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="clear"] {
+    --global-glass-blur: 17px;
+    --global-glass-saturate: 1.35;
+    --global-glass-contrast: 1.02;
+    --global-glass-depth: 0.76;
+    --global-glass-field-opacity: 0.26;
+    --global-glass-field-saturate: 1;
+    --global-glass-control-blur: 11px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 36%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 48%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 24%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 46%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 34%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 8%, transparent) inset,
+      0 12px 30px rgb(15 23 42 / 0.08);
+    --liquid-glass-bg: color-mix(in oklch, white 14%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 10%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 14%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 16%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 18%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 22%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 52%, transparent);
+    --liquid-glass-noise: 0.008;
+    --liquid-glass-displacement: 1px;
+    --liquid-glass-shadow: 0 16px 42px rgb(15 23 42 / 0.09);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="deep"] {
+    --global-glass-blur: 34px;
+    --global-glass-saturate: 1.72;
+    --global-glass-contrast: 1.065;
+    --global-glass-depth: 1.2;
+    --global-glass-field-opacity: 0.56;
+    --global-glass-field-saturate: 1.2;
+    --global-glass-control-blur: 20px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 64%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 76%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 50%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 72%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 52%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 16%, transparent) inset,
+      0 24px 64px rgb(15 23 42 / 0.16);
+    --liquid-glass-bg: color-mix(in oklch, white 30%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 25%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 31%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 30%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 35%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 42%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 76%, transparent);
+    --liquid-glass-noise: 0.018;
+    --liquid-glass-displacement: 2px;
+    --liquid-glass-shadow: 0 30px 90px rgb(15 23 42 / 0.18);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="frosted"] {
+    --global-glass-blur: 38px;
+    --global-glass-saturate: 1.42;
+    --global-glass-contrast: 1.06;
+    --global-glass-depth: 1.06;
+    --global-glass-field-opacity: 0.68;
+    --global-glass-field-saturate: 1.05;
+    --global-glass-control-blur: 24px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 82%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 90%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 68%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 58%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 42%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 13%, transparent) inset,
+      0 22px 58px rgb(15 23 42 / 0.14);
+    --liquid-glass-bg: color-mix(in oklch, white 48%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 40%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 48%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 46%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 54%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 60%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 70%, transparent);
+    --liquid-glass-noise: 0.014;
+    --liquid-glass-displacement: 1.3px;
+    --liquid-glass-shadow: 0 24px 70px rgb(15 23 42 / 0.14);
+  }
+
+  :root[data-material-theme="liquid"].dark {
+    --global-glass-blur: 24px;
+    --global-glass-saturate: 1.38;
+    --global-glass-contrast: 1.08;
+    --global-glass-field-opacity: 0.38;
+    --global-glass-field-saturate: 0.95;
+    --global-glass-control-blur: 15px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 54%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 68%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 40%,
+      transparent
+    );
+    --global-glass-border: color-mix(in oklch, var(--border) 55%, white 8%);
+    --global-glass-highlight: color-mix(in oklch, white 18%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 10%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 32%, transparent) inset,
+      0 22px 56px rgb(0 0 0 / 0.34);
+    --liquid-glass-bg: color-mix(in oklch, var(--background) 50%, transparent);
+    --liquid-glass-thin-bg: color-mix(
+      in oklch,
+      var(--background) 42%,
+      transparent
+    );
+    --liquid-glass-card-bg: color-mix(
+      in oklch,
+      var(--background) 52%,
+      transparent
+    );
+    --liquid-glass-dock-bg: color-mix(
+      in oklch,
+      var(--background) 50%,
+      transparent
+    );
+    --liquid-glass-sheet-bg: color-mix(
+      in oklch,
+      var(--background) 58%,
+      transparent
+    );
+    --liquid-glass-input-bg: color-mix(
+      in oklch,
+      var(--background) 64%,
+      transparent
+    );
+    --liquid-glass-border: color-mix(in oklch, white 20%, transparent);
+    --liquid-glass-noise: 0.014;
+    --liquid-glass-shadow: 0 26px 82px rgb(0 0 0 / 0.38);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="crystal"].dark {
+    --global-glass-blur: 12px;
+    --global-glass-saturate: 1.08;
+    --global-glass-contrast: 1.04;
+    --global-glass-field-opacity: 0.13;
+    --global-glass-field-saturate: 0.82;
+    --global-glass-control-blur: 8px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 26%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 34%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 18%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 8%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 5%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 18%, transparent) inset,
+      0 10px 28px rgb(0 0 0 / 0.2);
+    --liquid-glass-bg: color-mix(in oklch, var(--background) 25%, transparent);
+    --liquid-glass-thin-bg: color-mix(
+      in oklch,
+      var(--background) 20%,
+      transparent
+    );
+    --liquid-glass-card-bg: color-mix(
+      in oklch,
+      var(--background) 25%,
+      transparent
+    );
+    --liquid-glass-dock-bg: color-mix(
+      in oklch,
+      var(--background) 28%,
+      transparent
+    );
+    --liquid-glass-sheet-bg: color-mix(
+      in oklch,
+      var(--background) 32%,
+      transparent
+    );
+    --liquid-glass-input-bg: color-mix(
+      in oklch,
+      var(--background) 38%,
+      transparent
+    );
+    --liquid-glass-border: color-mix(in oklch, white 12%, transparent);
+    --liquid-glass-noise: 0.004;
+    --liquid-glass-displacement: 0.7px;
+    --liquid-glass-shadow: 0 14px 42px rgb(0 0 0 / 0.26);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="clear"].dark {
+    --global-glass-blur: 17px;
+    --global-glass-saturate: 1.18;
+    --global-glass-contrast: 1.06;
+    --global-glass-field-opacity: 0.24;
+    --global-glass-field-saturate: 0.9;
+    --global-glass-control-blur: 10px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 42%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 52%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 30%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 12%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 7%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 24%, transparent) inset,
+      0 16px 38px rgb(0 0 0 / 0.25);
+    --liquid-glass-bg: color-mix(in oklch, var(--background) 36%, transparent);
+    --liquid-glass-thin-bg: color-mix(
+      in oklch,
+      var(--background) 30%,
+      transparent
+    );
+    --liquid-glass-card-bg: color-mix(
+      in oklch,
+      var(--background) 36%,
+      transparent
+    );
+    --liquid-glass-dock-bg: color-mix(
+      in oklch,
+      var(--background) 38%,
+      transparent
+    );
+    --liquid-glass-sheet-bg: color-mix(
+      in oklch,
+      var(--background) 42%,
+      transparent
+    );
+    --liquid-glass-input-bg: color-mix(
+      in oklch,
+      var(--background) 48%,
+      transparent
+    );
+    --liquid-glass-border: color-mix(in oklch, white 16%, transparent);
+    --liquid-glass-noise: 0.008;
+    --liquid-glass-displacement: 1px;
+    --liquid-glass-shadow: 0 18px 52px rgb(0 0 0 / 0.3);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="deep"].dark {
+    --global-glass-blur: 32px;
+    --global-glass-saturate: 1.48;
+    --global-glass-contrast: 1.1;
+    --global-glass-field-opacity: 0.5;
+    --global-glass-field-saturate: 1.04;
+    --global-glass-control-blur: 20px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 45%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 60%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 34%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 24%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 13%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 38%, transparent) inset,
+      0 28px 74px rgb(0 0 0 / 0.42);
+    --liquid-glass-bg: color-mix(in oklch, var(--background) 62%, transparent);
+    --liquid-glass-thin-bg: color-mix(
+      in oklch,
+      var(--background) 54%,
+      transparent
+    );
+    --liquid-glass-card-bg: color-mix(
+      in oklch,
+      var(--background) 64%,
+      transparent
+    );
+    --liquid-glass-dock-bg: color-mix(
+      in oklch,
+      var(--background) 62%,
+      transparent
+    );
+    --liquid-glass-sheet-bg: color-mix(
+      in oklch,
+      var(--background) 70%,
+      transparent
+    );
+    --liquid-glass-input-bg: color-mix(
+      in oklch,
+      var(--background) 76%,
+      transparent
+    );
+    --liquid-glass-border: color-mix(in oklch, white 24%, transparent);
+    --liquid-glass-noise: 0.018;
+    --liquid-glass-displacement: 2px;
+    --liquid-glass-shadow: 0 30px 90px rgb(0 0 0 / 0.44);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="frosted"].dark {
+    --global-glass-blur: 36px;
+    --global-glass-saturate: 1.28;
+    --global-glass-contrast: 1.1;
+    --global-glass-field-opacity: 0.58;
+    --global-glass-field-saturate: 0.96;
+    --global-glass-control-blur: 23px;
+    --global-glass-surface: color-mix(in oklch, var(--card) 76%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 86%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 62%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 17%, transparent);
+    --global-glass-shadow:
+      0 1px 1px color-mix(in oklch, white 10%, transparent) inset,
+      0 -1px 1px color-mix(in oklch, black 34%, transparent) inset,
+      0 26px 70px rgb(0 0 0 / 0.38);
+    --liquid-glass-bg: color-mix(in oklch, var(--background) 78%, transparent);
+    --liquid-glass-thin-bg: color-mix(
+      in oklch,
+      var(--background) 70%,
+      transparent
+    );
+    --liquid-glass-card-bg: color-mix(
+      in oklch,
+      var(--background) 78%,
+      transparent
+    );
+    --liquid-glass-dock-bg: color-mix(
+      in oklch,
+      var(--background) 76%,
+      transparent
+    );
+    --liquid-glass-sheet-bg: color-mix(
+      in oklch,
+      var(--background) 84%,
+      transparent
+    );
+    --liquid-glass-input-bg: color-mix(
+      in oklch,
+      var(--background) 88%,
+      transparent
+    );
+    --liquid-glass-border: color-mix(in oklch, white 22%, transparent);
+    --liquid-glass-noise: 0.014;
+    --liquid-glass-displacement: 1.4px;
+    --liquid-glass-shadow: 0 28px 82px rgb(0 0 0 / 0.4);
+  }
+
+  :root[data-material-theme="liquid"].apple {
+    --global-glass-blur: 24px;
+    --global-glass-saturate: 1.46;
+    --global-glass-contrast: 1.03;
+    --global-glass-field-opacity: 0.3;
+    --global-glass-field-saturate: 1;
+    --global-glass-surface: color-mix(in oklch, var(--card) 48%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 60%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 34%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 54%, transparent);
+    --liquid-glass-bg: color-mix(in oklch, white 18%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 14%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 18%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 18%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 22%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 26%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 62%, transparent);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="crystal"].apple {
+    --global-glass-blur: 12px;
+    --global-glass-saturate: 1.16;
+    --global-glass-field-opacity: 0.12;
+    --global-glass-surface: color-mix(in oklch, var(--card) 14%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 20%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 8%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 30%, transparent);
+    --liquid-glass-bg: color-mix(in oklch, white 6%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 4%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 6%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 8%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 10%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 14%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 42%, transparent);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="clear"].apple {
+    --global-glass-blur: 16px;
+    --global-glass-saturate: 1.26;
+    --global-glass-field-opacity: 0.2;
+    --global-glass-surface: color-mix(in oklch, var(--card) 30%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 40%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 20%,
+      transparent
+    );
+    --liquid-glass-bg: color-mix(in oklch, white 12%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 8%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 12%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 13%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 16%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 20%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 52%, transparent);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="deep"].apple {
+    --global-glass-blur: 30px;
+    --global-glass-saturate: 1.58;
+    --global-glass-field-opacity: 0.42;
+    --global-glass-surface: color-mix(in oklch, var(--card) 62%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 74%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 50%,
+      transparent
+    );
+    --liquid-glass-bg: color-mix(in oklch, white 28%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 22%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 28%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 28%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 34%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 40%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 74%, transparent);
+  }
+
+  :root[data-material-theme="liquid"][data-material-intensity="frosted"].apple {
+    --global-glass-blur: 36px;
+    --global-glass-saturate: 1.36;
+    --global-glass-field-opacity: 0.6;
+    --global-glass-surface: color-mix(in oklch, var(--card) 78%, transparent);
+    --global-glass-surface-strong: color-mix(
+      in oklch,
+      var(--card) 88%,
+      transparent
+    );
+    --global-glass-surface-soft: color-mix(
+      in oklch,
+      var(--card) 64%,
+      transparent
+    );
+    --global-glass-highlight: color-mix(in oklch, white 52%, transparent);
+    --liquid-glass-bg: color-mix(in oklch, white 44%, transparent);
+    --liquid-glass-thin-bg: color-mix(in oklch, white 36%, transparent);
+    --liquid-glass-card-bg: color-mix(in oklch, white 44%, transparent);
+    --liquid-glass-dock-bg: color-mix(in oklch, white 42%, transparent);
+    --liquid-glass-sheet-bg: color-mix(in oklch, white 50%, transparent);
+    --liquid-glass-input-bg: color-mix(in oklch, white 56%, transparent);
+    --liquid-glass-border: color-mix(in oklch, white 70%, transparent);
+  }
+
+  :root[data-material-theme="liquid"] body {
+    background:
+      radial-gradient(
+        circle at 18% -12%,
+        color-mix(in oklch, var(--primary) 12%, transparent),
+        transparent 30rem
+      ),
+      radial-gradient(
+        circle at 88% 4%,
+        color-mix(in oklch, var(--accent) 32%, transparent),
+        transparent 28rem
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, var(--background) 92%, white 8%),
+        var(--background) 36rem
+      ),
+      var(--background);
+  }
+
+  :root[data-material-theme="liquid"].dark body {
+    background:
+      radial-gradient(
+        circle at 14% -10%,
+        color-mix(in oklch, var(--primary) 18%, transparent),
+        transparent 32rem
+      ),
+      radial-gradient(
+        circle at 88% 0%,
+        color-mix(in oklch, var(--accent) 18%, transparent),
+        transparent 30rem
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, var(--background) 84%, white 4%),
+        var(--background) 34rem
+      ),
+      var(--background);
+  }
+
+  :root[data-material-theme="liquid"] .workspace-shell {
+    isolation: isolate;
+    background:
+      radial-gradient(
+        circle at 24% -14%,
+        color-mix(in oklch, var(--primary) 12%, transparent),
+        transparent 28rem
+      ),
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, var(--background) 82%, transparent),
+        color-mix(in oklch, var(--background) 94%, transparent) 42rem
+      );
+  }
+
+  :root[data-material-theme="liquid"] .workspace-panel,
+  :root[data-material-theme="liquid"] [data-slot="card"],
+  :root[data-material-theme="liquid"] [data-slot="dialog-content"],
+  :root[data-material-theme="liquid"] [data-slot="dropdown-menu-content"],
+  :root[data-material-theme="liquid"] [data-slot="select-content"],
+  :root[data-material-theme="liquid"] [data-slot="popover-content"],
+  :root[data-material-theme="liquid"] [data-slot="sidebar-inner"] {
+    border-color: var(--global-glass-border);
+    background:
+      linear-gradient(180deg, var(--global-glass-highlight), transparent 30%),
+      radial-gradient(
+        80% 140% at 12% -20%,
+        color-mix(in oklch, white 22%, transparent),
+        transparent 54%
+      ),
+      var(--global-glass-surface);
+    box-shadow: var(--global-glass-shadow);
+    backdrop-filter: blur(var(--global-glass-blur))
+      saturate(var(--global-glass-saturate))
+      contrast(var(--global-glass-contrast));
+    -webkit-backdrop-filter: blur(var(--global-glass-blur))
+      saturate(var(--global-glass-saturate))
+      contrast(var(--global-glass-contrast));
+  }
+
+  :root[data-material-theme="liquid"] .workspace-panel-subtle,
+  :root[data-material-theme="liquid"] [data-slot="sidebar-inset"],
+  :root[data-material-theme="liquid"] [data-slot="segmented-control"] {
+    border-color: color-mix(
+      in oklch,
+      var(--global-glass-border) 82%,
+      transparent
+    );
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, white 28%, transparent),
+        transparent 34%
+      ),
+      var(--global-glass-surface-soft);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 38%, transparent),
+      0 10px 28px rgb(15 23 42 / 0.08);
+    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
+      saturate(var(--global-glass-saturate));
+    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
+      saturate(var(--global-glass-saturate));
+  }
+
+  :root[data-material-theme="liquid"].dark .workspace-panel-subtle,
+  :root[data-material-theme="liquid"].dark [data-slot="sidebar-inset"],
+  :root[data-material-theme="liquid"].dark [data-slot="segmented-control"] {
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 9%, transparent),
+      0 14px 34px rgb(0 0 0 / 0.26);
+  }
+
+  :root[data-material-theme="liquid"] .workspace-panel:hover,
+  :root[data-material-theme="liquid"] .workspace-panel-subtle:hover,
+  :root[data-material-theme="liquid"] [data-slot="card"]:hover {
+    border-color: color-mix(in oklch, var(--border) 54%, var(--primary) 46%);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 50%, transparent),
+      0 22px 56px rgb(15 23 42 / 0.14);
+  }
+
+  :root[data-material-theme="liquid"].dark .workspace-panel:hover,
+  :root[data-material-theme="liquid"].dark .workspace-panel-subtle:hover,
+  :root[data-material-theme="liquid"].dark [data-slot="card"]:hover {
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 11%, transparent),
+      0 24px 62px rgb(0 0 0 / 0.38);
+  }
+
+  :root[data-material-theme="liquid"] [data-slot="dialog-content"] {
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 45%, transparent),
+      0 34px 100px rgb(15 23 42 / 0.28);
+  }
+
+  :root[data-material-theme="liquid"] [data-slot="dialog-overlay"] {
+    background: color-mix(in oklch, black 24%, transparent);
+    backdrop-filter: blur(12px) saturate(1.1);
+    -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  }
+
+  :root[data-material-theme="liquid"]
+    :is(
+      [data-slot="dropdown-menu-content"],
+      [data-slot="select-content"],
+      [data-slot="popover-content"]
+    ) {
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 42%, transparent),
+      0 18px 50px rgb(15 23 42 / 0.18);
+  }
+
+  :root[data-material-theme="liquid"] [data-slot="sidebar-container"] {
+    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.7))
+      saturate(var(--global-glass-saturate));
+    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.7))
+      saturate(var(--global-glass-saturate));
+  }
+
+  :root[data-material-theme="liquid"] [data-slot="sidebar-inner"] {
+    overflow: hidden;
+  }
+
+  :root[data-material-theme="liquid"] [data-slot="sidebar-inner"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        100% 42% at 0% 0%,
+        color-mix(in oklch, var(--primary) 10%, transparent),
+        transparent 62%
+      ),
+      linear-gradient(
+        90deg,
+        color-mix(in oklch, white 18%, transparent),
+        transparent 32%
+      );
+    mix-blend-mode: screen;
+    opacity: 0.7;
+  }
+
+  :root[data-material-theme="liquid"]:not(.dark):not(.apple)
+    [data-slot="sidebar-inner"] {
+    border-color: color-mix(in oklch, var(--sidebar-border) 72%, transparent);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, white 42%, transparent),
+        transparent 32%
+      ),
+      radial-gradient(
+        110% 54% at 0% 0%,
+        color-mix(in oklch, var(--primary) 9%, transparent),
+        transparent 66%
+      ),
+      color-mix(in oklch, var(--global-glass-surface) 82%, transparent);
+    box-shadow:
+      inset -1px 0 0 color-mix(in oklch, white 34%, transparent),
+      0 14px 36px rgb(15 23 42 / 0.08);
+    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
+      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.01);
+    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.78))
+      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.01);
+  }
+
+  :root[data-material-theme="liquid"]:not(.dark):not(.apple)
+    [data-slot="sidebar-inner"]::before {
+    background:
+      linear-gradient(
+        90deg,
+        color-mix(in oklch, white 16%, transparent),
+        transparent 34%
+      ),
+      radial-gradient(
+        110% 42% at 0% 0%,
+        color-mix(in oklch, var(--primary) 5%, transparent),
+        transparent 66%
+      );
+    opacity: 0.32;
+  }
+
+  :root[data-material-theme="liquid"].dark [data-slot="sidebar-inner"] {
+    border-color: color-mix(in oklch, var(--sidebar-border) 78%, white 8%);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, white 7%, transparent),
+        transparent 34%
+      ),
+      radial-gradient(
+        120% 62% at 0% 0%,
+        color-mix(in oklch, var(--primary) 11%, transparent),
+        transparent 68%
+      ),
+      color-mix(in oklch, var(--global-glass-surface) 86%, transparent);
+    box-shadow:
+      inset -1px 0 0 color-mix(in oklch, white 8%, transparent),
+      0 18px 46px rgb(0 0 0 / 0.32);
+    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.82))
+      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.06);
+    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.82))
+      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.06);
+  }
+
+  :root[data-material-theme="liquid"].dark [data-slot="sidebar-inner"]::before {
+    background:
+      linear-gradient(
+        90deg,
+        color-mix(in oklch, white 6%, transparent),
+        transparent 34%
+      ),
+      radial-gradient(
+        110% 44% at 0% 0%,
+        color-mix(in oklch, var(--primary) 7%, transparent),
+        transparent 68%
+      );
+    opacity: 0.42;
+  }
+
+  :root[data-material-theme="liquid"].apple [data-slot="sidebar-inner"] {
+    border-color: color-mix(in oklch, var(--border) 52%, white 26%);
+    background-color: rgb(255 255 255 / 0.42);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, white 42%, transparent),
+        transparent 32%
+      ),
+      radial-gradient(
+        112% 54% at 0% 7%,
+        color-mix(in oklch, oklch(0.92 0.045 218) 9%, transparent),
+        transparent 68%
+      ),
+      radial-gradient(
+        96% 54% at 100% 100%,
+        color-mix(in oklch, oklch(0.89 0.038 28) 7%, transparent),
+        transparent 72%
+      ),
+      color-mix(in oklch, var(--global-glass-surface) 84%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 46%, transparent),
+      inset -1px 0 0 color-mix(in oklch, white 28%, transparent),
+      0 18px 42px rgb(15 23 42 / 0.1);
+    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.86))
+      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.02);
+    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.86))
+      saturate(calc(var(--global-glass-saturate) * 0.9)) contrast(1.02);
+  }
+
+  :root[data-material-theme="liquid"].apple
+    [data-slot="sidebar-inner"]::before {
+    background:
+      linear-gradient(
+        90deg,
+        color-mix(in oklch, white 16%, transparent),
+        transparent 36%
+      ),
+      radial-gradient(
+        100% 44% at 0% 0%,
+        color-mix(in oklch, var(--primary) 3%, transparent),
+        transparent 64%
+      ),
+      radial-gradient(
+        90% 42% at 100% 100%,
+        color-mix(in oklch, oklch(0.82 0.055 42) 3%, transparent),
+        transparent 70%
+      );
+    mix-blend-mode: screen;
+    opacity: 0.28;
+  }
+
+  :root[data-material-theme="liquid"].apple [data-slot="sidebar-container"] {
+    backdrop-filter: blur(14px) saturate(1.18);
+    -webkit-backdrop-filter: blur(14px) saturate(1.18);
+  }
+
+  :root[data-material-theme="liquid"]
+    :is(
+      [data-slot="input"],
+      [data-slot="textarea"],
+      [data-slot="select-trigger"],
+      [data-slot="sidebar-input"]
+    ) {
+    border-color: color-mix(in oklch, var(--border) 62%, transparent);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, white 22%, transparent),
+        transparent 70%
+      ),
+      var(--global-glass-surface-strong);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 42%, transparent),
+      0 8px 22px rgb(15 23 42 / 0.07);
+    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.56))
+      saturate(calc(var(--global-glass-saturate) * 0.92));
+    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.56))
+      saturate(calc(var(--global-glass-saturate) * 0.92));
+  }
+
+  :root[data-material-theme="liquid"]
+    :is(
+      [data-slot="input"],
+      [data-slot="textarea"],
+      [data-slot="select-trigger"],
+      [data-slot="sidebar-input"]
+    ):focus {
+    border-color: color-mix(in oklch, var(--ring) 58%, var(--border) 42%);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 48%, transparent),
+      0 0 0 4px color-mix(in oklch, var(--ring) 16%, transparent),
+      0 10px 26px rgb(15 23 42 / 0.1);
+  }
+
+  :root[data-material-theme="liquid"]
+    [data-slot="button"][data-variant="outline"],
+  :root[data-material-theme="liquid"]
+    [data-slot="button"][data-variant="secondary"],
+  :root[data-material-theme="liquid"]
+    [data-slot="segmented-control-item"][data-state="active"] {
+    border-color: color-mix(in oklch, var(--border) 62%, transparent);
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in oklch, white 26%, transparent),
+        transparent 72%
+      ),
+      color-mix(in oklch, var(--card) 66%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 46%, transparent),
+      0 8px 22px rgb(15 23 42 / 0.08);
+    backdrop-filter: blur(var(--global-glass-control-blur)) saturate(1.34);
+    -webkit-backdrop-filter: blur(var(--global-glass-control-blur))
+      saturate(1.34);
+  }
+
+  :root[data-material-theme="liquid"]
+    [data-slot="button"][data-variant="ghost"]:hover,
+  :root[data-material-theme="liquid"] [data-slot="dropdown-menu-item"]:focus,
+  :root[data-material-theme="liquid"] [data-slot="select-item"]:focus {
+    background: color-mix(in oklch, var(--accent) 62%, transparent);
+    backdrop-filter: blur(12px) saturate(1.22);
+    -webkit-backdrop-filter: blur(12px) saturate(1.22);
+  }
+
+  :root[data-material-theme="liquid"]
+    [data-slot="button"][data-variant="default"] {
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 24%, transparent),
+      0 12px 30px color-mix(in oklch, var(--primary) 22%, transparent);
+  }
+
+  :root[data-material-theme="liquid"] .octo-appearance-step-slider {
+    border-color: color-mix(in oklch, var(--border) 58%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 36%, transparent),
+      0 10px 26px rgb(15 23 42 / 0.08);
+    backdrop-filter: blur(calc(var(--global-glass-blur) * 0.5))
+      saturate(var(--global-glass-saturate));
+    -webkit-backdrop-filter: blur(calc(var(--global-glass-blur) * 0.5))
+      saturate(var(--global-glass-saturate));
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    :root[data-material-theme="liquid"] .workspace-panel,
+    :root[data-material-theme="liquid"] .workspace-panel-subtle,
+    :root[data-material-theme="liquid"] [data-slot="card"],
+    :root[data-material-theme="liquid"] [data-slot="dialog-content"],
+    :root[data-material-theme="liquid"] [data-slot="dropdown-menu-content"],
+    :root[data-material-theme="liquid"] [data-slot="select-content"],
+    :root[data-material-theme="liquid"] [data-slot="popover-content"] {
+      background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
+    }
+  }
+}
+
+@layer components {
+  .octo-global-liquid-field {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    opacity: var(--global-glass-field-opacity, 0.48);
+  }
+
+  .octo-global-liquid-field .octo-liquid-glass-field {
+    position: absolute;
+    inset: -8%;
+    width: 116%;
+    height: 116%;
+    opacity: 0.72;
+    mix-blend-mode: screen;
+    filter: blur(0.25px) saturate(var(--global-glass-field-saturate, 1.14));
+  }
+
+  .octo-liquid-glass-field {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.68;
+    mix-blend-mode: soft-light;
+    filter: blur(0.15px) saturate(1.18);
+  }
+
+  .octo-liquid-glass {
+    --glass-x: 50%;
+    --glass-y: 28%;
+    --glass-blur: 24px;
+    --glass-saturate: 1.88;
+    --glass-contrast: 1.04;
+    --glass-depth: 1;
+    --glass-displacement: var(--liquid-glass-displacement, 1.5px);
+    --glass-shift-x: 0px;
+    --glass-shift-y: 0px;
+    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-bg: var(
+      --liquid-glass-bg,
+      color-mix(in oklch, white 22%, transparent)
+    );
+    --glass-border: var(
+      --liquid-glass-border,
+      color-mix(in oklch, white 64%, transparent)
+    );
+    --glass-top: color-mix(in oklch, white 78%, transparent);
+    --glass-bottom: color-mix(in oklch, black 10%, transparent);
+    --glass-prism-cool: rgb(56 189 248 / 0.13);
+    --glass-prism-warm: rgb(251 113 133 / 0.08);
+    --glass-prism-fresh: rgb(52 211 153 / 0.1);
+    --glass-shadow: var(
+      --liquid-glass-shadow,
+      0 24px 70px rgb(15 23 42 / 0.13)
+    );
+    position: relative;
+    isolation: isolate;
+    overflow: visible;
+    border: 1px solid var(--glass-border);
+    background:
+      radial-gradient(
+        circle at var(--glass-x) var(--glass-y),
+        rgb(255 255 255 / calc(0.26 + var(--glass-depth) * 0.07)),
+        rgb(255 255 255 / 0.08) 22%,
+        transparent 54%
+      ),
+      radial-gradient(
+        68% 160% at calc(var(--glass-x) + 12%) -28%,
+        rgb(255 255 255 / calc(0.13 + var(--glass-depth) * 0.07)),
+        transparent 48%
+      ),
+      radial-gradient(
+        70% 130% at 8% 0%,
+        var(--glass-prism-fresh),
+        transparent 46%
+      ),
+      radial-gradient(
+        78% 160% at 96% 14%,
+        var(--glass-prism-cool),
+        transparent 52%
+      ),
+      radial-gradient(
+        90% 150% at 82% 100%,
+        var(--glass-prism-warm),
+        transparent 54%
+      ),
+      linear-gradient(
+        135deg,
+        rgb(255 255 255 / 0.32),
+        transparent 38%,
+        rgb(255 255 255 / 0.11)
+      ),
+      var(--glass-bg);
+    box-shadow:
+      inset 0 1px 1px rgb(255 255 255 / 0.82),
+      inset 0 -1px 1px var(--glass-bottom),
+      inset calc(var(--glass-displacement) * -1) 0
+        calc(var(--glass-displacement) * 3) rgb(255 255 255 / 0.18),
+      inset var(--glass-displacement) 0 calc(var(--glass-displacement) * 4)
+        rgb(56 189 248 / 0.09),
+      var(--glass-shadow);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate))
+      contrast(var(--glass-contrast));
+    -webkit-backdrop-filter: blur(var(--glass-blur))
+      saturate(var(--glass-saturate)) contrast(var(--glass-contrast));
+  }
+
+  .octo-liquid-glass::before,
+  .octo-liquid-glass::after,
+  .octo-liquid-glass__lens {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .octo-liquid-glass::before {
+    background:
+      linear-gradient(180deg, var(--glass-top), transparent 28%),
+      radial-gradient(
+        circle at var(--glass-x) var(--glass-y),
+        rgb(255 255 255 / calc(0.2 + var(--glass-depth) * 0.1)),
+        transparent 36%
+      ),
+      conic-gradient(
+        from 210deg at var(--glass-x) var(--glass-y),
+        transparent 0deg,
+        rgb(255 255 255 / 0.14) 30deg,
+        transparent 68deg,
+        rgb(56 189 248 / 0.1) 118deg,
+        transparent 154deg,
+        rgb(52 211 153 / 0.08) 188deg,
+        transparent 224deg
+      );
+    opacity: 0.78;
+    mix-blend-mode: screen;
+  }
+
+  .octo-liquid-glass > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .octo-liquid-glass::after {
+    inset: 1px;
+    border: 1px solid rgb(255 255 255 / calc(0.24 + var(--glass-depth) * 0.07));
+    background:
+      repeating-radial-gradient(
+        circle at 12% 18%,
+        rgb(255 255 255 / calc(var(--glass-noise) * 0.22)) 0 1px,
+        transparent 1px 10px
+      ),
+      repeating-linear-gradient(
+        112deg,
+        rgb(255 255 255 / calc(var(--glass-noise) * 0.12)) 0 1px,
+        transparent 1px 14px
+      ),
+      linear-gradient(180deg, transparent 62%, var(--glass-bottom));
+    opacity: 0.46;
+    box-shadow:
+      inset 0 0 0 0.5px rgb(255 255 255 / 0.38),
+      inset 0 0 calc(var(--glass-displacement) * 10) rgb(255 255 255 / 0.07);
+  }
+
+  .octo-liquid-glass__lens {
+    inset: -1px;
+    border-radius: inherit;
+    background:
+      linear-gradient(
+        90deg,
+        rgb(255 255 255 / 0.2),
+        transparent 18% 82%,
+        rgb(14 165 233 / 0.11)
+      ),
+      radial-gradient(
+        48% 100% at var(--glass-x) var(--glass-y),
+        rgb(255 255 255 / 0.22),
+        transparent 58%
+      );
+    filter: blur(calc(var(--glass-displacement) * 0.46));
+    opacity: calc(0.3 + var(--glass-depth) * 0.18);
+    transform: translate3d(var(--glass-shift-x), var(--glass-shift-y), 0);
+    mix-blend-mode: screen;
+  }
+
+  .octo-liquid-glass--thin {
+    --glass-blur: 16px;
+    --glass-depth: 0.72;
+    --glass-displacement: 0.8px;
+    --glass-noise: calc(var(--liquid-glass-noise, 0.016) * 0.75);
+    --glass-bg: var(
+      --liquid-glass-thin-bg,
+      color-mix(in oklch, white 18%, transparent)
+    );
+    --glass-border: color-mix(in oklch, white 58%, transparent);
+    --glass-shadow: 0 12px 34px rgb(15 23 42 / 0.12);
+  }
+
+  .octo-liquid-glass--card {
+    --glass-blur: 24px;
+    --glass-depth: 1;
+    --glass-displacement: 1.4px;
+    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-bg: var(
+      --liquid-glass-card-bg,
+      color-mix(in oklch, white 22%, transparent)
+    );
+    --glass-border: color-mix(in oklch, white 64%, transparent);
+  }
+
+  .octo-liquid-glass--dock {
+    --glass-blur: 30px;
+    --glass-depth: 1.25;
+    --glass-displacement: 2.1px;
+    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-bg: var(
+      --liquid-glass-dock-bg,
+      color-mix(in oklch, white 21%, transparent)
+    );
+    --glass-border: color-mix(in oklch, white 72%, transparent);
+    --glass-prism-cool: rgb(34 211 238 / 0.16);
+    --glass-prism-fresh: rgb(74 222 128 / 0.13);
+    --glass-prism-warm: rgb(251 146 60 / 0.08);
+    --glass-shadow: 0 28px 90px rgb(15 23 42 / 0.17);
+  }
+
+  .octo-liquid-glass--sheet {
+    --glass-blur: 28px;
+    --glass-depth: 1.14;
+    --glass-displacement: 1.8px;
+    --glass-noise: var(--liquid-glass-noise, 0.016);
+    --glass-bg: var(
+      --liquid-glass-sheet-bg,
+      color-mix(in oklch, white 25%, transparent)
+    );
+    --glass-border: color-mix(in oklch, white 68%, transparent);
+    --glass-shadow: 0 30px 90px rgb(15 23 42 / 0.18);
+  }
+
+  .octo-liquid-glass--input {
+    --glass-blur: 18px;
+    --glass-depth: 0.84;
+    --glass-displacement: 1px;
+    --glass-noise: calc(var(--liquid-glass-noise, 0.016) * 0.7);
+    --glass-bg: var(
+      --liquid-glass-input-bg,
+      color-mix(in oklch, white 30%, transparent)
+    );
+    --glass-border: color-mix(in oklch, white 62%, transparent);
+    --glass-shadow: 0 10px 28px rgb(15 23 42 / 0.1);
+  }
+
+  .octo-liquid-glass--interactive {
+    transform: translateZ(0);
+    will-change: transform, filter;
+    transition:
+      transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-color 180ms ease,
+      box-shadow 180ms ease,
+      background 180ms ease,
+      filter 180ms ease;
+  }
+
+  .octo-liquid-glass--interactive:hover {
+    transform: translateY(-1px) scale(1.006);
+    border-color: color-mix(in oklch, white 72%, transparent);
+    filter: saturate(1.05) brightness(1.015);
+  }
+
+  .octo-liquid-glass--interactive:active {
+    transform: translateY(0) scale(0.986);
+  }
+
+  .octo-appearance-step-slider {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid color-mix(in oklch, var(--border) 65%, transparent);
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--muted) 72%, transparent);
+    outline: none;
+  }
+
+  .octo-appearance-step-slider::-webkit-slider-runnable-track {
+    height: 14px;
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .octo-appearance-step-slider::-webkit-slider-thumb {
+    width: 24px;
+    height: 24px;
+    margin-top: -6px;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 1px solid color-mix(in oklch, white 70%, var(--primary) 30%);
+    border-radius: 999px;
+    background: radial-gradient(
+      circle at 35% 28%,
+      color-mix(in oklch, white 96%, transparent),
+      color-mix(in oklch, white 64%, var(--primary) 24%) 58%,
+      color-mix(in oklch, var(--primary) 60%, white 24%)
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 82%, transparent),
+      0 7px 18px color-mix(in oklch, var(--primary) 22%, transparent);
+  }
+
+  .octo-appearance-step-slider::-moz-range-track {
+    height: 14px;
+    border-radius: 999px;
+    background: transparent;
+  }
+
+  .octo-appearance-step-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border: 1px solid color-mix(in oklch, white 70%, var(--primary) 30%);
+    border-radius: 999px;
+    background: radial-gradient(
+      circle at 35% 28%,
+      color-mix(in oklch, white 96%, transparent),
+      color-mix(in oklch, white 64%, var(--primary) 24%) 58%,
+      color-mix(in oklch, var(--primary) 60%, white 24%)
+    );
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 82%, transparent),
+      0 7px 18px color-mix(in oklch, var(--primary) 22%, transparent);
+  }
+
+  .octo-appearance-step-slider:focus-visible {
+    box-shadow:
+      0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent),
+      0 10px 26px rgb(15 23 42 / 0.08);
+  }
+
+  .dark .octo-liquid-glass {
+    --glass-bg: var(
+      --liquid-glass-bg,
+      color-mix(in oklch, var(--background) 58%, transparent)
+    );
+    --glass-border: var(
+      --liquid-glass-border,
+      color-mix(in oklch, white 20%, transparent)
+    );
+    --glass-top: color-mix(in oklch, white 24%, transparent);
+    --glass-bottom: color-mix(in oklch, black 44%, transparent);
+    --glass-shadow: var(--liquid-glass-shadow, 0 26px 82px rgb(0 0 0 / 0.38));
+  }
+
+  :root:not([data-material-theme="liquid"]) .octo-liquid-glass {
+    isolation: auto;
+    border-color: color-mix(
+      in oklch,
+      var(--border) 38%,
+      transparent
+    ) !important;
+    background: color-mix(in oklch, var(--card) 92%, transparent) !important;
+    box-shadow: 0 1px 1px rgb(15 23 42 / 0.045) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  :root:not([data-material-theme="liquid"]) .octo-liquid-glass::before,
+  :root:not([data-material-theme="liquid"]) .octo-liquid-glass::after,
+  :root:not([data-material-theme="liquid"]) .octo-liquid-glass__lens,
+  :root:not([data-material-theme="liquid"]) .octo-liquid-glass-field {
+    display: none;
+  }
+
+  :root:not([data-material-theme="liquid"])
+    .octo-liquid-glass--interactive:hover,
+  :root:not([data-material-theme="liquid"])
+    .octo-liquid-glass--interactive:active {
+    transform: none !important;
+    filter: none !important;
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    .octo-liquid-glass {
+      background:
+        linear-gradient(
+          135deg,
+          color-mix(in oklch, white 42%, transparent),
+          color-mix(in oklch, var(--background) 78%, transparent)
+        ),
+        var(--glass-bg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .octo-liquid-glass-field {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .octo-liquid-glass--interactive {
+      transition: none;
+    }
+    .octo-liquid-glass--interactive:hover,
+    .octo-liquid-glass--interactive:active {
+      transform: none;
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, memo } from "react";
 import type { AnchorHTMLAttributes, HTMLAttributes, ReactElement } from "react";
 import type { BundledLanguage } from "shiki";
 
@@ -52,7 +52,16 @@ export type MarkdownContentProps = {
   chatFontSize?: "small" | "medium" | "large";
 };
 
-export function MarkdownContent({
+/**
+ * Renders markdown content via Streamdown + shiki syntax highlighting.
+ *
+ * Wrapped in React.memo so that completed (non-streaming) messages
+ * skip re-rendering when the parent re-renders due to an unrelated
+ * streaming token in a different group. The custom comparator checks
+ * only the props that affect output: content, isLoading, prose size,
+ * and component overrides.
+ */
+export const MarkdownContent = memo(function MarkdownContent({
   content,
   isLoading,
   rehypePlugins,
@@ -171,4 +180,4 @@ export function MarkdownContent({
       {content}
     </MessageResponse>
   );
-}
+});

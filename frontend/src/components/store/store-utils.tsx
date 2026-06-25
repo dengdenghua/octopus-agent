@@ -110,7 +110,7 @@ export const LOCAL_SKILL_CATEGORIES: SkillCategory[] = [
   {
     key: "market-product",
     pattern:
-      /market|competitor|competitive|product|prd|user-story|customer|saas|business|brand|naming|strategy|vc-industry|primary-market|idea-to-prd/i,
+      /market|competitor|competitive|product|prd|user-story|customer|saas|business|brand|naming|strategy|vc-industry|primary-market|product-spec-writer/i,
   },
   {
     key: "project-goal",
@@ -145,7 +145,7 @@ export const LOCAL_SKILL_CATEGORIES: SkillCategory[] = [
   {
     key: "deep-research",
     pattern:
-      /deep-research|research-advisor|research-writer|market-research|company-research|equity-research|commodity-research|auto-hypothesis/i,
+      /deep-research|research-advisor|research-writer|market-research|company-research|equity-research|commodity-research|auto-stat/i,
   },
   {
     key: "education-coach",
@@ -178,7 +178,7 @@ export const LOCAL_SKILL_CATEGORIES: SkillCategory[] = [
   {
     key: "media-audio-video",
     pattern:
-      /video|audio|tts|speech-synthesis|edge-tts|podcast|remotion|quality-diff|outline-planner/i,
+      /video|audio|tts|speech-synthesis|podcast|remotion|quality-diff|outline-planner/i,
   },
   {
     key: "personal-productivity",
@@ -209,8 +209,6 @@ export const APP_CATEGORIES: SkillCategory[] = [
     pattern: /docs?|calendar|mail|notion|drive|office|task/i,
   },
 ];
-
-
 
 // ── Utility functions ──────────────────────────────────────────────────
 
@@ -394,11 +392,7 @@ export function StoreErrorState({
   return (
     <ErrorState
       title={title}
-      detail={
-        detail ? (
-          <StoreErrorDetails detail={detail} />
-        ) : null
-      }
+      detail={detail ? <StoreErrorDetails detail={detail} /> : null}
       actionDisabled={retrying}
       actionIcon={
         <RefreshCw className={cn("size-3.5", retrying && "animate-spin")} />

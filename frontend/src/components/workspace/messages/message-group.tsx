@@ -39,6 +39,12 @@ import {
   ToolApprovalCard,
 } from "@/components/workspace/tool-approval-card";
 import {
+  type AgentRunState,
+  agentRunBadgeClass,
+  agentRunStatusLightClass,
+  agentRunStatusLightPulseClass,
+} from "../agent-run-status";
+import {
   TAORBadge,
   IterationDivider,
 } from "@/components/workspace/taor-indicator";
@@ -360,16 +366,16 @@ export function MessageGroup({
   messages: Message[];
   isLoading?: boolean;
   keepOpen?: boolean;
-  // Code mode reads like an IDE: the work-log (tool steps) stays expanded by
-  // default even after the answer lands, instead of folding into a "过程回放 N
-  // 步" disclosure. Users can still collapse individual groups.
+  // Code mode auto-expands only while the turn is live. Once a turn is saved,
+  // historical work logs fold behind a compact replay disclosure.
   codeMode?: boolean;
 }) {
   const { t } = useI18n();
   // Keep the live turn focused on the current frame. Older steps move behind
   // a replay disclosure so streaming never becomes a long historical pile.
   const isLiveTimeline = isLoading || keepOpen;
-  const [showSteps, setShowSteps] = useState(codeMode);
+  const [showSteps, setShowSteps] = useState(codeMode && isLiveTimeline);
+  const [savedStepsOpen, setSavedStepsOpen] = useState(false);
   const [openReasoningGroups, setOpenReasoningGroups] = useState<
     Record<string, boolean>
   >({});
@@ -445,20 +451,30 @@ export function MessageGroup({
     : steps.length;
   const showTimelineToggle = replayStepCount > 0;
   const useCompactToggleLabel = replayStepCount > 12;
+  const timelineExpanded = isLiveTimeline ? showSteps : savedStepsOpen;
   const timelineToggleLabel = isLiveTimeline
-    ? showSteps
+    ? timelineExpanded
       ? t.messageGrouping.hideProcessReplay
       : useCompactToggleLabel
         ? t.messageGrouping.processReplay
         : t.messageGrouping.replayNSteps(replayStepCount)
-    : showSteps
+    : timelineExpanded
       ? t.messageGrouping.hideSavedSteps
       : useCompactToggleLabel
         ? t.messageGrouping.viewProcessSummary
         : t.messageGrouping.viewNSavedSteps(steps.length);
+  const liveProcessState = currentStep
+    ? runStateForCurrentStep(currentStep, isLoading)
+    : "pending";
+  const showLiveProcessStrip = codeMode && isLoading && Boolean(currentStep);
+  const liveProcessSummary = currentStep
+    ? summarizeCurrentStep(currentStep, t)
+    : t.messageGrouping.reasoningFallback;
+  const liveProcessStatusLabel = runStateLabel(liveProcessState, t);
 
   useEffect(() => {
-    setShowSteps(codeMode);
+    setShowSteps(codeMode && isLiveTimeline);
+    setSavedStepsOpen(false);
     setOpenReasoningGroups({});
     setOpenActionGroups({});
   }, [isLiveTimeline, stepsFingerprint, codeMode]);
@@ -606,12 +622,68 @@ export function MessageGroup({
           )}
         </ChainOfThoughtContent>
       )}
+      {showLiveProcessStrip && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="live-process-strip"
+          className={cn(
+            "mb-1 flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-[11px]",
+            "bg-background/70 text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+            liveProcessState === "running" &&
+              "border-emerald-500/20 bg-emerald-500/[0.045]",
+            liveProcessState === "waiting" &&
+              "border-amber-500/25 bg-amber-500/[0.055]",
+            liveProcessState === "error" &&
+              "border-destructive/25 bg-destructive/[0.055]",
+          )}
+        >
+          <span className="relative flex size-2.5 shrink-0 items-center justify-center">
+            <span
+              className={cn(
+                "absolute inline-flex size-2.5 rounded-full opacity-25",
+                agentRunStatusLightClass(liveProcessState),
+                agentRunStatusLightPulseClass(liveProcessState),
+              )}
+            />
+            <span
+              className={cn(
+                "relative inline-flex size-1.5 rounded-full",
+                agentRunStatusLightClass(liveProcessState),
+              )}
+            />
+          </span>
+          <span className="shrink-0 font-medium text-foreground/85">
+            {t.messageGrouping.liveProcess}
+          </span>
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-1.5 py-0.5 leading-none",
+              agentRunBadgeClass(liveProcessState),
+            )}
+          >
+            {liveProcessStatusLabel}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{liveProcessSummary}</span>
+          {replayStepCount > 0 && (
+            <span className="shrink-0 rounded-full bg-muted/55 px-1.5 py-0.5 text-muted-foreground/80">
+              {t.messageGrouping.liveProcessHistory(replayStepCount)}
+            </span>
+          )}
+        </div>
+      )}
       {showTimelineToggle && (
         <Button
           key="timeline-toggle"
           className="h-auto w-full items-start justify-start px-0 py-1.5 text-left hover:bg-transparent"
           variant="ghost"
-          onClick={() => setShowSteps(!showSteps)}
+          onClick={() => {
+            if (isLiveTimeline) {
+              setShowSteps((value) => !value);
+            } else {
+              setSavedStepsOpen((value) => !value);
+            }
+          }}
         >
           <ChainOfThoughtStep
             label={<span className="opacity-60">{timelineToggleLabel}</span>}
@@ -619,14 +691,14 @@ export function MessageGroup({
               <ChevronUp
                 className={cn(
                   "size-4 opacity-60 transition-transform duration-200",
-                  showSteps ? "rotate-180" : "",
+                  timelineExpanded ? "rotate-180" : "",
                 )}
               />
             }
           ></ChainOfThoughtStep>
         </Button>
       )}
-      {showSteps && replayTimelineItems.length > 0 && (
+      {timelineExpanded && replayTimelineItems.length > 0 && (
         <ChainOfThoughtContent
           className={cn(
             "px-0 pb-1.5",
@@ -679,7 +751,9 @@ function ReasoningStepGroup({
   const { t } = useI18n();
   const summary = summarizeReasoningGroup(group, t);
   const countLabel =
-    group.steps.length > 1 ? t.messageGrouping.countItems(group.steps.length) : "";
+    group.steps.length > 1
+      ? t.messageGrouping.countItems(group.steps.length)
+      : "";
   const onlyStep = group.steps[0];
   if (!onlyStep) return null;
   return (
@@ -758,7 +832,9 @@ function ActionCallbackGroup({
   const { t } = useI18n();
   const summary = summarizeActionGroup(group, t);
   const countLabel =
-    group.steps.length > 1 ? t.messageGrouping.countItems(group.steps.length) : "";
+    group.steps.length > 1
+      ? t.messageGrouping.countItems(group.steps.length)
+      : "";
   const onlyStep = group.steps[0];
   if (!onlyStep) return null;
   const labelStep = active ? group.steps[group.steps.length - 1] : onlyStep;
@@ -1847,6 +1923,96 @@ function stepText(step: CoTStep): string {
   return `${step.name}\n${argsText}`;
 }
 
+function runStateForCurrentStep(
+  step: CoTStep,
+  isLoading: boolean,
+): AgentRunState {
+  if (stepHasError(step)) return "error";
+  if (stepIsWaiting(step)) return "waiting";
+  if (isLoading) return "running";
+  return "done";
+}
+
+function stepHasError(step: CoTStep): boolean {
+  if (step.type !== "toolCall") return false;
+  const result = step.result;
+  if (typeof result === "string") {
+    return (
+      /\b(?:error|failed|failure|traceback|exception)\b/i.test(result) ||
+      /\b(?:错误|失败|异常|报错)\b/.test(result)
+    );
+  }
+  if (typeof result !== "object" || result === null) return false;
+  const record = result as Record<string, unknown>;
+  return (
+    record.error != null ||
+    record.exception != null ||
+    record.status === "error" ||
+    record.status === "failed"
+  );
+}
+
+function stepIsWaiting(step: CoTStep): boolean {
+  if (step.type === "toolCall") {
+    const name = step.name.toLowerCase();
+    if (name === "ask_clarification" || name === "ask_user_question") {
+      return true;
+    }
+    if (typeof step.result === "string" && isApprovalRequest(step.result)) {
+      return true;
+    }
+    if (typeof step.result === "object" && step.result !== null) {
+      const record = step.result as Record<string, unknown>;
+      return (
+        record.status === "waiting" ||
+        record.status === "waiting_approval" ||
+        record.requires_approval === true
+      );
+    }
+    return false;
+  }
+  return /(?:approval|confirm|waiting|awaiting|待确认|等待|审批|确认)/i.test(
+    stepText(step),
+  );
+}
+
+function summarizeCurrentStep(
+  step: CoTStep,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (step.type === "reasoning") {
+    return compactReasoningSummary(
+      stripTraceLabelPrefixes(step.reasoning ?? ""),
+      96,
+      t,
+    );
+  }
+  if (step.type === "actionCallback") {
+    return compactReasoningSummary(
+      stripTraceLabelPrefixes(step.actionText),
+      96,
+      t,
+    );
+  }
+  const publicAction = publicActionTextFromTraceTool(
+    step.name,
+    extractPathFromArgs(step.args) ?? extractTeamCallTarget(step.args),
+    t,
+  );
+  return publicAction ?? t.toolCalls.useTool(step.name);
+}
+
+function runStateLabel(
+  state: AgentRunState,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (state === "waiting") return t.messageGrouping.liveProcessWaiting;
+  if (state === "error") return t.messageGrouping.liveProcessError;
+  if (state === "done") return t.messageGrouping.liveProcessDone;
+  if (state === "pending") return t.messageGrouping.liveProcessPending;
+  return t.messageGrouping.liveProcessRunning;
+}
+
 function summarizeReasoningGroup(
   group: ReasoningStepGroupItem,
   t: ReturnType<typeof useI18n>["t"],
@@ -1876,7 +2042,8 @@ function compactReasoningSummary(
     .replace(/\s+/g, " ")
     .replace(/^\s*[-*•]\s+/, "")
     .trim();
-  if (!normalized) return t?.messageGrouping.reasoningFallback ?? "Synthesize reasoning";
+  if (!normalized)
+    return t?.messageGrouping.reasoningFallback ?? "Synthesize reasoning";
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max).trimEnd()}...`;
 }

@@ -28,12 +28,6 @@ export function Welcome({
     }
     return ["var(--color-foreground)"];
   }, [isCode, isDeep]);
-  const modeLabel = isDeep
-    ? "Deep Research"
-    : isCode
-      ? "Project Mode"
-      : "Agent Mode";
-
   return (
     <div
       className={cn(
@@ -54,12 +48,6 @@ export function Welcome({
             <span className="inline-block size-2 rounded-full bg-primary/80" />
             <AuroraText colors={colors}>{t.welcome.greeting}</AuroraText>
           </div>
-        )}
-        {!isSkillSeed && (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2 py-0.5 text-[10px] font-medium leading-4 text-muted-foreground shadow-xs">
-            <span className="size-1 rounded-full bg-primary/70" />
-            {modeLabel}
-          </span>
         )}
       </div>
       {/* Use ``whitespace-pre-line`` so the \n in the i18n string

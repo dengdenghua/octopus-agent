@@ -270,7 +270,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://developer.mozilla.org/",
     icon: BookOpenIcon,
     logoUrl: "https://cdn.simpleicons.org/mdnwebdocs",
-    color: "from-slate-900 to-blue-600",
+    color: "from-foreground to-blue-600",
     description: "Web docs, API reference",
     category: "dev",
   },
@@ -288,7 +288,7 @@ const AI_DESKTOP_APPS: BrowserDesktopApp[] = [
     url: "https://www.wikipedia.org/",
     icon: GraduationCapIcon,
     logoUrl: "https://cdn.simpleicons.org/wikipedia",
-    color: "from-slate-700 to-slate-500",
+    color: "from-muted-foreground to-muted-foreground/70",
     description: "Encyclopedia, background materials",
     category: "knowledge",
   },
@@ -388,7 +388,7 @@ function DesktopAppLogo({
   return (
     <span
       className={cn(
-        "grid place-items-center overflow-hidden rounded-[18px] border border-white/65 bg-white/72 text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.78),0_10px_26px_rgba(15,23,42,0.14)] ring-1 ring-black/5 backdrop-blur-xl transition",
+        "grid place-items-center overflow-hidden rounded-[18px] border border-white/65 bg-white/72 text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.78),0_10px_26px_rgba(15,23,42,0.14)] ring-1 ring-black/5 backdrop-blur-xl transition",
         className,
         failed && "bg-gradient-to-br text-white",
         failed && app.color,
@@ -485,13 +485,6 @@ function loadDesktopAppOrder(): string[] {
   }
 }
 
-function orderDesktopApps(order: string[]): BrowserDesktopApp[] {
-  const byUrl = new Map(AI_DESKTOP_APPS.map((app) => [app.url, app]));
-  return order
-    .map((url) => byUrl.get(url))
-    .filter((app): app is BrowserDesktopApp => Boolean(app));
-}
-
 function loadDockAppUrls(): string[] {
   if (typeof window === "undefined") return DEFAULT_DOCK_APP_URLS;
   try {
@@ -543,13 +536,13 @@ function MenuItem({
         "w-full flex items-center gap-3 px-4 py-2 text-sm transition-colors rounded-lg",
         active
           ? "bg-sky-400/20 text-sky-400"
-          : "text-slate-600 hover:bg-white/50 hover:text-slate-800",
+          : "text-muted-foreground hover:bg-white/50 hover:text-foreground",
         danger && "text-red-500 hover:bg-red-400/10",
       )}
     >
       <Icon className="w-4 h-4 flex-shrink-0" />
       <span className="flex-1 text-left">{label}</span>
-      {shortcut && <span className="text-xs text-slate-400">{shortcut}</span>}
+      {shortcut && <span className="text-xs text-muted-foreground/70">{shortcut}</span>}
     </button>
   );
 }
@@ -604,7 +597,7 @@ function ContextMenu({
                 onClose();
               }}
             />
-            <div className="h-px bg-slate-200 my-2" />
+            <div className="h-px bg-muted my-2" />
             <MenuItem
               icon={Minimize2}
               label={wt.ctxSizeSmall}
@@ -653,7 +646,7 @@ function ContextMenu({
                 onClose();
               }}
             />
-            <div className="h-px bg-slate-200 my-2" />
+            <div className="h-px bg-muted my-2" />
             <MenuItem
               icon={Minimize2}
               label={wt.ctxSizeSmall}
@@ -709,7 +702,7 @@ function ContextMenu({
             <MenuItem icon={LayoutGridIcon} label={wt.ctxEditHome} />
             <MenuItem icon={Plus} label={wt.ctxAddWidget} />
             <MenuItem icon={Plus} label={wt.ctxAddIcon} />
-            <div className="h-px bg-slate-200 my-2" />
+            <div className="h-px bg-muted my-2" />
             <MenuItem icon={SettingsIcon} label={wt.ctxSettings} />
           </>
         )}
@@ -730,7 +723,7 @@ export function BrowserHome({
   const { t } = useI18n();
   const wt = t.browser.webviewTab;
   const bt = t.browserHome;
-  const { bookmarks, history } = useBrowserStore();
+  const { history } = useBrowserStore();
 
   const appNameMap = useMemo<Record<string, string>>(
     () => ({
@@ -792,7 +785,7 @@ export function BrowserHome({
     loadDockAppUrls(),
   );
   const [draggingUrl, setDraggingUrl] = useState<string | null>(null);
-  const [searchFilter, setSearchFilter] = useState("");
+  const [searchFilter] = useState("");
   const [quickLinks, setQuickLinks] = useState<QuickLink[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -830,7 +823,7 @@ export function BrowserHome({
     targetId: null,
     targetType: "background",
   });
-  const [addMenu, setAddMenu] = useState<AddMenuState>({
+  const [, setAddMenu] = useState<AddMenuState>({
     visible: false,
     x: 0,
     y: 0,
@@ -849,7 +842,6 @@ export function BrowserHome({
     size: "medium",
   });
 
-  const orderedApps = orderDesktopApps(appOrder);
   const appByUrl = useMemo(
     () => new Map(AI_DESKTOP_APPS.map((app) => [app.url, app])),
     [],
@@ -869,53 +861,67 @@ export function BrowserHome({
     (desc: string) => appDescMap[desc] ?? desc,
     [appDescMap],
   );
-  const bookmarkPanelItems = useMemo(() => {
-    const sourceItems =
-      bookmarks.length > 0
-        ? bookmarks.map((item) => ({
-            url: item.url,
-            title: item.title || item.url,
-            favicon: item.favicon,
-            meta: bt.metaBookmark,
-          }))
-        : history
-            .filter(
-              (item) =>
-                item.url &&
-                !item.url.startsWith("about:") &&
-                !item.url.startsWith("octopus:"),
-            )
-            .map((item) => ({
-              url: item.url,
-              title: item.title || item.url,
-              favicon: item.favicon,
-              meta: bt.metaRecent,
-            }));
-
-    if (sourceItems.length > 0) return sourceItems.slice(0, 6);
-
-    return [
-      "https://chat.deepseek.com/",
-      "https://chat.qwen.ai/",
-      "https://www.youtube.com/",
-      "https://github.com/",
-      "https://www.bilibili.com/",
-      "https://www.perplexity.ai/",
-    ]
-      .map((url) => appByUrl.get(url))
-      .filter((app): app is BrowserDesktopApp => Boolean(app))
-      .map((app) => ({
-        url: app.url,
-        title: appNameMap[app.name] ?? app.name,
-        favicon: app.logoUrl,
-        meta:
-          app.category === "video"
-            ? bt.categoryVideo
-            : app.category === "dev"
-              ? bt.categoryDev
-              : "AI",
-      }));
-  }, [appByUrl, appNameMap, bookmarks, bt, history]);
+  const recentPanelItems = useMemo(() => {
+    return history
+      .filter(
+        (item) =>
+          item.url &&
+          !item.url.startsWith("about:") &&
+          !item.url.startsWith("octopus:"),
+      )
+      .map((item) => ({
+        url: item.url,
+        title: item.title || item.url,
+        favicon: item.favicon,
+        meta: bt.metaRecent,
+      }))
+      .slice(0, 4);
+  }, [bt.metaRecent, history]);
+  const renderCompactLink = useCallback(
+    (item: { url: string; title: string; favicon?: string; meta: string }) => {
+      let fallbackIcon = "";
+      try {
+        fallbackIcon = `https://www.google.com/s2/favicons?domain=${
+          new URL(item.url).hostname
+        }&sz=64`;
+      } catch (e) {
+        swallow(e);
+      }
+      return (
+        <button
+          key={item.url}
+          type="button"
+          onClick={() => onOpen(item.url)}
+          className="group flex min-w-0 items-center gap-2 rounded-2xl border border-white/28 bg-white/20 p-2 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] transition hover:border-white/45 hover:bg-white/34"
+          title={item.title}
+        >
+          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/55 bg-white/62 shadow-sm">
+            {item.favicon || fallbackIcon ? (
+              <img
+                src={item.favicon || fallbackIcon}
+                alt=""
+                className="size-[68%] object-contain"
+                onError={(event) => {
+                  event.currentTarget.style.display = "none";
+                }}
+              />
+            ) : (
+              <BookOpenIcon className="size-4 text-muted-foreground" />
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-semibold text-foreground">
+              {item.title}
+            </span>
+            <span className="block truncate text-[10px] text-muted-foreground">
+              {item.meta}
+            </span>
+          </span>
+        </button>
+      );
+    },
+    [onOpen],
+  );
   const desktopAppGroups = useMemo(() => {
     const titles: Record<
       DesktopAppCategory,
@@ -940,6 +946,7 @@ export function BrowserHome({
   const compactDesktop = device !== "desktop";
   const tabletDesktop = device === "tablet";
   const mobileDesktop = device === "mobile";
+  const visibleDockApps = mobileDesktop ? dockApps.slice(0, 5) : dockApps;
   const today = new Date();
   const day = today.getDate().toString().padStart(2, "0");
   const month = wt.monthFormat(today.getFullYear(), today.getMonth() + 1);
@@ -1051,15 +1058,6 @@ export function BrowserHome({
     setDraggingUrl(url);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", url);
-  };
-
-  const dropApp = (event: DragEvent<HTMLElement>, targetUrl: string) => {
-    if (!editMode) return;
-    event.preventDefault();
-    const sourceUrl = draggingUrl || event.dataTransfer.getData("text/plain");
-    if (!sourceUrl) return;
-    setAppOrder((prev) => moveDesktopApp(prev, sourceUrl, targetUrl));
-    setDraggingUrl(null);
   };
 
   const dropDockApp = (event: DragEvent<HTMLElement>, targetUrl: string) => {
@@ -1360,17 +1358,18 @@ export function BrowserHome({
               pointerEvents: "none",
             }
       }
-      className="relative min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_18%_12%,rgba(255,255,255,0.72),transparent_28%),radial-gradient(circle_at_78%_8%,rgba(147,197,253,0.28),transparent_24%),radial-gradient(circle_at_84%_78%,rgba(251,207,232,0.32),transparent_32%),linear-gradient(145deg,#91a3b7_0%,#ada9b8_45%,#c0a197_100%)] text-white"
+      className="relative min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_16%_10%,rgba(236,253,245,0.72),transparent_27%),radial-gradient(circle_at_78%_6%,rgba(125,211,252,0.42),transparent_25%),radial-gradient(circle_at_88%_70%,rgba(251,207,232,0.38),transparent_31%),radial-gradient(circle_at_34%_88%,rgba(253,230,138,0.24),transparent_30%),linear-gradient(145deg,#5f8c91_0%,#8ea7bd_34%,#bba8b8_68%,#d1ad8f_100%)] text-white"
       onContextMenu={handleBackgroundContext}
     >
       <div
         className={cn(
-          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] border border-white/25 bg-white/14 py-4 shadow-[inset_0_1px_1px_rgba(255,255,255,0.42),0_20px_60px_rgba(15,23,42,0.20)] backdrop-blur-2xl",
+          "absolute left-4 top-5 z-10 flex h-[calc(100%-2.5rem)] w-12 flex-col items-center rounded-[24px] border border-white/55 bg-emerald-50/24 py-4 shadow-[0_18px_54px_rgba(15,23,42,0.14),inset_0_1px_1px_rgba(255,255,255,0.82)] backdrop-blur-2xl",
+          liquidGlassClass("dock"),
           compactDesktop && "left-3 top-4 h-[calc(100%-2rem)]",
           mobileDesktop && "left-2 w-11",
         )}
       >
-        <div className="grid size-8 place-items-center rounded-2xl border border-white/60 bg-white/50 text-slate-700 shadow-sm backdrop-blur-xl">
+        <div className="grid size-8 place-items-center rounded-2xl border border-white/70 bg-white/46 text-foreground shadow-sm backdrop-blur-xl">
           <BotIcon className="size-5" />
         </div>
         <div className="mt-8 flex flex-col gap-4">
@@ -1383,9 +1382,9 @@ export function BrowserHome({
                 type="button"
                 onClick={() => setActivePanel(item.id)}
                 className={cn(
-                  "grid size-9 place-items-center rounded-2xl text-white/72 transition hover:bg-white/22 hover:text-white",
+                  "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-sm",
                   selected &&
-                    "border border-white/35 bg-white/24 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.35)]",
+                    "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
                 )}
                 title={sideNavLabelMap[item.id]}
               >
@@ -1399,8 +1398,9 @@ export function BrowserHome({
             type="button"
             onClick={() => setActivePanel("add")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl border border-white/20 bg-white/18 text-white transition hover:bg-white/28",
-              activePanel === "add" && "bg-white/30",
+              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-sm",
+              activePanel === "add" &&
+                "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
             )}
             title={wt.addTitle}
           >
@@ -1410,8 +1410,9 @@ export function BrowserHome({
             type="button"
             onClick={() => setActivePanel("settings")}
             className={cn(
-              "grid size-9 place-items-center rounded-2xl text-white/75 transition hover:bg-white/22 hover:text-white",
-              activePanel === "settings" && "bg-white/24 text-white",
+              "grid size-9 place-items-center rounded-2xl border border-transparent text-muted-foreground/90 transition hover:border-white/60 hover:bg-white/46 hover:text-foreground hover:shadow-sm",
+              activePanel === "settings" &&
+                "border-white/80 bg-white/68 text-foreground shadow-[0_8px_22px_rgba(15,23,42,0.13),inset_0_1px_1px_rgba(255,255,255,0.86)]",
             )}
             title={wt.settingsTitle}
           >
@@ -1438,7 +1439,8 @@ export function BrowserHome({
         >
           <div
             className={cn(
-              "flex h-14 items-center gap-3 rounded-[22px] border border-white/55 bg-white/30 px-3 text-slate-600 shadow-[inset_0_1px_1px_rgba(255,255,255,0.78),0_20px_70px_rgba(15,23,42,0.14)] ring-1 ring-black/5 backdrop-blur-2xl",
+              "flex h-14 items-center gap-3 rounded-[22px] px-3 text-muted-foreground",
+              liquidGlassClass("input", true),
               mobileDesktop && "h-12 rounded-2xl px-2.5",
             )}
           >
@@ -1449,7 +1451,7 @@ export function BrowserHome({
               aria-expanded={enginePickerOpen}
               title={bt.switchSearchEngine}
               className={cn(
-                "group flex h-10 shrink-0 items-center gap-1 rounded-xl px-2 transition-colors hover:bg-slate-900/5",
+                "group flex h-10 shrink-0 items-center gap-1 rounded-xl px-2 transition-colors hover:bg-muted/50",
                 mobileDesktop && "h-9 px-1.5",
               )}
             >
@@ -1459,12 +1461,12 @@ export function BrowserHome({
               />
               <ChevronDownIcon
                 className={cn(
-                  "size-3.5 text-slate-400 transition-transform group-hover:text-slate-600",
-                  enginePickerOpen && "rotate-180 text-slate-700",
+                  "size-3.5 text-muted-foreground/70 transition-transform group-hover:text-muted-foreground",
+                  enginePickerOpen && "rotate-180 text-foreground",
                 )}
               />
             </button>
-            <div className="h-7 w-px bg-slate-300/60" />
+            <div className="h-7 w-px bg-border/60" />
             <SearchIcon className="size-5 shrink-0 text-blue-600/80" />
             <input
               ref={searchInputRef}
@@ -1474,14 +1476,17 @@ export function BrowserHome({
               placeholder={wt.searchPlaceholderFormat(
                 selectedSearchEngine?.name ?? wt.searchEngineFallback,
               )}
-              className="min-w-0 flex-1 bg-transparent text-lg font-medium text-slate-700 outline-none placeholder:text-slate-400"
+              className="min-w-0 flex-1 bg-transparent text-lg font-medium text-foreground outline-none placeholder:text-muted-foreground/70"
             />
           </div>
 
           {enginePickerOpen && (
             <div
               role="menu"
-              className="absolute left-2 top-[calc(100%+10px)] z-30 w-56 rounded-2xl border border-white/60 bg-white/55 p-1.5 text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_22px_70px_rgba(15,23,42,0.18)] backdrop-blur-2xl"
+              className={cn(
+                "absolute left-2 top-[calc(100%+10px)] z-30 w-56 rounded-2xl p-1.5 text-foreground",
+                liquidGlassClass("sheet"),
+              )}
             >
               {engines.map((engine, index) => {
                 const active = selectedEngine === index;
@@ -1499,8 +1504,8 @@ export function BrowserHome({
                     className={cn(
                       "flex h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium transition-colors",
                       active
-                        ? "bg-slate-950 text-white"
-                        : "hover:bg-slate-900/5",
+                        ? "bg-foreground text-white"
+                        : "hover:bg-muted/50",
                     )}
                   >
                     <SearchEngineLogo engine={engine} className="size-7" />
@@ -1528,14 +1533,14 @@ export function BrowserHome({
               <button
                 type="button"
                 onClick={resetDesktopLayout}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
               >
                 {wt.resetLayout}
               </button>
               <button
                 type="button"
                 onClick={handleCreateFolder}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
               >
                 <Folder className="w-3 h-3 inline mr-1" />
                 {wt.newFolder}
@@ -1543,7 +1548,7 @@ export function BrowserHome({
               <button
                 type="button"
                 onClick={handleAddIcon}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
               >
                 <Plus className="w-3 h-3 inline mr-1" />
                 {wt.addIconBtn}
@@ -1551,7 +1556,7 @@ export function BrowserHome({
               <button
                 type="button"
                 onClick={handleAddWidget}
-                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
+                className="rounded-full border border-white/50 bg-white/34 px-3 py-1.5 text-xs font-medium text-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_26px_rgba(15,23,42,0.10)] backdrop-blur-xl transition hover:bg-white/52"
               >
                 <PanelLeftIcon className="w-3 h-3 inline mr-1" />
                 {wt.addWidgetBtn}
@@ -1565,7 +1570,7 @@ export function BrowserHome({
               "rounded-full px-3 py-1.5 text-xs font-medium shadow-lg shadow-black/10 backdrop-blur-xl transition",
               editMode
                 ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "border border-white/50 bg-white/34 text-slate-700 hover:bg-white/52",
+                : "border border-white/50 bg-white/34 text-foreground hover:bg-white/52",
             )}
           >
             {editMode ? wt.finishEditing : wt.editDesktop}
@@ -1603,7 +1608,12 @@ export function BrowserHome({
             )}
           >
             <div className="text-center">
-              <div className="flex overflow-hidden rounded-[22px] border border-white/55 bg-white/36 text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.78),0_18px_50px_rgba(15,23,42,0.13)] ring-1 ring-black/5 backdrop-blur-2xl">
+              <div
+                className={cn(
+                  "flex overflow-hidden rounded-[22px] text-foreground",
+                  liquidGlassClass("card"),
+                )}
+              >
                 <div
                   className={cn(
                     "grid w-24 place-items-center border-r border-white/38 bg-white/40 px-4 py-3 text-center",
@@ -1636,7 +1646,7 @@ export function BrowserHome({
                   >
                     {month}
                   </div>
-                  <div className="text-sm text-slate-500">
+                  <div className="text-sm text-muted-foreground">
                     {wt.aiBrowserDesktop}
                   </div>
                 </div>
@@ -1646,7 +1656,8 @@ export function BrowserHome({
             <div className="relative">
               <div
                 className={cn(
-                  "grid grid-cols-2 gap-5 rounded-[26px] border border-white/42 bg-white/28 p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.68),0_22px_70px_rgba(15,23,42,0.15)] ring-1 ring-black/5 backdrop-blur-2xl",
+                  "grid grid-cols-2 gap-5 rounded-[26px] p-5",
+                  liquidGlassClass("card"),
                   mobileDesktop && "gap-3 rounded-[20px] p-4",
                 )}
               >
@@ -1662,7 +1673,12 @@ export function BrowserHome({
                     className="group flex min-w-0 flex-col items-center gap-2 rounded-2xl p-1 text-center transition hover:bg-white/24 focus:outline-none focus:ring-2 focus:ring-white/55"
                     title={`${group.title} · ${group.subtitle}`}
                   >
-                    <span className="grid size-20 grid-cols-2 gap-1.5 rounded-[22px] border border-white/55 bg-white/42 p-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.76),0_12px_30px_rgba(15,23,42,0.12)] ring-1 ring-black/5 backdrop-blur-xl transition group-hover:bg-white/52">
+                    <span
+                      className={cn(
+                        "grid size-20 grid-cols-2 gap-1.5 rounded-[22px] p-2 transition",
+                        liquidGlassClass("thin", true),
+                      )}
+                    >
                       {group.apps.slice(0, 4).map((app) => (
                         <DesktopAppLogo
                           key={app.url}
@@ -1672,7 +1688,7 @@ export function BrowserHome({
                         />
                       ))}
                     </span>
-                    <span className="w-28 truncate text-sm font-semibold text-slate-700">
+                    <span className="w-28 truncate text-sm font-semibold text-foreground">
                       {group.title}
                     </span>
                   </button>
@@ -1686,21 +1702,24 @@ export function BrowserHome({
                 openAppGroupId === group.id ? (
                   <div
                     key={group.id}
-                    className="absolute left-1/2 top-[calc(100%+10px)] z-20 w-72 -translate-x-1/2 rounded-[24px] border border-white/58 bg-white/46 p-3 text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.78),0_26px_80px_rgba(15,23,42,0.20)] ring-1 ring-black/5 backdrop-blur-2xl"
+                    className={cn(
+                      "absolute left-1/2 top-[calc(100%+10px)] z-20 w-72 -translate-x-1/2 rounded-[24px] p-3 text-foreground",
+                      liquidGlassClass("sheet"),
+                    )}
                   >
                     <div className="mb-2 flex items-center justify-between px-1">
                       <div>
                         <div className="text-sm font-semibold">
                           {group.title}
                         </div>
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-muted-foreground">
                           {group.subtitle}
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setOpenAppGroupId(null)}
-                        className="grid size-7 place-items-center rounded-full text-slate-400 transition hover:bg-slate-900/5 hover:text-slate-700"
+                        className="grid size-7 place-items-center rounded-full text-muted-foreground/70 transition hover:bg-muted/50 hover:text-foreground"
                       >
                         <X className="size-4" />
                       </button>
@@ -1725,7 +1744,7 @@ export function BrowserHome({
                             <span className="block truncate text-sm font-semibold">
                               {getAppName(app.name)}
                             </span>
-                            <span className="block truncate text-[11px] text-slate-500">
+                            <span className="block truncate text-[11px] text-muted-foreground">
                               {getAppDesc(app.description)}
                             </span>
                           </span>
@@ -1741,77 +1760,40 @@ export function BrowserHome({
           <div className={cn("flex flex-col gap-9", compactDesktop && "gap-7")}>
             <section
               className={cn(
-                "w-[360px] self-end rounded-[26px] border border-white/42 bg-white/24 p-4 text-slate-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.68),0_22px_70px_rgba(15,23,42,0.15)] ring-1 ring-black/5 backdrop-blur-2xl",
+                "w-[360px] self-end rounded-[26px] p-4 text-foreground",
+                liquidGlassClass("card"),
                 compactDesktop && "w-full self-stretch",
                 mobileDesktop && "rounded-[22px] p-3",
               )}
             >
               <div className="mb-3 flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-semibold text-slate-800">
-                    {bt.bookmarksLabel}
+                  <div className="text-sm font-semibold text-foreground">
+                    {bt.recentVisits}
                   </div>
-                  <div className="text-xs text-slate-500">
-                    {bookmarks.length > 0
-                      ? bt.bookmarkCount(bookmarks.length)
-                      : history.length > 0
-                        ? bt.recentVisits
-                        : bt.commonEntries}
+                  <div className="text-xs text-muted-foreground">
+                    {recentPanelItems.length > 0
+                      ? bt.recentVisitCount(recentPanelItems.length)
+                      : bt.noRecentVisits}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActivePanel("add")}
-                  className="grid size-8 place-items-center rounded-full border border-white/45 bg-white/30 text-slate-500 shadow-[inset_0_1px_1px_rgba(255,255,255,0.65)] transition hover:bg-white/48 hover:text-slate-800"
-                  title={bt.addToDock}
+                <div
+                  className="grid size-8 place-items-center rounded-full border border-white/45 bg-white/30 text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.65)]"
+                  title={bt.historyOnly}
                 >
-                  <Plus className="size-4" />
-                </button>
+                  <Clock3Icon className="size-4" />
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {bookmarkPanelItems.map((item) => {
-                  let fallbackIcon = "";
-                  try {
-                    fallbackIcon = `https://www.google.com/s2/favicons?domain=${
-                      new URL(item.url).hostname
-                    }&sz=64`;
-                  } catch (e) {
-                    swallow(e);
-                  }
-                  return (
-                    <button
-                      key={item.url}
-                      type="button"
-                      onClick={() => onOpen(item.url)}
-                      className="group flex min-w-0 items-center gap-2 rounded-2xl border border-white/28 bg-white/20 p-2 text-left shadow-[inset_0_1px_1px_rgba(255,255,255,0.45)] transition hover:border-white/45 hover:bg-white/34"
-                      title={item.title}
-                    >
-                      <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/55 bg-white/62 shadow-sm">
-                        {item.favicon || fallbackIcon ? (
-                          <img
-                            src={item.favicon || fallbackIcon}
-                            alt=""
-                            className="size-[68%] object-contain"
-                            onError={(event) => {
-                              event.currentTarget.style.display = "none";
-                            }}
-                          />
-                        ) : (
-                          <BookOpenIcon className="size-4 text-slate-500" />
-                        )}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-semibold text-slate-700">
-                          {item.title}
-                        </span>
-                        <span className="block truncate text-[10px] text-slate-500">
-                          {item.meta}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              {recentPanelItems.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  {recentPanelItems.map(renderCompactLink)}
+                </div>
+              )}
+              {recentPanelItems.length === 0 && (
+                <div className="rounded-2xl border border-white/28 bg-white/18 px-3 py-5 text-center text-xs text-muted-foreground">
+                  {bt.noRecentVisits}
+                </div>
+              )}
             </section>
 
             {widgets.length > 0 && (
@@ -1823,7 +1805,8 @@ export function BrowserHome({
                     <div
                       key={widget.id}
                       className={cn(
-                        "rounded-[24px] border border-white/44 bg-white/30 p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.70),0_18px_54px_rgba(15,23,42,0.13)] ring-1 ring-black/5 backdrop-blur-2xl transition-all",
+                        "rounded-[24px] p-5 transition-all",
+                        liquidGlassClass("card", true),
                         isDragging && "opacity-40 scale-95",
                         isDropTarget && "ring-2 ring-blue-400",
                       )}
@@ -1837,23 +1820,23 @@ export function BrowserHome({
                       }
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <span className="text-lg font-semibold text-slate-700">
+                        <span className="text-lg font-semibold text-foreground">
                           {widget.title}
                         </span>
                         {editMode && (
                           <button
                             onClick={() => handleEdit(widget.id)}
-                            className="text-slate-400 hover:text-slate-600"
+                            className="text-muted-foreground/70 hover:text-muted-foreground"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
-                      <div className="text-sm text-slate-500">
+                      <div className="text-sm text-muted-foreground">
                         {widget.type === "notes" && (
                           <div className="space-y-2">
                             <div className="rounded-xl border border-white/45 bg-white/32 p-2 backdrop-blur-xl">
-                              <p className="text-xs text-slate-500">
+                              <p className="text-xs text-muted-foreground">
                                 {bt.todoPlaceholder}
                               </p>
                             </div>
@@ -1862,7 +1845,7 @@ export function BrowserHome({
                         {widget.type === "weather" && (
                           <div className="flex items-center gap-2">
                             <span className="text-2xl">☀️</span>
-                            <span className="text-xl text-slate-600">26°C</span>
+                            <span className="text-xl text-muted-foreground">26°C</span>
                           </div>
                         )}
                         {widget.type === "system" && (
@@ -1880,7 +1863,7 @@ export function BrowserHome({
                             {["ChatGPT", "Claude", "Gemini"].map((name) => (
                               <div
                                 key={name}
-                                className="rounded-xl border border-white/40 bg-white/34 p-2 text-center text-xs text-slate-600"
+                                className="rounded-xl border border-white/40 bg-white/34 p-2 text-center text-xs text-muted-foreground"
                               >
                                 {name}
                               </div>
@@ -1889,10 +1872,10 @@ export function BrowserHome({
                         )}
                         {widget.type === "calendar" && (
                           <div className="text-center">
-                            <div className="text-3xl font-semibold text-slate-700">
+                            <div className="text-3xl font-semibold text-foreground">
                               {day}
                             </div>
-                            <div className="text-sm text-slate-500">
+                            <div className="text-sm text-muted-foreground">
                               {month}
                             </div>
                           </div>
@@ -1902,7 +1885,7 @@ export function BrowserHome({
                             {["GitHub", "StackOverflow", "MDN"].map((name) => (
                               <div
                                 key={name}
-                                className="rounded-lg border border-white/40 bg-white/34 p-1 text-xs text-slate-600"
+                                className="rounded-lg border border-white/40 bg-white/34 p-1 text-xs text-muted-foreground"
                               >
                                 {name}
                               </div>
@@ -2031,11 +2014,11 @@ export function BrowserHome({
                       {isOpen && (
                         <div className="absolute z-10 mt-2 p-3 bg-white/90 backdrop-blur-xl border border-white/30 rounded-2xl shadow-2xl min-w-[200px]">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-slate-700">
+                            <span className="text-sm font-medium text-foreground">
                               {folder.name}
                             </span>
                             <button onClick={() => toggleFolder(folder.id)}>
-                              <X className="w-4 h-4 text-slate-400 hover:text-slate-600" />
+                              <X className="w-4 h-4 text-muted-foreground/70 hover:text-muted-foreground" />
                             </button>
                           </div>
                           <div className="grid grid-cols-3 gap-2">
@@ -2043,12 +2026,12 @@ export function BrowserHome({
                               <button
                                 key={link.id}
                                 onClick={() => onOpen(link.url)}
-                                className="flex flex-col items-center gap-1 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition-colors"
+                                className="flex flex-col items-center gap-1 p-2 rounded-xl bg-muted hover:bg-muted transition-colors"
                               >
-                                <span className="text-lg font-bold text-slate-600">
+                                <span className="text-lg font-bold text-muted-foreground">
                                   {link.name[0]}
                                 </span>
-                                <span className="text-[10px] text-slate-500 truncate w-full text-center">
+                                <span className="text-[10px] text-muted-foreground truncate w-full text-center">
                                   {link.name}
                                 </span>
                               </button>
@@ -2066,7 +2049,8 @@ export function BrowserHome({
 
         <div
           className={cn(
-            "mx-auto mb-7 flex h-20 max-w-[780px] items-center gap-4 overflow-hidden rounded-[28px] border border-white/44 bg-white/32 px-4 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.74),0_26px_80px_rgba(15,23,42,0.18)] ring-1 ring-black/5 backdrop-blur-2xl",
+            "mx-auto mb-7 flex h-20 max-w-[780px] items-center gap-4 overflow-hidden rounded-[28px] px-4 py-2",
+            liquidGlassClass("dock"),
             compactDesktop &&
               "absolute bottom-5 left-20 right-5 z-10 mx-0 mb-0 justify-start gap-3 overflow-x-auto rounded-[22px] px-4 py-3",
             tabletDesktop &&
@@ -2074,7 +2058,7 @@ export function BrowserHome({
             mobileDesktop && "bottom-4 left-16 right-4 gap-2 px-3",
           )}
         >
-          {dockApps.map((app) => (
+          {visibleDockApps.map((app) => (
             <div key={app.url} className="group/dock relative shrink-0">
               <button
                 key={app.url}
@@ -2091,6 +2075,7 @@ export function BrowserHome({
                 onDragEnd={() => setDraggingUrl(null)}
                 className={cn(
                   "group grid size-14 place-items-center rounded-[18px] transition hover:-translate-y-0.5",
+                  liquidGlassClass("thin", true),
                   compactDesktop && "size-13 shrink-0 rounded-2xl",
                   tabletDesktop && "size-13",
                   mobileDesktop && "size-11 rounded-[15px]",
@@ -2127,7 +2112,8 @@ export function BrowserHome({
               type="button"
               onClick={() => setActivePanel("add")}
               className={cn(
-                "grid size-14 shrink-0 place-items-center rounded-[18px] border border-dashed border-white/55 bg-white/26 text-slate-600 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_10px_28px_rgba(15,23,42,0.12)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/48",
+                "grid size-14 shrink-0 place-items-center rounded-[18px] border-dashed text-muted-foreground transition hover:-translate-y-0.5",
+                liquidGlassClass("thin", true),
                 compactDesktop && "size-13 rounded-2xl",
                 tabletDesktop && "size-13",
                 mobileDesktop && "size-11 rounded-[15px]",
@@ -2152,7 +2138,7 @@ export function BrowserHome({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-slate-800">
+              <h3 className="text-lg font-medium text-foreground">
                 {wt.editWidgetDialogTitle}
               </h3>
               <button
@@ -2166,12 +2152,12 @@ export function BrowserHome({
                   })
                 }
               >
-                <X className="w-5 h-5 text-slate-400 hover:text-slate-600" />
+                <X className="w-5 h-5 text-muted-foreground/70 hover:text-muted-foreground" />
               </button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-slate-600 mb-2">
+                <label className="block text-sm text-muted-foreground mb-2">
                   {wt.editWidgetTitleLabel}
                 </label>
                 <input
@@ -2183,12 +2169,12 @@ export function BrowserHome({
                       title: e.target.value,
                     }))
                   }
-                  className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-2 text-slate-800 focus:outline-none focus:border-blue-400"
+                  className="w-full bg-muted border border-border rounded-xl px-4 py-2 text-foreground focus:outline-none focus:border-blue-400"
                   placeholder={wt.editWidgetTitlePlaceholder}
                 />
               </div>
               <div>
-                <label className="block text-sm text-slate-600 mb-2">
+                <label className="block text-sm text-muted-foreground mb-2">
                   {wt.editWidgetTypeLabel}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -2221,7 +2207,7 @@ export function BrowserHome({
                         "flex flex-col items-center gap-1 p-2 rounded-xl border transition-all",
                         editWidgetState.type === type
                           ? "bg-blue-50 border-blue-400 text-blue-600"
-                          : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100",
+                          : "bg-muted/50 border-border text-muted-foreground hover:bg-muted",
                       )}
                     >
                       <span className="text-xs">{label}</span>
@@ -2300,16 +2286,21 @@ function DesktopControlPanel({
   );
 
   return (
-    <div className="absolute bottom-7 left-24 top-24 z-20 w-[360px] overflow-hidden rounded-[30px] border border-white/48 bg-white/34 text-slate-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.76),0_30px_90px_rgba(15,23,42,0.24)] ring-1 ring-black/5 backdrop-blur-2xl">
+    <div
+      className={cn(
+        "absolute bottom-7 left-24 top-24 z-20 w-[360px] overflow-hidden rounded-[30px] text-foreground",
+        liquidGlassClass("sheet"),
+      )}
+    >
       <div className="flex items-center justify-between border-b border-white/38 bg-white/16 px-5 py-4">
         <div>
           <div className="text-base font-semibold">{title}</div>
-          <div className="text-xs text-slate-500">{wt.panelSubtitle}</div>
+          <div className="text-xs text-muted-foreground">{wt.panelSubtitle}</div>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded-full border border-white/45 bg-white/30 px-3 py-1 text-xs font-medium text-slate-600 shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_20px_rgba(15,23,42,0.10)] transition hover:bg-white/48"
+          className="rounded-full border border-white/45 bg-white/30 px-3 py-1 text-xs font-medium text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.72),0_8px_20px_rgba(15,23,42,0.10)] transition hover:bg-white/48"
         >
           {wt.panelClose}
         </button>
@@ -2328,10 +2319,10 @@ function DesktopControlPanel({
                     : "border-white/42 bg-white/24",
                 )}
               >
-                <span className="size-10 rounded-2xl bg-gradient-to-br from-slate-400 via-zinc-300 to-rose-300 shadow-inner" />
+                <span className="size-10 rounded-2xl bg-gradient-to-br from-muted-foreground via-zinc-300 to-rose-300 shadow-inner" />
                 <span>
                   <span className="block text-sm font-semibold">{name}</span>
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-xs text-muted-foreground">
                     {wt.themeDescs[index]}
                   </span>
                 </span>
@@ -2354,7 +2345,7 @@ function DesktopControlPanel({
                     <div className="text-sm font-semibold">
                       {wt.widgetPanelNames[index]}
                     </div>
-                    <div className="truncate text-xs text-slate-500">
+                    <div className="truncate text-xs text-muted-foreground">
                       {wt.widgetPanelDescs[index]}
                     </div>
                   </div>
@@ -2369,9 +2360,9 @@ function DesktopControlPanel({
         {panel === "wallpaper" && (
           <div className="grid grid-cols-2 gap-3">
             {[
-              "from-slate-400 via-zinc-300 to-rose-300",
-              "from-sky-300 via-indigo-300 to-slate-500",
-              "from-emerald-300 via-teal-400 to-slate-600",
+              "from-muted-foreground via-zinc-300 to-rose-300",
+              "from-sky-300 via-indigo-300 to-muted-foreground",
+              "from-emerald-300 via-teal-400 to-muted-foreground/80",
               "from-stone-500 via-neutral-400 to-orange-200",
             ].map((gradient, index) => (
               <button
@@ -2428,7 +2419,7 @@ function DesktopControlPanel({
                       <span className="block text-sm font-semibold">
                         {getAppName(app.name)}
                       </span>
-                      <span className="block truncate text-xs text-slate-500">
+                      <span className="block truncate text-xs text-muted-foreground">
                         {app.url}
                       </span>
                     </span>
@@ -2440,8 +2431,8 @@ function DesktopControlPanel({
                     className={cn(
                       "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition",
                       inDock
-                        ? "border border-white/30 bg-white/18 text-slate-400"
-                        : "bg-slate-950/88 text-white shadow-lg shadow-black/15 hover:bg-slate-700",
+                        ? "border border-white/30 bg-white/18 text-muted-foreground/70"
+                        : "bg-foreground/90 text-white shadow-lg shadow-black/15 hover:bg-muted-foreground",
                     )}
                   >
                     {inDock ? bt.alreadyInDock : bt.add}
@@ -2459,7 +2450,7 @@ function DesktopControlPanel({
                 className="rounded-2xl border border-white/38 bg-white/24 p-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.58)] backdrop-blur-xl"
               >
                 <div className="text-sm font-semibold">{name}</div>
-                <div className="mt-1 text-xs text-slate-500">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {wt.settingDescs[index]}
                 </div>
               </div>

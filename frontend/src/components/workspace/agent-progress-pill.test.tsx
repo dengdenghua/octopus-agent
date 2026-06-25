@@ -122,10 +122,10 @@ describe("<AgentProgressPill />", () => {
     fireEvent.click(screen.getByRole("button", { name: "Minimize Progress" }));
 
     const bead = screen.getByRole("button", { name: "Restore Progress" });
-    expect(bead).toHaveClass("bg-primary/70");
+    expect(bead).toHaveClass("bg-emerald-500/70");
     expect(bead.querySelector("[aria-hidden='true']")).toHaveClass(
       "animate-pulse",
-      "bg-primary/15",
+      "bg-emerald-500/15",
     );
   });
 

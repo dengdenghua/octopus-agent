@@ -7,11 +7,22 @@ import {
   ClockIcon,
   CpuIcon,
   SearchIcon,
+  RefreshCwIcon,
   WrenchIcon,
   ZapIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { ErrorState, LoadingState, StatusBadge } from "@/components/ui/state";
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
 import { authHeaders } from "@/core/auth/api";
@@ -73,7 +84,7 @@ function eventStyle(type: string) {
   return (
     EVENT_STYLE[type] ?? {
       icon: <CircleDotIcon className="size-3.5" />,
-      color: "bg-gray-500",
+      color: "bg-muted-foreground",
     }
   );
 }
@@ -86,8 +97,11 @@ export function ExecutionTimeline() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const r = await fetch(
         `${getBackendBaseURL()}/api/journal/timeline?limit=30`,
@@ -95,9 +109,11 @@ export function ExecutionTimeline() {
           headers: authHeaders(),
         },
       );
-      if (r.ok) setData(await r.json());
+      if (!r.ok) throw new Error(`${r.status}: ${r.statusText}`);
+      setData(await r.json());
     } catch (e) {
       swallow(e);
+      setError(e instanceof Error ? e.message : String(e));
     }
     setLoading(false);
   }, []);
@@ -123,185 +139,225 @@ export function ExecutionTimeline() {
   );
 
   if (loading) {
+    return <LoadingState title={t.executionTimeline.loading} />;
+  }
+  if (error) {
     return (
-      <div className="py-8 text-center text-sm text-muted-foreground">
-        {t.executionTimeline.loading}
-      </div>
+      <ErrorState
+        title={t.executionTimeline.loadFailed}
+        detail={error}
+        actionLabel={t.executionTimeline.refresh}
+        onAction={() => void load()}
+      />
     );
   }
-  if (!data || taskIds.length === 0) {
+  if (!data) {
     return (
-      <div className="py-8 text-center text-sm text-muted-foreground">
-        {t.executionTimeline.empty}
-      </div>
+      <Empty className="min-h-[220px]">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <ClockIcon />
+          </EmptyMedia>
+          <EmptyTitle>{t.executionTimeline.empty}</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <SearchIcon className="size-4 text-muted-foreground" />
-        <input
-          className="h-8 flex-1 rounded-lg border border-border/60 bg-background/60 px-3 text-xs outline-none placeholder:text-muted-foreground focus:border-primary/50"
-          placeholder={t.executionTimeline.searchPlaceholder}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <button
+        <div className="relative min-w-0 flex-1">
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="h-8 rounded-lg pl-8 text-xs"
+            placeholder={t.executionTimeline.searchPlaceholder}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
           onClick={() => {
-            setLoading(true);
             void load();
           }}
-          className="rounded-lg border border-border/60 px-3 py-1.5 text-xs hover:bg-muted"
         >
+          <RefreshCwIcon className="size-3.5" />
           {t.executionTimeline.refresh}
-        </button>
+        </Button>
       </div>
 
-      {taskIds.map((tid) => {
-        const events = data.timelines[tid] ?? [];
-        const isOpen = expanded.has(tid);
-        const first = events[0];
-        const last = events[events.length - 1];
-        const strategy = events.find((e) => e.strategy)?.strategy;
-        const totalTokens = events.reduce(
-          (s, e) => s + (e.tokens_in ?? 0) + (e.tokens_out ?? 0),
-          0,
-        );
-        const totalUsd = events.reduce((s, e) => s + (e.usd ?? 0), 0);
+      {taskIds.length === 0 ? (
+        <Empty className="min-h-[220px]">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <SearchIcon />
+            </EmptyMedia>
+            <EmptyTitle>
+              {filter
+                ? t.executionTimeline.noMatches
+                : t.executionTimeline.empty}
+            </EmptyTitle>
+            {filter ? (
+              <EmptyDescription>
+                {t.executionTimeline.noMatchesDescription}
+              </EmptyDescription>
+            ) : null}
+          </EmptyHeader>
+        </Empty>
+      ) : (
+        taskIds.map((tid) => {
+          const events = data.timelines[tid] ?? [];
+          const isOpen = expanded.has(tid);
+          const first = events[0];
+          const last = events[events.length - 1];
+          const strategy = events.find((e) => e.strategy)?.strategy;
+          const totalTokens = events.reduce(
+            (s, e) => s + (e.tokens_in ?? 0) + (e.tokens_out ?? 0),
+            0,
+          );
+          const totalUsd = events.reduce((s, e) => s + (e.usd ?? 0), 0);
 
-        return (
-          <div
-            key={tid}
-            className="rounded-xl border border-border/60 bg-background/60 overflow-hidden"
-          >
-            <button
-              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/30"
-              onClick={() => toggle(tid)}
+          return (
+            <div
+              key={tid}
+              className="rounded-xl border border-border/60 bg-background/60 overflow-hidden"
             >
-              {isOpen ? (
-                <ChevronDownIcon className="size-4 text-muted-foreground" />
-              ) : (
-                <ChevronRightIcon className="size-4 text-muted-foreground" />
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium font-mono">
-                    {tid === "_no_task"
-                      ? t.executionTimeline.noTask
-                      : tid.slice(0, 12)}
-                  </span>
-                  {strategy && (
-                    <span className="rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[10px] text-violet-400">
-                      {strategy}
+              <button
+                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/30"
+                onClick={() => toggle(tid)}
+              >
+                {isOpen ? (
+                  <ChevronDownIcon className="size-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRightIcon className="size-4 text-muted-foreground" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium font-mono">
+                      {tid === "_no_task"
+                        ? t.executionTimeline.noTask
+                        : tid.slice(0, 12)}
                     </span>
-                  )}
+                    {strategy && (
+                      <StatusBadge tone="paused" className="h-5 text-[10px]">
+                        {strategy}
+                      </StatusBadge>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {events.length} {t.executionTimeline.events}
+                    {totalTokens > 0 &&
+                      ` · ${totalTokens.toLocaleString()} tokens`}
+                    {totalUsd > 0 && ` · $${totalUsd.toFixed(4)}`}
+                    {first && ` · ${new Date(first.ts).toLocaleTimeString()}`}
+                    {last &&
+                      first &&
+                      last.ts !== first.ts &&
+                      ` → ${new Date(last.ts).toLocaleTimeString()}`}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-[11px] text-muted-foreground">
-                  {events.length} {t.executionTimeline.events}
-                  {totalTokens > 0 &&
-                    ` · ${totalTokens.toLocaleString()} tokens`}
-                  {totalUsd > 0 && ` · $${totalUsd.toFixed(4)}`}
-                  {first && ` · ${new Date(first.ts).toLocaleTimeString()}`}
-                  {last &&
-                    first &&
-                    last.ts !== first.ts &&
-                    ` → ${new Date(last.ts).toLocaleTimeString()}`}
-                </div>
-              </div>
-            </button>
+              </button>
 
-            {isOpen && (
-              <div className="border-t border-border/40 px-4 py-3">
-                <div className="relative ml-3 border-l-2 border-border/40 pl-6 space-y-4">
-                  {events.map((ev, i) => {
-                    const style = eventStyle(ev.event_type);
-                    return (
-                      <div key={i} className="relative">
-                        <div
-                          className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full text-white ${style.color}`}
-                        >
-                          {style.icon}
-                        </div>
-                        <div className="text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{ev.event_type}</span>
-                            {ev.skill_name && (
-                              <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] text-blue-400">
-                                {ev.skill_name}
-                              </span>
-                            )}
-                            {ev.iteration != null && (
-                              <span className="text-[10px] text-muted-foreground">
-                                iter {ev.iteration}
-                              </span>
-                            )}
-                            <span className="ml-auto text-[10px] text-muted-foreground">
-                              {new Date(ev.ts).toLocaleTimeString()}
-                            </span>
+              {isOpen && (
+                <div className="border-t border-border/40 px-4 py-3">
+                  <div className="relative ml-3 border-l-2 border-border/40 pl-6 space-y-4">
+                    {events.map((ev, i) => {
+                      const style = eventStyle(ev.event_type);
+                      return (
+                        <div key={i} className="relative">
+                          <div
+                            className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full text-white ${style.color}`}
+                          >
+                            {style.icon}
                           </div>
-                          {ev.thought && (
-                            <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-                              {stripTraceLabelPrefixes(ev.thought).slice(
-                                0,
-                                200,
-                              )}
-                            </div>
-                          )}
-                          {ev.action && (
-                            <div className="mt-1 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-mono text-blue-300">
-                              {stripTraceLabelPrefixes(ev.action).slice(0, 150)}
-                            </div>
-                          )}
-                          {ev.observation && (
-                            <div className="mt-1 max-h-24 overflow-y-auto rounded-lg bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-                              {stripTraceLabelPrefixes(ev.observation).slice(
-                                0,
-                                300,
-                              )}
-                            </div>
-                          )}
-                          {ev.final_answer && (
-                            <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-400">
-                              {stripTraceLabelPrefixes(ev.final_answer).slice(
-                                0,
-                                200,
-                              )}
-                            </div>
-                          )}
-                          {ev.error && (
-                            <div className="mt-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-400">
-                              {ev.error.slice(0, 200)}
-                            </div>
-                          )}
-                          {(ev.tokens_in || ev.tokens_out || ev.model) && (
-                            <div className="mt-1 flex gap-3 text-[10px] text-muted-foreground">
-                              {ev.model && (
-                                <span>
-                                  {ev.provider}/{ev.model}
+                          <div className="text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">
+                                {ev.event_type}
+                              </span>
+                              {ev.skill_name && (
+                                <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] text-blue-400">
+                                  {ev.skill_name}
                                 </span>
                               )}
-                              {ev.tokens_in != null && (
-                                <span>{ev.tokens_in} in</span>
+                              {ev.iteration != null && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  iter {ev.iteration}
+                                </span>
                               )}
-                              {ev.tokens_out != null && (
-                                <span>{ev.tokens_out} out</span>
-                              )}
-                              {ev.latency_ms != null && (
-                                <span>{ev.latency_ms.toFixed(0)}ms</span>
-                              )}
+                              <span className="ml-auto text-[10px] text-muted-foreground">
+                                {new Date(ev.ts).toLocaleTimeString()}
+                              </span>
                             </div>
-                          )}
+                            {ev.thought && (
+                              <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                                {stripTraceLabelPrefixes(ev.thought).slice(
+                                  0,
+                                  200,
+                                )}
+                              </div>
+                            )}
+                            {ev.action && (
+                              <div className="mt-1 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-mono text-blue-300">
+                                {stripTraceLabelPrefixes(ev.action).slice(
+                                  0,
+                                  150,
+                                )}
+                              </div>
+                            )}
+                            {ev.observation && (
+                              <div className="mt-1 max-h-24 overflow-y-auto rounded-lg bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                                {stripTraceLabelPrefixes(ev.observation).slice(
+                                  0,
+                                  300,
+                                )}
+                              </div>
+                            )}
+                            {ev.final_answer && (
+                              <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-400">
+                                {stripTraceLabelPrefixes(ev.final_answer).slice(
+                                  0,
+                                  200,
+                                )}
+                              </div>
+                            )}
+                            {ev.error && (
+                              <div className="mt-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-400">
+                                {ev.error.slice(0, 200)}
+                              </div>
+                            )}
+                            {(ev.tokens_in || ev.tokens_out || ev.model) && (
+                              <div className="mt-1 flex gap-3 text-[10px] text-muted-foreground">
+                                {ev.model && (
+                                  <span>
+                                    {ev.provider}/{ev.model}
+                                  </span>
+                                )}
+                                {ev.tokens_in != null && (
+                                  <span>{ev.tokens_in} in</span>
+                                )}
+                                {ev.tokens_out != null && (
+                                  <span>{ev.tokens_out} out</span>
+                                )}
+                                {ev.latency_ms != null && (
+                                  <span>{ev.latency_ms.toFixed(0)}ms</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
+              )}
+            </div>
+          );
+        })
+      )}
     </div>
   );
 }

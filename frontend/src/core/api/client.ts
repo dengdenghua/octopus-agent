@@ -157,76 +157,33 @@ export class OctopusClient {
   // -- Threads API --
 
   threads = {
-    create: async (body?: Record<string, unknown>): Promise<Thread> => {
-      const resp = await fetch(`${this.baseUrl}/threads`, {
-        method: "POST",
-        headers: this._safeHeaders(true),
-        body: JSON.stringify(body ?? {}),
-      });
-      if (!resp.ok) throw new Error(`Create thread failed: ${resp.status}`);
-      return resp.json();
-    },
+    create: (body?: Record<string, unknown>): Promise<Thread> =>
+      this.post<Thread>("/threads", body),
 
-    get: async (threadId: string): Promise<Thread> => {
-      const resp = await fetch(`${this.baseUrl}/threads/${threadId}`, {
-        headers: this._safeHeaders(false),
-      });
-      if (!resp.ok) throw new Error(`Get thread failed: ${resp.status}`);
-      return resp.json();
-    },
+    get: (threadId: string): Promise<Thread> =>
+      this.get<Thread>(`/threads/${threadId}`),
 
-    search: async (params?: Record<string, unknown>): Promise<Thread[]> => {
-      const resp = await fetch(`${this.baseUrl}/threads/search`, {
-        method: "POST",
-        headers: this._safeHeaders(true),
-        body: JSON.stringify(params ?? {}),
-      });
-      if (!resp.ok) throw new Error(`Search threads failed: ${resp.status}`);
-      return resp.json();
-    },
+    search: (params?: Record<string, unknown>): Promise<Thread[]> =>
+      this.post<Thread[]>("/threads/search", params),
 
-    delete: async (threadId: string): Promise<void> => {
-      const resp = await fetch(`${this.baseUrl}/threads/${threadId}`, {
-        method: "DELETE",
-        headers: this._safeHeaders(false),
-      });
-      if (!resp.ok) throw new Error(`Delete thread failed: ${resp.status}`);
-    },
+    delete: (threadId: string): Promise<void> =>
+      this.delete<void>(`/threads/${threadId}`),
 
-    getState: async <T = Record<string, unknown>>(
+    getState: <T = Record<string, unknown>>(
       threadId: string,
-    ): Promise<ThreadState<T>> => {
-      const resp = await fetch(`${this.baseUrl}/threads/${threadId}/state`, {
-        headers: this._safeHeaders(false),
-      });
-      if (!resp.ok) throw new Error(`Get state failed: ${resp.status}`);
-      return resp.json();
-    },
+    ): Promise<ThreadState<T>> =>
+      this.get<ThreadState<T>>(`/threads/${threadId}/state`),
 
-    updateState: async (
+    updateState: (
       threadId: string,
       body: Record<string, unknown>,
-    ): Promise<ThreadState> => {
-      const resp = await fetch(`${this.baseUrl}/threads/${threadId}/state`, {
-        method: "POST",
-        headers: this._safeHeaders(true),
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) throw new Error(`Update state failed: ${resp.status}`);
-      return resp.json();
-    },
+    ): Promise<ThreadState> =>
+      this.post<ThreadState>(`/threads/${threadId}/state`, body),
 
-    getHistory: async (
+    getHistory: (
       threadId: string,
       params?: { limit?: number },
-    ): Promise<ThreadState[]> => {
-      const resp = await fetch(`${this.baseUrl}/threads/${threadId}/history`, {
-        method: "POST",
-        headers: this._safeHeaders(true),
-        body: JSON.stringify(params ?? {}),
-      });
-      if (!resp.ok) throw new Error(`Get history failed: ${resp.status}`);
-      return resp.json();
-    },
+    ): Promise<ThreadState[]> =>
+      this.post<ThreadState[]>(`/threads/${threadId}/history`, params),
   };
 }

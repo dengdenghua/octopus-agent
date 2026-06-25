@@ -148,12 +148,12 @@ export function TerminalPanel({
 
   return (
     <div
-      className={cn("flex h-full flex-col bg-white text-slate-950", className)}
+      className={cn("flex h-full flex-col bg-background text-foreground", className)}
     >
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-2">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
+      <div className="flex items-center justify-between border-b border-border bg-background px-3 py-2">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <TerminalIcon className="size-3.5" />
-          <span className="text-sm font-semibold text-slate-950">
+          <span className="text-sm font-semibold text-foreground">
             {t.codeMode.terminal}
           </span>
           <span className="font-medium">powershell</span>
@@ -168,7 +168,7 @@ export function TerminalPanel({
           <button
             type="button"
             onClick={handleRestart}
-            className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             title={t.codeMode.terminalRestart}
           >
             <RotateCcwIcon className="size-3" />
@@ -177,7 +177,7 @@ export function TerminalPanel({
             <button
               type="button"
               onClick={onClose}
-              className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title={t.codeMode.terminalClose}
             >
               <XIcon className="size-3" />
@@ -185,10 +185,10 @@ export function TerminalPanel({
           )}
         </div>
       </div>
-      <div className="relative min-h-0 flex-1 bg-white">
+      <div className="relative min-h-0 flex-1 bg-background">
         <div ref={containerRef} className="absolute inset-0" />
         {!hasOutput && (
-          <div className="pointer-events-none absolute inset-0 px-6 py-5 font-mono text-[13px] leading-6 text-slate-400">
+          <div className="pointer-events-none absolute inset-0 px-6 py-5 font-mono text-[13px] leading-6 text-muted-foreground/70">
             {connectionError
               ? t.codeMode.terminalConnectionFailed
               : connected

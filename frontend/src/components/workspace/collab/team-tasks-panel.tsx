@@ -53,9 +53,7 @@ export function TeamTasksPanel({
   const deleteTask = useDeleteTeamTask();
   const collab = useOptionalCollab();
 
-  const filters = useMemo<
-    Array<{ id: "all" | TeamTaskStatus; label: string }>
-  >(
+  const filters = useMemo<Array<{ id: "all" | TeamTaskStatus; label: string }>>(
     () => [
       { id: "all", label: t.taskBoard.all },
       { id: "pending", label: t.teamTasksPanel.statusPending },
@@ -128,7 +126,9 @@ export function TeamTasksPanel({
       toast.success(t.teamTasksPanel.toast.runStarted);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t.teamTasksPanel.toast.runFailed,
+        error instanceof Error
+          ? error.message
+          : t.teamTasksPanel.toast.runFailed,
       );
     }
   };
@@ -142,7 +142,9 @@ export function TeamTasksPanel({
       toast.success(t.teamTasksPanel.toast.taskPaused);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t.teamTasksPanel.toast.pauseFailed,
+        error instanceof Error
+          ? error.message
+          : t.teamTasksPanel.toast.pauseFailed,
       );
     }
   };
@@ -153,7 +155,9 @@ export function TeamTasksPanel({
       toast.success(t.teamTasksPanel.toast.taskDeleted);
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t.teamTasksPanel.toast.deleteFailed,
+        error instanceof Error
+          ? error.message
+          : t.teamTasksPanel.toast.deleteFailed,
       );
     }
   };
@@ -383,7 +387,9 @@ export function TeamTasksPanel({
           <div className="space-y-1.5 border-t border-border/45 px-3 py-2">
             {task.produced_artifacts.map((artifact, i) => {
               const a = artifact as Record<string, unknown>;
-              const title = String(a.title ?? a.agent_id ?? a.type ?? `产出 ${i + 1}`);
+              const title = String(
+                a.title ?? a.agent_id ?? a.type ?? `产出 ${i + 1}`,
+              );
               const content = String(a.content ?? "");
               const ok = a.ok;
               return (

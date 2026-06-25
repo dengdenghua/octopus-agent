@@ -901,8 +901,16 @@ describe("reducer", () => {
 
   it("turn/grounding attaches consulted sources to the turn", () => {
     const sources = [
-      { kind: "doc" as const, title: "Hemolymph", path: "23-memory/hemolymph.md" },
-      { kind: "source" as const, title: "react_loop.py", path: "runtime/react_loop.py:501" },
+      {
+        kind: "doc" as const,
+        title: "Hemolymph",
+        path: "23-memory/hemolymph.md",
+      },
+      {
+        kind: "source" as const,
+        title: "react_loop.py",
+        path: "runtime/react_loop.py:501",
+      },
     ];
     const state = apply(
       emptyConversation("th"),
@@ -910,7 +918,10 @@ describe("reducer", () => {
         method: "turn/started",
         params: { threadId: "th", turn: blankTurn("tn", "th") },
       },
-      { method: "turn/grounding", params: { threadId: "th", turnId: "tn", sources } },
+      {
+        method: "turn/grounding",
+        params: { threadId: "th", turnId: "tn", sources },
+      },
     );
     expect(state.turns[0].grounding).toEqual(sources);
   });

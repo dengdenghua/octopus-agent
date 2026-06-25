@@ -56,9 +56,9 @@ const STATUS_STYLE: Record<
   { dotColor: string; badgeClass: string; icon: React.ReactNode }
 > = {
   queued: {
-    dotColor: "bg-slate-400",
+    dotColor: "bg-muted-foreground",
     badgeClass:
-      "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+      "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
     icon: <ClockIcon className="size-3" />,
   },
   running: {
@@ -86,9 +86,9 @@ const STATUS_STYLE: Record<
     icon: <AlertCircleIcon className="size-3" />,
   },
   cancelled: {
-    dotColor: "bg-gray-400",
+    dotColor: "bg-muted-foreground",
     badgeClass:
-      "bg-gray-500/10 text-gray-500 dark:text-gray-400 border-gray-500/20",
+      "bg-muted-foreground/10 text-muted-foreground border-muted-foreground/20",
     icon: <XIcon className="size-3" />,
   },
 };

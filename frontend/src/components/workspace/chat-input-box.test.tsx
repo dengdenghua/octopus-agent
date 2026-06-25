@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { renderWithProviders } from "@/test/harness";
+import { queueComposerImageEntry } from "@/core/composer-image-inbox";
 
 import { ChatInputBox } from "./chat-input-box";
 
@@ -123,6 +124,36 @@ describe("<ChatInputBox /> cowork materials", () => {
       }),
     );
     expect(textarea().value).toBe("");
+  });
+
+  it("allows sending a pasted image without typed text", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox mode="react" threadId="thread-1" onSubmit={onSubmit} />,
+    );
+
+    const image = new File(["img"], "screen.png", { type: "image/png" });
+    fireEvent.paste(textarea(), {
+      clipboardData: {
+        items: [
+          {
+            kind: "file",
+            type: "image/png",
+            getAsFile: () => image,
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByTitle("Send")).toBeEnabled();
+    fireEvent.click(screen.getByTitle("Send"));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith({
+        text: "",
+        images: [image],
+      }),
+    );
   });
 
   it("treats legacy deep Agent state as a normal message until research settings open", async () => {
@@ -414,6 +445,8 @@ describe("<ChatInputBox /> send-failure draft restore", () => {
   function dispatchSendFailed(detail: {
     threadId?: string | null;
     text?: string | null;
+    images?: File[] | null;
+    sourceLabel?: string | null;
   }) {
     act(() => {
       window.dispatchEvent(new CustomEvent("octopus:send-failed", { detail }));
@@ -468,5 +501,88 @@ describe("<ChatInputBox /> send-failure draft restore", () => {
     dispatchSendFailed({ threadId: "thread-1", text: "old failed text" });
 
     expect(textarea().value).toBe("new attempt");
+  });
+
+  it("restores failed screenshots when the composer had been cleared", async () => {
+    const image = new File(["img"], "failed-shot.png", { type: "image/png" });
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        onSubmit={vi.fn()}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    dispatchSendFailed({
+      threadId: "thread-1",
+      images: [image],
+      sourceLabel: "浏览器截图",
+    });
+
+    await waitFor(() =>
+      expect(
+        document.querySelector('img[alt="failed-shot.png"]'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByTitle("Send")).toBeEnabled();
+    expect(screen.getByText("浏览器截图")).toBeInTheDocument();
+  });
+
+  it("accepts externally injected browser screenshots for the active thread", async () => {
+    const image = new File(["img"], "browser-shot.png", { type: "image/png" });
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        onSubmit={vi.fn()}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent("octopus:inject-composer-images", {
+          detail: {
+            threadId: "thread-1",
+            images: [image],
+            sourceLabel: "浏览器截图",
+          },
+        }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(
+        document.querySelector('img[alt="browser-shot.png"]'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("浏览器截图")).toBeInTheDocument();
+  });
+
+  it("hydrates queued browser screenshots when the composer mounts", async () => {
+    const pngDataUrl =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnR5WQAAAAASUVORK5CYII=";
+    queueComposerImageEntry({
+      dataUrl: pngDataUrl,
+      filename: "queued-browser-shot.png",
+      sourceLabel: "浏览器截图",
+    });
+
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        onSubmit={vi.fn()}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        document.querySelector('img[alt="queued-browser-shot.png"]'),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("浏览器截图")).toBeInTheDocument();
   });
 });

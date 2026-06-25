@@ -18,11 +18,13 @@ export interface WorkBlock {
   kind: WorkBlockKind;
   title: string;
   subtitle: string;
-  status: LiveToolEvent["status"];
+  status: WorkBlockStatus;
   startedAt: number;
   inputText: string;
   outputText: string;
 }
+
+export type WorkBlockStatus = LiveToolEvent["status"] | "warning";
 
 export interface SettledRunDisplayOptions {
   hasAnswer?: boolean;
@@ -90,7 +92,10 @@ export function progressForWorkBlocks(blocks: WorkBlock[], current: WorkBlock) {
     blocks.findIndex((block) => block.id === current.id),
   );
   const terminal = blocks.filter(
-    (block) => block.status === "done" || block.status === "error",
+    (block) =>
+      block.status === "done" ||
+      block.status === "warning" ||
+      block.status === "error",
   ).length;
   const currentIndex = Math.max(
     1,
@@ -106,9 +111,10 @@ export function isWorkRunning(blocks: WorkBlock[]): boolean {
   );
 }
 
-export function statusText(status: LiveToolEvent["status"]): string {
+export function statusText(status: WorkBlockStatus): string {
   if (status === "running") return "正在执行";
   if (status === "waiting_approval") return "等待确认";
+  if (status === "warning") return "已恢复";
   if (status === "error") return "执行失败";
   return "已完成";
 }
@@ -117,17 +123,28 @@ function toWorkBlock(event: LiveToolEvent): WorkBlock {
   const kind = workKind(event.name);
   const title = workTitle(event, kind);
   const subtitle = workSubtitle(event);
+  const status = workBlockStatus(event);
   return {
     id: event.id,
     event,
     kind,
     title,
     subtitle,
-    status: event.status,
+    status,
     startedAt: event.startedAt,
     inputText: detailText(event.input),
     outputText: detailText(event.output),
   };
+}
+
+function workBlockStatus(event: LiveToolEvent): WorkBlockStatus {
+  if (event.status === "error" && isManualVerificationRequiredEvent(event)) {
+    return "waiting_approval";
+  }
+  if (event.status === "error" && isRecoverableToolFailureEvent(event)) {
+    return "warning";
+  }
+  return event.status;
 }
 
 function isVisibleWorkEvent(event: LiveToolEvent): boolean {
@@ -162,6 +179,9 @@ function workKind(name: string): WorkBlockKind {
 }
 
 function workTitle(event: LiveToolEvent, kind: WorkBlockKind): string {
+  if (isManualVerificationRequiredEvent(event)) {
+    return "等待验证";
+  }
   if (event.lifecycle === "spawned" || /subagent_spawned/i.test(event.name)) {
     return `创建助手 ${agentDisplayName(event)}`;
   }
@@ -201,6 +221,9 @@ function workTitle(event: LiveToolEvent, kind: WorkBlockKind): string {
 }
 
 function workSubtitle(event: LiveToolEvent): string {
+  if (isManualVerificationRequiredEvent(event)) {
+    return statusText(workBlockStatus(event));
+  }
   const progress = progressSubtitleText(event);
   if (progress) return compact(progress, 88);
   const target = firstString(event.input, [
@@ -215,7 +238,33 @@ function workSubtitle(event: LiveToolEvent): string {
   ]);
   if (target) return compact(target, 88);
   if (event.agentName) return event.agentName;
-  return statusText(event.status);
+  return statusText(workBlockStatus(event));
+}
+
+function isManualVerificationRequiredEvent(event: LiveToolEvent): boolean {
+  const normalizedName = event.name.trim().toLowerCase();
+  if (
+    !(
+      normalizedName === "verification:manual" ||
+      normalizedName.endsWith(":verification:manual")
+    )
+  ) {
+    return false;
+  }
+  const command = firstString(event.input, ["command"]);
+  const output = detailText(event.output);
+  return /verification required|no verification step|Code changes were produced/i.test(
+    `${command}\n${output}`,
+  );
+}
+
+function isRecoverableToolFailureEvent(event: LiveToolEvent): boolean {
+  const haystack = `${event.name}\n${detailText(event.input)}\n${detailText(
+    event.output,
+  )}`;
+  return /工具失败|status=failed\s+error=TypeError|换一种方式重试|tool failed|tool_error|No such tool|不存在的工具/i.test(
+    haystack,
+  );
 }
 
 function agentDisplayName(event: LiveToolEvent): string {

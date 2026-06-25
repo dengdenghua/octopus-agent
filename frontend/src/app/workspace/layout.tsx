@@ -3,8 +3,10 @@ import { Outlet } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { MoliliLoginDialog } from "@/components/auth/molili-login-dialog";
+import { LiquidGlassField } from "@/components/browser/liquid-glass-field";
 import { Banner } from "@/components/ui/banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { WorkspaceSidebar } from "@/components/workspace/workspace-sidebar";
 import {
   STUB_RESPONSE_EVENT,
@@ -13,6 +15,7 @@ import {
 import { swallow } from "@/core/utils/log";
 import { useWorkspaceShortcuts } from "@/core/shortcuts/use-global-shortcuts";
 import { useI18n } from "@/core/i18n/hooks";
+import { useAppearance } from "@/hooks/use-appearance";
 
 const CommandPalette = lazy(() =>
   import("@/components/workspace/command-palette").then((m) => ({
@@ -112,6 +115,7 @@ function StubResponseBannerHost() {
 
 export default function WorkspaceLayout() {
   const electron = inElectron();
+  const { materialTheme } = useAppearance();
   useTitleBarThemeSync();
   useWorkspaceShortcuts();
   return (
@@ -120,7 +124,7 @@ export default function WorkspaceLayout() {
       {/* Implementation note. */}
       {/* Implementation note. */}
       <SidebarProvider
-        className="workspace-shell h-screen"
+        className="workspace-shell h-screen overflow-hidden"
         defaultOpen
         style={
           electron
@@ -128,11 +132,14 @@ export default function WorkspaceLayout() {
             : undefined
         }
       >
+        {materialTheme === "liquid" ? <LiquidGlassField /> : null}
         <WorkspaceSidebar />
-        <SidebarInset className="flex min-w-0 flex-col overflow-hidden">
+        <SidebarInset className="relative z-[1] flex min-w-0 flex-col overflow-hidden">
           <StubResponseBannerHost />
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-            <Outlet />
+            <ErrorBoundary>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </SidebarInset>
       </SidebarProvider>

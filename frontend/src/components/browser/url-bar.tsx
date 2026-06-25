@@ -3,8 +3,12 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  MinusIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
   RefreshCwIcon,
   HouseIcon,
+  ImageIcon,
   LaptopIcon,
   PuzzleIcon,
   TabletIcon,
@@ -16,6 +20,7 @@ import {
   Trash2Icon,
   ExternalLinkIcon,
   SearchIcon,
+  RotateCcwIcon,
   DownloadIcon,
   FolderOpenIcon,
   FileIcon,
@@ -31,12 +36,18 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
+import { toast } from "sonner";
 
+import {
+  queueComposerImageEntry,
+  readLastComposerTarget,
+} from "@/core/composer-image-inbox";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 import type { DevicePreset } from "../workspace/embedded-browser/browser-context";
+import { LiquidGlass } from "./liquid-glass";
 import {
   BROWSER_HOME_URL,
   SEARCH_ENGINE_URLS,
@@ -106,6 +117,7 @@ interface Props {
 export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   const { t } = useI18n();
   const ub = t.browser.urlBar;
+  const bp = t.browserPreviewPanel;
   const {
     activeTab,
     patchTab,
@@ -129,8 +141,11 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   const [downloadsOpen, setDownloadsOpen] = useState(false);
   const [downloads, setDownloads] = useState<BrowserDownload[]>([]);
   const [siteDataStatus, setSiteDataStatus] = useState<string | null>(null);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [zoomByTab, setZoomByTab] = useState<Record<string, number>>({});
   const historyBtnRef = useRef<HTMLButtonElement>(null);
   const downloadsBtnRef = useRef<HTMLButtonElement>(null);
+  const actionsBtnRef = useRef<HTMLButtonElement>(null);
   const addressBarRef = useRef<HTMLDivElement>(null);
   const siteInfoBtnRef = useRef<HTMLButtonElement>(null);
   const siteInfoPanelRef = useRef<HTMLDivElement>(null);
@@ -216,6 +231,37 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
     });
     setDraft(BROWSER_HOME_URL);
   }, [activeTab, patchTab, t.browser.webviewTab.aiBrowserDesktop]);
+
+  const attachScreenshotToNextComposer = useCallback(async () => {
+    if (!webviewHandle) return;
+    try {
+      const shot = await webviewHandle.capturePage();
+      if (!shot?.dataUrl) {
+        toast.error(bp.attachScreenshotFailed);
+        return;
+      }
+      const host = (() => {
+        try {
+          return activeTab?.url ? new URL(activeTab.url).hostname : "browser";
+        } catch {
+          return "browser";
+        }
+      })();
+      queueComposerImageEntry({
+        dataUrl: shot.dataUrl,
+        filename: `browser-shot-${host}-${Date.now()}.png`,
+        sourceLabel: bp.attachScreenshotSource,
+      });
+      const target = readLastComposerTarget();
+      if (target) {
+        window.location.hash = target;
+      }
+      toast.success(bp.attachScreenshotSuccess);
+    } catch (error) {
+      swallow(error);
+      toast.error(bp.attachScreenshotFailed);
+    }
+  }, [activeTab?.url, bp, webviewHandle]);
 
   const goTo = useCallback(
     (url: string) => {
@@ -318,6 +364,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   }, [activeTab?.url]);
 
   const device = activeTab?.device ?? "desktop";
+  const activeZoom = activeTab ? (zoomByTab[activeTab.id] ?? 100) : 100;
   const bookmarked = activeTab ? isBookmarked(activeTab.url) : false;
   const activeDownloadCount = downloads.filter(
     (d) => d.state === "progressing",
@@ -329,6 +376,41 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
     !!activeTab?.url &&
     (activeTab.url.startsWith("http://") ||
       activeTab.url.startsWith("https://"));
+  const canUsePageActions = Boolean(
+    activeTab?.url &&
+    !activeTab.url.startsWith("octopus:") &&
+    !activeTab.url.startsWith("about:"),
+  );
+
+  const applyZoom = useCallback(
+    (nextZoom: number) => {
+      const normalized = Math.max(50, Math.min(200, nextZoom));
+      if (activeTab) {
+        setZoomByTab((prev) => ({ ...prev, [activeTab.id]: normalized }));
+      }
+      if (!webviewHandle || !canUsePageActions) return;
+      const scale = (normalized / 100).toFixed(2);
+      void webviewHandle.executeJS(`
+        (() => {
+          const scale = ${JSON.stringify(scale)};
+          document.documentElement.style.zoom = scale;
+          document.body.style.zoom = scale;
+          return true;
+        })();
+      `);
+    },
+    [activeTab, canUsePageActions, webviewHandle],
+  );
+
+  const findInPage = useCallback(() => {
+    if (!webviewHandle || !canUsePageActions) return;
+    const query = window.prompt(ub.findPrompt);
+    if (!query) return;
+    setActionsOpen(false);
+    void webviewHandle.executeJS(`
+      (() => window.find(${JSON.stringify(query)}, false, false, true, false, true, false))();
+    `);
+  }, [canUsePageActions, ub.findPrompt, webviewHandle]);
 
   useEffect(() => {
     if (!window.octopus?.on) return;
@@ -363,6 +445,27 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   }, [activeTab?.id, activeTab?.url]);
 
   useEffect(() => {
+    if (!activeTab || !webviewHandle || !canUsePageActions) return;
+    const zoom = zoomByTab[activeTab.id] ?? 100;
+    const scale = (zoom / 100).toFixed(2);
+    void webviewHandle.executeJS(`
+      (() => {
+        const scale = ${JSON.stringify(scale)};
+        document.documentElement.style.zoom = scale;
+        document.body.style.zoom = scale;
+        return true;
+      })();
+    `);
+  }, [
+    activeTab?.id,
+    activeTab?.url,
+    activeTab,
+    canUsePageActions,
+    webviewHandle,
+    zoomByTab,
+  ]);
+
+  useEffect(() => {
     if (!suggestionsOpen) return;
     const onDoc = (e: MouseEvent) => {
       const target = e.target as Node;
@@ -382,14 +485,19 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
   }, [addressSuggestions.length, draft]);
 
   return (
-    <div
-      className="flex h-14 items-center gap-2 border-b border-border/45 bg-sidebar/65 px-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.32),inset_0_-1px_0_rgba(255,255,255,0.26)] backdrop-blur-2xl"
+    <LiquidGlass
+      material="dock"
+      blur={44}
+      chroma={1.82}
+      depth={1.34}
+      displacement={2.5}
+      className="flex h-14 min-w-0 items-center gap-1 rounded-none border-x-0 border-border/35 px-2 sm:gap-2 sm:px-3"
       style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
     >
       <button
         onClick={() => webviewHandle?.goBack()}
         disabled={!canBack}
-        className="grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+        className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
         title={ub.back}
       >
         <ArrowLeftIcon className="size-4" />
@@ -397,7 +505,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={() => webviewHandle?.goForward()}
         disabled={!canForward}
-        className="grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+        className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:size-9"
         title={ub.forward}
       >
         <ArrowRightIcon className="size-4" />
@@ -405,21 +513,38 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
       <button
         onClick={() => webviewHandle?.reload()}
         disabled={activeTab?.url === BROWSER_HOME_URL}
-        className="grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+        className="hidden size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
         title={ub.refresh}
       >
         <RefreshCwIcon className="size-4" />
       </button>
       <button
+        type="button"
+        onClick={() => void attachScreenshotToNextComposer()}
+        disabled={!webviewHandle || activeTab?.url === BROWSER_HOME_URL}
+        className="hidden size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
+        title={bp.attachScreenshotToComposer}
+      >
+        <ImageIcon className="size-4" />
+      </button>
+      <button
         onClick={goHome}
         disabled={!activeTab || activeTab.url === BROWSER_HOME_URL}
-        className="grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25"
+        className="hidden size-9 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground disabled:pointer-events-none disabled:opacity-25 sm:grid"
         title={ub.backToHome}
       >
         <HouseIcon className="size-4" />
       </button>
-      <div ref={addressBarRef} className="relative ml-1 flex-1">
-        <div className="flex h-10 items-center gap-1 rounded-[18px] border border-border/55 bg-background/72 px-3 shadow-[inset_0_1px_1px_rgba(255,255,255,0.54),0_8px_28px_rgba(15,23,42,0.08)] ring-1 ring-border/30 transition-colors focus-within:border-primary/30 focus-within:bg-background focus-within:ring-2 focus-within:ring-primary/15">
+      <div ref={addressBarRef} className="relative ml-1 min-w-0 flex-1">
+        <LiquidGlass
+          material="input"
+          interactive
+          blur={28}
+          chroma={1.74}
+          depth={0.95}
+          displacement={1.25}
+          className="flex h-10 items-center gap-1 rounded-[18px] border-border/35 px-3 transition-colors focus-within:border-primary/25 focus-within:ring-2 focus-within:ring-primary/12"
+        >
           <input
             type="text"
             value={draft}
@@ -433,7 +558,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
               if (addressSuggestions.length > 0) setSuggestionsOpen(true);
             }}
             placeholder={ub.searchOrUrl}
-            className="flex-1 bg-transparent px-2 text-sm font-medium outline-none placeholder:text-muted-foreground/65"
+            className="min-w-0 flex-1 bg-transparent px-2 text-sm font-medium outline-none placeholder:text-muted-foreground/65"
           />
           {canManageSiteData && (
             <div className="relative">
@@ -454,7 +579,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
               {siteInfoOpen && (
                 <div
                   ref={siteInfoPanelRef}
-                  className="absolute right-0 top-full z-50 mt-2 w-[320px] rounded-xl border border-border/70 bg-popover p-3 text-popover-foreground shadow-xl shadow-black/10"
+                  className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-2 w-[320px] rounded-xl p-3 text-popover-foreground"
                 >
                   <div className="flex items-start gap-2.5">
                     <div className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
@@ -515,9 +640,9 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
                 />
               </button>
             )}
-        </div>
+        </LiquidGlass>
         {suggestionsOpen && addressSuggestions.length > 0 && (
-          <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl border border-border/70 bg-popover py-1.5 text-popover-foreground shadow-xl shadow-black/10">
+          <div className="octo-liquid-glass octo-liquid-glass--sheet absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-xl py-1.5 text-popover-foreground">
             {addressSuggestions.map((item, index) => {
               const active = index === suggestionIndex;
               const Icon = item.source === "bookmark" ? StarIcon : ClockIcon;
@@ -576,7 +701,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
           ref={downloadsBtnRef}
           onClick={() => setDownloadsOpen((v) => !v)}
           className={cn(
-            "ml-1 grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground",
+            "ml-1 grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground sm:size-9",
             activeDownloadCount > 0 && "text-primary",
           )}
           title={ub.downloads}
@@ -601,7 +726,7 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         <button
           ref={historyBtnRef}
           onClick={() => setHistoryOpen((v) => !v)}
-          className="grid size-9 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground"
+          className="grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground sm:size-9"
           title={ub.historyAndBookmarks}
         >
           <ClockIcon className="size-4" />
@@ -619,55 +744,236 @@ export function UrlBar({ webviewHandle, onOpenExtensions }: Props) {
         )}
       </div>
 
-      {/* Implementation note. */}
-      <div className="ml-1 flex h-10 shrink-0 items-center gap-0.5 rounded-[18px] border border-border/55 bg-background/55 p-1 shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_18px_rgba(15,23,42,0.06)] ring-1 ring-border/30">
-        {DEVICE_ORDER.map((d) => {
-          const Icon = DEVICE_ICONS[d];
-          const active = device === d;
-          return (
-            <button
-              key={d}
-              onClick={() => onDeviceChange(d)}
-              className={cn(
-                "flex h-8 items-center gap-1.5 rounded-xl px-2.5 text-xs font-medium transition-colors",
-                active
-                  ? "bg-background text-foreground shadow-[0_1px_2px_rgba(15,23,42,0.08)] ring-1 ring-border/65"
-                  : "text-muted-foreground hover:bg-background/62 hover:text-foreground",
-              )}
-              title={ub.switchToDevice(deviceLabelMap[d])}
-              aria-label={ub.switchToDevice(deviceLabelMap[d])}
-            >
-              <Icon className="size-3.5" />
-              {active && <span>{deviceLabelMap[d]}</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      <button
-        onClick={onOpenExtensions}
-        className="ml-1 flex h-10 items-center gap-1.5 rounded-[18px] border border-border/55 bg-background/55 px-3 text-xs font-semibold text-muted-foreground shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_18px_rgba(15,23,42,0.06)] ring-1 ring-border/30 transition-colors hover:bg-background/70 hover:text-foreground"
-        title={ub.browserExtensions}
-        aria-label={ub.openBrowserExtensions}
-      >
-        <PuzzleIcon className="size-3.5" />
-        <span>{ub.extensionsLabel}</span>
-      </button>
-
       {/* AI copilot toggle */}
       <button
         onClick={toggleCopilot}
         className={cn(
-          "ml-1 flex h-10 items-center gap-1.5 rounded-[18px] border px-3 text-xs font-semibold shadow-[inset_0_1px_1px_rgba(255,255,255,0.48),0_6px_18px_rgba(15,23,42,0.06)] ring-1 ring-border/30 transition-colors",
+          "ml-1 hidden h-10 items-center gap-1.5 rounded-[18px] border px-3 text-xs font-semibold shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_4px_14px_rgba(15,23,42,0.04)] transition-colors sm:flex",
           state.copilotOpen
             ? "border-primary/35 bg-primary/12 text-primary"
-            : "border-border/55 bg-background/55 text-muted-foreground hover:bg-background/70 hover:text-foreground",
+            : "border-border/35 bg-background/50 text-muted-foreground hover:bg-background/70 hover:text-foreground",
         )}
         title={ub.aiAssistant}
       >
         <SparklesIcon className="size-3.5" />
         <span>AI</span>
       </button>
+
+      <div className="relative">
+        <button
+          ref={actionsBtnRef}
+          onClick={() => setActionsOpen((v) => !v)}
+          className="ml-1 grid size-8 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-background/62 hover:text-foreground sm:size-9"
+          title={ub.moreActions}
+          aria-label={ub.moreActions}
+        >
+          <MoreHorizontalIcon className="size-4" />
+        </button>
+        {actionsOpen && (
+          <BrowserActionsMenu
+            activeZoom={activeZoom}
+            anchorRef={actionsBtnRef}
+            canManageSiteData={canManageSiteData}
+            canUsePageActions={canUsePageActions}
+            device={device}
+            deviceLabelMap={deviceLabelMap}
+            onClearSiteData={clearCurrentSiteData}
+            onClose={() => setActionsOpen(false)}
+            onDeviceChange={onDeviceChange}
+            onFindInPage={findInPage}
+            onOpenExtensions={onOpenExtensions}
+            onReload={() => webviewHandle?.reload()}
+            onZoomChange={applyZoom}
+            siteDataStatus={siteDataStatus}
+          />
+        )}
+      </div>
+    </LiquidGlass>
+  );
+}
+
+interface BrowserActionsMenuProps {
+  activeZoom: number;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  canManageSiteData: boolean;
+  canUsePageActions: boolean;
+  device: DevicePreset;
+  deviceLabelMap: Record<DevicePreset, string>;
+  onClearSiteData: () => void;
+  onClose: () => void;
+  onDeviceChange: (device: DevicePreset) => void;
+  onFindInPage: () => void;
+  onOpenExtensions?: () => void;
+  onReload: () => void;
+  onZoomChange: (zoom: number) => void;
+  siteDataStatus: string | null;
+}
+
+function BrowserActionsMenu({
+  activeZoom,
+  anchorRef,
+  canManageSiteData,
+  canUsePageActions,
+  device,
+  deviceLabelMap,
+  onClearSiteData,
+  onClose,
+  onDeviceChange,
+  onFindInPage,
+  onOpenExtensions,
+  onReload,
+  onZoomChange,
+  siteDataStatus,
+}: BrowserActionsMenuProps) {
+  const { t } = useI18n();
+  const ub = t.browser.urlBar;
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (ref.current?.contains(target)) return;
+      if (anchorRef.current?.contains(target)) return;
+      onClose();
+    };
+    window.addEventListener("mousedown", onDoc);
+    return () => window.removeEventListener("mousedown", onDoc);
+  }, [anchorRef, onClose]);
+
+  const menuButtonClass =
+    "flex h-9 w-full items-center gap-2 rounded-lg px-2.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground disabled:pointer-events-none disabled:opacity-40";
+
+  return (
+    <div
+      ref={ref}
+      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[292px] overflow-hidden rounded-xl p-2 text-popover-foreground"
+    >
+      <div className="px-1.5 pb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        {ub.pageActions}
+      </div>
+      <button
+        type="button"
+        disabled={!canUsePageActions}
+        onClick={() => {
+          onReload();
+          onClose();
+        }}
+        className={menuButtonClass}
+      >
+        <RefreshCwIcon className="size-4" />
+        {ub.refresh}
+      </button>
+      <button
+        type="button"
+        disabled={!canUsePageActions}
+        onClick={onFindInPage}
+        className={menuButtonClass}
+      >
+        <SearchIcon className="size-4" />
+        {ub.findInPage}
+      </button>
+
+      <div className="my-2 h-px bg-border/55" />
+
+      <div className="flex h-10 items-center gap-2 rounded-xl bg-background/45 px-2">
+        <span className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">
+          {ub.zoom}
+        </span>
+        <button
+          type="button"
+          disabled={!canUsePageActions || activeZoom <= 50}
+          onClick={() => onZoomChange(activeZoom - 10)}
+          className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          title={ub.zoomOut}
+          aria-label={ub.zoomOut}
+        >
+          <MinusIcon className="size-3.5" />
+        </button>
+        <span className="w-12 text-center text-sm font-semibold tabular-nums">
+          {activeZoom}%
+        </span>
+        <button
+          type="button"
+          disabled={!canUsePageActions || activeZoom >= 200}
+          onClick={() => onZoomChange(activeZoom + 10)}
+          className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          title={ub.zoomIn}
+          aria-label={ub.zoomIn}
+        >
+          <PlusIcon className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          disabled={!canUsePageActions || activeZoom === 100}
+          onClick={() => onZoomChange(100)}
+          className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+          title={ub.resetZoom}
+          aria-label={ub.resetZoom}
+        >
+          <RotateCcwIcon className="size-3.5" />
+        </button>
+      </div>
+
+      <div className="mt-2 rounded-xl bg-background/35 p-1">
+        <div className="px-1.5 pb-1.5 text-[11px] font-medium text-muted-foreground">
+          {ub.devicePreview}
+        </div>
+        <div className="grid grid-cols-3 gap-1">
+          {DEVICE_ORDER.map((d) => {
+            const Icon = DEVICE_ICONS[d];
+            const active = device === d;
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => onDeviceChange(d)}
+                className={cn(
+                  "flex h-8 items-center justify-center gap-1 rounded-lg text-xs font-medium transition-colors",
+                  active
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
+                    : "text-muted-foreground hover:bg-background/65 hover:text-foreground",
+                )}
+                title={ub.switchToDevice(deviceLabelMap[d])}
+                aria-label={ub.switchToDevice(deviceLabelMap[d])}
+              >
+                <Icon className="size-3.5" />
+                <span>{deviceLabelMap[d]}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="my-2 h-px bg-border/55" />
+
+      <button
+        type="button"
+        onClick={() => {
+          onOpenExtensions?.();
+          onClose();
+        }}
+        className={menuButtonClass}
+      >
+        <PuzzleIcon className="size-4" />
+        {ub.browserExtensions}
+      </button>
+      <button
+        type="button"
+        disabled={!canManageSiteData}
+        onClick={onClearSiteData}
+        className={cn(
+          menuButtonClass,
+          "hover:bg-destructive/10 hover:text-destructive",
+        )}
+      >
+        <Trash2Icon className="size-4" />
+        {ub.clearData}
+      </button>
+      {siteDataStatus && (
+        <div className="mt-1 rounded-lg border border-border/55 px-2.5 py-2 text-[11px] text-muted-foreground">
+          {siteDataStatus}
+        </div>
+      )}
     </div>
   );
 }
@@ -719,7 +1025,7 @@ function DownloadDropdown({
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full z-50 mt-1 w-[360px] overflow-hidden rounded-xl border border-border/70 bg-popover text-popover-foreground shadow-xl shadow-black/10"
+      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[360px] overflow-hidden rounded-xl text-popover-foreground"
     >
       <div className="flex items-center justify-between border-b border-border/65 px-3 py-2">
         <div className="flex items-center gap-2 text-sm font-semibold">
@@ -860,7 +1166,7 @@ function HistoryDropdown({
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-full z-50 mt-1 w-[420px] rounded-lg border bg-popover shadow-lg"
+      className="octo-liquid-glass octo-liquid-glass--sheet absolute right-0 top-full z-50 mt-1 w-[420px] rounded-lg"
     >
       <div className="flex items-center justify-between border-b">
         <div className="flex">

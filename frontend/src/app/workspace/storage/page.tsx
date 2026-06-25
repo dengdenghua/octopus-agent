@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AppWindowIcon,
   ArchiveIcon,
@@ -35,7 +35,6 @@ import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import LocalBrainSetup from "@/components/workspace/local-brain-setup";
 import {
   WorkspaceBody,
   WorkspaceContainer,
@@ -49,6 +48,7 @@ import {
   getNASPolicy,
   listNASSources,
   searchNAS,
+  startNASService,
   updateNASPolicy,
   type NASManifest,
   type NASPolicy,
@@ -149,6 +149,9 @@ const DEFAULT_POLICY: NASPolicy = {
   max_snippet_chars: 1200,
   redact_file_paths_for_cloud: true,
 };
+
+const delay = (ms: number) =>
+  new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const DOC_TOPICS: TopicItem[] = [
   topic(
@@ -359,75 +362,6 @@ const IMAGE_FILES: FileItem[] = [
   ),
 ];
 
-const COMPUTER_LOCATIONS: DiskItem[] = [
-  disk("最近项目", "recent://local", "智能位置", "18 项", FileSearchIcon),
-  disk("应用程序", "/Applications", "文件夹", "142 项", AppWindowIcon),
-  disk("桌面", "~/Desktop", "文件夹", "12 项", FolderOpenIcon),
-  disk("文稿", "~/Documents", "文件夹", "326 项", FileTextIcon),
-  disk("下载", "~/Downloads", "文件夹", "58 项", ArchiveIcon),
-  disk("图片", "~/Pictures", "文件夹", "8,426 项", FileImageIcon),
-  disk("Octopus", "~/Public/octopus", "工作目录", "已接入", BrainIcon, true),
-  disk("Macintosh HD", "/", "本地磁盘", "412 GB 可用", HardDriveIcon),
-  disk("Octopus NAS", "127.0.0.1:8767", "本地服务", "在线", DatabaseIcon),
-];
-
-const COMPUTER_FILES: FileItem[] = [
-  file(
-    "agents",
-    "~/Public/octopus/agents",
-    "文件夹",
-    "今天 15:02",
-    "--",
-    FolderIcon,
-    "blue",
-  ),
-  file(
-    "octopus-agent",
-    "~/Public/octopus/octopus-agent",
-    "项目文件夹",
-    "今天 14:58",
-    "--",
-    FolderOpenIcon,
-    "violet",
-  ),
-  file(
-    "octopus-mobile",
-    "~/Public/octopus/octopus-mobile",
-    "项目文件夹",
-    "昨天 21:16",
-    "--",
-    FolderOpenIcon,
-    "green",
-  ),
-  file(
-    "architecture.md",
-    "~/Public/octopus/docs/architecture.md",
-    "Markdown",
-    "今天 12:24",
-    "42 KB",
-    FileTextIcon,
-    "blue",
-  ),
-  file(
-    "marvis_1.0.10033_arm64.dmg",
-    "~/Public/octopus/.vendor/marvis/marvis_1.0.10033_arm64.dmg",
-    "磁盘映像",
-    "昨天 20:31",
-    "188 MB",
-    FileArchiveIcon,
-    "zinc",
-  ),
-  file(
-    "nas-index.sqlite",
-    "~/Public/octopus/.local/nas-index.sqlite",
-    "本地索引",
-    "今天 11:09",
-    "824 MB",
-    DatabaseIcon,
-    "amber",
-  ),
-];
-
 function topic(
   title: string,
   subtitle: string,
@@ -485,14 +419,15 @@ export default function StoragePage() {
   const [searchMessage, setSearchMessage] = useState<string | null>(null);
   const [hasSearchResult, setHasSearchResult] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const didAutoStartRef = useRef(false);
 
   const libraryParam = searchParams.get("library");
-  const activeLibrary = isLibraryKey(libraryParam) ? libraryParam : "overview";
+  const activeLibrary = isLibraryKey(libraryParam) ? libraryParam : "computer";
   const activeMeta = LIBRARIES.find((item) => item.key === activeLibrary)!;
-  const ActiveIcon = activeMeta.icon;
 
   const stats = useMemo(() => {
     const files = sources.reduce((sum, source) => sum + source.file_count, 0);
@@ -511,15 +446,43 @@ export default function StoragePage() {
       setManifest(nextManifest);
       setPolicy(nextPolicy);
       setSources(nextSources);
+      return true;
     } catch (error) {
       setManifest(null);
       setSources([]);
       setServiceError(error instanceof Error ? error.message : String(error));
+      return false;
     }
   };
 
+  const ensureNASService = async () => {
+    const startResult = await startNASService();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      if (await refreshNAS()) return true;
+      await delay(500);
+    }
+    if (startResult.status === "not_found") {
+      setServiceError(
+        "未找到 octopus-storage，请安装本地知识库服务，或设置 OCTOPUS_STORAGE_CMD 后重试。",
+      );
+      return false;
+    }
+    if (startResult.status === "error") {
+      setServiceError("本地知识库服务启动失败，请检查后端日志后重试。");
+      return false;
+    }
+    setServiceError(`本地知识库服务仍未连接：${getNASBaseURL()}`);
+    return false;
+  };
+
   useEffect(() => {
-    void refreshNAS();
+    const init = async () => {
+      if (await refreshNAS()) return;
+      if (didAutoStartRef.current) return;
+      didAutoStartRef.current = true;
+      await ensureNASService();
+    };
+    void init();
   }, []);
 
   useEffect(() => {
@@ -569,6 +532,21 @@ export default function StoragePage() {
     setServiceError(
       "浏览器目录选择无法提供安全的本机绝对路径，请在桌面壳中添加文件夹。",
     );
+  };
+
+  const reconnectNAS = async () => {
+    if (isReconnecting) return;
+    setIsReconnecting(true);
+    setServiceError(null);
+    try {
+      await ensureNASService();
+    } catch (error) {
+      if (!(await refreshNAS())) {
+        setServiceError(error instanceof Error ? error.message : String(error));
+      }
+    } finally {
+      setIsReconnecting(false);
+    }
   };
 
   const removeSource = async (id: string) => {
@@ -622,142 +600,132 @@ export default function StoragePage() {
   return (
     <WorkspaceContainer>
       <WorkspaceBody className="overflow-hidden">
-        <div className="flex size-full flex-col overflow-y-auto p-2">
-          <LocalBrainSetup />
-          <section className="workspace-panel flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/55 bg-[#f7f7f7]">
-            <div className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-black/5 bg-[#f7f7f7] px-4">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-white text-foreground shadow-sm ring-1 ring-black/5">
-                  <ActiveIcon className="size-4" />
+        <div className="flex size-full overflow-hidden p-2">
+          <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-lg border border-border/55 bg-white">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
+              {serviceError && (
+                <div className="flex items-center justify-between gap-3 border-b border-amber-300/70 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+                  <span className="min-w-0 truncate">
+                    本地知识库服务未连接：{getNASBaseURL()}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 shrink-0 rounded-md border-amber-300 bg-white px-3 text-amber-900 hover:bg-amber-100"
+                    onClick={() => void reconnectNAS()}
+                    disabled={isReconnecting}
+                  >
+                    <RefreshCwIcon
+                      className={cn(
+                        "size-3.5",
+                        isReconnecting && "animate-spin",
+                      )}
+                    />
+                    {isReconnecting ? "连接中" : "重新连接"}
+                  </Button>
                 </div>
-                <div className="min-w-0">
-                  <h1 className="truncate text-sm font-semibold tracking-normal">
-                    {activeMeta.label}
-                  </h1>
-                  <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {activeMeta.detail}
-                  </div>
-                </div>
-              </div>
+              )}
 
-              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "h-7 gap-1.5 rounded-full border-black/5 bg-white px-3 shadow-sm",
-                    manifest ? "text-emerald-700" : "text-amber-700",
-                  )}
-                >
-                  {manifest ? "知识库在线" : "知识库离线"}
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className="h-7 gap-1.5 rounded-full border-black/5 bg-white px-3 shadow-sm"
-                >
-                  <ShieldCheckIcon className="size-3.5" />
-                  不上传原文件
-                </Badge>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="rounded-full bg-white"
-                  onClick={() => void togglePrivacy()}
-                >
-                  {policy.mode === "privacy" ? (
-                    <LockKeyholeIcon className="size-4" />
-                  ) : (
-                    <ServerIcon className="size-4" />
-                  )}
-                  {policy.mode === "privacy" ? "隐私" : "效率"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="rounded-full bg-white"
-                  onClick={startIndexing}
-                  disabled={isIndexing || !manifest}
-                >
-                  <RefreshCwIcon className="size-4" />
-                  一键扫描
-                </Button>
-                <Button
-                  size="sm"
-                  className="rounded-full"
-                  onClick={pickFolder}
-                  disabled={isPickingFolder}
-                >
-                  <FolderPlusIcon className="size-4" />
-                  授权
-                </Button>
-              </div>
+              {activeLibrary !== "sources" && (
+                <div className="flex shrink-0 items-center justify-end gap-1.5 border-b border-black/5 bg-[#f5f5f5] px-3 py-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 rounded-md bg-white px-2 text-xs shadow-sm"
+                    onClick={pickFolder}
+                    disabled={isPickingFolder}
+                  >
+                    <FolderPlusIcon className="size-3.5" />
+                    授权
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-8 rounded-md bg-white px-2 text-xs shadow-sm"
+                    onClick={startIndexing}
+                    disabled={isIndexing || !manifest}
+                  >
+                    <RefreshCwIcon
+                      className={cn("size-3.5", isIndexing && "animate-spin")}
+                    />
+                    扫描
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 rounded-md px-2 text-xs text-muted-foreground"
+                    onClick={() => void togglePrivacy()}
+                  >
+                    {policy.mode === "privacy" ? (
+                      <LockKeyholeIcon className="size-3.5" />
+                    ) : (
+                      <ServerIcon className="size-3.5" />
+                    )}
+                    {policy.mode === "privacy" ? "隐私" : "效率"}
+                  </Button>
+                  <span className="ml-1 flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                    <span
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        manifest ? "bg-emerald-500" : "bg-amber-500",
+                      )}
+                    />
+                    <span>{manifest ? "在线" : "离线"}</span>
+                  </span>
+                </div>
+              )}
+
+              {activeLibrary === "sources" ? (
+                <SourcesView
+                  sources={sources}
+                  stats={stats}
+                  isPickingFolder={isPickingFolder}
+                  onPickFolder={pickFolder}
+                  onRemoveSource={removeSource}
+                  folderInputRef={folderInputRef}
+                  onFolderInputChange={onFolderInputChange}
+                />
+              ) : hasSearchResult ? (
+                <SearchResultsView
+                  hits={hits}
+                  query={query}
+                  setQuery={setQuery}
+                  runSearch={runSearch}
+                  isSearching={isSearching}
+                  manifest={manifest}
+                  message={searchMessage}
+                  libraryLabel={activeMeta.label}
+                  onBack={clearSearchResult}
+                />
+              ) : activeLibrary === "computer" ? (
+                <LocalDiskView
+                  query={query}
+                  setQuery={setQuery}
+                  runSearch={runSearch}
+                  isSearching={isSearching}
+                  manifest={manifest}
+                />
+              ) : activeLibrary === "apps" ? (
+                <AppsView
+                  query={query}
+                  setQuery={setQuery}
+                  runSearch={runSearch}
+                  isSearching={isSearching}
+                  manifest={manifest}
+                />
+              ) : (
+                <TopicCenterView
+                  activeLibrary={activeLibrary}
+                  activeMeta={activeMeta}
+                  query={query}
+                  setQuery={setQuery}
+                  runSearch={runSearch}
+                  isSearching={isSearching}
+                  manifest={manifest}
+                  searchMessage={searchMessage}
+                />
+              )}
             </div>
-
-            {serviceError && (
-              <div className="flex items-center justify-between gap-3 border-b border-amber-300/70 bg-amber-50 px-4 py-2 text-xs text-amber-900">
-                <span className="min-w-0 truncate">
-                  本地知识库服务未连接：{getNASBaseURL()}
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 shrink-0 rounded-full border-amber-300 bg-white px-3 text-amber-900 hover:bg-amber-100"
-                  onClick={() => void refreshNAS()}
-                >
-                  重新连接
-                </Button>
-              </div>
-            )}
-
-            {activeLibrary === "sources" ? (
-              <SourcesView
-                sources={sources}
-                stats={stats}
-                isPickingFolder={isPickingFolder}
-                onPickFolder={pickFolder}
-                onRemoveSource={removeSource}
-                folderInputRef={folderInputRef}
-                onFolderInputChange={onFolderInputChange}
-              />
-            ) : hasSearchResult ? (
-              <SearchResultsView
-                hits={hits}
-                query={query}
-                setQuery={setQuery}
-                runSearch={runSearch}
-                isSearching={isSearching}
-                manifest={manifest}
-                message={searchMessage}
-                libraryLabel={activeMeta.label}
-                onBack={clearSearchResult}
-              />
-            ) : activeLibrary === "computer" ? (
-              <LocalDiskView
-                query={query}
-                setQuery={setQuery}
-                runSearch={runSearch}
-                isSearching={isSearching}
-                manifest={manifest}
-              />
-            ) : activeLibrary === "apps" ? (
-              <AppsView
-                query={query}
-                setQuery={setQuery}
-                runSearch={runSearch}
-                isSearching={isSearching}
-                manifest={manifest}
-              />
-            ) : (
-              <TopicCenterView
-                activeLibrary={activeLibrary}
-                activeMeta={activeMeta}
-                query={query}
-                setQuery={setQuery}
-                runSearch={runSearch}
-                isSearching={isSearching}
-                manifest={manifest}
-                searchMessage={searchMessage}
-              />
-            )}
           </section>
         </div>
       </WorkspaceBody>
@@ -780,12 +748,11 @@ function ToolbarSearch({
   isSearching: boolean;
   manifest: NASManifest | null;
 }) {
-  const scopes = ["全文", "路径", "OCR", "应用"];
   return (
-    <div className="flex min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-xl border border-black/5 bg-white p-1 shadow-sm ring-1 ring-black/[0.03] sm:min-w-[420px]">
+    <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 rounded-md border border-black/10 bg-white px-2 shadow-sm sm:min-w-[300px]">
       <div className="flex min-w-0 flex-1 items-center">
-        <SearchIcon className="ml-2.5 size-4 shrink-0 text-muted-foreground" />
-        <span className="ml-2 shrink-0 text-xs text-muted-foreground">
+        <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="ml-2 hidden shrink-0 text-xs text-muted-foreground xl:inline">
           {label}
         </span>
         <Input
@@ -795,33 +762,23 @@ function ToolbarSearch({
             if (event.key === "Enter") runSearch();
           }}
           placeholder="文件名、正文、OCR、路径或应用"
-          className="h-9 min-w-40 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
+          className="h-8 min-w-36 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
         />
-      </div>
-      <div className="hidden items-center gap-1 xl:flex">
-        {scopes.map((scope, index) => (
-          <button
-            key={scope}
-            type="button"
-            className={cn(
-              "h-7 rounded-lg px-2 text-[11px] transition-colors",
-              index === 0
-                ? "bg-black text-white"
-                : "bg-black/[0.04] text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {scope}
-          </button>
-        ))}
       </div>
       <Button
         type="button"
         size="sm"
-        className="h-8 shrink-0 rounded-lg bg-black px-3 text-white hover:bg-black/85"
+        variant="ghost"
+        aria-label="搜索"
+        className="h-7 shrink-0 rounded-md px-2"
         onClick={runSearch}
         disabled={isSearching || !manifest}
       >
-        {isSearching ? "搜索中" : "搜索"}
+        {isSearching ? (
+          <RefreshCwIcon className="size-3.5 animate-spin" />
+        ) : (
+          <SearchIcon className="size-3.5" />
+        )}
       </Button>
     </div>
   );
@@ -996,28 +953,16 @@ function DocumentLibraryView({
 }) {
   return (
     <>
-      <div className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-black/5 bg-[#f7f7f7] px-4">
-        <div className="flex items-center gap-6">
-          {["全部文档", "文档来源", "文档主题", "最近文件"].map(
-            (tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                className={cn(
-                  "text-sm transition-colors",
-                  index === 0
-                    ? "font-semibold text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tab}
-              </button>
-            ),
-          )}
+      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">文档</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {DOC_FILES.length} 项 · 全文、表格、OCR 与来源路径检索
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <ToolbarSearch
-            label="在 全部文档 中搜索"
+            label="搜索文档："
             query={query}
             setQuery={setQuery}
             runSearch={runSearch}
@@ -1028,44 +973,58 @@ function DocumentLibraryView({
             size="sm"
             variant="ghost"
             aria-label="筛选"
-            className="rounded-full bg-black/[0.04]"
+            className="size-8 rounded-md"
           >
             <ListFilterIcon className="size-4" />
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            aria-label="宫格视图"
-            className="rounded-full bg-black/[0.04]"
-          >
-            <Grid3X3Icon className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
             aria-label="列表视图"
-            className="rounded-full bg-black/[0.04]"
+            className="size-8 rounded-md"
           >
             <LayoutListIcon className="size-4" />
           </Button>
         </div>
       </div>
 
-      <main className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] px-10 py-6">
-        <div className="mb-5">
-          <h2 className="text-base font-semibold">
-            全部文档({DOC_FILES.length})
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {searchMessage ||
-              "按时间聚合本机文档，支持全文、表格、OCR 与来源路径检索。"}
-          </p>
+      <main className="min-h-0 flex-1 overflow-hidden bg-white">
+        <div className="flex h-12 items-center justify-between border-b border-black/5 px-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold">全部文档</div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {searchMessage || "2026年6月 · 本机索引优先"}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge
+              variant="outline"
+              className="rounded-md border-black/10 bg-white"
+            >
+              最近
+            </Badge>
+            <Badge
+              variant="outline"
+              className="rounded-md border-black/10 bg-white"
+            >
+              本机文档
+            </Badge>
+          </div>
         </div>
-        <div className="mb-4 text-sm font-semibold">2026年6月</div>
-        <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+        <div className="grid grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px] items-center gap-3 border-b border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs font-medium text-muted-foreground">
+          <span>名称</span>
+          <span>位置</span>
+          <span>大小</span>
+          <span className="text-right">修改日期</span>
+          <span className="text-right">动作</span>
+        </div>
+        <div className="min-h-0 overflow-y-auto">
           {DOC_FILES.map((item) => (
             <FileManagerRow key={item.path} item={item} />
           ))}
+        </div>
+        <div className="border-t border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs text-muted-foreground">
+          文档只进入本机索引；引用到任务前不会自动进入上下文。
         </div>
       </main>
     </>
@@ -1087,28 +1046,16 @@ function ImageLibraryView({
 }) {
   return (
     <>
-      <div className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-black/5 bg-[#f7f7f7] px-4">
-        <div className="flex items-center gap-6">
-          {["全部图片", "图片识别", "人物印象", "足迹地点", "时光长廊"].map(
-            (tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                className={cn(
-                  "text-sm transition-colors",
-                  index === 0
-                    ? "font-semibold text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tab}
-              </button>
-            ),
-          )}
+      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">图片</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {IMAGE_FILES.length} 项 · OCR、地点、人物与截图统一检索
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <ToolbarSearch
-            label="在 图库 中搜索"
+            label="搜索图片："
             query={query}
             setQuery={setQuery}
             runSearch={runSearch}
@@ -1119,47 +1066,49 @@ function ImageLibraryView({
             size="sm"
             variant="ghost"
             aria-label="筛选"
-            className="rounded-full bg-black/[0.04]"
+            className="size-8 rounded-md"
           >
             <ListFilterIcon className="size-4" />
           </Button>
-          <div className="flex h-9 items-center gap-2 rounded-full bg-black/[0.04] px-3 text-xs text-muted-foreground">
-            <span>-</span>
-            <span className="h-1.5 w-20 rounded-full bg-black/10">
-              <span className="block h-full w-1/2 rounded-full bg-black" />
-            </span>
-            <span>+</span>
-          </div>
-          <div className="flex h-9 items-center rounded-full bg-white p-1 text-xs shadow-sm ring-1 ring-black/5">
-            {["年", "月", "所有图片"].map((item, index) => (
-              <button
-                key={item}
-                type="button"
-                className={cn(
-                  "h-7 rounded-full px-3",
-                  index === 2
-                    ? "bg-black text-white"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
+          <Badge
+            variant="outline"
+            className="h-8 rounded-md border-black/10 bg-white px-2.5 text-xs"
+          >
+            所有图片
+          </Badge>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="网格视图"
+            className="size-8 rounded-md"
+          >
+            <Grid3X3Icon className="size-4" />
+          </Button>
         </div>
       </div>
 
-      <main className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] px-10 py-6">
-        <div className="mb-5">
-          <h2 className="text-base font-semibold">
-            全部图片({IMAGE_FILES.length})
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            图片、截图和票据统一进入本机 OCR
-            与语义索引，可按人物、地点、主题检索。
-          </p>
+      <main className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] px-4 py-4 lg:px-6">
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="rounded-md border-black/10 bg-white"
+          >
+            全部 {IMAGE_FILES.length}
+          </Badge>
+          <Badge
+            variant="outline"
+            className="rounded-md border-black/10 bg-white"
+          >
+            已 OCR
+          </Badge>
+          <Badge
+            variant="outline"
+            className="rounded-md border-black/10 bg-white"
+          >
+            本机图库
+          </Badge>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-4">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
           {IMAGE_FILES.map((item) => (
             <ImageAssetTile key={item.path} item={item} />
           ))}
@@ -1265,26 +1214,26 @@ function FileManagerRow({ item }: { item: FileItem }) {
 function ImageAssetTile({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="group min-w-0 rounded-2xl bg-white p-2 text-left shadow-sm ring-1 ring-black/5 transition-transform hover:-translate-y-0.5">
-      <span className="flex aspect-square w-full items-center justify-center rounded-xl bg-[#f7f7f7]">
+    <div className="group min-w-0 overflow-hidden rounded-xl border border-black/5 bg-white text-left shadow-sm transition-colors hover:border-black/10 hover:bg-[#fcfcfc]">
+      <span className="flex aspect-[4/3] w-full items-center justify-center bg-[#f7f7f7]">
         <span
           className={cn(
-            "flex size-14 items-center justify-center rounded-2xl",
+            "flex size-16 items-center justify-center rounded-2xl",
             toneClass(item.tone),
           )}
         >
           <Icon className="size-7" />
         </span>
       </span>
-      <span className="mt-2 block truncate px-1 text-sm font-medium">
+      <span className="mt-3 block truncate px-3 text-sm font-medium">
         {item.name}
       </span>
-      <span className="block truncate px-1 text-xs text-muted-foreground">
+      <span className="block truncate px-3 text-xs text-muted-foreground">
         {item.updated} · {item.size}
       </span>
-      <div className="mt-2 flex items-center justify-between gap-1 px-1 pb-1">
-        <span className="rounded-md bg-black/[0.04] px-1.5 py-0.5 text-[10px] text-muted-foreground">
-          OCR
+      <div className="mt-3 flex items-center justify-between gap-2 px-3 pb-3">
+        <span className="rounded-md bg-black/[0.04] px-2 py-1 text-[10px] text-muted-foreground">
+          已 OCR
         </span>
         <QuickFileActions compact />
       </div>
@@ -1421,44 +1370,64 @@ function AppsView({
 }) {
   return (
     <>
-      <div className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-black/5 bg-[#f7f7f7] px-4">
-        <div className="flex items-center gap-6">
-          {["全部应用", "已装应用", "系统应用", "最近应用"].map(
-            (tab, index) => (
-              <button
-                key={tab}
-                type="button"
-                className={cn(
-                  "text-sm",
-                  index === 0
-                    ? "font-semibold text-foreground"
-                    : "text-muted-foreground",
-                )}
-              >
-                {tab}
-              </button>
-            ),
-          )}
+      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">应用</div>
+          <div className="truncate text-xs text-muted-foreground">
+            {APP_ITEMS.length} 项 · 本机应用注册表
+          </div>
         </div>
-        <ToolbarSearch
-          label="搜索应用："
-          query={query}
-          setQuery={setQuery}
-          runSearch={runSearch}
-          isSearching={isSearching}
-          manifest={manifest}
-        />
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <ToolbarSearch
+            label="搜索应用："
+            query={query}
+            setQuery={setQuery}
+            runSearch={runSearch}
+            isSearching={isSearching}
+            manifest={manifest}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="排序"
+            className="size-8 rounded-md"
+          >
+            <SlidersHorizontalIcon className="size-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="列表视图"
+            className="size-8 rounded-md"
+          >
+            <LayoutListIcon className="size-4" />
+          </Button>
+        </div>
       </div>
-      <main className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] px-10 py-6">
-        <div className="mb-5">
-          <h2 className="text-base font-semibold">本机应用注册表</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            已注册应用可被本地数据库调用，用于打开文件、预览内容或执行本机动作。
-          </p>
+      <main className="min-h-0 flex-1 overflow-hidden bg-white">
+        <div className="flex h-12 items-center justify-between border-b border-black/5 px-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold">已收录应用</div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              按启动器、系统组件与工具分类统一检索
+            </div>
+          </div>
+          <Badge
+            variant="outline"
+            className="rounded-md border-black/10 bg-white"
+          >
+            列表
+          </Badge>
         </div>
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_140px_130px_120px] gap-3 border-b border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs font-medium text-muted-foreground">
+          <span>名称</span>
+          <span>类型</span>
+          <span>状态</span>
+          <span className="text-right">动作</span>
+        </div>
+        <div className="min-h-0 overflow-y-auto">
           {APP_ITEMS.map((item) => (
-            <AppIconTile key={item.name} item={item} />
+            <AppListRow key={item.name} item={item} />
           ))}
         </div>
       </main>
@@ -1466,51 +1435,51 @@ function AppsView({
   );
 }
 
-function AppIconTile({ item }: { item: AppItem }) {
+function AppListRow({ item }: { item: AppItem }) {
   const Icon = item.icon;
   return (
-    <div className="group min-w-0 rounded-2xl bg-white p-3 shadow-sm ring-1 ring-black/5 transition-colors hover:bg-[#fbfbfb]">
-      <div className="flex min-w-0 items-start gap-3">
+    <div className="grid w-full grid-cols-[minmax(0,1fr)_140px_130px_120px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]">
+      <div className="flex min-w-0 items-center gap-2.5">
         <span
           className={cn(
-            "flex size-12 shrink-0 items-center justify-center rounded-[16px] shadow-sm ring-1 ring-black/5",
+            "flex size-8 shrink-0 items-center justify-center rounded-md",
             toneClass(item.tone),
           )}
         >
-          <Icon className="size-7" />
+          <Icon className="size-4" />
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{item.name}</div>
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">
-            {item.type}
-          </div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground/75">
+        <span className="min-w-0">
+          <span className="block truncate font-medium">{item.name}</span>
+          <span className="block truncate text-xs text-muted-foreground">
             {item.path}
-          </div>
-        </div>
+          </span>
+        </span>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
+      <span className="truncate text-xs text-muted-foreground">
+        {item.type}
+      </span>
+      <span>
         <Badge
           variant="outline"
-          className="rounded-full border-black/10 bg-[#f7f7f7] text-[11px]"
+          className="rounded-md border-black/10 bg-white text-[11px]"
         >
           {item.status}
         </Badge>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
-          >
-            打开
-          </button>
-          <button
-            type="button"
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
-          >
-            动作
-          </button>
-        </div>
-      </div>
+      </span>
+      <span className="flex justify-end gap-1">
+        <button
+          type="button"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
+        >
+          打开
+        </button>
+        <button
+          type="button"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
+        >
+          动作
+        </button>
+      </span>
     </div>
   );
 }
@@ -1534,47 +1503,35 @@ function LocalDiskView({
     disk("Documents", "~/Documents", "文件夹", "326 项", FileTextIcon),
     disk("Downloads", "~/Downloads", "文件夹", "58 项", ArchiveIcon),
     disk("Pictures", "~/Pictures", "文件夹", "8,426 项", FileImageIcon),
-    disk("Public", "~/Public", "文件夹", "4 项", FolderIcon, true),
+    disk("Public", "~/Public", "文件夹", "4 项", FolderIcon),
   ];
-  const publicFolders = [
-    disk("octopus", "~/Public/octopus", "工作目录", "6 项", BrainIcon, true),
-    disk("Shared", "~/Public/Shared", "文件夹", "2 项", FolderIcon),
-    disk("Drop Box", "~/Public/Drop Box", "文件夹", "0 项", FolderIcon),
-  ];
-  const locations = COMPUTER_LOCATIONS.map((item) =>
-    item.name === "Octopus NAS"
-      ? { ...item, size: manifest ? "在线" : "未连接" }
-      : item,
-  );
 
   return (
     <>
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f7f7f7] px-3 py-2 lg:h-[52px] lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-4 lg:py-0">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-3 lg:py-0">
         <div className="flex min-w-0 flex-wrap items-center text-sm">
-          {["Macintosh HD", "Users", "dangbei", "Public", "octopus"].map(
-            (item, index, items) => (
-              <span key={item} className="flex min-w-0 items-center">
-                <button
-                  type="button"
-                  className={cn(
-                    "max-w-32 truncate rounded-md px-1.5 py-1",
-                    index === items.length - 1
-                      ? "font-semibold text-foreground"
-                      : "text-muted-foreground hover:bg-black/[0.04] hover:text-foreground",
-                  )}
-                >
-                  {item}
-                </button>
-                {index < items.length - 1 && (
-                  <ChevronRightIcon className="mx-0.5 size-3 text-muted-foreground/60" />
+          {["Macintosh HD", "Users", "dangbei"].map((item, index, items) => (
+            <span key={item} className="flex min-w-0 items-center">
+              <button
+                type="button"
+                className={cn(
+                  "max-w-32 truncate rounded px-1.5 py-1",
+                  index === items.length - 1
+                    ? "font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-black/[0.04] hover:text-foreground",
                 )}
-              </span>
-            ),
-          )}
+              >
+                {item}
+              </button>
+              {index < items.length - 1 && (
+                <ChevronRightIcon className="mx-0.5 size-3 text-muted-foreground/60" />
+              )}
+            </span>
+          ))}
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <ToolbarSearch
-            label="在 dangbei 中搜索："
+            label="在当前位置中搜索："
             query={query}
             setQuery={setQuery}
             runSearch={runSearch}
@@ -1585,7 +1542,7 @@ function LocalDiskView({
             size="sm"
             variant="ghost"
             aria-label="排序"
-            className="rounded-full"
+            className="size-8 rounded-md"
           >
             <SlidersHorizontalIcon className="size-4" />
           </Button>
@@ -1593,76 +1550,47 @@ function LocalDiskView({
             size="sm"
             variant="ghost"
             aria-label="列表视图"
-            className="rounded-full"
+            className="size-8 rounded-md"
           >
             <LayoutListIcon className="size-4" />
           </Button>
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[176px_188px_188px_minmax(300px,1fr)] lg:overflow-hidden">
-        <aside className="min-h-0 border-b border-black/5 bg-[#f7f7f7] p-2 lg:overflow-y-auto lg:border-r lg:border-b-0">
-          <div className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            位置
-          </div>
-          <div className="space-y-0.5">
-            {locations.slice(0, 7).map((item) => (
-              <DiskRow key={item.path} item={item} />
-            ))}
-          </div>
-          <div className="px-2 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            设备与服务
-          </div>
-          <div className="space-y-0.5">
-            {locations.slice(7).map((item) => (
-              <DiskRow key={item.path} item={item} />
-            ))}
-          </div>
-        </aside>
-
-        <SplitColumnPanel title="dangbei" subtitle="/Users/dangbei">
-          {userFolders.map((item) => (
-            <SplitColumnRow key={item.path} item={item} active={item.active} />
-          ))}
-        </SplitColumnPanel>
-
-        <SplitColumnPanel title="Public" subtitle="~/Public">
-          {publicFolders.map((item) => (
-            <SplitColumnRow key={item.path} item={item} active={item.active} />
-          ))}
-        </SplitColumnPanel>
-
-        <main className="min-h-0 overflow-hidden bg-white">
-          <div className="flex h-12 items-center justify-between border-b border-black/5 px-4">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
+          <div className="flex h-12 items-center justify-between border-b border-black/5 px-3">
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold">octopus</div>
+              <div className="truncate text-sm font-semibold">dangbei</div>
               <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                ~/Public/octopus · {COMPUTER_FILES.length} 项 · 本机索引
+                /Users/dangbei · {userFolders.length} 项
               </div>
             </div>
             <Badge
               variant="outline"
-              className="rounded-full border-black/10 bg-white"
+              className="rounded-md border-black/10 bg-white"
             >
-              分栏视图
+              当前目录
             </Badge>
           </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_74px_58px] gap-2 border-b border-black/5 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="border-b border-black/5 bg-[#fafafa] px-3 py-2 text-xs text-muted-foreground">
+            默认停在当前用户目录，避免一进来就展开到深层项目路径。
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_120px_96px_36px] gap-3 border-b border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs font-medium text-muted-foreground">
             <span>名称</span>
-            <span>修改日期</span>
-            <span className="text-right">大小</span>
+            <span>类型</span>
+            <span>项目</span>
+            <span />
           </div>
           <div className="min-h-0 overflow-y-auto">
-            {COMPUTER_FILES.map((item, index) => (
-              <ComputerFileRow
-                key={item.path}
-                item={item}
-                active={index === 1}
-              />
+            {userFolders.map((item) => (
+              <LocalDiskEntryRow key={item.path} item={item} />
             ))}
           </div>
-          <div className="border-t border-black/5 bg-[#fbfbfb] px-4 py-3 text-xs text-muted-foreground">
-            本地数据库只保存路径、缩略图、OCR 文本和向量索引；原文件不上传云端。
+          <div className="border-t border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs text-muted-foreground">
+            {manifest
+              ? "常用位置与 Octopus NAS 已接入。本地数据库只保存路径、缩略图、OCR 文本和向量索引。"
+              : "常用位置可直接浏览；Octopus NAS 正等待连接。本地数据库只保存路径、缩略图、OCR 文本和向量索引。"}
           </div>
         </main>
       </div>
@@ -1670,148 +1598,31 @@ function LocalDiskView({
   );
 }
 
-function SplitColumnPanel({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="min-h-0 overflow-hidden border-b border-black/5 bg-white lg:border-r lg:border-b-0">
-      <div className="h-12 border-b border-black/5 px-3 py-2">
-        <div className="truncate text-sm font-semibold">{title}</div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-          {subtitle}
-        </div>
-      </div>
-      <div className="min-h-0 overflow-y-auto p-1.5">{children}</div>
-    </section>
-  );
-}
-
-function SplitColumnRow({
-  item,
-  active,
-}: {
-  item: DiskItem;
-  active?: boolean;
-}) {
+function LocalDiskEntryRow({ item }: { item: DiskItem }) {
   const Icon = item.icon;
   return (
     <button
       type="button"
-      className={cn(
-        "group flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors",
-        active ? "bg-black text-white" : "hover:bg-black/[0.04]",
-      )}
-    >
-      <Icon
-        className={cn(
-          "size-4 shrink-0",
-          active ? "text-white" : "text-muted-foreground",
-        )}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{item.name}</span>
-        <span
-          className={cn(
-            "block truncate text-xs",
-            active ? "text-white/65" : "text-muted-foreground",
-          )}
-        >
-          {item.type} · {item.size}
-        </span>
-      </span>
-      <ChevronRightIcon
-        className={cn(
-          "size-4 shrink-0",
-          active ? "text-white/65" : "text-muted-foreground",
-        )}
-      />
-    </button>
-  );
-}
-
-function ComputerFileRow({
-  item,
-  active,
-}: {
-  item: FileItem;
-  active: boolean;
-}) {
-  const Icon = item.icon;
-  return (
-    <button
-      type="button"
-      className={cn(
-        "grid w-full grid-cols-[minmax(0,1fr)_74px_58px] items-center gap-2 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]",
-        active && "bg-sky-50/70",
-      )}
+      className="grid w-full grid-cols-[minmax(0,1fr)_120px_96px_36px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]"
     >
       <span className="flex min-w-0 items-center gap-2.5">
-        <span
-          className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-md",
-            toneClass(item.tone),
-          )}
-        >
+        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[#f5f5f5] text-muted-foreground ring-1 ring-black/5">
           <Icon className="size-4" />
         </span>
         <span className="min-w-0">
           <span className="block truncate font-medium">{item.name}</span>
           <span className="block truncate text-xs text-muted-foreground">
-            {item.kind} · {item.path}
+            {item.path}
           </span>
         </span>
       </span>
       <span className="truncate text-xs text-muted-foreground">
-        {item.updated}
+        {item.type}
       </span>
-      <span className="truncate text-right text-xs text-muted-foreground">
+      <span className="truncate text-xs text-muted-foreground">
         {item.size}
       </span>
-    </button>
-  );
-}
-
-function DiskRow({ item }: { item: DiskItem }) {
-  const Icon = item.icon;
-  return (
-    <button
-      type="button"
-      className={cn(
-        "flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition-colors hover:bg-black/[0.04]",
-        item.active && "bg-black text-white shadow-sm",
-      )}
-    >
-      <Icon
-        className={cn(
-          "size-4 shrink-0",
-          item.active ? "text-white" : "text-muted-foreground",
-        )}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{item.name}</span>
-        <span
-          className={cn(
-            "block truncate text-xs",
-            item.active ? "text-white/65" : "text-muted-foreground",
-          )}
-        >
-          {item.path}
-        </span>
-      </span>
-      <span
-        className={cn(
-          "shrink-0 text-xs",
-          item.active ? "text-white/65" : "text-muted-foreground",
-        )}
-      >
-        {item.size}
-      </span>
+      <ChevronRightIcon className="ml-auto size-4 text-muted-foreground" />
     </button>
   );
 }
@@ -1834,70 +1645,101 @@ function SourcesView({
   onFolderInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto lg:grid-cols-[260px_minmax(520px,1fr)_300px] lg:overflow-hidden">
-      <aside className="min-h-0 border-b border-black/5 bg-[#f7f7f7] p-3 lg:overflow-y-auto lg:border-r lg:border-b-0">
-        <div className="rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/5">
-          <div className="text-sm font-semibold">授权读取本地文件</div>
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            只在本机建立索引。效率模式可云端问答，隐私模式全链路本地。
-          </p>
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold">授权目录</div>
+          <div className="truncate text-xs text-muted-foreground">
+            管理已授权目录、索引状态与扫描范围
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Button
-            className="mt-3 w-full rounded-xl bg-black text-white hover:bg-black/85"
+            size="sm"
+            className="h-8 rounded-md bg-black px-2.5 text-xs text-white hover:bg-black/85"
             onClick={onPickFolder}
             disabled={isPickingFolder}
           >
-            <FolderPlusIcon className="size-4" />
-            一键授权
+            <FolderPlusIcon className="size-3.5" />
+            添加
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="扫描队列"
+            className="size-8 rounded-md"
+          >
+            <RefreshCwIcon className="size-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="隐私策略"
+            className="size-8 rounded-md"
+          >
+            <ShieldCheckIcon className="size-4" />
           </Button>
         </div>
-        <div className="mt-3 grid gap-2">
-          <Metric label="授权目录" value={String(stats.sources)} />
-          <Metric label="扫描文件" value={String(stats.files)} />
-          <Metric label="索引片段" value={String(stats.chunks)} />
-        </div>
-        <div className="mt-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/5">
-          <div className="text-xs font-semibold text-foreground">
-            建议先接入
-          </div>
-          <div className="mt-2 space-y-1.5">
-            {["Documents", "Pictures", "Downloads", "Public/octopus"].map(
-              (item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-lg bg-black/[0.035] px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <span>{item}</span>
-                  <FolderPlusIcon className="size-3.5" />
-                </button>
-              ),
-            )}
-          </div>
-        </div>
-      </aside>
+      </div>
 
-      <main className="min-h-0 overflow-y-auto bg-white">
-        <div className="hidden grid-cols-[minmax(260px,1fr)_92px_92px_120px] border-b border-black/5 px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
+      <div className="grid shrink-0 gap-2 border-b border-black/5 bg-[#fbfbfb] p-3 sm:grid-cols-3">
+        <Metric label="授权目录" value={String(stats.sources)} />
+        <Metric label="扫描文件" value={String(stats.files)} />
+        <Metric label="索引片段" value={String(stats.chunks)} />
+      </div>
+
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/5 px-3 py-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          {["Documents", "Pictures", "Downloads", "Public/octopus"].map(
+            (item) => (
+              <button
+                key={item}
+                type="button"
+                className="rounded-md border border-black/10 bg-white px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                {item}
+              </button>
+            ),
+          )}
+        </div>
+        <div className="hidden shrink-0 items-center gap-2 md:flex">
+          <Badge
+            variant="outline"
+            className="rounded-md border-black/10 bg-white text-xs"
+          >
+            本地索引
+          </Badge>
+          <Badge
+            variant="outline"
+            className="rounded-md border-black/10 bg-white text-xs"
+          >
+            原文件不上传
+          </Badge>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="hidden grid-cols-[minmax(260px,1fr)_92px_92px_120px] border-b border-black/5 bg-[#fbfbfb] px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
           <span>目录</span>
           <span>文件</span>
           <span>片段</span>
           <span className="text-right">状态</span>
         </div>
         {sources.length === 0 ? (
-          <div className="flex min-h-[440px] flex-col items-center justify-center px-8 text-center">
-            <div className="grid size-16 place-items-center rounded-2xl bg-black text-white shadow-sm">
+          <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
+            <div className="grid size-14 place-items-center rounded-xl bg-black text-white shadow-sm">
               <FolderPlusIcon className="size-7" />
             </div>
             <div className="mt-4 text-base font-semibold">
               选择一个本机文件夹开始建索引
             </div>
             <div className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-              本地数据库会在本机解析文件、OCR
-              图片并生成向量索引。原文件不上传；只有你在任务里确认引用的片段会进入上下文。
+              本地数据库会在本机解析文件、OCR 图片并生成向量索引。
+              原文件不上传；只有你确认引用的片段会进入任务上下文。
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               <Button
-                className="rounded-xl bg-black text-white hover:bg-black/85"
+                className="rounded-md bg-black text-white hover:bg-black/85"
                 onClick={onPickFolder}
                 disabled={isPickingFolder}
               >
@@ -1906,25 +1748,11 @@ function SourcesView({
               </Button>
               <Button
                 variant="secondary"
-                className="rounded-xl bg-black/[0.04]"
+                className="rounded-md bg-black/[0.04]"
               >
                 <ShieldCheckIcon className="size-4" />
                 查看隐私策略
               </Button>
-            </div>
-            <div className="mt-6 grid w-full max-w-2xl gap-2 sm:grid-cols-3">
-              <OnboardingStep
-                title="1. 授权目录"
-                desc="选择文档、图片、项目或下载目录。"
-              />
-              <OnboardingStep
-                title="2. 本机索引"
-                desc="解析、OCR、向量化都在本机执行。"
-              />
-              <OnboardingStep
-                title="3. 任务引用"
-                desc="搜索命中后手动确认再带入任务。"
-              />
             </div>
           </div>
         ) : (
@@ -1938,67 +1766,26 @@ function SourcesView({
             ))}
           </div>
         )}
-        <input
-          ref={folderInputRef}
-          type="file"
-          // @ts-expect-error - Chromium/WebKit folder picker fallback
-          webkitdirectory=""
-          directory=""
-          multiple
-          hidden
-          onChange={onFolderInputChange}
-        />
-      </main>
+      </div>
 
-      <aside className="min-h-0 border-t border-black/5 bg-[#fbfbfb] p-4 lg:overflow-y-auto lg:border-l lg:border-t-0">
-        <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-          <div className="text-sm font-semibold">隐私机制</div>
-          <div className="mt-3 space-y-3 text-xs leading-5 text-muted-foreground">
-            <div className="rounded-xl bg-[#f7f7f7] p-3">
-              <span className="font-medium text-foreground">本地索引</span>
-              <br />
-              文件解析、OCR、向量索引默认落在本机。
-            </div>
-            <div className="rounded-xl bg-[#f7f7f7] p-3">
-              <span className="font-medium text-foreground">增量更新</span>
-              <br />
-              新增和修改文件自动进入队列，不需要手动上传。
-            </div>
-            <div className="rounded-xl bg-[#f7f7f7] p-3">
-              <span className="font-medium text-foreground">上下文确认</span>
-              <br />
-              搜索结果默认只预览；点击“引用到任务”后才进入当前任务。
-            </div>
-          </div>
+      <div className="shrink-0 border-t border-black/5 bg-[#fbfbfb] px-4 py-3 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span>隐私机制: 文件解析、OCR 与向量索引默认落在本机。</span>
+          <span>扫描队列: 等待扫描 0 · OCR 处理中 0 · 失败文件 0</span>
         </div>
-        <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
-          <div className="text-sm font-semibold">扫描队列</div>
-          <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-            <QueueRow label="等待扫描" value="0" />
-            <QueueRow label="OCR 处理中" value="0" />
-            <QueueRow label="失败文件" value="0" />
-          </div>
-        </div>
-      </aside>
-    </div>
-  );
-}
+      </div>
 
-function OnboardingStep({ title, desc }: { title: string; desc: string }) {
-  return (
-    <div className="rounded-xl bg-black/[0.035] p-3 text-left">
-      <div className="text-xs font-semibold text-foreground">{title}</div>
-      <div className="mt-1 text-xs leading-5 text-muted-foreground">{desc}</div>
-    </div>
-  );
-}
-
-function QueueRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-lg bg-[#f7f7f7] px-3 py-2">
-      <span>{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
-    </div>
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-expect-error - Chromium/WebKit folder picker fallback
+        webkitdirectory=""
+        directory=""
+        multiple
+        hidden
+        onChange={onFolderInputChange}
+      />
+    </main>
   );
 }
 
