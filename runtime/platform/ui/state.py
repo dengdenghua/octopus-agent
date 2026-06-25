@@ -5,6 +5,7 @@ from pathlib import Path
 
 from runtime.execution.suckers import SkillRegistry
 from runtime.memory.journal import InMemoryJournal, Journal, JSONLJournal
+from runtime.platform.observability.redactor import Redactor
 from runtime.sensing.gateway import StreamingJournal
 
 
@@ -49,7 +50,7 @@ class AppState:
         self.trace_store = trace_store
 
         base_journal = journal if journal is not None else (
-            JSONLJournal(journal_path, trace_store=trace_store)
+            JSONLJournal(journal_path, trace_store=trace_store, redactor=Redactor())
             if journal_path
             else InMemoryJournal()
         )
