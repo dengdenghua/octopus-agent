@@ -620,6 +620,28 @@
         "title": "CapabilityPermissionsResponse",
         "type": "object"
       },
+      "CliTeamRunRequest": {
+        "properties": {
+          "goal": {
+            "default": "",
+            "title": "Goal",
+            "type": "string"
+          },
+          "repo_root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repo Root"
+          }
+        },
+        "title": "CliTeamRunRequest",
+        "type": "object"
+      },
       "ConstitutionProfileResponse": {
         "properties": {
           "available": {
@@ -2235,6 +2257,37 @@
         "title": "ProvidersResponse",
         "type": "object"
       },
+      "RankRequest": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "top_k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top K"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "RankRequest",
+        "type": "object"
+      },
       "RepairRoutePromotionQueueBody": {
         "properties": {
           "limit": {
@@ -2379,6 +2432,20 @@
           }
         },
         "title": "ResumeTaskBody",
+        "type": "object"
+      },
+      "RoleModelsBody": {
+        "properties": {
+          "overrides": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Overrides",
+            "type": "object"
+          }
+        },
+        "title": "RoleModelsBody",
         "type": "object"
       },
       "ScorecardGapQueueBody": {
@@ -2653,6 +2720,64 @@
         "title": "SplitRequest",
         "type": "object"
       },
+      "StartRecordingRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thread_id",
+          "name"
+        ],
+        "title": "StartRecordingRequest",
+        "type": "object"
+      },
+      "StopRecordingRequest": {
+        "properties": {
+          "model_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Name"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "use_llm": {
+            "default": false,
+            "title": "Use Llm",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "StopRecordingRequest",
+        "type": "object"
+      },
       "SubagentDispatchRequest": {
         "properties": {
           "context": {
@@ -2900,6 +3025,48 @@
           "framework"
         ],
         "title": "TemplateInfo",
+        "type": "object"
+      },
+      "TemplateUpdateRequest": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "title": "TemplateUpdateRequest",
         "type": "object"
       },
       "ToolRegistryWire": {
@@ -7910,6 +8077,50 @@
         ]
       }
     },
+    "/api/agents/local-partners/{partner_id}/model": {
+      "get": {
+        "operationId": "get_local_partner_model_api_agents_local_partners__partner_id__model_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "partner_id",
+            "required": true,
+            "schema": {
+              "title": "Partner Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Local Partner Model Api Agents Local Partners  Partner Id  Model Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Local Partner Model",
+        "tags": [
+          "agents"
+        ]
+      }
+    },
     "/api/agents/parallel/batch/{batch_id}": {
       "get": {
         "operationId": "get_batch_api_agents_parallel_batch__batch_id__get",
@@ -11989,6 +12200,72 @@
         "summary": "List Pairings",
         "tags": [
           "channels"
+        ]
+      }
+    },
+    "/api/cli-team/run": {
+      "post": {
+        "operationId": "api_cli_team_run_api_cli_team_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CliTeamRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Cli Team Run Api Cli Team Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Cli Team Run",
+        "tags": [
+          "cli-team"
+        ]
+      }
+    },
+    "/api/cli-team/status": {
+      "get": {
+        "operationId": "api_cli_team_status_api_cli_team_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Cli Team Status Api Cli Team Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Cli Team Status",
+        "tags": [
+          "cli-team"
         ]
       }
     },
@@ -19232,6 +19509,30 @@
         ]
       }
     },
+    "/api/local-brain/status": {
+      "get": {
+        "description": "Return the plain-language readiness checklist (5 items + summary).\nBest-effort: any probe failure surfaces as that item being not-ok with\na next step, never a 500.",
+        "operationId": "api_local_brain_status_api_local_brain_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Local Brain Status Api Local Brain Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Local Brain Status",
+        "tags": [
+          "local-brain"
+        ]
+      }
+    },
     "/api/lsp/definition": {
       "post": {
         "operationId": "api_lsp_definition_api_lsp_definition_post",
@@ -22104,6 +22405,72 @@
         ]
       }
     },
+    "/api/retrieve/backend": {
+      "get": {
+        "operationId": "backend_api_retrieve_backend_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Backend Api Retrieve Backend Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Backend",
+        "tags": [
+          "retrieve"
+        ]
+      }
+    },
+    "/api/retrieve/rank": {
+      "post": {
+        "operationId": "rank_api_retrieve_rank_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RankRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rank Api Retrieve Rank Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rank",
+        "tags": [
+          "retrieve"
+        ]
+      }
+    },
     "/api/run": {
       "post": {
         "operationId": "api_run_api_run_post",
@@ -23744,6 +24111,487 @@
         ]
       }
     },
+    "/api/teach-repeat/record/start": {
+      "post": {
+        "operationId": "start_recording_api_teach_repeat_record_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRecordingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Start Recording Api Teach Repeat Record Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Recording"
+      }
+    },
+    "/api/teach-repeat/record/status": {
+      "get": {
+        "operationId": "recording_status_api_teach_repeat_record_status_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Recording Status Api Teach Repeat Record Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recording Status"
+      }
+    },
+    "/api/teach-repeat/record/stop": {
+      "post": {
+        "operationId": "stop_recording_api_teach_repeat_record_stop_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopRecordingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Stop Recording Api Teach Repeat Record Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Recording"
+      }
+    },
+    "/api/teach-repeat/templates": {
+      "get": {
+        "operationId": "list_templates_api_teach_repeat_templates_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Skip",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Tag",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Templates Api Teach Repeat Templates Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Templates"
+      }
+    },
+    "/api/teach-repeat/templates/{template_id}": {
+      "delete": {
+        "operationId": "delete_template_api_teach_repeat_templates__template_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Template Api Teach Repeat Templates  Template Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Template"
+      },
+      "get": {
+        "operationId": "get_template_api_teach_repeat_templates__template_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Template Api Teach Repeat Templates  Template Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Template"
+      },
+      "put": {
+        "operationId": "update_template_api_teach_repeat_templates__template_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Template Api Teach Repeat Templates  Template Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Template"
+      }
+    },
+    "/api/teach-repeat/templates/{template_id}/duplicate": {
+      "post": {
+        "operationId": "duplicate_template_api_teach_repeat_templates__template_id__duplicate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Duplicate Template Api Teach Repeat Templates  Template Id  Duplicate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Duplicate Template"
+      }
+    },
+    "/api/teach-repeat/templates/{template_id}/replay": {
+      "post": {
+        "operationId": "replay_template_api_teach_repeat_templates__template_id__replay_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Replay Template Api Teach Repeat Templates  Template Id  Replay Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Template"
+      }
+    },
+    "/api/teach-repeat/templates/{template_id}/replay/adaptive": {
+      "post": {
+        "operationId": "replay_template_adaptive_api_teach_repeat_templates__template_id__replay_adaptive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Replay Template Adaptive Api Teach Repeat Templates  Template Id  Replay Adaptive Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay Template Adaptive"
+      }
+    },
     "/api/team-invites/{token}": {
       "get": {
         "operationId": "inspect_invite_api_team_invites__token__get",
@@ -24114,6 +24962,70 @@
         "summary": "Run Task",
         "tags": [
           "team-tasks"
+        ]
+      }
+    },
+    "/api/team/role-models": {
+      "get": {
+        "operationId": "api_get_role_models_api_team_role_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Get Role Models Api Team Role Models Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Get Role Models",
+        "tags": [
+          "team-role-models"
+        ]
+      },
+      "put": {
+        "operationId": "api_put_role_models_api_team_role_models_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleModelsBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Put Role Models Api Team Role Models Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Put Role Models",
+        "tags": [
+          "team-role-models"
         ]
       }
     },
@@ -24631,6 +25543,554 @@
         "summary": " Telemetry Stats",
         "tags": [
           "stub"
+        ]
+      }
+    },
+    "/api/tentacle/dashboard": {
+      "get": {
+        "operationId": "dashboard_api_tentacle_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Dashboard",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/devices": {
+      "get": {
+        "operationId": "list_devices_api_tentacle_devices_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Devices Api Tentacle Devices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Devices",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/devices/{tentacle_id}": {
+      "get": {
+        "operationId": "device_detail_api_tentacle_devices__tentacle_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tentacle_id",
+            "required": true,
+            "schema": {
+              "title": "Tentacle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Device Detail Api Tentacle Devices  Tentacle Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Detail",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/devices/{tentacle_id}/analyze": {
+      "post": {
+        "description": "手动触发 VLM 分析设备屏幕.\n\n请求体::\n\n    {\"task\": \"描述你想做什么\"}\n\n返回::\n\n    {\n        \"description\": \"屏幕内容描述\",\n        \"suggested_actions\": [...],\n        \"current_app\": \"当前应用\",\n        \"screen_state\": \"屏幕状态\",\n        \"vlm_usage\": {...}\n    }",
+        "operationId": "vlm_analyze_api_tentacle_devices__tentacle_id__analyze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tentacle_id",
+            "required": true,
+            "schema": {
+              "title": "Tentacle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Vlm Analyze Api Tentacle Devices  Tentacle Id  Analyze Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Vlm Analyze",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/devices/{tentacle_id}/screenshot": {
+      "get": {
+        "description": "获取设备最新截图（JPEG）.\n\n返回设备最近推送的 JPEG 帧，若无截图返回 404.",
+        "operationId": "device_screenshot_api_tentacle_devices__tentacle_id__screenshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tentacle_id",
+            "required": true,
+            "schema": {
+              "title": "Tentacle Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Device Screenshot",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/join-info": {
+      "get": {
+        "operationId": "join_info_api_tentacle_join_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Join Info Api Tentacle Join Info Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Join Info",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/mcp/message": {
+      "post": {
+        "description": "MCP 消息接收端点.\n\n客户端通过此端点发送 JSON-RPC 请求，服务端处理后通过 SSE 推送响应。",
+        "operationId": "mcp_message_api_tentacle_mcp_message_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Mcp Message Api Tentacle Mcp Message Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mcp Message",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/mcp/sse": {
+      "get": {
+        "description": "MCP SSE 连接端点.\n\n客户端连接此端点获取 SSE 事件流，服务端首先发送 endpoint 事件\n告知客户端消息发送 URL，然后持续推送 JSON-RPC 响应。",
+        "operationId": "mcp_sse_api_tentacle_mcp_sse_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mcp Sse",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/pc-screen/start": {
+      "post": {
+        "description": "启动 PC 屏幕捕获.",
+        "operationId": "pc_screen_start_api_tentacle_pc_screen_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pc Screen Start Api Tentacle Pc Screen Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pc Screen Start",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/pc-screen/stats": {
+      "get": {
+        "description": "获取 PC 屏幕捕获统计.",
+        "operationId": "pc_screen_stats_api_tentacle_pc_screen_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pc Screen Stats Api Tentacle Pc Screen Stats Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Pc Screen Stats",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/pc-screen/stop": {
+      "post": {
+        "description": "停止 PC 屏幕捕获.",
+        "operationId": "pc_screen_stop_api_tentacle_pc_screen_stop_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pc Screen Stop Api Tentacle Pc Screen Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Pc Screen Stop",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/remote-input": {
+      "post": {
+        "description": "远程输入事件端点.\n\n接收来自前端/手机的输入事件，转发为PC鼠标/键盘操作.\n\n请求体::\n\n    {\n        \"action\": \"tap\",       # tap|double_tap|long_press|swipe|type_text|key_press\n        \"x\": 0.5, \"y\": 0.3,   # 归一化坐标 [0,1]\n        \"x2\": 0.8, \"y2\": 0.6,  # swipe 终点\n        \"duration_ms\": 300,\n        \"text\": \"hello\",\n        \"key\": \"enter\"\n    }",
+        "operationId": "remote_input_api_tentacle_remote_input_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remote Input Api Tentacle Remote Input Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remote Input",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/screen/subscribe": {
+      "post": {
+        "description": "返回屏幕流 WebSocket URL 供前端连接.\n\n客户端连接 WS 后发送 JSON 订阅/取消订阅消息.",
+        "operationId": "screen_subscribe_api_tentacle_screen_subscribe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Screen Subscribe Api Tentacle Screen Subscribe Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Screen Subscribe",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/stats": {
+      "get": {
+        "operationId": "stats_api_tentacle_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Stats Api Tentacle Stats Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stats",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/task": {
+      "post": {
+        "operationId": "submit_task_api_tentacle_task_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Submit Task Api Tentacle Task Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Task",
+        "tags": [
+          "tentacle"
+        ]
+      }
+    },
+    "/api/tentacle/tasks": {
+      "get": {
+        "operationId": "list_tasks_api_tentacle_tasks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response List Tasks Api Tentacle Tasks Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "tentacle"
         ]
       }
     },
@@ -25280,6 +26740,52 @@
         ]
       }
     },
+    "/api/wiki/ask": {
+      "post": {
+        "description": "Synthesis Q&A over the project wiki — retrieve + compose a cited\nanswer (ADR-009 · gbrain-style). Returns ``{answer, citations, grounded,\nreason?}``; ``grounded=False`` when no model is configured or the wiki\ndoesn't cover the question (no LLM call in those cases).",
+        "operationId": "api_wiki_ask_api_wiki_ask_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Wiki Ask Api Wiki Ask Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Wiki Ask",
+        "tags": [
+          "wiki"
+        ]
+      }
+    },
     "/api/wiki/docs": {
       "get": {
         "description": "Flat WikiDocEntry list · frontend builds the tree via\n``path.split('/')`` so we don't need to pre-structure here.",
@@ -25504,6 +27010,52 @@
           }
         },
         "summary": "Api Wiki Generate",
+        "tags": [
+          "wiki"
+        ]
+      }
+    },
+    "/api/wiki/graph": {
+      "get": {
+        "description": "Wiki dependency graph (ADR-009): the page nodes + the zero-LLM\npage→page import edges from index.json, for a graph visualiser.",
+        "operationId": "api_wiki_graph_api_wiki_graph_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Wiki Graph Api Wiki Graph Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Wiki Graph",
+        "tags": [
+          "wiki"
+        ]
+      }
+    },
+    "/api/wiki/okf-bundle": {
+      "get": {
+        "description": "Export the wiki as a portable OKF bundle — a ``tar.gz`` of\n``docs/auto`` (markdown + frontmatter + index.json + edges). The family\nlingua franca (ADR-009): any OKF-aware consumer (Storage, mobile, os)\nfetches and ingests it without a proprietary SDK.",
+        "operationId": "api_wiki_okf_bundle_api_wiki_okf_bundle_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Api Wiki Okf Bundle Api Wiki Okf Bundle Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Wiki Okf Bundle",
         "tags": [
           "wiki"
         ]
