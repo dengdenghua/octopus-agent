@@ -72,7 +72,8 @@ Two forces make convergence worth the churn now:
 (The full-stack audit on this branch independently confirmed the
 governing principle: generated-and-gated artifacts stay fresh
 [`docs/auto` has `tests/test_auto_docs_fresh.py`]; hand-maintained ones
-drift [`CODE_WIKI.md`, the openapi snapshot]. OKF + a freshness gate is
+drift (the openapi snapshot; the 1993-line `CODE_WIKI.md` drifted so far it
+was retired in favour of `docs/auto` + `docs/architecture*`). OKF + a freshness gate is
 the durable side of that line.)
 
 ## Decision

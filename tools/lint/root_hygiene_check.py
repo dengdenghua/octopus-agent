@@ -56,7 +56,6 @@ ALLOWED_ROOT_NAMES = frozenset({
     "biome.json",            # Biome formatter config (frontend)
     "build",                 # Build artifacts (ephemeral)
     "CHANGELOG.md",          # Project changelog
-    "CODE_WIKI.md",          # Internal code wiki
     "config.example.yaml",   # Example runtime config
     "config.local.yaml",     # Local runtime config (gitignored)
     "CONTRIBUTING.md",       # Contributor guide

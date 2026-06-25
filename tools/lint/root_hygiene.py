@@ -87,7 +87,6 @@ ROOT_ALLOWLIST: set[str] = {
     "README.en.md",
     "ROOT_LAYOUT.md",
     "QUICKSTART.md",
-    "CODE_WIKI.md",
     "CONTRIBUTING.md",
     "CHANGELOG.md",
     "LICENSE",

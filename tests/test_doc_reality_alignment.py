@@ -10,7 +10,7 @@ marketing material.
 Scope: project-authored docs only.
 - ``docs/`` (project documentation)
 - ``protocols/`` (protocol specs)
-- top-level project ``*.md`` (README, CHANGELOG, CONTRIBUTING, CODE_WIKI, etc.)
+- top-level project ``*.md`` (README, CHANGELOG, CONTRIBUTING, etc.)
 
 Explicitly excluded (each is a separate concern):
 - ``agents/**/*.md`` (per-agent SOUL/MEMORY files — agent-owned content)
