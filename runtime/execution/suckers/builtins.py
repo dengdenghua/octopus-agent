@@ -612,13 +612,17 @@ def register_all(registry: SkillRegistry) -> int:
     # existing skill set: Glob / Grep (non-code) / tree / read range / ipynb.
     fs_search_count = register_fs_search_skills(registry)
     notebook_count = register_notebook_skills(registry)
-    # Prompt-as-skill catalog · `all_skills/<name>/SKILL.md`
-    # (64 entries · pdf / xlsx / pptx / copywriting /
-    # 1688-* / shopify-* / etc) were previously unreachable — md_loader
-    # only accepts `handler:` fields. register_market_skills walks the
-    # directory and wraps each SKILL.md as a prompt-returning handler
-    # so agents can actually discover and invoke them.
-    market_count = register_market_skills(registry)
+    # Prompt-as-skill catalog · `skills/public/<name>/SKILL.md`
+    # (preferred external location) with fallback to the legacy
+    # in-package `all_skills/` directory for bare wheel installs.
+    from runtime.platform.process.paths import resources_root
+
+    _external_skills_dir = resources_root() / "skills" / "public"
+    _legacy_skills_dir = Path(__file__).resolve().parent.parent / "all_skills"
+    _market_skills_dir = (
+        _external_skills_dir if _external_skills_dir.is_dir() else _legacy_skills_dir
+    )
+    market_count = register_market_skills(registry, all_skills_dir=_market_skills_dir)
     # AST-aware code editing · tree-sitter powered · 2026-04-26
     from .code_edit_skills import register_code_edit_skills
     code_edit_count = register_code_edit_skills(registry)

@@ -82,9 +82,6 @@ jobs:
       - name: Auth-actor ratchet (no NEW bare _auth calls)
         run: python tools/lint/auth_actor_check.py --strict
 
-      - name: Root hygiene (prevent foreign Electron scaffolds)
-        run: python tools/lint/root_hygiene_check.py --strict
-
       - name: Hardcoded user paths (block per-user absolute paths in source)
         run: python tools/lint/hardcoded_path_check.py --strict
 

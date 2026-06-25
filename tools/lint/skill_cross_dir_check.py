@@ -44,8 +44,8 @@ PUBLIC_DIR = REPO_ROOT / "skills" / "public"
 _SKILL_MD = "SKILL.md"
 
 # Baseline count of cross-dir duplicates. Update when you migrate or
-# resolve duplicates. Audited 2026-06-06.
-BASELINE_DUPLICATE_COUNT = 47
+# resolve duplicates. Audited 2026-06-25 (skills/local/ retired).
+BASELINE_DUPLICATE_COUNT = 4
 
 
 def _skill_names_in(root: Path) -> set[str]:
