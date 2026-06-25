@@ -699,7 +699,13 @@ def create_app(
     # and optionally triggers regeneration · no LLM involved.
     from runtime.sensing.gateway.wiki_router import create_wiki_router
 
-    app.include_router(create_wiki_router())
+    _wiki_planner = getattr(stack, "planner", None) if stack is not None else None
+    app.include_router(
+        create_wiki_router(
+            model_router=getattr(_wiki_planner, "router", None),
+            model=getattr(_wiki_planner, "planner_model", None),
+        )
+    )
 
     # Local-brain setup wizard · plain-language readiness checklist so a
     # non-technical user can wire the whole stack to run locally.
@@ -1570,6 +1576,21 @@ def create_app(
         create_stub_router(
             jwt_secret=molili_jwt_secret,
             jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
+        )
+    )
+
+    from runtime.sensing.gateway.teach_repeat_router import create_teach_repeat_router
+
+    # Wire the live journal + skill registry so REC stop forges a reusable
+    # skill from the conversation's trajectory (active single-demo forge).
+    _tr_registry = None
+    if stack is not None:
+        _tr_registry = getattr(getattr(stack, "executor", None), "registry", None)
+    _tr_registry = _tr_registry or getattr(state, "registry", None)
+    app.include_router(
+        create_teach_repeat_router(
+            journal=getattr(state, "journal", None),
+            registry=_tr_registry,
         )
     )
 

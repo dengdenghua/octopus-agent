@@ -175,9 +175,24 @@ Phased, with the cheapest validation first:
   semantic lane is dormant and free until an embedder is configured (a *local*
   model satisfies it; no external API required). This closes the biggest gbrain
   gap — hybrid retrieval — with in-repo infrastructure; pinned by
-  `tests/test_repo_context.py`. Still out: a cross-encoder **reranker** and a
-  **synthesis layer** (both need a model service), and a scheduled "dream
-  cycle".
+  `tests/test_repo_context.py`. Embeddings are cached per corpus (keyed by
+  index.json mtime, `_page_vectors`) so a hot loop embeds only the per-call
+  query — gbrain's precompute pattern.
+- **Synthesis layer — DONE (2026-06-24): `POST /api/wiki/ask`.** gbrain's "give
+  the answer, not raw pages" — retrieve the wiki context and compose a grounded,
+  cited answer via octopus's own model router (`stack.planner.router`),
+  instructed to answer ONLY from the retrieved wiki and name gaps rather than
+  invent. Gated and safe: no model or no relevant context → `grounded=False`
+  with no LLM call; a model error degrades the same way. Pinned by
+  `tests/test_wiki_qa.py`.
+- **Dream cycle — already exists, not a gap.** octopus's `RegenerationScheduler`
+  (`runtime/safety/recovery/scheduler.py`, ~600s loop) already extracts learned
+  rules from the journal and runs `MemoryConsolidator` / SkillForge / KG-updater
+  — the autonomous-consolidation role gbrain's dream cycle plays. We do not
+  duplicate it.
+- **Still out (genuine boundaries):** a cross-encoder **reranker** (needs a
+  cross-encoder model service), the **graph-visualisation UI** (frontend), and
+  the **cross-repo Storage OKF export** (a different repo).
 
 ## Alternatives considered
 

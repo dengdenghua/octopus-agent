@@ -208,9 +208,77 @@ def _validate_user_root(root: str | None) -> Path | None:
     return p
 
 
-def create_wiki_router() -> Any:
+def _answer_from_wiki(question: str, *, model_router: Any, model: str | None) -> dict[str, Any]:
+    """Synthesis layer (ADR-009): retrieve the most relevant wiki context and
+    compose a grounded, cited answer — gbrain's "give the answer, not raw pages".
+
+    Gated and safe: no model configured → ``grounded=False`` with no LLM call;
+    no relevant wiki → ``grounded=False`` with no LLM call. Answers strictly from
+    the retrieved wiki and is told to name gaps rather than invent."""
+    question = (question or "").strip()
+    if not question:
+        return {"answer": "", "citations": [], "grounded": False, "reason": "empty question"}
+
+    from runtime.memory.hemolymph.repo_context import build_codebase_context
+
+    context, sources = build_codebase_context(question)
+    if not context:
+        return {
+            "answer": "",
+            "citations": [],
+            "grounded": False,
+            "reason": "no relevant wiki context",
+        }
+    if model_router is None:
+        return {
+            "answer": "",
+            "citations": sources,
+            "grounded": False,
+            "reason": "no model configured",
+        }
+
+    from runtime.sensing.model_router.models import Message, ModelRequest
+
+    system = (
+        "You answer questions about THIS codebase using ONLY the wiki context "
+        "provided below. Cite the page titles you relied on. If the context does "
+        "not cover the question, say so plainly and name what is missing — never "
+        "invent APIs, files, or behaviour."
+    )
+    try:
+        resp = model_router.call(
+            ModelRequest(
+                model=model or "auto",
+                messages=[
+                    Message(role="system", content=system),
+                    Message(role="user", content=f"Question: {question}\n\n{context}"),
+                ],
+                max_tokens=700,
+                temperature=0.0,
+                system_provider="anthropic",
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 — synthesis must never crash the endpoint
+        return {
+            "answer": "",
+            "citations": sources,
+            "grounded": False,
+            "reason": f"model error: {exc}",
+        }
+    return {
+        "answer": str(getattr(resp, "text", "") or ""),
+        "citations": sources,
+        "grounded": True,
+        "model": model or "auto",
+    }
+
+
+def create_wiki_router(*, model_router: Any = None, model: str | None = None) -> Any:
     """Build + return the FastAPI router. Call site:
-    ``app.include_router(create_wiki_router())``."""
+    ``app.include_router(create_wiki_router(model_router=..., model=...))``.
+
+    ``model_router`` / ``model`` enable the ``/api/wiki/ask`` synthesis endpoint;
+    omit them (the default) and that route degrades to ``grounded=False``."""
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
@@ -219,6 +287,17 @@ def create_wiki_router() -> Any:
     # Lazy-import the generic generator so the router file stays the
     # only place that knows about the dual-mode dispatch.
     from . import wiki_generic
+
+    @router.post("/api/wiki/ask")
+    def api_wiki_ask(body: dict[str, Any]) -> dict[str, Any]:
+        """Synthesis Q&A over the project wiki — retrieve + compose a cited
+        answer (ADR-009 · gbrain-style). Returns ``{answer, citations, grounded,
+        reason?}``; ``grounded=False`` when no model is configured or the wiki
+        doesn't cover the question (no LLM call in those cases)."""
+        question = body.get("question")
+        if not isinstance(question, str) or not question.strip():
+            raise HTTPException(400, "body.question must be a non-empty string")
+        return _answer_from_wiki(question, model_router=model_router, model=model)
 
     @router.get("/api/wiki/status")
     def api_wiki_status(root: str | None = Query(None)) -> dict[str, Any]:
