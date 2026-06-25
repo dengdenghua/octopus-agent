@@ -1,4 +1,4 @@
-# ADR-008 · Octopus Mobile（移动触手 / 跨端编排）
+# ADR-011 · Octopus Mobile（移动触手 / 跨端编排）
 
 Status: Accepted · 决策层已落地 octopus-mobile · Updated: 2026-06-25 (反向对齐实施现状)
 Date: 2026-06-06 (initial) | Last revision: 2026-06-25 (doc-lags-code 对齐：方案 F 决策层四件套已实装)
@@ -214,6 +214,6 @@ octopus-agent 已有 `desktop_operator_arm` —— 用 pyautogui / 屏幕截图 
 - [protocol.md](../../mobile/protocol.md) — 协议规范
 - [skills.md](../../mobile/skills.md) — 30 个移动技能
 - [browser-integration.md](../../mobile/browser-integration.md) — 浏览器内核集成
-- [biomimetic/tentacle/README.md](../../biomimetic/tentacle/README.md) — 触手器官说明
+- [architecture/organs/tentacle.md](../../architecture/organs/tentacle.md) — 触手器官说明
 - [Octopus Mobile 源码](https://github.com/octopus-agent/octopus-mobile) — Android 端实现参考
 - ADR-001 — 双轨命名契约

@@ -6,7 +6,7 @@
 
 ## 📍 当前现状（2026-06 快照）
 
-**5900+ tests 绿 · 0 lint-blocker · 0 新硬依赖**。
+**7500+ tests 绿 · 0 lint-blocker · 0 新硬依赖**。
 （活计数：`python tools/lint/count_tests.py`；CI 通过 `--check` 防止漂移。）
 
 ### ✅ 已闭合（原路线图 0-3 阶段 + 额外补齐）
@@ -152,10 +152,10 @@
 
 ## 阶段 4 · 心跳期 Three-Hearts （第 15–18 周）
 
-**目标**：HA + 策略自适应，达到"生产级"
+**目标**：双循环隔离 + 策略自适应，达到"生产级"
 **对应生物**：3 颗心脏齐跳，能变色拟态
 
-- [ ] `hearts/` 三心脏调度：1 主 + 2 备，任一停跳自动接管
+- [ ] `hearts/` 双循环隔离：主循环 + 备循环，上下文泵驱动
 - [ ] `camouflage/` 策略 A/B：同任务并行跑多种 prompt/model 组合，按 ROI 收敛
 - [ ] `ink/skill_cost_profile`：每 Sucker 成本画像，异常涨价告警
 - [ ] `hearts/` 节律调度：预算紧缩时降频，空闲加速反思流水线
@@ -172,7 +172,7 @@
 **对应生物**：成年章鱼繁殖
 
 - [ ] SKILL Hub：社区 Sucker 市场，安全扫描
-- [ ] IM 集成（Feishu/Slack/Telegram）—— fork octopus 现成模块
+- [x] IM 集成（Feishu/Slack/Telegram/Discord/DingTalk）—— 已实装 6 channel
 - [ ] 多租户：Mantle 隔离 + Genome 分片
 - [ ] 协议：MCP 已有 + 考虑 ACP / A2A
 - [ ] 文档站 + demo 视频
@@ -183,7 +183,7 @@
 
 > **Octopus Mobile · 让章鱼的触手真正"触达"Android 设备与桌面**
 >
-> 详见 [docs/mobile/README.md](mobile/README.md) · [docs/adr/008-octopus-mobile.md](adr/008-octopus-mobile.md) · [docs/biomimetic/tentacle/README.md](biomimetic/tentacle/README.md)
+> 详见 [docs/mobile/README.md](mobile/README.md) · [docs/adr/011-octopus-mobile.md](adr/011-octopus-mobile.md) · [docs/architecture/organs/tentacle.md](architecture/organs/tentacle.md)
 
 **目标**：让 octopus-agent 能**真实操控** Android 手机 + 桌面电脑，并实现跨端混合编排
 **对应生物**：章鱼伸出触手（章鱼能伸出腕外肢体抓住远处目标）
@@ -195,7 +195,7 @@
 - [x] `mobile_operator_arm` + `mobile_browser_operator_arm` preset
 - [x] 核心 10 个 SKILL.md（tap/swipe/input_text/get_screen_info/...）
 - [x] Octopus Mobile RPC 客户端骨架（Kotlin）
-- [x] ADR-008 决策记录 + docs/mobile/ 完整文档
+- [x] ADR-011 决策记录 + docs/mobile/ 完整文档
 
 ### Phase 1 · 设备注册 + 简单工具（2 周）
 
@@ -287,7 +287,7 @@
 | 风险 | 对应器官 | 护栏 |
 |---|---|---|
 | 腕失控疯狂烧钱 | Ink | per-task 预算硬顶，超限即停 |
-| 单点中枢挂掉 | Hearts | 3 心脏 HA + Ganglion 断联自治（未实装）|
+| 单点中枢挂掉 | Hearts | 双循环隔离 + Ganglion 断联自治 |
 | 反思反而贵 | Regeneration | 全走 Batch API，夜间跑 |
 | 腕之间抢资源 | Chromatophores | 状态广播 + Cerebrum 仲裁 |
 | 技能爆炸污染上下文 | Suckers | Progressive disclosure，按 affinity 只挂相关子集 |

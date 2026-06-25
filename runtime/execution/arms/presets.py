@@ -95,7 +95,7 @@ _SHELL_EXEC = [
 ]
 
 # Octopus Mobile · Phase 0 概念验证
-# 详见 docs/mobile/skills.md 与 docs/adr/008-octopus-mobile.md
+# 详见 docs/mobile/skills.md 与 docs/adr/011-octopus-mobile.md
 _MOBILE_OPS = [
     # 基础操作
     SkillId("android.tap"),
@@ -258,7 +258,7 @@ def make_desktop_operator_arm(runtime: GraphRuntime) -> Worker:
 
 # ═══════════════════════════════════════════════════════════
 #  Octopus Mobile · 移动操作 Arm（Phase 0 概念验证）
-#  详见 docs/mobile/architecture.md 与 docs/adr/008-octopus-mobile.md
+#  详见 docs/mobile/architecture.md 与 docs/adr/011-octopus-mobile.md
 # ═══════════════════════════════════════════════════════════
 
 

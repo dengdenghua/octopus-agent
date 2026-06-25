@@ -43,7 +43,7 @@ PYPROJECT = REPO_ROOT / "pyproject.toml"
 GITHUB_URL_RE = re.compile(
     r"https?://(?:www\.)?github\.com/"
     r"(?P<owner>octopus(?:-ai|-agent)?|octopus-agent|octopus-ai)"
-    r"/(?P<repo>octopus(?:-agent)?)",
+    r"/(?P<repo>octopus(?:-agent)?)(?=/|$|[\s\"'#)])",
     re.IGNORECASE,
 )
 
