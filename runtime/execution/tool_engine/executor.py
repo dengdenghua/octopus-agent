@@ -37,7 +37,11 @@ from runtime.platform.models import (
 )
 from runtime.platform.process.utils import safe_repr as _safe_repr
 from runtime.safety.approval.approval_gate import injection_taint_block
-from runtime.safety.auth import TrustEngine, check_file_write
+from runtime.safety.auth import (
+    TrustEngine,
+    check_file_write,
+    strip_model_controlled_overrides,
+)
 from runtime.safety.validation.prompt_injection import (
     is_untrusted_tool,
     mark_injection_taint,
@@ -177,6 +181,21 @@ class ToolExecutor:
             span.set_attribute("octopus.node_id", node_id)
             if actor:
                 span.set_attribute("octopus.actor", actor)
+
+            # Drop model-controllable privilege-escalation flags before the
+            # args reach the ToolCall record, the journal, or
+            # ``handler(**args)``. The published tool schema hides
+            # ``allow_sensitive`` but is ``additionalProperties: True``, so a
+            # model — or an indirect prompt injection in tool output — could
+            # otherwise smuggle ``allow_sensitive`` / ``allow_private`` in to
+            # defeat the sensitive-file / SSRF guards. Trusted internal callers
+            # set these by invoking handlers directly, never via execute_step.
+            args, _stripped_overrides = strip_model_controlled_overrides(args)
+            if _stripped_overrides:
+                span.set_attribute(
+                    "octopus.args.stripped_overrides",
+                    ",".join(_stripped_overrides),
+                )
 
             skill = self.registry.get(sucker_id)
             if not self.registry.is_enabled(sucker_id):
