@@ -974,6 +974,28 @@ def _execute_tool_in_subagent(
     if _confine_block is not None:
         return (_confine_block, True)
 
+    # Direct-dispatch hardening — ephemeral runs bypass the executor
+    # chokepoint, so apply the same pre-execution safety gates here (SEC-1/2).
+    if isinstance(getattr(call, "input", None), dict):
+        from runtime.execution.tool_engine.skill_gate import gate_inner_dispatch
+        from runtime.safety.auth import MODEL_FORBIDDEN_ARGS
+
+        # Drop model-controllable privilege flags (allow_sensitive /
+        # allow_private) the model must never set — same as the executor.
+        # ``call`` is a frozen model, so mutate the input dict in place rather
+        # than rebinding the attribute (cf. the sandbox_dir injection above).
+        for _forbidden in MODEL_FORBIDDEN_ARGS:
+            call.input.pop(_forbidden, None)
+        # Capability denylist + immunity (when a TrustEngine is ambiently
+        # bound) + credential-file denylist (check_file_write). Without these
+        # an unsandboxed sub-agent could write ./.env / ./id_rsa, or run an
+        # operator-disabled tool — the executor blocks both. Reuse the shared
+        # primitive the other direct-dispatch points already use so this path
+        # stays in lock-step with the executor instead of re-implementing gates.
+        _gate = gate_inner_dispatch(skill, call.input, caller="ephemeral_subagent")
+        if _gate is not None:
+            return (f"(blocked: {_gate.message})", True)
+
     try:
         output = skill.handler(**call.input)
     except TypeError as exc:
