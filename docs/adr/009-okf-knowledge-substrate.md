@@ -208,14 +208,23 @@ Phased, with the cheapest validation first:
   streams the wiki as a portable `tar.gz` OKF bundle (markdown + frontmatter +
   index.json + edges) — the family lingua franca: any OKF-aware consumer
   (Storage, mobile, os) fetches and ingests it with no proprietary SDK. Pinned
-  by `tests/test_wiki_qa.py`. The remaining half — the `octopus-storage` repo
-  *consuming* this bundle (and emitting its own doc-KB as OKF) — is that repo's
-  work, genuinely outside this one.
+  by `tests/test_wiki_qa.py`.
+- **OKF consume — Storage half DONE (2026-06-25, `octopus-storage`).** The loop
+  is now closed end-to-end in the sibling repo: `POST /v1/okf/ingest` safely
+  unpacks an OKF bundle (hardened, `extractall`-free: rejects symlink/traversal/
+  absolute members, caps entry-count + uncompressed size), registers it as a
+  folder source, and indexes it — so this repo's wiki becomes searchable through
+  Storage's `/v1/search` + `/v1/answer` hybrid retrieval. Verified by an
+  ingest → auto-index → search end-to-end test there. (Lives in
+  `octopus-storage` on branch `feat/okf-ingest`; tracked separately from this
+  repo's PR.) Storage *emitting* its own doc-KB as OKF remains optional future
+  surface area.
 
-With Phases 0–3, the reranker, the graph UI, and the OKF export all landed, the
-in-repo catch-up to gbrain's knowledge layer is complete; what remains lives in
-other repos (Storage) or needs an external model service (a heavier reranker) —
-not in this codebase.
+With Phases 0–3, the reranker, the graph UI, and the OKF export landed in this
+repo and the Storage consume side landed in `octopus-storage`, the catch-up to
+gbrain's knowledge layer is complete end-to-end across the family. What remains
+is optional (a heavier external-model reranker; Storage emitting OKF) — nothing
+load-bearing.
 
 ## Alternatives considered
 
