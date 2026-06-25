@@ -1,4 +1,5 @@
 
+from .arg_guard import MODEL_FORBIDDEN_ARGS, strip_model_controlled_overrides
 from .identity import (
     ANONYMOUS_ACTOR,
     Identity,
@@ -20,6 +21,7 @@ __all__ = [
     "Identity",
     "IdentityStore",
     "JWTError",
+    "MODEL_FORBIDDEN_ARGS",
     "PathVerdict",
     "ToolCallGuardrailController",
     "ToolCallSignature",
@@ -35,6 +37,7 @@ __all__ = [
     "is_safe_path",
     "is_safe_url",
     "is_safe_write",
+    "strip_model_controlled_overrides",
     "verify_jwt_hs256",
 ]
 
