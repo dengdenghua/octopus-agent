@@ -11,7 +11,7 @@ tier: "standard"
 
 ## Per ADR
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/001-bionic-naming.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/001-bionic-naming.md) · *Accepted*
 
 - `docs/biomimetic/*`
 - `docs/invariants.md`
@@ -20,48 +20,48 @@ tier: "standard"
 - `runtime/core/hearts/`
 - `runtime/execution/suckers/`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/002-mode-gated-scope.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/002-mode-gated-scope.md) · *Accepted*
 
 - `agents/<id>/workspace/<thread_id>/`
 - `tests/test_scope.py`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/003-session-object.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/003-session-object.md) · *Accepted*
 
 _未引用代码路径_
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/004-openapi-ts-codegen.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/004-openapi-ts-codegen.md) · *Accepted*
 
 - `docs/openapi-snapshot.json`
 - `frontend/src/core/api/openapi-types.ts`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/005-agent-capabilities.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/005-agent-capabilities.md) · *Accepted*
 
 - `docs/agent-capabilities.md`
 - `frontend/src/core/agents/types.ts`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/006-lifecycle-hooks.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/006-lifecycle-hooks.md) · *Accepted*
 
 - `runtime/safety/hooks/{events,registry,runner}.py`
 - `tests/test_safety_hooks.py`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/007-mcp-trust-store.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/007-mcp-trust-store.md) · *Accepted*
 
 - `runtime/adapters/mcp_client/bridge.py:require_trust`
 - `runtime/adapters/mcp_client/trust.py`
 - `tests/test_mcp_trust.py`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/008-constitution-profiles.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/008-constitution-profiles.md) · *Accepted*
 
 - `runtime/safety/constitution/gate.py`
 - `runtime/safety/constitution/profiles.py`
 - `tests/test_constitution_profiles.py`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/008-octopus-mobile.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/008-octopus-mobile.md) · *Accepted*
 
 - `runtime/execution/arms/presets.py`
 - `runtime/tentacle/`
 
-### [ADR-009 · OKF as the knowledge substrate](../../adr/009-okf-knowledge-substrate.md) · *Proposed*
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/009-okf-knowledge-substrate.md) · *Accepted*
 
 - `docs/architecture*`
 - `docs/auto`
@@ -71,6 +71,11 @@ _未引用代码路径_
 - `tests/test_auto_docs_fresh.py`
 - `tests/test_repo_context.py`
 - `tests/test_wiki_qa.py`
+
+### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/010-swarm-resource-contention.md) · *Accepted*
+
+- `runtime/execution/swarm/runtime.py`
+- `runtime/safety/chromatophores/boids.py`
 
 ## Per file
 
@@ -91,6 +96,8 @@ _未引用代码路径_
 - `runtime/core/hearts/` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
 - `runtime/execution/arms/presets.py` ← [008-octopus-mobile](../../adr/008-octopus-mobile.md)
 - `runtime/execution/suckers/` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
+- `runtime/execution/swarm/runtime.py` ← [010-swarm-resource-contention](../../adr/010-swarm-resource-contention.md)
+- `runtime/safety/chromatophores/boids.py` ← [010-swarm-resource-contention](../../adr/010-swarm-resource-contention.md)
 - `runtime/safety/constitution/gate.py` ← [008-constitution-profiles](../../adr/008-constitution-profiles.md)
 - `runtime/safety/constitution/profiles.py` ← [008-constitution-profiles](../../adr/008-constitution-profiles.md)
 - `runtime/safety/hooks/{events,registry,runner}.py` ← [006-lifecycle-hooks](../../adr/006-lifecycle-hooks.md)
