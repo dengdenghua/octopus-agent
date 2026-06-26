@@ -13,8 +13,6 @@ import {
   PlusIcon,
   PresentationIcon,
   SearchIcon,
-  ShieldAlertIcon,
-  ShieldCheckIcon,
   SlidersHorizontalIcon,
   SquareIcon,
   TableIcon,
@@ -375,20 +373,10 @@ export function ChatInputBox({
   // one. When the parent opts into the picker (``showWorkDirSelector``), show it
   // so picking a folder is the entry point into a project/code workflow.
   const showWorkDirSegment = isProjectMode || hasWorkDir || showWorkDirSelector;
-  // Only surface the access chip when it's a WARNING (read-only). "项目写入"
-  // is the expected default — showing it always is noise; show only "项目只读".
-  const showProjectAccessSegment = isProjectMode && !codeModeUnlocked;
-  const projectAccessLabel = codeModeUnlocked
-    ? t.chatInputBox.projectWriteAccess
-    : t.chatInputBox.projectReadOnly;
-  const projectStatusTitle = `${t.chatInputBox.projectStatusTitle}: ${
-    codeModeUnlocked
-      ? t.chatInputBox.projectStatusDescUnlocked
-      : t.chatInputBox.projectStatusDescLocked
-  }`;
-  const ProjectAccessIcon = codeModeUnlocked
-    ? ShieldCheckIcon
-    : ShieldAlertIcon;
+  // Read-only is no longer a standalone chip — it folds into a 🔒 lock badge on
+  // the mode chip (passed to ModeSelector as readOnlyHint). "项目写入" is the
+  // expected default and needs no indicator; only read-only is surfaced.
+  const projectReadOnlyHint = `${t.chatInputBox.projectStatusTitle}: ${t.chatInputBox.projectStatusDescLocked}`;
   const _isDefaultGeneralAgent =
     !hasWorkDir &&
     !isProjectMode &&
@@ -397,8 +385,7 @@ export function ChatInputBox({
   const statusSegmentCount =
     (showAgentSegment ? 1 : 0) +
     (showWorkDirSegment ? 1 : 0) +
-    (showModeSegment ? 1 : 0) +
-    (showProjectAccessSegment ? 1 : 0);
+    (showModeSegment ? 1 : 0);
   const showStatusStrip = statusSegmentCount > 0;
 
   useEffect(() => {
@@ -1399,6 +1386,7 @@ export function ChatInputBox({
                       mode={projectAgentMode}
                       auditIntensity={auditIntensity}
                       codeModeUnlocked={codeModeUnlocked}
+                      readOnlyHint={projectReadOnlyHint}
                       chromeless
                       permissionLabel={permissionLabel}
                       onModeChange={
@@ -1407,26 +1395,6 @@ export function ChatInputBox({
                       onAuditIntensityChange={onAuditIntensityChange}
                       onDetectionChange={onProjectDetectionChange}
                     />
-                  </>
-                )}
-                {showProjectAccessSegment && (
-                  <>
-                    <span
-                      className="h-3 w-px shrink-0 bg-border/35"
-                      aria-hidden="true"
-                    />
-                    <span
-                      className={cn(
-                        "inline-flex max-w-[96px] shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium",
-                        codeModeUnlocked
-                          ? "text-emerald-700 dark:text-emerald-300"
-                          : "text-amber-700 dark:text-amber-300",
-                      )}
-                      title={projectStatusTitle}
-                    >
-                      <ProjectAccessIcon className="size-3 shrink-0" />
-                      <span className="truncate">{projectAccessLabel}</span>
-                    </span>
                   </>
                 )}
               </>

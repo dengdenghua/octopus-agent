@@ -10,6 +10,7 @@ import {
   ChevronDownIcon,
   CodeIcon,
   LoaderIcon,
+  LockIcon,
   PaletteIcon,
   ShieldCheckIcon,
 } from "lucide-react";
@@ -121,6 +122,9 @@ interface ModeSelectorProps {
   mode: AgentModeName;
   auditIntensity?: AuditIntensity;
   codeModeUnlocked?: boolean;
+  /** When read-only (codeModeUnlocked=false), this hint is the lock badge's
+   * tooltip on the mode chip — replacing the old standalone access chip. */
+  readOnlyHint?: string;
   chromeless?: boolean;
   permissionLabel?: string;
   onModeChange: (mode: AgentModeName) => void;
@@ -135,6 +139,7 @@ export function ModeSelector({
   mode,
   auditIntensity = "standard",
   codeModeUnlocked = false,
+  readOnlyHint,
   chromeless = false,
   permissionLabel,
   onModeChange,
@@ -315,15 +320,20 @@ export function ModeSelector({
             {t.modes.manualOverrideShort}
           </span>
         )}
-        <span
-          className={cn(
-            "size-1.5 rounded-full transition-all duration-200",
-            codeModeUnlocked
-              ? "bg-emerald-500/90 shadow-[0_0_6px_rgba(16,185,129,0.28)] animate-pulse"
-              : "bg-amber-500/85 shadow-[0_0_6px_rgba(245,158,11,0.24)] animate-pulse",
-          )}
-          aria-hidden="true"
-        />
+        {codeModeUnlocked ? (
+          <span
+            className="size-1.5 rounded-full bg-emerald-500/90 shadow-[0_0_6px_rgba(16,185,129,0.28)] transition-all duration-200"
+            aria-hidden="true"
+          />
+        ) : (
+          <span
+            className="inline-flex shrink-0 text-amber-600 dark:text-amber-400"
+            title={readOnlyHint}
+            aria-label={readOnlyHint}
+          >
+            <LockIcon className="size-3" />
+          </span>
+        )}
         <ChevronDownIcon className="size-3 opacity-35 transition-opacity group-hover:opacity-60" />
       </button>
 
