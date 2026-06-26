@@ -362,7 +362,6 @@ export function ChatInputBox({
   const displayAgentIcon = displayAgent?.icon?.trim() || "";
   const displayAgentName = displayAgent?.name?.trim() || "";
   const hasWorkDir = Boolean(workDir?.trim());
-  const showProjectStatusSegment = isProjectMode;
   const showModeSegment = isProjectMode;
   // Surface the workspace-directory picker even in a fresh personal-space
   // conversation (no workDir yet). Previously this was gated on
@@ -371,7 +370,9 @@ export function ChatInputBox({
   // one. When the parent opts into the picker (``showWorkDirSelector``), show it
   // so picking a folder is the entry point into a project/code workflow.
   const showWorkDirSegment = isProjectMode || hasWorkDir || showWorkDirSelector;
-  const showProjectAccessSegment = isProjectMode;
+  // Only surface the access chip when it's a WARNING (read-only). "项目写入"
+  // is the expected default — showing it always is noise; show only "项目只读".
+  const showProjectAccessSegment = isProjectMode && !codeModeUnlocked;
   const projectAccessLabel = codeModeUnlocked
     ? t.chatInputBox.projectWriteAccess
     : t.chatInputBox.projectReadOnly;
@@ -390,7 +391,6 @@ export function ChatInputBox({
   const showAgentSegment = false;
   const statusSegmentCount =
     (showAgentSegment ? 1 : 0) +
-    (showProjectStatusSegment ? 1 : 0) +
     (showWorkDirSegment ? 1 : 0) +
     (showModeSegment ? 1 : 0) +
     (showProjectAccessSegment ? 1 : 0);
@@ -1376,23 +1376,6 @@ export function ChatInputBox({
             ) : null}
             {showWorkDirSegment ? (
               <>
-                {showProjectStatusSegment && (
-                  <>
-                    <span
-                      className="inline-flex max-w-[108px] shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium text-foreground"
-                      title={projectStatusTitle}
-                    >
-                      <FolderOpenIcon className="size-3 shrink-0 text-muted-foreground" />
-                      <span className="truncate">
-                        {t.chatInputBox.projectModeLabel}
-                      </span>
-                    </span>
-                    <span
-                      className="h-3 w-px shrink-0 bg-border/35"
-                      aria-hidden="true"
-                    />
-                  </>
-                )}
                 <WorkDirSelector
                   workDir={workDir ?? ""}
                   onWorkDirChange={onWorkDirChange}
