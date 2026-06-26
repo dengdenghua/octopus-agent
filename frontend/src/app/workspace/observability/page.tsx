@@ -14,6 +14,7 @@ import { Link } from "react-router-dom";
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
+import { authedEventSource } from "@/core/auth/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -258,7 +259,7 @@ function SwarmPanel() {
   // so a start/end pair updates a single row in place.
   useEffect(() => {
     const base = getBackendBaseURL();
-    const es = new EventSource(`${base}/api/stream`);
+    const es = authedEventSource(`${base}/api/stream`);
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
     es.onmessage = (msg) => {
@@ -634,7 +635,7 @@ function JournalPanel() {
 
   useEffect(() => {
     const base = getBackendBaseURL();
-    const es = new EventSource(`${base}/api/stream`);
+    const es = authedEventSource(`${base}/api/stream`);
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
     es.onmessage = (msg) => {

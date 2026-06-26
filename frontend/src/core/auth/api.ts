@@ -282,6 +282,20 @@ export function getToken(): string | null {
   return _readToken();
 }
 
+/**
+ * Open an EventSource (SSE) with the bearer token attached as a `?token=`
+ * query param. EventSource cannot set request headers, so without this the
+ * backend's `_resolve_actor` (which reads the query param) returns no actor
+ * and every SSE 401s when `require_auth` is on. Mirrors the chat WebSocket,
+ * which already authenticates via `?token=`.
+ */
+export function authedEventSource(url: string): EventSource {
+  const token = getToken();
+  if (!token) return new EventSource(url);
+  const sep = url.includes("?") ? "&" : "?";
+  return new EventSource(`${url}${sep}token=${encodeURIComponent(token)}`);
+}
+
 export function getUser(): User | null {
   if (typeof window === "undefined") return null;
   const userStr =
