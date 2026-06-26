@@ -1,0 +1,79 @@
+import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+vi.mock("@/core/teach-repeat/api", () => ({
+  startRecording: vi.fn(() =>
+    Promise.resolve({ recording: true, thread_id: "t1", name: "x" }),
+  ),
+  stopRecording: vi.fn(() =>
+    Promise.resolve({ name: "x", status: "promoted", forged: ["skill-a"] }),
+  ),
+  getRecordingStatus: vi.fn(() =>
+    Promise.resolve({ recording: true, step_count: 3, name: "x" }),
+  ),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() },
+}));
+
+import { RecRecorderOverlay } from "./rec-recorder-overlay";
+
+describe("RecRecorderOverlay", () => {
+  it("renders nothing when closed", () => {
+    const { container } = render(
+      <RecRecorderOverlay
+        open={false}
+        threadId="t1"
+        defaultName="任务"
+        onClose={() => {}}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("shows the pre-record form when opened idle", () => {
+    render(
+      <RecRecorderOverlay
+        open
+        threadId="t1"
+        defaultName="导出对账单"
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByText("录什么任务?")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /开始录制/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("enters the countdown after pressing start", async () => {
+    const user = userEvent.setup();
+    render(
+      <RecRecorderOverlay
+        open
+        threadId="t1"
+        defaultName="任务"
+        onClose={() => {}}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /开始录制/ }));
+    expect(screen.getByText("准备录制…")).toBeInTheDocument();
+  });
+
+  it("shows the stop control when opened mid-recording", async () => {
+    render(
+      <RecRecorderOverlay
+        open
+        threadId="t1"
+        defaultName="任务"
+        initiallyRecording
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      await screen.findByRole("button", { name: /停止并提炼技能/ }),
+    ).toBeInTheDocument();
+  });
+});
