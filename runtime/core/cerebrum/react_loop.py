@@ -20,6 +20,7 @@ from runtime.core.cerebrum.react_checkpointing import (
 from runtime.core.cerebrum.react_context import (
     _build_code_agent_mode_prompt,
     _build_code_context_prelude,
+    _build_personal_agent_mode_prompt,
     _build_project_profile_prompt,
     _build_project_signals_prompt,
     _build_user_message_content,
@@ -495,6 +496,7 @@ __all__ = [
     "_beak_step_effective_success",
     "_build_code_agent_mode_prompt",
     "_build_code_context_prelude",
+    "_build_personal_agent_mode_prompt",
     "_build_project_signals_prompt",
     "_build_resume_context_prompt",
     "_build_user_message_content",
@@ -764,6 +766,9 @@ def stream_react_loop(
     ).lower()
     _workflow_preset_value = str(
         _uc.get("workflow_preset") or _metadata.get("workflow_preset") or ""
+    ).strip().lower()
+    _personal_mode_value = str(
+        _uc.get("personal_mode") or _metadata.get("personal_mode") or ""
     ).strip().lower()
     _project_signals = _uc.get("project_signals") or _metadata.get("project_signals")
     _is_swarm_mode = _mode_value in {
@@ -1042,6 +1047,13 @@ def stream_react_loop(
         "debug details.\n"
         "</user-facing-process-language>"
     )
+    # Personal-space work mode (no bound project dir). The code/project agent-mode
+    # steering above only runs under a workspace_path; this is its personal-space
+    # counterpart and applies to non-code turns only.
+    if not _is_code_mode:
+        _personal_mode_prompt = _build_personal_agent_mode_prompt(_personal_mode_value)
+        if _personal_mode_prompt:
+            system_parts.append("\n" + _personal_mode_prompt)
     if not _is_swarm_mode and _mode_value not in {"chat", "flash", "inspiration"}:
         system_parts.append(
             "\n<agent-auto-delegation-guidance>\n"

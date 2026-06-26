@@ -811,6 +811,29 @@ def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
     return f"<workflow-preset>\n{body}\n</workflow-preset>"
 
 
+def _build_personal_agent_mode_prompt(personal_mode: str | None) -> str:
+    """Operating contract for a PERSONAL-space work mode (no bound user project).
+
+    The code/project modes (:func:`_build_code_agent_mode_prompt`) only apply once
+    a workspace directory is bound. Personal space is the agent's own
+    conversational/work space — it still has a sandbox to write in, so it can carry
+    its own modes. Only "build" carries steering here; "general" is the default
+    (no contract) and "research" is handled upstream by the existing deep-research
+    reasoning mode, not by this prompt.
+    """
+    mode = (personal_mode or "").strip().lower()
+    if mode not in {"build", "builder", "make", "maker"}:
+        return ""
+    body = (
+        "当前空间: 个人工作空间(未绑定用户项目目录),你有自己的沙箱工作目录可写。\n"
+        "构建模式 / maker:\n"
+        "- 主动产出可运行的成果,而不是只给方案:需要时在工作目录里创建文件、写代码、跑起来验证。\n"
+        "- 每完成一个可运行切片就自测一次;优先最小可运行版本,不要堆到最后才验证。\n"
+        "- 收工用 Final Answer 说明:产出了什么、怎么运行或获取(关键文件 / 命令 / 导出方式)、残余风险。"
+    )
+    return f"<personal-agent-mode>\n{body}\n</personal-agent-mode>"
+
+
 def _build_project_signals_prompt(project_signals: Any) -> str:
     if not isinstance(project_signals, dict):
         return ""

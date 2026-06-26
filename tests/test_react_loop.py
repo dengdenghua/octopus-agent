@@ -16,6 +16,7 @@ from runtime.core.cerebrum.react_loop import (
     ReActStep,
     _build_code_agent_mode_prompt,
     _build_code_context_prelude,
+    _build_personal_agent_mode_prompt,
     _build_project_signals_prompt,
     _build_resume_context_prompt,
     _build_workflow_preset_prompt,
@@ -314,6 +315,25 @@ def test_workflow_preset_prompt_steers_audit_ultracode_to_orchestration() -> Non
     # Security: the preset must NOT let the turn raise its own spawn ceiling —
     # depth stays operator-budget-gated. The directive says so explicitly.
     assert "max_spawns" in prompt
+
+
+def test_personal_agent_mode_prompt_steers_build_mode() -> None:
+    prompt = _build_personal_agent_mode_prompt("build")
+
+    assert "<personal-agent-mode>" in prompt
+    assert "构建模式" in prompt
+    # Steers toward producing runnable artifacts, not just plans.
+    assert "工作目录" in prompt
+
+
+def test_personal_agent_mode_prompt_is_empty_for_general_and_research() -> None:
+    # "build" carries the contract; "general" is the default and "research" is
+    # handled by the deep reasoning mode upstream, not this prompt.
+    assert _build_personal_agent_mode_prompt("BUILD").startswith("<personal-agent-mode>")
+    assert _build_personal_agent_mode_prompt("general") == ""
+    assert _build_personal_agent_mode_prompt("research") == ""
+    assert _build_personal_agent_mode_prompt("") == ""
+    assert _build_personal_agent_mode_prompt(None) == ""
 
 
 def test_workflow_preset_prompt_is_empty_for_non_ultracode_presets() -> None:
