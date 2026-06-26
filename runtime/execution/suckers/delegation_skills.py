@@ -396,6 +396,24 @@ def _bump_and_check(turn_id: str | None) -> tuple[int, bool]:
     return (cur + 1, within)
 
 
+def _delegation_budget_exhausted_message(
+    used: int,
+    *,
+    budget: Any = None,
+    action: str = "Do the rest of this turn's work yourself · do NOT call_agent again.",
+) -> str:
+    if budget is not None:
+        limit = getattr(budget, "max_spawns", _PER_TURN_ABSOLUTE_LIMIT)
+        return (
+            "orchestration spawn budget exhausted for this turn "
+            f"(used {used}/{limit}). {action}"
+        )
+    return (
+        "delegation budget exhausted for this turn "
+        f"(used {used}/{_PER_TURN_ABSOLUTE_LIMIT}). {action}"
+    )
+
+
 # ── Catalog rendering ─────────────────────────────────────
 
 
@@ -1841,12 +1859,12 @@ def _run_orchestration(
         "off",
         "none",
     )
-    # Opt-in budget-driven depth. A token budget set by TRUSTED code
-    # (the bus / operator / audit.ultracode path) in ``session.metadata`` scales
-    # the spawn ceiling so a deep verify run isn't throttled at 48. Read ONLY
-    # from session metadata — never from the model's call args, or a model could
-    # raise its own cap. Absent a budget, the conservative n*rounds / 48 default
-    # is unchanged.
+    # Opt-in budget-driven depth, from TRUSTED sources only — never the model's
+    # call args (or a model could raise its own cap):
+    #   1. per-turn: ``session.metadata["orchestration_token_budget"]`` (set by
+    #      the bus / audit.ultracode path);
+    #   2. deployment-wide: the ``OCTOPUS_ORCH_TOKEN_BUDGET`` operator env.
+    # Per-turn wins; absent both, the conservative n*rounds / 48 default holds.
     _orch_token_budget: Any = None
     try:
         _sess_meta = getattr(session, "metadata", None)
@@ -1854,6 +1872,12 @@ def _run_orchestration(
             _orch_token_budget = _sess_meta.get("orchestration_token_budget")
     except (AttributeError, TypeError):
         _orch_token_budget = None
+    if _orch_token_budget is None:
+        from runtime.execution.suckers.delegation_budget import (
+            operator_orchestration_token_budget,
+        )
+
+        _orch_token_budget = operator_orchestration_token_budget()
     max_spawns = _resolve_max_spawns(
         max_spawns,
         n=n,

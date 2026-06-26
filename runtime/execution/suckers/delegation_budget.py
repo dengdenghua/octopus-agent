@@ -18,6 +18,7 @@ by ``Session.turn_id`` upstream.
 from __future__ import annotations
 
 import hashlib
+import os
 import threading
 from collections import OrderedDict
 from collections.abc import Iterator
@@ -131,6 +132,28 @@ def max_spawns_for_token_budget(
     if tokens <= 0 or tokens_per_spawn <= 0:
         return floor
     return max(floor, min(ceiling, tokens // tokens_per_spawn))
+
+
+_OPERATOR_TOKEN_BUDGET_ENV = "OCTOPUS_ORCH_TOKEN_BUDGET"
+
+
+def operator_orchestration_token_budget() -> int | None:
+    """Operator-set deployment-wide orchestration token budget, or ``None``.
+
+    Reads ``OCTOPUS_ORCH_TOKEN_BUDGET`` — an OPERATOR switch (set on the server,
+    NOT by the model or an end user), so turning on deeper orchestration is a
+    deliberate, billable deployment decision. When set to a positive int every
+    orchestration on this deployment scales its spawn ceiling to it (still
+    hard-capped by ``max_spawns_for_token_budget``'s ceiling). Unset / invalid /
+    non-positive → ``None`` (conservative default, behaviour unchanged)."""
+    raw = os.environ.get(_OPERATOR_TOKEN_BUDGET_ENV, "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
 
 
 def compute_fingerprint(agent_id: str, prompt: str) -> str:

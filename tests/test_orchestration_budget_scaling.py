@@ -9,7 +9,10 @@ are pure, so this is verified without spawning agents.
 """
 from __future__ import annotations
 
-from runtime.execution.suckers.delegation_budget import max_spawns_for_token_budget
+from runtime.execution.suckers.delegation_budget import (
+    max_spawns_for_token_budget,
+    operator_orchestration_token_budget,
+)
 from runtime.execution.suckers.delegation_skills import (
     _ORCH_MAX_SPAWNS_CEILING,
     _resolve_max_spawns,
@@ -64,3 +67,29 @@ class TestResolveMaxSpawns:
             None, n=5, rounds=2, verify=False, synthesize=False, token_budget=8_000
         )
         assert got == 5
+
+
+class TestOperatorEnvBudget:
+    _ENV = "OCTOPUS_ORCH_TOKEN_BUDGET"
+
+    def test_unset_is_none(self, monkeypatch) -> None:
+        monkeypatch.delenv(self._ENV, raising=False)
+        assert operator_orchestration_token_budget() is None
+
+    def test_set_positive_returns_value(self, monkeypatch) -> None:
+        monkeypatch.setenv(self._ENV, "400000")
+        assert operator_orchestration_token_budget() == 400_000
+
+    def test_invalid_or_nonpositive_is_none(self, monkeypatch) -> None:
+        for bad in ("", "  ", "abc", "0", "-100"):
+            monkeypatch.setenv(self._ENV, bad)
+            assert operator_orchestration_token_budget() is None
+
+    def test_operator_env_drives_resolve_max_spawns(self, monkeypatch) -> None:
+        # the operator switch, fed through the resolver, lifts above the 48 cap
+        monkeypatch.setenv(self._ENV, "400000")
+        budget = operator_orchestration_token_budget()
+        got = _resolve_max_spawns(
+            None, n=3, rounds=2, verify=True, synthesize=True, token_budget=budget
+        )
+        assert got == 50 > _ORCH_MAX_SPAWNS_CEILING
