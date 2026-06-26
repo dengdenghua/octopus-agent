@@ -780,11 +780,18 @@ def stream_react_loop(
     if _is_swarm_mode and max_iterations < 100:
         max_iterations = 100
     _goal_for_mode = str(intent.normalized_goal or intent.raw or "")
-    _is_research_mode = _mode_value in {"deep", "deep_research", "research"} or bool(
-        re.search(
-            r"调研|研究报告|市场研究|行业报告|竞品分析|deep\s*research|market\s*research|research\s*report",
-            _goal_for_mode,
-            re.IGNORECASE,
+    _is_research_mode = (
+        _mode_value in {"deep", "deep_research", "research"}
+        # Personal-space "research" work mode routes here without changing the
+        # reasoning mode (so it needs no thread navigation): same research
+        # behaviour (iteration lift + research guidance below).
+        or _personal_mode_value == "research"
+        or bool(
+            re.search(
+                r"调研|研究报告|市场研究|行业报告|竞品分析|deep\s*research|market\s*research|research\s*report",
+                _goal_for_mode,
+                re.IGNORECASE,
+            )
         )
     )
     # Research turns often need: web_search × N → browse × N →
