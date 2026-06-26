@@ -40,6 +40,10 @@ class LoopPolicy(BaseModel):
 
     max_attempts: int = Field(default=2, ge=1, le=10)
     max_iterations: int = Field(default=8, ge=1, le=50)
+    goal_mode: bool = False
+    max_tokens_budget: int = Field(default=50_000, ge=1, le=2_000_000)
+    max_usd_budget: float = Field(default=0.5, ge=0.0, le=100.0)
+    budget_auto_pause: bool = True
     verifier_profile: str = "auto"
     auto_approve: bool = True
     sandbox_mode: str = "full"

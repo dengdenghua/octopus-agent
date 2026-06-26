@@ -556,6 +556,25 @@ def test_swarm_mode_requires_visible_todos() -> None:
     )
 
 
+def test_goal_mode_keeps_caller_iteration_cap() -> None:
+    intent = _intent("finish this objective")
+    intent.user_context["goal_mode"] = True
+
+    gen = stream_react_loop(
+        _FakeStack(_ScriptedRouter(["Final Answer: done"])),
+        intent,
+        agent=None,
+        max_iterations=1,
+    )
+    try:
+        started = next(gen)
+    finally:
+        gen.close()
+
+    assert started["type"] == "react_started"
+    assert started["max_iterations"] == 1
+
+
 def test_react_loop_multi_turn_then_final() -> None:
     router = _ScriptedRouter([
         "Thought: 先想想\nAction: none\n",
