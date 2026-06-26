@@ -1102,6 +1102,62 @@ class JSONLJournal(Journal):
         """Attach or replace the optional SQLite trace sidecar."""
         self._trace_store = trace_store
 
+    @contextlib.contextmanager
+    def _interprocess_lock(self) -> Any:
+        """Exclusive cross-process lock on a STABLE sidecar (``<path>.lock``),
+        held across BOTH the append and the rotation below.
+
+        Rotation does a ``tmp.replace`` rename, which swaps the journal inode —
+        so a per-fd ``flock`` on the journal file itself cannot serialise a
+        concurrent worker's append against a rename (the appender ends up
+        writing the orphaned inode and its events are lost under
+        ``uvicorn --workers N``). Locking a sidecar that is never renamed gives
+        every writer a single, stable mutex. Best-effort: degrades to the
+        process-internal ``self._lock`` the caller already holds when
+        ``fcntl``/``msvcrt`` aren't importable (e.g. a WASM build)."""
+        import os as _os
+
+        lock_path = self._path.with_suffix(self._path.suffix + ".lock")
+        try:
+            lock_file = lock_path.open("a")
+        except OSError:
+            yield
+            return
+        fd = lock_file.fileno()
+        locked = False
+        try:
+            try:
+                if _os.name == "nt":
+                    import msvcrt as _msvcrt
+
+                    _msvcrt.locking(fd, _msvcrt.LK_LOCK, 1)
+                    locked = True
+                else:
+                    import fcntl as _fcntl
+
+                    _fcntl.flock(fd, _fcntl.LOCK_EX)
+                    locked = True
+            except (OSError, ImportError):
+                locked = False
+            yield
+        finally:
+            if locked:
+                try:
+                    if _os.name == "nt":
+                        import msvcrt as _msvcrt
+
+                        with contextlib.suppress(OSError):
+                            lock_file.seek(0)
+                        _msvcrt.locking(fd, _msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl as _fcntl
+
+                        _fcntl.flock(fd, _fcntl.LOCK_UN)
+                except OSError:
+                    pass
+            with contextlib.suppress(OSError):
+                lock_file.close()
+
     @enforces("CC-5")
     def write(self, event: JournalEvent) -> None:
         line = event.model_dump_json()
@@ -1113,7 +1169,7 @@ class JSONLJournal(Journal):
             with contextlib.suppress(Exception):
                 line = self._redactor.redact(line)
         line = line + "\n"
-        with self._lock:
+        with self._lock, self._interprocess_lock():
             # Cross-process lock. ``self._lock`` only serialises writers
             # inside this Python process — with ``uvicorn --workers N``
             # two processes can interleave ``write`` + ``flush`` cycles.
