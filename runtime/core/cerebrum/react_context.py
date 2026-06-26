@@ -781,6 +781,36 @@ def _build_code_agent_mode_prompt(agent_mode: str | None) -> str:
     return f"<code-agent-mode>\n{body}\n</code-agent-mode>"
 
 
+def _build_workflow_preset_prompt(workflow_preset: str | None) -> str:
+    """Operating contract for an intensity workflow preset (e.g. audit.ultracode).
+
+    Most of the frontend's preset bundle (skill packs, verification policy) is
+    advisory metadata, but ``audit.ultracode`` carries real behaviour: it steers
+    the turn toward a DEEP multi-agent review instead of a single-pass read.
+
+    Spawn DEPTH is deliberately NOT set here — it stays governed by the operator
+    orchestration budget (``OCTOPUS_ORCH_TOKEN_BUDGET``; conservative 48-spawn cap
+    unless the operator opts in). This prompt only steers WHAT to do, never how
+    many agents to allow, so a client picking this preset cannot escalate its own
+    spawn budget. The directive is also defensive about skill availability: if the
+    ``run_orchestration`` skill is gated out for this agent, fall back to a manual
+    multi-pass review rather than calling a tool that isn't there.
+    """
+    preset = (workflow_preset or "").strip().lower()
+    if preset != "audit.ultracode":
+        return ""
+    body = (
+        "当前工作流: audit.ultracode / 最高强度审查。\n"
+        "- 不要单轮通读了事,做多代理并行深审。若具备 `run_orchestration` 技能,"
+        "用它发起编排(agent_id 传一组不同视角的角色,如 [critic, explorer, "
+        "researcher];n=5、rounds=2~3、verify=true、synthesize=true),让发现经过 "
+        "收集→去重→投票核验→综合;不具备该技能时,改为按模块多轮交叉审查。\n"
+        "- 扇出深度由部署预算自动伸缩,你只负责发起编排,不要自行抬高 max_spawns。\n"
+        "- 汇总按 严重度 + 证据(文件:行)+ 修复顺序 归并;核验未通过的发现标注为存疑。"
+    )
+    return f"<workflow-preset>\n{body}\n</workflow-preset>"
+
+
 def _build_project_signals_prompt(project_signals: Any) -> str:
     if not isinstance(project_signals, dict):
         return ""

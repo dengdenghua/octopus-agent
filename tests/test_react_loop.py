@@ -18,6 +18,7 @@ from runtime.core.cerebrum.react_loop import (
     _build_code_context_prelude,
     _build_project_signals_prompt,
     _build_resume_context_prompt,
+    _build_workflow_preset_prompt,
     _code_mode_completion_guard,
     _escape_md_brackets,
     _execute_action_via_beak,
@@ -300,6 +301,29 @@ def test_code_agent_mode_prompt_distinguishes_architect_mode() -> None:
     assert "<code-agent-mode>" in prompt
     assert "architect / 架构师" in prompt
     assert "大范围修改前先分阶段执行" in prompt
+
+
+def test_workflow_preset_prompt_steers_audit_ultracode_to_orchestration() -> None:
+    prompt = _build_workflow_preset_prompt("audit.ultracode")
+
+    assert "<workflow-preset>" in prompt
+    assert "audit.ultracode" in prompt
+    # Steers toward the deep multi-agent review skill, defensively.
+    assert "run_orchestration" in prompt
+    assert "verify=true" in prompt
+    # Security: the preset must NOT let the turn raise its own spawn ceiling —
+    # depth stays operator-budget-gated. The directive says so explicitly.
+    assert "max_spawns" in prompt
+
+
+def test_workflow_preset_prompt_is_empty_for_non_ultracode_presets() -> None:
+    # Case-insensitive match on the one preset that carries behaviour; everything
+    # else (including the lighter audit.review) is advisory only → no directive.
+    assert _build_workflow_preset_prompt("AUDIT.ULTRACODE").startswith("<workflow-preset>")
+    assert _build_workflow_preset_prompt("audit.review") == ""
+    assert _build_workflow_preset_prompt("develop.iterate") == ""
+    assert _build_workflow_preset_prompt("") == ""
+    assert _build_workflow_preset_prompt(None) == ""
 
 
 def test_project_signals_prompt_surfaces_stack_and_verification_hint() -> None:
