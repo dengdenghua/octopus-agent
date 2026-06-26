@@ -1237,8 +1237,14 @@ class LoopController:
         runner = self.react_runner or run_react_loop
         thread_id = run.thread_id or run.run_id
         user_context = {
+            "objective": run.goal,
             "workspace_path": workspace_path,
             "mode": run.mode.value,
+            "goal_mode": run.policy.goal_mode,
+            "completion_policy": "goal" if run.policy.goal_mode else "",
+            "budget_auto_pause": run.policy.budget_auto_pause,
+            "max_tokens_budget": run.policy.max_tokens_budget,
+            "max_usd_budget": run.policy.max_usd_budget,
             "auto_approve": run.policy.auto_approve,
             "thread_id": thread_id,
             "sandbox_mode": run.policy.sandbox_mode,
@@ -1271,13 +1277,23 @@ class LoopController:
             ),
             scoped_cancellation(cancellation_token or CancellationToken.none()),
         ):
+            runner_kwargs = {
+                "stack": self.stack,
+                "intent": intent,
+                "agent": None,
+                "model": run.policy.model,
+                "max_iterations": run.policy.max_iterations,
+                "thread_id": thread_id,
+            }
+            if self.react_runner is None:
+                runner_kwargs.update(
+                    {
+                        "max_tokens_budget": run.policy.max_tokens_budget,
+                        "max_usd_budget": run.policy.max_usd_budget,
+                    }
+                )
             return runner(
-                stack=self.stack,
-                intent=intent,
-                agent=None,
-                model=run.policy.model,
-                max_iterations=run.policy.max_iterations,
-                thread_id=thread_id,
+                **runner_kwargs,
             )
 
     def _check_for_cancellation(

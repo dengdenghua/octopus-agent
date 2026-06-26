@@ -790,17 +790,10 @@ def stream_react_loop(
     # to compose from.
     if _is_research_mode and max_iterations < 100:
         max_iterations = 100
-    # Goal mode runs to user-defined completion (every todo marked
-    # ``completed`` AND required verification recorded), enforced by
-    # ``_todo_protocol_completion_guard``. The iteration cap exists
-    # only as a runaway-safeguard; the guard already gates Final
-    # Answer on real progress, so we lift the cap effectively to
-    # "as long as it takes". 10000 is the implementation cap; in
-    # practice goal mode terminates via the protocol guard, not the
-    # iteration counter.
-    _GOAL_MODE_MAX_ITER = 10_000  # noqa: N806
-    if _is_goal_mode and max_iterations < _GOAL_MODE_MAX_ITER:
-        max_iterations = _GOAL_MODE_MAX_ITER
+    # Goal mode is an objective contract, not permission to run an
+    # unbounded inner ReAct loop. Keep the caller-provided iteration
+    # cap; continuation belongs to the outer goal/run layer via
+    # checkpoint, replay, resume, and explicit follow-up turns.
     (
         _active_max_tokens_budget,
         _active_max_usd_budget,
@@ -811,7 +804,7 @@ def stream_react_loop(
         max_tokens_budget=max_tokens_budget,
         max_usd_budget=max_usd_budget,
     )
-    _budget_auto_pause_enabled = bool(
+    _budget_auto_pause_enabled = _is_goal_mode or bool(
         _uc.get("budget_auto_pause")
         or _metadata.get("budget_auto_pause")
         or intent.flags.get("budget_auto_pause", False)
@@ -879,15 +872,19 @@ def stream_react_loop(
         if _is_goal_mode:
             system_parts.append(
                 "\n<goal-mode-guidance>\n"
-                "当前为 Goal 模式。Goal 模式比普通计划模式更严格: "
-                "你必须把用户目标拆成可执行计划, 用 todo_write 记录完整清单, "
-                "并按清单推进。\n"
-                "不要因为完成了部分计划就结束; 只有当用户目标已达成、"
-                "所有 todo 都是 completed、且必要验证已完成时, 才能给完成式 Final Answer。\n"
-                "如果发现原计划不够或目标变化, 必须调用 todo_write 更新完整清单, "
-                "继续执行新的计划。\n"
-                "如果被权限、登录、外部信息或用户决策阻塞, 先更新 todo_write 标出阻塞项, "
-                "再明确向用户请求所需输入。\n"
+                "当前为 Codex 风格 Goal 模式: Goal 是跨轮次持续存在的 objective, "
+                "不是把单次 ReAct 循环拉长到无限。\n"
+                "本轮仍受 max_iterations 和预算约束; 到达边界时要留下可恢复状态, "
+                "不要为了凑完成而扩大范围或重定义成功。\n"
+                "开始执行前把 objective 拆成可审计 todo; 每次改动或验证后更新 todo。\n"
+                "完成前必须做 completion audit: 从原始 objective 推导每个显式要求、"
+                "交付物、命令、测试、验收条件, 并逐项用当前证据验证。\n"
+                "只有证据证明全部要求满足、所有 todo completed、必要验证完成时, "
+                "才能给完成式 Final Answer。\n"
+                "如果证据不足或还有工作, Final Answer 只能报告进度、剩余项、"
+                "下一个具体动作或阻塞原因; 不要声明完成。\n"
+                "同一阻塞连续多轮确认前不要把目标视为 blocked; 可以请求用户输入, "
+                "但要先保留恢复上下文。\n"
                 "</goal-mode-guidance>"
             )
 
@@ -898,7 +895,8 @@ def stream_react_loop(
         if _todo_protocol_required or _is_research_mode or _is_swarm_mode or _is_goal_mode:
             system_parts.append(
                 "\n<long-task>\n"
-                "**深度**: 长任务变体 max_iter 60-100 轮; 跑到第 10/20 轮会有 system 检查,"
+                "**深度**: 长任务可以显式配置更高 max_iter; 当前轮始终受传入的 "
+                "max_iterations 约束。跑到第 10/20 轮会有 system 检查,"
                 "实诚回答(还在推进/已经完成/工具连续失败); 答完了就停, 别凑轮数。\n"
                 "**大项目**: 文件 >20 个时不要试图全读 — 维护"
                 "「工作集」(直接相关 3-8 个文件), 已读过的不要在后续 Thought 复述。"
@@ -3129,6 +3127,8 @@ def run_react_loop(
     enable_tools: bool = True,
     resume_task_id: TaskId | None = None,
     thread_id: str | None = None,
+    max_tokens_budget: int = 50000,
+    max_usd_budget: float = 0.5,
     approval_provider: ApprovalProvider | None = None,
 ) -> ReActResult | None:
     gen = stream_react_loop(
@@ -3141,6 +3141,8 @@ def run_react_loop(
         enable_tools=enable_tools,
         resume_task_id=resume_task_id,
         thread_id=thread_id or "",
+        max_tokens_budget=max_tokens_budget,
+        max_usd_budget=max_usd_budget,
         approval_provider=approval_provider,
     )
     try:

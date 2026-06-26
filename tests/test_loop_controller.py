@@ -237,6 +237,73 @@ def test_loop_controller_retries_with_verifier_feedback(tmp_path) -> None:
 
 def test_loop_policy_defaults_to_auto_verifier_profile() -> None:
     assert LoopPolicy().verifier_profile == "auto"
+    assert LoopPolicy().goal_mode is False
+
+
+def test_loop_controller_goal_mode_passes_bounded_objective_context(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    run = LoopRun(
+        goal="Finish the migration with verification",
+        workspace_path=str(workspace),
+        policy=LoopPolicy(
+            max_attempts=1,
+            max_iterations=3,
+            goal_mode=True,
+            max_tokens_budget=12_345,
+            max_usd_budget=1.25,
+        ),
+    )
+    store.create(run)
+    runner_calls: list[dict[str, object]] = []
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(
+            {
+                "max_iterations": max_iterations,
+                "objective": intent.user_context.get("objective"),
+                "goal_mode": intent.user_context.get("goal_mode"),
+                "completion_policy": intent.user_context.get("completion_policy"),
+                "budget_auto_pause": intent.user_context.get("budget_auto_pause"),
+                "max_tokens_budget": intent.user_context.get("max_tokens_budget"),
+                "max_usd_budget": intent.user_context.get("max_usd_budget"),
+            }
+        )
+        return ReActResult(final_answer="done", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=_StubVerifierRegistry(
+            [
+                VerifierResult(
+                    profile="auto",
+                    kind="python",
+                    passed=True,
+                    findings=[VerifierFinding(name="syntax", passed=True, exit_code=0)],
+                    summary="all checks passed",
+                )
+            ]
+        ),
+        react_runner=runner,
+    )
+
+    completed = controller.execute(run.run_id)
+
+    assert completed.status == LoopRunStatus.COMPLETED
+    assert runner_calls == [
+        {
+            "max_iterations": 3,
+            "objective": "Finish the migration with verification",
+            "goal_mode": True,
+            "completion_policy": "goal",
+            "budget_auto_pause": True,
+            "max_tokens_budget": 12_345,
+            "max_usd_budget": 1.25,
+        }
+    ]
 
 
 def test_loop_controller_stops_on_environment_verifier_blocker(tmp_path) -> None:
