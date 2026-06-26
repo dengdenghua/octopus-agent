@@ -23,6 +23,7 @@ from runtime.core.cerebrum.react_context import (
     _build_project_profile_prompt,
     _build_project_signals_prompt,
     _build_user_message_content,
+    _build_workflow_preset_prompt,
     _compress_context,
     _format_skill_catalog,
     _image_blocks_from_attachments,
@@ -497,6 +498,7 @@ __all__ = [
     "_build_project_signals_prompt",
     "_build_resume_context_prompt",
     "_build_user_message_content",
+    "_build_workflow_preset_prompt",
     "_checkpoint_interval",
     "_checkpoint_mirror",
     "_code_mode_completion_guard",
@@ -760,6 +762,9 @@ def stream_react_loop(
     _agent_mode_value = str(
         _uc.get("agent_mode") or _metadata.get("agent_mode") or "coder"
     ).lower()
+    _workflow_preset_value = str(
+        _uc.get("workflow_preset") or _metadata.get("workflow_preset") or ""
+    ).strip().lower()
     _project_signals = _uc.get("project_signals") or _metadata.get("project_signals")
     _is_swarm_mode = _mode_value in {
         "swarm",
@@ -848,6 +853,9 @@ def stream_react_loop(
                 "</code-mode>"
             )
             system_parts.append(_build_code_agent_mode_prompt(_agent_mode_value))
+            _workflow_preset_prompt = _build_workflow_preset_prompt(_workflow_preset_value)
+            if _workflow_preset_prompt:
+                system_parts.append(_workflow_preset_prompt)
             _signals_prompt = _build_project_signals_prompt(_project_signals)
             if _signals_prompt:
                 system_parts.append(_signals_prompt)
