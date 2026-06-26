@@ -1597,9 +1597,56 @@ def _call_agent_vote(
 # one against the per-turn cap so orchestrations can't be spammed.
 
 _ORCH_MAX_SPAWNS_CEILING = 48
+# Higher ceiling for the OPT-IN budget-driven path only (a trusted token budget
+# set by the bus/operator). Lets a deep verify+synth run use its full natural
+# spawn count (~n*rounds*voters) instead of being throttled at 48. The default
+# (no budget) path keeps the conservative 48 cap untouched.
+_ORCH_MAX_SPAWNS_BUDGET_CEILING = 256
 _ORCH_VERIFY_VOTERS = 3
 _ORCH_MAX_FINDINGS_PER_WORKER = 50
 _ORCH_MAX_FINDINGS_TOTAL = 200
+
+
+def _resolve_max_spawns(
+    max_spawns: int | str | None,
+    *,
+    n: int,
+    rounds: int,
+    verify: bool,
+    synthesize: bool,
+    token_budget: int | float | None = None,
+) -> int:
+    """Resolve an orchestration's total spawn budget.
+
+    Precedence:
+      1. explicit ``max_spawns`` (clamped to the conservative 48 ceiling);
+      2. opt-in ``token_budget`` (TRUSTED only) → scale to budget up to the
+         higher ``_ORCH_MAX_SPAWNS_BUDGET_CEILING``;
+      3. default → ``n*rounds`` estimate, hard-capped at 48 (unchanged).
+
+    Pure function so the budget policy is unit-testable without spawning agents.
+    """
+    if max_spawns is not None:
+        try:
+            explicit = int(max_spawns)
+        except (TypeError, ValueError):
+            explicit = n * rounds
+        return max(n, min(_ORCH_MAX_SPAWNS_CEILING, explicit))
+    if token_budget is not None:
+        from runtime.execution.suckers.delegation_budget import (
+            max_spawns_for_token_budget,
+        )
+
+        return max(
+            n,
+            max_spawns_for_token_budget(
+                token_budget, ceiling=_ORCH_MAX_SPAWNS_BUDGET_CEILING
+            ),
+        )
+    verify_cost = n * rounds * _ORCH_VERIFY_VOTERS if verify else 0
+    synth_cost = 1 if synthesize else 0
+    planned = n * rounds + verify_cost + synth_cost
+    return min(_ORCH_MAX_SPAWNS_CEILING, max(n, planned))
 _NULL_FINDING_TOKENS = frozenset(
     {
         "none",
@@ -1794,16 +1841,27 @@ def _run_orchestration(
         "off",
         "none",
     )
-    if max_spawns is None:
-        # find spends n per round; verify spends ``voters`` per finding; an
-        # optional synthesis spends ONE more — budget ~``n*rounds`` findings
-        # worth of voting on top of the search, plus the synthesizer.
-        verify_cost = n * rounds * _ORCH_VERIFY_VOTERS if verify else 0
-        synth_cost = 1 if synthesize else 0
-        planned = n * rounds + verify_cost + synth_cost
-        max_spawns = min(_ORCH_MAX_SPAWNS_CEILING, max(n, planned))
-    else:
-        max_spawns = _clamp(max_spawns, n, _ORCH_MAX_SPAWNS_CEILING, n * rounds)
+    # Opt-in budget-driven depth. A token budget set by TRUSTED code
+    # (the bus / operator / audit.ultracode path) in ``session.metadata`` scales
+    # the spawn ceiling so a deep verify run isn't throttled at 48. Read ONLY
+    # from session metadata — never from the model's call args, or a model could
+    # raise its own cap. Absent a budget, the conservative n*rounds / 48 default
+    # is unchanged.
+    _orch_token_budget: Any = None
+    try:
+        _sess_meta = getattr(session, "metadata", None)
+        if isinstance(_sess_meta, dict):
+            _orch_token_budget = _sess_meta.get("orchestration_token_budget")
+    except (AttributeError, TypeError):
+        _orch_token_budget = None
+    max_spawns = _resolve_max_spawns(
+        max_spawns,
+        n=n,
+        rounds=rounds,
+        verify=verify,
+        synthesize=synthesize,
+        token_budget=_orch_token_budget,
+    )
     roles = _coerce_roles(agent_id)
 
     # Outer gate: an orchestration costs ONE against the per-turn cap so the
