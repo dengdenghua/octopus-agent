@@ -48,14 +48,16 @@ from typing import Any
 from runtime.platform.process.paths import app_paths
 
 try:
-    from fastapi import APIRouter, HTTPException
+    from fastapi import APIRouter, Depends, HTTPException, Request
     from pydantic import BaseModel, Field
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
     Field = None  # type: ignore[assignment, misc]
 
@@ -215,6 +217,11 @@ def create_config_router(
     *,
     stack: Any = None,
     custom_models_path: Path | str | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> ConfigRouter:
     """Build the FastAPI router + state bundle.
 
@@ -232,7 +239,23 @@ def create_config_router(
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
-    router = APIRouter(tags=["config"])
+    def _auth_dep(request: Request) -> None:
+        # Router-level gate keeps the whole config surface aligned with
+        # the rest of the auth-aware control plane. require_auth=False
+        # stays a no-op for single-user dev; auth-on deployments get a
+        # consistent 401 before any config state is exposed or mutated.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["config"], dependencies=[Depends(_auth_dep)])
     path = Path(custom_models_path) if custom_models_path is not None else app_paths().custom_models_path
     custom_models_state: dict[str, dict[str, Any]] = {}
 
@@ -485,9 +508,9 @@ def create_config_router(
     def api_identity_lock_put(body: dict[str, Any]) -> dict[str, Any]:
         """Admin · toggle identity lock at runtime.
 
-        ``null`` clears the runtime override and defers to the env var
-        / default. No auth enforced here by design — gate at a higher
-        layer in production deploys.
+        ``null`` clears the runtime override and defers to the env var /
+        default. Authentication, when enabled, is enforced once at the
+        router level so every config endpoint stays aligned.
         """
         from runtime.platform import identity_filter as _idf
 

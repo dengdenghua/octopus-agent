@@ -18,11 +18,63 @@ platform tier where both can import it without crossing layers.
 from __future__ import annotations
 
 import contextlib
+import os
 import subprocess
 import threading
 import time
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
+
+_EXECUTION_POLICY_SCHEMA = "octopus.execution_policy.v1"
+
+
+def _sandbox_extra_env(env: Mapping[str, str] | None) -> dict[str, str]:
+    """Return only caller-supplied env overrides for sandboxed subprocesses.
+
+    Some legacy callers pass ``{**os.environ, **overrides}`` into
+    ``stream_run``. Feeding that whole dict into ``SandboxPolicy.extra_env``
+    would re-add secrets after the policy allow-list stripped them. Treat
+    values identical to the current process env as inherited noise and keep
+    only real overrides.
+    """
+    if not env:
+        return {}
+    extra: dict[str, str] = {}
+    for key, value in env.items():
+        key_s = str(key)
+        value_s = str(value)
+        if os.environ.get(key_s) != value_s:
+            extra[key_s] = value_s
+    return extra
+
+
+def execution_policy_snapshot(
+    *,
+    sandbox_requested: bool,
+    workspace: str | None,
+    cwd: str | None,
+    backend: str,
+    hard: bool,
+    allow_network: bool,
+    env_mode: str,
+    process_group: bool,
+    timeout_s: float | None,
+) -> dict[str, Any]:
+    """Stable audit shape for subprocess policy decisions."""
+    return {
+        "schema": _EXECUTION_POLICY_SCHEMA,
+        "sandbox_requested": sandbox_requested,
+        "workspace": workspace,
+        "cwd": cwd,
+        "backend": backend,
+        "hard": hard,
+        "allow_network": allow_network,
+        "env_mode": env_mode,
+        "process_group": process_group,
+        "process_tree_kill": process_group,
+        "timeout_s": timeout_s,
+    }
 
 
 def stream_run(
@@ -34,6 +86,8 @@ def stream_run(
     env: Mapping[str, str] | None = None,
     output_cap_bytes: int = 200_000,
     on_timeout: Callable[[subprocess.Popen[str]], None] | None = None,
+    sandbox_dir: str | None = None,
+    allow_network: bool = False,
 ) -> dict[str, Any]:
     """Run ``argv`` as a subprocess, streaming output as it arrives.
 
@@ -45,24 +99,113 @@ def stream_run(
     ``on_timeout`` is called after the process is killed, letting the
     caller run any backend-specific cleanup (e.g. ``docker kill``).
     """
+    run_cwd = cwd
+    run_env = dict(env) if env is not None else None
+    sandbox_backend = "direct"
+    sandbox_hard = False
+    sandbox_workspace: str | None = None
+    env_mode = "custom" if env is not None else "inherit"
+
+    def _policy_snapshot(*, process_group: bool = False) -> dict[str, Any]:
+        return execution_policy_snapshot(
+            sandbox_requested=sandbox_dir is not None,
+            workspace=sandbox_workspace,
+            cwd=run_cwd,
+            backend=sandbox_backend,
+            hard=sandbox_hard,
+            allow_network=allow_network,
+            env_mode=env_mode,
+            process_group=process_group,
+            timeout_s=timeout,
+        )
+
+    if sandbox_dir is not None:
+        from runtime.safety.sandboxing.sandbox import (
+            SandboxPolicy,
+            SandboxViolation,
+            select_process_backend,
+        )
+
+        sandbox_root = Path(sandbox_dir).expanduser().resolve()
+        sandbox_workspace = str(sandbox_root)
+        if not sandbox_root.is_dir():
+            return {
+                "error": f"sandbox_violation: workspace not a directory: {sandbox_root}",
+                "execution_policy": _policy_snapshot(),
+            }
+        if cwd is None:
+            run_cwd = str(sandbox_root)
+        else:
+            candidate = Path(cwd).expanduser()
+            if not candidate.is_absolute():
+                candidate = sandbox_root / candidate
+            candidate = candidate.resolve()
+            try:
+                candidate.relative_to(sandbox_root)
+            except ValueError:
+                return {
+                    "error": (
+                        f"sandbox_violation: cwd {candidate} escapes workspace {sandbox_root}"
+                    ),
+                    "execution_policy": _policy_snapshot(),
+                }
+            if not candidate.is_dir():
+                return {
+                    "error": f"sandbox_violation: cwd is not a directory: {candidate}",
+                    "execution_policy": _policy_snapshot(),
+                }
+            run_cwd = str(candidate)
+        policy = SandboxPolicy(
+            workspace=sandbox_root,
+            allow_network=allow_network,
+            timeout_s=timeout,
+            extra_env=_sandbox_extra_env(env),
+        )
+        run_env = policy.env_for()
+        env_mode = "allowlist"
+        try:
+            choice = select_process_backend()
+            run_argv, run_env, transformed_cwd = choice.backend.transform(
+                list(argv),
+                run_env,
+                Path(run_cwd),
+                policy,
+            )
+        except SandboxViolation as exc:
+            return {
+                "error": f"sandbox_violation: {exc}",
+                "execution_policy": _policy_snapshot(),
+            }
+        argv = run_argv
+        run_cwd = str(transformed_cwd)
+        sandbox_backend = choice.name
+        sandbox_hard = choice.hard
+
+    started_at = time.monotonic()
     try:
+        from runtime.platform.process.tree import (
+            process_group_kwargs,
+            terminate_process_tree,
+        )
+
         proc = subprocess.Popen(
             argv,
             stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=cwd,
-            env=dict(env) if env is not None else None,
+            cwd=run_cwd,
+            env=run_env,
             bufsize=1,
             shell=False,
+            **process_group_kwargs(),
         )
     except FileNotFoundError as e:
-        return {"error": f"exec_failed: {e}"}
+        return {"error": f"exec_failed: {e}", "execution_policy": _policy_snapshot()}
     except OSError as e:
-        return {"error": f"exec_failed: {e}"}
+        return {"error": f"exec_failed: {e}", "execution_policy": _policy_snapshot()}
 
-    from runtime.core.cerebrum import tool_output_sink
+    from runtime.platform.process import tool_output_sink
     from runtime.safety.approval.cancellation import current_cancellation_token
 
     # Capture the sink on the calling thread — reader threads below do
@@ -87,10 +230,14 @@ def stream_run(
                 stream.close()
 
     t_out = threading.Thread(
-        target=_reader, args=(proc.stdout, stdout_parts, "stdout"), daemon=True,
+        target=_reader,
+        args=(proc.stdout, stdout_parts, "stdout"),
+        daemon=True,
     )
     t_err = threading.Thread(
-        target=_reader, args=(proc.stderr, stderr_parts, "stderr"), daemon=True,
+        target=_reader,
+        args=(proc.stderr, stderr_parts, "stderr"),
+        daemon=True,
     )
     t_out.start()
     t_err.start()
@@ -103,17 +250,18 @@ def stream_run(
 
     timed_out = False
     cancelled = False
+    killed = False
     deadline = time.monotonic() + timeout
     try:
         while True:
             if cancel_token.is_cancelled:
                 cancelled = True
-                proc.kill()
+                killed = terminate_process_tree(proc)
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 timed_out = True
-                proc.kill()
+                killed = terminate_process_tree(proc)
                 if on_timeout is not None:
                     with contextlib.suppress(Exception):
                         on_timeout(proc)
@@ -132,12 +280,18 @@ def stream_run(
 
     raw_stdout = "".join(stdout_parts)
     raw_stderr = "".join(stderr_parts)
+    duration_ms = int((time.monotonic() - started_at) * 1000)
     return {
         "stdout": raw_stdout[:output_cap_bytes],
         "stderr": raw_stderr[:output_cap_bytes],
         "exit_code": None if (timed_out or cancelled) else proc.returncode,
+        "duration_ms": duration_ms,
         "timed_out": timed_out,
         "cancelled": cancelled,
+        "killed": killed,
         "stdout_truncated": len(raw_stdout) > output_cap_bytes,
         "stderr_truncated": len(raw_stderr) > output_cap_bytes,
+        "sandbox_backend": sandbox_backend,
+        "sandbox_hard": sandbox_hard,
+        "execution_policy": _policy_snapshot(process_group=True),
     }

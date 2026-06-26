@@ -24,7 +24,15 @@ from runtime.core.cerebrum.react_types import REACT_SYSTEM_PROMPT_BASE
 # tight so further creep still re-fires this guard; if that guidance
 # turns out to be mode-specific it can later move to a conditional
 # system_parts.append block in react_loop instead.
-BASE_PROMPT_BUDGET_CHARS = 2500
+#
+# Raised 2500 → 3100 (2026-06-25): commits 7eb0cf0f (verdict_repair +
+# tournament) and ba0ba111 (cli_team) surfaced the remaining
+# delegation/orchestration skills in the base skill guidance, taking the
+# observed size to 3024 (committed at HEAD). Same sanctioned reason as
+# above — the model needs the full delegation catalog every turn, and
+# test_base_prompt_has_no_mode_specific_sections confirms it isn't
+# mode-specific. Headroom kept tight so further creep still re-fires.
+BASE_PROMPT_BUDGET_CHARS = 3100
 
 
 def test_base_prompt_within_budget() -> None:

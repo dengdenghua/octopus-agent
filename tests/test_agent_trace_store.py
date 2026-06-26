@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -744,6 +745,199 @@ def test_task_run_review_exposes_resume_readiness_without_raw_checkpoint_state(
     assert resume["safety"]["raw_message_snapshots_included"] is False
 
 
+def test_task_run_review_uses_loop_native_review_when_latest_checkpoint_is_loop_run(
+    store: AgentTraceStore,
+    tmp_path: Path,
+) -> None:
+    from runtime.core.cerebrum.react_types import ReActResult
+    from runtime.execution.loops.controller import LoopController
+    from runtime.execution.loops.models import (
+        LoopPolicy,
+        LoopRun,
+        VerifierFinding,
+        VerifierResult,
+    )
+    from runtime.execution.loops.store import LoopRunStore
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+
+    class _StubVerifierRegistry:
+        def __init__(self, results: list[VerifierResult]) -> None:
+            self._results = list(results)
+
+        def run(self, profile: str, workspace_path: str) -> VerifierResult:
+            return self._results.pop(0)
+
+    loop_store = LoopRunStore(tmp_path / "loop_runs.json")
+    run = LoopRun(
+        owner_id="alice",
+        goal="Fix remaining verifier failures",
+        thread_id="thread-loop",
+        workspace_path=str(tmp_path / "workspace"),
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+    )
+    loop_store.create(run)
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        return ReActResult(final_answer="not fixed", success=False)
+
+    controller = LoopController(
+        store=loop_store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=_StubVerifierRegistry(
+            [
+                VerifierResult(
+                    profile="python_repo_patch",
+                    kind="python",
+                    passed=False,
+                    findings=[
+                        VerifierFinding(
+                            name="pytest",
+                            passed=False,
+                            exit_code=1,
+                            stderr="1 failing test remains",
+                        )
+                    ],
+                    summary="failed checks: pytest",
+                )
+            ]
+        ),
+        trace_store=store,
+        react_runner=runner,
+    )
+    controller.execute(run.run_id)
+
+    review = store.task_run_review(run.run_id)
+    replay_case = store.task_run_replay_case(run.run_id)
+    replay_evaluation = store.evaluate_task_run_replay_case(run.run_id)
+
+    assert review is not None
+    assert review["status"] == "failed"
+    assert review["resume"]["source"] == "trace_store"
+    assert review["resume"]["latest_checkpoint"]["trace_checkpoint_id"] > 0
+    assert any(
+        step["kind"] == "loop_attempt"
+        for step in review["replay"]["steps"]
+    )
+    assert any(finding["type"] == "tool_error" for finding in review["findings"])
+    assert any(item["kind"] == "failure_pattern" for item in review["learning_candidates"])
+    assert review["summary"]["trace_checkpoint_id"] == review["resume"]["latest_checkpoint"]["trace_checkpoint_id"]
+
+    assert replay_case is not None
+    assert replay_case["expectations"]["status"] == "failed"
+    assert replay_case["resume"]["source"] == "trace_store"
+    assert replay_evaluation is not None
+    assert replay_evaluation["passed"] is True
+
+
+def test_task_run_review_prefers_loop_checkpoint_even_if_newer_generic_checkpoint_exists(
+    store: AgentTraceStore,
+    tmp_path: Path,
+) -> None:
+    from runtime.core.cerebrum.react_types import ReActResult
+    from runtime.execution.loops.controller import LoopController
+    from runtime.execution.loops.models import (
+        LoopPolicy,
+        LoopRun,
+        VerifierFinding,
+        VerifierResult,
+    )
+    from runtime.execution.loops.store import LoopRunStore
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+
+    class _StubVerifierRegistry:
+        def __init__(self, results: list[VerifierResult]) -> None:
+            self._results = list(results)
+
+        def run(self, profile: str, workspace_path: str) -> VerifierResult:
+            return self._results.pop(0)
+
+    loop_store = LoopRunStore(tmp_path / "loop_runs.json")
+    run = LoopRun(
+        owner_id="alice",
+        goal="Keep loop review stable under extra checkpoints",
+        thread_id="thread-loop",
+        workspace_path=str(tmp_path / "workspace"),
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+    )
+    loop_store.create(run)
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        return ReActResult(final_answer="not fixed", success=False)
+
+    controller = LoopController(
+        store=loop_store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=_StubVerifierRegistry(
+            [
+                VerifierResult(
+                    profile="python_repo_patch",
+                    kind="python",
+                    passed=False,
+                    findings=[
+                        VerifierFinding(
+                            name="pytest",
+                            passed=False,
+                            exit_code=1,
+                            stderr="1 failing test remains",
+                        )
+                    ],
+                    summary="failed checks: pytest",
+                )
+            ]
+        ),
+        trace_store=store,
+        react_runner=runner,
+    )
+    controller.execute(run.run_id)
+
+    loop_checkpoint = store.latest_checkpoint(
+        task_id=run.run_id,
+        checkpoint_type="loop_run",
+    )
+    assert loop_checkpoint is not None
+
+    generic_checkpoint_id = store.record_checkpoint(
+        task_id=run.run_id,
+        checkpoint_type="react",
+        state={
+            "current_phase": "postmortem",
+            "messages_snapshot": [],
+            "steps_snapshot": [{"iteration": 9, "action": "summarize_failure()"}],
+            "working_set_snapshot": [],
+        },
+        thread_id="thread-loop",
+        turn_id=run.run_id,
+        agent_id="observer",
+        iteration=9,
+        summary="observer note",
+    )
+
+    task_run = store.task_run(run.run_id)
+    review = store.task_run_review(run.run_id)
+    replay_case = store.task_run_replay_case(run.run_id)
+    replay_evaluation = store.evaluate_task_run_replay_case(run.run_id)
+
+    assert task_run is not None
+    assert task_run["latest_checkpoint"]["id"] == generic_checkpoint_id
+    assert task_run["latest_checkpoint"]["type"] == "react"
+
+    assert review is not None
+    assert review["status"] == "failed"
+    assert any(
+        step["kind"] == "loop_attempt"
+        for step in review["replay"]["steps"]
+    )
+    assert review["summary"]["trace_checkpoint_id"] == loop_checkpoint["id"]
+    assert review["resume"]["latest_checkpoint"]["trace_checkpoint_id"] == loop_checkpoint["id"]
+
+    assert replay_case is not None
+    assert replay_case["resume"]["source"] == "trace_store"
+    assert replay_evaluation is not None
+    assert replay_evaluation["passed"] is True
+
+
 def test_stats_can_be_scoped_to_thread_task_and_agent(store: AgentTraceStore) -> None:
     store.record_message(thread_id="thread-a", role="user", content="a")
     store.record_message(thread_id="thread-b", role="user", content="b")
@@ -1137,3 +1331,35 @@ def test_create_app_uses_default_agent_trace_path(monkeypatch: pytest.MonkeyPatc
     state = app.state.octopus_state
 
     assert state.trace_store_path == (tmp_path / "data" / "agent_trace.sqlite").resolve()
+
+
+def test_create_app_wires_trace_store_into_loop_controller(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    fastapi = pytest.importorskip("fastapi")
+    assert fastapi is not None
+    from runtime.execution.suckers import SkillRegistry
+    from runtime.platform.ui import create_app
+
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    stack = SimpleNamespace(
+        journal=None,
+        executor=SimpleNamespace(
+            journal=None,
+            registry=SkillRegistry(),
+        ),
+        runtime=SimpleNamespace(journal=None),
+    )
+
+    app = create_app(
+        journal_path=tmp_path / "data" / "events.jsonl",
+        stack=stack,
+    )
+    state = app.state.octopus_state
+
+    assert app.state.loop_controller is not None
+    assert app.state.loop_controller.trace_store is state.trace_store
+    assert state.task_supervisor is not None
+    assert app.state.task_supervisor is state.task_supervisor
+    assert app.state.loop_controller.task_supervisor is state.task_supervisor

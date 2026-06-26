@@ -290,6 +290,42 @@ class TestSharedJournal:
         assert captured_app["journal"] is not None
         assert captured_app["registry"] is not None
 
+    def test_serve_requires_auth_when_login_config_enabled(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        cfg = _write_cfg(tmp_path)
+        with cfg.open("a", encoding="utf-8") as f:
+            f.write(
+                "\nlocal_auth:\n"
+                "  enabled: true\n"
+                "  allow_any_username: true\n"
+                "  jwt_secret: 0123456789abcdef0123456789ABCDEF!\n"
+            )
+
+        import uvicorn
+        from fastapi import FastAPI
+
+        import runtime.platform.ui as ui_module
+
+        captured_app = {}
+
+        def spy_create_app(journal_path=None, **kwargs):
+            captured_app.update(kwargs)
+            return FastAPI()
+
+        monkeypatch.setattr(ui_module, "create_app", spy_create_app)
+        monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: None)
+
+        from runtime.cli import run_serve
+
+        rc = run_serve(
+            config_path=cfg, host="127.0.0.1", port=8000,
+            learn_interval_s=0, color=False,
+        )
+
+        assert rc == 0
+        assert captured_app["cocoloop_require_auth"] is True
+
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.

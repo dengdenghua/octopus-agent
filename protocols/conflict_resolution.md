@@ -1,4 +1,17 @@
+---
+implementation_status: dormant
+implemented_in: []
+last_verified: 2026-06-25
+---
+
 # Protocol · Conflict Resolution (冲突消解 · 共享算法底座)
+
+> ✅ **实装状态:6 策略决策树已实装。**
+> `runtime/safety/conflict_resolution/resolver.py` 实装了完整的 6 策略:
+> Temporal Split → Evidence Weight → Source Trust → Confidence → Recency → Human Escalation。
+> `resolve(ConflictRecord)` 按优先级顺序尝试,首个命中策略生效。
+> Source trust score 动态维护(`update_trust`)已实装(EMA,错误惩罚 2×)。
+> **注**:KG 的 `add()` 目前仍用内联 supersede 逻辑,尚未切换到调用 `resolve()`;CC-C1 不变量(所有写入必经 conflict_resolver)待 KG 接入后成立。
 
 > **知识图谱**和**长时记忆**的共同痛点。
 > 两者存不同类型的信息，但"新旧信息矛盾时怎么办"是**同一个算法问题**。

@@ -9,6 +9,8 @@
  *   GET  /api/tentacle/stats            — coordinator stats
  */
 
+import { authHeaders } from "@/core/auth/api";
+
 // ── Types ──────────────────────────────────────────────
 
 export interface TentacleDevice {
@@ -87,8 +89,12 @@ const TENTACLE_BASE = "/api/tentacle";
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${TENTACLE_BASE}${path}`;
   const res = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+      ...(init?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -142,7 +148,7 @@ export async function analyzeDevice(
 
 export async function getDeviceScreenshot(tentacleId: string): Promise<Blob> {
   const url = `${TENTACLE_BASE}/devices/${encodeURIComponent(tentacleId)}/screenshot`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: authHeaders() });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail || res.statusText);

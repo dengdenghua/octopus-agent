@@ -15,16 +15,41 @@
 """
 from __future__ import annotations
 
-# Backward-compat shims for code that does `from runtime.execution import X`
-# where X is a submodule name now living under misc/.
-from .misc import (  # noqa: F401
-    agent_avatar,
-    agent_packs,
-    capability_catalog,
-    capability_permissions,
-    file_write_leases,
-    image_generation,
-    multiagent_contracts,
-    parallel_runner,
-    skill_policy,
-)
+_LAZY_EXPORTS = {
+    # Group subpackages.
+    "agents": "runtime.execution.agents",
+    "arms": "runtime.execution.arms",
+    "tool_engine": "runtime.execution.tool_engine",
+    "suckers": "runtime.execution.suckers",
+    "all_skills": "runtime.execution.all_skills",
+    "swarm": "runtime.execution.swarm",
+    "parallel_agents": "runtime.execution.parallel_agents",
+    "subagents": "runtime.execution.subagents",
+    "slash_commands": "runtime.execution.slash_commands",
+    "loops": "runtime.execution.loops",
+    # Backward-compat shims for code that does `from runtime.execution import X`
+    # where X is a submodule name now living under misc/.
+    "agent_avatar": "runtime.execution.misc.agent_avatar",
+    "agent_packs": "runtime.execution.misc.agent_packs",
+    "capability_catalog": "runtime.execution.misc.capability_catalog",
+    "capability_permissions": "runtime.execution.misc.capability_permissions",
+    "file_write_leases": "runtime.execution.misc.file_write_leases",
+    "image_generation": "runtime.execution.misc.image_generation",
+    "multiagent_contracts": "runtime.execution.misc.multiagent_contracts",
+    "parallel_runner": "runtime.execution.misc.parallel_runner",
+    "skill_policy": "runtime.execution.misc.skill_policy",
+}
+
+
+def __getattr__(name: str):
+    target = _LAZY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+
+    value = import_module(target)
+    globals()[name] = value
+    return value
+
+
+__all__ = sorted(_LAZY_EXPORTS)

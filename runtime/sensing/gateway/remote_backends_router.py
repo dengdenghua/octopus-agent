@@ -23,7 +23,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, WebSocket
+from fastapi import APIRouter, HTTPException, Request, WebSocket
 
 from runtime.sensing.gateway.remote_transport import (
     BackendRegistry,
@@ -59,6 +59,11 @@ def _safe_dict(b: Any) -> dict[str, Any]:
 def create_remote_backends_router(
     *,
     store_path: str | Path | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     """Factory. ``store_path`` defaults to
     ``<data>/remote_backends.json``; tests pass a tmp path."""
@@ -68,10 +73,68 @@ def create_remote_backends_router(
         store_path = app_paths().data_dir / "remote_backends.json"
 
     registry = BackendRegistry(store_path)
+
+    class _WsAuthError(Exception):
+        """Raised to refuse an unauthenticated remote-backend WS handshake."""
+
+    def _auth_http(request: Request) -> None:
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    def _resolve_ws_actor(ws: WebSocket) -> str | None:
+        if identity_store is None:
+            if require_auth:
+                raise _WsAuthError("identity store required for remote backend auth")
+            return None
+
+        token: str | None = None
+        auth_header = ws.headers.get("authorization") or ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if token is None:
+            subproto = ws.headers.get("sec-websocket-protocol") or ""
+            parts = [p.strip() for p in subproto.split(",") if p.strip()]
+            if len(parts) >= 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+        if token is None:
+            token = ws.query_params.get("token")
+        if not token:
+            if require_auth:
+                raise _WsAuthError("missing remote backend auth token")
+            return None
+
+        if jwt_secret and token.count(".") == 2:
+            identity = identity_store.verify_jwt(
+                token,
+                secret=jwt_secret,
+                required_issuer=jwt_issuer,
+                required_audience=jwt_audience,
+                trust_jwt_sub=True,
+            )
+            if identity is not None:
+                return identity.actor_id
+            if require_auth:
+                raise _WsAuthError("invalid jwt")
+        identity = identity_store.verify_api_key(token)
+        if identity is not None:
+            return identity.actor_id
+        if require_auth:
+            raise _WsAuthError("invalid token")
+        return None
+
     router = APIRouter()
 
     @router.get("/api/remote-backends")
-    def list_backends() -> dict[str, Any]:
+    def list_backends(request: Request) -> dict[str, Any]:
+        _auth_http(request)
         from runtime.platform import feature_flags as _ff
         return {
             "enabled": _ff.is_on("ui.remote_transport"),
@@ -79,7 +142,11 @@ def create_remote_backends_router(
         }
 
     @router.post("/api/remote-backends")
-    def add_backend(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def add_backend(
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _auth_http(request)
         _require_flag()
         payload = body or {}
         name = str(payload.get("name") or "").strip()
@@ -103,14 +170,16 @@ def create_remote_backends_router(
         return {"backend": _safe_dict(backend)}
 
     @router.delete("/api/remote-backends/{backend_id}")
-    def remove_backend(backend_id: str) -> dict[str, Any]:
+    def remove_backend(backend_id: str, request: Request) -> dict[str, Any]:
+        _auth_http(request)
         _require_flag()
         if not registry.remove(backend_id):
             raise HTTPException(404, f"backend {backend_id!r} not found")
         return {"removed": backend_id}
 
     @router.post("/api/remote-backends/{backend_id}/health")
-    def ping_backend(backend_id: str) -> dict[str, Any]:
+    def ping_backend(backend_id: str, request: Request) -> dict[str, Any]:
+        _auth_http(request)
         _require_flag()
         backend = registry.get(backend_id)
         if backend is None:
@@ -126,8 +195,10 @@ def create_remote_backends_router(
     @router.post("/api/remote-backends/{backend_id}/proxy")
     def proxy(
         backend_id: str,
+        request: Request,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        _auth_http(request)
         _require_flag()
         backend = registry.get(backend_id)
         if backend is None:
@@ -166,6 +237,12 @@ def create_remote_backends_router(
         so we can send a proper JSON-RPC error frame instead of a
         bare HTTP 403 (which the WS client can't read).
         """
+        try:
+            _resolve_ws_actor(ws)
+        except _WsAuthError:
+            await ws.close(code=4401)
+            return
+
         await ws.accept()
         from runtime.platform import feature_flags as _ff
         if not _ff.is_on("ui.remote_transport"):

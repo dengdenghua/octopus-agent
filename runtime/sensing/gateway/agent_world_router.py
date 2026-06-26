@@ -16,14 +16,16 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
 
 from runtime.execution.agents.loader import default_agents_root
 from runtime.execution.misc.agent_avatar import write_pixel_agent_avatar
@@ -666,11 +668,31 @@ def create_agent_world_router(
     registry: Any = None,
     runtime: Any = None,
     skill_registry: Any = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> Any:
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
-    router = APIRouter(tags=["agent-market"])
+    def _auth_dep(request: Request) -> None:
+        # Agent market reads templates and can also install/uninstall local
+        # agents. Keep dev mode unchanged; in auth-on deployments gate the
+        # whole market surface at the router level.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["agent-market"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/agent-market/store")
     def api_agent_market_store(

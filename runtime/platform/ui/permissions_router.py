@@ -22,7 +22,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from runtime.safety.approval.approval_gate import ApprovalPolicy, ApprovalRule
@@ -67,6 +67,12 @@ def _to_out(rule: ApprovalRule) -> _RuleOut:
 
 def create_permissions_router(
     path_getter: Callable[[], Path] | None = None,
+    *,
+    identity_store: object | None = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     """Build the router. ``path_getter`` is called per-request so a
     test fixture can swap the underlying file by re-binding the
@@ -76,7 +82,26 @@ def create_permissions_router(
 
         path_getter = lambda: app_paths().permissions_path  # noqa: E731 — single-expression closure is the right shape here
 
-    router = APIRouter(prefix="/api/permissions", tags=["permissions"])
+    def _auth_dep(request: Request) -> None:
+        # Approval rules directly shape which tools may execute, so in
+        # auth-on deployments this whole surface should reject
+        # anonymous callers at the router boundary.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        prefix="/api/permissions",
+        tags=["permissions"],
+        dependencies=[Depends(_auth_dep)],
+    )
 
     @router.get("", response_model=_PolicyOut)
     def list_rules() -> _PolicyOut:

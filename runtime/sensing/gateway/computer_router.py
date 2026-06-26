@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from runtime.execution.suckers import computer_skills, computer_uia_skills
 from runtime.memory.learning.review_queue import ReviewQueue
@@ -38,8 +38,34 @@ _DEFAULT_LEASE_OWNER_ID = "default-computer-operator"
 _DEFAULT_LEASE_OWNER_LABEL = "Default operator"
 
 
-def create_computer_router() -> APIRouter:
-    router = APIRouter(prefix="/api/computer", tags=["computer"])
+def create_computer_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
+    def _auth_dep(request: Request) -> None:
+        # Desktop automation can click/type on the host machine. Keep
+        # the current friction-free local-dev behavior, but in auth-on
+        # deploys reject anonymous access at the router boundary.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        prefix="/api/computer",
+        tags=["computer"],
+        dependencies=[Depends(_auth_dep)],
+    )
     pending: dict[str, dict[str, Any]] = {}
     lease: dict[str, Any] = {}
     activity: list[dict[str, Any]] = []

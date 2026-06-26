@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, HTTPException, Query, Request
     from fastapi.responses import FileResponse
     from pydantic import BaseModel
 
@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     FileResponse = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
@@ -55,12 +56,50 @@ if FASTAPI_AVAILABLE:
         count: int
 
 
-def create_workspaces_router(*, workspace_root: Path | str) -> Any:
+def create_workspaces_router(
+    *,
+    workspace_root: Path | str,
+    thread_store: Any = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
     manager = WorkspaceManager(Path(workspace_root))
     router = APIRouter(tags=["workspaces"])
+
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    def _require_thread_access(request: Request, thread_id: str) -> str | None:
+        actor = _auth(request)
+        if thread_store is None or not hasattr(thread_store, "get"):
+            return actor
+        thread = thread_store.get(thread_id)
+        if thread is None:
+            if actor is not None:
+                raise HTTPException(404, f"thread not found: {thread_id}")
+            return actor
+        metadata = thread.get("metadata") or {}
+        owner = metadata.get("owner_actor_id")
+        if actor is not None and owner and owner != actor:
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        return actor
 
     def _info(thread_id: str) -> dict[str, Any]:
         if not thread_id.strip():
@@ -144,14 +183,16 @@ def create_workspaces_router(*, workspace_root: Path | str) -> Any:
         "/api/workspaces/{thread_id}",
         response_model=WorkspaceInfoResponse,
     )
-    def api_workspace_info(thread_id: str) -> dict[str, Any]:
+    def api_workspace_info(request: Request, thread_id: str) -> dict[str, Any]:
+        _require_thread_access(request, thread_id)
         return _info(thread_id)
 
     @router.get(
         "/api/threads/{thread_id}/workspace",
         response_model=WorkspaceInfoResponse,
     )
-    def api_thread_workspace_info(thread_id: str) -> dict[str, Any]:
+    def api_thread_workspace_info(request: Request, thread_id: str) -> dict[str, Any]:
+        _require_thread_access(request, thread_id)
         return _info(thread_id)
 
     @router.get(
@@ -159,10 +200,12 @@ def create_workspaces_router(*, workspace_root: Path | str) -> Any:
         response_model=WorkspaceOutputsResponse,
     )
     def api_workspace_outputs(
+        request: Request,
         thread_id: str,
         area: str = "output",
         limit: int = Query(500, ge=1, le=2000),  # noqa: B008
     ) -> dict[str, Any]:
+        _require_thread_access(request, thread_id)
         return _output_entries(thread_id, area, limit)
 
     @router.get(
@@ -170,19 +213,23 @@ def create_workspaces_router(*, workspace_root: Path | str) -> Any:
         response_model=WorkspaceOutputsResponse,
     )
     def api_thread_workspace_outputs(
+        request: Request,
         thread_id: str,
         area: str = "output",
         limit: int = Query(500, ge=1, le=2000),  # noqa: B008
     ) -> dict[str, Any]:
+        _require_thread_access(request, thread_id)
         return _output_entries(thread_id, area, limit)
 
     @router.get("/api/workspaces/{thread_id}/outputs/{artifact_path:path}")
     def api_workspace_output_file(
+        request: Request,
         thread_id: str,
         artifact_path: str,
         area: str = "output",
         download: bool = False,
     ) -> Any:
+        _require_thread_access(request, thread_id)
         _, root = _area_root(thread_id, area)
         target = _safe_child(root, artifact_path)
         if not target.is_file():
@@ -191,12 +238,14 @@ def create_workspaces_router(*, workspace_root: Path | str) -> Any:
 
     @router.get("/api/threads/{thread_id}/outputs/{artifact_path:path}")
     def api_thread_workspace_output_file(
+        request: Request,
         thread_id: str,
         artifact_path: str,
         area: str = "output",
         download: bool = False,
     ) -> Any:
         return api_workspace_output_file(
+            request,
             thread_id,
             artifact_path,
             area=area,

@@ -24,7 +24,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from runtime.memory.journal.sqlite_index import JournalIndex
 
@@ -56,6 +56,11 @@ def create_journal_router(
     *,
     db_path: Path | None = None,
     default_jsonl_path: Path | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     """Factory.
 
@@ -66,8 +71,23 @@ def create_journal_router(
     """
     router = APIRouter()
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.get("/api/journal/events")
     def list_events(
+        request: Request,
         event_type: str | None = Query(default=None),
         since: str | None = Query(default=None),
         until: str | None = Query(default=None),
@@ -75,6 +95,7 @@ def create_journal_router(
         limit: int = Query(default=100, ge=1, le=1000),
         offset: int = Query(default=0, ge=0),
     ) -> dict[str, Any]:
+        _auth(request)
         index = _get_index(db_path)
         rows = index.query(
             event_type=event_type,
@@ -87,12 +108,14 @@ def create_journal_router(
         return {"events": rows, "limit": limit, "offset": offset}
 
     @router.get("/api/journal/stats")
-    def get_stats() -> dict[str, Any]:
+    def get_stats(request: Request) -> dict[str, Any]:
+        _auth(request)
         index = _get_index(db_path)
         return index.stats()
 
     @router.post("/api/journal/reindex")
-    def reindex(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def reindex(request: Request, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        _auth(request)
         payload = body or {}
         path_override = payload.get("jsonl_path")
         if path_override:

@@ -83,4 +83,4 @@ Keep these in mind when reading the code:
 - First hands-on task: [GOLDEN_PATH.md](GOLDEN_PATH.md)
 - Existing quick start: [../QUICKSTART.md](../QUICKSTART.md)
 - Naming contract: [naming.md](naming.md)
-- Full architecture: [architecture.md](architecture.md)
+- Full architecture: [guide/architecture.md](guide/architecture.md)

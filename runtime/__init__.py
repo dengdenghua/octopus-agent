@@ -19,35 +19,60 @@ Prefer the explicit group path `from runtime.<group>.X` in new code.
 
 __version__ = "0.2.0"
 
-# ─── re-exports (flat-form import surface) ─────────────────────
-from runtime.adapters import (
-    channels,
-    instrumentation,
-    integrations,
-    mcp_client,
-    scheduler,
-)
-from runtime.core import cerebrum, graph_runtime, hearts, nerves
-from runtime.core.nerves import reflex  # noqa: F401
-from runtime.execution import (
-    agents,
-    arms,
-    parallel_agents,
-    suckers,
-    swarm,
-    tool_engine,
-)
-from runtime.memory import hemolymph, journal, knowledge_graph, threads
-from runtime.platform import config, i18n, models, ui  # noqa: F401
-from runtime.safety import (
-    auth,
-    budget_breaker,
-    chromatophores,
-    experiments,
-    invariants,
-    recovery,
-)
-from runtime.sensing import gateway, model_router, normalize, server
+_LAZY_EXPORTS = {
+    # core
+    "cerebrum": "runtime.core.cerebrum",
+    "graph_runtime": "runtime.core.graph_runtime",
+    "hearts": "runtime.core.hearts",
+    "nerves": "runtime.core.nerves",
+    "reflex": "runtime.core.nerves.reflex",
+    # execution
+    "agents": "runtime.execution.agents",
+    "arms": "runtime.execution.arms",
+    "tool_engine": "runtime.execution.tool_engine",
+    "suckers": "runtime.execution.suckers",
+    "parallel_agents": "runtime.execution.parallel_agents",
+    "swarm": "runtime.execution.swarm",
+    # sensing
+    "model_router": "runtime.sensing.model_router",
+    "normalize": "runtime.sensing.normalize",
+    "gateway": "runtime.sensing.gateway",
+    "server": "runtime.sensing.server",
+    # memory
+    "journal": "runtime.memory.journal",
+    "hemolymph": "runtime.memory.hemolymph",
+    "knowledge_graph": "runtime.memory.knowledge_graph",
+    "threads": "runtime.memory.threads",
+    # safety
+    "auth": "runtime.safety.auth",
+    "budget_breaker": "runtime.safety.budget_breaker",
+    "invariants": "runtime.safety.invariants",
+    "recovery": "runtime.safety.recovery",
+    "experiments": "runtime.safety.experiments",
+    "chromatophores": "runtime.safety.chromatophores",
+    # adapters
+    "channels": "runtime.adapters.channels",
+    "integrations": "runtime.adapters.integrations",
+    "mcp_client": "runtime.adapters.mcp_client",
+    "scheduler": "runtime.adapters.scheduler",
+    "instrumentation": "runtime.adapters.instrumentation",
+    # platform
+    "config": "runtime.platform.config",
+    "models": "runtime.platform.models",
+    "ui": "runtime.platform.ui",
+    "i18n": "runtime.platform.i18n",
+}
+
+
+def __getattr__(name: str):
+    target = _LAZY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    from importlib import import_module
+
+    value = import_module(target)
+    globals()[name] = value
+    return value
 
 __all__ = [
     "__version__",

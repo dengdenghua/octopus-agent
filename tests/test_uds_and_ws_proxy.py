@@ -7,10 +7,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocketDisconnect
 from fastapi.testclient import TestClient
 
 from runtime.platform import feature_flags as ff
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.remote_backends_router import (
     create_remote_backends_router,
 )
@@ -199,6 +200,40 @@ def test_realtime_ws_404_for_unknown_backend(
     ff.reload()
     with client.websocket_connect(
         "/api/remote-backends/does-not-exist/realtime"
+    ) as ws:
+        msg = json.loads(ws.receive_text())
+        assert msg["method"] == "proxy/error"
+        assert "not found" in msg["params"]["message"]
+
+
+def test_realtime_ws_requires_auth_when_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _reset_flags: None,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_FF_UI_REMOTE_TRANSPORT", "1")
+    ff.reload()
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_remote_backends_router(
+            store_path=tmp_path / "backends.json",
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    with (
+        pytest.raises(WebSocketDisconnect),
+        client.websocket_connect("/api/remote-backends/missing/realtime") as ws,
+    ):
+        ws.receive_text()
+
+    with client.websocket_connect(
+        "/api/remote-backends/missing/realtime",
+        headers={"Authorization": "Bearer sk-alice"},
     ) as ws:
         msg = json.loads(ws.receive_text())
         assert msg["method"] == "proxy/error"

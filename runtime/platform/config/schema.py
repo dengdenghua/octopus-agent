@@ -256,11 +256,17 @@ class LocalAuthConfig(BaseModel):
     enabled: bool = False
     allow_any_username: bool = False
     allowed_usernames: list[str] = Field(default_factory=list)
+    users: dict[str, str] = Field(default_factory=dict)
     jwt_secret: str | None = Field(default=None, min_length=32)
     jwt_expire_seconds: int = Field(default=604_800, gt=0)
     jwt_issuer: str = "octopus-agent"
+    jwt_audience: str | None = None
     actor_prefix: str = "local:"
     default_roles: list[str] = Field(default_factory=lambda: ["user", "local"])
+
+    @property
+    def password_required(self) -> bool:
+        return bool(self.users)
 
 
 

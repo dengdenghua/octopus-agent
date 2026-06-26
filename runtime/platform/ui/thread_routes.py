@@ -25,6 +25,8 @@ def mount_thread_state_routes(
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> None:
     """Mount thread state CRUD used by sidebars and scope settings."""
     if thread_store is None:
@@ -38,6 +40,8 @@ def mount_thread_state_routes(
         identity_store=identity_store,
         require_auth=require_auth,
         jwt_secret=jwt_secret,
+        jwt_issuer=jwt_issuer,
+        jwt_audience=jwt_audience,
     ))
 
 

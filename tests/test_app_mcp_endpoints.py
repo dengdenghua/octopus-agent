@@ -33,6 +33,22 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(create_app())
 
 
+@pytest.fixture
+def secured_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> tuple[TestClient, dict[str, str]]:
+    from runtime.safety.auth import Identity, IdentityStore
+
+    monkeypatch.chdir(tmp_path)
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = create_app(
+        cocoloop_require_auth=True,
+        cocoloop_identity_store=store,
+    )
+    return TestClient(app), {"Authorization": "Bearer sk-alice"}
+
+
 class TestMcpConfigGet:
     def test_returns_mcp_servers_field(self, client: TestClient) -> None:
         r = client.get("/api/mcp/config")
@@ -40,6 +56,14 @@ class TestMcpConfigGet:
         data = r.json()
         assert "mcp_servers" in data
         assert isinstance(data["mcp_servers"], dict)
+
+    def test_requires_auth_when_enabled(
+        self, secured_client: tuple[TestClient, dict[str, str]],
+    ) -> None:
+        client, headers = secured_client
+
+        assert client.get("/api/mcp/config").status_code == 401
+        assert client.get("/api/mcp/config", headers=headers).status_code == 200
 
 
 class TestMcpConfigPut:
@@ -118,3 +142,11 @@ class TestMcpConfigPut:
         assert stored["command"] == "node"
         assert stored["args"] == ["server.js"]
         assert stored["env"] == {"FOO": "bar"}
+
+    def test_trust_routes_require_auth_when_enabled(
+        self, secured_client: tuple[TestClient, dict[str, str]],
+    ) -> None:
+        client, headers = secured_client
+
+        assert client.get("/api/mcp/trust").status_code == 401
+        assert client.get("/api/mcp/trust", headers=headers).status_code == 200

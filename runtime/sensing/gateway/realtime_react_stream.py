@@ -144,6 +144,22 @@ def _model_error_reply(exc: BaseException) -> str | None:
     return None
 
 
+def _personalize_reflex_reply(reply: str, agent: Any) -> str:
+    display_name = str(
+        getattr(agent, "display_name", None)
+        or getattr(agent, "name", None)
+        or getattr(agent, "agent_id", None)
+        or ""
+    ).strip()
+    if not display_name:
+        return reply
+    return (
+        reply
+        .replace("我是 Octopus", f"我是 {display_name}")
+        .replace("I'm Octopus", f"I'm {display_name}")
+    )
+
+
 def _should_use_reflection_fast_path(
     runtime: CerebrumRuntime,
     text: str,
@@ -184,7 +200,12 @@ async def _drive_reflection_fast_path(
     """Pump direct-LLM reflection output into realtime item events."""
     reflex_reply = runtime._try_reflex_reply(intent)
     if reflex_reply:
-        await runtime._emit_agent_message(turn, log, emitter, reflex_reply)
+        await runtime._emit_agent_message(
+            turn,
+            log,
+            emitter,
+            _personalize_reflex_reply(reflex_reply, agent),
+        )
         return
 
     from runtime.safety.approval.cancellation import (

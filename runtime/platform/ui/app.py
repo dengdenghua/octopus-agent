@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import FastAPI
+    from fastapi import FastAPI, HTTPException
     from fastapi.responses import (
         HTMLResponse,
+        JSONResponse,
     )
 
     FASTAPI_AVAILABLE = True
@@ -27,6 +28,91 @@ from runtime.platform.ui.pages import (
 )
 from runtime.platform.ui.state import AppState
 from runtime.platform.ui.webui_static import _find_webui_dist, _mount_webui
+
+_LEGACY_CONTROL_PLANE_PREFIXES = (
+    "/api/account",
+    "/api/agent-world",
+    "/api/agent-market",
+    "/api/agent-modes",
+    "/api/android",
+    "/api/ambient-suggestions",
+    "/api/apps",
+    "/api/cli-team",
+    "/api/computer",
+    "/api/config",
+    "/api/dag",
+    "/api/evolution",
+    "/api/feature-flags",
+    "/api/intelligence",
+    "/api/lsp",
+    "/api/mcp",
+    "/api/memory",
+    "/api/meta-skill",
+    "/api/meta-skills",
+    "/api/path-denylist",
+    "/api/permissions",
+    "/api/plugin-hub",
+    "/api/plugins",
+    "/api/prompts",
+    "/api/remote-backends",
+    "/api/safety",
+    "/api/skill-market",
+    "/api/skills/market",
+    "/api/smart-routing",
+    "/api/tasks",
+    "/api/tentacle",
+    "/api/team/role-models",
+)
+
+
+def _path_matches_prefix(path: str, prefix: str) -> bool:
+    return path == prefix or path.startswith(prefix + "/")
+
+
+def _install_legacy_control_plane_auth(
+    app: Any,
+    *,
+    identity_store: Any,
+    require_auth: bool,
+    jwt_secret: str | None,
+    jwt_issuer: str | None,
+    jwt_audience: str | None,
+) -> None:
+    """Add one auth gate for older HTTP control-plane routers."""
+    if not require_auth:
+        return
+
+    @app.middleware("http")
+    async def _legacy_control_plane_auth(request: Any, call_next: Any) -> Any:
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        path = str(getattr(getattr(request, "url", None), "path", "") or "")
+        if not any(
+            _path_matches_prefix(path, prefix)
+            for prefix in _LEGACY_CONTROL_PLANE_PREFIXES
+        ):
+            return await call_next(request)
+        if identity_store is None:
+            return JSONResponse(
+                {"detail": "identity store required for control-plane auth"},
+                status_code=401,
+            )
+        try:
+            from runtime.adapters.web_auth import _resolve_actor
+
+            actor = _resolve_actor(
+                request,
+                identity_store,
+                True,
+                jwt_secret=jwt_secret,
+                jwt_issuer=jwt_issuer,
+                jwt_audience=jwt_audience,
+            )
+            if actor:
+                request.state.actor_id = actor
+        except HTTPException as exc:
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+        return await call_next(request)
 
 
 def _attach_molili_fallback_router(
@@ -127,6 +213,19 @@ def create_app(
     auth_enabled = bool(
         molili_config is not None and getattr(molili_config, "enabled", False)
     ) or bool(local_auth_config is not None and getattr(local_auth_config, "enabled", False))
+    cocoloop_jwt_secret = molili_jwt_secret or (
+        getattr(local_auth_config, "jwt_secret", None) if local_auth_config else None
+    )
+    cocoloop_jwt_issuer = (
+        getattr(molili_config, "jwt_issuer", None)
+        if molili_jwt_secret and molili_config
+        else getattr(local_auth_config, "jwt_issuer", None) if local_auth_config else None
+    )
+    cocoloop_jwt_audience = (
+        getattr(molili_config, "jwt_audience", None)
+        if molili_jwt_secret and molili_config
+        else getattr(local_auth_config, "jwt_audience", None) if local_auth_config else None
+    )
     if cocoloop_identity_store is None and auth_enabled:
         from runtime.safety.auth.identity import IdentityStore
 
@@ -140,6 +239,15 @@ def create_app(
             "local auth allow_any_username=true accepts arbitrary usernames; "
             "use only for trusted local development"
         )
+
+    _install_legacy_control_plane_auth(
+        app,
+        identity_store=cocoloop_identity_store,
+        require_auth=cocoloop_require_auth,
+        jwt_secret=cocoloop_jwt_secret,
+        jwt_issuer=cocoloop_jwt_issuer,
+        jwt_audience=cocoloop_jwt_audience,
+    )
 
     thread_store = None
     thread_upload_root: Path | None = None
@@ -564,6 +672,9 @@ def create_app(
                 registry=agent_registry,
                 identity_store=cocoloop_identity_store,
                 require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
                 journal=state.journal,  # /api/conversations/*
                 group_registry=group_registry,  # /api/groups/*
                 runtime=stack.runtime if stack is not None else None,  # /api/agents/{id}/reload
@@ -596,7 +707,9 @@ def create_app(
     team_rooms_router = create_team_rooms_router(
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
-        jwt_secret=molili_jwt_secret,
+        jwt_secret=cocoloop_jwt_secret,
+        jwt_issuer=cocoloop_jwt_issuer,
+        jwt_audience=cocoloop_jwt_audience,
         reset_callback=getattr(getattr(app.state, "thread_store", None), "clear", None),
         # Bridge bound digital twins to the model router so they actually
         # generate + emit speech when the floor reaches them. None-safe: no
@@ -637,7 +750,9 @@ def create_app(
     team_tasks_router = create_team_tasks_router(
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
-        jwt_secret=molili_jwt_secret,
+        jwt_secret=cocoloop_jwt_secret,
+        jwt_issuer=cocoloop_jwt_issuer,
+        jwt_audience=cocoloop_jwt_audience,
         team_event_broadcaster=(_team_event_broadcaster if _broadcast_room is not None else None),
         room_membership_resolver=_resolve_room_members,
     )
@@ -662,7 +777,9 @@ def create_app(
             orchestrator=parallel_agent_orchestrator,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
     app.state.parallel_agent_orchestrator = parallel_agent_orchestrator
@@ -678,7 +795,9 @@ def create_app(
             upload_root=thread_upload_root,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -689,7 +808,9 @@ def create_app(
             registry=subagent_registry,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
     app.state.subagent_registry = subagent_registry
@@ -704,6 +825,11 @@ def create_app(
         create_wiki_router(
             model_router=getattr(_wiki_planner, "router", None),
             model=getattr(_wiki_planner, "planner_model", None),
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -711,20 +837,44 @@ def create_app(
     # non-technical user can wire the whole stack to run locally.
     from runtime.sensing.gateway.local_brain_router import create_local_brain_router
 
-    app.include_router(create_local_brain_router())
+    app.include_router(
+        create_local_brain_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     # CLI-team · detect installed coding CLIs (Claude/Codex) + run them as a team
     # in isolated worktrees, diff-first review.
     from runtime.sensing.gateway.cli_team_router import create_cli_team_router
 
-    app.include_router(create_cli_team_router())
+    app.include_router(
+        create_cli_team_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     # Team role-model tiering · per-role cheap/primary override (cost control).
     from runtime.sensing.gateway.team_role_models_router import (
         create_team_role_models_router,
     )
 
-    app.include_router(create_team_role_models_router())
+    app.include_router(
+        create_team_role_models_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     # Mobile (tentacle) · phones running octopus-mobile connect over WebSocket
     # (:8765) via the existing tentacle bridge and appear in the team. Mount the
@@ -764,7 +914,16 @@ def create_app(
             decision_engine=_tentacle_engine,
             auth_token=_tentacle_token,
         )
-        app.include_router(create_tentacle_router(_tentacle_coordinator))
+        app.include_router(
+            create_tentacle_router(
+                _tentacle_coordinator,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
         app.include_router(
             create_tentacle_join_router(ws_port=_tentacle_ws_port, auth_token=_tentacle_token)
         )
@@ -791,7 +950,15 @@ def create_app(
     # it to pick the right skill/cached action instead of keyword matching.
     from runtime.sensing.gateway.retrieve_router import create_retrieve_router
 
-    app.include_router(create_retrieve_router())
+    app.include_router(
+        create_retrieve_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     # ─── Persistent terminal WebSocket ─────────
     from runtime.sensing.gateway.terminal_router import mount_terminal_routes
@@ -800,7 +967,9 @@ def create_app(
         app,
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
-        jwt_secret=molili_jwt_secret,
+        jwt_secret=cocoloop_jwt_secret,
+        jwt_issuer=cocoloop_jwt_issuer,
+        jwt_audience=cocoloop_jwt_audience,
     )
 
     # ─── IM Channels webhook / dashboard APIs ─────────
@@ -814,6 +983,9 @@ def create_app(
             manager=channel_manager,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -839,7 +1011,9 @@ def create_app(
         logs_root=_realtime_logs_root,
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
-        jwt_secret=molili_jwt_secret,
+        jwt_secret=cocoloop_jwt_secret,
+        jwt_issuer=cocoloop_jwt_issuer,
+        jwt_audience=cocoloop_jwt_audience,
     )
 
     if stack is not None:
@@ -851,7 +1025,9 @@ def create_app(
                 default_arm=default_arm,
                 identity_store=cocoloop_identity_store,
                 require_auth=cocoloop_require_auth,
-                jwt_secret=molili_jwt_secret,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
                 agent_registry=agent_registry,
                 reflex_router=_reflex_router,
             )
@@ -945,7 +1121,9 @@ def create_app(
             molili_config=molili_config,
             local_auth_config=local_auth_config,
             identity_store=cocoloop_identity_store,
-            molili_jwt_secret=molili_jwt_secret,
+            molili_jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -962,6 +1140,11 @@ def create_app(
     _mcp_bundle = create_mcp_router(
         registry=state.registry,
         initial_mcp_servers=_stack_mcp_servers,
+        identity_store=cocoloop_identity_store,
+        require_auth=cocoloop_require_auth,
+        jwt_secret=cocoloop_jwt_secret,
+        jwt_issuer=cocoloop_jwt_issuer,
+        jwt_audience=cocoloop_jwt_audience,
     )
     app.include_router(_mcp_bundle.router)
 
@@ -977,7 +1160,14 @@ def create_app(
     # than duplicating persistence logic.
     from runtime.sensing.gateway.config_router import create_config_router
 
-    _config_bundle = create_config_router(stack=stack)
+    _config_bundle = create_config_router(
+        stack=stack,
+        identity_store=cocoloop_identity_store,
+        require_auth=cocoloop_require_auth,
+        jwt_secret=cocoloop_jwt_secret,
+        jwt_issuer=cocoloop_jwt_issuer,
+        jwt_audience=cocoloop_jwt_audience,
+    )
     app.include_router(_config_bundle.router)
 
     # ``/api/llm-models`` (merged molili presets + custom models)
@@ -1002,9 +1192,9 @@ def create_app(
             identity_store=cocoloop_identity_store,
             memory_reset_callback=_reset_runtime_memory,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
-            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-            jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1015,9 +1205,9 @@ def create_app(
         create_browser_router(
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
-            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-            jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1034,7 +1224,9 @@ def create_app(
             thread_store=thread_store,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1048,6 +1240,12 @@ def create_app(
         app.include_router(
             create_workspaces_router(
                 workspace_root=app_paths().data_dir / "workspaces",
+                thread_store=thread_store,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
             )
         )
     except Exception as _workspace_exc:  # noqa: BLE001
@@ -1060,13 +1258,103 @@ def create_app(
 
     app.include_router(create_lsp_router(state.registry))
 
+    try:
+        from runtime.execution.loops import (
+            LoopController,
+            LoopRunDispatcher,
+            LoopRunStore,
+        )
+        from runtime.memory.learning.review_queue import ReviewQueue
+        from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+        from runtime.sensing.gateway.loop_router import create_loop_router
+
+        _loop_workspace_root = thread_workspace_root or (app_paths().data_dir / "workspaces")
+        _loop_store = LoopRunStore(app_paths().loop_runs_path)
+        _loop_review_queue = ReviewQueue(app_paths().review_queue_path)
+        _loop_controller = (
+            LoopController(
+                store=_loop_store,
+                stack=stack,
+                workspace_manager=WorkspaceManager(_loop_workspace_root),
+                review_queue=_loop_review_queue,
+                trace_store=getattr(state, "trace_store", None),
+                task_supervisor=getattr(state, "task_supervisor", None),
+            )
+            if stack is not None
+            else None
+        )
+        _loop_dispatcher = (
+            LoopRunDispatcher(
+                controller=_loop_controller,
+                store=_loop_store,
+            )
+            if _loop_controller is not None
+            else None
+        )
+        app.include_router(
+            create_loop_router(
+                store=_loop_store,
+                controller=_loop_controller,
+                dispatcher=_loop_dispatcher,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
+        app.state.loop_controller = _loop_controller
+        app.state.loop_dispatcher = _loop_dispatcher
+        app.state.loop_store = _loop_store
+        app.state.task_supervisor = getattr(state, "task_supervisor", None)
+    except Exception as _loop_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "loop router failed to mount: %s",
+            _loop_exc,
+        )
+
+    try:
+        from runtime.sensing.gateway.task_runs_router import create_task_runs_router
+
+        app.include_router(
+            create_task_runs_router(
+                supervisor=getattr(state, "task_supervisor", None),
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
+    except Exception as _task_runs_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "task runs router failed to mount: %s",
+            _task_runs_exc,
+        )
+
     from runtime.sensing.gateway.verify_router import create_verify_router
 
-    app.include_router(create_verify_router())
+    app.include_router(
+        create_verify_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     from runtime.sensing.gateway.deployments_router import create_deployments_router
 
-    app.include_router(create_deployments_router())
+    app.include_router(
+        create_deployments_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     from runtime.sensing.gateway.debug_router import create_debug_router
 
@@ -1076,27 +1364,59 @@ def create_app(
             stack=stack,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
-            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-            jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
     from runtime.sensing.gateway.index_router import create_index_router
 
-    app.include_router(create_index_router())
+    app.include_router(
+        create_index_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     from runtime.sensing.gateway.computer_router import create_computer_router
 
-    app.include_router(create_computer_router())
+    app.include_router(
+        create_computer_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     from runtime.sensing.gateway.android_router import create_android_router
 
-    app.include_router(create_android_router())
+    app.include_router(
+        create_android_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     from runtime.sensing.gateway.completion_router import create_completion_router
 
-    app.include_router(create_completion_router())
+    app.include_router(
+        create_completion_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     from runtime.execution.misc.parallel_runner import create_parallel_task_router
 
@@ -1114,6 +1434,11 @@ def create_app(
             thread_store=thread_store,
             workspace_root=thread_workspace_root,
             legacy_upload_root=thread_upload_root,
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1134,7 +1459,9 @@ def create_app(
             planner=getattr(stack, "planner", None) if stack is not None else None,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1162,9 +1489,9 @@ def create_app(
             forged_skill_dir=Path("data/forged_skills"),
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
-            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-            jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1188,7 +1515,15 @@ def create_app(
             create_skill_market_router,
         )
 
-        app.include_router(create_skill_market_router())
+        app.include_router(
+            create_skill_market_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _sm_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("skill_market_router failed to mount: %s", _sm_exc)
 
@@ -1198,14 +1533,30 @@ def create_app(
             create_meta_skill_router,
         )
 
-        app.include_router(create_meta_skill_router())
+        app.include_router(
+            create_meta_skill_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _ms_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("meta_skill_router failed to mount: %s", _ms_exc)
 
     try:
         from runtime.sensing.gateway.apps_router import create_apps_router
 
-        app.include_router(create_apps_router())
+        app.include_router(
+            create_apps_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _apps_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("apps_router failed to mount: %s", _apps_exc)
 
@@ -1220,6 +1571,11 @@ def create_app(
                 registry=agent_registry,
                 runtime=stack.runtime if stack is not None else None,
                 skill_registry=state.registry,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
             )
         )
     except Exception as _aw_exc:  # noqa: BLE001
@@ -1237,6 +1593,11 @@ def create_app(
             create_enterprise_assets_router(
                 registry=agent_registry,
                 runtime=stack.runtime if stack is not None else None,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
             )
         )
     except Exception as _ea_exc:  # noqa: BLE001
@@ -1248,7 +1609,15 @@ def create_app(
             create_intelligence_router,
         )
 
-        app.include_router(create_intelligence_router())
+        app.include_router(
+            create_intelligence_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _intel_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("intelligence_router failed to mount: %s", _intel_exc)
 
@@ -1273,7 +1642,15 @@ def create_app(
             create_remote_backends_router,
         )
 
-        app.include_router(create_remote_backends_router())
+        app.include_router(
+            create_remote_backends_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _rb_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "remote_backends_router failed to mount: %s",
@@ -1299,7 +1676,16 @@ def create_app(
         # every boot — it's a no-op once any .md exists.
         with contextlib.suppress(Exception):
             seed_if_empty(_prompt_registry)
-        app.include_router(create_prompts_router(_prompt_registry))
+        app.include_router(
+            create_prompts_router(
+                _prompt_registry,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _pr_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "prompts_router failed to mount: %s",
@@ -1330,7 +1716,15 @@ def create_app(
             create_invariants_router,
         )
 
-        app.include_router(create_invariants_router())
+        app.include_router(
+            create_invariants_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _inv_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "invariants_router failed to mount: %s",
@@ -1351,7 +1745,14 @@ def create_app(
         elif isinstance(journal_path, Path):
             _journal_jsonl = journal_path
         app.include_router(
-            create_journal_router(default_jsonl_path=_journal_jsonl),
+            create_journal_router(
+                default_jsonl_path=_journal_jsonl,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            ),
         )
     except Exception as _jr_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
@@ -1373,11 +1774,9 @@ def create_app(
                 db_path=trace_store_path,
                 identity_store=cocoloop_identity_store,
                 require_auth=cocoloop_require_auth,
-                jwt_secret=molili_jwt_secret,
-                jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-                jwt_audience=getattr(molili_config, "jwt_audience", None)
-                if molili_config
-                else None,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
             )
         )
     except Exception as _trace_exc:  # noqa: BLE001
@@ -1388,7 +1787,15 @@ def create_app(
 
     from runtime.sensing.gateway.memory_router import create_memory_router
 
-    app.include_router(create_memory_router())
+    app.include_router(
+        create_memory_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
 
     # Cron settings compatibility API. Keep it before the broad stub router
     # so /api/cron/* is backed by the real local settings store.
@@ -1398,9 +1805,9 @@ def create_app(
         create_cron_router(
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
-            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-            jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1416,11 +1823,9 @@ def create_app(
             create_organizations_router(
                 identity_store=cocoloop_identity_store,
                 require_auth=cocoloop_require_auth,
-                jwt_secret=molili_jwt_secret,
-                jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-                jwt_audience=getattr(molili_config, "jwt_audience", None)
-                if molili_config
-                else None,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
                 agent_registry=agent_registry,
             )
         )
@@ -1492,9 +1897,9 @@ def create_app(
             runtime=_realtime_runtime,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
-            jwt_secret=molili_jwt_secret,
-            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-            jwt_audience=getattr(molili_config, "jwt_audience", None) if molili_config else None,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
             allow_client_approval_bypass=_allow_approval_bypass,
         )
         app.include_router(_realtime_gateway.router)
@@ -1509,7 +1914,15 @@ def create_app(
             create_permissions_router,
         )
 
-        app.include_router(create_permissions_router())
+        app.include_router(
+            create_permissions_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _rt_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "realtime gateway failed to mount: %s",
@@ -1532,7 +1945,15 @@ def create_app(
     try:
         from runtime.sensing.gateway.plugins_router import create_plugins_router
 
-        app.include_router(create_plugins_router())
+        app.include_router(
+            create_plugins_router(
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
     except Exception as _plugins_exc:
         logging.getLogger(__name__).warning(
             "plugins router failed to mount: %s",
@@ -1562,7 +1983,16 @@ def create_app(
                 _loaded,
             )
 
-        app.include_router(create_plugin_hub_router(hub=_hub))
+        app.include_router(
+            create_plugin_hub_router(
+                hub=_hub,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
         app.state.plugin_hub = _hub
     except Exception as _hub_exc:
         logging.getLogger(__name__).warning(
@@ -1574,8 +2004,9 @@ def create_app(
 
     app.include_router(
         create_stub_router(
-            jwt_secret=molili_jwt_secret,
-            jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1591,6 +2022,11 @@ def create_app(
         create_teach_repeat_router(
             journal=getattr(state, "journal", None),
             registry=_tr_registry,
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
         )
     )
 
@@ -1617,11 +2053,9 @@ def create_app(
                 stack=stack,
                 identity_store=cocoloop_identity_store,
                 require_auth=cocoloop_require_auth,
-                jwt_secret=molili_jwt_secret,
-                jwt_issuer=getattr(molili_config, "jwt_issuer", None) if molili_config else None,
-                jwt_audience=getattr(molili_config, "jwt_audience", None)
-                if molili_config
-                else None,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
                 agent_registry=agent_registry,
             )
         )

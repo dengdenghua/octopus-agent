@@ -5,8 +5,13 @@ Catches the common failure mode where docs say "17 个器官" but the
 filesystem has 19, or "9 份契约" when there are 15.
 
 Ground truth:
-- Organs: count of subdirectories under ``docs/biomimetic/``
+- Organs: count of markdown files under ``docs/architecture/organs/``
 - Protocols: count of ``protocols/*.md`` (excluding README.md)
+
+Also validates that every protocol file carries a YAML frontmatter block
+with an ``implementation_status`` field (implemented | partial | spec_only |
+dormant) and, when status is implemented/partial, a non-empty
+``implemented_in`` list whose paths exist on disk.
 
 Run::
 
@@ -19,6 +24,11 @@ import argparse
 import re
 import sys
 from pathlib import Path
+
+# Valid values for the implementation_status frontmatter field.
+VALID_STATUSES = frozenset({"implemented", "partial", "spec_only", "dormant"})
+# Statuses that require implemented_in paths to exist on disk.
+STATUSES_REQUIRING_EVIDENCE = frozenset({"implemented", "partial"})
 
 # (regex pattern, label, ground-truth fn)
 ROOT = Path(__file__).parent.parent.parent
@@ -33,10 +43,10 @@ PATTERNS: list[tuple[re.Pattern[str], str]] = [
 
 
 def truth_organs() -> int:
-    bio = ROOT / "docs" / "biomimetic"
-    if not bio.exists():
+    organs = ROOT / "docs" / "architecture" / "organs"
+    if not organs.exists():
         return -1
-    return sum(1 for p in bio.iterdir() if p.is_dir() and not p.name.startswith("."))
+    return sum(1 for p in organs.glob("*.md") if p.name.lower() != "readme.md")
 
 
 def truth_protocols() -> int:
@@ -108,34 +118,96 @@ def scan_docs() -> list[tuple[Path, int, str, int, int]]:
     return drift
 
 
+def scan_protocol_frontmatter() -> list[tuple[Path, str]]:
+    """Validate ``implementation_status`` frontmatter on every protocol.
+
+    Returns a list of ``(path, message)`` issues. Empty list = OK.
+    """
+    issues: list[tuple[Path, str]] = []
+    proto_dir = ROOT / "protocols"
+    if not proto_dir.is_dir():
+        return issues
+
+    for md in sorted(proto_dir.glob("*.md")):
+        if md.name.lower() == "readme.md":
+            continue
+        text = md.read_text(encoding="utf-8")
+        # Parse the YAML frontmatter block (--- delimited) at the very top.
+        if not text.startswith("---"):
+            issues.append((md, "missing YAML frontmatter (expected leading '---')"))
+            continue
+        end = text.find("\n---", 3)
+        if end < 0:
+            issues.append((md, "frontmatter block not closed (missing closing '---')"))
+            continue
+        block = text[4:end]
+
+        # implementation_status (required)
+        m = re.search(r"^implementation_status:\s*(\S+)", block, re.MULTILINE)
+        if not m:
+            issues.append((md, "missing implementation_status field"))
+            continue
+        status = m.group(1).strip()
+        if status not in VALID_STATUSES:
+            issues.append(
+                (md, f"invalid implementation_status '{status}' "
+                 f"(must be one of {sorted(VALID_STATUSES)})")
+            )
+            continue
+
+        # implemented_in (required non-empty for implemented/partial)
+        if status in STATUSES_REQUIRING_EVIDENCE:
+            paths = re.findall(r"^  - (.+)$", block, re.MULTILINE)
+            if not paths:
+                issues.append(
+                    (md, f"implementation_status={status} but implemented_in is empty")
+                )
+                continue
+            for rel in paths:
+                rel = rel.strip().strip('"').strip("'")
+                if rel and not (ROOT / rel).exists():
+                    issues.append(
+                        (md, f"implemented_in path does not exist: {rel}")
+                    )
+    return issues
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="exit 1 on drift")
     args = parser.parse_args()
 
     drift = scan_docs()
+    fm_issues = scan_protocol_frontmatter()
 
     organs_truth = truth_organs()
     protos_truth = truth_protocols()
-    print(f"Ground truth: {organs_truth} organs (docs/biomimetic/), "
+    print(f"Ground truth: {organs_truth} organs (docs/architecture/organs/), "
           f"{protos_truth} protocols (protocols/*.md).")
 
-    if not drift:
-        print("OK · no doc-claim drift detected.")
+    if not drift and not fm_issues:
+        print("OK · no doc-claim drift detected, protocol frontmatter valid.")
         return 0
 
-    print(f"\n{len(drift)} drift{'s' if len(drift) > 1 else ''} found:")
-    for path, lineno, snippet, claimed, truth in drift:
-        rel = path.relative_to(ROOT)
-        snippet_short = snippet[:90] + "..." if len(snippet) > 90 else snippet
-        print(f"  {rel}:{lineno}: claims {claimed} but truth={truth}")
-        print(f"    > {snippet_short}")
+    if drift:
+        print(f"\n{len(drift)} drift{'s' if len(drift) > 1 else ''} found:")
+        for path, lineno, snippet, claimed, truth in drift:
+            rel = path.relative_to(ROOT)
+            snippet_short = snippet[:90] + "..." if len(snippet) > 90 else snippet
+            print(f"  {rel}:{lineno}: claims {claimed} but truth={truth}")
+            print(f"    > {snippet_short}")
+
+    if fm_issues:
+        print(f"\n{len(fm_issues)} protocol frontmatter issue(s) found:")
+        for path, msg in fm_issues:
+            rel = path.relative_to(ROOT)
+            print(f"  {rel}: {msg}")
 
     if args.strict:
         print(
-            "\n::error::Doc-claim drift detected. Update docs to match "
-            "filesystem ground truth, or update truth fn in this linter "
-            "if the structure intentionally changed."
+            "\n::error::Doc-claim drift or frontmatter issue detected. Update "
+            "docs to match filesystem ground truth, or update truth fn in "
+            "this linter if the structure intentionally changed."
         )
         return 1
     return 0

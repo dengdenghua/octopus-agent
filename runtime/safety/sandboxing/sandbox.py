@@ -26,13 +26,13 @@ gets observable behavior** (timeout, output cap, env scrubbing,
 blocked-network hints). Switching to a real backend later is a
 configuration change, not an API change.
 """
+
 from __future__ import annotations
 
-import contextlib
 import logging
 import os
 import shlex
-import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -131,6 +131,16 @@ class Backend(Protocol):
 
 
 @dataclass(frozen=True)
+class BackendChoice:
+    """Resolved process sandbox backend for one command."""
+
+    backend: Backend
+    name: str
+    hard: bool
+    strict: bool = False
+
+
+@dataclass(frozen=True)
 class DirectBackend:
     """No isolation primitive applied — soft constraints only.
 
@@ -148,6 +158,133 @@ class DirectBackend:
         return argv, env, cwd
 
 
+@dataclass(frozen=True)
+class BubblewrapBackend:
+    """Linux hard sandbox backend using ``bwrap``.
+
+    The workspace is bind-mounted read/write at its original absolute
+    path so callers can keep using host paths. System directories are
+    mounted read-only; home directories and unrelated project folders
+    are not mounted unless they are the workspace.
+    """
+
+    executable: str = "bwrap"
+
+    @staticmethod
+    def available() -> bool:
+        return shutil.which("bwrap") is not None
+
+    def transform(
+        self,
+        argv: list[str],
+        env: dict[str, str],
+        cwd: Path,
+        policy: SandboxPolicy,
+    ) -> tuple[list[str], dict[str, str], Path]:
+        workspace = policy.workspace.expanduser().resolve()
+        run_cwd = cwd.expanduser().resolve()
+        try:
+            run_cwd.relative_to(workspace)
+        except ValueError as exc:
+            raise SandboxViolation(f"cwd {run_cwd} escapes workspace {workspace}") from exc
+
+        bwrap = shutil.which(self.executable)
+        if not bwrap:
+            raise SandboxViolation("bubblewrap sandbox requested but bwrap is not installed")
+
+        wrapped: list[str] = [
+            bwrap,
+            "--die-with-parent",
+            "--new-session",
+            "--unshare-pid",
+            "--unshare-ipc",
+            "--unshare-uts",
+            "--unshare-cgroup",
+        ]
+        if not policy.allow_network:
+            wrapped.append("--unshare-net")
+
+        for path in ("/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc"):
+            if Path(path).exists():
+                wrapped.extend(["--ro-bind", path, path])
+        if Path("/dev").exists():
+            wrapped.extend(["--dev", "/dev"])
+        if Path("/proc").exists():
+            wrapped.extend(["--proc", "/proc"])
+        wrapped.extend(["--tmpfs", "/tmp"])
+
+        parents = list(workspace.parents)
+        parents.reverse()
+        for parent in parents:
+            if str(parent) != "/":
+                wrapped.extend(["--dir", str(parent)])
+        wrapped.extend(["--bind", str(workspace), str(workspace)])
+        wrapped.extend(["--chdir", str(run_cwd), "--"])
+        wrapped.extend(argv)
+        return wrapped, env, run_cwd
+
+
+@dataclass(frozen=True)
+class SeatbeltBackend:
+    """macOS hard write/network sandbox using ``sandbox-exec``.
+
+    Seatbelt profiles that fully confine reads tend to break language
+    runtimes without a curated framework allow-list, so this backend is
+    intentionally scoped as a hard write/network guard: it allows reads
+    needed to launch tooling, denies network unless explicitly allowed,
+    and restricts writes to the workspace plus temporary directories.
+    """
+
+    executable: str = "sandbox-exec"
+
+    @staticmethod
+    def available() -> bool:
+        return shutil.which("sandbox-exec") is not None and sys.platform == "darwin"
+
+    def transform(
+        self,
+        argv: list[str],
+        env: dict[str, str],
+        cwd: Path,
+        policy: SandboxPolicy,
+    ) -> tuple[list[str], dict[str, str], Path]:
+        workspace = policy.workspace.expanduser().resolve()
+        run_cwd = cwd.expanduser().resolve()
+        try:
+            run_cwd.relative_to(workspace)
+        except ValueError as exc:
+            raise SandboxViolation(f"cwd {run_cwd} escapes workspace {workspace}") from exc
+
+        sandbox_exec = shutil.which(self.executable)
+        if not sandbox_exec:
+            raise SandboxViolation("seatbelt sandbox requested but sandbox-exec is not installed")
+
+        write_subpaths = [
+            workspace,
+            Path("/dev/null"),
+            Path("/tmp"),
+            Path("/private/tmp"),
+            Path("/var/tmp"),
+            Path(os.environ.get("TMPDIR", "/tmp")).expanduser().resolve(strict=False),
+        ]
+        write_rules = "\n".join(
+            f'  (subpath "{_sbpl_escape(str(path))}")' for path in _unique_paths(write_subpaths)
+        )
+        network_rule = "(allow network*)" if policy.allow_network else "(deny network*)"
+        profile = (
+            "(version 1)\n"
+            "(deny default)\n"
+            "(allow process*)\n"
+            "(allow signal (target same-sandbox))\n"
+            "(allow sysctl-read)\n"
+            "(allow mach-lookup)\n"
+            "(allow file-read*)\n"
+            f"(allow file-write*\n{write_rules})\n"
+            f"{network_rule}\n"
+        )
+        return [sandbox_exec, "-p", profile, *argv], env, run_cwd
+
+
 class SandboxViolation(Exception):
     """Raised when a request would escape the policy.
 
@@ -155,6 +292,66 @@ class SandboxViolation(Exception):
     Caller should surface this as ``status=rejected`` so the planner
     distinguishes "not allowed" from "ran and failed".
     """
+
+
+def select_process_backend(mode: str | None = None) -> BackendChoice:
+    """Resolve the process sandbox backend from env/config.
+
+    ``OCTOPUS_PROCESS_SANDBOX`` values:
+
+    * ``auto`` (default): use the best available hard backend; fall back
+      to soft if none is installed.
+    * ``soft`` / ``direct`` / ``off``: direct subprocess with
+      the soft policy already enforced by callers.
+    * ``strict``: use a hard backend; reject execution if unavailable.
+    * ``bwrap`` / ``bubblewrap`` / ``seatbelt``: require that backend.
+    """
+
+    raw = (mode or os.environ.get("OCTOPUS_PROCESS_SANDBOX") or "auto").strip().lower()
+    if raw in {"", "soft", "direct", "off", "false", "0"}:
+        return BackendChoice(DirectBackend(), "direct", hard=False)
+
+    if raw in {"bwrap", "bubblewrap"}:
+        if BubblewrapBackend.available():
+            return BackendChoice(BubblewrapBackend(), "bwrap", hard=True, strict=True)
+        raise SandboxViolation("bwrap sandbox requested but bwrap is not installed")
+
+    if raw in {"seatbelt", "sandbox-exec"}:
+        if SeatbeltBackend.available():
+            return BackendChoice(SeatbeltBackend(), "seatbelt", hard=True, strict=True)
+        raise SandboxViolation(
+            "seatbelt sandbox requested but sandbox-exec is not available on this host"
+        )
+
+    if raw in {"auto", "strict"}:
+        strict = raw == "strict"
+        if sys.platform.startswith("linux") and BubblewrapBackend.available():
+            return BackendChoice(BubblewrapBackend(), "bwrap", hard=True, strict=strict)
+        if SeatbeltBackend.available():
+            return BackendChoice(SeatbeltBackend(), "seatbelt", hard=True, strict=strict)
+        if strict:
+            raise SandboxViolation(
+                "strict process sandbox requested but no hard backend is available "
+                "(install bwrap on Linux or use sandbox-exec on macOS)"
+            )
+        return BackendChoice(DirectBackend(), "direct", hard=False)
+
+    raise SandboxViolation(f"unknown process sandbox mode: {raw}")
+
+
+def _sbpl_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _unique_paths(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    out: list[Path] = []
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
 
 
 class SandboxRunner:
@@ -194,15 +391,10 @@ class SandboxRunner:
         cmd_list, env, run_cwd = self.backend.transform(cmd_list, env, run_cwd, self.policy)
 
         started_at = time.monotonic()
-        # ``preexec_fn`` is unsafe with threading on POSIX
-        # (https://bugs.python.org/issue40364). We rely on signalling
-        # the process group from the parent, which is portable enough.
-        creationflags = 0
-        start_new_session = False
-        if sys.platform == "win32":
-            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
-        else:
-            start_new_session = True
+        from runtime.platform.process.tree import (
+            process_group_kwargs,
+            terminate_process_tree,
+        )
 
         try:
             proc = subprocess.Popen(
@@ -215,8 +407,7 @@ class SandboxRunner:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                creationflags=creationflags,
-                start_new_session=start_new_session,
+                **process_group_kwargs(),
             )
         except FileNotFoundError as exc:
             raise SandboxViolation(f"executable not found: {exc.filename}") from exc
@@ -274,11 +465,8 @@ class SandboxRunner:
         except subprocess.TimeoutExpired:
             timed_out = True
             killed = True
-            _kill_tree(proc)
-            try:
-                exit_code = proc.wait(timeout=2.0)
-            except subprocess.TimeoutExpired:
-                exit_code = -1
+            terminate_process_tree(proc)
+            exit_code = proc.returncode if proc.returncode is not None else -1
 
         out_thread.join(timeout=1.0)
         err_thread.join(timeout=1.0)
@@ -301,9 +489,7 @@ class SandboxRunner:
         try:
             candidate.relative_to(ws)
         except ValueError as exc:
-            raise SandboxViolation(
-                f"cwd {candidate} escapes workspace {ws}"
-            ) from exc
+            raise SandboxViolation(f"cwd {candidate} escapes workspace {ws}") from exc
         if not candidate.is_dir():
             raise SandboxViolation(f"cwd is not a directory: {candidate}")
         return candidate
@@ -315,31 +501,15 @@ def _normalise_argv(argv: Iterable[str] | str) -> list[str]:
     return [str(a) for a in argv]
 
 
-def _kill_tree(proc: subprocess.Popen) -> None:
-    """Best-effort kill of the process and its children.
-
-    On POSIX we signal the session group; on Windows we send
-    CTRL_BREAK to the process group, then ``terminate`` as a fallback.
-    """
-    if proc.poll() is not None:
-        return
-    if sys.platform == "win32":
-        with contextlib.suppress((OSError, ValueError)):
-            proc.send_signal(signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
-            proc.terminate()
-        return
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-    except OSError:
-        with contextlib.suppress(OSError):
-            proc.terminate()
-
-
 __all__ = [
     "Backend",
+    "BackendChoice",
+    "BubblewrapBackend",
     "DirectBackend",
     "SandboxPolicy",
     "SandboxResult",
     "SandboxRunner",
     "SandboxViolation",
+    "SeatbeltBackend",
+    "select_process_backend",
 ]

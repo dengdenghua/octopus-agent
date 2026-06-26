@@ -36,12 +36,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Request
+    from fastapi import APIRouter, Depends, HTTPException, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Request = None  # type: ignore[assignment, misc]
 
@@ -105,6 +106,11 @@ def create_mcp_router(
     *,
     registry: Any,
     initial_mcp_servers: Any = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> McpRouter:
     """Build the MCP router.
 
@@ -128,7 +134,22 @@ def create_mcp_router(
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
-    router = APIRouter(tags=["mcp"])
+    def _auth_dep(request: Request) -> None:
+        # Router-level auth keeps MCP config/trust self-contained: if
+        # this router is mounted without app.py's legacy middleware, it
+        # still refuses anonymous callers in auth-on deployments.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["mcp"], dependencies=[Depends(_auth_dep)])
     mcp_config_state: dict[str, Any] = {"mcp_servers": {}}
     mcp_runtime: dict[str, dict[str, Any]] = {}
 

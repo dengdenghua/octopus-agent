@@ -15,6 +15,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import time
 import uuid
 from typing import Any
@@ -40,11 +41,71 @@ _VALID_ANDROID_ACTIONS = {
 _PENDING_TTL_SECONDS = 90
 
 
-def create_android_router() -> APIRouter:
+def create_android_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
     router = APIRouter(prefix="/api/android", tags=["android"])
     pool = get_device_pool()
     lock_mgr = get_device_lock_manager()
     pending_previews: dict[str, dict[str, Any]] = {}
+
+    class _WsAuthError(Exception):
+        """Raised to refuse a device WebSocket handshake (→ close 4401)."""
+
+    def _resolve_ws_actor(ws: WebSocket) -> str | None:
+        """Authenticate the device WebSocket before ``accept()``.
+
+        Mirrors ``realtime_gateway._resolve_ws_actor``: the token may
+        arrive as an ``Authorization: Bearer`` header, the
+        ``sec-websocket-protocol`` subprotocol (``bearer, <token>``), or
+        a ``?token=`` query param. Degrades open when ``require_auth`` is
+        false, so default (no-auth) deployments are unchanged. The HTTP
+        endpoints on this router are gated separately by the control-plane
+        auth middleware in ``app.py``; that middleware never sees WS
+        scope, so the handshake must be gated here.
+        """
+        if identity_store is None:
+            if require_auth:
+                raise _WsAuthError("identity store required for android auth")
+            return None
+        token: str | None = None
+        auth_header = ws.headers.get("authorization") or ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if token is None:
+            subproto = ws.headers.get("sec-websocket-protocol") or ""
+            parts = [p.strip() for p in subproto.split(",") if p.strip()]
+            if len(parts) >= 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+        if token is None:
+            token = ws.query_params.get("token")
+        if not token:
+            if require_auth:
+                raise _WsAuthError("missing android auth token")
+            return None
+        if jwt_secret and token.count(".") == 2:
+            identity = identity_store.verify_jwt(
+                token,
+                secret=jwt_secret,
+                required_issuer=jwt_issuer,
+                required_audience=jwt_audience,
+                trust_jwt_sub=True,
+            )
+            if identity is not None:
+                return identity.actor_id
+            if require_auth:
+                raise _WsAuthError("invalid jwt")
+        identity = identity_store.verify_api_key(token)
+        if identity is not None:
+            return identity.actor_id
+        if require_auth:
+            raise _WsAuthError("invalid token")
+        return None
 
     # ── List devices ───────────────────────────────────
 
@@ -158,6 +219,12 @@ def create_android_router() -> APIRouter:
 
     @router.websocket("/ws/{device_id}")
     async def device_websocket(ws: WebSocket, device_id: str) -> None:
+        try:
+            _resolve_ws_actor(ws)
+        except _WsAuthError as exc:
+            with contextlib.suppress(Exception):
+                await ws.close(code=4401, reason=str(exc))
+            return
         await ws.accept()
 
         # Register device

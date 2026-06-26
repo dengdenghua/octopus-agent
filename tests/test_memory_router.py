@@ -4,11 +4,13 @@ import json
 from pathlib import Path
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.memory import user_store
 from runtime.platform.process.paths import app_paths
 from runtime.platform.ui.app import create_app
+from runtime.sensing.gateway.memory_router import create_memory_router
 
 
 @pytest.fixture
@@ -75,3 +77,33 @@ def test_memory_config_uses_same_app_paths(client: TestClient, tmp_path: Path) -
     assert config["storage_path"] == str(tmp_path / "data" / "user_memory.json")
     assert (tmp_path / "data" / "user_memory_config.json").exists()
 
+
+class TestMemoryRouterAuth:
+    def _client(self, require_auth: bool) -> TestClient:
+        from runtime.safety.auth import Identity, IdentityStore
+
+        store = IdentityStore()
+        store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+        app = FastAPI()
+        app.include_router(
+            create_memory_router(
+                identity_store=store,
+                require_auth=require_auth,
+            )
+        )
+        return TestClient(app)
+
+    def test_no_auth_required_by_default(self) -> None:
+        client = self._client(require_auth=False)
+        assert client.get("/api/memory").status_code == 200
+
+    def test_missing_token_rejected_when_required(self) -> None:
+        client = self._client(require_auth=True)
+        assert client.get("/api/memory").status_code == 401
+
+    def test_valid_token_accepted_when_required(self) -> None:
+        client = self._client(require_auth=True)
+        assert client.get(
+            "/api/memory",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code == 200

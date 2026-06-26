@@ -5,6 +5,9 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from runtime.execution.agents.cli_team import run_cli_team
 from runtime.execution.agents.local_partner_bridge import LocalPartnerResult
 
@@ -165,6 +168,28 @@ def test_router_exposes_status_and_run_routes() -> None:
     paths = {getattr(r, "path", None) for r in router.routes}
     assert "/api/cli-team/status" in paths
     assert "/api/cli-team/run" in paths
+
+
+def test_router_requires_auth_when_enabled() -> None:
+    from runtime.safety.auth import Identity, IdentityStore
+    from runtime.sensing.gateway.cli_team_router import create_cli_team_router
+
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_cli_team_router(
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/cli-team/status").status_code == 401
+    assert client.get(
+        "/api/cli-team/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    ).status_code == 200
 
 
 # ── team-task routing: local_* assignees → run_cli_team ───────────────

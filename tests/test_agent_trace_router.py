@@ -1,17 +1,36 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from runtime.core.cerebrum.react_types import ReActResult
+from runtime.execution.loops.controller import LoopController
+from runtime.execution.loops.models import (
+    LoopPolicy,
+    LoopRun,
+    VerifierFinding,
+    VerifierResult,
+)
+from runtime.execution.loops.store import LoopRunStore
 from runtime.memory.diagnostics.trace_store import AgentTraceStore
+from runtime.platform.runtime_policy.workspaces import WorkspaceManager
 from runtime.sensing.gateway.agent_trace_router import create_agent_trace_router
 
 
 class _DenyIdentityStore:
     def verify_api_key(self, token: str):
         return None
+
+
+class _StubVerifierRegistry:
+    def __init__(self, results: list[VerifierResult]) -> None:
+        self._results = list(results)
+
+    def run(self, profile: str, workspace_path: str) -> VerifierResult:
+        return self._results.pop(0)
 
 
 def _client_with_trace(
@@ -987,6 +1006,197 @@ def test_trace_resume_proposals_supports_thread_scope(tmp_path: Path) -> None:
     assert proposal["checkpoint"]["type"] == "react"
     assert proposal["recovery_hints"]["phase"] == "implementation"
     assert "secret message body" not in str(data)
+
+
+def test_trace_router_exposes_loop_run_checkpoints_and_resume_proposals(tmp_path: Path) -> None:
+    trace = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    loop_store = LoopRunStore(tmp_path / "loop_runs.json")
+    run = LoopRun(
+        owner_id="alice",
+        goal="Fix remaining verifier failures",
+        thread_id="thread-loop",
+        workspace_path=str(tmp_path / "workspace"),
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+    )
+    loop_store.create(run)
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        return ReActResult(final_answer="not fixed", success=False)
+
+    controller = LoopController(
+        store=loop_store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=_StubVerifierRegistry(
+            [
+                VerifierResult(
+                    profile="python_repo_patch",
+                    kind="python",
+                    passed=False,
+                    findings=[
+                        VerifierFinding(
+                            name="pytest",
+                            passed=False,
+                            exit_code=1,
+                            stderr="1 failing test remains",
+                        )
+                    ],
+                    summary="failed checks: pytest",
+                )
+            ]
+        ),
+        trace_store=trace,
+        react_runner=runner,
+    )
+    controller.execute(run.run_id)
+
+    app = FastAPI()
+    app.include_router(create_agent_trace_router(store=trace))
+    client = TestClient(app)
+
+    checkpoints = client.get(
+        "/api/agent-trace/checkpoints",
+        params={"task_id": run.run_id, "checkpoint_type": "loop_run"},
+    )
+    proposals = client.get(
+        "/api/agent-trace/resume-proposals",
+        params={"task_id": run.run_id, "checkpoint_type": "loop_run"},
+    )
+    task_run = client.get(f"/api/agent-trace/task-runs/{run.run_id}")
+    review = client.get(f"/api/agent-trace/task-runs/{run.run_id}/review")
+    replay_case = client.get(f"/api/agent-trace/task-runs/{run.run_id}/replay-case")
+    replay_evaluation = client.get(
+        f"/api/agent-trace/task-runs/{run.run_id}/replay-evaluation",
+    )
+
+    assert checkpoints.status_code == 200
+    assert len(checkpoints.json()["checkpoints"]) == 1
+    assert checkpoints.json()["checkpoints"][0]["checkpoint_type"] == "loop_run"
+    assert checkpoints.json()["checkpoints"][0]["state"]["current_phase"] == "failed"
+
+    assert proposals.status_code == 200
+    assert len(proposals.json()["proposals"]) == 1
+    assert proposals.json()["proposals"][0]["checkpoint"]["type"] == "loop_run"
+    assert proposals.json()["proposals"][0]["recovery_hints"]["phase"] == "failed"
+
+    assert task_run.status_code == 200
+    assert task_run.json()["task_run"]["status"] == "failed"
+    assert task_run.json()["task_run"]["latest_checkpoint"]["type"] == "loop_run"
+
+    assert review.status_code == 200
+    review_body = review.json()["review"]
+    assert review_body["status"] == "failed"
+    assert any(
+        step["kind"] == "loop_attempt"
+        for step in review_body["replay"]["steps"]
+    )
+    assert review_body["resume"]["source"] == "trace_store"
+    assert review_body["resume"]["latest_checkpoint"]["trace_checkpoint_id"] > 0
+
+    assert replay_case.status_code == 200
+    assert replay_case.json()["replay_case"]["expectations"]["status"] == "failed"
+    assert replay_case.json()["replay_case"]["resume"]["source"] == "trace_store"
+
+    assert replay_evaluation.status_code == 200
+    assert replay_evaluation.json()["evaluation"]["passed"] is True
+
+
+def test_trace_router_review_prefers_loop_checkpoint_under_newer_generic_checkpoint(
+    tmp_path: Path,
+) -> None:
+    trace = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    loop_store = LoopRunStore(tmp_path / "loop_runs.json")
+    run = LoopRun(
+        owner_id="alice",
+        goal="Keep loop review stable under extra checkpoints",
+        thread_id="thread-loop",
+        workspace_path=str(tmp_path / "workspace"),
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+    )
+    loop_store.create(run)
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        return ReActResult(final_answer="not fixed", success=False)
+
+    controller = LoopController(
+        store=loop_store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=_StubVerifierRegistry(
+            [
+                VerifierResult(
+                    profile="python_repo_patch",
+                    kind="python",
+                    passed=False,
+                    findings=[
+                        VerifierFinding(
+                            name="pytest",
+                            passed=False,
+                            exit_code=1,
+                            stderr="1 failing test remains",
+                        )
+                    ],
+                    summary="failed checks: pytest",
+                )
+            ]
+        ),
+        trace_store=trace,
+        react_runner=runner,
+    )
+    controller.execute(run.run_id)
+
+    loop_checkpoint = trace.latest_checkpoint(
+        task_id=run.run_id,
+        checkpoint_type="loop_run",
+    )
+    assert loop_checkpoint is not None
+
+    generic_checkpoint_id = trace.record_checkpoint(
+        task_id=run.run_id,
+        checkpoint_type="react",
+        state={
+            "current_phase": "postmortem",
+            "messages_snapshot": [],
+            "steps_snapshot": [{"iteration": 9, "action": "summarize_failure()"}],
+            "working_set_snapshot": [],
+        },
+        thread_id="thread-loop",
+        turn_id=run.run_id,
+        agent_id="observer",
+        iteration=9,
+        summary="observer note",
+    )
+
+    app = FastAPI()
+    app.include_router(create_agent_trace_router(store=trace))
+    client = TestClient(app)
+
+    task_run = client.get(f"/api/agent-trace/task-runs/{run.run_id}")
+    review = client.get(f"/api/agent-trace/task-runs/{run.run_id}/review")
+    replay_case = client.get(f"/api/agent-trace/task-runs/{run.run_id}/replay-case")
+    replay_evaluation = client.get(
+        f"/api/agent-trace/task-runs/{run.run_id}/replay-evaluation",
+    )
+
+    assert task_run.status_code == 200
+    assert task_run.json()["task_run"]["latest_checkpoint"]["id"] == generic_checkpoint_id
+    assert task_run.json()["task_run"]["latest_checkpoint"]["type"] == "react"
+
+    assert review.status_code == 200
+    review_body = review.json()["review"]
+    assert review_body["status"] == "failed"
+    assert any(
+        step["kind"] == "loop_attempt"
+        for step in review_body["replay"]["steps"]
+    )
+    assert review_body["summary"]["trace_checkpoint_id"] == loop_checkpoint["id"]
+    assert review_body["resume"]["latest_checkpoint"]["trace_checkpoint_id"] == loop_checkpoint["id"]
+
+    assert replay_case.status_code == 200
+    assert replay_case.json()["replay_case"]["resume"]["source"] == "trace_store"
+
+    assert replay_evaluation.status_code == 200
+    assert replay_evaluation.json()["evaluation"]["passed"] is True
 
 
 def test_trace_resume_requests_are_readable_and_sanitized(tmp_path: Path) -> None:

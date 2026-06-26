@@ -1,3 +1,12 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/memory/knowledge_graph/kg.py
+  - runtime/memory/knowledge_graph/sqlite_kg.py
+  - runtime/memory/knowledge_graph/kuzu_kg.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Knowledge Graph (知识图谱升级)
 
 > 缺口 2（SIX_MODULES §4）的完整规范。
@@ -142,6 +151,8 @@ def ingest(triples: list[Triple]):
 ```
 
 **不变量 CC-C1**：KG 所有写入必经 conflict_resolver，没有 bypass。
+
+> ⚠️ **CC-C1 部分成立**:6 策略 conflict_resolver 已实装(`runtime/safety/conflict_resolution/resolver.py`),但 KG 的 `add()` 目前仍用内联 supersede 逻辑(基于 confidence + timestamp),尚未切换到调用 `resolve()`。CC-C1 待 KG 接入后完全成立。
 
 ---
 

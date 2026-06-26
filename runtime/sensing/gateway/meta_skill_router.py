@@ -20,17 +20,26 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
 
 
-def create_meta_skill_router() -> Any:
+def create_meta_skill_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     """Build a FastAPI router over the MetaSkill catalog."""
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
@@ -44,7 +53,19 @@ def create_meta_skill_router() -> Any:
         meta_skill_to_mermaid,
     )
 
-    router = APIRouter(tags=["meta-skill"])
+    def _auth_dep(request: Request) -> None:
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["meta-skill"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/meta-skills")
     def list_packs() -> dict[str, Any]:

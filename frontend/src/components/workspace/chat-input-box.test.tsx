@@ -300,23 +300,23 @@ describe("<ChatInputBox /> cowork materials", () => {
       <ChatInputBox
         mode="react"
         threadId="thread-1"
-        contextTokens={0}
+        contextTokens={500}
         maxContextTokens={1000}
       />,
     );
 
-    expect(screen.getByLabelText(/Context Usage: 0%/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Context Usage: 50%/)).toBeInTheDocument();
 
     rerender(
       <ChatInputBox
         mode="react"
         threadId="thread-1"
-        contextTokens={60}
+        contextTokens={600}
         maxContextTokens={1000}
       />,
     );
 
-    expect(screen.getByLabelText(/Context Usage: 6%/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Context Usage: 60%/)).toBeInTheDocument();
   });
 
   it("submits only enabled URL/text materials", async () => {

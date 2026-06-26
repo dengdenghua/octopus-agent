@@ -217,11 +217,25 @@ def create_openai_router(
         }
 
     @router.get("/v1/models")
-    def list_models() -> dict[str, Any]:
+    def list_models(request: Request) -> dict[str, Any]:
+        _resolve_actor(
+            request, identity_store, require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+            jwt_leeway_seconds=jwt_leeway_seconds,
+        )
         return _list_openai_models()
 
     @router.get("/api/models")
-    def list_models_alias() -> dict[str, Any]:
+    def list_models_alias(request: Request) -> dict[str, Any]:
+        _resolve_actor(
+            request, identity_store, require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+            jwt_leeway_seconds=jwt_leeway_seconds,
+        )
         return {
             "models": [
                 {

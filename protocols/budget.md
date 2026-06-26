@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/safety/budget_breaker/breaker.py
+  - runtime/platform/llm_infra/budget_tracker.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Budget (墨囊 · 成本治理)
 
 > **原则 ⑥ 成本治理** 的具体协议。

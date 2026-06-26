@@ -1,3 +1,10 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/safety/recovery/memory_consolidator.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Memory Consolidation (记忆巩固 · "睡眠"机制)
 
 > 缺口 5（SIX_MODULES §4）的完整规范。
@@ -252,6 +259,8 @@ def sync(semantic: SemanticMemory, triple: Triple):
 |---|---|---|
 | MEM-I1 | Episodic 永不修改，只 append | Schema enforce |
 | MEM-I2 | Semantic 写入必经 conflict_resolver | Runtime Gate |
+
+> ⚠️ **MEM-I2 待 KG 接入后成立**:conflict_resolver 已实装(`runtime/safety/conflict_resolution/resolver.py`),但 KG 的 `add()` 尚未切换到调用 `resolve()`。
 | MEM-I3 | Decay 只降 priority 不删除 | Runtime Assert |
 | MEM-I4 | REM 产出 trust 上限 0.4 | Runtime Assert |
 | MEM-I5 | Procedural 规则上限 30 条（在 Cerebrum prompt）| Runtime Assert（复用 EVO-I6）|
@@ -380,10 +389,12 @@ memory_consolidation:
 | 新 skill 候选 | [evolution.md](evolution.md) | ✅ |
 | Workflow 改写建议 | [workflow_rewrite.md](workflow_rewrite.md) | ✅ |
 | KG 新增三元组 | [knowledge_graph.md](knowledge_graph.md) | ✅ |
-| **记忆巩固指令** | **本协议** | ✅ |
+| **记忆巩固指令** | **本协议** | ⚠️ |
 | 上下文配方打分 | [recipe.md](recipe.md) | ✅ |
 
-**进度 5/5 = 100%。反思引擎协议层全齐。**
+**进度 5/5 文件已创建,完整协议语义实装进行中。**
+
+> ⚠️ **memory_consolidator.py 当前仅实装轨迹模式聚类**。4 层记忆分工、衰减机制、Light/Deep/REM 三级巩固、KG 双向同步为设计愿景。conflict_resolver 已实装但 KG 未接入。
 
 ---
 

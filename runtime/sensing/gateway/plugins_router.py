@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from runtime.platform.plugins.codex_discovery import (  # re-exported
@@ -16,8 +16,25 @@ from runtime.platform.plugins.codex_discovery import (  # re-exported
 def create_plugins_router(
     *,
     plugin_roots: list[Path] | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
-    router = APIRouter(tags=["plugins"])
+    def _auth_dep(request: Request) -> None:
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["plugins"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/plugins")
     def _plugins() -> list[dict[str, Any]]:

@@ -48,6 +48,14 @@ class AppState:
             if isinstance(journal, JSONLJournal):
                 journal.attach_trace_store(trace_store)
         self.trace_store = trace_store
+        self.task_supervisor = None
+        try:
+            from runtime.platform.process.paths import app_paths
+            from runtime.platform.process.task_supervisor import TaskSupervisor
+
+            self.task_supervisor = TaskSupervisor.from_path(app_paths().task_runs_path)
+        except Exception:  # noqa: BLE001
+            self.task_supervisor = None
 
         base_journal = journal if journal is not None else (
             JSONLJournal(journal_path, trace_store=trace_store, redactor=Redactor())

@@ -1,213 +1,68 @@
-"""WebSocket handshake auth for the tentacle server.
+"""Auth on tentacle screen-stream WebSockets.
 
-The mother-brain WS server binds 0.0.0.0 (phones connect over the LAN)
-and used to register and execute for ANY device that sent device/hello —
-no secret. These tests lock the token handshake: loopback-without-token
-stays open for local dev, but a routable bind rejects every connection
-that doesn't present the configured token, and an unauthenticated client
-can't reach task/execute at all.
-
-(_handle_connection unregisters the device in its finally when the
-stream ends, so we assert on the registration callback / close state
-rather than connected_count after the call returns.)
+The HTTP /api/tentacle/* routes can be protected by app middleware, but
+the screen-stream sockets bypass HTTP middleware entirely. These tests
+lock the handshake boundary: when require_auth is enabled, an anonymous
+or wrong-token client is closed with 4401 before any stream subscription
+is established.
 """
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
-from runtime.tentacle.transport.ws_server import (
-    _HELLO_MAX_FAILURES,
-    TentacleWebSocketServer,
-)
-
-
-class _FakeWs:
-    """Minimal stand-in for a websockets server connection."""
-
-    def __init__(self, incoming: list[Any], remote: tuple[str, int] = ("192.168.1.50", 5555)):
-        self._incoming = list(incoming)
-        self.remote_address = remote
-        self.sent: list[str] = []
-        self.closed = False
-        self.close_code: int | None = None
-        self.close_reason: str | None = None
-
-    def __aiter__(self) -> _FakeWs:
-        return self
-
-    async def __anext__(self) -> Any:
-        if self.closed or not self._incoming:
-            raise StopAsyncIteration
-        return self._incoming.pop(0)
-
-    async def send(self, data: str) -> None:
-        self.sent.append(data)
-
-    async def close(self, code: int = 1000, reason: str = "") -> None:
-        self.closed = True
-        self.close_code = code
-        self.close_reason = reason
+from runtime.safety.auth import Identity, IdentityStore
+from runtime.tentacle.dashboard import create_tentacle_router
 
 
-def _hello(token: str | None = None, tentacle_id: str = "android-1") -> str:
-    params: dict[str, Any] = {"tentacle_id": tentacle_id, "model": "Pixel"}
-    if token is not None:
-        params["token"] = token
-    return json.dumps({"jsonrpc": "2.0", "method": "device/hello", "params": params, "id": "1"})
+class _DummyCoordinator:
+    screen_relay = None
+    _dashboard_port = 8000
 
 
-def _task_execute() -> str:
-    return json.dumps(
-        {
-            "jsonrpc": "2.0",
-            "method": "task/execute",
-            "params": {"task_id": "t1", "task": "do thing"},
-            "id": "9",
-        }
+def _store() -> IdentityStore:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    return store
+
+
+def _client(require_auth: bool, store: IdentityStore | None = None) -> TestClient:
+    app = FastAPI()
+    app.include_router(
+        create_tentacle_router(
+            _DummyCoordinator(),
+            identity_store=store,
+            require_auth=require_auth,
+        )
     )
+    return TestClient(app)
 
 
-def _make_server(**kw: Any) -> tuple[TentacleWebSocketServer, list[str]]:
-    """Server whose on_device_hello records every registered device id."""
-    registered: list[str] = []
-
-    async def _on_hello(hello: Any, ws: Any) -> None:
-        registered.append(hello.tentacle_id)
-
-    return TentacleWebSocketServer(on_device_hello=_on_hello, **kw), registered
-
-
-@pytest.mark.asyncio
-async def test_loopback_without_token_allows_hello():
-    server, registered = _make_server(host="127.0.0.1", auth_token=None)
-    ws = _FakeWs([_hello()], remote=("127.0.0.1", 4000))
-    await server._handle_connection(ws, "/")
-    assert not ws.closed
-    assert registered == ["android-1"]
+def test_tentacle_screen_ws_rejects_missing_token_when_required() -> None:
+    client = _client(require_auth=True, store=_store())
+    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect(
+        "/api/tentacle/screen/stream"
+    ) as ws:
+        ws.receive_text()
+    assert exc_info.value.code == 4401
 
 
-@pytest.mark.asyncio
-async def test_routable_without_token_rejects_everything():
-    # 0.0.0.0 with no configured secret: nothing to authenticate against.
-    server, registered = _make_server(host="0.0.0.0", auth_token=None)
-    ws = _FakeWs([_hello()])
-    await server._handle_connection(ws, "/")
-    assert ws.closed
-    assert ws.close_code == 1008
-    assert registered == []
+def test_tentacle_pc_screen_ws_rejects_wrong_token_when_required() -> None:
+    client = _client(require_auth=True, store=_store())
+    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect(
+        "/api/tentacle/pc-screen/stream?token=nope"
+    ) as ws:
+        ws.receive_text()
+    assert exc_info.value.code == 4401
 
 
-@pytest.mark.asyncio
-async def test_routable_with_token_requires_matching_token():
-    server, registered = _make_server(host="0.0.0.0", auth_token="s3cret")
-
-    ok = _FakeWs([_hello(token="s3cret")])
-    await server._handle_connection(ok, "/")
-    assert not ok.closed
-    assert registered == ["android-1"]
-
-    bad = _FakeWs([_hello(token="wrong")], remote=("192.168.1.51", 6666))
-    await server._handle_connection(bad, "/")
-    assert bad.closed
-    assert bad.close_code == 1008
-
-    missing = _FakeWs([_hello(token=None)], remote=("192.168.1.52", 7777))
-    await server._handle_connection(missing, "/")
-    assert missing.closed
-
-    assert registered == ["android-1"]  # only the correct-token device
-
-
-@pytest.mark.asyncio
-async def test_unauthenticated_cannot_reach_task_execute():
-    # The original hole: a client could send task/execute without ever
-    # registering. The gate must reject it before dispatch.
-    seen: list[Any] = []
-
-    async def _on_task(req: Any, ws: Any) -> None:
-        seen.append(req)
-
-    server = TentacleWebSocketServer(
-        host="0.0.0.0",
-        auth_token="s3cret",
-        on_task_execute=_on_task,
-    )
-    ws = _FakeWs([_task_execute()])
-    await server._handle_connection(ws, "/")
-    assert ws.closed
-    assert ws.close_code == 1008
-    assert seen == []  # decision engine never invoked
-
-
-@pytest.mark.asyncio
-async def test_env_var_token_is_honored(monkeypatch: Any):
-    monkeypatch.setenv("OCTOPUS_TENTACLE_TOKEN", "from-env")
-    server, registered = _make_server(host="0.0.0.0")
-    ok = _FakeWs([_hello(token="from-env")])
-    await server._handle_connection(ok, "/")
-    assert registered == ["android-1"]
-    assert not ok.closed
-
-
-# ── pairing-token brute-force throttle ──────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_hello_failures_rate_limited_per_ip():
-    """After _HELLO_MAX_FAILURES wrong-token hellos from one IP, the next
-    connection from that IP is refused (1008 'rate limited') BEFORE the hello
-    is even processed — a valid token can't get in. Throttles brute force."""
-    server, registered = _make_server(host="0.0.0.0", auth_token="s3cret")
-    attacker = ("203.0.113.7", 9000)
-
-    for _ in range(_HELLO_MAX_FAILURES):
-        ws = _FakeWs([_hello(token="wrong")], remote=attacker)
-        await server._handle_connection(ws, "/")
-        assert ws.closed
-        assert ws.close_reason == "unauthorized"
-
-    blocked = _FakeWs([_hello(token="s3cret")], remote=attacker)
-    await server._handle_connection(blocked, "/")
-    assert blocked.closed
-    assert blocked.close_code == 1008
-    assert blocked.close_reason == "rate limited"
-    assert registered == []  # the valid hello was never processed
-
-
-@pytest.mark.asyncio
-async def test_rate_limit_is_per_ip():
-    """One IP's exhausted budget must not block a different IP."""
-    server, registered = _make_server(host="0.0.0.0", auth_token="s3cret")
-    attacker = ("203.0.113.8", 9000)
-    for _ in range(_HELLO_MAX_FAILURES):
-        await server._handle_connection(_FakeWs([_hello(token="wrong")], remote=attacker), "/")
-
-    other = _FakeWs([_hello(token="s3cret")], remote=("203.0.113.9", 1234))
-    await server._handle_connection(other, "/")
-    assert not other.closed
-    assert registered == ["android-1"]
-
-
-@pytest.mark.asyncio
-async def test_successful_hello_clears_failure_budget():
-    """A success resets the IP's failure count, so a user who mistypes a few
-    times then succeeds isn't subsequently locked out."""
-    server, registered = _make_server(host="0.0.0.0", auth_token="s3cret")
-    ip = ("203.0.113.10", 4321)
-
-    for _ in range(_HELLO_MAX_FAILURES - 1):
-        await server._handle_connection(_FakeWs([_hello(token="wrong")], remote=ip), "/")
-
-    ok = _FakeWs([_hello(token="s3cret")], remote=ip)
-    await server._handle_connection(ok, "/")
-    assert not ok.closed
-
-    # Clean slate after success: the next wrong hello is processed (and
-    # rejected as unauthorized), NOT short-circuited as "rate limited".
-    again = _FakeWs([_hello(token="wrong")], remote=ip)
-    await server._handle_connection(again, "/")
-    assert again.close_reason == "unauthorized"
+def test_tentacle_ws_require_auth_without_identity_store_rejects() -> None:
+    client = _client(require_auth=True, store=None)
+    with pytest.raises(WebSocketDisconnect) as exc_info, client.websocket_connect(
+        "/api/tentacle/screen/stream?token=anything"
+    ) as ws:
+        ws.receive_text()
+    assert exc_info.value.code == 4401

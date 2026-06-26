@@ -1,3 +1,12 @@
+---
+implementation_status: partial
+implemented_in:
+  - runtime/safety/auth/trust_engine.py
+  - runtime/safety/auth/attack_memory.py
+  - runtime/safety/auth/adaptive_immunity.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Immunity (免疫系统协议)
 
 > **原则 ③ 内生安全** 的具体协议。

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.platform.io.atomic import _cross_process_lock
 
 
 def _review(task_id: str = "turn-1") -> dict:
@@ -34,6 +38,63 @@ def _review(task_id: str = "turn-1") -> dict:
                 "validation_metric": "Replay passes before prompt changes land.",
             }
         ],
+    }
+
+
+def _execution_policy(tmp_path: Path, backend: str) -> dict:
+    return {
+        "schema": "octopus.execution_policy.v1",
+        "sandbox_requested": True,
+        "workspace": str(tmp_path),
+        "cwd": str(tmp_path),
+        "backend": backend,
+        "hard": backend != "direct",
+        "allow_network": False,
+        "env_mode": "allowlist",
+        "process_group": True,
+        "process_tree_kill": True,
+        "timeout_s": 60,
+        "raw_output": "not copied",
+    }
+
+
+def _review_with_execution_policy(
+    tmp_path: Path,
+    *,
+    backend: str = "seatbelt",
+    task_id: str = "turn-1",
+) -> dict:
+    policy = _execution_policy(tmp_path, backend)
+    return {
+        **_review(task_id),
+        "replay": {
+            "schema": "octopus.task_run_replay.v1",
+            "case_id": "task-run:abc",
+            "fingerprint": "abc",
+            "replayable": True,
+            "step_count": 1,
+            "steps": [{"kind": "verifier_result", "execution_policies": [policy]}],
+        },
+        "findings": [
+            {
+                "type": "tool_error",
+                "evidence": {"execution_policies": [policy]},
+            }
+        ],
+        "resume": {
+            "available": True,
+            "latest_checkpoint": {
+                "id": "loop-run:1",
+                "state": {
+                    "last_verifier": {"execution_policies": [policy]},
+                    "recent_tool_calls": [{"execution_policies": [policy]}],
+                },
+                "integrity": {
+                    "resume_safe": True,
+                    "continue_from_iteration": 2,
+                },
+            },
+        },
     }
 
 
@@ -79,6 +140,38 @@ def test_review_queue_deduplicates_without_overwriting(tmp_path: Path) -> None:
     assert all(item["source_task_ids"] == ["turn-1", "turn-2"] for item in rows)
 
 
+def test_review_queue_carries_deduplicated_execution_policy_evidence(
+    tmp_path: Path,
+) -> None:
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+    queue.add_from_task_run_review(_review_with_execution_policy(tmp_path))
+    item = queue.items(target_bucket="experience")["items"][0]
+
+    policies = item["metadata"]["execution_policies"]
+    assert len(policies) == 1
+    assert policies[0]["backend"] == "seatbelt"
+    assert policies[0]["process_tree_kill"] is True
+    assert "raw_output" not in policies[0]
+
+
+def test_review_queue_merges_execution_policy_evidence_on_dedup(
+    tmp_path: Path,
+) -> None:
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+
+    queue.add_from_task_run_review(
+        _review_with_execution_policy(tmp_path, backend="seatbelt", task_id="turn-seatbelt")
+    )
+    queue.add_from_task_run_review(
+        _review_with_execution_policy(tmp_path, backend="direct", task_id="turn-direct")
+    )
+
+    item = queue.items(target_bucket="experience")["items"][0]
+    policies = item["metadata"]["execution_policies"]
+    assert item["occurrences"] == 2
+    assert {policy["backend"] for policy in policies} == {"seatbelt", "direct"}
+
+
 def test_review_queue_decisions_change_status(tmp_path: Path) -> None:
     queue = ReviewQueue(tmp_path / "review_queue.json")
     queue.add_from_task_run_review(_review())
@@ -115,3 +208,40 @@ def test_review_queue_filters_and_rejects_bad_decisions(tmp_path: Path) -> None:
         queue.decide(item_id, action="unknown")
     with pytest.raises(KeyError):
         queue.decide("missing", action="archived")
+
+
+def test_review_queue_write_lock_serializes_cross_process_writers(tmp_path: Path) -> None:
+    path = tmp_path / "review_queue.json"
+    started = tmp_path / "child-started"
+    done = tmp_path / "child-done"
+    script = f"""
+from pathlib import Path
+from runtime.memory.learning.review_queue import ReviewQueue
+
+Path({str(started)!r}).write_text("started", encoding="utf-8")
+ReviewQueue({str(path)!r}).upsert_item(
+    source="child",
+    source_kind="test",
+    candidate_kind="test",
+    priority="P1",
+    target_bucket="experience",
+    title="Child write",
+    text="Cross-process write should wait for the store lock.",
+)
+Path({str(done)!r}).write_text("done", encoding="utf-8")
+"""
+
+    with _cross_process_lock(path.parent / f"{path.name}.rw"):
+        child = subprocess.Popen([sys.executable, "-c", script])
+        deadline = time.monotonic() + 5
+        while not started.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert started.exists()
+        time.sleep(0.2)
+        assert done.exists() is False
+        assert child.poll() is None
+
+    child.wait(timeout=5)
+    assert child.returncode == 0
+    assert done.exists()
+    assert ReviewQueue(path).items()["total"] == 1

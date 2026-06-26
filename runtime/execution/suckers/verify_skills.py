@@ -10,9 +10,11 @@ executed with ``shell=False``. The legacy ``cmd`` string field is still
 read for backwards compatibility but is logged as a warning — new
 entries must supply ``argv``.
 """
+
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import sys
 import time
@@ -28,21 +30,37 @@ _logger = logging.getLogger(__name__)
 # react_context._collect_initial_diagnostics). A missing checker binary
 # is an environment gap, not a code failure — surfacing it as one sends
 # the model chasing phantom errors.
-_TOOL_MISSING_MARKERS = (
+_DEPENDENCY_MISSING_MARKERS = (
     "no module named",
+    "modulenotfounderror",
+    "cannot find module",
+    "module not found",
+)
+
+_TOOL_MISSING_MARKERS = (
     "command not found",
     "not recognized as an internal or external command",
     "could not determine executable to run",
     "npx: not found",
+    "[winerror 2]",
+    "executable not found",
     # A bare "enoent" is intentionally excluded — it also appears in
     # legitimate "ENOENT: no such file or directory" compile/type
     # errors, which are REAL failures.
 )
 
 
-def output_indicates_missing_tool(output: str) -> bool:
+def classify_environment_gap(output: str) -> str:
     lowered = (output or "").lower()
-    return any(marker in lowered for marker in _TOOL_MISSING_MARKERS)
+    if any(marker in lowered for marker in _DEPENDENCY_MISSING_MARKERS):
+        return "environment_missing_dependency"
+    if any(marker in lowered for marker in _TOOL_MISSING_MARKERS):
+        return "environment_missing_tool"
+    return ""
+
+
+def output_indicates_missing_tool(output: str) -> bool:
+    return bool(classify_environment_gap(output))
 
 
 @dataclass
@@ -61,6 +79,7 @@ class CheckResult:
     stdout: str
     stderr: str
     duration_ms: int
+    execution_policy: dict[str, Any] = field(default_factory=dict)
 
 
 def _module_installed(name: str) -> bool:
@@ -77,6 +96,116 @@ def _tsc_installed(root: Path) -> bool:
     return (bin_dir / "tsc").exists() or (bin_dir / "tsc.cmd").exists()
 
 
+def _executable_available(name: str) -> bool:
+    return shutil.which(name) is not None
+
+
+def _package_json_check() -> dict[str, Any]:
+    return {
+        "name": "package-json",
+        "argv": [
+            sys.executable,
+            "-c",
+            (
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "try:\n"
+                "    data = json.loads(Path('package.json').read_text(encoding='utf-8'))\n"
+                "except json.JSONDecodeError as exc:\n"
+                "    print(\n"
+                "        f'package.json: invalid JSON: {exc.msg} '\n"
+                "        f'at line {exc.lineno} column {exc.colno}',\n"
+                "        file=sys.stderr,\n"
+                "    )\n"
+                "    sys.exit(2)\n"
+                "name = data.get('name') if isinstance(data, dict) else None\n"
+                "scripts = data.get('scripts', {}) if isinstance(data, dict) else {}\n"
+                "print(f\"package={name or '<unnamed>'} scripts={len(scripts) if isinstance(scripts, dict) else 0}\")\n"
+            ),
+        ],
+        "display_cmd": 'python -c "parse package.json"',
+        "fatal_on_failure": True,
+    }
+
+
+def _pyproject_toml_check() -> dict[str, Any]:
+    return {
+        "name": "pyproject",
+        "argv": [
+            sys.executable,
+            "-c",
+            (
+                "import sys\n"
+                "from pathlib import Path\n"
+                "text = Path('pyproject.toml').read_text(encoding='utf-8')\n"
+                "try:\n"
+                "    import tomllib\n"
+                "except ModuleNotFoundError:\n"
+                "    print(f'pyproject.toml: {len(text.splitlines())} lines')\n"
+                "else:\n"
+                "    try:\n"
+                "        tomllib.loads(text)\n"
+                "    except tomllib.TOMLDecodeError as exc:\n"
+                "        print(f'pyproject.toml: invalid TOML: {exc}', file=sys.stderr)\n"
+                "        sys.exit(2)\n"
+                "    print('pyproject.toml: valid TOML')\n"
+            ),
+        ],
+        "display_cmd": 'python -c "parse pyproject.toml"',
+        "fatal_on_failure": True,
+    }
+
+
+def _manifest_file_check(filename: str, *, name: str) -> dict[str, Any]:
+    if filename.endswith(".toml"):
+        inline = (
+            "import sys\n"
+            "from pathlib import Path\n"
+            f"path = Path({filename!r})\n"
+            "text = path.read_text(encoding='utf-8')\n"
+            "try:\n"
+            "    import tomllib\n"
+            "except ModuleNotFoundError:\n"
+            "    print(f'{path.name}: {len(text.splitlines())} lines')\n"
+            "else:\n"
+            "    try:\n"
+            "        tomllib.loads(text)\n"
+            "    except tomllib.TOMLDecodeError as exc:\n"
+            "        print(f'{path.name}: invalid TOML: {exc}', file=sys.stderr)\n"
+            "        sys.exit(2)\n"
+            "    print(f'{path.name}: valid TOML')\n"
+        )
+    elif filename == "go.mod":
+        inline = (
+            "import sys\n"
+            "from pathlib import Path\n"
+            "path = Path('go.mod')\n"
+            "lines = path.read_text(encoding='utf-8').splitlines()\n"
+            "first = next((line.strip() for line in lines if line.strip() and not line.strip().startswith('//')), '')\n"
+            "if not first.startswith('module '):\n"
+            "    print('go.mod: missing module directive', file=sys.stderr)\n"
+            "    sys.exit(2)\n"
+            "print('go.mod: module ' + first[len('module '):].strip())\n"
+        )
+    else:
+        inline = (
+            "from pathlib import Path\n"
+            f"path = Path({filename!r})\n"
+            "text = path.read_text(encoding='utf-8')\n"
+            "print(f'{path.name}: {len(text.splitlines())} lines')\n"
+        )
+    return {
+        "name": name,
+        "argv": [
+            sys.executable,
+            "-c",
+            inline,
+        ],
+        "display_cmd": f'python -c "read {filename}"',
+        "fatal_on_failure": True,
+    }
+
+
 def detect_project(workspace: str) -> ProjectProfile:
     root = Path(workspace)
     if not root.is_dir():
@@ -85,123 +214,178 @@ def detect_project(workspace: str) -> ProjectProfile:
     checks: list[dict[str, Any]] = []
 
     if (root / "package.json").is_file():
+        checks.append(_package_json_check())
         pkg = _read_json(root / "package.json")
         scripts = pkg.get("scripts", {}) if isinstance(pkg, dict) else {}
         has_ts = (root / "tsconfig.json").is_file()
         kind = "node-ts" if has_ts else "node"
+        npm_available = _executable_available("npm")
+        npx_available = _executable_available("npx")
         # Only offer typecheck when tsc is actually installed: a bare
         # ``npx tsc`` on a machine without the package may hit the
         # network to fetch it, and a missing binary would surface as a
         # bogus "typecheck failed" — these checks feed the agent's
         # auto-diagnostics, so a false failure sends it chasing
         # phantom errors.
-        if has_ts and _tsc_installed(root):
-            checks.append({
-                "name": "typecheck",
-                "argv": ["npx", "--no-install", "tsc", "--noEmit"],
-                "display_cmd": "npx --no-install tsc --noEmit",
-            })
-        if "lint" in scripts:
-            checks.append({
-                "name": "lint",
-                "argv": ["npm", "run", "lint"],
-                "display_cmd": "npm run lint",
-            })
-        if "test" in scripts:
+        if has_ts and npx_available and _tsc_installed(root):
+            checks.append(
+                {
+                    "name": "typecheck",
+                    "argv": ["npx", "--no-install", "tsc", "--noEmit"],
+                    "display_cmd": "npx --no-install tsc --noEmit",
+                }
+            )
+        if npm_available and "lint" in scripts:
+            checks.append(
+                {
+                    "name": "lint",
+                    "argv": ["npm", "run", "lint"],
+                    "display_cmd": "npm run lint",
+                }
+            )
+        if npm_available and "test" in scripts:
             # --run is the vitest convention; if the project uses a different
             # runner the extra flag is simply ignored.
-            checks.append({
-                "name": "test",
-                "argv": ["npm", "test", "--", "--run"],
-                "display_cmd": "npm test -- --run",
-            })
-        if "build" in scripts:
-            checks.append({
-                "name": "build",
-                "argv": ["npm", "run", "build"],
-                "display_cmd": "npm run build",
-            })
-        if not checks:
-            checks.append({
-                "name": "install-check",
-                "argv": ["npm", "ls", "--depth=0"],
-                "display_cmd": "npm ls --depth=0",
-            })
+            checks.append(
+                {
+                    "name": "test",
+                    "argv": ["npm", "test", "--", "--run"],
+                    "display_cmd": "npm test -- --run",
+                }
+            )
+        if npm_available and "build" in scripts:
+            checks.append(
+                {
+                    "name": "build",
+                    "argv": ["npm", "run", "build"],
+                    "display_cmd": "npm run build",
+                }
+            )
         return ProjectProfile(kind=kind, root=workspace, checks=checks)
 
     if (root / "pyproject.toml").is_file() or (root / "setup.py").is_file():
         kind = "python"
+        if (root / "pyproject.toml").is_file():
+            checks.append(_pyproject_toml_check())
         # Same tool-presence gate as tsc above: without it, projects
         # that don't ship mypy (most of them) get "No module named
         # mypy" reported as a typecheck FAILURE after every file write.
         if (root / "pyproject.toml").is_file() and _module_installed("mypy"):
-            checks.append({
-                "name": "typecheck",
-                "argv": [sys.executable, "-m", "mypy", ".", "--ignore-missing-imports"],
-                "display_cmd": "python -m mypy . --ignore-missing-imports",
-            })
-        if _any_exists(root, ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]):
-            checks.append({
-                "name": "test",
-                "argv": [sys.executable, "-m", "pytest", "--tb=short", "-q"],
-                "display_cmd": "python -m pytest --tb=short -q",
-            })
-        checks.append({
-            "name": "syntax",
-            "argv": [
-                sys.executable,
-                "-c",
-                (
-                    "from pathlib import Path\n"
-                    "import py_compile, sys\n"
-                    "files = [p for p in Path('.').rglob('*.py') "
-                    "if '.venv' not in p.parts and '__pycache__' not in p.parts][:20]\n"
-                    "failed = 0\n"
-                    "for p in files:\n"
-                    "    try:\n"
-                    "        py_compile.compile(str(p), doraise=True)\n"
-                    "    except Exception as exc:\n"
-                    "        failed += 1\n"
-                    "        print(f'{p}: {exc}')\n"
-                    "print(f'checked {len(files)} python files')\n"
-                    "sys.exit(1 if failed else 0)\n"
-                ),
-            ],
-            "display_cmd": 'python -c "compile up to 20 Python files"',
-        })
+            checks.append(
+                {
+                    "name": "typecheck",
+                    "argv": [sys.executable, "-m", "mypy", ".", "--ignore-missing-imports"],
+                    "display_cmd": "python -m mypy . --ignore-missing-imports",
+                }
+            )
+        if _any_exists(
+            root, ["pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"]
+        ) and _module_installed("pytest"):
+            checks.append(
+                {
+                    "name": "test",
+                    "argv": [sys.executable, "-m", "pytest", "--tb=short", "-q"],
+                    "display_cmd": "python -m pytest --tb=short -q",
+                }
+            )
+        checks.append(
+            {
+                "name": "syntax",
+                "argv": [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from pathlib import Path\n"
+                        "import py_compile, sys\n"
+                        "files = sorted(p for p in Path('.').rglob('*.py') "
+                        "if '.venv' not in p.parts and '__pycache__' not in p.parts)[:20]\n"
+                        "failed = 0\n"
+                        "for p in files:\n"
+                        "    try:\n"
+                        "        py_compile.compile(str(p), doraise=True)\n"
+                        "    except Exception as exc:\n"
+                        "        failed += 1\n"
+                        "        print(f'{p}: {exc}')\n"
+                        "print(f'checked {len(files)} python files')\n"
+                        "sys.exit(1 if failed else 0)\n"
+                    ),
+                ],
+                "display_cmd": 'python -c "compile up to 20 Python files"',
+            }
+        )
         return ProjectProfile(kind=kind, root=workspace, checks=checks)
 
     if (root / "Cargo.toml").is_file():
-        return ProjectProfile(kind="rust", root=workspace, checks=[
-            {"name": "check", "argv": ["cargo", "check"], "display_cmd": "cargo check"},
-            {"name": "test", "argv": ["cargo", "test", "--no-run"], "display_cmd": "cargo test --no-run"},
-            {"name": "clippy", "argv": ["cargo", "clippy", "--", "-D", "warnings"], "display_cmd": "cargo clippy -- -D warnings"},
-        ])
+        checks.append(_manifest_file_check("Cargo.toml", name="cargo-manifest"))
+        if not _executable_available("cargo"):
+            return ProjectProfile(
+                kind="rust",
+                root=workspace,
+                checks=checks,
+            )
+        checks.extend(
+            [
+                {"name": "check", "argv": ["cargo", "check"], "display_cmd": "cargo check"},
+                {
+                    "name": "test",
+                    "argv": ["cargo", "test", "--no-run"],
+                    "display_cmd": "cargo test --no-run",
+                },
+                {
+                    "name": "clippy",
+                    "argv": ["cargo", "clippy", "--", "-D", "warnings"],
+                    "display_cmd": "cargo clippy -- -D warnings",
+                },
+            ]
+        )
+        return ProjectProfile(kind="rust", root=workspace, checks=checks)
 
     if (root / "go.mod").is_file():
-        return ProjectProfile(kind="go", root=workspace, checks=[
-            {"name": "build", "argv": ["go", "build", "./..."], "display_cmd": "go build ./..."},
-            {"name": "vet", "argv": ["go", "vet", "./..."], "display_cmd": "go vet ./..."},
-            {"name": "test", "argv": ["go", "test", "./...", "-count=1", "-short"], "display_cmd": "go test ./... -count=1 -short"},
-        ])
+        checks.append(_manifest_file_check("go.mod", name="go-manifest"))
+        if not _executable_available("go"):
+            return ProjectProfile(
+                kind="go",
+                root=workspace,
+                checks=checks,
+            )
+        checks.extend(
+            [
+                {
+                    "name": "build",
+                    "argv": ["go", "build", "./..."],
+                    "display_cmd": "go build ./...",
+                },
+                {"name": "vet", "argv": ["go", "vet", "./..."], "display_cmd": "go vet ./..."},
+                {
+                    "name": "test",
+                    "argv": ["go", "test", "./...", "-count=1", "-short"],
+                    "display_cmd": "go test ./... -count=1 -short",
+                },
+            ]
+        )
+        return ProjectProfile(kind="go", root=workspace, checks=checks)
 
-    return ProjectProfile(kind="unknown", root=workspace, checks=[
-        {
-            "name": "file-count",
-            "argv": [
-                sys.executable,
-                "-c",
-                (
-                    "from pathlib import Path\n"
-                    "root = Path('.')\n"
-                    "count = sum(1 for p in root.rglob('*') "
-                    "if p.is_file() and len(p.relative_to(root).parts) <= 3)\n"
-                    "print(count)\n"
-                ),
-            ],
-            "display_cmd": 'python -c "count files up to depth 3"',
-        },
-    ])
+    return ProjectProfile(
+        kind="unknown",
+        root=workspace,
+        checks=[
+            {
+                "name": "file-count",
+                "argv": [
+                    sys.executable,
+                    "-c",
+                    (
+                        "from pathlib import Path\n"
+                        "root = Path('.')\n"
+                        "count = sum(1 for p in root.rglob('*') "
+                        "if p.is_file() and len(p.relative_to(root).parts) <= 3)\n"
+                        "print(count)\n"
+                    ),
+                ],
+                "display_cmd": 'python -c "count files up to depth 3"',
+            },
+        ],
+    )
 
 
 def run_checks(
@@ -209,14 +393,17 @@ def run_checks(
     *,
     timeout_per_check: float = 60.0,
     max_output: int = 8000,
+    sandbox_dir: str | None = None,
 ) -> list[CheckResult]:
     from runtime.platform.process.streaming import stream_run
 
+    effective_sandbox_dir = sandbox_dir or profile.root
     results: list[CheckResult] = []
     for check in profile.checks:
         argv = check.get("argv")
         display = check.get("display_cmd") or check.get("cmd") or ""
         legacy_cmd = check.get("cmd")
+        fatal_on_failure = bool(check.get("fatal_on_failure"))
         t0 = time.monotonic()
         if isinstance(argv, list) and argv:
             r = stream_run(
@@ -224,6 +411,7 @@ def run_checks(
                 cwd=str(profile.root),
                 timeout=timeout_per_check,
                 output_cap_bytes=max_output,
+                sandbox_dir=effective_sandbox_dir,
             )
         elif isinstance(legacy_cmd, str):
             _logger.warning(
@@ -231,30 +419,49 @@ def run_checks(
                 check.get("name"),
             )
             try:
+                run_env = None
+                if effective_sandbox_dir is not None:
+                    from runtime.safety.sandboxing.sandbox import SandboxPolicy
+
+                    run_env = SandboxPolicy(
+                        workspace=Path(effective_sandbox_dir).expanduser().resolve(),
+                    ).env_for()
                 proc = subprocess.run(
                     legacy_cmd,
                     shell=True,  # legacy path only — new checks use argv
                     capture_output=True,
                     text=True,
                     cwd=profile.root,
+                    env=run_env,
                     timeout=timeout_per_check,
                 )
             except FileNotFoundError as exc:
                 duration = int((time.monotonic() - t0) * 1000)
-                results.append(CheckResult(
-                    name=check["name"], command=display, passed=False,
-                    exit_code=-3, stdout="",
-                    stderr=f"executable not found: {exc}",
-                    duration_ms=duration,
-                ))
+                results.append(
+                    CheckResult(
+                        name=check["name"],
+                        command=display,
+                        passed=False,
+                        exit_code=-3,
+                        stdout="",
+                        stderr=f"executable not found: {exc}",
+                        duration_ms=duration,
+                    )
+                )
                 continue
             except subprocess.TimeoutExpired:
                 duration = int((time.monotonic() - t0) * 1000)
-                results.append(CheckResult(
-                    name=check["name"], command=display, passed=False,
-                    exit_code=-1, stdout="", stderr="timeout",
-                    duration_ms=duration,
-                ))
+                results.append(
+                    CheckResult(
+                        name=check["name"],
+                        command=display,
+                        passed=False,
+                        exit_code=-1,
+                        stdout="",
+                        stderr="timeout",
+                        duration_ms=duration,
+                    )
+                )
                 continue
             r = {
                 "stdout": proc.stdout[:max_output],
@@ -263,47 +470,156 @@ def run_checks(
                 "timed_out": False,
             }
         else:
-            results.append(CheckResult(
-                name=check.get("name", "?"),
-                command=display,
-                passed=False,
-                exit_code=-2,
-                stdout="",
-                stderr="check is missing both 'argv' and 'cmd'",
-                duration_ms=0,
-            ))
+            results.append(
+                CheckResult(
+                    name=check.get("name", "?"),
+                    command=display,
+                    passed=False,
+                    exit_code=-2,
+                    stdout="",
+                    stderr="check is missing both 'argv' and 'cmd'",
+                    duration_ms=0,
+                )
+            )
             continue
         duration = int((time.monotonic() - t0) * 1000)
+        if not isinstance(r, dict):
+            results.append(
+                CheckResult(
+                    name=check["name"],
+                    command=display,
+                    passed=False,
+                    exit_code=-6,
+                    stdout="",
+                    stderr=f"verifier runner returned non-dict result: {type(r).__name__}",
+                    duration_ms=duration,
+                )
+            )
+            if fatal_on_failure:
+                break
+            continue
+        stdout = str(r.get("stdout") or "")[:max_output]
+        stderr = str(r.get("stderr") or "")[:max_output]
+        execution_policy = (
+            r.get("execution_policy") if isinstance(r.get("execution_policy"), dict) else {}
+        )
         if "error" in r and "exit_code" not in r:
+            if str(r["error"]).startswith("sandbox_violation:"):
+                results.append(
+                    CheckResult(
+                        name=check["name"],
+                        command=display,
+                        passed=False,
+                        exit_code=-4,
+                        stdout=stdout,
+                        stderr=str(r["error"]),
+                        duration_ms=duration,
+                        execution_policy=execution_policy,
+                    )
+                )
+                break
             # FileNotFoundError surfaced through stream_run.
-            results.append(CheckResult(
-                name=check["name"], command=display, passed=False,
-                exit_code=-3, stdout="",
-                stderr=f"executable not found: {r['error']}",
-                duration_ms=duration,
-            ))
+            results.append(
+                CheckResult(
+                    name=check["name"],
+                    command=display,
+                    passed=False,
+                    exit_code=-3,
+                    stdout=stdout,
+                    stderr=f"executable not found: {r['error']}",
+                    duration_ms=duration,
+                    execution_policy=execution_policy,
+                )
+            )
+            if fatal_on_failure:
+                break
             continue
         if r.get("timed_out"):
-            results.append(CheckResult(
-                name=check["name"], command=display, passed=False,
-                exit_code=-1, stdout="", stderr="timeout",
-                duration_ms=duration,
-            ))
+            results.append(
+                CheckResult(
+                    name=check["name"],
+                    command=display,
+                    passed=False,
+                    exit_code=-1,
+                    stdout=stdout,
+                    stderr=stderr or "timeout",
+                    duration_ms=duration,
+                    execution_policy=execution_policy,
+                )
+            )
+            if fatal_on_failure:
+                break
             continue
-        results.append(CheckResult(
-            name=check["name"],
-            command=display,
-            passed=r["exit_code"] == 0,
-            exit_code=r["exit_code"],
-            stdout=r["stdout"][:max_output],
-            stderr=r["stderr"][:max_output],
-            duration_ms=duration,
-        ))
+        if r.get("cancelled"):
+            results.append(
+                CheckResult(
+                    name=check["name"],
+                    command=display,
+                    passed=False,
+                    exit_code=-5,
+                    stdout=stdout,
+                    stderr=stderr or "cancelled",
+                    duration_ms=duration,
+                    execution_policy=execution_policy,
+                )
+            )
+            break
+        raw_exit_code = r.get("exit_code")
+        if raw_exit_code is None:
+            results.append(
+                CheckResult(
+                    name=check["name"],
+                    command=display,
+                    passed=False,
+                    exit_code=-6,
+                    stdout=stdout,
+                    stderr=stderr or "verifier runner returned no exit_code",
+                    duration_ms=duration,
+                    execution_policy=execution_policy,
+                )
+            )
+            if fatal_on_failure:
+                break
+            continue
+        try:
+            exit_code = int(raw_exit_code)
+        except (TypeError, ValueError):
+            results.append(
+                CheckResult(
+                    name=check["name"],
+                    command=display,
+                    passed=False,
+                    exit_code=-6,
+                    stdout=stdout,
+                    stderr=stderr
+                    or f"verifier runner returned invalid exit_code: {raw_exit_code!r}",
+                    duration_ms=duration,
+                    execution_policy=execution_policy,
+                )
+            )
+            if fatal_on_failure:
+                break
+            continue
+        results.append(
+            CheckResult(
+                name=check["name"],
+                command=display,
+                passed=exit_code == 0,
+                exit_code=exit_code,
+                stdout=stdout,
+                stderr=stderr,
+                duration_ms=duration,
+                execution_policy=execution_policy,
+            )
+        )
+        if fatal_on_failure and exit_code != 0:
+            break
     return results
 
 
 def _read_json(path: Path) -> Any:
     import json
+
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

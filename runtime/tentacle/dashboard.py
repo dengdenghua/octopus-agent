@@ -25,6 +25,7 @@ import asyncio
 import json
 import logging
 import time
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -86,7 +87,15 @@ def _auto_detect_vlm_config() -> VlmConfig | None:
     return None
 
 
-def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
+def create_tentacle_router(
+    coordinator: TentacleCoordinator,
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> APIRouter:
     """创建 Tentacle Dashboard 路由.
 
     Args:
@@ -96,6 +105,54 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
 
     # 任务历史记录（内存，重启清空）
     _task_history: list[dict[str, Any]] = []
+
+    def _resolve_ws_actor(ws: WebSocket) -> str | None:
+        if identity_store is None:
+            if require_auth:
+                raise PermissionError("identity store required for tentacle auth")
+            return None
+        token: str | None = None
+        auth_header = ""
+        try:
+            auth_header = ws.headers.get("authorization") or ""
+        except Exception:  # noqa: BLE001
+            auth_header = ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if token is None:
+            try:
+                subproto = ws.headers.get("sec-websocket-protocol") or ""
+            except Exception:  # noqa: BLE001
+                subproto = ""
+            parts = [part.strip() for part in subproto.split(",") if part.strip()]
+            if len(parts) >= 2 and parts[0].lower() == "bearer":
+                token = parts[1]
+        if token is None:
+            try:
+                token = ws.query_params.get("token")
+            except Exception:  # noqa: BLE001
+                token = None
+        if not token:
+            if require_auth:
+                raise PermissionError("missing tentacle auth token")
+            return None
+        if jwt_secret and token.count(".") == 2:
+            identity = identity_store.verify_jwt(
+                token,
+                secret=jwt_secret,
+                required_issuer=jwt_issuer,
+                required_audience=jwt_audience,
+            )
+            if identity is not None:
+                return identity.actor_id
+            if require_auth:
+                raise PermissionError("invalid jwt")
+        identity = identity_store.verify_api_key(token)
+        if identity is not None:
+            return identity.actor_id
+        if require_auth:
+            raise PermissionError("invalid token")
+        return None
 
     # ── Dashboard HTML ──────────────────────────────────
 
@@ -390,6 +447,12 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
 
         服务端推送二进制帧（格式同 ScreenRelay）.
         """
+        try:
+            _resolve_ws_actor(ws)
+        except PermissionError as exc:
+            with suppress(Exception):
+                await ws.close(code=4401, reason=str(exc))
+            return
         screen_relay = getattr(coordinator, "screen_relay", None)
         if screen_relay is None:
             await ws.close(code=1011, reason="Screen relay not available")
@@ -474,6 +537,12 @@ def create_tentacle_router(coordinator: TentacleCoordinator) -> APIRouter:
         浏览器客户端连接此端点接收 PC 屏幕画面.
         协议与设备屏幕流相同（二进制帧格式）.
         """
+        try:
+            _resolve_ws_actor(ws)
+        except PermissionError as exc:
+            with suppress(Exception):
+                await ws.close(code=4401, reason=str(exc))
+            return
         screen_relay = getattr(coordinator, "screen_relay", None)
         if screen_relay is None:
             await ws.close(code=1011, reason="Screen relay not available")

@@ -4,20 +4,27 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException, Query
+    from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
     Query = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
 
 
 def create_skill_market_router(
     *,
     skill_market: Any = None,
     skills_dir: str | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> Any:
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
@@ -26,7 +33,22 @@ def create_skill_market_router(
         from runtime.platform.plugins.skill_market import SkillMarket
         skill_market = SkillMarket(skills_dir=skills_dir)
 
-    router = APIRouter(tags=["skill-market"])
+    def _auth_dep(request: Request) -> None:
+        # Marketplace install/uninstall/publish mutates local skill state.
+        # In multi-user/auth-on setups, require a valid actor before any
+        # read or write on this control surface.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(tags=["skill-market"], dependencies=[Depends(_auth_dep)])
 
     @router.get("/api/skills/market/search")
     def search_skills(

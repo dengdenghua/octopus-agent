@@ -12,7 +12,7 @@ from uuid import uuid4
 from xml.etree import ElementTree
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from runtime.platform.io import atomic_write_json, read_json_with_backup
 
@@ -677,17 +677,41 @@ def create_intelligence_router(
     search_fn: Any = None,
     fetch_fn: Any = None,
     remember_reports: bool = True,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> APIRouter:
     router = APIRouter()
     path = Path(store_path) if store_path is not None else _default_store_path()
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.get("/api/intelligence/subscriptions")
-    def list_subscriptions() -> dict[str, Any]:
+    def list_subscriptions(request: Request) -> dict[str, Any]:
+        _auth(request)
         data = _read_store(path)
         return {"subscriptions": data["subscriptions"]}
 
     @router.post("/api/intelligence/subscriptions/draft")
-    def draft_subscription(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def draft_subscription(
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _auth(request)
         payload = body or {}
         goal = str(payload.get("goal") or "").strip()
         if not goal:
@@ -695,7 +719,11 @@ def create_intelligence_router(
         return {"draft": _draft_subscription(goal)}
 
     @router.post("/api/intelligence/subscriptions")
-    def create_subscription(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def create_subscription(
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _auth(request)
         payload = body or {}
         topic = str(payload.get("topic") or "").strip()
         if not topic:
@@ -734,7 +762,12 @@ def create_intelligence_router(
         return subscription
 
     @router.patch("/api/intelligence/subscriptions/{sub_id}")
-    def update_subscription(sub_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def update_subscription(
+        request: Request,
+        sub_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _auth(request)
         payload = body or {}
         data = _read_store(path)
         for item in data["subscriptions"]:
@@ -767,7 +800,8 @@ def create_intelligence_router(
         raise HTTPException(status_code=404, detail="subscription not found")
 
     @router.delete("/api/intelligence/subscriptions/{sub_id}")
-    def delete_subscription(sub_id: str) -> dict[str, Any]:
+    def delete_subscription(request: Request, sub_id: str) -> dict[str, Any]:
+        _auth(request)
         data = _read_store(path)
         before = len(data["subscriptions"])
         data["subscriptions"] = [
@@ -779,7 +813,12 @@ def create_intelligence_router(
         return {"ok": True, "id": sub_id}
 
     @router.post("/api/intelligence/subscriptions/{sub_id}/run")
-    def run_subscription(sub_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def run_subscription(
+        request: Request,
+        sub_id: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _auth(request)
         data = _read_store(path)
         subscription = next(
             (item for item in data["subscriptions"] if item.get("id") == sub_id),
@@ -800,7 +839,11 @@ def create_intelligence_router(
         return {"ok": True, "subscription": subscription, "report": report}
 
     @router.post("/api/intelligence/run")
-    def run_enabled_subscriptions(body: dict[str, Any] | None = None) -> dict[str, Any]:
+    def run_enabled_subscriptions(
+        request: Request,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        _auth(request)
         payload = body or {}
         return run_enabled_subscriptions_once(
             path,
@@ -814,7 +857,8 @@ def create_intelligence_router(
         )
 
     @router.get("/api/intelligence/reports")
-    def list_reports(topic: str | None = None) -> dict[str, Any]:
+    def list_reports(request: Request, topic: str | None = None) -> dict[str, Any]:
+        _auth(request)
         data = _read_store(path)
         reports = data["reports"]
         if topic:
@@ -822,7 +866,8 @@ def create_intelligence_router(
         return {"reports": reports}
 
     @router.get("/api/intelligence/reports/{report_id}")
-    def get_report(report_id: str) -> dict[str, Any]:
+    def get_report(request: Request, report_id: str) -> dict[str, Any]:
+        _auth(request)
         data = _read_store(path)
         for report in data["reports"]:
             if report.get("id") == report_id:

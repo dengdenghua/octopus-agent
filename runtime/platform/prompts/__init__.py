@@ -130,15 +130,22 @@ class PromptLoader:
         return None
 
     def _load_from_file(self, path: Path) -> str | None:
-        if yaml is None:
-            _logger.warning("PyYAML is not installed; cannot load prompt from %s", path)
-            return None
         try:
-            with path.open("r", encoding="utf-8") as f:
-                data = yaml.safe_load(f)
-            if isinstance(data, dict) and "content" in data:
-                return str(data["content"])
-            _logger.warning("prompt file %s missing 'content' key", path)
+            text = path.read_text(encoding="utf-8")
+            if yaml is not None:
+                data = yaml.safe_load(text)
+                if isinstance(data, dict) and "content" in data:
+                    return str(data["content"])
+                _logger.warning("prompt file %s missing 'content' key", path)
+                return None
+            content = _load_content_from_yaml_subset(text)
+            if content is not None:
+                _logger.debug("loaded prompt %s with YAML subset fallback", path)
+                return content
+            _logger.debug(
+                "PyYAML is not installed and prompt file %s is not subset-parseable",
+                path,
+            )
         except Exception as e:  # noqa: BLE001
             _logger.warning("failed to load prompt from %s: %s", path, e)
         return None
@@ -199,6 +206,49 @@ class PromptLoader:
 
 
 _default_loader: PromptLoader | None = None
+
+
+def _load_content_from_yaml_subset(text: str) -> str | None:
+    """Parse the simple ``content: |`` YAML shape used by bundled prompts.
+
+    This is intentionally tiny: it keeps lightweight imports stable when
+    PyYAML is absent, while complex YAML still falls back to builtins.
+    """
+
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if line[:1].isspace():
+            continue
+        stripped = line.strip()
+        if not stripped.startswith("content:"):
+            continue
+        suffix = stripped[len("content:"):].strip()
+        if suffix in {"|", "|-", "|+"}:
+            return _read_yaml_block_scalar(lines[index + 1:])
+        if suffix in {'""', "''"}:
+            return ""
+        if suffix:
+            return suffix.strip('"').strip("'")
+        return ""
+    return None
+
+
+def _read_yaml_block_scalar(lines: list[str]) -> str:
+    block: list[str] = []
+    base_indent: int | None = None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if base_indent is not None:
+                block.append("")
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if base_indent is None:
+            base_indent = indent
+        if indent < base_indent:
+            break
+        block.append(line[base_indent:])
+    return "\n".join(block).rstrip("\n")
 
 
 def get_prompt_loader() -> PromptLoader:

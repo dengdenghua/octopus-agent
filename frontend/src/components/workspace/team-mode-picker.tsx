@@ -1,7 +1,7 @@
 import {
   BoxesIcon,
-  NetworkIcon,
-  UserCircleIcon,
+  GitBranchIcon,
+  MessageCircleIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useMemo } from "react";
@@ -47,12 +47,12 @@ export const TEAM_MODE_META: Record<
   chat: {
     label: "单聊",
     description: "一个 agent 接话 · @谁就他，不@默认队长",
-    icon: UserCircleIcon,
+    icon: MessageCircleIcon,
   },
   cluster: {
     label: "集群",
     description: "队长拆解 → 分派 → 各司其职 → 汇总（有分工、有中心）",
-    icon: NetworkIcon,
+    icon: GitBranchIcon,
   },
   swarm: {
     label: "蜂群",

@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.platform.plugins.codex_discovery import discover_codex_plugins
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.plugins_router import create_plugins_router
 
 
@@ -127,6 +128,27 @@ def test_codex_plugin_smoke_flags_empty_surface(tmp_path: Path) -> None:
     smoke = plugins[0]["smoke"]
     assert smoke["ok"] is False
     assert any("no capabilities" in issue for issue in smoke["issues"])
+
+
+def test_plugins_router_requires_auth_when_enabled(tmp_path: Path) -> None:
+    _write_plugin(tmp_path)
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_plugins_router(
+            plugin_roots=[tmp_path],
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/plugins").status_code == 401
+    assert client.get(
+        "/api/plugins",
+        headers={"Authorization": "Bearer sk-alice"},
+    ).status_code == 200
 
 
 def _write_plugin(root: Path) -> Path:

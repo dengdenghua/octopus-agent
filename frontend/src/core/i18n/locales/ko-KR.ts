@@ -386,14 +386,16 @@ export const koKR: Translations = {
     seedProjectFiles: "Based on project files, help me: ",
     send: "Send",
     stop: "Stop",
-    projectModeLabel: "Project code",
+    projectModeLabel: "Project attached",
     projectModeHint:
-      "A local folder is bound; this agent will use project context for code tasks.",
-    projectStatusTitle: "Project context bound",
+      "A local folder is bound; this thread will use project context for code tasks.",
+    projectStatusTitle: "Project attached",
     projectStatusDescUnlocked:
-      "This agent can use code mode and will work through inspect, edit, and verify.",
+      "This agent can inspect, edit, and verify the bound project.",
     projectStatusDescLocked:
-      "This agent has not declared code write access; the backend will downgrade the write scope. Switch to Coder or enable code_mode_unlock.",
+      "This agent can use project context, but write scope downgrades unless a role with project-write access is selected.",
+    projectWriteAccess: "Project write",
+    projectReadOnly: "Read only",
     permissionFullAccess: "Full access",
     permissionAcceptEdits: "Accept edits",
     permissionConfirm: "Confirm",

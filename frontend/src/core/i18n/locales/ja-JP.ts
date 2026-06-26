@@ -386,14 +386,16 @@ export const jaJP: Translations = {
     seedProjectFiles: "Based on project files, help me: ",
     send: "Send",
     stop: "Stop",
-    projectModeLabel: "Project code",
+    projectModeLabel: "Project attached",
     projectModeHint:
-      "A local folder is bound; this agent will use project context for code tasks.",
-    projectStatusTitle: "Project context bound",
+      "A local folder is bound; this thread will use project context for code tasks.",
+    projectStatusTitle: "Project attached",
     projectStatusDescUnlocked:
-      "This agent can use code mode and will work through inspect, edit, and verify.",
+      "This agent can inspect, edit, and verify the bound project.",
     projectStatusDescLocked:
-      "This agent has not declared code write access; the backend will downgrade the write scope. Switch to Coder or enable code_mode_unlock.",
+      "This agent can use project context, but write scope downgrades unless a role with project-write access is selected.",
+    projectWriteAccess: "Project write",
+    projectReadOnly: "Read only",
     permissionFullAccess: "Full access",
     permissionAcceptEdits: "Accept edits",
     permissionConfirm: "Confirm",
@@ -6941,14 +6943,14 @@ Strategy:
 
   scopeSettings: {
     codeModeDisabled:
-      "This agent does not have code mode enabled · write scope is fixed to its own workspace",
-    authorizeWorkspaces: "Authorize additional workspaces (code mode)",
+      "This agent does not have project-write access · write scope is fixed to its own workspace",
+    authorizeWorkspaces: "Authorize additional project folders",
     noAuthorized:
-      "Not authorized yet · defaults to writing only inside the agent's own workspace",
+      "No extra folders authorized · defaults to the bound project plus this thread's own workspace",
     writeScopeTitle: "Write scope",
     writeScopeTooltip: "Write scope settings",
     writeScopeDescription:
-      "Controls which directories the current conversation can write to · paths outside the allowlist are always rejected",
+      "Controls which project folders this thread may write · paths outside the allowlist are always rejected",
   },
 
   teamSelector: {
