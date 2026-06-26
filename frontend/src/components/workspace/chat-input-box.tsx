@@ -364,7 +364,13 @@ export function ChatInputBox({
   const hasWorkDir = Boolean(workDir?.trim());
   const showProjectStatusSegment = isProjectMode;
   const showModeSegment = isProjectMode;
-  const showWorkDirSegment = isProjectMode || hasWorkDir;
+  // Surface the workspace-directory picker even in a fresh personal-space
+  // conversation (no workDir yet). Previously this was gated on
+  // ``isProjectMode || hasWorkDir`` — a chicken-and-egg: you needed a bound
+  // directory before the picker appeared, so there was no inline way to choose
+  // one. When the parent opts into the picker (``showWorkDirSelector``), show it
+  // so picking a folder is the entry point into a project/code workflow.
+  const showWorkDirSegment = isProjectMode || hasWorkDir || showWorkDirSelector;
   const showProjectAccessSegment = isProjectMode;
   const projectAccessLabel = codeModeUnlocked
     ? t.chatInputBox.projectWriteAccess
