@@ -622,31 +622,41 @@ class AgentTraceStore:
             intent["confirmation_text"] = confirmation_text
         confirmed_at = _now_iso()
         with self._lock:
-            self._conn.execute(
-                "UPDATE resume_requests SET status = ?, confirmed_at = ?, intent = ? WHERE id = ?",
+            # Atomic compare-and-set: only the caller that flips a STILL-pending
+            # request wins. The latest_pending lookup above can be stale across
+            # connections, so the ``status = 'pending'`` guard (not just id) is
+            # what stops two racing confirms from both succeeding (TOCTOU).
+            cur = self._conn.execute(
+                "UPDATE resume_requests SET status = ?, confirmed_at = ?, intent = ? "
+                "WHERE id = ? AND status = ?",
                 (
                     "confirmed",
                     confirmed_at,
                     _json_dumps(intent),
                     int(request["id"]),
+                    "pending",
                 ),
             )
-        return self.resume_requests(thread_id=thread_id, checkpoint_id=checkpoint_id, status="confirmed", limit=1)[0]
+            if cur.rowcount == 0:
+                return None  # lost the race — already confirmed/consumed elsewhere
+        confirmed_rows = self.resume_requests(
+            thread_id=thread_id, checkpoint_id=checkpoint_id, status="confirmed", limit=1,
+        )
+        return confirmed_rows[0] if confirmed_rows else None
 
     def consume_resume_request(self, request_id: int) -> dict[str, Any] | None:
         with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM resume_requests WHERE id = ?",
-                (int(request_id),),
-            ).fetchone()
-            if row is None:
-                return None
-            consumed_at = _now_iso()
-            self._conn.execute(
-                "UPDATE resume_requests SET status = ?, consumed_at = ? WHERE id = ?",
-                ("consumed", consumed_at, int(request_id)),
+            # Atomic single-consumer transition: the ``status != 'consumed'``
+            # guard means only ONE connection's UPDATE matches the row, so a
+            # racing second consume gets rowcount 0 and returns None instead of
+            # re-running the resume (TOCTOU double-consume).
+            cur = self._conn.execute(
+                "UPDATE resume_requests SET status = ?, consumed_at = ? "
+                "WHERE id = ? AND status != ?",
+                ("consumed", _now_iso(), int(request_id), "consumed"),
             )
-        with self._lock:
+            if cur.rowcount == 0:
+                return None  # no such request, or already consumed elsewhere
             updated = self._conn.execute(
                 "SELECT * FROM resume_requests WHERE id = ?",
                 (int(request_id),),
