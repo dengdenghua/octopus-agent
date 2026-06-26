@@ -1,5 +1,5 @@
 import { getBackendBaseURL } from "@/core/config";
-import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
+import { authHeaders, authedEventSource, jsonAuthHeaders } from "@/core/auth/api";
 
 import type {
   ActiveAlert,
@@ -218,7 +218,7 @@ export function subscribeFileOps(
   // Implementation note.
   // Implementation note.
   const url = `${getBackendBaseURL()}/api/files/stream`;
-  const es = new EventSource(url);
+  const es = authedEventSource(url);
   es.addEventListener("file_op", (raw) => {
     try {
       const data = JSON.parse((raw as MessageEvent).data) as FileOpEvent;
@@ -247,7 +247,7 @@ export function subscribePreviewRefresh(
   onError?: (err: Event) => void,
 ): () => void {
   const url = `${getBackendBaseURL()}/api/preview/stream`;
-  const es = new EventSource(url);
+  const es = authedEventSource(url);
   es.addEventListener("preview_refresh", (raw) => {
     try {
       const data = JSON.parse(

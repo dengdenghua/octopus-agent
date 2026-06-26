@@ -31,7 +31,17 @@ def _resolve_actor(
         auth = request.headers.get("Authorization") or ""
         if auth.lower().startswith("bearer "):
             token = auth[7:].strip()
+        else:
+            # SSE EventSource cannot set request headers, so accept the bearer
+            # via a ``?token=`` query param — the same convention the chat
+            # WebSocket already uses. The Authorization header takes precedence
+            # when both are present.
+            try:
+                token = (request.query_params.get("token") or "").strip()
+            except (AttributeError, TypeError):
+                token = ""
 
+        if token:
             if jwt_secret and token.count(".") == 2:
                 identity = identity_store.verify_jwt(
                     token,

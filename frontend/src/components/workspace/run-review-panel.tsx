@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
+import { authedEventSource } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
@@ -305,7 +306,7 @@ export function RunReviewPanel() {
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    const es = new EventSource(`${getBackendBaseURL()}/api/stream`);
+    const es = authedEventSource(`${getBackendBaseURL()}/api/stream`);
     es.onopen = () => setConnected(true);
     es.onerror = () => setConnected(false);
     es.onmessage = (msg) => {

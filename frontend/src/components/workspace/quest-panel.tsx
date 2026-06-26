@@ -15,6 +15,7 @@
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
+import { authedEventSource } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 import {
@@ -223,7 +224,7 @@ function useQuestStream(questId: string | null): QuestState {
 
     const base = getBackendBaseURL();
     const url = `${base}/api/quest/${questId}/stream`;
-    const es = new EventSource(url);
+    const es = authedEventSource(url);
 
     es.addEventListener("phase", (e) => {
       try {

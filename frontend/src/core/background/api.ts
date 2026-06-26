@@ -2,7 +2,7 @@
 
 import { swallow } from "@/core/utils/log";
 import { getBackendBaseURL } from "@/core/config";
-import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
+import { authHeaders, authedEventSource, jsonAuthHeaders } from "@/core/auth/api";
 
 import type {
   BackgroundTask,
@@ -155,7 +155,7 @@ export function connectOutputSSE(
   const url = `${BASE()}/tasks/${taskId}/output`;
 
   const connect = () => {
-    const eventSource = new EventSource(url);
+    const eventSource = authedEventSource(url);
 
     eventSource.addEventListener("output", (event: MessageEvent) => {
       try {
