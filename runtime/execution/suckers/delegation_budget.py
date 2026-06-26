@@ -103,6 +103,36 @@ def orchestration_budget_scope(max_spawns: int) -> Iterator[OrchestrationBudget]
         _ORCH_BUDGET.reset(token)
 
 
+# Rough token cost of one sub-agent run (one bounded ephemeral turn: system +
+# tool specs + a few tool rounds). Used to translate an opt-in token budget into
+# a spawn count so a deep run scales its parallelism to the budget it was
+# actually given, instead of the fixed ``n*rounds`` guess.
+_TOKENS_PER_SPAWN = 8_000
+
+
+def max_spawns_for_token_budget(
+    token_budget: int | float | None,
+    *,
+    tokens_per_spawn: int = _TOKENS_PER_SPAWN,
+    floor: int = 2,
+    ceiling: int = 256,
+) -> int:
+    """Translate a token budget into an orchestration spawn cap.
+
+    A bigger budget buys more sub-agent runs (deeper fan-out + verification).
+    Clamped to ``[floor, ceiling]`` so a tiny budget still does *some* work and
+    a huge one can't run away; a missing / non-positive budget falls back to
+    ``floor``. This is the opt-in lever only — callers that don't supply a
+    budget keep the conservative default (``n*rounds`` / 48) behaviour."""
+    try:
+        tokens = int(token_budget or 0)
+    except (TypeError, ValueError):
+        tokens = 0
+    if tokens <= 0 or tokens_per_spawn <= 0:
+        return floor
+    return max(floor, min(ceiling, tokens // tokens_per_spawn))
+
+
 def compute_fingerprint(agent_id: str, prompt: str) -> str:
     """Normalize and hash a delegation spec so repeated identical
     attempts (modulo whitespace / case) share the same fingerprint.
