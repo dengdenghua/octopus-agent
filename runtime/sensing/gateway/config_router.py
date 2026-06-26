@@ -255,6 +255,45 @@ def create_config_router(
             jwt_audience=jwt_audience,
         )
 
+    def _resolve_identity(request: Request) -> Any:
+        """Resolve the full Identity (with roles) for admin checks. ``None``
+        when auth is disabled or no valid bearer is present."""
+        if not require_auth or identity_store is None:
+            return None
+        auth = request.headers.get("Authorization") or ""
+        if not auth.lower().startswith("bearer "):
+            return None
+        token = auth[7:].strip()
+        if jwt_secret and token.count(".") == 2:
+            try:
+                identity = identity_store.verify_jwt(
+                    token,
+                    secret=jwt_secret,
+                    required_issuer=jwt_issuer,
+                    required_audience=jwt_audience,
+                )
+                if identity is not None:
+                    return identity
+            except Exception:  # noqa: BLE001 — fall through to api-key check
+                pass
+        try:
+            return identity_store.verify_api_key(token)
+        except Exception:  # noqa: BLE001 — unresolved identity → no roles
+            return None
+
+    def _require_admin(request: Request) -> None:
+        """Mutating config endpoints that are themselves security controls (the
+        path-denylist is one) need the ``admin`` role when auth is on. The
+        router-level ``_auth_dep`` already enforced authentication; this adds
+        the role gate on top. Dev mode (require_auth=False) stays a no-op for
+        single-user local use."""
+        if not require_auth:
+            return
+        identity = _resolve_identity(request)
+        roles = getattr(identity, "roles", ()) or ()
+        if "admin" not in {str(r).lower() for r in roles}:
+            raise HTTPException(403, "admin role required")
+
     router = APIRouter(tags=["config"], dependencies=[Depends(_auth_dep)])
     path = Path(custom_models_path) if custom_models_path is not None else app_paths().custom_models_path
     custom_models_state: dict[str, dict[str, Any]] = {}
@@ -1322,7 +1361,7 @@ def create_config_router(
         from runtime.safety.auth.path_denylist import get_user_denylist
         return {"paths": get_user_denylist()}
 
-    @router.post("/api/path-denylist")
+    @router.post("/api/path-denylist", dependencies=[Depends(_require_admin)])
     def api_path_denylist_add(payload: dict[str, Any]) -> dict[str, Any]:
         """Append a path to the user denylist."""
         from runtime.safety.auth.path_denylist import add_user_denylist_entry
@@ -1332,7 +1371,7 @@ def create_config_router(
             raise HTTPException(400, "path must be a non-empty string")
         return {"paths": add_user_denylist_entry(path), "ok": True}
 
-    @router.delete("/api/path-denylist")
+    @router.delete("/api/path-denylist", dependencies=[Depends(_require_admin)])
     def api_path_denylist_remove(payload: dict[str, Any]) -> dict[str, Any]:
         """Remove a path from the user denylist."""
         from runtime.safety.auth.path_denylist import remove_user_denylist_entry
