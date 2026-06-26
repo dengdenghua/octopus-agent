@@ -6,7 +6,7 @@
 
 ```bash
 git clone <repo> && cd octopus-agent
-pip install -e ".[dev]"
+pip install -e ".[dev,serve,web]"   # serve+web 带 fastapi/uvicorn；只装 [dev] 会让 status/ui 起不来
 
 # 可选依赖（按需装）
 pip install anthropic              # 真 LLM 调用
@@ -370,7 +370,7 @@ $ python -m runtime status
 ## 常见问题
 
 **Q: tests 跑不过怎么办？**
-A: 装齐可选依赖 `pip install -e ".[dev]" httpx mcp`。如果仍报错，issue 里贴 `python -m runtime status` 输出。
+A: 装齐可选依赖 `pip install -e ".[dev,serve,web]" httpx mcp`。如果仍报错，issue 里贴 `python -m runtime status` 输出。
 
 **Q: 不想装 Anthropic SDK，但想试 LLM 路径？**
 A: 用 `MockModelRouter`（`--model mock/planner`）。Mock 响应可 `--mock-response '{"reasoning":"x","nodes":[...]}'` 控制。
