@@ -17,8 +17,11 @@ By the end, you should have:
 From the repository root:
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,serve,web]"
 ```
+
+`[dev]` alone has lint/test tools but **not** `fastapi`/`uvicorn`, so the
+`status` and `ui` steps below would fail; `serve` + `web` add the web runtime.
 
 If you only want the smallest backend demo:
 
@@ -110,7 +113,7 @@ Do not start by reading the biomimetic architecture. Start with the work trace.
 
 | Symptom | Try |
 |---|---|
-| `fastapi` missing | `pip install -e ".[dev]"` |
+| `fastapi` missing | `pip install -e ".[dev,serve,web]"` (the `serve` extra carries fastapi/uvicorn; `[dev]` alone does not) |
 | UI starts but `/ui/` is empty | run `cd frontend && corepack enable && pnpm install --frozen-lockfile && pnpm build` |
 | model call fails | run deterministic demos first, then configure provider keys |
 | browser automation unavailable | install Playwright or use the browser relay path |
