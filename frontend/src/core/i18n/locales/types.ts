@@ -3572,6 +3572,7 @@ export interface Translations {
     uxui: string;
     architect: string;
     ultra: string;
+    standard: string;
     teamCoder: string;
     admin: string;
     builderTooltip: string;

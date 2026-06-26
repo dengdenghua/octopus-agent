@@ -4160,6 +4160,7 @@ Strategy:
     uxui: "UX/UI",
     architect: "Architect",
     ultra: "Ultra",
+    standard: "Standard",
     teamCoder: "Programmer",
     admin: "Admin",
     builderTooltip:

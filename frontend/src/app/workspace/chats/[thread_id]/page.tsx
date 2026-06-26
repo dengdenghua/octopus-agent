@@ -37,6 +37,7 @@ import {
 } from "@/components/workspace/chat-input-box";
 import type {
   AgentModeName,
+  AuditIntensity,
   DetectResponse,
   DetectionSignals,
 } from "@/components/workspace/mode-selector";
@@ -66,7 +67,10 @@ import { screenBlocksForAgent } from "@/components/workspace/agent-workbench-sna
 import { buildReplayFromBlocks } from "@/components/workspace/replay-from-blocks";
 import { buildReplayHtml } from "@/core/sharing/replay-html";
 import { downloadTextFile, shareSlug } from "@/core/sharing/download";
-import { modePresetForAgentMode } from "@/core/agent-modes/presets";
+import {
+  modePresetForAgentMode,
+  workflowPresetForMode,
+} from "@/core/agent-modes/presets";
 import { TodoPanel } from "@/components/workspace/todo-panel";
 import { Welcome } from "@/components/workspace/welcome";
 import {
@@ -625,6 +629,8 @@ function ChatsPageContent({
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   const [projectAgentMode, setProjectAgentMode] =
     useState<AgentModeName>("develop");
+  const [auditIntensity, setAuditIntensity] =
+    useState<AuditIntensity>("standard");
   const [projectDetection, setProjectDetection] =
     useState<DetectResponse | null>(null);
   // Work directory for Agent project/code state. Empty means personal
@@ -971,7 +977,7 @@ function ChatsPageContent({
       agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
       mode_preset: isProjectCodeMode ? projectModePreset.id : undefined,
       workflow_preset: isProjectCodeMode
-        ? projectModePreset.workflowPreset
+        ? workflowPresetForMode(projectAgentMode, auditIntensity)
         : undefined,
       skill_pack_profile: isProjectCodeMode
         ? projectModePreset.skillPackProfile
@@ -1860,8 +1866,10 @@ function ChatsPageContent({
                       onWorkDirChange={handleWorkDirChange}
                       codeModeUnlocked={codeModeUnlocked}
                       projectAgentMode={projectAgentMode}
+                      auditIntensity={auditIntensity}
                       projectDetection={projectDetection}
                       onProjectAgentModeChange={setProjectAgentMode}
+                      onAuditIntensityChange={setAuditIntensity}
                       onProjectDetectionChange={setProjectDetection}
                       contextTokens={contextTokens}
                       maxContextTokens={maxContextTokens}

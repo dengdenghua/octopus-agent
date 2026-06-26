@@ -1,4 +1,7 @@
-import type { AgentModeName } from "@/components/workspace/mode-selector";
+import type {
+  AgentModeName,
+  AuditIntensity,
+} from "@/components/workspace/mode-selector";
 
 export type ModePresetId =
   | "develop"
@@ -65,4 +68,22 @@ export function modePresetForAgentMode(
   if (agentMode === "audit") return MODE_PRESETS.audit;
   if (agentMode === "uxui") return MODE_PRESETS.uxui;
   return MODE_PRESETS.develop;
+}
+
+/**
+ * Resolve the workflow preset to SEND, applying the audit-intensity toggle.
+ *
+ * Only audit mode carries an intensity switch: "max" upgrades the sent preset to
+ * `audit.ultracode`, which the backend acts on to steer a deep multi-agent
+ * review (depth still governed by the operator orchestration budget). Every
+ * other mode — and audit at "standard" — keeps its base preset unchanged.
+ */
+export function workflowPresetForMode(
+  agentMode: AgentModeName,
+  auditIntensity: AuditIntensity = "standard",
+): ModeOrchestrationPreset["workflowPreset"] {
+  if (agentMode === "audit" && auditIntensity === "max") {
+    return "audit.ultracode";
+  }
+  return modePresetForAgentMode(agentMode).workflowPreset;
 }

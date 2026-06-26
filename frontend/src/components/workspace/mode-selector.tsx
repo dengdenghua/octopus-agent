@@ -24,6 +24,11 @@ import { cn } from "@/lib/utils";
 
 export type AgentModeName = "develop" | "audit" | "uxui";
 export type DetectedProjectKind = "builder" | "coder" | "architect";
+/**
+ * Audit-only intensity. "standard" → audit.review (single-pass); "max" →
+ * audit.ultracode (deep multi-agent review). The toggle only shows for audit.
+ */
+export type AuditIntensity = "standard" | "max";
 
 export interface VerificationCommand {
   kind: string;
@@ -114,10 +119,12 @@ interface ModeSelectorProps {
   workDir: string;
   sessionId: string;
   mode: AgentModeName;
+  auditIntensity?: AuditIntensity;
   codeModeUnlocked?: boolean;
   chromeless?: boolean;
   permissionLabel?: string;
   onModeChange: (mode: AgentModeName) => void;
+  onAuditIntensityChange?: (intensity: AuditIntensity) => void;
   onDetectionChange?: (detection: DetectResponse | null) => void;
   className?: string;
 }
@@ -126,10 +133,12 @@ export function ModeSelector({
   workDir,
   sessionId,
   mode,
+  auditIntensity = "standard",
   codeModeUnlocked = false,
   chromeless = false,
   permissionLabel,
   onModeChange,
+  onAuditIntensityChange,
   onDetectionChange,
   className,
 }: ModeSelectorProps) {
@@ -367,6 +376,38 @@ export function ModeSelector({
                     );
                   })}
                 </div>
+
+                {mode === "audit" && (
+                  <div className="border-t px-3 py-2">
+                    <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-0.5">
+                      {(["standard", "max"] as const).map((level) => {
+                        const active = auditIntensity === level;
+                        const label =
+                          level === "max" ? t.modes.ultra : t.modes.standard;
+                        return (
+                          <button
+                            key={level}
+                            type="button"
+                            onClick={() => onAuditIntensityChange?.(level)}
+                            className={cn(
+                              "flex-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors duration-150",
+                              active
+                                ? "bg-background text-foreground shadow-sm ring-1 ring-border/40"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-1.5 text-[10px] leading-tight text-muted-foreground">
+                      {auditIntensity === "max"
+                        ? t.modes.ultraTooltip
+                        : t.modes.auditEffect}
+                    </p>
+                  </div>
+                )}
 
                 {modeInfo && (
                   <div className="border-t px-3 py-2 text-[10px] text-muted-foreground leading-tight">

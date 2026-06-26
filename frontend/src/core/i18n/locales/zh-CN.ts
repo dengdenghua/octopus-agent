@@ -3927,6 +3927,7 @@ export const zhCN: Translations = {
     uxui: "UX/UI",
     architect: "架构师",
     ultra: "最高",
+    standard: "标准",
     teamCoder: "程序员",
     admin: "管理员",
     builderTooltip: "新项目/空目录：优先搭建可运行最小闭环",

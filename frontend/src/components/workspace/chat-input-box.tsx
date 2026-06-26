@@ -72,6 +72,7 @@ import {
   type DetectResponse,
   ModeSelector,
   type AgentModeName,
+  type AuditIntensity,
 } from "./mode-selector";
 
 /**
@@ -111,6 +112,7 @@ export interface ChatInputBoxProps {
   permissionMode?: PermissionMode;
   codeModeUnlocked?: boolean;
   projectAgentMode?: AgentModeName;
+  auditIntensity?: AuditIntensity;
   projectDetection?: DetectResponse | null;
   reasoningEffort?: ReasoningEffort;
   /** When set, this chat targets a local CLI partner (e.g. "codex-cli"); the
@@ -122,6 +124,7 @@ export interface ChatInputBoxProps {
   onPartnerModelChange?: (model: string) => void;
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
+  onAuditIntensityChange?: (intensity: AuditIntensity) => void;
   onProjectDetectionChange?: (detection: DetectResponse | null) => void;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
   onModelChange?: (modelName: string) => void;
@@ -235,6 +238,7 @@ export function ChatInputBox({
   permissionMode,
   codeModeUnlocked = false,
   projectAgentMode = "develop",
+  auditIntensity = "standard",
   projectDetection: _projectDetection,
   reasoningEffort,
   partnerId,
@@ -242,6 +246,7 @@ export function ChatInputBox({
   onPartnerModelChange,
   onPermissionModeChange,
   onProjectAgentModeChange,
+  onAuditIntensityChange,
   onProjectDetectionChange,
   onReasoningEffortChange,
   onModelChange,
@@ -1392,12 +1397,14 @@ export function ChatInputBox({
                       workDir={workDir ?? ""}
                       sessionId={threadId ?? "new"}
                       mode={projectAgentMode}
+                      auditIntensity={auditIntensity}
                       codeModeUnlocked={codeModeUnlocked}
                       chromeless
                       permissionLabel={permissionLabel}
                       onModeChange={
                         onProjectAgentModeChange ?? (() => undefined)
                       }
+                      onAuditIntensityChange={onAuditIntensityChange}
                       onDetectionChange={onProjectDetectionChange}
                     />
                   </>
