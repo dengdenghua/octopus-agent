@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { modePresetForAgentMode } from "./presets";
+import { modePresetForAgentMode, workflowPresetForMode } from "./presets";
 
 describe("modePresetForAgentMode", () => {
   it("maps top-level work modes to orchestration presets", () => {
@@ -32,5 +32,19 @@ describe("modePresetForAgentMode", () => {
       skillPackProfile: "audit",
       verificationPolicy: "strict",
     });
+  });
+});
+
+describe("workflowPresetForMode", () => {
+  it("upgrades audit to ultracode only at max intensity", () => {
+    expect(workflowPresetForMode("audit", "standard")).toBe("audit.review");
+    expect(workflowPresetForMode("audit", "max")).toBe("audit.ultracode");
+    // Default intensity is the conservative single-pass review.
+    expect(workflowPresetForMode("audit")).toBe("audit.review");
+  });
+
+  it("ignores intensity for non-audit modes (no ultracode leak)", () => {
+    expect(workflowPresetForMode("develop", "max")).toBe("develop.iterate");
+    expect(workflowPresetForMode("uxui", "max")).toBe("uxui.regression");
   });
 });
