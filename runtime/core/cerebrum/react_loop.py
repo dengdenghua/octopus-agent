@@ -164,6 +164,31 @@ def _retry_safe_affinity(affinity: list[str] | None) -> bool:
     return not (set(affinity) & _NON_IDEMPOTENT_AFFINITY)
 
 
+def _record_rejected_step(
+    steps: list,
+    messages: list,
+    step: Any,
+    observation: str,
+) -> None:
+    """Record a denied / user-rejected action instead of silently dropping it.
+
+    The approval-deny and user-reject branches used to ``continue`` after only
+    setting a local ``observation``, so the rejected action never entered
+    ``steps`` or ``messages``. That (a) livelocked the loop — the next LLM call
+    could not see the rejection and re-emitted the same action until
+    ``max_iter`` — and (b) left security-relevant denials invisible to the step
+    trace. Append the step and surface the rejection to the model (assistant
+    action + observation) so it adapts on the next turn."""
+    from runtime.platform.models.llm import Message
+
+    step.observation = observation
+    steps.append(step)
+    messages.append(Message(role="assistant", content=step.action))
+    messages.append(
+        Message(role="user", content=f"Observation: {observation}\n\n继续下一轮推理。")
+    )
+
+
 def _looks_like_observation_echo(text: str) -> bool:
     """True when model prose is leaked tool/protocol text, not an answer."""
     stripped = (text or "").lstrip()
@@ -2252,6 +2277,7 @@ def stream_react_loop(
                             "(工具被风险策略拒绝) 此操作被 approval risk policy 拒绝，"
                             "请换一种方式或询问用户。"
                         )
+                        _record_rejected_step(steps, messages, step, observation)
                         continue
                     if (
                         _approval_action in {"ask", "confirm"}
@@ -2297,6 +2323,7 @@ def stream_react_loop(
                             observation = (
                                 "(工具被用户拒绝) 用户拒绝了此操作，请换一种方式或询问用户。"
                             )
+                            _record_rejected_step(steps, messages, step, observation)
                             continue
                     if output_chunk_sink is not None:
                         from runtime.core.cerebrum.tool_output_sink import push_sink
