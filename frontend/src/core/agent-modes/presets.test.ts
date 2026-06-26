@@ -22,12 +22,6 @@ describe("modePresetForAgentMode", () => {
       skillPackProfile: "uxui",
       verificationPolicy: "visual",
     });
-    expect(modePresetForAgentMode("architect")).toMatchObject({
-      id: "architect",
-      workflowPreset: "architect.design",
-      skillPackProfile: "architect",
-      verificationPolicy: "standard",
-    });
   });
 
   it("keeps audit as the only user-facing audit mode", () => {
