@@ -2,11 +2,11 @@
  * Task-oriented mode selector for Agent project/code mode.
  *
  * Project detection decides whether the workspace is new or existing.
- * User-facing modes decide the work strategy: develop, audit, UX/UI, architect.
+ * User-facing modes decide the work strategy: develop, audit, UX/UI.
+ * (architect was merged into develop — design/migration is handled there.)
  */
 
 import {
-  BuildingIcon,
   ChevronDownIcon,
   CodeIcon,
   LoaderIcon,
@@ -22,7 +22,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 
-export type AgentModeName = "develop" | "audit" | "uxui" | "architect";
+export type AgentModeName = "develop" | "audit" | "uxui";
 export type DetectedProjectKind = "builder" | "coder" | "architect";
 
 export interface VerificationCommand {
@@ -403,8 +403,9 @@ function compactWorkspaceLabel(path: string): string {
   return normalized.split("/").filter(Boolean).pop() ?? normalized;
 }
 
-function modeFromProjectKind(kind: DetectedProjectKind): AgentModeName {
-  return kind === "architect" ? "architect" : "develop";
+function modeFromProjectKind(_kind: DetectedProjectKind): AgentModeName {
+  // architect mode was merged into develop; all detected kinds map to develop.
+  return "develop";
 }
 
 function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {
@@ -444,18 +445,6 @@ function getModeOptions(t: ReturnType<typeof useI18n>["t"]): ModeOption[] {
       desc: t.modes.uxuiDesc,
       effect: t.modes.uxuiEffect,
       tooltip: t.modes.uxuiTooltip,
-    },
-    {
-      name: "architect",
-      icon: BuildingIcon,
-      tone: "bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:bg-amber-900/30 dark:text-amber-400",
-      activeTone:
-        "bg-amber-500/15 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-500/20",
-      ring: "ring-amber-500/20",
-      label: t.modes.architect,
-      desc: t.modes.architectDesc,
-      effect: t.modes.architectEffect,
-      tooltip: t.modes.architectTooltip,
     },
   ];
 }
