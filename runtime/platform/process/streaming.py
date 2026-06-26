@@ -29,6 +29,77 @@ from typing import Any
 _EXECUTION_POLICY_SCHEMA = "octopus.execution_policy.v1"
 
 
+def execution_policy_result_snapshot(
+    *,
+    status: str,
+    exit_code: int | None = None,
+    timed_out: bool = False,
+    cancelled: bool = False,
+    killed: bool = False,
+    stdout_truncated: bool = False,
+    stderr_truncated: bool = False,
+    duration_ms: int | None = None,
+    error_type: str | None = None,
+) -> dict[str, Any]:
+    """Stable, content-free subprocess outcome summary for audit/replay."""
+    result = {
+        "status": str(status or "unknown"),
+        "exit_code": exit_code,
+        "timed_out": bool(timed_out),
+        "cancelled": bool(cancelled),
+        "killed": bool(killed),
+        "stdout_truncated": bool(stdout_truncated),
+        "stderr_truncated": bool(stderr_truncated),
+        "output_truncated": bool(stdout_truncated or stderr_truncated),
+    }
+    if duration_ms is not None:
+        result["duration_ms"] = max(0, int(duration_ms))
+    clean_error_type = str(error_type or "").strip()
+    if clean_error_type:
+        result["error_type"] = clean_error_type
+    return result
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_nonnegative_int(value: Any, default: int) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _append_capped_utf8(
+    parts: list[str],
+    chunk: str,
+    *,
+    cap_bytes: int,
+    state: dict[str, Any],
+) -> None:
+    if state["bytes"] >= cap_bytes:
+        state["truncated"] = True
+        return
+    chunk_bytes = chunk.encode("utf-8", errors="replace")
+    remaining = cap_bytes - int(state["bytes"])
+    if len(chunk_bytes) <= remaining:
+        parts.append(chunk)
+        state["bytes"] += len(chunk_bytes)
+        return
+    state["truncated"] = True
+    if remaining > 0:
+        truncated = chunk_bytes[:remaining].decode("utf-8", errors="ignore")
+        if truncated:
+            parts.append(truncated)
+    state["bytes"] = cap_bytes
+
+
 def _sandbox_extra_env(env: Mapping[str, str] | None) -> dict[str, str]:
     """Return only caller-supplied env overrides for sandboxed subprocesses.
 
@@ -60,9 +131,10 @@ def execution_policy_snapshot(
     env_mode: str,
     process_group: bool,
     timeout_s: float | None,
+    result: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Stable audit shape for subprocess policy decisions."""
-    return {
+    snapshot = {
         "schema": _EXECUTION_POLICY_SCHEMA,
         "sandbox_requested": sandbox_requested,
         "workspace": workspace,
@@ -75,6 +147,19 @@ def execution_policy_snapshot(
         "process_tree_kill": process_group,
         "timeout_s": timeout_s,
     }
+    if isinstance(result, Mapping):
+        snapshot["result"] = execution_policy_result_snapshot(
+            status=str(result.get("status") or "unknown"),
+            exit_code=_optional_int(result.get("exit_code")),
+            timed_out=bool(result.get("timed_out")),
+            cancelled=bool(result.get("cancelled")),
+            killed=bool(result.get("killed")),
+            stdout_truncated=bool(result.get("stdout_truncated")),
+            stderr_truncated=bool(result.get("stderr_truncated")),
+            duration_ms=_optional_int(result.get("duration_ms")),
+            error_type=str(result.get("error_type") or ""),
+        )
+    return snapshot
 
 
 def stream_run(
@@ -99,6 +184,7 @@ def stream_run(
     ``on_timeout`` is called after the process is killed, letting the
     caller run any backend-specific cleanup (e.g. ``docker kill``).
     """
+    output_cap_bytes = _coerce_nonnegative_int(output_cap_bytes, 200_000)
     run_cwd = cwd
     run_env = dict(env) if env is not None else None
     sandbox_backend = "direct"
@@ -106,7 +192,11 @@ def stream_run(
     sandbox_workspace: str | None = None
     env_mode = "custom" if env is not None else "inherit"
 
-    def _policy_snapshot(*, process_group: bool = False) -> dict[str, Any]:
+    def _policy_snapshot(
+        *,
+        process_group: bool = False,
+        result: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         return execution_policy_snapshot(
             sandbox_requested=sandbox_dir is not None,
             workspace=sandbox_workspace,
@@ -117,6 +207,7 @@ def stream_run(
             env_mode=env_mode,
             process_group=process_group,
             timeout_s=timeout,
+            result=result,
         )
 
     if sandbox_dir is not None:
@@ -131,7 +222,9 @@ def stream_run(
         if not sandbox_root.is_dir():
             return {
                 "error": f"sandbox_violation: workspace not a directory: {sandbox_root}",
-                "execution_policy": _policy_snapshot(),
+                "execution_policy": _policy_snapshot(
+                    result={"status": "sandbox_violation", "error_type": "sandbox_violation"}
+                ),
             }
         if cwd is None:
             run_cwd = str(sandbox_root)
@@ -147,12 +240,16 @@ def stream_run(
                     "error": (
                         f"sandbox_violation: cwd {candidate} escapes workspace {sandbox_root}"
                     ),
-                    "execution_policy": _policy_snapshot(),
+                    "execution_policy": _policy_snapshot(
+                        result={"status": "sandbox_violation", "error_type": "sandbox_violation"}
+                    ),
                 }
             if not candidate.is_dir():
                 return {
                     "error": f"sandbox_violation: cwd is not a directory: {candidate}",
-                    "execution_policy": _policy_snapshot(),
+                    "execution_policy": _policy_snapshot(
+                        result={"status": "sandbox_violation", "error_type": "sandbox_violation"}
+                    ),
                 }
             run_cwd = str(candidate)
         policy = SandboxPolicy(
@@ -174,7 +271,9 @@ def stream_run(
         except SandboxViolation as exc:
             return {
                 "error": f"sandbox_violation: {exc}",
-                "execution_policy": _policy_snapshot(),
+                "execution_policy": _policy_snapshot(
+                    result={"status": "sandbox_violation", "error_type": "sandbox_violation"}
+                ),
             }
         argv = run_argv
         run_cwd = str(transformed_cwd)
@@ -201,9 +300,19 @@ def stream_run(
             **process_group_kwargs(),
         )
     except FileNotFoundError as e:
-        return {"error": f"exec_failed: {e}", "execution_policy": _policy_snapshot()}
+        return {
+            "error": f"exec_failed: {e}",
+            "execution_policy": _policy_snapshot(
+                result={"status": "exec_failed", "error_type": "file_not_found"}
+            ),
+        }
     except OSError as e:
-        return {"error": f"exec_failed: {e}", "execution_policy": _policy_snapshot()}
+        return {
+            "error": f"exec_failed: {e}",
+            "execution_policy": _policy_snapshot(
+                result={"status": "exec_failed", "error_type": type(e).__name__}
+            ),
+        }
 
     from runtime.platform.process import tool_output_sink
     from runtime.safety.approval.cancellation import current_cancellation_token
@@ -215,13 +324,22 @@ def stream_run(
 
     stdout_parts: list[str] = []
     stderr_parts: list[str] = []
+    stream_state: dict[str, dict[str, Any]] = {
+        "stdout": {"bytes": 0, "truncated": False},
+        "stderr": {"bytes": 0, "truncated": False},
+    }
 
     def _reader(stream: Any, parts: list[str], kind: str) -> None:
         try:
             for line in iter(stream.readline, ""):
                 if not line:
                     break
-                parts.append(line)
+                _append_capped_utf8(
+                    parts,
+                    line,
+                    cap_bytes=output_cap_bytes,
+                    state=stream_state[kind],
+                )
                 if sink is not None:
                     with contextlib.suppress(Exception):
                         sink(kind, line)  # type: ignore[arg-type]
@@ -281,17 +399,37 @@ def stream_run(
     raw_stdout = "".join(stdout_parts)
     raw_stderr = "".join(stderr_parts)
     duration_ms = int((time.monotonic() - started_at) * 1000)
-    return {
-        "stdout": raw_stdout[:output_cap_bytes],
-        "stderr": raw_stderr[:output_cap_bytes],
-        "exit_code": None if (timed_out or cancelled) else proc.returncode,
+    stdout_truncated = bool(stream_state["stdout"]["truncated"])
+    stderr_truncated = bool(stream_state["stderr"]["truncated"])
+    exit_code = None if (timed_out or cancelled) else proc.returncode
+    status = "completed"
+    if timed_out:
+        status = "timed_out"
+    elif cancelled:
+        status = "cancelled"
+    elif exit_code not in {0, None}:
+        status = "failed"
+    result_snapshot = {
+        "status": status,
+        "exit_code": exit_code,
         "duration_ms": duration_ms,
         "timed_out": timed_out,
         "cancelled": cancelled,
         "killed": killed,
-        "stdout_truncated": len(raw_stdout) > output_cap_bytes,
-        "stderr_truncated": len(raw_stderr) > output_cap_bytes,
+        "stdout_truncated": stdout_truncated,
+        "stderr_truncated": stderr_truncated,
+    }
+    return {
+        "stdout": raw_stdout,
+        "stderr": raw_stderr,
+        "exit_code": exit_code,
+        "duration_ms": duration_ms,
+        "timed_out": timed_out,
+        "cancelled": cancelled,
+        "killed": killed,
+        "stdout_truncated": stdout_truncated,
+        "stderr_truncated": stderr_truncated,
         "sandbox_backend": sandbox_backend,
         "sandbox_hard": sandbox_hard,
-        "execution_policy": _policy_snapshot(process_group=True),
+        "execution_policy": _policy_snapshot(process_group=True, result=result_snapshot),
     }

@@ -8,6 +8,7 @@ via ``-c``. That dodges shell-builtin differences (``echo``, ``ls``,
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -91,6 +92,31 @@ class TestEnvironmentScrub:
         result = runner.run(_python("import os; print(os.environ.get('OCT_INJECT', 'no'))"))
         assert "yes" in result.stdout
 
+    def test_extra_env_secret_keys_are_blocked(self, workspace: Path) -> None:
+        runner = SandboxRunner(
+            SandboxPolicy(
+                workspace=workspace,
+                timeout_s=10.0,
+                extra_env={
+                    "OPENAI_API_KEY": "sk-secret",
+                    "CUSTOM_TOKEN": "token-secret",
+                    "OCTOPUS_EXPLICIT": "kept",
+                },
+            )
+        )
+        result = runner.run(
+            _python(
+                "import os",
+                "print(os.environ.get('OPENAI_API_KEY', 'MISSING'))",
+                "print(os.environ.get('CUSTOM_TOKEN', 'MISSING'))",
+                "print(os.environ.get('OCTOPUS_EXPLICIT', 'MISSING'))",
+            )
+        )
+
+        assert "sk-secret" not in result.stdout
+        assert "token-secret" not in result.stdout
+        assert result.stdout.splitlines() == ["MISSING", "MISSING", "kept"]
+
     def test_no_network_sets_proxy_short_circuit(self, workspace: Path) -> None:
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
         result = runner.run(
@@ -98,6 +124,35 @@ class TestEnvironmentScrub:
         )
         assert "*" in result.stdout
         assert "127.0.0.1:1" in result.stdout
+
+    def test_home_and_temp_are_redirected_inside_workspace(self, workspace: Path) -> None:
+        runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
+        result = runner.run(
+            _python(
+                "import json, os, pathlib, tempfile",
+                "home = pathlib.Path.home()",
+                "tmp = pathlib.Path(tempfile.gettempdir())",
+                "(home / 'home-marker.txt').write_text('home')",
+                "(tmp / 'tmp-marker.txt').write_text('tmp')",
+                "print(json.dumps({'HOME': os.environ.get('HOME'), 'USERPROFILE': os.environ.get('USERPROFILE'), 'TMPDIR': os.environ.get('TMPDIR'), 'TMP': os.environ.get('TMP'), 'TEMP': os.environ.get('TEMP'), 'XDG_CACHE_HOME': os.environ.get('XDG_CACHE_HOME'), 'XDG_CONFIG_HOME': os.environ.get('XDG_CONFIG_HOME'), 'XDG_DATA_HOME': os.environ.get('XDG_DATA_HOME'), 'tempfile': str(tmp)}))",
+            )
+        )
+
+        assert result.exit_code == 0
+        env = json.loads(result.stdout)
+        expected_home = workspace / ".octopus-home"
+        expected_tmp = workspace / ".octopus-tmp"
+        assert Path(env["HOME"]).resolve() == expected_home.resolve()
+        assert Path(env["USERPROFILE"]).resolve() == expected_home.resolve()
+        assert Path(env["TMPDIR"]).resolve() == expected_tmp.resolve()
+        assert Path(env["TMP"]).resolve() == expected_tmp.resolve()
+        assert Path(env["TEMP"]).resolve() == expected_tmp.resolve()
+        assert Path(env["tempfile"]).resolve() == expected_tmp.resolve()
+        assert Path(env["XDG_CACHE_HOME"]).resolve() == (workspace / ".octopus-cache").resolve()
+        assert Path(env["XDG_CONFIG_HOME"]).resolve() == (workspace / ".octopus-config").resolve()
+        assert Path(env["XDG_DATA_HOME"]).resolve() == (workspace / ".octopus-data").resolve()
+        assert (expected_home / "home-marker.txt").read_text(encoding="utf-8") == "home"
+        assert (expected_tmp / "tmp-marker.txt").read_text(encoding="utf-8") == "tmp"
 
 
 class TestCwdIsolation:
@@ -128,6 +183,13 @@ class TestCwdIsolation:
         with pytest.raises(SandboxViolation):
             runner.run(_python("print('x')"), cwd=workspace / "missing")
 
+    def test_nonexistent_workspace_rejected(self, tmp_path: Path) -> None:
+        missing = tmp_path / "missing-workspace"
+        runner = SandboxRunner(SandboxPolicy(workspace=missing, timeout_s=10.0))
+        with pytest.raises(SandboxViolation, match="workspace is not a directory"):
+            runner.run(_python("print('x')"))
+        assert not missing.exists()
+
 
 class TestLimits:
     def test_timeout_kills_process(self, workspace: Path) -> None:
@@ -144,6 +206,16 @@ class TestLimits:
         result = runner.run(_python("for i in range(200):\n    print('xxxxxxxx', flush=True)\n"))
         assert result.truncated is True
         assert len(result.stdout) <= 64
+
+    def test_output_cap_is_measured_in_utf8_bytes(self, workspace: Path) -> None:
+        runner = SandboxRunner(
+            SandboxPolicy(workspace=workspace, timeout_s=10.0, max_output_bytes=5)
+        )
+        result = runner.run(_python("import sys; sys.stdout.write('界' * 10)"))
+
+        assert result.truncated is True
+        assert len(result.stdout.encode("utf-8")) <= 5
+        assert result.stdout == "界"
 
     def test_empty_command_rejected(self, workspace: Path) -> None:
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, field_validator
+
 try:
     from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -14,7 +16,39 @@ except ImportError:  # pragma: no cover
     Request = None  # type: ignore[assignment, misc]
 
 from runtime.platform.process.paths import app_paths
-from runtime.platform.process.task_supervisor import TaskSupervisor, TaskSupervisorStore
+from runtime.platform.process.task_supervisor import (
+    LostTaskLease,
+    TaskLeaseConflict,
+    TaskSupervisor,
+    TaskSupervisorStore,
+    build_task_runs_overview,
+    task_lease_health,
+)
+
+
+class TaskApprovalDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    approved: bool
+    reason: str | None = None
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _normalize_reason(cls, value: Any) -> str | None:
+        text = str(value or "").strip()
+        return text or None
+
+
+class TaskTakeoverRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    reason: str | None = None
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def _normalize_reason(cls, value: Any) -> str | None:
+        text = str(value or "").strip()
+        return text or None
 
 
 def _default_supervisor() -> TaskSupervisor:
@@ -52,6 +86,9 @@ def create_task_runs_router(
             jwt_audience=jwt_audience,
         )
 
+    def _supervisor() -> TaskSupervisor:
+        return supervisor or _default_supervisor()
+
     @router.get("/api/task-runs")
     def api_task_runs(
         request: Request,
@@ -64,7 +101,7 @@ def create_task_runs_router(
     ) -> dict[str, Any]:
         actor = _auth(request)
         effective_owner = actor if require_auth else owner_id
-        tasks = _store().list(
+        page = _store().list_page(
             status=status,
             kind=kind,
             owner_id=effective_owner,
@@ -72,17 +109,39 @@ def create_task_runs_router(
             limit=limit,
             offset=offset,
         )
+        tasks = page["items"]
         return {
             "schema": "octopus.task_runs.v1",
             "tasks": [task.model_dump(mode="json") for task in tasks],
-            "total": len(tasks),
-            "limit": limit,
-            "offset": offset,
+            "items": [_task_run_payload(task) for task in tasks],
+            "total": page["total"],
+            "count": len(tasks),
+            "limit": page["limit"],
+            "offset": page["offset"],
             "filters": {
                 "status": status,
                 "kind": kind,
                 "owner_id": effective_owner,
                 "thread_id": thread_id,
+            },
+        }
+
+    @router.get("/api/task-runs/overview")
+    def api_task_runs_overview(
+        request: Request,
+        owner_id: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        actor = _auth(request)
+        effective_owner = actor if require_auth else owner_id
+        if effective_owner:
+            tasks = _store().list(owner_id=effective_owner, limit=1_000_000)
+            overview = build_task_runs_overview(tasks)
+        else:
+            overview = _store().overview()
+        return {
+            **overview,
+            "filters": {
+                "owner_id": effective_owner,
             },
         }
 
@@ -97,9 +156,82 @@ def create_task_runs_router(
         return {
             "schema": "octopus.task_run.v1",
             "task_run": task.model_dump(mode="json"),
+            "lease_health": task_lease_health(task),
+        }
+
+    @router.post("/api/task-runs/{task_id}/approval-decision")
+    def api_task_run_approval_decision(
+        task_id: str,
+        body: TaskApprovalDecisionRequest,
+        request: Request,
+    ) -> dict[str, Any]:
+        actor = _auth(request)
+        task = _store().get(task_id)
+        if task is None:
+            raise HTTPException(404, "task run not found")
+        if require_auth and task.owner_id not in {None, "", actor}:
+            raise HTTPException(404, "task run not found")
+        try:
+            updated = _supervisor().record_approval_decision(
+                task_id,
+                approved=body.approved,
+                decided_by=actor,
+                reason=body.reason or "",
+            )
+        except LostTaskLease as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(404, "task run not found") from exc
+        return {
+            "schema": "octopus.task_run_approval_decision.v1",
+            "task_run": updated.model_dump(mode="json"),
+            "lease_health": task_lease_health(updated),
+        }
+
+    @router.post("/api/task-runs/{task_id}/takeover")
+    def api_task_run_takeover(
+        task_id: str,
+        request: Request,
+        body: TaskTakeoverRequest | None = None,
+    ) -> dict[str, Any]:
+        actor = _auth(request)
+        task = _store().get(task_id)
+        if task is None:
+            raise HTTPException(404, "task run not found")
+        if require_auth and task.owner_id not in {None, "", actor}:
+            raise HTTPException(404, "task run not found")
+        try:
+            updated = _supervisor().takeover_task(
+                task_id,
+                by=actor,
+                reason=(body.reason if body is not None else None) or "",
+            )
+        except TaskLeaseConflict as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(404, "task run not found") from exc
+        return {
+            "schema": "octopus.task_run_takeover.v1",
+            "task_run": updated.model_dump(mode="json"),
+            "lease_health": task_lease_health(updated),
         }
 
     return router
 
 
-__all__ = ["create_task_runs_router"]
+def _task_run_payload(task: Any) -> dict[str, Any]:
+    return {
+        "task_run": task.model_dump(mode="json"),
+        "lease_health": task_lease_health(task),
+    }
+
+
+__all__ = [
+    "TaskApprovalDecisionRequest",
+    "TaskTakeoverRequest",
+    "create_task_runs_router",
+]

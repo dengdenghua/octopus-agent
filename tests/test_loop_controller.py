@@ -15,6 +15,7 @@ from runtime.execution.loops.models import (
     VerifierFinding,
     VerifierResult,
 )
+from runtime.execution.loops.recovery import build_loop_run_checkpoint
 from runtime.execution.loops.replay import (
     build_loop_run_replay,
     build_loop_run_replay_case,
@@ -48,10 +49,40 @@ class _UnknownProfileVerifierRegistry:
         raise KeyError(profile)
 
 
+class _InterleavingLoopRunStore:
+    def __init__(self, inner: LoopRunStore) -> None:
+        self.inner = inner
+        self.interleave_once = None
+
+    def create(self, run: LoopRun) -> LoopRun:
+        return self.inner.create(run)
+
+    def get(self, run_id: str) -> LoopRun | None:
+        return self.inner.get(run_id)
+
+    def list(self, **kwargs):
+        return self.inner.list(**kwargs)
+
+    def count(self, **kwargs) -> int:
+        return self.inner.count(**kwargs)
+
+    def save(self, run: LoopRun) -> LoopRun:
+        return self.inner.save(run)
+
+    def mutate(self, run_id: str, mutator):
+        if self.interleave_once is not None:
+            callback = self.interleave_once
+            self.interleave_once = None
+            callback()
+        return self.inner.mutate(run_id, mutator)
+
+
 def _execution_policy(
     *,
     backend: str = "seatbelt",
     workspace_path: str = "/tmp/octopus-workspace",
+    result_status: str = "completed",
+    duration_ms: int = 123,
 ) -> dict[str, object]:
     return {
         "schema": "octopus.execution_policy.v1",
@@ -65,6 +96,18 @@ def _execution_policy(
         "process_group": True,
         "process_tree_kill": True,
         "timeout_s": 60,
+        "result": {
+            "status": result_status,
+            "exit_code": 0 if result_status == "completed" else None,
+            "timed_out": result_status == "timed_out",
+            "cancelled": result_status == "cancelled",
+            "killed": result_status in {"timed_out", "cancelled"},
+            "stdout_truncated": result_status == "truncated",
+            "stderr_truncated": False,
+            "output_truncated": result_status == "truncated",
+            "duration_ms": duration_ms,
+            "raw_stdout": "not copied into checkpoint summaries",
+        },
         "extra_raw_detail": "not copied into checkpoint summaries",
     }
 
@@ -253,6 +296,9 @@ def test_loop_controller_stops_on_environment_verifier_blocker(tmp_path) -> None
     verifier_step = failed.last_review["replay"]["steps"][5]
     assert verifier_step["failure_category"] == "environment_missing_tool"
     assert verifier_step["execution_policies"][0]["backend"] == "seatbelt"
+    assert verifier_step["execution_policies"][0]["result"]["status"] == "completed"
+    assert "duration_ms" not in verifier_step["execution_policies"][0]["result"]
+    assert "raw_stdout" not in verifier_step["execution_policies"][0]["result"]
     assert "extra_raw_detail" not in verifier_step["execution_policies"][0]
     verifier_findings = [
         finding
@@ -262,6 +308,10 @@ def test_loop_controller_stops_on_environment_verifier_blocker(tmp_path) -> None
     assert verifier_findings[0]["evidence"]["execution_policies"][0]["backend"] == "seatbelt"
     checkpoint_state = failed.last_review["resume"]["latest_checkpoint"]["state"]
     assert checkpoint_state["last_verifier"]["execution_policies"][0]["backend"] == "seatbelt"
+    assert (
+        checkpoint_state["last_verifier"]["execution_policies"][0]["result"]["status"]
+        == "completed"
+    )
     assert (
         checkpoint_state["attempt_snapshots"][0]["verifier"]["execution_policies"][0][
             "process_tree_kill"
@@ -515,10 +565,95 @@ def test_loop_run_replay_fingerprint_includes_verifier_execution_policy(tmp_path
     direct_replay = build_loop_run_replay(
         _run_for_policy(_execution_policy(backend="direct", workspace_path=workspace))
     )
+    timed_out_replay = build_loop_run_replay(
+        _run_for_policy(
+            _execution_policy(
+                backend="direct",
+                workspace_path=workspace,
+                result_status="timed_out",
+            )
+        )
+    )
+    slow_direct_replay = build_loop_run_replay(
+        _run_for_policy(
+            _execution_policy(
+                backend="direct",
+                workspace_path=workspace,
+                duration_ms=999_999,
+            )
+        )
+    )
 
     assert seatbelt_replay["fingerprint"] != direct_replay["fingerprint"]
+    assert timed_out_replay["fingerprint"] != direct_replay["fingerprint"]
+    assert slow_direct_replay["fingerprint"] == direct_replay["fingerprint"]
     assert seatbelt_replay["steps"][5]["execution_policies"][0]["backend"] == "seatbelt"
     assert direct_replay["steps"][5]["execution_policies"][0]["backend"] == "direct"
+    assert timed_out_replay["steps"][5]["execution_policies"][0]["result"]["status"] == "timed_out"
+    assert "raw_stdout" not in timed_out_replay["steps"][5]["execution_policies"][0]["result"]
+
+
+def test_loop_run_replay_fingerprint_includes_task_boundary_policy_and_workspace(
+    tmp_path,
+) -> None:
+    def _run(
+        *,
+        workspace_path: str,
+        verifier_profile: str = "auto",
+        sandbox_mode: str = "full",
+    ) -> LoopRun:
+        return LoopRun(
+            goal="Repair the loop runtime",
+            workspace_path=workspace_path,
+            status=LoopRunStatus.COMPLETED,
+            policy=LoopPolicy(
+                max_attempts=2,
+                max_iterations=3,
+                verifier_profile=verifier_profile,
+                sandbox_mode=sandbox_mode,
+            ),
+            attempts=[
+                LoopAttempt(
+                    attempt_index=1,
+                    prompt="Repair the loop runtime",
+                    status="completed",
+                    success=True,
+                    final_answer="done",
+                    verifier_result=VerifierResult(
+                        profile=verifier_profile,
+                        kind="python",
+                        passed=True,
+                        summary="all checks passed",
+                    ),
+                )
+            ],
+            last_verifier_result=VerifierResult(
+                profile=verifier_profile,
+                kind="python",
+                passed=True,
+                summary="all checks passed",
+            ),
+        )
+
+    workspace_a = str(tmp_path / "repo-a")
+    workspace_b = str(tmp_path / "repo-b")
+    auto_replay = build_loop_run_replay(_run(workspace_path=workspace_a))
+    python_replay = build_loop_run_replay(
+        _run(workspace_path=workspace_a, verifier_profile="python")
+    )
+    workspace_replay = build_loop_run_replay(_run(workspace_path=workspace_b))
+    sandbox_replay = build_loop_run_replay(
+        _run(workspace_path=workspace_a, sandbox_mode="readonly")
+    )
+
+    start = auto_replay["steps"][0]
+    assert start["kind"] == "task_start"
+    assert start["workspace_path"] == workspace_a
+    assert start["policy"]["verifier_profile"] == "auto"
+    assert start["policy"]["sandbox_mode"] == "full"
+    assert auto_replay["fingerprint"] != python_replay["fingerprint"]
+    assert auto_replay["fingerprint"] != workspace_replay["fingerprint"]
+    assert auto_replay["fingerprint"] != sandbox_replay["fingerprint"]
 
 
 def test_loop_controller_can_cancel_pending_run(tmp_path) -> None:
@@ -942,6 +1077,272 @@ def test_loop_controller_records_loop_trace_checkpoints_and_task_run(tmp_path) -
     trace.close()
 
 
+def test_loop_controller_terminal_finalize_is_idempotent(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    trace = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+    supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="loop-worker",
+    )
+    verifier_result = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        failure_category="test_failure",
+        passed=False,
+        findings=[
+            VerifierFinding(
+                name="pytest",
+                category="test_failure",
+                passed=False,
+                exit_code=1,
+                stderr="1 failing test remains",
+            )
+        ],
+        summary="failed checks: pytest",
+    )
+    run = LoopRun(
+        owner_id="alice",
+        goal="Avoid duplicate terminal artifacts",
+        thread_id="thread-loop",
+        workspace_path=str(tmp_path / "workspace"),
+        status=LoopRunStatus.FAILED,
+        started_at="2026-06-25T00:00:00+00:00",
+        completed_at="2026-06-25T00:02:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Avoid duplicate terminal artifacts",
+                status="completed",
+                success=False,
+                completed_at="2026-06-25T00:01:00+00:00",
+                final_answer="not fixed",
+                verifier_result=verifier_result,
+            )
+        ],
+        last_verifier_result=verifier_result,
+        last_error="failed checks: pytest",
+    )
+    store.create(run)
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        trace_store=trace,
+        task_supervisor=supervisor,
+        review_queue=queue,
+        react_runner=lambda **kwargs: ReActResult(final_answer="should not run", success=True),
+    )
+    supervisor.start_task(
+        task_id=run.run_id,
+        kind="loop",
+        owner_id=run.owner_id,
+        thread_id=run.thread_id,
+        title=run.goal,
+        goal=run.goal,
+        mode=run.mode.value,
+        workspace_path=run.workspace_path,
+    )
+
+    first = controller._finalize_learning(run)
+    second = controller._finalize_learning(first)
+
+    checkpoints = trace.checkpoints(task_id=run.run_id, checkpoint_type="loop_run")
+    failed_events = trace.events(task_id=run.run_id, event_type="TASK_RUN_FAILED")
+    assert len(checkpoints) == 1
+    assert len(failed_events) == 1
+    assert first.last_review is not None
+    assert second.last_review == first.last_review
+    assert second.last_review_queue_result == first.last_review_queue_result
+    assert first.last_review_queue_result is not None
+    assert first.last_review_queue_result["created"] == 2
+    assert queue.summary()["pending_count"] == 2
+    task_record = supervisor.store.get(run.run_id)
+    assert task_record is not None
+    assert task_record.latest_checkpoint_id == checkpoints[0]["id"]
+    trace.close()
+
+
+def test_loop_controller_reuses_terminal_trace_after_pre_review_crash(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    trace = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+    verifier_result = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        failure_category="test_failure",
+        passed=False,
+        findings=[
+            VerifierFinding(
+                name="pytest",
+                category="test_failure",
+                passed=False,
+                exit_code=1,
+                stderr="1 failing test remains",
+            )
+        ],
+        summary="failed checks: pytest",
+    )
+    run = LoopRun(
+        owner_id="alice",
+        goal="Recover pre-review trace write",
+        thread_id="thread-loop",
+        workspace_path=str(tmp_path / "workspace"),
+        status=LoopRunStatus.FAILED,
+        started_at="2026-06-25T00:00:00+00:00",
+        completed_at="2026-06-25T00:02:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Recover pre-review trace write",
+                status="completed",
+                success=False,
+                completed_at="2026-06-25T00:01:00+00:00",
+                final_answer="not fixed",
+                verifier_result=verifier_result,
+            )
+        ],
+        last_verifier_result=verifier_result,
+        last_error="failed checks: pytest",
+    )
+    store.create(run)
+    checkpoint_id = trace.record_checkpoint(
+        task_id=run.run_id,
+        checkpoint_type="loop_run",
+        state={
+            "schema": "octopus.loop_checkpoint.v1",
+            "current_phase": "failed",
+        },
+        thread_id=run.thread_id,
+        turn_id=run.run_id,
+        agent_id="loop_controller",
+        iteration=1,
+        summary="failed after 1 attempt",
+        ts=run.completed_at,
+    )
+    trace.record_task_run_finished(
+        task_id=run.run_id,
+        status="failed",
+        thread_id=run.thread_id,
+        turn_id=run.run_id,
+        agent_id="loop_controller",
+        summary="failed after 1 attempt",
+        reason=run.last_error,
+        metadata={
+            "checkpoint_id": checkpoint_id,
+            "checkpoint_type": "loop_run",
+        },
+        ts=run.completed_at,
+    )
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        trace_store=trace,
+        review_queue=queue,
+        react_runner=lambda **kwargs: ReActResult(final_answer="should not run", success=True),
+    )
+
+    failed = controller._finalize_learning(run)
+
+    checkpoints = trace.checkpoints(task_id=run.run_id, checkpoint_type="loop_run")
+    failed_events = trace.events(task_id=run.run_id, event_type="TASK_RUN_FAILED")
+    assert len(checkpoints) == 1
+    assert len(failed_events) == 1
+    assert failed.last_review is not None
+    assert failed.last_review["summary"]["trace_checkpoint_id"] == checkpoint_id
+    assert failed.last_review["resume"]["latest_checkpoint"]["trace_checkpoint_id"] == checkpoint_id
+    assert failed.last_review_queue_result is not None
+    assert failed.last_review_queue_result["created"] == 2
+    assert queue.summary()["pending_count"] == 2
+    trace.close()
+
+
+def test_loop_controller_reuses_checkpoint_and_backfills_terminal_event_after_crash(
+    tmp_path,
+) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    trace = AgentTraceStore(tmp_path / "agent_trace.sqlite")
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+    verifier_result = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        failure_category="test_failure",
+        passed=False,
+        findings=[
+            VerifierFinding(
+                name="pytest",
+                category="test_failure",
+                passed=False,
+                exit_code=1,
+                stderr="1 failing test remains",
+            )
+        ],
+        summary="failed checks: pytest",
+    )
+    run = LoopRun(
+        owner_id="alice",
+        goal="Backfill terminal event",
+        thread_id="thread-loop",
+        workspace_path=str(tmp_path / "workspace"),
+        status=LoopRunStatus.FAILED,
+        started_at="2026-06-25T00:00:00+00:00",
+        completed_at="2026-06-25T00:02:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Backfill terminal event",
+                status="completed",
+                success=False,
+                completed_at="2026-06-25T00:01:00+00:00",
+                final_answer="not fixed",
+                verifier_result=verifier_result,
+            )
+        ],
+        last_verifier_result=verifier_result,
+        last_error="failed checks: pytest",
+    )
+    store.create(run)
+    checkpoint = build_loop_run_checkpoint(run)
+    checkpoint_id = trace.record_checkpoint(
+        task_id=run.run_id,
+        checkpoint_type=str(checkpoint["checkpoint_type"]),
+        state=checkpoint["state"],
+        thread_id=run.thread_id,
+        turn_id=run.run_id,
+        agent_id="loop_controller",
+        iteration=int(checkpoint["iteration"]),
+        summary=str(checkpoint["summary"]),
+        ts=str(checkpoint["ts"]),
+    )
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        trace_store=trace,
+        review_queue=queue,
+        react_runner=lambda **kwargs: ReActResult(final_answer="should not run", success=True),
+    )
+
+    failed = controller._finalize_learning(run)
+
+    checkpoints = trace.checkpoints(task_id=run.run_id, checkpoint_type="loop_run")
+    failed_events = trace.events(task_id=run.run_id, event_type="TASK_RUN_FAILED")
+    assert len(checkpoints) == 1
+    assert len(failed_events) == 1
+    assert checkpoints[0]["id"] == checkpoint_id
+    assert failed_events[0]["payload"]["metadata"]["checkpoint_id"] == checkpoint_id
+    assert failed.last_review is not None
+    assert failed.last_review["summary"]["trace_checkpoint_id"] == checkpoint_id
+    assert failed.last_review_queue_result is not None
+    assert failed.last_review_queue_result["created"] == 2
+    assert queue.summary()["pending_count"] == 2
+    trace.close()
+
+
 def test_loop_controller_writes_task_supervisor_record(tmp_path) -> None:
     store = LoopRunStore(tmp_path / "loop_runs.json")
     trace = AgentTraceStore(tmp_path / "agent_trace.sqlite")
@@ -1156,6 +1557,59 @@ def test_loop_controller_recovers_interrupted_attempt_before_retry(tmp_path) -> 
     assert completed.last_verifier_result.passed is True
 
 
+def test_loop_controller_fails_exhausted_interrupted_attempt_with_review(
+    tmp_path,
+) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    run = LoopRun(
+        goal="Recover but no attempts remain",
+        workspace_path=str(workspace),
+        status=LoopRunStatus.RUNNING,
+        started_at="2026-06-25T00:00:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Recover but no attempts remain",
+                status="running",
+            )
+        ],
+    )
+    store.create(run)
+    runner_calls: list[str] = []
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(intent.normalized_goal)
+        return ReActResult(final_answer="should not run", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        review_queue=queue,
+        react_runner=runner,
+    )
+
+    failed = controller.execute(run.run_id)
+
+    assert failed.status == LoopRunStatus.FAILED
+    assert runner_calls == []
+    assert len(failed.attempts) == 1
+    assert failed.attempts[0].status == "interrupted"
+    assert "interrupted" in failed.attempts[0].error
+    assert "interrupted" in failed.last_error
+    assert failed.last_review is not None
+    assert failed.last_review["resume"]["available"] is True
+    assert (
+        failed.last_review["resume"]["latest_checkpoint"]["state"]["last_attempt"]["status"]
+        == "interrupted"
+    )
+    assert queue.summary()["pending_count"] == 2
+
+
 def test_loop_controller_resumes_pending_verification_without_rerunning_attempt(
     tmp_path,
 ) -> None:
@@ -1211,5 +1665,436 @@ def test_loop_controller_resumes_pending_verification_without_rerunning_attempt(
     assert verifier_registry.calls == [("auto", str(workspace))]
     assert len(completed.attempts) == 1
     assert completed.attempts[0].verifier_result is not None
+    assert completed.last_verifier_result is not None
+    assert completed.last_verifier_result.passed is True
+
+
+def test_loop_controller_recovers_half_written_success_before_verification(
+    tmp_path,
+) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    run = LoopRun(
+        goal="Verify half-written completion",
+        workspace_path=str(workspace),
+        status=LoopRunStatus.RUNNING,
+        started_at="2026-06-25T00:00:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Verify half-written completion",
+                status="running",
+                success=True,
+                final_answer="patched before completion timestamp crash",
+                terminated_reason="final_answer",
+                completion_receipt={"writes": 1},
+            )
+        ],
+    )
+    store.create(run)
+    runner_calls: list[str] = []
+    verifier_registry = _StubVerifierRegistry(
+        [
+            VerifierResult(
+                profile="python_repo_patch",
+                kind="python",
+                passed=True,
+                summary="all checks passed",
+            )
+        ]
+    )
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(intent.normalized_goal)
+        return ReActResult(final_answer="should not run", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        react_runner=runner,
+    )
+
+    completed = controller.execute(run.run_id)
+
+    assert completed.status == LoopRunStatus.COMPLETED
+    assert runner_calls == []
+    assert verifier_registry.calls == [("auto", str(workspace))]
+    assert len(completed.attempts) == 1
+    attempt = completed.attempts[0]
+    assert attempt.status == "completed"
+    assert attempt.success is True
+    assert attempt.completed_at is not None
+    assert attempt.final_answer == "patched before completion timestamp crash"
+    assert attempt.error == ""
+    assert attempt.verifier_result is not None
+    assert completed.last_verifier_result is not None
+    assert completed.last_verifier_result.passed is True
+
+
+def test_loop_controller_rechecks_attempt_recovery_inside_store_mutation(
+    tmp_path,
+) -> None:
+    inner_store = LoopRunStore(tmp_path / "loop_runs.json")
+    store = _InterleavingLoopRunStore(inner_store)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    run = LoopRun(
+        goal="Avoid stale recovery overwrite",
+        workspace_path=str(workspace),
+        status=LoopRunStatus.RUNNING,
+        started_at="2026-06-25T00:00:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Avoid stale recovery overwrite",
+                status="running",
+            )
+        ],
+    )
+    store.create(run)
+    runner_calls: list[str] = []
+    verifier_registry = _StubVerifierRegistry(
+        [
+            VerifierResult(
+                profile="python_repo_patch",
+                kind="python",
+                passed=True,
+                summary="all checks passed",
+            )
+        ]
+    )
+
+    def advance_attempt_before_recovery_write() -> None:
+        inner_store.mutate(
+            run.run_id,
+            lambda current: current.model_copy(
+                update={
+                    "status": LoopRunStatus.VERIFYING,
+                    "last_error": "",
+                    "attempts": [
+                        attempt.model_copy(
+                            update={
+                                "completed_at": "2026-06-25T00:01:00+00:00",
+                                "status": "completed",
+                                "success": True,
+                                "terminated_reason": "final_answer",
+                                "final_answer": "completed by concurrent worker",
+                                "error": "",
+                            }
+                        )
+                        if attempt.attempt_index == 1
+                        else attempt
+                        for attempt in current.attempts
+                    ],
+                }
+            ),
+        )
+
+    store.interleave_once = advance_attempt_before_recovery_write
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(intent.normalized_goal)
+        return ReActResult(final_answer="should not run", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        react_runner=runner,
+    )
+
+    completed = controller.execute(run.run_id)
+
+    assert completed.status == LoopRunStatus.COMPLETED
+    assert runner_calls == []
+    assert verifier_registry.calls == [("auto", str(workspace))]
+    assert len(completed.attempts) == 1
+    attempt = completed.attempts[0]
+    assert attempt.status == "completed"
+    assert attempt.success is True
+    assert attempt.final_answer == "completed by concurrent worker"
+    assert attempt.error == ""
+    assert attempt.verifier_result is not None
+    assert completed.last_verifier_result is not None
+    assert completed.last_verifier_result.passed is True
+
+
+def test_loop_controller_recovers_passed_verifier_before_terminal_write(
+    tmp_path,
+) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    verifier_result = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        passed=True,
+        summary="all checks passed",
+    )
+    run = LoopRun(
+        goal="Recover verifier terminal success",
+        workspace_path=str(workspace),
+        status=LoopRunStatus.VERIFYING,
+        started_at="2026-06-25T00:00:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Recover verifier terminal success",
+                status="completed",
+                success=True,
+                completed_at="2026-06-25T00:01:00+00:00",
+                final_answer="patched",
+                verifier_result=verifier_result,
+            )
+        ],
+    )
+    store.create(run)
+    runner_calls: list[str] = []
+    verifier_registry = _StubVerifierRegistry([])
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(intent.normalized_goal)
+        return ReActResult(final_answer="should not run", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        react_runner=runner,
+    )
+
+    completed = controller.execute(run.run_id)
+
+    assert completed.status == LoopRunStatus.COMPLETED
+    assert runner_calls == []
+    assert verifier_registry.calls == []
+    assert completed.completed_at is not None
+    assert completed.last_error == ""
+    assert completed.last_verifier_result is not None
+    assert completed.last_verifier_result.passed is True
+    assert completed.attempts[0].verifier_result is not None
+    assert completed.attempts[0].verifier_result.passed is True
+
+
+def test_loop_controller_rechecks_verified_terminal_recovery_inside_store_mutation(
+    tmp_path,
+) -> None:
+    inner_store = LoopRunStore(tmp_path / "loop_runs.json")
+    store = _InterleavingLoopRunStore(inner_store)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    stale_verifier = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        passed=True,
+        summary="all checks passed",
+    )
+    run = LoopRun(
+        goal="Avoid stale verifier overwrite",
+        workspace_path=str(workspace),
+        status=LoopRunStatus.VERIFYING,
+        started_at="2026-06-25T00:00:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Avoid stale verifier overwrite",
+                status="completed",
+                success=True,
+                completed_at="2026-06-25T00:01:00+00:00",
+                final_answer="patched",
+                verifier_result=stale_verifier,
+            )
+        ],
+    )
+    store.create(run)
+    runner_calls: list[str] = []
+    verifier_registry = _StubVerifierRegistry([])
+
+    def mark_cancelled_before_terminal_recovery_write() -> None:
+        inner_store.mutate(
+            run.run_id,
+            lambda current: current.model_copy(
+                update={
+                    "status": LoopRunStatus.CANCELLED,
+                    "completed_at": "2026-06-25T00:02:00+00:00",
+                    "cancel_requested_at": "2026-06-25T00:02:00+00:00",
+                    "cancel_reason": "operator cancelled",
+                    "last_error": "operator cancelled",
+                }
+            ),
+        )
+
+    store.interleave_once = mark_cancelled_before_terminal_recovery_write
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(intent.normalized_goal)
+        return ReActResult(final_answer="should not run", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        react_runner=runner,
+    )
+
+    latest = controller.execute(run.run_id)
+
+    assert latest.status == LoopRunStatus.CANCELLED
+    assert latest.cancel_reason == "operator cancelled"
+    assert latest.last_error == "operator cancelled"
+    assert runner_calls == []
+    assert verifier_registry.calls == []
+    assert latest.last_review is None
+
+
+def test_loop_controller_recovers_nonrepairable_verifier_before_terminal_write(
+    tmp_path,
+) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    queue = ReviewQueue(tmp_path / "review_queue.json")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    verifier_result = VerifierResult(
+        profile="python_repo_patch",
+        kind="verifier_error",
+        failure_category="verifier_profile_unknown",
+        passed=False,
+        summary="unknown verifier profile: missing",
+    )
+    run = LoopRun(
+        goal="Recover verifier terminal failure",
+        workspace_path=str(workspace),
+        status=LoopRunStatus.VERIFYING,
+        started_at="2026-06-25T00:00:00+00:00",
+        policy=LoopPolicy(max_attempts=1, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Recover verifier terminal failure",
+                status="completed",
+                success=True,
+                completed_at="2026-06-25T00:01:00+00:00",
+                final_answer="patched",
+                verifier_result=verifier_result,
+            )
+        ],
+    )
+    store.create(run)
+    runner_calls: list[str] = []
+    verifier_registry = _StubVerifierRegistry([])
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(intent.normalized_goal)
+        return ReActResult(final_answer="should not run", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        review_queue=queue,
+        react_runner=runner,
+    )
+
+    failed = controller.execute(run.run_id)
+
+    assert failed.status == LoopRunStatus.FAILED
+    assert runner_calls == []
+    assert verifier_registry.calls == []
+    assert failed.completed_at is not None
+    assert "verifier_profile_unknown" in failed.last_error
+    assert failed.last_verifier_result is not None
+    assert failed.last_verifier_result.failure_category == "verifier_profile_unknown"
+    assert failed.last_review is not None
+    assert failed.last_review["resume"]["available"] is True
+    assert queue.summary()["pending_count"] == 2
+
+
+def test_loop_controller_recovers_repairable_verifier_before_retry(
+    tmp_path,
+) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    verifier_result = VerifierResult(
+        profile="python_repo_patch",
+        kind="python",
+        failure_category="test_failure",
+        passed=False,
+        findings=[
+            VerifierFinding(
+                name="pytest",
+                category="test_failure",
+                passed=False,
+                exit_code=1,
+                stderr="AssertionError",
+            )
+        ],
+        summary="failed checks: pytest",
+    )
+    run = LoopRun(
+        goal="Recover verifier repair",
+        workspace_path=str(workspace),
+        status=LoopRunStatus.VERIFYING,
+        started_at="2026-06-25T00:00:00+00:00",
+        policy=LoopPolicy(max_attempts=2, max_iterations=2),
+        attempts=[
+            LoopAttempt(
+                attempt_index=1,
+                prompt="Recover verifier repair",
+                status="completed",
+                success=True,
+                completed_at="2026-06-25T00:01:00+00:00",
+                final_answer="first patch",
+                verifier_result=verifier_result,
+            )
+        ],
+    )
+    store.create(run)
+    runner_calls: list[str] = []
+    verifier_registry = _StubVerifierRegistry(
+        [
+            VerifierResult(
+                profile="python_repo_patch",
+                kind="python",
+                passed=True,
+                summary="all checks passed",
+            )
+        ]
+    )
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_calls.append(intent.normalized_goal)
+        return ReActResult(final_answer="fixed on retry", success=True)
+
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        react_runner=runner,
+    )
+
+    completed = controller.execute(run.run_id)
+
+    assert completed.status == LoopRunStatus.COMPLETED
+    assert len(runner_calls) == 1
+    assert "Failure category: test_failure" in runner_calls[0]
+    assert "AssertionError" in runner_calls[0]
+    assert verifier_registry.calls == [("auto", str(workspace))]
+    assert len(completed.attempts) == 2
+    assert completed.attempts[0].verifier_result is not None
+    assert completed.attempts[0].verifier_result.passed is False
+    assert completed.attempts[1].status == "completed"
     assert completed.last_verifier_result is not None
     assert completed.last_verifier_result.passed is True

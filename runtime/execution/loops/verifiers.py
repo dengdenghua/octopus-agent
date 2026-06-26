@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from runtime.execution.loops.models import VerifierFinding, VerifierResult
 
@@ -66,8 +67,24 @@ def _classify_finding(
     exit_code: int | None,
     stdout: str,
     stderr: str,
+    execution_policy: dict[str, Any] | None = None,
 ) -> str:
     output = "\n".join(part for part in (stderr, stdout) if str(part or "").strip())
+    policy_result = (
+        execution_policy.get("result")
+        if isinstance(execution_policy, dict) and isinstance(execution_policy.get("result"), dict)
+        else {}
+    )
+    policy_status = str(policy_result.get("status") or "").strip().lower()
+    policy_error_type = str(policy_result.get("error_type") or "").strip().lower()
+    if policy_status == "sandbox_violation" or policy_error_type == "sandbox_violation":
+        return "verifier_sandbox_violation"
+    if policy_status == "timed_out" or policy_result.get("timed_out") is True:
+        return "verification_timeout"
+    if policy_status == "cancelled" or policy_result.get("cancelled") is True:
+        return "verification_cancelled"
+    if policy_status == "exec_failed":
+        return "environment_missing_tool"
     try:
         from runtime.execution.suckers.verify_skills import classify_environment_gap
 
@@ -172,6 +189,7 @@ def _findings_from_checks(workspace_path: str) -> tuple[str, list[VerifierFindin
                     exit_code=result.exit_code,
                     stdout=result.stdout,
                     stderr=result.stderr,
+                    execution_policy=result.execution_policy,
                 )
             ),
             exit_code=result.exit_code,

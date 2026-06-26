@@ -50,6 +50,18 @@ def _execution_policy_from_result(result: dict[str, Any]) -> dict[str, Any]:
     return dict(policy) if isinstance(policy, dict) else {}
 
 
+def _error_with_execution_policy(
+    error: str,
+    result: dict[str, Any],
+    **extra: Any,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {"error": error, **extra}
+    policy = _execution_policy_from_result(result)
+    if policy:
+        payload["execution_policy"] = policy
+    return payload
+
+
 def _background_execution_policy(
     *,
     sandbox_requested: bool,
@@ -72,6 +84,43 @@ def _background_execution_policy(
         process_group=True,
         timeout_s=None,
     )
+
+
+def _background_policy_with_result(
+    policy: dict[str, Any],
+    *,
+    status: str,
+    exit_code: int | None,
+    started_at: float | None,
+    stdout_truncated: bool = False,
+    stderr_truncated: bool = False,
+) -> dict[str, Any]:
+    from runtime.platform.process.streaming import execution_policy_result_snapshot
+
+    enriched = dict(policy) if isinstance(policy, dict) else {}
+    duration_ms: int | None = None
+    if started_at is not None:
+        duration_ms = int(max(0.0, time.time() - float(started_at)) * 1000)
+    enriched["result"] = execution_policy_result_snapshot(
+        status=status,
+        exit_code=exit_code,
+        timed_out=False,
+        cancelled=status == "cancelled",
+        killed=status == "cancelled",
+        stdout_truncated=stdout_truncated,
+        stderr_truncated=stderr_truncated,
+        duration_ms=duration_ms,
+    )
+    return enriched
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class _BackgroundProcess:
@@ -111,13 +160,30 @@ class _BackgroundProcess:
         self._wait_thread.start()
 
     def _metadata(self, *, exit_code: int | None) -> dict[str, Any]:
+        raw_stdout = _read_background_text(self.stdout_path)
+        raw_stderr = _read_background_text(self.stderr_path)
+        if self.cancelled:
+            status = "cancelled"
+        elif exit_code is None:
+            status = "running"
+        elif exit_code == 0:
+            status = "completed"
+        else:
+            status = "failed"
         return {
             "task_id": self.task_id,
             "argv": self.argv,
             "cwd": self.cwd,
             "sandbox_backend": self.sandbox_backend,
             "sandbox_hard": self.sandbox_hard,
-            "execution_policy": self.execution_policy,
+            "execution_policy": _background_policy_with_result(
+                self.execution_policy,
+                status=status,
+                exit_code=exit_code,
+                started_at=self.started_at,
+                stdout_truncated=len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
+                stderr_truncated=len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+            ),
             "pid": self.proc.pid,
             "started_at": self.started_at,
             "cancelled": self.cancelled,
@@ -155,6 +221,14 @@ class _BackgroundProcess:
 
         raw_stdout = _read_background_text(self.stdout_path)
         raw_stderr = _read_background_text(self.stderr_path)
+        execution_policy = _background_policy_with_result(
+            self.execution_policy,
+            status=status,
+            exit_code=exit_code,
+            started_at=self.started_at,
+            stdout_truncated=len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
+            stderr_truncated=len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+        )
         return {
             "task_id": self.task_id,
             "status": status,
@@ -162,7 +236,7 @@ class _BackgroundProcess:
             "cwd": self.cwd,
             "sandbox_backend": self.sandbox_backend,
             "sandbox_hard": self.sandbox_hard,
-            "execution_policy": self.execution_policy,
+            "execution_policy": execution_policy,
             "exit_code": exit_code,
             "running": status == "running",
             "stdout": raw_stdout[:_BACKGROUND_OUTPUT_CAP],
@@ -320,6 +394,19 @@ def _snapshot_background_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     stderr_path = Path(str(metadata.get("stderr_path") or default_paths["stderr"]))
     raw_stdout = _read_background_text(stdout_path)
     raw_stderr = _read_background_text(stderr_path)
+    execution_policy = (
+        dict(metadata["execution_policy"])
+        if isinstance(metadata.get("execution_policy"), dict)
+        else {}
+    )
+    execution_policy = _background_policy_with_result(
+        execution_policy,
+        status=status,
+        exit_code=exit_code,
+        started_at=_optional_float(metadata.get("started_at")),
+        stdout_truncated=len(raw_stdout) > _BACKGROUND_OUTPUT_CAP,
+        stderr_truncated=len(raw_stderr) > _BACKGROUND_OUTPUT_CAP,
+    )
     return {
         "task_id": task_id,
         "status": status,
@@ -327,11 +414,7 @@ def _snapshot_background_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "cwd": metadata.get("cwd"),
         "sandbox_backend": str(metadata.get("sandbox_backend") or "direct"),
         "sandbox_hard": bool(metadata.get("sandbox_hard")),
-        "execution_policy": (
-            dict(metadata["execution_policy"])
-            if isinstance(metadata.get("execution_policy"), dict)
-            else {}
-        ),
+        "execution_policy": execution_policy,
         "pid": pid,
         "exit_code": exit_code,
         "running": status == "running",
@@ -733,8 +816,8 @@ def _exec_shell(
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
         if "FileNotFoundError" in msg or "not found" in msg.lower():
-            return {"error": f"command not found: {msg}", "argv": argv}
-        return {"error": f"exec_failed: {msg}", "argv": argv}
+            return _error_with_execution_policy(f"command not found: {msg}", r, argv=argv)
+        return _error_with_execution_policy(f"exec_failed: {msg}", r, argv=argv)
     if r.get("timed_out"):
         return {
             "error": f"timeout after {timeout_s}s",
@@ -967,7 +1050,7 @@ def _ipython(
         sandbox_dir=sandbox_dir,
     )
     if "error" in r and "exit_code" not in r:
-        return {"error": f"exec_failed: {r['error']}"}
+        return _error_with_execution_policy(f"exec_failed: {r['error']}", r)
     if r.get("timed_out"):
         return {
             "error": f"timeout after {timeout_s}s",
@@ -1027,8 +1110,8 @@ def _run_git(
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
         if "FileNotFoundError" in msg or "No such file" in msg or "not found" in msg.lower():
-            return {"error": "git_not_found_on_path"}
-        return {"error": f"git_exec_failed: {msg}"}
+            return _error_with_execution_policy("git_not_found_on_path", r)
+        return _error_with_execution_policy(f"git_exec_failed: {msg}", r)
     if r.get("timed_out"):
         return {
             "error": f"git timeout after {timeout_s}s",
@@ -1854,8 +1937,11 @@ def _git_create_pr(
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
         if "FileNotFoundError" in msg or "not found" in msg.lower():
-            return {"error": "gh CLI not found — install from https://cli.github.com"}
-        return {"error": f"gh_exec_failed: {msg}"}
+            return _error_with_execution_policy(
+                "gh CLI not found — install from https://cli.github.com",
+                r,
+            )
+        return _error_with_execution_policy(f"gh_exec_failed: {msg}", r)
     if r.get("timed_out"):
         return {
             "error": "timeout creating PR",
@@ -1987,8 +2073,8 @@ def _run_quality_cmd(
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
         if "FileNotFoundError" in msg or "not found" in msg.lower():
-            return {"error": f"command not found: {command[0]}"}
-        return {"error": f"exec failed: {msg}"}
+            return _error_with_execution_policy(f"command not found: {command[0]}", r)
+        return _error_with_execution_policy(f"exec failed: {msg}", r)
     if r.get("timed_out"):
         return {
             "error": f"timeout after {timeout_s}s",

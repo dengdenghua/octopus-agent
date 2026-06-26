@@ -11,6 +11,7 @@ from runtime.execution.loops.models import (
     VerifierResult,
 )
 from runtime.execution.loops.store import LoopRunStore
+from runtime.platform.process.task_supervisor import TaskRunStatus, TaskSupervisor
 from runtime.safety.auth.identity import Identity, IdentityStore
 from runtime.sensing.gateway.loop_router import create_loop_router
 
@@ -219,29 +220,35 @@ class _StubDispatcher:
         }
 
 
-def _build_client(tmp_path):
+def _build_client(tmp_path, *, include_task_supervisor: bool = False):
     identity_store = IdentityStore()
     identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
     identity_store.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
     store = LoopRunStore(tmp_path / "loop_runs.json")
     controller = _StubController(store)
     dispatcher = _StubDispatcher(store)
+    task_supervisor = (
+        TaskSupervisor.from_path(tmp_path / "task_runs.json", holder_id="loop-worker")
+        if include_task_supervisor
+        else None
+    )
     app = FastAPI()
     app.include_router(
         create_loop_router(
             store=store,
             controller=controller,
             dispatcher=dispatcher,
+            task_supervisor=task_supervisor,
             identity_store=identity_store,
             require_auth=True,
         )
     )
     client = TestClient(app)
-    return client, controller, dispatcher, store
+    return client, controller, dispatcher, store, task_supervisor
 
 
 def test_loop_router_create_list_get_and_execute_with_owner_isolation(tmp_path) -> None:
-    client, controller, dispatcher, _store = _build_client(tmp_path)
+    client, controller, dispatcher, _store, _task_supervisor = _build_client(tmp_path)
 
     created = client.post(
         "/api/loops/start",
@@ -393,7 +400,7 @@ def test_loop_router_status_degrades_without_dispatcher(tmp_path) -> None:
 
 
 def test_loop_router_can_background_dispatch_from_start_and_endpoint(tmp_path) -> None:
-    client, _controller, dispatcher, _store = _build_client(tmp_path)
+    client, _controller, dispatcher, _store, _task_supervisor = _build_client(tmp_path)
 
     created = client.post(
         "/api/loops/start",
@@ -443,7 +450,7 @@ def test_loop_router_can_background_dispatch_from_start_and_endpoint(tmp_path) -
 
 
 def test_loop_router_can_restart_terminal_run_and_execute_child(tmp_path) -> None:
-    client, controller, dispatcher, store = _build_client(tmp_path)
+    client, controller, dispatcher, store, _task_supervisor = _build_client(tmp_path)
     source = store.create(
         LoopRun(
             owner_id="alice",
@@ -479,7 +486,7 @@ def test_loop_router_can_restart_terminal_run_and_execute_child(tmp_path) -> Non
 
 
 def test_loop_router_resume_rejects_completed_run(tmp_path) -> None:
-    client, controller, _dispatcher, store = _build_client(tmp_path)
+    client, controller, _dispatcher, store, _task_supervisor = _build_client(tmp_path)
     source = store.create(
         LoopRun(
             owner_id="alice",
@@ -499,7 +506,7 @@ def test_loop_router_resume_rejects_completed_run(tmp_path) -> None:
 
 
 def test_loop_router_can_resume_failed_run_in_background(tmp_path) -> None:
-    client, controller, dispatcher, store = _build_client(tmp_path)
+    client, controller, dispatcher, store, _task_supervisor = _build_client(tmp_path)
     source = store.create(
         LoopRun(
             owner_id="alice",
@@ -530,7 +537,9 @@ def test_loop_router_can_resume_failed_run_in_background(tmp_path) -> None:
     assert child["workspace_path"] is None
     assert child["parent_run_id"] == source.run_id
     assert child["origin_run_id"] == "root-run"
-    assert child["resume_checkpoint_id"] == f"loop-run:{source.run_id}:attempt:{len(source.attempts)}"
+    assert (
+        child["resume_checkpoint_id"] == f"loop-run:{source.run_id}:attempt:{len(source.attempts)}"
+    )
     assert controller.resume_calls == [source.run_id]
     assert controller.execute_calls == []
     assert dispatcher.calls == [child["run_id"]]
@@ -547,7 +556,7 @@ def test_loop_router_can_resume_failed_run_in_background(tmp_path) -> None:
 
 
 def test_loop_router_exposes_resume_proposal_for_failed_run(tmp_path) -> None:
-    client, _controller, _dispatcher, store = _build_client(tmp_path)
+    client, _controller, _dispatcher, store, _task_supervisor = _build_client(tmp_path)
     source = store.create(
         LoopRun(
             owner_id="alice",
@@ -610,8 +619,89 @@ def test_loop_router_exposes_resume_proposal_for_failed_run(tmp_path) -> None:
     assert body["safety"]["raw_state_included"] is False
 
 
+def test_loop_router_status_includes_recovery_audit_for_failed_run(tmp_path) -> None:
+    client, _controller, _dispatcher, store, _task_supervisor = _build_client(tmp_path)
+    source = store.create(
+        LoopRun(
+            owner_id="alice",
+            goal="Fix remaining verifier failures",
+            thread_id="thread-failed",
+            workspace_path=str(tmp_path / "workspace"),
+            status=LoopRunStatus.FAILED,
+            attempts=[
+                LoopAttempt(
+                    attempt_index=1,
+                    prompt="Fix remaining verifier failures",
+                    status="completed",
+                    success=False,
+                    final_answer="patched once",
+                    verifier_result=VerifierResult(
+                        profile="python_repo_patch",
+                        kind="python",
+                        passed=False,
+                        findings=[
+                            VerifierFinding(
+                                name="pytest",
+                                passed=False,
+                                exit_code=1,
+                                stderr="1 failing test remains",
+                            )
+                        ],
+                        summary="failed checks: pytest",
+                    ),
+                )
+            ],
+            last_verifier_result=VerifierResult(
+                profile="python_repo_patch",
+                kind="python",
+                passed=False,
+                findings=[
+                    VerifierFinding(
+                        name="pytest",
+                        passed=False,
+                        exit_code=1,
+                        stderr="1 failing test remains",
+                    )
+                ],
+                summary="failed checks: pytest",
+            ),
+            last_error="failed checks: pytest",
+            last_review=_completed_review(),
+        )
+    )
+
+    status = client.get(
+        f"/api/loops/{source.run_id}/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    overview = client.get(
+        "/api/loops/overview",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert status.status_code == 200
+    audit = status.json()["recovery_audit"]
+    assert audit["schema"] == "octopus.loop_recovery_audit.v1"
+    assert audit["checkpoint"]["available"] is True
+    assert audit["checkpoint"]["id"] == f"loop-run:{source.run_id}:attempt:1"
+    assert audit["resume"]["available"] is True
+    assert audit["resume"]["latest_checkpoint_id"] == audit["checkpoint"]["id"]
+    assert audit["review"]["available"] is True
+    assert audit["review"]["score"] == 1.0
+    assert audit["replay"]["replayable"] is True
+    assert str(audit["replay"]["case_id"]).startswith("task-run:")
+    assert audit["safety"]["raw_checkpoint_state_included"] is False
+    assert audit["safety"]["raw_replay_steps_included"] is False
+
+    assert overview.status_code == 200
+    overview_audit = overview.json()["recovery_audit"]
+    assert overview_audit["checkpoint_available_count"] == 1
+    assert overview_audit["resume_available_count"] == 1
+    assert overview_audit["replay_available_count"] == 1
+
+
 def test_loop_router_resume_proposal_rejects_non_resumable_run(tmp_path) -> None:
-    client, _controller, _dispatcher, store = _build_client(tmp_path)
+    client, _controller, _dispatcher, store, _task_supervisor = _build_client(tmp_path)
     source = store.create(
         LoopRun(
             owner_id="alice",
@@ -627,3 +717,75 @@ def test_loop_router_resume_proposal_rejects_non_resumable_run(tmp_path) -> None
 
     assert proposal.status_code == 409
     assert proposal.json()["detail"] == "loop run is not resumable"
+
+
+def test_loop_router_status_and_overview_include_task_lease_health(tmp_path) -> None:
+    client, _controller, _dispatcher, store, task_supervisor = _build_client(
+        tmp_path,
+        include_task_supervisor=True,
+    )
+    assert task_supervisor is not None
+    run = store.create(
+        LoopRun(
+            owner_id="alice",
+            goal="Inspect task health",
+            status=LoopRunStatus.RUNNING,
+        )
+    )
+    task_supervisor.start_task(
+        task_id=run.run_id,
+        kind="loop",
+        owner_id="alice",
+        title=run.goal,
+        goal=run.goal,
+        status=TaskRunStatus.RUNNING,
+    )
+
+    def _expire(record):
+        assert record.lease is not None
+        return record.model_copy(
+            update={
+                "latest_checkpoint_id": "ckpt-loop",
+                "lease": record.lease.model_copy(update={"expires_at": 1}),
+            },
+            deep=True,
+        )
+
+    task_supervisor.store.mutate(run.run_id, _expire)
+
+    status = client.get(
+        f"/api/loops/{run.run_id}/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    overview = client.get(
+        "/api/loops/overview",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert status.status_code == 200
+    status_body = status.json()
+    assert status_body["task_run"]["task_id"] == run.run_id
+    assert status_body["task_lease_health"]["state"] == "expired"
+    assert status_body["task_lease_health"]["holder_id"] == "loop-worker"
+    assert status_body["task_lease_health"]["recommended_action"] == "takeover_and_resume"
+    assert status_body["task_lease_health"]["can_takeover"] is True
+    assert status_body["task_lease_health"]["can_resume"] is True
+    assert status_body["task_recovery"]["recommended_action"] == "takeover_and_resume"
+    assert status_body["task_recovery"]["latest_checkpoint_id"] == "ckpt-loop"
+    assert status_body["recovery_audit"]["checkpoint"]["available"] is True
+    assert status_body["recovery_audit"]["replay"]["replayable"] is True
+    assert status_body["recovery_audit"]["resume"]["available"] is False
+
+    assert overview.status_code == 200
+    health = overview.json()["task_health"]
+    assert health["tracked_count"] == 1
+    assert health["unhealthy_count"] == 1
+    assert health["unhealthy_task_ids"] == [run.run_id]
+    assert health["takeover_recommended_count"] == 1
+    assert health["resumable_count"] == 1
+    assert health["takeover_task_ids"] == [run.run_id]
+    assert health["resumable_task_ids"] == [run.run_id]
+    assert health["by_recommended_action"] == {"takeover_and_resume": 1}
+    assert health["items"][0]["state"] == "expired"
+    assert overview.json()["recovery_audit"]["checkpoint_available_count"] == 1
+    assert overview.json()["recovery_audit"]["replay_available_count"] == 1

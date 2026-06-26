@@ -201,6 +201,10 @@ class LoopRunRuntimeStateResponse(BaseModel):
     cancel_requested: bool = False
     cancel_requested_at: str | None = None
     cancel_reason: str = ""
+    task_run: dict[str, Any] = Field(default_factory=dict)
+    task_lease_health: dict[str, Any] = Field(default_factory=dict)
+    task_recovery: dict[str, Any] = Field(default_factory=dict)
+    recovery_audit: dict[str, Any] = Field(default_factory=dict)
 
 
 class LoopRunsOverviewResponse(BaseModel):
@@ -212,3 +216,5 @@ class LoopRunsOverviewResponse(BaseModel):
     by_status: dict[str, int] = Field(default_factory=dict)
     by_mode: dict[str, int] = Field(default_factory=dict)
     reviewed_runs: int = 0
+    task_health: dict[str, Any] = Field(default_factory=dict)
+    recovery_audit: dict[str, Any] = Field(default_factory=dict)

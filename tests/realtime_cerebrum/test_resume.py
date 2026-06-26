@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import pytest
-
 try:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -18,7 +16,11 @@ except ImportError:  # pragma: no cover
 from tests.realtime_cerebrum._helpers import (
     _LAST_SESSION,
     _LAST_STREAM_KWARGS,
+)
+from tests.realtime_cerebrum._helpers import (
     drive as _drive,
+)
+from tests.realtime_cerebrum._helpers import (
     set_script as _set_script,
 )
 

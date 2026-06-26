@@ -14,8 +14,8 @@ entries must supply ``argv``.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -61,6 +61,30 @@ def classify_environment_gap(output: str) -> str:
 
 def output_indicates_missing_tool(output: str) -> bool:
     return bool(classify_environment_gap(output))
+
+
+def _legacy_shell_argv(command: str) -> list[str]:
+    if sys.platform == "win32":
+        return [os.environ.get("COMSPEC") or "cmd.exe", "/C", command]
+    return [shutil.which("sh") or "/bin/sh", "-c", command]
+
+
+def _coerce_output_cap(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _truncate_utf8_bytes(value: Any, max_bytes: int) -> str:
+    text = str(value or "")
+    cap = _coerce_output_cap(max_bytes)
+    if cap <= 0:
+        return ""
+    encoded = text.encode("utf-8", errors="replace")
+    if len(encoded) <= cap:
+        return text
+    return encoded[:cap].decode("utf-8", errors="ignore")
 
 
 @dataclass
@@ -398,6 +422,7 @@ def run_checks(
     from runtime.platform.process.streaming import stream_run
 
     effective_sandbox_dir = sandbox_dir or profile.root
+    output_cap = _coerce_output_cap(max_output)
     results: list[CheckResult] = []
     for check in profile.checks:
         argv = check.get("argv")
@@ -410,7 +435,7 @@ def run_checks(
                 argv,
                 cwd=str(profile.root),
                 timeout=timeout_per_check,
-                output_cap_bytes=max_output,
+                output_cap_bytes=output_cap,
                 sandbox_dir=effective_sandbox_dir,
             )
         elif isinstance(legacy_cmd, str):
@@ -418,57 +443,13 @@ def run_checks(
                 "verify_skills: legacy 'cmd' string check %r — switch to 'argv'",
                 check.get("name"),
             )
-            try:
-                run_env = None
-                if effective_sandbox_dir is not None:
-                    from runtime.safety.sandboxing.sandbox import SandboxPolicy
-
-                    run_env = SandboxPolicy(
-                        workspace=Path(effective_sandbox_dir).expanduser().resolve(),
-                    ).env_for()
-                proc = subprocess.run(
-                    legacy_cmd,
-                    shell=True,  # legacy path only — new checks use argv
-                    capture_output=True,
-                    text=True,
-                    cwd=profile.root,
-                    env=run_env,
-                    timeout=timeout_per_check,
-                )
-            except FileNotFoundError as exc:
-                duration = int((time.monotonic() - t0) * 1000)
-                results.append(
-                    CheckResult(
-                        name=check["name"],
-                        command=display,
-                        passed=False,
-                        exit_code=-3,
-                        stdout="",
-                        stderr=f"executable not found: {exc}",
-                        duration_ms=duration,
-                    )
-                )
-                continue
-            except subprocess.TimeoutExpired:
-                duration = int((time.monotonic() - t0) * 1000)
-                results.append(
-                    CheckResult(
-                        name=check["name"],
-                        command=display,
-                        passed=False,
-                        exit_code=-1,
-                        stdout="",
-                        stderr="timeout",
-                        duration_ms=duration,
-                    )
-                )
-                continue
-            r = {
-                "stdout": proc.stdout[:max_output],
-                "stderr": proc.stderr[:max_output],
-                "exit_code": proc.returncode,
-                "timed_out": False,
-            }
+            r = stream_run(
+                _legacy_shell_argv(legacy_cmd),
+                cwd=str(profile.root),
+                timeout=timeout_per_check,
+                output_cap_bytes=output_cap,
+                sandbox_dir=effective_sandbox_dir,
+            )
         else:
             results.append(
                 CheckResult(
@@ -498,8 +479,8 @@ def run_checks(
             if fatal_on_failure:
                 break
             continue
-        stdout = str(r.get("stdout") or "")[:max_output]
-        stderr = str(r.get("stderr") or "")[:max_output]
+        stdout = _truncate_utf8_bytes(r.get("stdout") or "", output_cap)
+        stderr = _truncate_utf8_bytes(r.get("stderr") or "", output_cap)
         execution_policy = (
             r.get("execution_policy") if isinstance(r.get("execution_policy"), dict) else {}
         )

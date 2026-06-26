@@ -63,6 +63,28 @@ _BASE_ALLOWED_ENV = (
     "ComSpec",
     "PATHEXT",
 )
+_EXTRA_ENV_ALLOWED_EXACT = frozenset(
+    {
+        "PYTHONPATH",
+        "PYTHONHOME",
+        "VIRTUAL_ENV",
+        "NODE_PATH",
+        "RUST_LOG",
+        "TERM",
+        "COLORTERM",
+    }
+)
+_EXTRA_ENV_ALLOWED_PREFIXES = ("OCT_", "OCTOPUS_", "PYTEST_")
+_SENSITIVE_ENV_MARKERS = (
+    "API_KEY",
+    "ACCESS_KEY",
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "PASSWD",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+)
 
 
 @dataclass(frozen=True)
@@ -88,7 +110,29 @@ class SandboxPolicy:
 
     def env_for(self) -> dict[str, str]:
         env = {k: os.environ[k] for k in self.allowed_env if k in os.environ}
-        env.update(self.extra_env)
+        allowed = set(self.allowed_env)
+        for key, value in self.extra_env.items():
+            key_s = str(key)
+            if _sandbox_extra_env_key_allowed(key_s, allowed):
+                env[key_s] = str(value)
+        workspace = self.workspace.expanduser().resolve(strict=False)
+        home_dir = _ensure_workspace_env_dir(workspace, ".octopus-home")
+        tmp_dir = _ensure_workspace_env_dir(workspace, ".octopus-tmp")
+        cache_dir = _ensure_workspace_env_dir(workspace, ".octopus-cache")
+        config_dir = _ensure_workspace_env_dir(workspace, ".octopus-config")
+        data_dir = _ensure_workspace_env_dir(workspace, ".octopus-data")
+        env.update(
+            {
+                "HOME": str(home_dir),
+                "USERPROFILE": str(home_dir),
+                "TMPDIR": str(tmp_dir),
+                "TMP": str(tmp_dir),
+                "TEMP": str(tmp_dir),
+                "XDG_CACHE_HOME": str(cache_dir),
+                "XDG_CONFIG_HOME": str(config_dir),
+                "XDG_DATA_HOME": str(data_dir),
+            }
+        )
         if not self.allow_network:
             # Hint to popular HTTP libs to give up immediately. This is
             # not a substitute for kernel-level network namespace, but
@@ -99,6 +143,56 @@ class SandboxPolicy:
             env["http_proxy"] = "http://127.0.0.1:1"
             env["https_proxy"] = "http://127.0.0.1:1"
         return env
+
+
+def _ensure_workspace_env_dir(workspace: Path, name: str) -> Path:
+    if not workspace.is_dir():
+        return workspace
+    path = workspace / name
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    except OSError:
+        return workspace
+
+
+def _sandbox_extra_env_key_allowed(key: str, base_allowed: set[str]) -> bool:
+    clean = str(key or "").strip()
+    if not clean:
+        return False
+    upper = clean.upper()
+    if upper in base_allowed:
+        return True
+    if any(marker in upper for marker in _SENSITIVE_ENV_MARKERS):
+        return False
+    if upper in _EXTRA_ENV_ALLOWED_EXACT:
+        return True
+    return any(upper.startswith(prefix) for prefix in _EXTRA_ENV_ALLOWED_PREFIXES)
+
+
+def _append_capped_utf8_output(
+    sink: list[str],
+    chunk: str,
+    *,
+    cap_bytes: int,
+    size: list[int],
+) -> tuple[str, bool]:
+    if size[0] >= cap_bytes:
+        return "", True
+    chunk_bytes = chunk.encode("utf-8", errors="replace")
+    remaining = cap_bytes - size[0]
+    if len(chunk_bytes) <= remaining:
+        size[0] += len(chunk_bytes)
+        sink.append(chunk)
+        return chunk, False
+    if remaining <= 0:
+        size[0] = cap_bytes
+        return "", True
+    truncated = chunk_bytes[:remaining].decode("utf-8", errors="ignore")
+    size[0] = cap_bytes
+    if truncated:
+        sink.append(truncated)
+    return truncated, True
 
 
 @dataclass(frozen=True)
@@ -418,6 +512,7 @@ class SandboxRunner:
         err_chunks: list[str] = []
         truncated = False
         size_lock = threading.Lock()
+        cap_bytes = max(0, int(self.policy.max_output_bytes))
         size = [0]
 
         def reader(stream: object, sink: list[str], tag: str) -> None:
@@ -426,16 +521,14 @@ class SandboxRunner:
                 if not raw_line:
                     break
                 with size_lock:
-                    if size[0] >= self.policy.max_output_bytes:
-                        truncated = True
-                        continue
-                    remaining = self.policy.max_output_bytes - size[0]
-                    if len(raw_line) > remaining:
-                        truncated = True
-                        raw_line = raw_line[:remaining]
-                    size[0] += len(raw_line)
-                sink.append(raw_line)
-                if on_output is not None:
+                    raw_line, was_truncated = _append_capped_utf8_output(
+                        sink,
+                        raw_line,
+                        cap_bytes=cap_bytes,
+                        size=size,
+                    )
+                    truncated = truncated or was_truncated
+                if raw_line and on_output is not None:
                     try:
                         on_output(raw_line)
                     except Exception as cb_err:  # noqa: BLE001
@@ -482,10 +575,12 @@ class SandboxRunner:
         )
 
     def _resolve_cwd(self, cwd: Path | str | None) -> Path:
-        ws = self.policy.workspace.expanduser().resolve()
+        ws = self.policy.workspace.expanduser().resolve(strict=False)
+        if not ws.is_dir():
+            raise SandboxViolation(f"workspace is not a directory: {ws}")
         if cwd is None:
             return ws
-        candidate = Path(cwd).expanduser().resolve()
+        candidate = Path(cwd).expanduser().resolve(strict=False)
         try:
             candidate.relative_to(ws)
         except ValueError as exc:

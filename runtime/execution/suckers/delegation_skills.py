@@ -404,10 +404,7 @@ def _delegation_budget_exhausted_message(
 ) -> str:
     if budget is not None:
         limit = getattr(budget, "max_spawns", _PER_TURN_ABSOLUTE_LIMIT)
-        return (
-            "orchestration spawn budget exhausted for this turn "
-            f"(used {used}/{limit}). {action}"
-        )
+        return f"orchestration spawn budget exhausted for this turn (used {used}/{limit}). {action}"
     return (
         "delegation budget exhausted for this turn "
         f"(used {used}/{_PER_TURN_ABSOLUTE_LIMIT}). {action}"
@@ -690,18 +687,18 @@ def _call_agent(
     sess, turn_id = _resolve_session_and_turn()
     if session is None:
         session = sess
-    cur_count, within = _check_absolute_cap(turn_id)
+    orch_budget = _current_orchestration_budget()
+    cur_count, within = _check_absolute_cap(turn_id, budget=orch_budget)
     if not within:
         return {
             "agent_id": target_raw,
             "output": "",
             "success": False,
-            "error": (
-                f"delegation budget exhausted for this turn "
-                f"(used {cur_count}/{_PER_TURN_ABSOLUTE_LIMIT}). "
-                "Do the rest of this turn's work yourself · "
-                "do NOT call_agent again."
+            "error": _delegation_budget_exhausted_message(
+                cur_count,
+                budget=orch_budget,
             ),
+            "error_type": "budget_exhausted",
         }
 
     # Inject the custom role label into the prompt so the LLM still
@@ -745,6 +742,17 @@ def _call_agent(
         },
         context,
     )
+    if orch_budget is not None and not orch_budget.try_charge():
+        return {
+            "agent_id": target_raw,
+            "output": "",
+            "success": False,
+            "error": _delegation_budget_exhausted_message(
+                orch_budget.used,
+                budget=orch_budget,
+            ),
+            "error_type": "budget_exhausted",
+        }
     result = call_subagent(
         agent_id=target,
         prompt=final_prompt,
@@ -758,33 +766,42 @@ def _call_agent(
     # the budget counter — that happens in ``_record_delegation`` based
     # on the FINAL result (success vs. repeat-failure vs. first-failure).
     if _is_transient_error(result):
-        retry_result = call_subagent(
-            agent_id=target,
-            prompt=final_prompt,
-            context=subagent_context,
-            timeout_s=timeout_s,
-            session=session,
-            output_schema=schema_arg,
-        )
-        if retry_result.get("success"):
-            retry_result.setdefault("retried", True)
-            result = retry_result
-        else:
-            # Both attempts failed — surface that fact in the error
-            result["retried"] = True
+        if orch_budget is not None and not orch_budget.try_charge():
+            result["retry_skipped"] = True
             existing_err = result.get("error") or ""
             result["error"] = (
-                f"{existing_err} (retry also failed: {retry_result.get('error') or 'unknown'})"
+                f"{existing_err} (retry skipped: "
+                f"{_delegation_budget_exhausted_message(orch_budget.used, budget=orch_budget, action='Retry skipped.')})"
             )
+        else:
+            retry_result = call_subagent(
+                agent_id=target,
+                prompt=final_prompt,
+                context=subagent_context,
+                timeout_s=timeout_s,
+                session=session,
+                output_schema=schema_arg,
+            )
+            if retry_result.get("success"):
+                retry_result.setdefault("retried", True)
+                result = retry_result
+            else:
+                # Both attempts failed — surface that fact in the error
+                result["retried"] = True
+                existing_err = result.get("error") or ""
+                result["error"] = (
+                    f"{existing_err} (retry also failed: {retry_result.get('error') or 'unknown'})"
+                )
 
     # Record against budget AFTER we know the outcome. Smart-budget:
     # first-time failures get a free pass; repeat failures + successes
     # both count.
-    _record_delegation(
-        turn_id,
-        fingerprint,
-        succeeded=bool(result.get("success")),
-    )
+    if orch_budget is None:
+        _record_delegation(
+            turn_id,
+            fingerprint,
+            succeeded=bool(result.get("success")),
+        )
 
     # Preserve the operator's original custom name in the response so
     # logs / UI show what they asked for, not the resolved builtin.
@@ -1014,9 +1031,11 @@ def _call_agent_parallel(
     cur_count, within = _check_absolute_cap(turn_id, budget=orch_budget)
     if not within:
         return _empty_parallel_result(
-            f"delegation budget exhausted for this turn "
-            f"(used {cur_count}/{_PER_TURN_ABSOLUTE_LIMIT}). "
-            "Do the rest yourself · do NOT call_agent again.",
+            _delegation_budget_exhausted_message(
+                cur_count,
+                budget=orch_budget,
+                action="Do the rest yourself · do NOT call_agent again.",
+            ),
         )
 
     # Concurrent fan-out · one worker thread per spec. Each worker
@@ -1062,6 +1081,26 @@ def _call_agent_parallel(
             }
         call_context = dict(spec.get("context") or {})
         call_context["subagent_route_decision"] = route_decision
+        if orch_budget is not None and not orch_budget.try_charge():
+            return {
+                "agent_id": original_id,
+                "resolved_to": spec.get("agent_id"),
+                "custom_role": role_label,
+                "output": "",
+                "success": False,
+                "status": "budget_exhausted",
+                "error": _delegation_budget_exhausted_message(
+                    orch_budget.used,
+                    budget=orch_budget,
+                    action="This lane was not spawned.",
+                ),
+                "error_type": "budget_exhausted",
+                "spec_index": spec.get("spec_index"),
+                "task_label": task_label,
+                "bb_key": spec.get("bb_key"),
+                "task_preview": spec.get("task_preview"),
+                "subagent_route_decision": route_decision,
+            }
         try:
             result = call_subagent(
                 agent_id=spec["agent_id"],
@@ -1088,42 +1127,50 @@ def _call_agent_parallel(
         # Retry once on transient failure. Per-spec retry, not per
         # parallel batch — one slow worker shouldn't block faster ones.
         if _is_transient_error(result):
-            try:
-                retry = call_subagent(
-                    agent_id=spec["agent_id"],
-                    prompt=spec["prompt"],
-                    context=call_context,
-                    timeout_s=timeout_s,
-                    session=session,
-                    use_cheap_model=bool(spec.get("cheap")),
-                    output_schema=spec.get("output_schema"),
+            if orch_budget is not None and not orch_budget.try_charge():
+                result["retry_skipped"] = True
+                existing_err = result.get("error") or ""
+                result["error"] = (
+                    f"{existing_err} (retry skipped: "
+                    f"{_delegation_budget_exhausted_message(orch_budget.used, budget=orch_budget, action='Retry skipped.')})"
                 )
-                if retry.get("success"):
-                    retry["retried"] = True
-                    result = retry
-                    result["spec_index"] = spec.get("spec_index")
-                    result["task_label"] = task_label
-                    result["bb_key"] = spec.get("bb_key")
-                    result["task_preview"] = spec.get("task_preview")
-                else:
-                    result["retried"] = True
-                    existing_err = result.get("error") or ""
-                    result["error"] = (
-                        f"{existing_err} (retry also failed: {retry.get('error') or 'unknown'})"
+            else:
+                try:
+                    retry = call_subagent(
+                        agent_id=spec["agent_id"],
+                        prompt=spec["prompt"],
+                        context=call_context,
+                        timeout_s=timeout_s,
+                        session=session,
+                        use_cheap_model=bool(spec.get("cheap")),
+                        output_schema=spec.get("output_schema"),
                     )
-            except (ConnectionError, TimeoutError, TypeError, ValueError):
-                result["retried"] = True
+                    if retry.get("success"):
+                        retry["retried"] = True
+                        result = retry
+                        result["spec_index"] = spec.get("spec_index")
+                        result["task_label"] = task_label
+                        result["bb_key"] = spec.get("bb_key")
+                        result["task_preview"] = spec.get("task_preview")
+                    else:
+                        result["retried"] = True
+                        existing_err = result.get("error") or ""
+                        result["error"] = (
+                            f"{existing_err} (retry also failed: {retry.get('error') or 'unknown'})"
+                        )
+                except (ConnectionError, TimeoutError, TypeError, ValueError):
+                    result["retried"] = True
         # Record this spec's outcome against the smart-budget. Each
         # spec gets its own fingerprint so a failed spec doesn't
         # spend budget on a first try (LLM gets a chance to fix it),
         # but a repeat of the same {agent, prompt} does count.
-        spec_fingerprint = _compute_fingerprint(spec["agent_id"], spec["prompt"])
-        _record_delegation(
-            turn_id,
-            spec_fingerprint,
-            succeeded=bool(result.get("success")),
-            budget=orch_budget,
-        )
+        if orch_budget is None:
+            spec_fingerprint = _compute_fingerprint(spec["agent_id"], spec["prompt"])
+            _record_delegation(
+                turn_id,
+                spec_fingerprint,
+                succeeded=bool(result.get("success")),
+            )
         # Preserve operator's original agent_id in response
         if role_label:
             result["agent_id"] = original_id
@@ -1657,14 +1704,14 @@ def _resolve_max_spawns(
 
         return max(
             n,
-            max_spawns_for_token_budget(
-                token_budget, ceiling=_ORCH_MAX_SPAWNS_BUDGET_CEILING
-            ),
+            max_spawns_for_token_budget(token_budget, ceiling=_ORCH_MAX_SPAWNS_BUDGET_CEILING),
         )
     verify_cost = n * rounds * _ORCH_VERIFY_VOTERS if verify else 0
     synth_cost = 1 if synthesize else 0
     planned = n * rounds + verify_cost + synth_cost
     return min(_ORCH_MAX_SPAWNS_CEILING, max(n, planned))
+
+
 _NULL_FINDING_TOKENS = frozenset(
     {
         "none",
@@ -2107,9 +2154,7 @@ def _run_verdict_repair(
     """
     from runtime.execution.suckers.verdict_repair import Verdict, run_verdict_repair
 
-    task = str(
-        task or kw.get("goal") or kw.get("prompt") or kw.get("query") or ""
-    ).strip()
+    task = str(task or kw.get("goal") or kw.get("prompt") or kw.get("query") or "").strip()
     if not task:
         return {
             "ok": False,
@@ -2154,9 +2199,7 @@ def _run_verdict_repair(
 
     def _judge(output: str) -> Verdict:
         if not output:
-            return Verdict(
-                passed=False, label="fail", critique="the attempt produced no output"
-            )
+            return Verdict(passed=False, label="fail", critique="the attempt produced no output")
         question = (
             "Does the RESULT fully and correctly accomplish the TASK? Answer "
             "'fail' if anything is missing, wrong, or unverified.\n\n"
@@ -2616,6 +2659,24 @@ def _run_pipeline(
                 prompt = tmpl  # unknown placeholder — use template raw
 
             role = str(stage_spec.get("agent_id") or default_role).strip() or default_role
+            stage_budget = _current_orchestration_budget()
+            if stage_budget is not None and not stage_budget.try_charge():
+                stage_outputs.append(
+                    {
+                        "stage": s_idx,
+                        "agent_id": role,
+                        "output": "",
+                        "ok": False,
+                        "error": _delegation_budget_exhausted_message(
+                            stage_budget.used,
+                            budget=stage_budget,
+                            action="This pipeline stage was not spawned.",
+                        ),
+                        "error_type": "budget_exhausted",
+                    }
+                )
+                chain_ok = False
+                continue
 
             try:
                 result = call_subagent(

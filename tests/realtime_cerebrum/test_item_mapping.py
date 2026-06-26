@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -17,19 +16,15 @@ except ImportError:  # pragma: no cover
     TestClient = None  # type: ignore[assignment]
 
 from runtime.protocol import (
-    JsonRpcErrorCode,
     JsonRpcRequest,
     JsonRpcResponse,
-    Notification,
     decode_message,
     encode_message,
 )
-
 from tests.realtime_cerebrum._helpers import (
-    _LAST_SESSION,
-    _LAST_STREAM_ARGS,
-    _LAST_STREAM_KWARGS,
     drive as _drive,
+)
+from tests.realtime_cerebrum._helpers import (
     set_script as _set_script,
 )
 
