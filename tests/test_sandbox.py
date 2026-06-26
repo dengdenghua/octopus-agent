@@ -5,6 +5,7 @@ uses ``sys.executable`` (always available) and feeds Python a one-liner
 via ``-c``. That dodges shell-builtin differences (``echo``, ``ls``,
 ``true``) without losing test coverage.
 """
+
 from __future__ import annotations
 
 import sys
@@ -13,10 +14,13 @@ from pathlib import Path
 import pytest
 
 from runtime.safety.sandboxing.sandbox import (
+    BubblewrapBackend,
     DirectBackend,
     SandboxPolicy,
     SandboxRunner,
     SandboxViolation,
+    SeatbeltBackend,
+    select_process_backend,
 )
 
 
@@ -45,9 +49,7 @@ class TestRun:
 
     def test_stderr_captured(self, workspace: Path) -> None:
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
-        result = runner.run(
-            _python("import sys; sys.stderr.write('boom'); sys.stderr.flush()")
-        )
+        result = runner.run(_python("import sys; sys.stderr.write('boom'); sys.stderr.flush()"))
         assert "boom" in result.stderr
 
     def test_stdin_text(self, workspace: Path) -> None:
@@ -62,9 +64,7 @@ class TestRun:
         chunks: list[str] = []
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
         runner.run(
-            _python(
-                "for i in range(3):\n    print('line' + str(i), flush=True)\n"
-            ),
+            _python("for i in range(3):\n    print('line' + str(i), flush=True)\n"),
             on_output=chunks.append,
         )
         assert any("line" in c for c in chunks)
@@ -76,9 +76,7 @@ class TestEnvironmentScrub:
     ) -> None:
         monkeypatch.setenv("FAKE_API_KEY", "TOPSECRET")
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
-        result = runner.run(
-            _python("import os; print(os.environ.get('FAKE_API_KEY', 'MISSING'))")
-        )
+        result = runner.run(_python("import os; print(os.environ.get('FAKE_API_KEY', 'MISSING'))"))
         assert "MISSING" in result.stdout
         assert "TOPSECRET" not in result.stdout
 
@@ -90,17 +88,13 @@ class TestEnvironmentScrub:
                 extra_env={"OCT_INJECT": "yes"},
             )
         )
-        result = runner.run(
-            _python("import os; print(os.environ.get('OCT_INJECT', 'no'))")
-        )
+        result = runner.run(_python("import os; print(os.environ.get('OCT_INJECT', 'no'))"))
         assert "yes" in result.stdout
 
     def test_no_network_sets_proxy_short_circuit(self, workspace: Path) -> None:
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
         result = runner.run(
-            _python(
-                "import os; print(os.environ.get('no_proxy'), os.environ.get('http_proxy'))"
-            )
+            _python("import os; print(os.environ.get('no_proxy'), os.environ.get('http_proxy'))")
         )
         assert "*" in result.stdout
         assert "127.0.0.1:1" in result.stdout
@@ -147,11 +141,7 @@ class TestLimits:
             SandboxPolicy(workspace=workspace, timeout_s=10.0, max_output_bytes=64)
         )
         # Each line is ~10 chars; produce more than the cap.
-        result = runner.run(
-            _python(
-                "for i in range(200):\n    print('xxxxxxxx', flush=True)\n"
-            )
-        )
+        result = runner.run(_python("for i in range(200):\n    print('xxxxxxxx', flush=True)\n"))
         assert result.truncated is True
         assert len(result.stdout) <= 64
 
@@ -190,3 +180,84 @@ class TestBackendSeam:
         )
         runner.run(_python("print('via backend')"))
         assert captured["argv"][0] == sys.executable
+
+
+class TestProcessBackendSelection:
+    def test_soft_mode_uses_direct_backend(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "soft")
+
+        choice = select_process_backend()
+
+        assert choice.name == "direct"
+        assert choice.hard is False
+        assert isinstance(choice.backend, DirectBackend)
+
+    def test_auto_prefers_bwrap_on_linux(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "auto")
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: True))
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: True))
+
+        choice = select_process_backend()
+
+        assert choice.name == "bwrap"
+        assert choice.hard is True
+
+    def test_strict_rejects_when_no_hard_backend(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "strict")
+        monkeypatch.setattr(BubblewrapBackend, "available", staticmethod(lambda: False))
+        monkeypatch.setattr(SeatbeltBackend, "available", staticmethod(lambda: False))
+
+        with pytest.raises(SandboxViolation):
+            select_process_backend()
+
+    def test_bwrap_transform_wraps_command_and_network_policy(
+        self,
+        workspace: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/bwrap" if name == "bwrap" else None
+        )
+        policy = SandboxPolicy(workspace=workspace, allow_network=False)
+
+        argv, env, cwd = BubblewrapBackend().transform(
+            ["python", "-V"],
+            {},
+            workspace,
+            policy,
+        )
+
+        assert argv[0] == "/usr/bin/bwrap"
+        assert "--unshare-net" in argv
+        assert "--bind" in argv
+        assert str(workspace.resolve()) in argv
+        assert argv[-2:] == ["python", "-V"]
+        assert cwd == workspace.resolve()
+
+    def test_seatbelt_transform_wraps_command_and_network_policy(
+        self,
+        workspace: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(
+            "shutil.which", lambda name: "/usr/bin/sandbox-exec" if name == "sandbox-exec" else None
+        )
+        policy = SandboxPolicy(workspace=workspace, allow_network=True)
+
+        argv, env, cwd = SeatbeltBackend().transform(
+            ["python", "-V"],
+            {},
+            workspace,
+            policy,
+        )
+
+        assert argv[:2] == ["/usr/bin/sandbox-exec", "-p"]
+        assert "(allow network*)" in argv[2]
+        assert "/dev/null" in argv[2]
+        assert str(workspace.resolve()) in argv[2]
+        assert argv[-2:] == ["python", "-V"]
+        assert cwd == workspace.resolve()

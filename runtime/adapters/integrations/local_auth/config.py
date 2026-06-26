@@ -89,6 +89,10 @@ class LocalAuthConfig(BaseModel):
         default="octopus-agent",
         description="JWT iss claim",
     )
+    jwt_audience: str | None = Field(
+        default=None,
+        description="JWT aud claim",
+    )
     actor_prefix: str = Field(
         default="local:",
         description="actor_id 前缀 · 和 molili: 分命名空间",

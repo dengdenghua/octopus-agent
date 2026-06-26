@@ -497,7 +497,7 @@ def _describe_dir(
 
 
 def page_overview() -> str:
-    """Top-level repo overview · pulls from README + docs/architecture.md."""
+    """Top-level repo overview · pulls from README + docs/guide/architecture.md."""
     pieces: list[str] = [
         "# 项目概述 · Project Overview",
         "",

@@ -1,3 +1,9 @@
+---
+implementation_status: spec_only
+implemented_in: []
+last_verified: 2026-06-25
+---
+
 # Protocol · Distribution (端云协同部署)
 
 > **原则 ⑤ Edge + Cloud** 的具体协议。

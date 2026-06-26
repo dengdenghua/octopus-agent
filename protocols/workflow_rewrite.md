@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/safety/recovery/workflow_rewriter.py
+  - runtime/safety/recovery/workflow_applier.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Workflow Rewrite (工作流自改写)
 
 > 中心反思引擎的**第二条产出**（共 5 条）。

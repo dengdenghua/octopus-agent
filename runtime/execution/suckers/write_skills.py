@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 # ╔════════════════════════════════════════════════════════════════════════╗
@@ -39,11 +38,40 @@ from uuid import uuid4
 from .registry import Skill, SkillRegistry
 from .testing import SkillExpect, SkillTestCase
 
-_DEFAULT_MAX_BYTES = 1 * 1024 * 1024    # 1 MB
+_DEFAULT_MAX_BYTES = 1 * 1024 * 1024  # 1 MB
 _DEFAULT_EXEC_TIMEOUT_S = 30.0
-_EXEC_OUTPUT_CAP = 200_000               # Implementation note.
+_EXEC_OUTPUT_CAP = 200_000  # Implementation note.
 
 _BACKGROUND_OUTPUT_CAP = 200_000
+
+
+def _execution_policy_from_result(result: dict[str, Any]) -> dict[str, Any]:
+    policy = result.get("execution_policy")
+    return dict(policy) if isinstance(policy, dict) else {}
+
+
+def _background_execution_policy(
+    *,
+    sandbox_requested: bool,
+    sandbox_workspace: str | None,
+    cwd: str | None,
+    sandbox_backend: str,
+    sandbox_hard: bool,
+    env_mode: str,
+) -> dict[str, Any]:
+    from runtime.platform.process.streaming import execution_policy_snapshot
+
+    return execution_policy_snapshot(
+        sandbox_requested=sandbox_requested,
+        workspace=sandbox_workspace,
+        cwd=cwd,
+        backend=sandbox_backend,
+        hard=sandbox_hard,
+        allow_network=False,
+        env_mode=env_mode,
+        process_group=True,
+        timeout_s=None,
+    )
 
 
 class _BackgroundProcess:
@@ -54,6 +82,9 @@ class _BackgroundProcess:
         argv: list[str],
         proc: subprocess.Popen[str],
         cwd: str | None,
+        sandbox_backend: str = "direct",
+        sandbox_hard: bool = False,
+        execution_policy: dict[str, Any] | None = None,
         stdout_path: Path,
         stderr_path: Path,
         metadata_path: Path,
@@ -62,6 +93,9 @@ class _BackgroundProcess:
         self.argv = argv
         self.proc = proc
         self.cwd = cwd
+        self.sandbox_backend = sandbox_backend
+        self.sandbox_hard = sandbox_hard
+        self.execution_policy = execution_policy or {}
         self.started_at = time.time()
         self.cancelled = False
         self._lock = threading.Lock()
@@ -81,6 +115,9 @@ class _BackgroundProcess:
             "task_id": self.task_id,
             "argv": self.argv,
             "cwd": self.cwd,
+            "sandbox_backend": self.sandbox_backend,
+            "sandbox_hard": self.sandbox_hard,
+            "execution_policy": self.execution_policy,
             "pid": self.proc.pid,
             "started_at": self.started_at,
             "cancelled": self.cancelled,
@@ -123,6 +160,9 @@ class _BackgroundProcess:
             "status": status,
             "argv": self.argv,
             "cwd": self.cwd,
+            "sandbox_backend": self.sandbox_backend,
+            "sandbox_hard": self.sandbox_hard,
+            "execution_policy": self.execution_policy,
             "exit_code": exit_code,
             "running": status == "running",
             "stdout": raw_stdout[:_BACKGROUND_OUTPUT_CAP],
@@ -134,10 +174,10 @@ class _BackgroundProcess:
 
     def kill(self) -> dict[str, Any]:
         if self.proc.poll() is None:
+            from runtime.platform.process.tree import terminate_process_tree
+
             self.cancelled = True
-            self.proc.kill()
-            with contextlib.suppress(Exception):
-                self.proc.wait(timeout=2)
+            terminate_process_tree(self.proc)
         else:
             self.cancelled = self.cancelled or False
         self._wait_thread.join(timeout=1)
@@ -225,6 +265,14 @@ def _probe_process(pid: int | None) -> tuple[bool, int | None]:
         except Exception:  # noqa: BLE001
             return True, None
     try:
+        waited_pid, status = os.waitpid(pid, os.WNOHANG)
+        if waited_pid == pid:
+            return False, os.waitstatus_to_exitcode(status)
+    except ChildProcessError:
+        pass
+    except OSError:
+        pass
+    try:
         os.kill(pid, 0)
     except OSError:
         return False, None
@@ -260,8 +308,10 @@ def _snapshot_background_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         status = "cancelled"
     elif running:
         status = "running"
-    elif exit_code == 0 or exit_code is None:
+    elif exit_code == 0:
         status = "completed"
+    elif exit_code is None:
+        status = "unknown"
     else:
         status = "failed"
 
@@ -275,6 +325,13 @@ def _snapshot_background_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "argv": list(metadata.get("argv") or []),
         "cwd": metadata.get("cwd"),
+        "sandbox_backend": str(metadata.get("sandbox_backend") or "direct"),
+        "sandbox_hard": bool(metadata.get("sandbox_hard")),
+        "execution_policy": (
+            dict(metadata["execution_policy"])
+            if isinstance(metadata.get("execution_policy"), dict)
+            else {}
+        ),
         "pid": pid,
         "exit_code": exit_code,
         "running": status == "running",
@@ -310,7 +367,8 @@ def _parse_command(command: str | list[str]) -> tuple[list[str] | None, str | No
 
 
 def _ensure_sandbox(
-    path: str | Path, sandbox_dir: str | Path | None,
+    path: str | Path,
+    sandbox_dir: str | Path | None,
 ) -> tuple[Path, str | None]:
     from runtime.safety.auth.path_guard import check_path
 
@@ -399,7 +457,7 @@ def _edit_text_file(
     *,
     sandbox_dir: str | None = None,
     max_bytes: int = _DEFAULT_MAX_BYTES,
-    count: int = -1,     # Implementation note.
+    count: int = -1,  # Implementation note.
     **_kw: Any,
 ) -> dict[str, Any]:
     if not path:
@@ -506,7 +564,11 @@ def _edit_file(
             ),
         }
 
-    new_text = original.replace(old_string, new_string) if replace_all else original.replace(old_string, new_string, 1)
+    new_text = (
+        original.replace(old_string, new_string)
+        if replace_all
+        else original.replace(old_string, new_string, 1)
+    )
     new_bytes = new_text.encode("utf-8")
     if len(new_bytes) > max_bytes:
         return {"error": f"result too large: {len(new_bytes)} > {max_bytes}"}
@@ -556,9 +618,7 @@ def _multi_edit_file(
         if not old_string:
             return {"error": f"edits[{idx}].old_string must be non-empty"}
         if old_string == new_string:
-            return {
-                "error": f"edits[{idx}] is a no-op: old_string and new_string are identical"
-            }
+            return {"error": f"edits[{idx}] is a no-op: old_string and new_string are identical"}
         occurrences = candidate.count(old_string)
         if occurrences == 0:
             preview = old_string[:80].replace("\n", "\\n")
@@ -645,12 +705,20 @@ def _exec_shell(
         if not resolved_cwd.is_dir():
             return {"error": f"cwd not a directory: {resolved_cwd}"}
         cwd_str = str(resolved_cwd)
+    elif sandbox_dir is not None:
+        sandbox_root = Path(sandbox_dir).expanduser().resolve()
+        if not sandbox_root.is_dir():
+            return {"error": f"sandbox_violation: workspace not a directory: {sandbox_root}"}
+        cwd_str = str(sandbox_root)
     else:
         cwd_str = None
 
     run_env = None
     if env is not None:
-        run_env = {**os.environ, **{str(k): str(v) for k, v in env.items()}}
+        if sandbox_dir is not None:
+            run_env = {str(k): str(v) for k, v in env.items()}
+        else:
+            run_env = {**os.environ, **{str(k): str(v) for k, v in env.items()}}
 
     from runtime.platform.process.streaming import stream_run
 
@@ -660,6 +728,7 @@ def _exec_shell(
         env=run_env,
         timeout=timeout_s,
         output_cap_bytes=_EXEC_OUTPUT_CAP,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
@@ -673,6 +742,7 @@ def _exec_shell(
             "argv": argv,
             "stdout": r["stdout"],
             "stderr": r["stderr"],
+            "execution_policy": _execution_policy_from_result(r),
         }
     return {
         "argv": argv,
@@ -681,6 +751,9 @@ def _exec_shell(
         "stderr": r["stderr"],
         "stdout_truncated": r["stdout_truncated"],
         "stderr_truncated": r["stderr_truncated"],
+        "sandbox_backend": r.get("sandbox_backend", "direct"),
+        "sandbox_hard": bool(r.get("sandbox_hard")),
+        "execution_policy": _execution_policy_from_result(r),
     }
 
 
@@ -704,16 +777,65 @@ def _background_exec(
         if not resolved_cwd.is_dir():
             return {"error": f"cwd not a directory: {resolved_cwd}"}
         cwd_str = str(resolved_cwd)
+    elif sandbox_dir is not None:
+        sandbox_root = Path(sandbox_dir).expanduser().resolve()
+        if not sandbox_root.is_dir():
+            return {"error": f"sandbox_violation: workspace not a directory: {sandbox_root}"}
+        cwd_str = str(sandbox_root)
     else:
         cwd_str = None
 
     run_env = None
-    if env is not None:
+    sandbox_backend = "direct"
+    sandbox_hard = False
+    sandbox_workspace: str | None = None
+    env_mode = "custom" if env is not None else "inherit"
+    if sandbox_dir is not None:
+        from runtime.platform.process.streaming import _sandbox_extra_env
+        from runtime.safety.sandboxing.sandbox import (
+            SandboxPolicy,
+            SandboxViolation,
+            select_process_backend,
+        )
+
+        sandbox_root = Path(sandbox_dir).expanduser().resolve()
+        sandbox_workspace = str(sandbox_root)
+        policy = SandboxPolicy(
+            workspace=sandbox_root,
+            extra_env=_sandbox_extra_env(env),
+        )
+        run_env = policy.env_for()
+        env_mode = "allowlist"
+        try:
+            choice = select_process_backend()
+            argv, run_env, transformed_cwd = choice.backend.transform(
+                list(argv),
+                run_env,
+                Path(cwd_str),
+                policy,
+            )
+        except SandboxViolation as exc:
+            return {"error": f"sandbox_violation: {exc}", "argv": argv}
+        cwd_str = str(transformed_cwd)
+        sandbox_backend = choice.name
+        sandbox_hard = choice.hard
+    elif env is not None:
         run_env = {**os.environ, **{str(k): str(v) for k, v in env.items()}}
+
+    execution_policy = _background_execution_policy(
+        sandbox_requested=sandbox_dir is not None,
+        sandbox_workspace=sandbox_workspace,
+        cwd=cwd_str,
+        sandbox_backend=sandbox_backend,
+        sandbox_hard=sandbox_hard,
+        env_mode=env_mode,
+    )
 
     task_id = f"bg_{uuid4().hex[:16]}"
     paths = _background_paths(task_id)
     try:
+        from runtime.platform.process.tree import process_group_kwargs
+
         stdout_fh = paths["stdout"].open("w", encoding="utf-8", errors="replace")
         stderr_fh = paths["stderr"].open("w", encoding="utf-8", errors="replace")
         proc = subprocess.Popen(
@@ -726,6 +848,7 @@ def _background_exec(
             env=run_env,
             bufsize=1,
             shell=False,
+            **process_group_kwargs(),
         )
     except FileNotFoundError as e:
         return {"error": f"command not found: {e}", "argv": argv}
@@ -742,6 +865,9 @@ def _background_exec(
         argv=argv,
         proc=proc,
         cwd=cwd_str,
+        sandbox_backend=sandbox_backend,
+        sandbox_hard=sandbox_hard,
+        execution_policy=execution_policy,
         stdout_path=paths["stdout"],
         stderr_path=paths["stderr"],
         metadata_path=paths["metadata"],
@@ -749,8 +875,7 @@ def _background_exec(
     _BACKGROUND_PROCESSES[task_id] = task
     snap = task.snapshot()
     snap["message"] = (
-        "background process started; call read_background_output "
-        "with task_id to poll output/status"
+        "background process started; call read_background_output with task_id to poll output/status"
     )
     return snap
 
@@ -793,8 +918,10 @@ def _kill_background_exec(
         except (TypeError, ValueError):
             pid = 0
         if pid > 0:
-            with contextlib.suppress(OSError):
-                os.kill(pid, 9)
+            from runtime.platform.process.tree import terminate_pid_tree
+
+            with contextlib.suppress(Exception):
+                terminate_pid_tree(pid)
         metadata["cancelled"] = True
         with contextlib.suppress(Exception):
             _write_background_metadata(_background_paths(task_id)["metadata"], metadata)
@@ -837,6 +964,7 @@ def _ipython(
         cwd=cwd_str,
         timeout=timeout_s,
         output_cap_bytes=_EXEC_OUTPUT_CAP,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r and "exit_code" not in r:
         return {"error": f"exec_failed: {r['error']}"}
@@ -846,6 +974,7 @@ def _ipython(
             "timed_out": True,
             "stdout": r["stdout"],
             "stderr": r["stderr"],
+            "execution_policy": _execution_policy_from_result(r),
         }
     return {
         "exit_code": r["exit_code"],
@@ -854,6 +983,9 @@ def _ipython(
         "success": r["exit_code"] == 0,
         "stdout_truncated": r["stdout_truncated"],
         "stderr_truncated": r["stderr_truncated"],
+        "sandbox_backend": r.get("sandbox_backend", "direct"),
+        "sandbox_hard": bool(r.get("sandbox_hard")),
+        "execution_policy": _execution_policy_from_result(r),
     }
 
 
@@ -872,6 +1004,7 @@ def _run_git(
     *,
     timeout_s: float,
     sandbox_dir: str | None = None,
+    allow_network: bool = False,
 ) -> dict[str, Any]:
     if not repo_dir:
         return {"error": "missing repo_dir"}
@@ -884,20 +1017,33 @@ def _run_git(
     from runtime.platform.process.streaming import stream_run
 
     full_argv = ["git", "-C", str(resolved), *argv]
-    r = stream_run(full_argv, timeout=timeout_s, output_cap_bytes=_GIT_OUTPUT_CAP)
+    r = stream_run(
+        full_argv,
+        timeout=timeout_s,
+        output_cap_bytes=_GIT_OUTPUT_CAP,
+        sandbox_dir=sandbox_dir,
+        allow_network=allow_network,
+    )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
         if "FileNotFoundError" in msg or "No such file" in msg or "not found" in msg.lower():
             return {"error": "git_not_found_on_path"}
         return {"error": f"git_exec_failed: {msg}"}
     if r.get("timed_out"):
-        return {"error": f"git timeout after {timeout_s}s", "timed_out": True}
+        return {
+            "error": f"git timeout after {timeout_s}s",
+            "timed_out": True,
+            "execution_policy": _execution_policy_from_result(r),
+        }
     return {
         "exit_code": r["exit_code"],
         "stdout": r["stdout"],
         "stderr": r["stderr"],
         "stdout_truncated": r["stdout_truncated"],
         "resolved_repo": str(resolved),
+        "sandbox_backend": r.get("sandbox_backend", "direct"),
+        "sandbox_hard": bool(r.get("sandbox_hard")),
+        "execution_policy": _execution_policy_from_result(r),
     }
 
 
@@ -908,8 +1054,10 @@ def _git_status(
     **_kw: Any,
 ) -> dict[str, Any]:
     r = _run_git(
-        repo_dir, ["status", "--porcelain=v1", "--branch"],
-        timeout_s=_GIT_READ_TIMEOUT_S, sandbox_dir=sandbox_dir,
+        repo_dir,
+        ["status", "--porcelain=v1", "--branch"],
+        timeout_s=_GIT_READ_TIMEOUT_S,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r:
         return r
@@ -950,7 +1098,10 @@ def _git_diff(
             return {"error": "invalid path (leading '-')"}
         argv.extend(["--", path])
     r = _run_git(
-        repo_dir, argv, timeout_s=_GIT_READ_TIMEOUT_S, sandbox_dir=sandbox_dir,
+        repo_dir,
+        argv,
+        timeout_s=_GIT_READ_TIMEOUT_S,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r:
         return r
@@ -980,7 +1131,10 @@ def _git_log(
             return {"error": "invalid path (leading '-')"}
         argv.extend(["--", path])
     r = _run_git(
-        repo_dir, argv, timeout_s=_GIT_READ_TIMEOUT_S, sandbox_dir=sandbox_dir,
+        repo_dir,
+        argv,
+        timeout_s=_GIT_READ_TIMEOUT_S,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r:
         return r
@@ -993,12 +1147,14 @@ def _git_log(
         if len(parts) != 4:
             continue
         sha, author, date, subject = parts
-        commits.append({
-            "sha": sha,
-            "author": author,
-            "date": date,
-            "subject": subject,
-        })
+        commits.append(
+            {
+                "sha": sha,
+                "author": author,
+                "date": date,
+                "subject": subject,
+            }
+        )
     return {"commits": commits}
 
 
@@ -1024,8 +1180,10 @@ def _git_add(
         safe_paths.append(p)
 
     r = _run_git(
-        repo_dir, ["add", "--", *safe_paths],
-        timeout_s=_GIT_WRITE_TIMEOUT_S, sandbox_dir=sandbox_dir,
+        repo_dir,
+        ["add", "--", *safe_paths],
+        timeout_s=_GIT_WRITE_TIMEOUT_S,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r:
         return r
@@ -1054,7 +1212,10 @@ def _git_commit(
         argv.extend(["--author", author])
 
     r = _run_git(
-        repo_dir, argv, timeout_s=_GIT_WRITE_TIMEOUT_S, sandbox_dir=sandbox_dir,
+        repo_dir,
+        argv,
+        timeout_s=_GIT_WRITE_TIMEOUT_S,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r:
         return r
@@ -1062,8 +1223,10 @@ def _git_commit(
         return {"error": "git_commit_failed", **r}
 
     head = _run_git(
-        repo_dir, ["rev-parse", "HEAD"],
-        timeout_s=_GIT_READ_TIMEOUT_S, sandbox_dir=sandbox_dir,
+        repo_dir,
+        ["rev-parse", "HEAD"],
+        timeout_s=_GIT_READ_TIMEOUT_S,
+        sandbox_dir=sandbox_dir,
     )
     sha = head.get("stdout", "").strip() if "error" not in head else ""
     return {"sha": sha, "stdout": r["stdout"], "stderr": r["stderr"]}
@@ -1086,8 +1249,10 @@ def _git_branch(
                 return {"error": f"invalid ref: {from_ref!r}"}
             argv.append(from_ref)
         r = _run_git(
-            repo_dir, argv,
-            timeout_s=_GIT_WRITE_TIMEOUT_S, sandbox_dir=sandbox_dir,
+            repo_dir,
+            argv,
+            timeout_s=_GIT_WRITE_TIMEOUT_S,
+            sandbox_dir=sandbox_dir,
         )
         if "error" in r:
             return r
@@ -1096,8 +1261,10 @@ def _git_branch(
         return {"created": create, "from_ref": from_ref}
 
     r = _run_git(
-        repo_dir, ["branch", "--list"],
-        timeout_s=_GIT_READ_TIMEOUT_S, sandbox_dir=sandbox_dir,
+        repo_dir,
+        ["branch", "--list"],
+        timeout_s=_GIT_READ_TIMEOUT_S,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r:
         return r
@@ -1127,8 +1294,12 @@ WRITE_SKILL_NAMES = [
 ]
 EXEC_SKILL_NAME = "exec_shell"
 GIT_SKILL_NAMES = [
-    "git_status", "git_diff", "git_log",
-    "git_add", "git_commit", "git_branch",
+    "git_status",
+    "git_diff",
+    "git_log",
+    "git_add",
+    "git_commit",
+    "git_branch",
 ]
 
 
@@ -1140,7 +1311,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 "用途: 把 UTF-8 文本完整写入一个新文件；首选用于「创建新文件」场景。会受 sandbox_dir 路径校验保护。\n"
                 "何时不用: 要修改已有文件请用 edit_file (按唯一片段) 或 multi_edit_file (批量精确替换)；要追加内容用 append_text_file；要写二进制不要用本工具。\n"
                 "关键参数: path (必填); content (必填); overwrite (默认 False — 文件已存在时返回错误); max_bytes (默认 1MB)。\n"
-                "示例: write_text_file({\"path\": \"notes.md\", \"content\": \"# hello\\n\", \"overwrite\": false})"
+                '示例: write_text_file({"path": "notes.md", "content": "# hello\\n", "overwrite": false})'
             ),
             affinity=["file", "write"],
             cost_profile="low",
@@ -1163,7 +1334,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 "用途: 在文件末尾追加 UTF-8 文本（不存在则创建）；常用于日志、增量记录、向 markdown 续写。\n"
                 "何时不用: 要替换/修改文件中间某段用 edit_file；要整体覆写一个新文件用 write_text_file (overwrite=True)；要在指定位置插入用 edit_file 把上下文一并替换。\n"
                 "关键参数: path (必填); content (必填, 自带换行需自己加 \\n); max_bytes (默认 1MB)。\n"
-                "示例: append_text_file({\"path\": \"log.txt\", \"content\": \"2026-05-29 ok\\n\"})"
+                '示例: append_text_file({"path": "log.txt", "content": "2026-05-29 ok\\n"})'
             ),
             affinity=["file", "write"],
             cost_profile="low",
@@ -1186,7 +1357,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 "用途: 老式宽松版 find-and-replace — 不强制唯一性，按计数替换出现的字面串。适合简单批量改名、注释清理。\n"
                 "何时不用: 想要「唯一片段才替换」的安全编辑用 edit_file；要一次改多处不同片段用 multi_edit_file；要写新文件用 write_text_file。\n"
                 "关键参数: path / find / replace (均必填); count (默认 -1 = 全部替换, 正数 = 只替换前 N 个)。\n"
-                "示例: edit_text_file({\"path\": \"a.py\", \"find\": \"foo\", \"replace\": \"bar\", \"count\": 1})"
+                '示例: edit_text_file({"path": "a.py", "find": "foo", "replace": "bar", "count": 1})'
             ),
             affinity=["file", "edit"],
             cost_profile="low",
@@ -1209,7 +1380,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 "用途: 安全的精确编辑 — 把 old_string 替换为 new_string，默认要求文件中只出现一次 (避免误改)。改源码首选。\n"
                 "何时不用: 要一次性应用多处不同替换用 multi_edit_file (原子化、按序合并)；要写全新文件用 write_text_file；只是末尾追加用 append_text_file；宽松全替换用 edit_text_file。\n"
                 "关键参数: path / old_string / new_string (均必填, old≠new); replace_all (默认 False, True 时允许多处匹配并全替换)。\n"
-                "示例: edit_file({\"path\": \"a.py\", \"old_string\": \"def foo():\\n    pass\", \"new_string\": \"def foo():\\n    return 1\"})"
+                '示例: edit_file({"path": "a.py", "old_string": "def foo():\\n    pass", "new_string": "def foo():\\n    return 1"})'
             ),
             summary="Replace one exact unique string in a file.",
             affinity=["file", "edit"],
@@ -1233,7 +1404,7 @@ def register_write_skills(registry: SkillRegistry) -> int:
                 "用途: 一次调用对同一文件原子化应用多个精确替换 (按 edits 顺序累积)；适合重构 / 同时改多处。任一编辑失败整批回滚。\n"
                 "何时不用: 只改一处用 edit_file；不同文件分别处理；要一行 find/replace 全文扫荡用 edit_text_file；要新建文件用 write_text_file。\n"
                 "关键参数: path (必填); edits (必填, list[{old_string, new_string, replace_all?}], 顺序敏感, 默认每条要求唯一)。\n"
-                "示例: multi_edit_file({\"path\": \"a.py\", \"edits\": [{\"old_string\": \"v1\", \"new_string\": \"v2\"}, {\"old_string\": \"x\", \"new_string\": \"y\", \"replace_all\": true}]})"
+                '示例: multi_edit_file({"path": "a.py", "edits": [{"old_string": "v1", "new_string": "v2"}, {"old_string": "x", "new_string": "y", "replace_all": true}]})'
             ),
             summary="Apply multiple exact string edits to one file.",
             affinity=["file", "edit"],
@@ -1373,7 +1544,7 @@ def register_exec_skill(registry: SkillRegistry) -> int:
                 "用途: 执行本地 shell 命令 (无 shell=True、有超时)；最适合编译、打包、文件管线、调用各种 CLI；当没有专门 skill 匹配时的兜底。\n"
                 "何时不用: 谷歌/搜资料用 web_search；抓取已知 URL 用 fetch_url (curl/wget 抓回的 HTML 不好解析)；跑 Python 片段用 ipython；改文件用 edit_file/write_text_file；查 git 状态用 git_status。\n"
                 "关键参数: command (str 或 list[str], 必填); cwd (可选); timeout_s (默认 30); run_in_background (默认 False, True 时返回 task_id, 配合 read_shell_output / kill_shell)。\n"
-                "示例: exec_shell({\"command\": \"npm test\", \"cwd\": \"web\", \"timeout_s\": 120})"
+                '示例: exec_shell({"command": "npm test", "cwd": "web", "timeout_s": 120})'
             ),
             affinity=["shell", "exec", "dangerous"],
             cost_profile="mid",
@@ -1396,7 +1567,7 @@ def register_exec_skill(registry: SkillRegistry) -> int:
                 "用途: 在带超时的子进程里跑一段 Python (当前解释器, 无 REPL 状态保留)；适合数据分析、临时计算、调用 numpy/pandas/json。\n"
                 "何时不用: 跑非 Python 命令用 exec_shell；只是数文本用 count_words；改文件用 edit_file 而不是写脚本绕路；要长跑用 background_exec / exec_shell(run_in_background=True)。\n"
                 "关键参数: code (必填, 完整 Python 片段, 用 print 才能拿到 stdout); cwd (可选); timeout_s (默认 30)。\n"
-                "示例: ipython({\"code\": \"import json; print(json.dumps({\\\"x\\\": 1}))\"})"
+                '示例: ipython({"code": "import json; print(json.dumps({\\"x\\": 1}))"})'
             ),
             affinity=["python", "analysis", "exec", "dangerous"],
             cost_profile="mid",
@@ -1439,8 +1610,7 @@ def register_exec_skill(registry: SkillRegistry) -> int:
         Skill(
             name="read_background_output",
             description=(
-                "Poll stdout/stderr and status for a command started by "
-                "`background_exec`."
+                "Poll stdout/stderr and status for a command started by `background_exec`."
             ),
             affinity=["shell", "exec", "background", "read"],
             cost_profile="low",
@@ -1544,7 +1714,13 @@ def _git_push(
         argv.append(branch)
     if set_upstream:
         argv.insert(1, "-u")
-    r = _run_git(repo_dir, argv, timeout_s=60.0, sandbox_dir=sandbox_dir)
+    r = _run_git(
+        repo_dir,
+        argv,
+        timeout_s=60.0,
+        sandbox_dir=sandbox_dir,
+        allow_network=True,
+    )
     if "error" in r:
         return r
     if r["exit_code"] != 0:
@@ -1568,7 +1744,13 @@ def _git_pull(
         if branch.startswith("-"):
             return {"error": f"invalid branch: {branch!r}"}
         argv.append(branch)
-    r = _run_git(repo_dir, argv, timeout_s=60.0, sandbox_dir=sandbox_dir)
+    r = _run_git(
+        repo_dir,
+        argv,
+        timeout_s=60.0,
+        sandbox_dir=sandbox_dir,
+        allow_network=True,
+    )
     if "error" in r:
         return r
     if r["exit_code"] != 0:
@@ -1587,7 +1769,9 @@ def _git_checkout(
     """Switch branch. Auto-stashes dirty state."""
     if not branch or branch.startswith("-"):
         return {"error": f"invalid branch: {branch!r}"}
-    stash_r = _run_git(repo_dir, ["stash", "--include-untracked"], timeout_s=15.0, sandbox_dir=sandbox_dir)
+    stash_r = _run_git(
+        repo_dir, ["stash", "--include-untracked"], timeout_s=15.0, sandbox_dir=sandbox_dir
+    )
     stashed = stash_r.get("exit_code") == 0 and "No local changes" not in stash_r.get("stdout", "")
     argv = ["checkout"]
     if create:
@@ -1645,6 +1829,7 @@ def _git_create_pr(
     if not title:
         return {"error": "title is required"}
     from runtime.execution.suckers.write_skills import _ensure_sandbox
+
     resolved, err = _ensure_sandbox(repo_dir, sandbox_dir)
     if err:
         return {"error": err}
@@ -1658,25 +1843,46 @@ def _git_create_pr(
 
     from runtime.platform.process.streaming import stream_run
 
-    r = stream_run(argv, cwd=str(resolved), timeout=30.0, output_cap_bytes=8000)
+    r = stream_run(
+        argv,
+        cwd=str(resolved),
+        timeout=30.0,
+        output_cap_bytes=8000,
+        sandbox_dir=sandbox_dir,
+        allow_network=True,
+    )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
         if "FileNotFoundError" in msg or "not found" in msg.lower():
             return {"error": "gh CLI not found — install from https://cli.github.com"}
         return {"error": f"gh_exec_failed: {msg}"}
     if r.get("timed_out"):
-        return {"error": "timeout creating PR"}
+        return {
+            "error": "timeout creating PR",
+            "execution_policy": _execution_policy_from_result(r),
+        }
     if r["exit_code"] != 0:
         return {
             "error": "gh_pr_create_failed",
             "stderr": r["stderr"][:2000],
             "exit_code": r["exit_code"],
+            "execution_policy": _execution_policy_from_result(r),
         }
-    return {"created": True, "url": r["stdout"].strip()}
+    return {
+        "created": True,
+        "url": r["stdout"].strip(),
+        "sandbox_backend": r.get("sandbox_backend", "direct"),
+        "sandbox_hard": bool(r.get("sandbox_hard")),
+        "execution_policy": _execution_policy_from_result(r),
+    }
 
 
 GIT_NETWORK_SKILL_NAMES = [
-    "git_push", "git_pull", "git_checkout", "git_stash", "git_create_pr",
+    "git_push",
+    "git_pull",
+    "git_checkout",
+    "git_stash",
+    "git_create_pr",
 ]
 
 
@@ -1776,6 +1982,7 @@ def _run_quality_cmd(
         cwd=str(resolved),
         timeout=timeout_s,
         output_cap_bytes=_QUALITY_OUTPUT_CAP,
+        sandbox_dir=sandbox_dir,
     )
     if "error" in r and "exit_code" not in r:
         msg = r["error"]
@@ -1783,12 +1990,19 @@ def _run_quality_cmd(
             return {"error": f"command not found: {command[0]}"}
         return {"error": f"exec failed: {msg}"}
     if r.get("timed_out"):
-        return {"error": f"timeout after {timeout_s}s", "timed_out": True}
+        return {
+            "error": f"timeout after {timeout_s}s",
+            "timed_out": True,
+            "execution_policy": _execution_policy_from_result(r),
+        }
     return {
         "exit_code": r["exit_code"],
         "stdout": r["stdout"],
         "stderr": r["stderr"],
         "success": r["exit_code"] == 0,
+        "sandbox_backend": r.get("sandbox_backend", "direct"),
+        "sandbox_hard": bool(r.get("sandbox_hard")),
+        "execution_policy": _execution_policy_from_result(r),
     }
 
 
@@ -1813,7 +2027,11 @@ def _run_tests(
         if (p / "pytest.ini").exists() or (p / "pyproject.toml").exists():
             argv = [sys.executable, "-m", "pytest", "--tb=short", "-q"]
         elif (p / "package.json").exists():
-            argv = ["npx", "vitest", "--run"] if (p / "vitest.config.ts").exists() or (p / "vitest.config.js").exists() else ["npm", "test"]
+            argv = (
+                ["npx", "vitest", "--run"]
+                if (p / "vitest.config.ts").exists() or (p / "vitest.config.js").exists()
+                else ["npm", "test"]
+            )
         else:
             return {"error": "cannot auto-detect test runner; pass command explicitly"}
 
@@ -1841,7 +2059,11 @@ def _lint_check(
         p = Path(str(resolved))
         if (p / "ruff.toml").exists() or (p / "pyproject.toml").exists():
             argv = [sys.executable, "-m", "ruff", "check", "--output-format=concise"]
-        elif (p / ".eslintrc.js").exists() or (p / ".eslintrc.json").exists() or (p / "eslint.config.js").exists():
+        elif (
+            (p / ".eslintrc.js").exists()
+            or (p / ".eslintrc.json").exists()
+            or (p / "eslint.config.js").exists()
+        ):
             argv = ["npx", "eslint", "--format=compact"]
         else:
             return {"error": "cannot auto-detect linter; pass command explicitly"}
@@ -1879,7 +2101,11 @@ def _format_code(
             argv = [sys.executable, "-m", "ruff", "format"]
             if check_only:
                 argv.append("--check")
-        elif (p / ".prettierrc").exists() or (p / ".prettierrc.json").exists() or (p / "prettier.config.js").exists():
+        elif (
+            (p / ".prettierrc").exists()
+            or (p / ".prettierrc.json").exists()
+            or (p / "prettier.config.js").exists()
+        ):
             argv = ["npx", "prettier"]
             argv.append("--check" if check_only else "--write")
             argv.append(".")

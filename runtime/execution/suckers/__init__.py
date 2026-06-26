@@ -1,3 +1,9 @@
+"""Suckers = skill pool.
+
+Directory name is bio (see ADR-001); all exports use engineering names
+(``Skill``, ``SkillRegistry``, ``SkillSearcher`` …). Grep for the class
+name, not the directory name.
+"""
 
 from .forged_persistence import (
     dump_forged_skill_to_md,

@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { authHeaders } from "@/core/auth/api";
 import { copyTextToClipboard } from "@/core/clipboard";
 import { getBackendBaseURL } from "@/core/config";
 
@@ -26,6 +27,7 @@ export function MobileJoinSection() {
         const res = await fetch(
           `${getBackendBaseURL()}/api/tentacle/join-info`,
           {
+            headers: authHeaders(),
             signal,
           },
         );

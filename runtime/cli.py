@@ -493,7 +493,7 @@ def main(argv: list[str] | None = None) -> int:
 
     mcp_serve = mcp_sub.add_parser("serve", help="Start Tentacle MCP Server (stdio or SSE mode).")
     mcp_serve.add_argument("--stdio", action="store_true", help="Run in stdio mode (for Claude Desktop command)")
-    mcp_serve.add_argument("--host", default="0.0.0.0", help="Host for SSE mode (default: 0.0.0.0)")
+    mcp_serve.add_argument("--host", default="127.0.0.1", help="Host for SSE mode (default: 127.0.0.1; pass 0.0.0.0 to expose on the network)")
     mcp_serve.add_argument("--port", type=int, default=8766, help="Port for SSE mode (default: 8766)")
     mcp_serve.add_argument("--log-level", default="warning", choices=["debug", "info", "warning", "error"], help="Log level")
 

@@ -156,6 +156,6 @@ Ingest → Parse → Plan → Execute → Synthesize → Store
 
 ## 延伸阅读
 
-- [architecture.md](architecture.md) — 本原则的章鱼仿生实现
+- [vision/biomimetic-architecture.md](vision/biomimetic-architecture.md) — 本原则的章鱼仿生实现
 - [ROADMAP.md](ROADMAP.md) — 按原则分层验收的 5 阶段路线
 - [forklist.md](forklist.md) — 哪些组件可直接 fork 上游

@@ -17,6 +17,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { authHeaders, getToken } from "@/core/auth/api";
+
 // ── Types ──────────────────────────────────────────────
 
 export interface PcScreenStreamState {
@@ -52,7 +54,10 @@ const FRAME_TYPE_WEBP = 0x03;
 
 function buildPcWsUrl(): string {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/api/tentacle/pc-screen/stream`;
+  const base = `${proto}//${window.location.host}/api/tentacle/pc-screen/stream`;
+  const token = getToken();
+  if (!token) return base;
+  return `${base}?token=${encodeURIComponent(token)}`;
 }
 
 function parseFrameHeader(buf: ArrayBuffer): {
@@ -156,7 +161,7 @@ export function usePcScreenStream(
     try {
       const res = await fetch("/api/tentacle/remote-input", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify(event),
       });
       if (!res.ok) {

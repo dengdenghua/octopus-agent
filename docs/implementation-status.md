@@ -23,7 +23,7 @@
 
 | 机制 | 状态 | 证据 |
 |---|---|---|
-| Hearts「3 心 HA 调度」叙事 | **可选后端**（用途比叙事小） | `runtime/core/hearts/` 有 coordinator/etcd/redis 实现；实际消费方是 `runtime/platform/process/distributed_lock.py`（Redis 分布式锁，按依赖可用性启用）与 tour 演示。无"三心互备调度循环" |
+| Hearts「双循环隔离 + 上下文泵」叙事 | **可选后端**（用途比叙事小） | `runtime/core/hearts/` 有 coordinator/etcd/redis 实现；实际消费方是 `runtime/platform/process/distributed_lock.py`（Redis 分布式锁，按依赖可用性启用）与 tour 演示。当前实现为分布式锁 + 节律熔断聚合，"双循环隔离 + 上下文泵"的完整叙事尚未在默认路径运行。 |
 | Nerves 消息总线（进程内 TypedEventBus） | **已接线** | `runtime/core/nerves/bus.py`；skill/agent registry 事件发布在用。跨进程的 NATS/Redis 总线曾是休眠代码（零消费者），已于路线收尾时删除 |
 | Chromatophores（信号广播 + Boids 仲裁） | **已接线** | `runtime/safety/chromatophores/`（signal_bus、boids）被 `runtime/execution/swarm/runtime.py`、`runtime/cli_run.py` 使用 |
 | SpinalCord 反射快路径 | **已接线** | `runtime/core/nerves/reflex/` + 前端 `/workspace/reflex` 管理页 |

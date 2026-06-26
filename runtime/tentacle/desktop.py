@@ -5,7 +5,7 @@
 与远程手机触手用同一套协议。
 
 Phase 0 占位实现 —— Phase 5 期间真正实现。
-详见 ``docs/biomimetic/tentacle/desktop.md``。
+详见 ``docs/architecture/organs/tentacle-desktop.md``。
 """
 
 from __future__ import annotations

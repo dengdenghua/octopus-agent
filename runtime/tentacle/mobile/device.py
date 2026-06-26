@@ -7,7 +7,7 @@ Octopus Mobile 端（Kotlin）通过 WebSocket 连接本服务器，接收 tool/
 本类只负责"通信 + 协议"，不重复实现工具。
 
 详见：
-- ``docs/biomimetic/tentacle/mobile.md``
+- ``docs/architecture/organs/tentacle-mobile.md``
 - ``docs/mobile/architecture.md`` 第 3 节
 """
 

@@ -326,6 +326,8 @@ export interface Translations {
     projectStatusTitle: string;
     projectStatusDescUnlocked: string;
     projectStatusDescLocked: string;
+    projectWriteAccess: string;
+    projectReadOnly: string;
     permissionFullAccess: string;
     permissionAcceptEdits: string;
     permissionConfirm: string;

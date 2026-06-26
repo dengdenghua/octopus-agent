@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/core/nerves/reflex/reflex_router.py
+  - runtime/core/nerves/reflex/rules_loader.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Reflex (反射快路径)
 
 > **原则 ① Reactive + Deliberative** 的具体协议。

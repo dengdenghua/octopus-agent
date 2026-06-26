@@ -1,0 +1,629 @@
+from __future__ import annotations
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from runtime.execution.loops.models import (
+    LoopAttempt,
+    LoopRun,
+    LoopRunStatus,
+    VerifierFinding,
+    VerifierResult,
+)
+from runtime.execution.loops.store import LoopRunStore
+from runtime.safety.auth.identity import Identity, IdentityStore
+from runtime.sensing.gateway.loop_router import create_loop_router
+
+
+def _completed_review() -> dict[str, object]:
+    replay = {
+        "schema": "octopus.task_run_replay.v1",
+        "fingerprint": "abc123def4567890",
+        "case_id": "task-run:abc123def4567890",
+        "replayable": True,
+        "step_count": 3,
+        "steps": [
+            {"kind": "task_start", "goal": "Ship the loop runtime", "mode": "code"},
+            {
+                "kind": "tool_end",
+                "tool": "verifier:python_repo_patch",
+                "tool_call_id": "verifier-1",
+                "status": "success",
+                "is_error": False,
+                "output_preview": "all checks passed",
+            },
+            {
+                "kind": "task_event",
+                "event_type": "LOOP_RUN_COMPLETED",
+                "status": "completed",
+                "reason": "",
+            },
+        ],
+        "safety": {
+            "raw_messages_included": False,
+            "tool_outputs_truncated": True,
+            "approval_args_are_previews": True,
+        },
+    }
+    return {
+        "schema": "octopus.task_run_review.v1",
+        "task_id": "run-1",
+        "thread_id": "run-1",
+        "turn_id": "run-1",
+        "agent_id": "loop_controller",
+        "status": "completed",
+        "score": 1.0,
+        "score_reasons": ["status:completed"],
+        "summary": {"attempt_count": 1, "verifier_profile": "python_repo_patch"},
+        "findings": [],
+        "replay": replay,
+        "resume": {
+            "available": False,
+            "source": "loop_runs",
+            "latest_checkpoint": {},
+        },
+        "learning_candidates": [],
+        "backlog_candidates": [],
+    }
+
+
+class _StubController:
+    def __init__(self, store: LoopRunStore) -> None:
+        self.store = store
+        self.execute_calls: list[str] = []
+        self.restart_calls: list[str] = []
+        self.resume_calls: list[str] = []
+
+    def execute(self, run_id: str):
+        self.execute_calls.append(run_id)
+        return self.store.mutate(
+            run_id,
+            lambda current: current.model_copy(
+                update={
+                    "status": LoopRunStatus.COMPLETED,
+                    "last_review": _completed_review(),
+                }
+            ),
+        )
+
+    def restart(
+        self,
+        run_id: str,
+        *,
+        goal: str | None = None,
+        thread_id: str | None = None,
+        workspace_path: str | None = None,
+        reuse_workspace: bool = True,
+        policy=None,
+    ):
+        self.restart_calls.append(run_id)
+        source = self.store.get(run_id)
+        if source is None:
+            raise KeyError(run_id)
+        if source.status in {
+            LoopRunStatus.PENDING,
+            LoopRunStatus.RUNNING,
+            LoopRunStatus.VERIFYING,
+            LoopRunStatus.REPAIRING,
+        }:
+            raise ValueError("loop run is still active")
+        return self._spawn_child(
+            source,
+            goal=goal,
+            thread_id=thread_id,
+            workspace_path=workspace_path,
+            reuse_workspace=reuse_workspace,
+            policy=policy,
+            resume_checkpoint_id=None,
+        )
+
+    def resume(
+        self,
+        run_id: str,
+        *,
+        goal: str | None = None,
+        thread_id: str | None = None,
+        workspace_path: str | None = None,
+        reuse_workspace: bool = True,
+        policy=None,
+    ):
+        self.resume_calls.append(run_id)
+        source = self.store.get(run_id)
+        if source is None:
+            raise KeyError(run_id)
+        if source.status not in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}:
+            raise ValueError("loop run is not resumable")
+        return self._spawn_child(
+            source,
+            goal=goal,
+            thread_id=thread_id,
+            workspace_path=workspace_path,
+            reuse_workspace=reuse_workspace,
+            policy=policy,
+            resume_checkpoint_id=f"loop-run:{source.run_id}:attempt:{len(source.attempts)}",
+        )
+
+    def _spawn_child(
+        self,
+        source: LoopRun,
+        *,
+        goal: str | None,
+        thread_id: str | None,
+        workspace_path: str | None,
+        reuse_workspace: bool,
+        policy,
+        resume_checkpoint_id: str | None,
+    ) -> LoopRun:
+        next_goal = str(goal or "").strip() or source.goal
+        next_thread_id = thread_id if thread_id is not None else source.thread_id
+        next_workspace_path = (
+            workspace_path
+            if workspace_path is not None
+            else source.workspace_path
+            if reuse_workspace
+            else None
+        )
+        next_policy = (
+            policy.model_copy(deep=True)
+            if policy is not None
+            else source.policy.model_copy(deep=True)
+        )
+        child = LoopRun(
+            owner_id=source.owner_id,
+            parent_run_id=source.run_id,
+            origin_run_id=source.origin_run_id or source.run_id,
+            resume_checkpoint_id=resume_checkpoint_id,
+            goal=next_goal,
+            mode=source.mode,
+            thread_id=next_thread_id,
+            workspace_path=next_workspace_path,
+            policy=next_policy,
+        )
+        return self.store.create(child)
+
+
+class _StubDispatcher:
+    def __init__(self, store: LoopRunStore) -> None:
+        self.store = store
+        self.calls: list[str] = []
+        self.cancel_calls: list[tuple[str, str]] = []
+        self.running: set[str] = set()
+
+    def submit(self, run_id: str) -> None:
+        self.calls.append(run_id)
+        self.running.add(run_id)
+
+    def is_running(self, run_id: str) -> bool:
+        return run_id in self.running
+
+    def cancel(self, run_id: str, *, reason: str = "cancelled by operator") -> dict[str, object]:
+        self.cancel_calls.append((run_id, reason))
+        self.running.discard(run_id)
+        run = self.store.mutate(
+            run_id,
+            lambda current, reason=reason: current.model_copy(
+                update={
+                    "status": LoopRunStatus.CANCELLED,
+                    "cancel_requested_at": current.cancel_requested_at or current.updated_at,
+                    "cancel_reason": reason,
+                    "last_error": reason,
+                    "completed_at": current.completed_at or current.updated_at,
+                }
+            ),
+        )
+        return {
+            "run": run,
+            "reason": reason,
+            "source_cancelled": True,
+            "future_cancelled": True,
+        }
+
+
+def _build_client(tmp_path):
+    identity_store = IdentityStore()
+    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identity_store.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    controller = _StubController(store)
+    dispatcher = _StubDispatcher(store)
+    app = FastAPI()
+    app.include_router(
+        create_loop_router(
+            store=store,
+            controller=controller,
+            dispatcher=dispatcher,
+            identity_store=identity_store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+    return client, controller, dispatcher, store
+
+
+def test_loop_router_create_list_get_and_execute_with_owner_isolation(tmp_path) -> None:
+    client, controller, dispatcher, _store = _build_client(tmp_path)
+
+    created = client.post(
+        "/api/loops/start",
+        json={
+            "goal": "Ship the loop runtime",
+            "thread_id": "   ",
+        },
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert created.status_code == 200
+    run = created.json()
+    run_id = run["run_id"]
+    assert run["thread_id"] is None
+    assert run["status"] == "pending"
+
+    listing = client.get(
+        "/api/loops",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+    assert listing.json()["runs"][0]["run_id"] == run_id
+
+    denied = client.get(
+        f"/api/loops/{run_id}",
+        headers={"Authorization": "Bearer sk-bob"},
+    )
+    assert denied.status_code == 404
+
+    executed = client.post(
+        f"/api/loops/{run_id}/execute",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert executed.status_code == 200
+    assert executed.json()["status"] == "completed"
+    assert controller.execute_calls == [run_id]
+    assert dispatcher.calls == []
+
+    review = client.get(
+        f"/api/loops/{run_id}/review",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert review.status_code == 200
+    assert review.json()["review"]["status"] == "completed"
+
+    replay_case = client.get(
+        f"/api/loops/{run_id}/replay-case",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert replay_case.status_code == 200
+    assert replay_case.json()["replay_case"]["case_id"].startswith("task-run:")
+
+    evaluation = client.get(
+        f"/api/loops/{run_id}/replay-evaluation",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert evaluation.status_code == 200
+    assert evaluation.json()["evaluation"]["passed"] is True
+
+    overview = client.get(
+        "/api/loops/overview",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert overview.status_code == 200
+    assert overview.json()["total"] == 1
+    assert overview.json()["reviewed_runs"] == 1
+    assert overview.json()["by_status"]["completed"] == 1
+
+    status = client.get(
+        f"/api/loops/{run_id}/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert status.status_code == 200
+    assert status.json()["is_running"] is False
+    assert status.json()["review_available"] is True
+
+
+def test_loop_router_execute_requires_controller_when_requested(tmp_path) -> None:
+    identity_store = IdentityStore()
+    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    app = FastAPI()
+    app.include_router(
+        create_loop_router(
+            store=store,
+            controller=None,
+            identity_store=identity_store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/loops/start",
+        json={"goal": "Execute immediately", "execute": True},
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert response.status_code == 503
+    assert store.count(owner_id="alice") == 0
+
+
+def test_loop_router_status_degrades_without_dispatcher(tmp_path) -> None:
+    identity_store = IdentityStore()
+    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    app = FastAPI()
+    app.include_router(
+        create_loop_router(
+            store=store,
+            controller=None,
+            dispatcher=None,
+            identity_store=identity_store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/loops/start",
+        json={"goal": "Inspect loop status"},
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert created.status_code == 200
+    run_id = created.json()["run_id"]
+
+    status = client.get(
+        f"/api/loops/{run_id}/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert status.status_code == 200
+    assert status.json()["is_running"] is False
+    assert status.json()["status"] == "pending"
+
+    replay_case = client.get(
+        f"/api/loops/{run_id}/replay-case",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert replay_case.status_code == 409
+
+    cancelled = client.post(
+        f"/api/loops/{run_id}/cancel",
+        json={"reason": "skip this run"},
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["cancel_reason"] == "skip this run"
+
+
+def test_loop_router_can_background_dispatch_from_start_and_endpoint(tmp_path) -> None:
+    client, _controller, dispatcher, _store = _build_client(tmp_path)
+
+    created = client.post(
+        "/api/loops/start",
+        json={
+            "goal": "Run in background",
+            "execute": True,
+            "background": True,
+        },
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert created.status_code == 200
+    run_id = created.json()["run_id"]
+    assert dispatcher.calls == [run_id]
+
+    status = client.get(
+        f"/api/loops/{run_id}/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert status.status_code == 200
+    assert status.json()["is_running"] is True
+    assert status.json()["attempt_count"] == 0
+
+    overview = client.get(
+        "/api/loops/overview",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert overview.status_code == 200
+    assert overview.json()["active_dispatches"] == 1
+    assert overview.json()["active_run_ids"] == [run_id]
+
+    dispatched = client.post(
+        f"/api/loops/{run_id}/dispatch",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert dispatched.status_code == 200
+    assert dispatcher.calls == [run_id, run_id]
+
+    cancelled = client.post(
+        f"/api/loops/{run_id}/cancel",
+        json={"reason": "operator stop"},
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["cancel_reason"] == "operator stop"
+    assert dispatcher.cancel_calls == [(run_id, "operator stop")]
+
+
+def test_loop_router_can_restart_terminal_run_and_execute_child(tmp_path) -> None:
+    client, controller, dispatcher, store = _build_client(tmp_path)
+    source = store.create(
+        LoopRun(
+            owner_id="alice",
+            goal="Ship the loop runtime",
+            thread_id="thread-loop",
+            workspace_path=str(tmp_path / "workspace"),
+            status=LoopRunStatus.COMPLETED,
+        )
+    )
+
+    restarted = client.post(
+        f"/api/loops/{source.run_id}/restart",
+        json={
+            "goal": "Continue hardening",
+            "execute": True,
+        },
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert restarted.status_code == 200
+    child = restarted.json()
+    assert child["run_id"] != source.run_id
+    assert child["status"] == "completed"
+    assert child["goal"] == "Continue hardening"
+    assert child["thread_id"] == source.thread_id
+    assert child["workspace_path"] == source.workspace_path
+    assert child["parent_run_id"] == source.run_id
+    assert child["origin_run_id"] == source.run_id
+    assert child["resume_checkpoint_id"] is None
+    assert controller.restart_calls == [source.run_id]
+    assert controller.execute_calls == [child["run_id"]]
+    assert dispatcher.calls == []
+
+
+def test_loop_router_resume_rejects_completed_run(tmp_path) -> None:
+    client, controller, _dispatcher, store = _build_client(tmp_path)
+    source = store.create(
+        LoopRun(
+            owner_id="alice",
+            goal="Already complete",
+            status=LoopRunStatus.COMPLETED,
+        )
+    )
+
+    resumed = client.post(
+        f"/api/loops/{source.run_id}/resume",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert resumed.status_code == 409
+    assert resumed.json()["detail"] == "loop run is not resumable"
+    assert controller.resume_calls == [source.run_id]
+
+
+def test_loop_router_can_resume_failed_run_in_background(tmp_path) -> None:
+    client, controller, dispatcher, store = _build_client(tmp_path)
+    source = store.create(
+        LoopRun(
+            owner_id="alice",
+            origin_run_id="root-run",
+            goal="Fix remaining verifier failures",
+            thread_id="thread-failed",
+            workspace_path=str(tmp_path / "workspace"),
+            status=LoopRunStatus.FAILED,
+        )
+    )
+
+    resumed = client.post(
+        f"/api/loops/{source.run_id}/resume",
+        json={
+            "execute": True,
+            "background": True,
+            "thread_id": "thread-resumed",
+            "reuse_workspace": False,
+        },
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert resumed.status_code == 200
+    child = resumed.json()
+    assert child["status"] == "pending"
+    assert child["goal"] == source.goal
+    assert child["thread_id"] == "thread-resumed"
+    assert child["workspace_path"] is None
+    assert child["parent_run_id"] == source.run_id
+    assert child["origin_run_id"] == "root-run"
+    assert child["resume_checkpoint_id"] == f"loop-run:{source.run_id}:attempt:{len(source.attempts)}"
+    assert controller.resume_calls == [source.run_id]
+    assert controller.execute_calls == []
+    assert dispatcher.calls == [child["run_id"]]
+
+    status = client.get(
+        f"/api/loops/{child['run_id']}/status",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert status.status_code == 200
+    assert status.json()["is_running"] is True
+    assert status.json()["parent_run_id"] == source.run_id
+    assert status.json()["origin_run_id"] == "root-run"
+    assert status.json()["resume_checkpoint_id"] == child["resume_checkpoint_id"]
+
+
+def test_loop_router_exposes_resume_proposal_for_failed_run(tmp_path) -> None:
+    client, _controller, _dispatcher, store = _build_client(tmp_path)
+    source = store.create(
+        LoopRun(
+            owner_id="alice",
+            goal="Fix remaining verifier failures",
+            thread_id="thread-failed",
+            workspace_path=str(tmp_path / "workspace"),
+            status=LoopRunStatus.FAILED,
+            attempts=[
+                LoopAttempt(
+                    attempt_index=1,
+                    prompt="Fix remaining verifier failures",
+                    status="completed",
+                    success=False,
+                    final_answer="patched once",
+                    verifier_result=VerifierResult(
+                        profile="python_repo_patch",
+                        kind="python",
+                        passed=False,
+                        findings=[
+                            VerifierFinding(
+                                name="pytest",
+                                passed=False,
+                                exit_code=1,
+                                stderr="1 failing test remains",
+                            )
+                        ],
+                        summary="failed checks: pytest",
+                    ),
+                )
+            ],
+            last_verifier_result=VerifierResult(
+                profile="python_repo_patch",
+                kind="python",
+                passed=False,
+                findings=[
+                    VerifierFinding(
+                        name="pytest",
+                        passed=False,
+                        exit_code=1,
+                        stderr="1 failing test remains",
+                    )
+                ],
+                summary="failed checks: pytest",
+            ),
+            last_error="failed checks: pytest",
+        )
+    )
+
+    proposal = client.get(
+        f"/api/loops/{source.run_id}/resume-proposal",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert proposal.status_code == 200
+    body = proposal.json()["proposal"]
+    assert body["checkpoint"]["task_id"] == source.run_id
+    assert body["checkpoint"]["type"] == "loop_run"
+    assert body["recovery_hints"]["phase"] == "failed"
+    assert body["recovery_hints"]["failed_checks"] == ["pytest"]
+    assert body["safety"]["raw_state_included"] is False
+
+
+def test_loop_router_resume_proposal_rejects_non_resumable_run(tmp_path) -> None:
+    client, _controller, _dispatcher, store = _build_client(tmp_path)
+    source = store.create(
+        LoopRun(
+            owner_id="alice",
+            goal="Already complete",
+            status=LoopRunStatus.COMPLETED,
+        )
+    )
+
+    proposal = client.get(
+        f"/api/loops/{source.run_id}/resume-proposal",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+
+    assert proposal.status_code == 409
+    assert proposal.json()["detail"] == "loop run is not resumable"

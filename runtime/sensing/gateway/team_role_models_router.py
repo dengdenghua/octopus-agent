@@ -11,13 +11,15 @@ from __future__ import annotations
 from typing import Any
 
 try:
-    from fastapi import APIRouter
+    from fastapi import APIRouter, Depends, Request
     from pydantic import BaseModel
 
     FASTAPI_AVAILABLE = True
 except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
+    Depends = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
 
@@ -25,12 +27,37 @@ class RoleModelsBody(BaseModel):
     overrides: dict[str, str] = {}
 
 
-def create_team_role_models_router() -> Any:
+def create_team_role_models_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     """Build + return the router."""
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
-    router = APIRouter(tags=["team-role-models"])
+    def _auth_dep(request: Request) -> None:
+        # Role-model overrides steer team execution cost/tier choices.
+        # Keep single-user dev mode open, but require an authenticated
+        # actor when this control surface is exposed in shared deploys.
+        from runtime.adapters.web_auth import _resolve_actor
+
+        _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    router = APIRouter(
+        tags=["team-role-models"],
+        dependencies=[Depends(_auth_dep)],
+    )
 
     @router.get("/api/team/role-models")
     def api_get_role_models() -> dict[str, Any]:

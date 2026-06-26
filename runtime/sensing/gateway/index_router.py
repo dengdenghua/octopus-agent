@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, HTTPException
+    from fastapi import APIRouter, HTTPException, Request
     from pydantic import BaseModel
 
     FASTAPI_AVAILABLE = True
@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
 _DB_PATH = Path("data/code_index.db")
@@ -139,14 +140,36 @@ if FASTAPI_AVAILABLE:
         workspace: str = "."
 
 
-def create_index_router() -> Any:
+def create_index_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
     router = APIRouter(tags=["index"])
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.get("/api/index/status")
-    def api_index_status() -> dict[str, Any]:
+    def api_index_status(request: Request) -> dict[str, Any]:
+        _auth(request)
         chunks, embeddings = _count_db_rows()
         return {
             **_index_state,
@@ -156,7 +179,8 @@ def create_index_router() -> Any:
         }
 
     @router.get("/api/index/stats")
-    def api_index_stats() -> dict[str, Any]:
+    def api_index_stats(request: Request) -> dict[str, Any]:
+        _auth(request)
         stats = _get_db_stats()
         stats["last_indexed_at"] = _index_state.get("last_indexed_at", "")
         stats["config"] = {
@@ -169,7 +193,8 @@ def create_index_router() -> Any:
         return stats
 
     @router.post("/api/index/start")
-    def api_index_start(body: IndexStartRequest) -> dict[str, Any]:
+    def api_index_start(request: Request, body: IndexStartRequest) -> dict[str, Any]:
+        _auth(request)
         if _index_state["running"]:
             raise HTTPException(409, "Indexing already in progress")
         t = threading.Thread(target=_run_indexing, args=(body.workspace, body.force), daemon=True)
@@ -177,7 +202,8 @@ def create_index_router() -> Any:
         return {"started": True}
 
     @router.post("/api/index/rebuild")
-    def api_index_rebuild() -> dict[str, Any]:
+    def api_index_rebuild(request: Request) -> dict[str, Any]:
+        _auth(request)
         if _DB_PATH.exists():
             _DB_PATH.unlink()
         workspace = _index_state.get("workspace") or "."
@@ -186,7 +212,8 @@ def create_index_router() -> Any:
         return {"started": True}
 
     @router.delete("/api/index")
-    def api_index_clear() -> dict[str, Any]:
+    def api_index_clear(request: Request) -> dict[str, Any]:
+        _auth(request)
         if _DB_PATH.exists():
             _DB_PATH.unlink()
         _index_state["total_chunks"] = 0
@@ -197,7 +224,8 @@ def create_index_router() -> Any:
         return {"cleared": True}
 
     @router.post("/api/index/search")
-    def api_index_search(body: IndexSearchRequest) -> dict[str, Any]:
+    def api_index_search(request: Request, body: IndexSearchRequest) -> dict[str, Any]:
+        _auth(request)
         t0 = time.monotonic()
         try:
             from runtime.execution.suckers.code_intelligence_skills import _code_search

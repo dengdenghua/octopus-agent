@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -23,7 +22,6 @@ class SshUnavailableError(RuntimeError):
 
 
 class SshBackend(LocalBackend):
-
     def __init__(
         self,
         *,
@@ -31,7 +29,7 @@ class SshBackend(LocalBackend):
         user: str | None = None,
         port: int = 22,
         identity_file: str | Path | None = None,
-        password: str | None = None,          # Implementation note.
+        password: str | None = None,  # Implementation note.
         timeout_seconds: float = 30.0,
         connect_timeout: int = 10,
         strict_host_key_checking: bool = True,
@@ -104,13 +102,12 @@ class SshBackend(LocalBackend):
 
 
 class SshSandbox(Sandbox):
-
     def __init__(self, backend: SshBackend, audit: BackendAudit, span: Any) -> None:
         super().__init__(backend=backend, audit=audit, span=span)
         self.backend: SshBackend = backend  # type: ignore[assignment]
         self.run_command_count = 0
         self.timeouts = 0
-        self._paramiko_client: Any = None   # Implementation note.
+        self._paramiko_client: Any = None  # Implementation note.
 
     def run_command(
         self,
@@ -132,7 +129,6 @@ class SshSandbox(Sandbox):
         if self.backend.use_paramiko:
             return self._run_paramiko(argv, input_data, cwd, timeout)
         return self._run_cli(argv, input_data, cwd, timeout)
-
 
     def _run_cli(
         self,
@@ -180,7 +176,7 @@ class SshSandbox(Sandbox):
         args += ["-o", f"ConnectTimeout={m.connect_timeout}"]
         args += ["-o", "ServerAliveInterval=15"]
         args += ["-o", "ServerAliveCountMax=3"]
-        args += ["-o", "BatchMode=yes"]        # Implementation note.
+        args += ["-o", "BatchMode=yes"]  # Implementation note.
         if not m.strict_host_key_checking:
             # Opt-in MITM window · operators that disable strict checking
             # should know they lose host-key pinning. The paired
@@ -191,7 +187,8 @@ class SshSandbox(Sandbox):
                 "(host key is not pinned; susceptible to MITM on first "
                 "connection). Set strict_host_key_checking=True in the "
                 "backend config to require a pre-populated known_hosts.",
-                m.host, m.port,
+                m.host,
+                m.port,
             )
             args += ["-o", "StrictHostKeyChecking=no"]
             args += ["-o", "UserKnownHostsFile=/dev/null"]
@@ -210,7 +207,9 @@ class SshSandbox(Sandbox):
         return args
 
     def _compose_remote_command(
-        self, argv: list[str], cwd: str | None,
+        self,
+        argv: list[str],
+        cwd: str | None,
     ) -> list[str]:
         m = self.backend
         if cwd is None and not m.env:
@@ -222,13 +221,10 @@ class SshSandbox(Sandbox):
             return [*env_prefix, *argv]
 
         cwd_quoted = _sh_quote(cwd)
-        env_frag = " ".join(
-            f"{_sh_quote(k)}={_sh_quote(v)}" for k, v in m.env.items()
-        )
+        env_frag = " ".join(f"{_sh_quote(k)}={_sh_quote(v)}" for k, v in m.env.items())
         argv_frag = " ".join(_sh_quote(a) for a in argv)
         script = f"cd {cwd_quoted} && {'env ' + env_frag + ' ' if env_frag else ''}exec {argv_frag}"
         return ["sh", "-c", script]
-
 
     def _run_paramiko(
         self,
@@ -260,7 +256,8 @@ class SshSandbox(Sandbox):
                     "ssh_backend %s:%d (paramiko) · strict_host_key_checking is "
                     "DISABLED (host key not pinned; MITM possible on first "
                     "connection)",
-                    m.host, m.port,
+                    m.host,
+                    m.port,
                 )
                 if m.known_hosts_file is not None:
                     client.load_host_keys(str(m.known_hosts_file))
@@ -292,7 +289,9 @@ class SshSandbox(Sandbox):
 
         try:
             stdin, stdout, stderr = client.exec_command(
-                cmd, timeout=timeout, environment=env_dict,
+                cmd,
+                timeout=timeout,
+                environment=env_dict,
             )
             if input_data is not None:
                 stdin.write(input_data)
@@ -302,7 +301,8 @@ class SshSandbox(Sandbox):
             # wrappers. ``readline`` on these blocks until data is
             # available or the channel is closed, matching the local
             # subprocess path in _streaming.py.
-            from runtime.core.cerebrum import tool_output_sink
+            from runtime.platform.process import tool_output_sink
+
             sink = tool_output_sink.current_sink()
             out_parts: list[str] = []
             err_parts: list[str] = []
@@ -330,11 +330,16 @@ class SshSandbox(Sandbox):
                         src.close()
 
             import threading as _threading
+
             t_out = _threading.Thread(
-                target=_drain, args=(stdout, out_parts, "stdout"), daemon=True,
+                target=_drain,
+                args=(stdout, out_parts, "stdout"),
+                daemon=True,
             )
             t_err = _threading.Thread(
-                target=_drain, args=(stderr, err_parts, "stderr"), daemon=True,
+                target=_drain,
+                args=(stderr, err_parts, "stderr"),
+                daemon=True,
             )
             t_out.start()
             t_err.start()
@@ -348,8 +353,11 @@ class SshSandbox(Sandbox):
             if "timeout" in name.lower():
                 self.timeouts += 1
                 return {
-                    "stdout": "", "stderr": "", "exit_code": None,
-                    "timed_out": True, "host": m.host,
+                    "stdout": "",
+                    "stderr": "",
+                    "exit_code": None,
+                    "timed_out": True,
+                    "host": m.host,
                     "timeout_seconds": timeout,
                 }
             return {"error": f"ssh_exec_failed: {name}: {e}"}

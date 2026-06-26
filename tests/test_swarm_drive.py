@@ -11,7 +11,7 @@ def test_run_swarm_runs_and_taps_mesh_signals(monkeypatch) -> None:
     captured: list[Any] = []
 
     class _FakeSwarm:
-        def __init__(self, *, arm_pool, signal_bus, boids, journal, max_workers):
+        def __init__(self, *, arm_pool, signal_bus, boids, journal, max_workers, skill_resources=None):
             self._bus = signal_bus
             self.kw = (arm_pool, journal, max_workers)
 

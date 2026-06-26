@@ -14,12 +14,13 @@ import {
   GlobeIcon,
   HardDriveIcon,
   MessageSquarePlusIcon,
-  NetworkIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PlusIcon,
   PuzzleIcon,
   Trash2Icon,
+  UsersRoundIcon,
+  WorkflowIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -132,7 +133,7 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
 // 工作 surface 的组织导航。公司 PM(工作台/项目/任务/里程碑/AI 助手)已移除
 // (交企业版);保留团队/多人协作。Agent 管理统一收敛到左下角角色切换。
 const COMPANY_ORG_ROUTES: NavRoute[] = [
-  { to: "/workspace/team/new", labelKey: "navTeam", icon: NetworkIcon },
+  { to: "/workspace/team/new", labelKey: "navTeam", icon: UsersRoundIcon },
 ];
 
 const COMPANY_CAPABILITY_ROUTES: NavRoute[] = [
@@ -1379,7 +1380,7 @@ export function WorkspaceSurfaceSwitch({
     {
       to: COMPANY_WORKSPACE_ROUTE,
       label: t.sidebar.navCompany,
-      icon: NetworkIcon,
+      icon: WorkflowIcon,
       active: active === "work",
       kind: "icon" as const,
     },
@@ -1657,7 +1658,7 @@ function ProjectGroupIcon({ project }: { project: string }) {
     return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
   }
 
-  const AccentIcon = isTeamProject ? NetworkIcon : Code2Icon;
+  const AccentIcon = isTeamProject ? UsersRoundIcon : Code2Icon;
 
   return (
     <span className="relative grid size-5 shrink-0 place-items-center text-muted-foreground/75">

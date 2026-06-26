@@ -160,22 +160,22 @@ class IoTDevice(ConnectedDevice):
 
 
 class DeviceOnlineEvent(NervesEvent):
-    def __init__(self, device_id: str, kind: str, label: str, **kwargs: Any) -> None:
-        self.device_id = device_id
-        self.kind = kind
-        self.label = label
+    # NervesEvent is a frozen pydantic model — declare fields as
+    # annotations (like the sibling events above) rather than assigning
+    # ``self.x`` in ``__init__``, which raises on a frozen instance.
+    device_id: str
+    kind: str
+    label: str
 
 
 class DeviceOfflineEvent(NervesEvent):
-    def __init__(self, device_id: str, kind: str, reason: str, **kwargs: Any) -> None:
-        self.device_id = device_id
-        self.kind = kind
-        self.reason = reason
+    device_id: str
+    kind: str
+    reason: str
 
 
 class DeviceHeartbeatEvent(NervesEvent):
-    def __init__(self, device_id: str, **kwargs: Any) -> None:
-        self.device_id = device_id
+    device_id: str
 
 
 # ── Pool ────────────────────────────────────────────────

@@ -61,10 +61,6 @@ markdown_extensions:
   - pymdownx.emoji
 
 nav:
-  - Product Hardening:
-      - Main Path Audit: main-path-audit.md
-      - Self-Evolution Minimum Loop: self-evolution-min-loop.md
-      - Engineering Hygiene Plan: engineering-hygiene-plan.md
   - 首页: index.md
   - 入门:
       - 概念入口: CONCEPTS.md
@@ -74,7 +70,7 @@ nav:
       - 扩展: extending.md
       - 自定义模型: custom-models.md
   - 架构:
-      - 总览: architecture.md
+      - 总览: guide/architecture.md
       - 实装状态对照: implementation-status.md
       - 核心路径: architecture/core-path.md
       - 高分图: architecture/high-res-map.md
@@ -82,10 +78,10 @@ nav:
       - 模块地图: architecture/module-map.md
       - 器官分级: architecture/organ-tiering.md
       - 聊天模式: architecture/chat-modes.md
-      - ReAct 自演化: architecture/react-self-evolution.md
       - 索引: architecture/README.md
-  - 仿生模型:
-      - 总览: biomimetic/README.md
+  - 仿生愿景:
+      - 架构: vision/biomimetic-architecture.md
+      - 映射表: vision/biomimetic-map.md
       - 原则: principles.md
       - 命名: naming.md
       - 六模块: six-modules.md
@@ -101,7 +97,6 @@ nav:
   - 能力与基准:
       - Agent 能力: agent-capabilities.md
       - 基准: benchmarks.md
-      - 评审地图: review-map-capability-parity.md
   - ADR:
       - 索引: adr/README.md
       - 001 仿生命名: adr/001-bionic-naming.md
@@ -112,12 +107,13 @@ nav:
       - 006 生命周期 hooks: adr/006-lifecycle-hooks.md
       - 007 MCP 信任库: adr/007-mcp-trust-store.md
       - 008 宪法 profiles: adr/008-constitution-profiles.md
+      - 011 章鱼移动端: adr/011-octopus-mobile.md
+      - 009 OKF 知识底床: adr/009-okf-knowledge-substrate.md
+      - 010 Swarm 资源争用: adr/010-swarm-resource-contention.md
   - 自动文档:
       - 总览: auto/README.md
       - 概览: auto/00-overview.md
       - 技术栈: auto/10-tech-stack.md
-  - 工程笔记:
-      - Redis Streams vs NATS JetStream: redis-streams-vs-nats-jetstream.md
   - 贡献:
       - Roadmap: roadmap.md
       - Forklist: forklist.md

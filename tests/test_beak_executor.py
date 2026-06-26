@@ -21,6 +21,7 @@ from runtime.platform.models import (
     TaskId,
 )
 from runtime.platform.process.session import Session, session_scope
+from runtime.platform.process.task_supervisor import TaskCapabilityManifest
 from runtime.safety.auth import TrustEngine
 
 
@@ -108,6 +109,53 @@ class TestHappyPath:
         )
         assert step.success
         assert step.result.output == 5
+
+    def test_task_capability_manifest_blocks_disabled_group(
+        self,
+        registry,
+        immunity,
+        journal,
+        budget,
+    ):
+        registry.register(
+            Skill(
+                name="exec_shell",
+                description="test shell",
+                affinity=["shell"],
+                trusted_source="skill://public/exec_shell",
+                handler=lambda **kw: "should not run",
+            )
+        )
+        executor = ToolExecutor(registry=registry, immunity=immunity, journal=journal)
+        manifest = TaskCapabilityManifest(groups={"shell": False})
+
+        with session_scope(
+            Session(
+                actor="alice",
+                thread_id="thread-1",
+                metadata={
+                    "task_id": "task-shell-blocked",
+                    "task_capability_manifest": manifest.model_dump(mode="json"),
+                },
+            )
+        ):
+            step = executor.execute_step(
+                step_id=0,
+                node_id="n0",
+                sucker_id=SkillId("exec_shell"),
+                args={"cmd": "echo hi"},
+                caller="arms/code_arm",
+                task_id=budget.task_id,
+                arm_id=ArmId("code_arm"),
+                budget=budget,
+            )
+
+        assert not step.success
+        assert step.result.status == "immune_reject"
+        assert any(
+            "task capability group disabled: shell" in tag
+            for tag in step.result.stderr_tags
+        )
 
 
 class TestHandlerException:

@@ -799,6 +799,12 @@ class AgentTraceStore:
         run = self.task_run(task_id)
         if run is None:
             return None
+        loop_checkpoint = self.latest_checkpoint(
+            task_id=str(run["task_id"]),
+            checkpoint_type="loop_run",
+        )
+        if isinstance(loop_checkpoint, dict):
+            return _task_run_review_from_loop_checkpoint(run, loop_checkpoint)
         approvals = self._approvals_for_task(str(run["task_id"]))
         return _task_run_review_from_run(run, approvals)
 
@@ -1403,6 +1409,186 @@ def _first_nonempty(
         if isinstance(value, str) and value.strip():
             return value.strip()
     return None
+
+
+def _task_run_review_from_loop_checkpoint(
+    run: dict[str, Any],
+    checkpoint: dict[str, Any],
+) -> dict[str, Any]:
+    from runtime.execution.loops.learning import build_loop_run_review
+    from runtime.execution.loops.models import (
+        LoopAttempt,
+        LoopMode,
+        LoopPolicy,
+        LoopRun,
+        LoopRunStatus,
+        VerifierFinding,
+        VerifierResult,
+    )
+
+    state = checkpoint.get("state") if isinstance(checkpoint.get("state"), dict) else {}
+    raw_status = (
+        _clean_str(state.get("current_phase"))
+        or _clean_str(run.get("status"))
+        or "failed"
+    )
+    try:
+        status = LoopRunStatus(raw_status)
+    except ValueError:
+        status = LoopRunStatus.FAILED
+
+    raw_mode = _clean_str(run.get("mode")) or "code"
+    try:
+        mode = LoopMode(raw_mode)
+    except ValueError:
+        mode = LoopMode.CODE
+
+    attempts: list[LoopAttempt] = []
+    attempt_rows = state.get("attempt_snapshots")
+    attempt_rows = attempt_rows if isinstance(attempt_rows, list) else []
+    goal = _clean_str(run.get("goal")) or _clean_str(run.get("title")) or _clean_str(checkpoint.get("summary"))
+    for index, item in enumerate(attempt_rows, start=1):
+        if not isinstance(item, dict):
+            continue
+        verifier_raw = item.get("verifier") if isinstance(item.get("verifier"), dict) else {}
+        failed_checks = [
+            str(name).strip()
+            for name in verifier_raw.get("failed_checks") or []
+            if str(name or "").strip()
+        ]
+        verifier_result: VerifierResult | None = None
+        if verifier_raw:
+            failure_category = _clean_str(verifier_raw.get("failure_category")) or ""
+            findings = [
+                VerifierFinding(
+                    name=name,
+                    passed=False,
+                    category=failure_category,
+                    stderr=str(verifier_raw.get("summary") or "") if idx == 0 else "",
+                )
+                for idx, name in enumerate(failed_checks)
+            ]
+            if not findings and bool(verifier_raw.get("passed")):
+                findings = [VerifierFinding(name="verifier", passed=True, exit_code=0)]
+            verifier_result = VerifierResult(
+                profile=_clean_str(verifier_raw.get("profile")) or "auto",
+                kind=_clean_str(verifier_raw.get("kind")) or "unknown",
+                failure_category=failure_category,
+                passed=bool(verifier_raw.get("passed")),
+                summary=str(verifier_raw.get("summary") or ""),
+                findings=findings,
+            )
+        attempts.append(
+            LoopAttempt(
+                attempt_index=int(item.get("attempt_index") or index),
+                prompt=str(item.get("prompt_preview") or goal),
+                started_at=_clean_str(item.get("started_at")) or str(checkpoint.get("ts") or ""),
+                completed_at=_clean_str(item.get("completed_at")) or None,
+                status=_clean_str(item.get("status")) or "completed",
+                success=item.get("success"),
+                terminated_reason=str(item.get("terminated_reason") or ""),
+                final_answer=str(item.get("final_answer_preview") or ""),
+                verifier_result=verifier_result,
+                error=str(item.get("error_preview") or ""),
+            )
+        )
+
+    attempt_count = max(
+        int(state.get("attempt_count") or 0),
+        int(checkpoint.get("iteration") or 0),
+        len(attempts),
+    )
+    if not attempts and attempt_count > 0:
+        for attempt_index in range(1, attempt_count + 1):
+            attempts.append(
+                LoopAttempt(
+                    attempt_index=attempt_index,
+                    prompt=goal,
+                )
+            )
+
+    last_verifier_raw = state.get("last_verifier") if isinstance(state.get("last_verifier"), dict) else {}
+    last_verifier_result: VerifierResult | None = None
+    if attempts and attempts[-1].verifier_result is not None:
+        last_verifier_result = attempts[-1].verifier_result
+    elif last_verifier_raw:
+        failed_checks = [
+            str(name).strip()
+            for name in last_verifier_raw.get("failed_checks") or []
+            if str(name or "").strip()
+        ]
+        failure_category = _clean_str(last_verifier_raw.get("failure_category")) or ""
+        last_verifier_result = VerifierResult(
+            profile=_clean_str(last_verifier_raw.get("profile")) or "auto",
+            kind=_clean_str(last_verifier_raw.get("kind")) or "unknown",
+            failure_category=failure_category,
+            passed=bool(last_verifier_raw.get("passed")),
+            summary=str(last_verifier_raw.get("summary") or ""),
+            findings=[
+                VerifierFinding(name=name, passed=False, category=failure_category)
+                for name in failed_checks
+            ] or [VerifierFinding(name="verifier", passed=bool(last_verifier_raw.get("passed")))],
+        )
+
+    workspace_path = _clean_str(state.get("workspace_path"))
+    loop_run = LoopRun(
+        run_id=str(run.get("task_id") or checkpoint.get("task_id") or ""),
+        parent_run_id=_clean_str(state.get("parent_run_id")) or None,
+        origin_run_id=_clean_str(state.get("origin_run_id")) or None,
+        resume_checkpoint_id=_clean_str(state.get("resume_checkpoint_id")) or None,
+        goal=goal or "loop run",
+        mode=mode,
+        status=status,
+        thread_id=_clean_str(run.get("thread_id")) or _clean_str(checkpoint.get("thread_id")) or None,
+        workspace_path=workspace_path or None,
+        policy=LoopPolicy(
+            verifier_profile=(
+                last_verifier_result.profile
+                if last_verifier_result is not None
+                else "auto"
+            )
+        ),
+        attempts=attempts,
+        last_verifier_result=last_verifier_result,
+        last_error="" if status == LoopRunStatus.COMPLETED else (
+            _clean_str(run.get("reason"))
+            or _clean_str(checkpoint.get("summary"))
+            or _clean_str(state.get("progress_summary"))
+        ),
+        created_at=_clean_str(run.get("started_at")) or _clean_str(checkpoint.get("ts")) or _now_iso(),
+        updated_at=_clean_str(run.get("updated_at")) or _clean_str(checkpoint.get("ts")) or _now_iso(),
+        started_at=_clean_str(run.get("started_at")) or _clean_str(checkpoint.get("ts")) or None,
+        completed_at=_clean_str(run.get("completed_at")) or None,
+    )
+    review = build_loop_run_review(loop_run)
+    summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
+    review["thread_id"] = run.get("thread_id")
+    review["turn_id"] = run.get("turn_id")
+    review["agent_id"] = run.get("agent_id")
+    review["summary"] = {
+        **summary,
+        "title": run.get("title") or "",
+        "goal": run.get("goal") or "",
+        "mode": run.get("mode") or "",
+        "checkpoint_count": run.get("checkpoint_count") or 0,
+        "token_totals": run.get("token_totals") or {},
+        "trace_checkpoint_id": checkpoint.get("id"),
+    }
+    resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
+    latest_checkpoint = (
+        resume.get("latest_checkpoint")
+        if isinstance(resume.get("latest_checkpoint"), dict)
+        else {}
+    )
+    review["resume"] = {
+        **resume,
+        "source": "trace_store",
+        "latest_checkpoint": {
+            **latest_checkpoint,
+            "trace_checkpoint_id": checkpoint.get("id"),
+        },
+    }
+    return review
 
 
 def _task_run_review_from_run(

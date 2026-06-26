@@ -261,6 +261,66 @@ class TestSandbox:
             registry, "git_status", repo_dir="/nonexistent/xyz",
         )
 
+    def test_git_push_allows_network_in_stream_runner(
+        self,
+        repo,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import runtime.platform.process.streaming as streaming
+        from runtime.execution.suckers.write_skills import _git_push
+
+        captured: dict[str, object] = {}
+
+        def fake_stream_run(argv, **kwargs):
+            captured["argv"] = argv
+            captured.update(kwargs)
+            return {
+                "stdout": "",
+                "stderr": "",
+                "exit_code": 0,
+                "timed_out": False,
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+            }
+
+        monkeypatch.setattr(streaming, "stream_run", fake_stream_run)
+
+        out = _git_push(repo_dir=str(repo), sandbox_dir=str(repo))
+
+        assert out["pushed"] is True
+        assert captured["sandbox_dir"] == str(repo)
+        assert captured["allow_network"] is True
+
+    def test_git_status_keeps_network_disabled_in_stream_runner(
+        self,
+        repo,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import runtime.platform.process.streaming as streaming
+        from runtime.execution.suckers.write_skills import _git_status
+
+        captured: dict[str, object] = {}
+
+        def fake_stream_run(argv, **kwargs):
+            captured["argv"] = argv
+            captured.update(kwargs)
+            return {
+                "stdout": "## main\n",
+                "stderr": "",
+                "exit_code": 0,
+                "timed_out": False,
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+            }
+
+        monkeypatch.setattr(streaming, "stream_run", fake_stream_run)
+
+        out = _git_status(repo_dir=str(repo), sandbox_dir=str(repo))
+
+        assert out["branch"] == "main"
+        assert captured["sandbox_dir"] == str(repo)
+        assert captured["allow_network"] is False
+
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.

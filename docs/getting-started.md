@@ -341,7 +341,7 @@ $ python -m runtime status
 |---|---|
 | [README.md](README.md) | 项目速览 + 当前状态 |
 | **[getting-started.md](getting-started.md)** | **本文 · 上手 + 常用示例** |
-| [architecture.md](architecture.md) | 仿生理论（章鱼器官 / 神经节 / 免疫）|
+| [vision/biomimetic-architecture.md](vision/biomimetic-architecture.md) | 仿生理论（章鱼器官 / 神经节 / 免疫）|
 | [six-modules.md](six-modules.md) | 六大能力模块（长任务 / 工作流 / 技能 / KG / 记忆 / 上下文）|
 | [tiers.md](tiers.md) | MVP / Core / Full 三档切分 |
 | [invariants.md](invariants.md) | 139 条不变量清单 |

@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/safety/recovery/genome_registry.py
+  - runtime/safety/experiments/prompt_evolver.py
+last_verified: 2026-06-25
+---
+
 # Protocol · Genome (DNA 热更新 · CRDT · Runtime Patch)
 
 > 配套 [GENOME.md](../GENOME.md) 的**工程实现协议**。

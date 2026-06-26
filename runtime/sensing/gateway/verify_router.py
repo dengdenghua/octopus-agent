@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 try:
-    from fastapi import APIRouter, HTTPException
+    from fastapi import APIRouter, HTTPException, Request
     from pydantic import BaseModel
 
     FASTAPI_AVAILABLE = True
@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover
     FASTAPI_AVAILABLE = False
     APIRouter = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
 
 
@@ -36,14 +37,39 @@ if FASTAPI_AVAILABLE:
         browser_regression_requires_visible_cursor: bool = False
 
 
-def create_verify_router() -> Any:
+def create_verify_router(
+    *,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
+) -> Any:
     if not FASTAPI_AVAILABLE:
         raise RuntimeError("fastapi not installed")
 
     router = APIRouter(tags=["verify"])
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
     @router.post("/api/verify/detect")
-    def api_verify_detect(body: VerifyDetectRequest) -> dict[str, Any]:
+    def api_verify_detect(
+        request: Request,
+        body: VerifyDetectRequest,
+    ) -> dict[str, Any]:
+        _auth(request)
         from runtime.execution.suckers.verify_skills import detect_project
         profile = detect_project(body.workspace)
         return {
@@ -53,7 +79,8 @@ def create_verify_router() -> Any:
         }
 
     @router.post("/api/verify/run")
-    def api_verify_run(body: VerifyRunRequest) -> dict[str, Any]:
+    def api_verify_run(request: Request, body: VerifyRunRequest) -> dict[str, Any]:
+        _auth(request)
         from runtime.execution.suckers.verify_skills import (
             detect_project,
             run_checks,

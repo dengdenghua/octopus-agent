@@ -13,6 +13,8 @@ import {
   PlusIcon,
   PresentationIcon,
   SearchIcon,
+  ShieldAlertIcon,
+  ShieldCheckIcon,
   SlidersHorizontalIcon,
   SquareIcon,
   TableIcon,
@@ -360,8 +362,21 @@ export function ChatInputBox({
   const displayAgentIcon = displayAgent?.icon?.trim() || "";
   const displayAgentName = displayAgent?.name?.trim() || "";
   const hasWorkDir = Boolean(workDir?.trim());
+  const showProjectStatusSegment = isProjectMode;
   const showModeSegment = isProjectMode;
   const showWorkDirSegment = isProjectMode || hasWorkDir;
+  const showProjectAccessSegment = isProjectMode;
+  const projectAccessLabel = codeModeUnlocked
+    ? t.chatInputBox.projectWriteAccess
+    : t.chatInputBox.projectReadOnly;
+  const projectStatusTitle = `${t.chatInputBox.projectStatusTitle}: ${
+    codeModeUnlocked
+      ? t.chatInputBox.projectStatusDescUnlocked
+      : t.chatInputBox.projectStatusDescLocked
+  }`;
+  const ProjectAccessIcon = codeModeUnlocked
+    ? ShieldCheckIcon
+    : ShieldAlertIcon;
   const _isDefaultGeneralAgent =
     !hasWorkDir &&
     !isProjectMode &&
@@ -369,8 +384,10 @@ export function ChatInputBox({
   const showAgentSegment = false;
   const statusSegmentCount =
     (showAgentSegment ? 1 : 0) +
+    (showProjectStatusSegment ? 1 : 0) +
     (showWorkDirSegment ? 1 : 0) +
-    (showModeSegment ? 1 : 0);
+    (showModeSegment ? 1 : 0) +
+    (showProjectAccessSegment ? 1 : 0);
   const showStatusStrip = statusSegmentCount > 0;
 
   useEffect(() => {
@@ -1353,6 +1370,23 @@ export function ChatInputBox({
             ) : null}
             {showWorkDirSegment ? (
               <>
+                {showProjectStatusSegment && (
+                  <>
+                    <span
+                      className="inline-flex max-w-[108px] shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium text-foreground"
+                      title={projectStatusTitle}
+                    >
+                      <FolderOpenIcon className="size-3 shrink-0 text-muted-foreground" />
+                      <span className="truncate">
+                        {t.chatInputBox.projectModeLabel}
+                      </span>
+                    </span>
+                    <span
+                      className="h-3 w-px shrink-0 bg-border/35"
+                      aria-hidden="true"
+                    />
+                  </>
+                )}
                 <WorkDirSelector
                   workDir={workDir ?? ""}
                   onWorkDirChange={onWorkDirChange}
@@ -1377,6 +1411,26 @@ export function ChatInputBox({
                       }
                       onDetectionChange={onProjectDetectionChange}
                     />
+                  </>
+                )}
+                {showProjectAccessSegment && (
+                  <>
+                    <span
+                      className="h-3 w-px shrink-0 bg-border/35"
+                      aria-hidden="true"
+                    />
+                    <span
+                      className={cn(
+                        "inline-flex max-w-[96px] shrink-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium",
+                        codeModeUnlocked
+                          ? "text-emerald-700 dark:text-emerald-300"
+                          : "text-amber-700 dark:text-amber-300",
+                      )}
+                      title={projectStatusTitle}
+                    >
+                      <ProjectAccessIcon className="size-3 shrink-0" />
+                      <span className="truncate">{projectAccessLabel}</span>
+                    </span>
                   </>
                 )}
               </>

@@ -294,6 +294,26 @@ class TestAgentDetail:
         assert set(data["visual_urls"]) == {"front", "side", "back"}
         assert data["character_profile"]["epithet"] == "Signal Reader"
 
+    def test_market_requires_auth_when_enabled(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
+        monkeypatch.setattr(agent_world_router, "_INSTALL_STATE", tmp_path / "installed.json")
+        store = IdentityStore()
+        store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+        app = FastAPI()
+        app.include_router(
+            create_agent_world_router(
+                identity_store=store,
+                require_auth=True,
+            )
+        )
+        client = TestClient(app)
+
+        assert client.get("/api/agent-market/store").status_code == 401
+        assert client.get(
+            "/api/agent-market/store",
+            headers={"Authorization": "Bearer sk-alice"},
+        ).status_code == 200
+
     def test_update_agent_display_name_writes_profile_and_registry(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setenv("OCTOPUS_AGENTS_ROOT", str(tmp_path))
         agent_core = tmp_path / "general" / "agent-core"

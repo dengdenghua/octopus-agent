@@ -98,9 +98,9 @@ immunity:
   # ── Adaptive tier · 行为异常评分 ──
   # 每个 sucker 维护延迟/token 成本的滑动窗口基线，偏离基线过远
   # （z-score 复合分 ≥ 阈值）的调用被 quarantine —— 即使来源可信。
-  # 默认关：需要积累每个工具的成本基线才有意义；冷启动保守返回 0.5
-  # 不会误隔离。
-  enable_adaptive: false
+  # 默认开：冷启动期间基线不足时保守返回 0.5（中性），不会误隔离；
+  # 积累 200 次调用后基线稳定，z-score 才有意义。
+  enable_adaptive: true
   adaptive_window_size: 200
   adaptive_quarantine_threshold: 0.7
 
@@ -262,6 +262,20 @@ local_auth:
 # disabling — but disabling is the right escape hatch when noise
 # is hurting the agent's productivity.
 safety:
+  # ─── Process sandbox backend (exec_shell / verify / git / quality) ───
+  # Runtime env var only: OCTOPUS_PROCESS_SANDBOX controls the
+  # subprocess backend used once a tool has a sandbox_dir.
+  #
+  # Values:
+  #   auto      default; use bwrap on Linux or sandbox-exec on macOS when available
+  #   soft      direct subprocess + cwd/env/network soft policy
+  #   strict    require a hard backend; reject execution if unavailable
+  #   bwrap     require Linux bubblewrap
+  #   seatbelt  require macOS sandbox-exec
+  #
+  # Recommended production setting for Code Mode:
+  #   OCTOPUS_PROCESS_SANDBOX=strict
+
   # Examples — uncomment to disable persistently in this project:
   # disabled_guards:
   #   - magic-number guard

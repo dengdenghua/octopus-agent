@@ -308,12 +308,17 @@ def test_stages_clamped_to_4(mock_subagent, unlimited_budget, mock_builtins):
 
 # ── Registration count ─────────────────────────────────────────────────────
 
-def test_register_delegation_skills_returns_5():
-    """register_delegation_skills must register exactly 5 skills now."""
+def test_register_delegation_skills_returns_8():
+    """register_delegation_skills must register exactly 8 skills.
+
+    call_agent, call_agent_parallel, call_agent_vote, run_orchestration,
+    verdict_repair, tournament, cli_team, run_pipeline. The return value had
+    drifted to a stale 5 while 8 are actually registered.
+    """
 
     from runtime.execution.suckers.delegation_skills import register_delegation_skills
 
     registry = MagicMock()
     count = register_delegation_skills(registry)
-    assert count == 5
-    assert registry.register.call_count == 5
+    assert count == 8
+    assert registry.register.call_count == 8

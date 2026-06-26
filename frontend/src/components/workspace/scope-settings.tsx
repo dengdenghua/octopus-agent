@@ -1,5 +1,5 @@
 /**
- * Extra-workspaces authorization panel for code mode.
+ * Extra-workspaces authorization panel for project-write threads.
  *
  * Background
  * ----------
@@ -11,10 +11,10 @@
  *     team  → + team workspace
  *     code  → + user-authorized `extra_workspaces`
  *
- * Only agents whose profile sets ``capabilities.code_mode_unlock``
- * (currently: coder) can actually use `code` tier. Everyone else
- * silently degrades to `chat` — their turn can't write anywhere
- * outside their own workspace no matter what this panel contains.
+ * Only agents whose profile sets ``capabilities.code_mode_unlock`` can
+ * actually use the project-write tier. Everyone else silently degrades to
+ * `chat` — their turn can't write anywhere outside their own workspace no
+ * matter what this panel contains.
  *
  * The panel is purely UI for the third tier: it reads and writes
  * `thread.metadata.extra_workspaces` through the existing

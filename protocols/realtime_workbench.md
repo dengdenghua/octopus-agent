@@ -1,3 +1,11 @@
+---
+implementation_status: implemented
+implemented_in:
+  - runtime/sensing/gateway/realtime_workbench.py
+  - runtime/protocol/events.py
+last_verified: 2026-06-25
+---
+
 # Realtime Workbench Snapshot Protocol
 
 This document defines how the realtime runtime publishes the workbench's

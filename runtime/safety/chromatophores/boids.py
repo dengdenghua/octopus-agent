@@ -151,3 +151,57 @@ class BoidsArbitrator:
             for bucket in self._ro_holders.values():
                 result.extend(bucket.values())
             return result
+
+    # ─── Alignment (Boids 原则 2:同 affinity 同 tick 启动) ──────
+
+    def alignment_groups(
+        self, arms: list[tuple[ArmId, list[str]]],
+    ) -> dict[str, list[ArmId]]:
+        """Group arms by shared affinity for coordinated start (Alignment).
+
+        Returns a mapping ``affinity -> [arm_id, ...]``. Arms sharing an
+        affinity tag are expected to start in the same tick so their
+        outputs converge predictably. Arms with no affinity land in the
+        ``""`` bucket and start independently (no barrier).
+        """
+        groups: dict[str, list[ArmId]] = {}
+        for arm_id, affinities in arms:
+            if not affinities:
+                groups.setdefault("", []).append(arm_id)
+                continue
+            primary = affinities[0]
+            groups.setdefault(primary, []).append(arm_id)
+        return groups
+
+    # ─── Cohesion (Boids 原则 3:idle 腕靠拢最忙簇) ──────────
+
+    def cohesion_rebalance(
+        self,
+        arm_load: dict[ArmId, int],
+        idle_arms: list[ArmId],
+        max_redirect: int = 1,
+    ) -> dict[ArmId, ArmId]:
+        """Suggest idle arms to migrate toward the busiest cluster (Cohesion).
+
+        Given current per-arm pending load and a list of idle arms, returns a
+        mapping ``idle_arm -> busiest_arm`` suggesting each idle arm redirect
+        to help the busiest arm. Only ``max_redirect`` idle arms are redirected
+        per call (avoid thundering herd). Returns empty dict when no load
+        imbalance exists.
+
+        This is advisory — the caller (SwarmRuntime) decides whether to act
+        on the suggestion by reassigning pending assignments.
+        """
+        if not idle_arms or not arm_load:
+            return {}
+        # Find the busiest arm (highest pending load).
+        busiest_arm = max(arm_load, key=lambda a: arm_load[a])
+        busiest_load = arm_load[busiest_arm]
+        if busiest_load <= 1:
+            # Nobody is overloaded; cohesion has nothing to do.
+            return {}
+        # Redirect up to max_redirect idle arms toward the busiest.
+        return {
+            idle: busiest_arm
+            for idle in idle_arms[:max_redirect]
+        }

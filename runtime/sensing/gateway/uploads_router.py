@@ -25,11 +25,12 @@ Covered by ``test_filename_path_traversal_stripped``.
 """
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import APIRouter, File, HTTPException, UploadFile
+    from fastapi import APIRouter, File, HTTPException, Request, UploadFile
     from fastapi.responses import FileResponse
     from pydantic import BaseModel
 
@@ -39,6 +40,7 @@ except ImportError:  # pragma: no cover
     APIRouter = None  # type: ignore[assignment, misc]
     File = None  # type: ignore[assignment, misc]
     HTTPException = None  # type: ignore[assignment, misc]
+    Request = None  # type: ignore[assignment, misc]
     UploadFile = None  # type: ignore[assignment, misc]
     FileResponse = None  # type: ignore[assignment, misc]
     BaseModel = object  # type: ignore[assignment, misc]
@@ -86,6 +88,11 @@ def create_uploads_router(
     workspace_root: Path | None = None,
     legacy_upload_root: Path | None = None,
     upload_root: Path | None = None,
+    identity_store: Any = None,
+    require_auth: bool = False,
+    jwt_secret: str | None = None,
+    jwt_issuer: str | None = None,
+    jwt_audience: str | None = None,
 ) -> Any:
     """Build the FastAPI router.
 
@@ -129,6 +136,19 @@ def create_uploads_router(
             dirs.append(legacy)
         return dirs
 
+    def _absolute_artifact_candidate(thread_id: str, raw_path: Path) -> Path | None:
+        if not raw_path.exists() or not raw_path.is_file():
+            return None
+        try:
+            resolved = raw_path.resolve()
+        except OSError:
+            return None
+        for upload_dir in _upload_dirs_for_read(thread_id):
+            with contextlib.suppress(OSError, ValueError):
+                resolved.relative_to(upload_dir.resolve())
+                return resolved
+        return None
+
     def _metadata(thread_id: str, file_path: Path) -> dict[str, Any]:
         rel_name = file_path.name
         return {
@@ -147,16 +167,55 @@ def create_uploads_router(
         if thread_store is None:
             raise HTTPException(503, "thread uploads unavailable")
 
+    def _auth(request: Request) -> str | None:
+        if require_auth and identity_store is None:
+            raise HTTPException(401, "auth required")
+        from runtime.sensing.gateway.openai_gateway_router import _resolve_actor
+
+        return _resolve_actor(
+            request,
+            identity_store,
+            require_auth,
+            jwt_secret=jwt_secret,
+            jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience,
+        )
+
+    def _require_thread_access(
+        request: Request,
+        thread_id: str,
+        *,
+        allow_create: bool = False,
+    ) -> str | None:
+        actor = _auth(request)
+        if thread_store is None or not hasattr(thread_store, "get"):
+            return actor
+        thread = thread_store.get(thread_id)
+        if thread is None:
+            if allow_create and hasattr(thread_store, "ensure_thread"):
+                metadata = {"owner_actor_id": actor} if actor is not None else None
+                thread_store.ensure_thread(thread_id, metadata=metadata)
+                return actor
+            if actor is not None:
+                raise HTTPException(404, f"thread not found: {thread_id}")
+            return actor
+        metadata = thread.get("metadata") if isinstance(thread.get("metadata"), dict) else {}
+        owner = metadata.get("owner_actor_id") or metadata.get("actor_id")
+        if actor is not None and owner and owner != actor:
+            raise HTTPException(404, f"thread not found: {thread_id}")
+        return actor
+
     @router.post(
         "/api/threads/{thread_id}/uploads",
         response_model=UploadPostResponse,
     )
     async def api_thread_uploads(
+        request: Request,
         thread_id: str,
         files: list[UploadFile] = File(...),  # noqa: B008 — FastAPI dependency pattern
     ) -> dict[str, Any]:
         _require_store()
-        thread_store.ensure_thread(thread_id)
+        _require_thread_access(request, thread_id, allow_create=True)
         upload_dir = _upload_dir(thread_id)
         uploaded: list[dict[str, Any]] = []
         for upload in files:
@@ -183,8 +242,9 @@ def create_uploads_router(
         "/api/threads/{thread_id}/uploads/list",
         response_model=UploadsListResponse,
     )
-    def api_thread_uploads_list(thread_id: str) -> dict[str, Any]:
+    def api_thread_uploads_list(request: Request, thread_id: str) -> dict[str, Any]:
         _require_store()
+        _require_thread_access(request, thread_id)
         files: list[dict[str, Any]] = []
         seen: set[str] = set()
         for upload_dir in _upload_dirs_for_read(thread_id):
@@ -202,9 +262,12 @@ def create_uploads_router(
         response_model=UploadDeleteResponse,
     )
     def api_thread_uploads_delete(
-        thread_id: str, filename: str,
+        request: Request,
+        thread_id: str,
+        filename: str,
     ) -> dict[str, Any]:
         _require_store()
+        _require_thread_access(request, thread_id)
         # Sanitize the incoming filename the same way we did on
         # upload · don't trust URL path params more than we'd
         # trust a multipart field.
@@ -234,19 +297,22 @@ def create_uploads_router(
         # pydantic response models · skip the type mismatch.
     )
     def api_thread_artifact(
+        request: Request,
         thread_id: str,
         artifact_path: str,
         download: bool = False,
     ) -> Any:
         _require_store()
+        _require_thread_access(request, thread_id)
         normalized = Path(artifact_path)
         candidates: list[Path] = []
         if normalized.is_absolute():
-            # Absolute paths pass straight through · used by some
-            # legacy clients that stored the server-side path and
-            # then asked for it back. Still bounded to "file must
-            # exist" · no new privilege granted here.
-            candidates.append(normalized)
+            # Legacy clients may have persisted the server-side upload
+            # path. Keep that compatibility only when the absolute path
+            # still points inside this thread's upload roots.
+            absolute = _absolute_artifact_candidate(thread_id, normalized)
+            if absolute is not None:
+                candidates.append(absolute)
         for upload_dir in _upload_dirs_for_read(thread_id):
             candidates.append(upload_dir / Path(artifact_path).name)
         target = next(

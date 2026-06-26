@@ -372,13 +372,15 @@ export const zhCN: Translations = {
     seedProjectFiles: "基于项目文件帮我：",
     send: "发送",
     stop: "停止",
-    projectModeLabel: "项目代码模式",
+    projectModeLabel: "项目已绑定",
     projectModeHint:
-      "已绑定本地目录，当前 Agent 会读取项目上下文并按代码任务执行。",
-    projectStatusTitle: "工作区已绑定",
-    projectStatusDescUnlocked: "当前 Agent 可直接读取并修改该工作区。",
+      "已绑定本地目录，当前对话会读取项目上下文并按代码任务执行。",
+    projectStatusTitle: "项目已绑定",
+    projectStatusDescUnlocked: "当前 Agent 可读取、修改并验证该项目。",
     projectStatusDescLocked:
-      "当前 Agent 仅能读取该工作区；如需改文件，请切换到具备代码权限的角色。",
+      "当前 Agent 可使用项目上下文；如需写入项目，请切换到具备项目写权限的角色。",
+    projectWriteAccess: "项目写入",
+    projectReadOnly: "只读项目",
     permissionFullAccess: "完全访问",
     permissionAcceptEdits: "自动接受编辑",
     permissionConfirm: "确认后执行",
@@ -6641,13 +6643,13 @@ export const zhCN: Translations = {
   },
 
   scopeSettings: {
-    codeModeDisabled: "此 agent 未启用 code 模式 · 写入范围固定为自己工作区",
-    authorizeWorkspaces: "授权额外工作区 (code 模式)",
-    noAuthorized: "尚未授权 · 默认只能写入 agent 自己的工作区",
+    codeModeDisabled: "此 agent 没有项目写权限 · 写入范围固定为自己工作区",
+    authorizeWorkspaces: "授权额外项目目录",
+    noAuthorized: "尚未授权额外目录 · 默认使用已绑定项目和当前对话工作区",
     writeScopeTitle: "写入范围",
     writeScopeTooltip: "写入范围设置",
     writeScopeDescription:
-      "控制当前对话能写入哪些目录 · 不在白名单里的路径一律拒绝",
+      "控制当前对话能写入哪些项目目录 · 不在白名单里的路径一律拒绝",
   },
 
   teamSelector: {

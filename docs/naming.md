@@ -58,7 +58,7 @@ from runtime.core.cerebrum import Cerebrum     # ✅ 也可（文档一致）
 
 ---
 
-## 20 器官双轨命名总表
+## 22 器官双轨命名总表
 
 | # | 目录（Bio）| 主要类（Eng）| 工程别名 | 职责一词 |
 |---|---|---|---|---|
@@ -166,5 +166,5 @@ runtime/
 ## 相关文档
 
 - [principles.md](principles.md) — 六大抽象原则（工程名版本就藏在这里）
-- [architecture.md](architecture.md) — 章鱼器官视角（生物名版本）
+- [vision/biomimetic-architecture.md](vision/biomimetic-architecture.md) — 章鱼器官视角（生物名版本）
 - [ROADMAP.md](ROADMAP.md) — 实施路线

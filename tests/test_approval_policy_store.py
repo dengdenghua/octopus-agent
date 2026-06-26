@@ -274,6 +274,23 @@ def router_client(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
+@pytest.fixture
+def secured_router_client(tmp_path: Path) -> tuple[TestClient, dict[str, str]]:
+    from runtime.safety.auth import Identity, IdentityStore
+
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_permissions_router(
+            lambda: tmp_path / "perm.json",
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    return TestClient(app), {"Authorization": "Bearer sk-alice"}
+
+
 class TestPermissionsRouter:
     def test_empty_list(self, router_client: TestClient) -> None:
         r = router_client.get("/api/permissions")
@@ -383,6 +400,18 @@ class TestPermissionsRouter:
 
         assert r.status_code == 200
         assert (data_dir / "permissions.json").exists()
+
+    def test_missing_token_rejected_when_required(
+        self, secured_router_client: tuple[TestClient, dict[str, str]],
+    ) -> None:
+        client, _headers = secured_router_client
+        assert client.get("/api/permissions").status_code == 401
+
+    def test_valid_token_accepted_when_required(
+        self, secured_router_client: tuple[TestClient, dict[str, str]],
+    ) -> None:
+        client, headers = secured_router_client
+        assert client.get("/api/permissions", headers=headers).status_code == 200
 
 
 # ── Runtime wiring ──────────────────────────────────────────────

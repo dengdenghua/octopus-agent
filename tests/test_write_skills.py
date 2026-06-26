@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from runtime.execution.suckers.write_skills import (
     _multi_edit_file,
     _read_background_output,
     _read_shell_output,
+    _snapshot_background_metadata,
     _write_text_file,
     register_exec_skill,
     register_write_skills,
@@ -57,7 +59,9 @@ class TestWriteTextFile:
     def test_size_cap_rejects_big_content(self, tmp_path: Path):
         p = tmp_path / "big.txt"
         r = _write_text_file(
-            path=str(p), content="x" * 1000, max_bytes=100,
+            path=str(p),
+            content="x" * 1000,
+            max_bytes=100,
         )
         assert "error" in r
         assert not p.exists()
@@ -70,7 +74,8 @@ class TestWriteTextFile:
 
     def test_sandbox_dir_allows_inner(self, tmp_path: Path):
         r = _write_text_file(
-            path="inner.txt", content="x",
+            path="inner.txt",
+            content="x",
             sandbox_dir=str(tmp_path),
         )
         assert "error" not in r
@@ -79,7 +84,8 @@ class TestWriteTextFile:
     def test_sandbox_dir_blocks_escape(self, tmp_path: Path):
         outside = tmp_path.parent / f"escape_{tmp_path.name}.txt"
         r = _write_text_file(
-            path=str(outside), content="pwned",
+            path=str(outside),
+            content="pwned",
             sandbox_dir=str(tmp_path),
         )
         assert "error" in r
@@ -112,7 +118,9 @@ class TestAppendTextFile:
     def test_size_cap(self, tmp_path: Path):
         p = tmp_path / "a.log"
         r = _append_text_file(
-            path=str(p), content="x" * 1000, max_bytes=100,
+            path=str(p),
+            content="x" * 1000,
+            max_bytes=100,
         )
         assert "error" in r
         assert not p.exists()
@@ -152,7 +160,9 @@ class TestEditTextFile:
 
     def test_missing_file_error(self, tmp_path: Path):
         r = _edit_text_file(
-            path=str(tmp_path / "nope"), find="a", replace="b",
+            path=str(tmp_path / "nope"),
+            find="a",
+            replace="b",
         )
         assert "error" in r
         assert "not found" in r["error"]
@@ -233,6 +243,7 @@ class TestExecShell:
     def test_simple_str_command_platform_neutral(self):
         """Implementation note."""
         import sys
+
         # Implementation note.
         r = _exec_shell(command=f"{sys.executable} --version")
         if "error" in r:
@@ -244,6 +255,7 @@ class TestExecShell:
 
     def test_argv_list(self):
         import sys
+
         r = _exec_shell(command=[sys.executable, "-c", "print(2+2)"])
         assert "error" not in r
         assert "4" in r["stdout"]
@@ -251,12 +263,14 @@ class TestExecShell:
 
     def test_nonzero_exit_returned(self):
         import sys
+
         r = _exec_shell(command=[sys.executable, "-c", "import sys; sys.exit(3)"])
         assert "error" not in r
         assert r["exit_code"] == 3
 
     def test_timeout(self):
         import sys
+
         r = _exec_shell(
             command=[sys.executable, "-c", "import time; time.sleep(5)"],
             timeout_s=0.3,
@@ -281,9 +295,59 @@ class TestExecShell:
         assert "error" in r
         assert "escapes_sandbox" in r["error"]
 
+    def test_sandbox_dir_defaults_cwd_to_workspace(self, tmp_path: Path):
+        import sys
+
+        r = _exec_shell(
+            command=[
+                sys.executable,
+                "-c",
+                "from pathlib import Path; print(Path.cwd())",
+            ],
+            sandbox_dir=str(tmp_path),
+        )
+
+        assert "error" not in r
+        assert Path(r["stdout"].strip()).resolve() == tmp_path.resolve()
+        policy = r["execution_policy"]
+        assert policy["schema"] == "octopus.execution_policy.v1"
+        assert policy["sandbox_requested"] is True
+        assert policy["workspace"] == str(tmp_path.resolve())
+        assert policy["cwd"] == str(tmp_path.resolve())
+        assert policy["env_mode"] == "allowlist"
+        assert policy["process_tree_kill"] is True
+
+    def test_sandbox_dir_scrubs_inherited_env(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import sys
+
+        monkeypatch.setenv("OCTOPUS_TEST_SECRET", "do-not-inherit")
+
+        r = _exec_shell(
+            command=[
+                sys.executable,
+                "-c",
+                (
+                    "import os\n"
+                    "print('secret=' + str('OCTOPUS_TEST_SECRET' in os.environ))\n"
+                    "print('explicit=' + os.environ.get('OCTOPUS_EXPLICIT', ''))\n"
+                ),
+            ],
+            env={"OCTOPUS_EXPLICIT": "kept"},
+            sandbox_dir=str(tmp_path),
+        )
+
+        assert "error" not in r
+        assert "secret=False" in r["stdout"]
+        assert "explicit=kept" in r["stdout"]
+
     def test_no_shell_injection(self, tmp_path: Path):
         """Implementation note."""
         import sys
+
         # Implementation note.
         r = _exec_shell(
             command=[sys.executable, "-c", "print('safe')"],
@@ -338,6 +402,105 @@ class TestBackgroundExec:
         assert "ready" in polled["stdout"]
         assert "done" in polled["stdout"]
 
+    def test_background_sandbox_defaults_cwd_and_scrubs_env(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import sys
+        import time
+
+        monkeypatch.setenv("OCTOPUS_TEST_SECRET", "do-not-inherit")
+        started = _background_exec(
+            command=[
+                sys.executable,
+                "-u",
+                "-c",
+                (
+                    "import os\n"
+                    "from pathlib import Path\n"
+                    "print('cwd=' + str(Path.cwd()))\n"
+                    "print('secret=' + str('OCTOPUS_TEST_SECRET' in os.environ))\n"
+                    "print('explicit=' + os.environ.get('OCTOPUS_EXPLICIT', ''))\n"
+                ),
+            ],
+            env={"OCTOPUS_EXPLICIT": "kept"},
+            sandbox_dir=str(tmp_path),
+        )
+        assert "error" not in started
+        task_id = started["task_id"]
+
+        deadline = time.monotonic() + 3
+        polled = {}
+        while time.monotonic() < deadline:
+            polled = _read_background_output(task_id=task_id)
+            if polled.get("status") == "completed":
+                break
+            time.sleep(0.05)
+
+        assert polled["status"] == "completed"
+        assert f"cwd={tmp_path.resolve()}" in polled["stdout"]
+        assert "secret=False" in polled["stdout"]
+        assert "explicit=kept" in polled["stdout"]
+
+    def test_background_sandbox_uses_selected_backend(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        import sys
+        import time
+
+        import runtime.safety.sandboxing.sandbox as sandbox_mod
+        from runtime.safety.sandboxing.sandbox import DirectBackend
+
+        class TaggingBackend(DirectBackend):
+            def transform(self, argv, env, cwd, policy):  # type: ignore[no-untyped-def]
+                return (
+                    [
+                        sys.executable,
+                        "-u",
+                        "-c",
+                        "print('wrapped-bg')",
+                    ],
+                    env,
+                    cwd,
+                )
+
+        monkeypatch.setattr(
+            sandbox_mod,
+            "select_process_backend",
+            lambda: sandbox_mod.BackendChoice(TaggingBackend(), "tagged", hard=True),
+        )
+
+        started = _background_exec(
+            command=[sys.executable, "-u", "-c", "print('original-bg')"],
+            sandbox_dir=str(tmp_path),
+        )
+        assert "error" not in started
+        assert started["sandbox_backend"] == "tagged"
+        assert started["sandbox_hard"] is True
+
+        deadline = time.monotonic() + 3
+        polled = {}
+        while time.monotonic() < deadline:
+            polled = _read_background_output(task_id=started["task_id"])
+            if polled.get("status") == "completed":
+                break
+            time.sleep(0.05)
+
+        assert polled["status"] == "completed"
+        assert polled["stdout"].strip() == "wrapped-bg"
+        assert polled["sandbox_backend"] == "tagged"
+        assert polled["sandbox_hard"] is True
+        policy = polled["execution_policy"]
+        assert policy["schema"] == "octopus.execution_policy.v1"
+        assert policy["sandbox_requested"] is True
+        assert policy["backend"] == "tagged"
+        assert policy["hard"] is True
+        assert policy["env_mode"] == "allowlist"
+        assert policy["process_tree_kill"] is True
+
     def test_background_output_survives_registry_loss(
         self,
         tmp_path: Path,
@@ -371,6 +534,51 @@ class TestBackgroundExec:
         assert "ready" in polled["stdout"]
         assert "done" in polled["stdout"]
 
+    def test_lost_background_without_exit_code_is_not_marked_completed(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+        stdout_path = tmp_path / "stdout.txt"
+        stderr_path = tmp_path / "stderr.txt"
+        stdout_path.write_text("partial\n", encoding="utf-8")
+        stderr_path.write_text("", encoding="utf-8")
+        monkeypatch.setattr(
+            "runtime.execution.suckers.write_skills._probe_process",
+            lambda _pid: (False, None),
+        )
+
+        polled = _snapshot_background_metadata(
+            {
+                "task_id": "bg_lost",
+                "argv": ["python", "-c", "print('partial')"],
+                "cwd": str(tmp_path),
+                "pid": 999999,
+                "exit_code": None,
+                "stdout_path": str(stdout_path),
+                "stderr_path": str(stderr_path),
+            }
+        )
+
+        assert polled["status"] == "unknown"
+        assert polled["exit_code"] is None
+        assert polled["running"] is False
+        assert polled["stdout"] == "partial\n"
+
+    def test_probe_process_treats_unwaitable_live_pid_as_running(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from runtime.execution.suckers.write_skills import _probe_process
+
+        monkeypatch.setattr(
+            "os.waitpid", lambda _pid, _flags: (_ for _ in ()).throw(ChildProcessError())
+        )
+        monkeypatch.setattr("os.kill", lambda _pid, _signal: None)
+
+        assert _probe_process(os.getpid()) == (True, None)
+
     def test_kill_background_command_marks_cancelled(self):
         import sys
 
@@ -384,6 +592,32 @@ class TestBackgroundExec:
 
         polled = _read_background_output(task_id=task_id)
         assert polled["status"] in {"cancelled", "completed"}
+
+    def test_kill_background_command_kills_child_process_tree(self, tmp_path: Path):
+        import sys
+        import time
+
+        marker = tmp_path / "child-survived.txt"
+        code = (
+            "import subprocess, sys, time\n"
+            "subprocess.Popen([\n"
+            "    sys.executable,\n"
+            "    '-c',\n"
+            f"    \"import pathlib, time; time.sleep(1.0); pathlib.Path({str(marker)!r}).write_text('alive')\",\n"
+            "])\n"
+            "time.sleep(10)\n"
+        )
+        started = _background_exec(
+            command=[sys.executable, "-u", "-c", code],
+            cwd=str(tmp_path),
+        )
+        assert "error" not in started
+
+        killed = _kill_background_exec(task_id=started["task_id"])
+
+        assert killed["status"] in {"cancelled", "completed"}
+        time.sleep(1.2)
+        assert not marker.exists()
 
     def test_shell_aliases_poll_and_kill_background_command(self):
         import sys
@@ -436,9 +670,7 @@ class TestRegistration:
         register_all(reg)
         for name in WRITE_SKILL_NAMES:
             assert reg.has(name), f"{name} should be in register_all"
-        assert not reg.has(EXEC_SKILL_NAME), (
-            "exec_shell must NOT be auto-registered · opt-in only"
-        )
+        assert not reg.has(EXEC_SKILL_NAME), "exec_shell must NOT be auto-registered · opt-in only"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -470,7 +702,8 @@ class TestEndToEnd:
         )
         tid = TaskId(uuid4())
         step = executor.execute_step(
-            step_id=0, node_id="n0",
+            step_id=0,
+            node_id="n0",
             sucker_id=SkillId("write_text_file"),
             args={
                 "path": "out.txt",
@@ -478,7 +711,8 @@ class TestEndToEnd:
                 "sandbox_dir": str(tmp_path),
             },
             caller="arms/x",
-            task_id=tid, arm_id=ArmId("x"),
+            task_id=tid,
+            arm_id=ArmId("x"),
             budget=Budget(task_id=tid, limits=BudgetLimits(tokens=1000, usd=0.01)),
         )
         assert step.success

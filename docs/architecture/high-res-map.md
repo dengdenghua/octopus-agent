@@ -1,6 +1,6 @@
 # Octopus 高清架构图
 
-一张图讲清楚 20 个器官的职责、依赖、数据流向。
+一张图讲清楚 22 个器官的职责、依赖、数据流向。
 
 配合 [`core-path.md`](./core-path.md)（学习顺序）+ [`organ-tiering.md`](./organ-tiering.md)（维护分类）一起读。
 
@@ -235,4 +235,4 @@ Skin 的新 import 路径：`runtime.core.nerves.sensors`（工程心智）
 4. 读 3 个治理模块（`runtime/safety/{immunity,ink}/`, `runtime/memory/genome/`）
 5. 需要时再看本文件其他图
 
-第一天读完 1-3，第二天读 4，一周内补齐 5。**不要试图一天啃完 20 个器官。**
+第一天读完 1-3，第二天读 4，一周内补齐 5。**不要试图一天啃完 22 个器官。**

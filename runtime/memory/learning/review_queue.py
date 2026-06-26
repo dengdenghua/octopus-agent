@@ -3,17 +3,33 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import threading
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from runtime.platform.io import atomic_write_json, read_json_with_backup
+from runtime.platform.io.atomic import _cross_process_lock
 
 _SCHEMA = "octopus.review_queue.v1"
 _VALID_STATUSES = {"pending", "promoted", "rejected", "archived"}
 _DECISIONS = {"promoted", "rejected", "archived"}
 _PRIORITY_RANK = {"P0": 0, "P1": 1, "P2": 2}
+_EXECUTION_POLICY_KEYS = (
+    "schema",
+    "sandbox_requested",
+    "workspace",
+    "cwd",
+    "backend",
+    "hard",
+    "allow_network",
+    "env_mode",
+    "process_group",
+    "process_tree_kill",
+    "timeout_s",
+)
 
 
 class ReviewQueue:
@@ -21,6 +37,7 @@ class ReviewQueue:
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
+        self._lock = threading.RLock()
 
     def add_from_task_run_review(
         self,
@@ -28,28 +45,29 @@ class ReviewQueue:
         *,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        payload = self._read()
-        items = list(payload.get("items") or [])
-        now_text = _iso(now)
-        source = _source_from_review(review)
-        created = 0
-        updated = 0
-        touched: list[dict[str, Any]] = []
+        with self._write_lock():
+            payload = self._read()
+            items = list(payload.get("items") or [])
+            now_text = _iso(now)
+            source = _source_from_review(review)
+            created = 0
+            updated = 0
+            touched: list[dict[str, Any]] = []
 
-        for candidate in _items_from_review(review, now_text):
-            existing = _find_item(items, candidate["id"])
-            if existing is None:
-                items.append(candidate)
-                touched.append(candidate)
-                created += 1
-                continue
-            _merge_existing_item(existing, candidate, now_text)
-            touched.append(existing)
-            updated += 1
+            for candidate in _items_from_review(review, now_text):
+                existing = _find_item(items, candidate["id"])
+                if existing is None:
+                    items.append(candidate)
+                    touched.append(candidate)
+                    created += 1
+                    continue
+                _merge_existing_item(existing, candidate, now_text)
+                touched.append(existing)
+                updated += 1
 
-        payload["items"] = sorted(items, key=_item_sort_key)
-        payload["lastUpdated"] = now_text
-        self._write(payload)
+            payload["items"] = sorted(items, key=_item_sort_key)
+            payload["lastUpdated"] = now_text
+            self._write(payload)
         return {
             "schema": _SCHEMA,
             "source": source,
@@ -77,49 +95,50 @@ class ReviewQueue:
         tags: list[str] | None = None,
         now: datetime | None = None,
     ) -> dict[str, Any]:
-        payload = self._read()
-        items = list(payload.get("items") or [])
-        now_text = _iso(now)
-        clean_title = _clean_text(title, limit=180)
-        clean_text = _clean_text(text, limit=1200)
-        if not clean_title or not clean_text:
-            raise ValueError("title and text are required")
-        candidate = _new_item(
-            now_text=now_text,
-            source_task_id="",
-            thread_id="",
-            turn_id="",
-            agent_id="",
-            source_kind=_clean_text(source_kind, limit=80) or "policy_review",
-            candidate_kind=_clean_text(candidate_kind, limit=80) or "policy_review",
-            priority=_priority(priority),
-            target_bucket=_clean_text(target_bucket, limit=80) or "policy_review",
-            title=clean_title,
-            text=clean_text,
-            metadata=metadata if isinstance(metadata, dict) else {},
-        )
-        candidate["source"] = _clean_text(source, limit=80) or "manual"
-        candidate["source_task_ids"] = _clean_unique_list(source_task_ids, limit=80)
-        candidate["thread_ids"] = _clean_unique_list(thread_ids, limit=80)
-        candidate["turn_ids"] = _clean_unique_list(turn_ids, limit=80)
-        candidate["agent_ids"] = _clean_unique_list(agent_ids, limit=80)
-        candidate["tags"] = _merge_unique(candidate["tags"], tags or [])
+        with self._write_lock():
+            payload = self._read()
+            items = list(payload.get("items") or [])
+            now_text = _iso(now)
+            clean_title = _clean_text(title, limit=180)
+            clean_text = _clean_text(text, limit=1200)
+            if not clean_title or not clean_text:
+                raise ValueError("title and text are required")
+            candidate = _new_item(
+                now_text=now_text,
+                source_task_id="",
+                thread_id="",
+                turn_id="",
+                agent_id="",
+                source_kind=_clean_text(source_kind, limit=80) or "policy_review",
+                candidate_kind=_clean_text(candidate_kind, limit=80) or "policy_review",
+                priority=_priority(priority),
+                target_bucket=_clean_text(target_bucket, limit=80) or "policy_review",
+                title=clean_title,
+                text=clean_text,
+                metadata=metadata if isinstance(metadata, dict) else {},
+            )
+            candidate["source"] = _clean_text(source, limit=80) or "manual"
+            candidate["source_task_ids"] = _clean_unique_list(source_task_ids, limit=80)
+            candidate["thread_ids"] = _clean_unique_list(thread_ids, limit=80)
+            candidate["turn_ids"] = _clean_unique_list(turn_ids, limit=80)
+            candidate["agent_ids"] = _clean_unique_list(agent_ids, limit=80)
+            candidate["tags"] = _merge_unique(candidate["tags"], tags or [])
 
-        existing = _find_item(items, candidate["id"])
-        created = 0
-        updated = 0
-        if existing is None:
-            items.append(candidate)
-            item = candidate
-            created = 1
-        else:
-            _merge_existing_item(existing, candidate, now_text)
-            item = existing
-            updated = 1
+            existing = _find_item(items, candidate["id"])
+            created = 0
+            updated = 0
+            if existing is None:
+                items.append(candidate)
+                item = candidate
+                created = 1
+            else:
+                _merge_existing_item(existing, candidate, now_text)
+                item = existing
+                updated = 1
 
-        payload["items"] = sorted(items, key=_item_sort_key)
-        payload["lastUpdated"] = now_text
-        self._write(payload)
+            payload["items"] = sorted(items, key=_item_sort_key)
+            payload["lastUpdated"] = now_text
+            self._write(payload)
         return {
             "schema": _SCHEMA,
             "source": {"source": candidate["source"]},
@@ -139,29 +158,22 @@ class ReviewQueue:
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
-        rows = list(self._read().get("items") or [])
+        with self._lock:
+            rows = list(self._read().get("items") or [])
         if status:
             rows = [row for row in rows if str(row.get("status") or "") == status]
         if target_bucket:
-            rows = [
-                row
-                for row in rows
-                if str(row.get("target_bucket") or "") == target_bucket
-            ]
+            rows = [row for row in rows if str(row.get("target_bucket") or "") == target_bucket]
         if priority:
             rows = [row for row in rows if str(row.get("priority") or "") == priority]
         if source_task_id:
             wanted = _clean_text(source_task_id, limit=120)
-            rows = [
-                row
-                for row in rows
-                if wanted in (row.get("source_task_ids") or [])
-            ]
+            rows = [row for row in rows if wanted in (row.get("source_task_ids") or [])]
         rows = sorted(rows, key=_item_sort_key)
         total = len(rows)
         return {
             "schema": _SCHEMA,
-            "items": rows[offset: offset + limit],
+            "items": rows[offset : offset + limit],
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -181,28 +193,29 @@ class ReviewQueue:
         if decision not in _DECISIONS:
             raise ValueError("action must be one of: promoted, rejected, archived")
 
-        payload = self._read()
-        rows = list(payload.get("items") or [])
-        item = _find_item(rows, normalized_id)
-        if item is None:
-            raise KeyError(normalized_id)
+        with self._write_lock():
+            payload = self._read()
+            rows = list(payload.get("items") or [])
+            item = _find_item(rows, normalized_id)
+            if item is None:
+                raise KeyError(normalized_id)
 
-        now_text = _iso(now)
-        item["status"] = decision
-        item["updated_at"] = now_text
-        item["decided_at"] = now_text
-        item["decision_reason"] = _clean_text(reason, limit=1200)
-        item["promoted_to"] = (
-            _clean_text(promoted_to, limit=80)
-            if decision == "promoted" and promoted_to
-            else item.get("target_bucket", "none")
-            if decision == "promoted"
-            else "none"
-        )
+            now_text = _iso(now)
+            item["status"] = decision
+            item["updated_at"] = now_text
+            item["decided_at"] = now_text
+            item["decision_reason"] = _clean_text(reason, limit=1200)
+            item["promoted_to"] = (
+                _clean_text(promoted_to, limit=80)
+                if decision == "promoted" and promoted_to
+                else item.get("target_bucket", "none")
+                if decision == "promoted"
+                else "none"
+            )
 
-        payload["items"] = sorted(rows, key=_item_sort_key)
-        payload["lastUpdated"] = now_text
-        self._write(payload)
+            payload["items"] = sorted(rows, key=_item_sort_key)
+            payload["lastUpdated"] = now_text
+            self._write(payload)
         return {"schema": _SCHEMA, "item": item}
 
     def update_metadata(
@@ -214,28 +227,30 @@ class ReviewQueue:
         now: datetime | None = None,
     ) -> dict[str, Any]:
         normalized_id = _clean_text(item_id, limit=80)
-        payload = self._read()
-        rows = list(payload.get("items") or [])
-        item = _find_item(rows, normalized_id)
-        if item is None:
-            raise KeyError(normalized_id)
-        if not isinstance(metadata_patch, dict):
-            raise ValueError("metadata_patch must be an object")
+        with self._write_lock():
+            payload = self._read()
+            rows = list(payload.get("items") or [])
+            item = _find_item(rows, normalized_id)
+            if item is None:
+                raise KeyError(normalized_id)
+            if not isinstance(metadata_patch, dict):
+                raise ValueError("metadata_patch must be an object")
 
-        now_text = _iso(now)
-        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
-        metadata.update(metadata_patch)
-        item["metadata"] = metadata
-        item["tags"] = _merge_unique(item.get("tags"), tags or [])
-        item["updated_at"] = now_text
-        item["last_seen_at"] = now_text
-        payload["items"] = sorted(rows, key=_item_sort_key)
-        payload["lastUpdated"] = now_text
-        self._write(payload)
+            now_text = _iso(now)
+            metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            metadata.update(metadata_patch)
+            item["metadata"] = metadata
+            item["tags"] = _merge_unique(item.get("tags"), tags or [])
+            item["updated_at"] = now_text
+            item["last_seen_at"] = now_text
+            payload["items"] = sorted(rows, key=_item_sort_key)
+            payload["lastUpdated"] = now_text
+            self._write(payload)
         return {"schema": _SCHEMA, "item": item}
 
     def summary(self) -> dict[str, Any]:
-        rows = list(self._read().get("items") or [])
+        with self._lock:
+            rows = list(self._read().get("items") or [])
         by_status = Counter(str(row.get("status") or "pending") for row in rows)
         by_priority = Counter(str(row.get("priority") or "P2") for row in rows)
         by_bucket = Counter(str(row.get("target_bucket") or "experience") for row in rows)
@@ -257,6 +272,28 @@ class ReviewQueue:
 
     def _write(self, payload: dict[str, Any]) -> None:
         atomic_write_json(self.path, _normalize_payload(payload))
+
+    def _write_lock(self) -> Any:
+        return _StoreWriteLock(self._lock, self.path.parent / f"{self.path.name}.rw")
+
+
+class _StoreWriteLock:
+    def __init__(self, thread_lock: threading.RLock, target: Path) -> None:
+        self._thread_lock = thread_lock
+        self._target = target
+        self._process_lock: Any = None
+
+    def __enter__(self) -> None:
+        self._thread_lock.__enter__()
+        self._process_lock = _cross_process_lock(self._target)
+        self._process_lock.__enter__()
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        try:
+            if self._process_lock is not None:
+                self._process_lock.__exit__(exc_type, exc, tb)
+        finally:
+            self._thread_lock.__exit__(exc_type, exc, tb)
 
 
 def _empty_payload() -> dict[str, Any]:
@@ -285,7 +322,8 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
         candidate_kind = _clean_text(item.get("candidate_kind"), limit=80) or source_kind
         target_bucket = _clean_text(item.get("target_bucket"), limit=80) or "experience"
         normalized = {
-            "id": _clean_text(item.get("id"), limit=80) or _item_id(
+            "id": _clean_text(item.get("id"), limit=80)
+            or _item_id(
                 source_kind=source_kind,
                 candidate_kind=candidate_kind,
                 target_bucket=target_bucket,
@@ -316,12 +354,14 @@ def _normalize_payload(raw: dict[str, Any]) -> dict[str, Any]:
             "source_hash": _clean_text(item.get("source_hash"), limit=80),
         }
         rows.append(normalized)
-    payload.update({
-        "schema": _SCHEMA,
-        "version": 1,
-        "lastUpdated": _clean_text(raw.get("lastUpdated"), limit=80),
-        "items": sorted(rows, key=_item_sort_key),
-    })
+    payload.update(
+        {
+            "schema": _SCHEMA,
+            "version": 1,
+            "lastUpdated": _clean_text(raw.get("lastUpdated"), limit=80),
+            "items": sorted(rows, key=_item_sort_key),
+        }
+    )
     return payload
 
 
@@ -341,20 +381,22 @@ def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, 
             continue
         candidate_kind = _clean_text(item.get("kind"), limit=80) or "learning_candidate"
         target_bucket = _clean_text(item.get("memory_bucket"), limit=80) or "experience"
-        rows.append(_new_item(
-            now_text=now_text,
-            source_task_id=source_task_id,
-            thread_id=thread_id,
-            turn_id=turn_id,
-            agent_id=agent_id,
-            source_kind="learning_candidate",
-            candidate_kind=candidate_kind,
-            priority=_priority(item.get("priority")),
-            target_bucket=target_bucket,
-            title=title,
-            text=text,
-            metadata={**evidence, "candidate": item},
-        ))
+        rows.append(
+            _new_item(
+                now_text=now_text,
+                source_task_id=source_task_id,
+                thread_id=thread_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                source_kind="learning_candidate",
+                candidate_kind=candidate_kind,
+                priority=_priority(item.get("priority")),
+                target_bucket=target_bucket,
+                title=title,
+                text=text,
+                metadata={**evidence, "candidate": item},
+            )
+        )
     for item in review.get("backlog_candidates") or []:
         if not isinstance(item, dict):
             continue
@@ -362,28 +404,30 @@ def _items_from_review(review: dict[str, Any], now_text: str) -> list[dict[str, 
         text = _clean_text(item.get("hypothesis"), limit=1200)
         if not title or not text:
             continue
-        rows.append(_new_item(
-            now_text=now_text,
-            source_task_id=source_task_id,
-            thread_id=thread_id,
-            turn_id=turn_id,
-            agent_id=agent_id,
-            source_kind="backlog_candidate",
-            candidate_kind="backlog_candidate",
-            priority=_priority(item.get("priority")),
-            target_bucket="experiment_backlog",
-            title=title,
-            text=text,
-            metadata={
-                **evidence,
-                "candidate": item,
-                "minimal_implementation": _clean_text(
-                    item.get("minimal_implementation"),
-                    limit=1200,
-                ),
-                "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
-            },
-        ))
+        rows.append(
+            _new_item(
+                now_text=now_text,
+                source_task_id=source_task_id,
+                thread_id=thread_id,
+                turn_id=turn_id,
+                agent_id=agent_id,
+                source_kind="backlog_candidate",
+                candidate_kind="backlog_candidate",
+                priority=_priority(item.get("priority")),
+                target_bucket="experiment_backlog",
+                title=title,
+                text=text,
+                metadata={
+                    **evidence,
+                    "candidate": item,
+                    "minimal_implementation": _clean_text(
+                        item.get("minimal_implementation"),
+                        limit=1200,
+                    ),
+                    "validation_metric": _clean_text(item.get("validation_metric"), limit=600),
+                },
+            )
+        )
     return rows
 
 
@@ -391,9 +435,7 @@ def _review_evidence_metadata(review: dict[str, Any]) -> dict[str, Any]:
     replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
     resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
     latest = (
-        resume.get("latest_checkpoint")
-        if isinstance(resume.get("latest_checkpoint"), dict)
-        else {}
+        resume.get("latest_checkpoint") if isinstance(resume.get("latest_checkpoint"), dict) else {}
     )
     integrity = latest.get("integrity") if isinstance(latest.get("integrity"), dict) else {}
     return {
@@ -413,7 +455,69 @@ def _review_evidence_metadata(review: dict[str, Any]) -> dict[str, Any]:
             "resume_safe": bool(integrity.get("resume_safe")),
             "continue_from_iteration": int(integrity.get("continue_from_iteration") or 0),
         },
+        "execution_policies": _execution_policies_from_review(review),
     }
+
+
+def _execution_policy_summary(policy: Any) -> dict[str, Any]:
+    if not isinstance(policy, dict) or not policy:
+        return {}
+    return {key: policy[key] for key in _EXECUTION_POLICY_KEYS if key in policy}
+
+
+def _append_execution_policies(
+    out: list[dict[str, Any]],
+    seen: set[str],
+    value: Any,
+) -> None:
+    if not isinstance(value, list):
+        return
+    for policy in value:
+        summary = _execution_policy_summary(policy)
+        if not summary:
+            continue
+        marker = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        out.append(summary)
+
+
+def _merge_execution_policies(*values: Any) -> list[dict[str, Any]]:
+    policies: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for value in values:
+        _append_execution_policies(policies, seen, value)
+    return policies
+
+
+def _execution_policies_from_review(review: dict[str, Any]) -> list[dict[str, Any]]:
+    policies: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
+    for step in replay.get("steps") or []:
+        if isinstance(step, dict):
+            _append_execution_policies(policies, seen, step.get("execution_policies"))
+
+    for finding in review.get("findings") or []:
+        if not isinstance(finding, dict):
+            continue
+        evidence = finding.get("evidence") if isinstance(finding.get("evidence"), dict) else {}
+        _append_execution_policies(policies, seen, evidence.get("execution_policies"))
+
+    resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
+    latest = (
+        resume.get("latest_checkpoint") if isinstance(resume.get("latest_checkpoint"), dict) else {}
+    )
+    state = latest.get("state") if isinstance(latest.get("state"), dict) else {}
+    last_verifier = (
+        state.get("last_verifier") if isinstance(state.get("last_verifier"), dict) else {}
+    )
+    _append_execution_policies(policies, seen, last_verifier.get("execution_policies"))
+    for item in state.get("recent_tool_calls") or []:
+        if isinstance(item, dict):
+            _append_execution_policies(policies, seen, item.get("execution_policies"))
+    return policies
 
 
 def _new_item(
@@ -483,7 +587,14 @@ def _merge_existing_item(
     for key in ("source_task_ids", "thread_ids", "turn_ids", "agent_ids", "tags"):
         existing[key] = _merge_unique(existing.get(key), candidate.get(key))
     metadata = existing.get("metadata") if isinstance(existing.get("metadata"), dict) else {}
-    metadata["last_candidate"] = candidate.get("metadata", {}).get("candidate")
+    candidate_metadata = (
+        candidate.get("metadata") if isinstance(candidate.get("metadata"), dict) else {}
+    )
+    metadata["execution_policies"] = _merge_execution_policies(
+        metadata.get("execution_policies"),
+        candidate_metadata.get("execution_policies"),
+    )
+    metadata["last_candidate"] = candidate_metadata.get("candidate")
     existing["metadata"] = metadata
 
 
@@ -520,13 +631,15 @@ def _source_hash(
     title: str,
     text: str,
 ) -> str:
-    key = "|".join([
-        _clean_text(source_kind, limit=80).casefold(),
-        _clean_text(candidate_kind, limit=80).casefold(),
-        _clean_text(target_bucket, limit=80).casefold(),
-        title.casefold(),
-        text.casefold(),
-    ])
+    key = "|".join(
+        [
+            _clean_text(source_kind, limit=80).casefold(),
+            _clean_text(candidate_kind, limit=80).casefold(),
+            _clean_text(target_bucket, limit=80).casefold(),
+            title.casefold(),
+            text.casefold(),
+        ]
+    )
     return hashlib.blake2b(key.encode("utf-8"), digest_size=10).hexdigest()
 
 
@@ -558,12 +671,14 @@ def _next_actions(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
             action = f"Promote or reject experiment: {title}"
         else:
             action = f"Promote, reject, or archive learning: {title}"
-        actions.append({
-            "priority": _priority(row.get("priority")),
-            "item_id": str(row.get("id") or ""),
-            "target_bucket": target,
-            "action": action,
-        })
+        actions.append(
+            {
+                "priority": _priority(row.get("priority")),
+                "item_id": str(row.get("id") or ""),
+                "target_bucket": target,
+                "action": action,
+            }
+        )
     return actions
 
 

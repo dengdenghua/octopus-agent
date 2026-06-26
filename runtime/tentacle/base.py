@@ -3,7 +3,7 @@
 定义所有物理触手的核心接口（Protocol）+ 枚举 + 数据类。
 本文件不包含任何具体实现 —— 那是 mobile.py / desktop.py 的事。
 
-设计原则（见 docs/biomimetic/tentacle/README.md）：
+设计原则（见 docs/architecture/organs/tentacle.md）：
 
 1. **设备无关**：不暴露任何设备特定 API
 2. **离线友好**：断网时降级工作

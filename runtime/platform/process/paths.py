@@ -89,6 +89,14 @@ class AppPaths:
         return self.data_dir / "cron_jobs.json"
 
     @property
+    def loop_runs_path(self) -> Path:
+        return self.data_dir / "loop_runs.json"
+
+    @property
+    def task_runs_path(self) -> Path:
+        return self.data_dir / "task_runs.json"
+
+    @property
     def feature_flags_path(self) -> Path:
         return self.data_dir / "feature_flags.json"
 
