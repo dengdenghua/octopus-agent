@@ -1,0 +1,262 @@
+/**
+ * Personal-space work mode selector.
+ *
+ * The project ModeSelector only applies once a workspace folder is bound. This is
+ * its personal-space counterpart — the agent's own sandbox/conversation space:
+ *   - general:  normal agent (default)
+ *   - build:    the agent actively produces runnable artifacts in its own sandbox
+ *   - research: reuses the existing deep-research behaviour (the backend treats
+ *               personal_mode="research" as a research turn)
+ *
+ * Labels are kept self-contained here (not in the shared i18n bundle) so this
+ * feature stays decoupled from concurrently-edited locale files.
+ */
+
+import {
+  ChevronDownIcon,
+  FlaskConicalIcon,
+  HammerIcon,
+  SparklesIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+import { useI18n } from "@/core/i18n/hooks";
+import { cn } from "@/lib/utils";
+
+export type PersonalMode = "general" | "build" | "research";
+
+type PanelRect = {
+  left: number;
+  width: number;
+  maxHeight: number;
+  top?: number;
+  bottom?: number;
+};
+
+type ModeMeta = {
+  name: PersonalMode;
+  icon: typeof SparklesIcon;
+  activeTone: string;
+};
+
+type Labels = { label: string; desc: string };
+
+const PERSONAL_MODES: [ModeMeta, ModeMeta, ModeMeta] = [
+  {
+    name: "general",
+    icon: SparklesIcon,
+    activeTone:
+      "bg-sky-500/15 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300 ring-1 ring-sky-500/20",
+  },
+  {
+    name: "build",
+    icon: HammerIcon,
+    activeTone:
+      "bg-amber-500/15 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 ring-1 ring-amber-500/20",
+  },
+  {
+    name: "research",
+    icon: FlaskConicalIcon,
+    activeTone:
+      "bg-violet-500/15 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300 ring-1 ring-violet-500/20",
+  },
+];
+
+const LABELS: Record<PersonalMode, Record<"zh" | "en" | "ja" | "ko", Labels>> = {
+  general: {
+    zh: { label: "通用", desc: "日常对话与任务" },
+    en: { label: "General", desc: "Everyday chat and tasks" },
+    ja: { label: "汎用", desc: "日常の対話とタスク" },
+    ko: { label: "일반", desc: "일상 대화와 작업" },
+  },
+  build: {
+    zh: { label: "构建", desc: "在自己工作区造可运行成果" },
+    en: { label: "Build", desc: "Make runnable artifacts in its own space" },
+    ja: { label: "構築", desc: "自分の作業領域で動く成果物を作る" },
+    ko: { label: "빌드", desc: "자체 작업 공간에서 산출물 생성" },
+  },
+  research: {
+    zh: { label: "研究", desc: "多源深度调研出报告" },
+    en: { label: "Research", desc: "Deep multi-source research report" },
+    ja: { label: "研究", desc: "多ソースの深いリサーチ報告" },
+    ko: { label: "리서치", desc: "다중 소스 심층 리서치 보고서" },
+  },
+};
+
+function labelsFor(mode: PersonalMode, locale: string): Labels {
+  const lang = (locale || "en").slice(0, 2).toLowerCase();
+  const byLang = LABELS[mode];
+  if (lang === "zh") return byLang.zh;
+  if (lang === "ja") return byLang.ja;
+  if (lang === "ko") return byLang.ko;
+  return byLang.en;
+}
+
+const PANEL_WIDTH = 300;
+const PANEL_GAP = 6;
+const PANEL_MARGIN = 12;
+const PANEL_MIN_HEIGHT = 140;
+
+interface PersonalModeSelectorProps {
+  mode: PersonalMode;
+  chromeless?: boolean;
+  onModeChange: (mode: PersonalMode) => void;
+  className?: string;
+}
+
+export function PersonalModeSelector({
+  mode,
+  chromeless = false,
+  onModeChange,
+  className,
+}: PersonalModeSelectorProps) {
+  const { locale } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [panelRect, setPanelRect] = useState<PanelRect | null>(null);
+
+  const activeOption =
+    PERSONAL_MODES.find((o) => o.name === mode) ?? PERSONAL_MODES[0];
+  const ActiveIcon = activeOption.icon;
+  const activeLabels = labelsFor(activeOption.name, locale);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        panelRef.current &&
+        !panelRef.current.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
+        setExpanded(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [expanded]);
+
+  const updatePanelPosition = useCallback(() => {
+    const trigger = panelRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(PANEL_WIDTH, viewportWidth - PANEL_MARGIN * 2);
+    const left = Math.min(
+      Math.max(PANEL_MARGIN, rect.right - width),
+      viewportWidth - PANEL_MARGIN - width,
+    );
+    const spaceBelow = viewportHeight - rect.bottom - PANEL_MARGIN;
+    const spaceAbove = rect.top - PANEL_MARGIN;
+    const openUp = spaceAbove > spaceBelow;
+    const maxHeight = Math.max(
+      PANEL_MIN_HEIGHT,
+      openUp ? spaceAbove - PANEL_GAP : spaceBelow - PANEL_GAP,
+    );
+    setPanelRect({
+      left,
+      width,
+      maxHeight,
+      ...(openUp
+        ? { bottom: viewportHeight - rect.top + PANEL_GAP }
+        : { top: rect.bottom + PANEL_GAP }),
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!expanded) {
+      setPanelRect(null);
+      return;
+    }
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [expanded, updatePanelPosition]);
+
+  const handlePick = useCallback(
+    (next: PersonalMode) => {
+      onModeChange(next);
+      setExpanded(false);
+    },
+    [onModeChange],
+  );
+
+  return (
+    <div ref={panelRef} className={cn("relative", className)}>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className={cn(
+          "group flex items-center gap-1.5 text-[11px] font-medium text-foreground shadow-none transition-colors duration-150",
+          chromeless
+            ? "h-6 rounded-md px-0.5 hover:text-foreground"
+            : "h-8 rounded-full border border-transparent bg-transparent px-2 hover:border-border/50 hover:bg-muted/55",
+        )}
+        title={activeLabels.desc}
+      >
+        <ActiveIcon className="size-3" />
+        <span className={cn("truncate", chromeless ? "max-w-[42px]" : "max-w-[72px]")}>
+          {activeLabels.label}
+        </span>
+        <ChevronDownIcon className="size-3 opacity-35 transition-opacity group-hover:opacity-60" />
+      </button>
+
+      {expanded && panelRect && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="fixed z-[100] overflow-hidden rounded-xl border bg-background shadow-xl ring-1 ring-border/30"
+              style={{
+                left: `${panelRect.left}px`,
+                width: `${panelRect.width}px`,
+                maxHeight: `${panelRect.maxHeight}px`,
+                top: panelRect.top !== undefined ? `${panelRect.top}px` : undefined,
+                bottom: panelRect.bottom !== undefined ? `${panelRect.bottom}px` : undefined,
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="max-h-[inherit] overflow-y-auto">
+                <div className="space-y-1 p-2">
+                  {PERSONAL_MODES.map((option) => {
+                    const Icon = option.icon;
+                    const labels = labelsFor(option.name, locale);
+                    return (
+                      <button
+                        key={option.name}
+                        type="button"
+                        onClick={() => handlePick(option.name)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-200",
+                          mode === option.name
+                            ? option.activeTone
+                            : "text-muted-foreground hover:bg-muted",
+                        )}
+                        title={labels.desc}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <div className="flex min-w-0 items-center gap-2 text-left">
+                          <span className="font-semibold">{labels.label}</span>
+                          <span className="truncate text-[10px] opacity-70">
+                            {labels.desc}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
