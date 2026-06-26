@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import contextlib
@@ -36,7 +35,10 @@ from runtime.platform.models import (
     ToolCall,
 )
 from runtime.platform.process.utils import safe_repr as _safe_repr
-from runtime.safety.approval.approval_gate import injection_taint_block
+from runtime.safety.approval.approval_gate import (
+    approval_action_for_tool,
+    injection_taint_block,
+)
 from runtime.safety.auth import (
     TrustEngine,
     check_file_write,
@@ -48,12 +50,14 @@ from runtime.safety.validation.prompt_injection import (
     scan_for_injection,
 )
 
-_READ_BEFORE_WRITE_TOOLS = frozenset({
-    "write_text_file",
-    "edit_text_file",
-    "edit_file",
-    "multi_edit_file",
-})
+_READ_BEFORE_WRITE_TOOLS = frozenset(
+    {
+        "write_text_file",
+        "edit_text_file",
+        "edit_file",
+        "multi_edit_file",
+    }
+)
 _READ_TRACKING_KEY = "_read_file_paths_this_turn"
 _TRANSIENT_ERROR_NAME_HINTS = (
     "Timeout",
@@ -156,7 +160,6 @@ class ToolExecutor:
         # tracking, only per-task ``Budget`` accounting.
         self._budget_tracker = budget_tracker
 
-
     def execute_step(
         self,
         step_id: int,
@@ -231,29 +234,75 @@ class ToolExecutor:
             )
             sig = antigen_for(skill)
 
-            allowed_by_task_capability, task_capability_reason = (
-                _check_task_capability_permission(sucker_id)
+            allowed_by_task_capability, task_capability_reason = _check_task_capability_permission(
+                sucker_id
             )
             if not allowed_by_task_capability:
+                deny_reason = task_capability_reason or "task capability disabled"
+                _mark_task_waiting_approval(
+                    str(sucker_id),
+                    deny_reason,
+                    metadata_patch={
+                        "approval_required": False,
+                        "approval_denied": True,
+                        "approval_action": "capability_denied",
+                        "capability_denied": True,
+                        "capability_denial_reason": deny_reason,
+                    },
+                )
                 self.journal.write_immune(
                     verdict="reject",
                     signature=sig,
                     task_id=task_id,
                     arm_id=arm_id,
                     actor=actor,
-                    reason=task_capability_reason or "task capability disabled",
+                    reason=deny_reason,
                 )
                 span.set_attribute("octopus.immunity.verdict", "reject")
+                span.set_attribute("octopus.task_capability.blocked", deny_reason)
+                step = _make_reject_step(
+                    step_id,
+                    node_id,
+                    call,
+                    "immune_reject",
+                    deny_reason,
+                )
+                self.journal.write_step(task_id, arm_id, step, actor=actor)
+                return step
+
+            approval_block = _executor_approval_block(str(sucker_id), args)
+            if approval_block is not None:
+                _mark_task_waiting_approval(
+                    str(sucker_id),
+                    approval_block["reason"],
+                    metadata_patch={
+                        "approval_required": approval_block["approval_action"]
+                        in {"ask", "confirm"},
+                        "approval_denied": approval_block["approval_action"] == "deny",
+                        "approval_action": approval_block["approval_action"],
+                        "executor_approval": approval_block,
+                    },
+                )
+                self.journal.write_immune(
+                    verdict="reject",
+                    signature=sig,
+                    task_id=task_id,
+                    arm_id=arm_id,
+                    actor=actor,
+                    reason=approval_block["reason"],
+                )
+                span.set_attribute("octopus.immunity.verdict", "reject")
+                span.set_attribute("octopus.executor_approval.blocked", True)
                 span.set_attribute(
-                    "octopus.task_capability.blocked",
-                    task_capability_reason or "task capability disabled",
+                    "octopus.executor_approval.action",
+                    str(approval_block["approval_action"]),
                 )
                 step = _make_reject_step(
                     step_id,
                     node_id,
                     call,
                     "immune_reject",
-                    task_capability_reason or "task capability disabled",
+                    approval_block["reason"],
                 )
                 self.journal.write_step(task_id, arm_id, step, actor=actor)
                 return step
@@ -295,7 +344,10 @@ class ToolExecutor:
             if _inj_block is not None:
                 span.set_attribute("octopus.injection.blocked", _inj_block)
                 step = _make_reject_step(
-                    step_id, node_id, call, "immune_reject",
+                    step_id,
+                    node_id,
+                    call,
+                    "immune_reject",
                     f"injection_taint_block: {_inj_block}",
                 )
                 self.journal.write_step(task_id, arm_id, step, actor=actor)
@@ -324,6 +376,7 @@ class ToolExecutor:
                     from runtime.safety.hooks.runner import (
                         dispatch_notification,
                     )
+
                     dispatch_notification(
                         kind="immune_reject",
                         details={
@@ -361,6 +414,7 @@ class ToolExecutor:
                     from runtime.safety.hooks.runner import (
                         dispatch_notification,
                     )
+
                     dispatch_notification(
                         kind="budget_squirt",
                         details={
@@ -382,9 +436,14 @@ class ToolExecutor:
                 from runtime.core.nerves.hooks import HookContext, HookError
 
                 pre_ctx = HookContext(
-                    phase="pre", task_id=task_id, arm_id=arm_id,
-                    sucker_id=sucker_id, node_id=node_id, step_id=step_id,
-                    call=call, result=None,
+                    phase="pre",
+                    task_id=task_id,
+                    arm_id=arm_id,
+                    sucker_id=sucker_id,
+                    node_id=node_id,
+                    step_id=step_id,
+                    call=call,
+                    result=None,
                 )
                 try:
                     pre_out = self.hooks.run_pre(pre_ctx)
@@ -394,7 +453,10 @@ class ToolExecutor:
                     budget.commit(reservation, CostEntry())
                     self.journal.write_budget("budget_commit", task_id=task_id, actor=actor)
                     step = _make_reject_step(
-                        step_id, node_id, call, "failed",
+                        step_id,
+                        node_id,
+                        call,
+                        "failed",
                         reason=f"hook_block: {he.reason}",
                     )
                     self.journal.write_step(task_id, arm_id, step, actor=actor)
@@ -420,6 +482,7 @@ class ToolExecutor:
             try:
                 from runtime.platform.process.session import current_session as _cs
                 from runtime.safety.hooks.runner import dispatch_pre_tool
+
                 pre_decision = dispatch_pre_tool(
                     sucker_id=str(sucker_id),
                     args=args,
@@ -436,10 +499,15 @@ class ToolExecutor:
             if hook_cancel is not None:
                 budget.commit(reservation, CostEntry())
                 self.journal.write_budget(
-                    "budget_commit", task_id=task_id, actor=actor,
+                    "budget_commit",
+                    task_id=task_id,
+                    actor=actor,
                 )
                 step = _make_reject_step(
-                    step_id, node_id, call, "failed",
+                    step_id,
+                    node_id,
+                    call,
+                    "failed",
                     reason=f"hook_cancel: {hook_cancel}",
                 )
                 self.journal.write_step(task_id, arm_id, step, actor=actor)
@@ -459,6 +527,7 @@ class ToolExecutor:
                     # `current_session()` lookup). Old handlers without
                     # the param keep working — we detect via inspect.
                     import inspect as _inspect
+
                     handler_params: dict[str, Any] = {}
                     try:
                         sig = _inspect.signature(skill.handler)
@@ -466,11 +535,9 @@ class ToolExecutor:
                     except (TypeError, ValueError):
                         handler_params = {}
 
-                    if (
-                        "session" in handler_params
-                        and "session" not in args
-                    ):
+                    if "session" in handler_params and "session" not in args:
                         from runtime.platform.process.session import current_session
+
                         args = {**args, "session": current_session()}
 
                     # Mode-gated sandbox injection / enforcement.
@@ -493,7 +560,11 @@ class ToolExecutor:
                     # in the WorkDirSelector, instead of hitting the
                     # project root by accident.
                     _root_params = (
-                        "root", "cwd", "working_dir", "directory", "base_dir",
+                        "root",
+                        "cwd",
+                        "working_dir",
+                        "directory",
+                        "base_dir",
                         "repo_dir",
                     )
                     # Parameters that carry a file/directory path (not a
@@ -505,17 +576,14 @@ class ToolExecutor:
                     # "analyze this project" scanned octopus-agent itself).
                     _path_params = ("path", "filepath", "file_path", "filename")
                     has_sandbox = "sandbox_dir" in handler_params
-                    has_root_param = any(
-                        p in handler_params for p in _root_params
-                    )
-                    has_path_param = any(
-                        p in handler_params for p in _path_params
-                    )
+                    has_root_param = any(p in handler_params for p in _root_params)
+                    has_path_param = any(p in handler_params for p in _path_params)
 
                     if has_sandbox or has_root_param or has_path_param:
                         from runtime.platform.process.session import (
                             current_session,
                         )
+
                         _sess = current_session()
                         # Scope is only enforced when a Session is
                         # bound. Direct callers (tests, programmatic
@@ -529,15 +597,13 @@ class ToolExecutor:
                             from runtime.platform.process.scope import (
                                 resolve_execution_scope,
                             )
+
                             scope = resolve_execution_scope(_sess)
                             read_primary = scope.primary_read
                             _mutates_files = bool(
-                                set(skill.affinity or [])
-                                & {"write", "edit", "exec", "dangerous"}
+                                set(skill.affinity or []) & {"write", "edit", "exec", "dangerous"}
                             )
-                            arg_primary = (
-                                scope.primary_write if _mutates_files else read_primary
-                            )
+                            arg_primary = scope.primary_write if _mutates_files else read_primary
                             # Read-side root injection · only fires
                             # for skills that accept a directory-base
                             # parameter. Symmetric with the write-side
@@ -607,7 +673,8 @@ class ToolExecutor:
                                     if _mutates_files:
                                         with contextlib.suppress(OSError):
                                             scope.primary_write.mkdir(
-                                                parents=True, exist_ok=True,
+                                                parents=True,
+                                                exist_ok=True,
                                             )
                                     args = {
                                         **args,
@@ -656,6 +723,7 @@ class ToolExecutor:
                     _lease_target = _file_write_lease_target(skill, args)
                     if _lease_target is not None:
                         from runtime.platform.process.session import current_session
+
                         acquire_file_write_lease(
                             current_session(),
                             _lease_target,
@@ -707,7 +775,8 @@ class ToolExecutor:
                         except ValueError as ve:
                             stderr_tags.append("schema_mismatch")
                             span.set_attribute(
-                                "octopus.output_schema.error", str(ve),
+                                "octopus.output_schema.error",
+                                str(ve),
                             )
                 except ReadBeforeWriteRequired as e:
                     output = {"error": str(e)}
@@ -798,6 +867,7 @@ class ToolExecutor:
                     from runtime.safety.hooks.runner import (
                         dispatch_notification,
                     )
+
                     for level in crossings:
                         dispatch_notification(
                             kind="budget_warn",
@@ -834,6 +904,7 @@ class ToolExecutor:
             try:
                 from runtime.platform.process.session import current_session as _cs2
                 from runtime.safety.hooks.runner import dispatch_post_tool
+
                 post_decision = dispatch_post_tool(
                     sucker_id=str(sucker_id),
                     args=args,
@@ -869,18 +940,23 @@ class ToolExecutor:
                         post_write_diagnostics,
                         post_write_regression_matrix,
                     )
+
                     workspace_path = _resolve_workspace_for_diagnostics(args)
                     if workspace_path is not None:
                         diag = post_write_diagnostics(
                             str(sucker_id),
                             args,
-                            output if isinstance(output, dict) else {"path": _extract_path(args, output)},
+                            output
+                            if isinstance(output, dict)
+                            else {"path": _extract_path(args, output)},
                             workspace_path=workspace_path,
                         )
                         matrix = post_write_regression_matrix(
                             str(sucker_id),
                             args,
-                            output if isinstance(output, dict) else {"path": _extract_path(args, output)},
+                            output
+                            if isinstance(output, dict)
+                            else {"path": _extract_path(args, output)},
                             workspace_path=workspace_path,
                         )
                         if diag:
@@ -893,8 +969,7 @@ class ToolExecutor:
                             result = result.model_copy(
                                 update={
                                     "output": new_output_text,
-                                    "stderr_tags": list(result.stderr_tags)
-                                    + ["post_diagnostics"],
+                                    "stderr_tags": list(result.stderr_tags) + ["post_diagnostics"],
                                 }
                             )
                         if matrix:
@@ -907,8 +982,7 @@ class ToolExecutor:
                             result = result.model_copy(
                                 update={
                                     "output": new_output_text,
-                                    "stderr_tags": list(result.stderr_tags)
-                                    + ["regression_matrix"],
+                                    "stderr_tags": list(result.stderr_tags) + ["regression_matrix"],
                                 }
                             )
                 except (TypeError, ValueError, RuntimeError):  # noqa: BLE001
@@ -918,9 +992,14 @@ class ToolExecutor:
                 from runtime.core.nerves.hooks import HookContext
 
                 post_ctx = HookContext(
-                    phase="post", task_id=task_id, arm_id=arm_id,
-                    sucker_id=sucker_id, node_id=node_id, step_id=step_id,
-                    call=call, result=result,
+                    phase="post",
+                    task_id=task_id,
+                    arm_id=arm_id,
+                    sucker_id=sucker_id,
+                    node_id=node_id,
+                    step_id=step_id,
+                    call=call,
+                    result=result,
                 )
                 post_out = self.hooks.run_post(post_ctx)
                 if post_out is not None and post_out.replace_with is not None:
@@ -940,6 +1019,7 @@ class ToolExecutor:
             # break execution.
             try:
                 from runtime.platform.observability.metrics import get_registry as _mr
+
                 _reg = _mr()
                 _calls = _reg.counter(
                     "octopus_skill_calls_total",
@@ -962,10 +1042,12 @@ class ToolExecutor:
                         "Skill invocations that did not return success",
                         labels=["sucker_id", "error_type"],
                     )
-                    _errs.inc(labels={
-                        "sucker_id": str(sucker_id),
-                        "error_type": str(error_type or "unknown"),
-                    })
+                    _errs.inc(
+                        labels={
+                            "sucker_id": str(sucker_id),
+                            "error_type": str(error_type or "unknown"),
+                        }
+                    )
             except (TypeError, ValueError, RuntimeError):  # noqa: BLE001
                 pass
 
@@ -987,6 +1069,7 @@ class ToolExecutor:
             if self._budget_tracker is not None:
                 try:
                     from runtime.platform.process.session import current_session as _cs_bt
+
                     _sess = _cs_bt()
                     _sid: str | None = None
                     if _sess is not None:
@@ -1089,6 +1172,7 @@ def _read_before_write_violation(
 
     try:
         from runtime.platform.process.session import current_session
+
         session = current_session()
     except (ImportError, AttributeError, RuntimeError):
         session = None
@@ -1101,10 +1185,7 @@ def _read_before_write_violation(
     target_key = _path_key(target)
     if target_key in set(str(p) for p in read_paths):
         return None
-    return (
-        f"refuse: must read_file('{target}') in this turn before writing "
-        "to an existing file"
-    )
+    return f"refuse: must read_file('{target}') in this turn before writing to an existing file"
 
 
 def _file_write_lease_target(skill: Skill, args: dict[str, Any]) -> Path | None:
@@ -1139,6 +1220,7 @@ def _record_successful_read(
         return
     try:
         from runtime.platform.process.session import current_session
+
         session = current_session()
     except (ImportError, AttributeError, RuntimeError):
         session = None
@@ -1168,6 +1250,7 @@ def _resolve_workspace_for_diagnostics(args: dict[str, Any]) -> str | None:
     """
     try:
         from runtime.platform.process.session import current_session
+
         session = current_session()
     except (ImportError, AttributeError, RuntimeError):
         session = None
@@ -1223,9 +1306,7 @@ def _check_task_capability_permission(skill_id: SkillId) -> tuple[bool, str | No
         from runtime.platform.process.task_supervisor import manifest_from_session_metadata
 
         session = current_session()
-        manifest = manifest_from_session_metadata(
-            session.metadata if session is not None else None
-        )
+        manifest = manifest_from_session_metadata(session.metadata if session is not None else None)
         if manifest is None:
             return True, None
         group = permission_group_for_skill(str(skill_id))
@@ -1238,6 +1319,113 @@ def _check_task_capability_permission(skill_id: SkillId) -> tuple[bool, str | No
         return True, None
 
 
+def _executor_approval_block(
+    skill_id: str,
+    args: dict[str, Any],
+) -> dict[str, Any] | None:
+    try:
+        from runtime.platform.process.session import current_session
+
+        session = current_session()
+        metadata = session.metadata if session is not None else {}
+        if not bool(metadata.get("enforce_executor_approval")):
+            return None
+        if bool(metadata.get("auto_approve")):
+            return None
+        permission_mode = str(metadata.get("permission_mode") or "").strip().lower()
+        if permission_mode in {"bypasspermissions", "bypass-permissions"}:
+            return None
+        risk_policy = metadata.get("approval_risk_policy")
+        risk, action, policy = approval_action_for_tool(
+            skill_id,
+            _approval_args_preview(args),
+            policy=risk_policy,
+        )
+        if action in {"allow", "audit"}:
+            return None
+        reason = (
+            f"approval required before executing {skill_id} "
+            f"(risk={risk.level}: {risk.reason}; action={action})"
+        )
+        return {
+            "schema": "octopus.executor_approval_block.v1",
+            "tool_name": skill_id,
+            "reason": reason,
+            "approval_action": action,
+            "risk": risk.to_dict(),
+            "approval_policy": policy.to_dict(),
+            "args_preview": _approval_args_preview(args),
+        }
+    except (ImportError, AttributeError, TypeError, RuntimeError, ValueError) as exc:
+        try:
+            from runtime.platform.process.session import current_session
+
+            session = current_session()
+            metadata = session.metadata if session is not None else {}
+            if bool(metadata.get("enforce_executor_approval")):
+                return {
+                    "schema": "octopus.executor_approval_block.v1",
+                    "tool_name": skill_id,
+                    "reason": f"executor approval check failed closed: {exc}",
+                    "approval_action": "deny",
+                    "risk": {"level": "critical", "categories": ["approval_check_failed"]},
+                    "approval_policy": {},
+                    "args_preview": _approval_args_preview(args),
+                }
+        except (ImportError, AttributeError, TypeError, RuntimeError, ValueError):
+            return None
+    return None
+
+
+def _approval_args_preview(args: dict[str, Any]) -> str:
+    try:
+        return _safe_repr(args)[:500]
+    except Exception:  # noqa: BLE001
+        return str(args)[:500]
+
+
+def _mark_task_waiting_approval(
+    tool_name: str,
+    reason: str,
+    *,
+    metadata_patch: dict[str, Any] | None = None,
+) -> None:
+    try:
+        from runtime.platform.process.session import current_session
+        from runtime.platform.process.task_supervisor import (
+            TaskRunStatus,
+            TaskSupervisor,
+            TaskSupervisorStore,
+        )
+
+        session = current_session()
+        metadata = session.metadata if session is not None else {}
+        task_id = str(metadata.get("task_id") or "").strip()
+        store_path = str(metadata.get("task_supervisor_store_path") or "").strip()
+        if not task_id or not store_path:
+            return
+        supervisor = TaskSupervisor(
+            TaskSupervisorStore(store_path),
+            holder_id=str(metadata.get("task_supervisor_holder_id") or "") or None,
+            lease_ttl_seconds=float(metadata.get("task_supervisor_lease_ttl_seconds") or 300.0),
+        )
+        patch = {
+            "approval_required": True,
+            "approval_tool_name": tool_name,
+            "approval_reason": reason,
+        }
+        if isinstance(metadata_patch, dict):
+            patch.update(metadata_patch)
+        patch["approval_tool_name"] = tool_name
+        patch["approval_reason"] = reason
+        supervisor.transition(
+            task_id,
+            TaskRunStatus.WAITING_APPROVAL,
+            reason=reason,
+            metadata_patch=patch,
+        )
+    except Exception:  # noqa: BLE001 - approval status marking is best-effort
+        return
 
 
 def _hash_output(obj: Any) -> str | None:
@@ -1292,9 +1480,9 @@ def _extract_path(args: dict[str, Any], output: Any) -> str:
     return ""
 
 
-_FILE_DIFF_PRE_READ_LIMIT = 100_000   # Implementation note.
-_FILE_DIFF_OUTPUT_LIMIT = 20_000      # Implementation note.
-_FILE_DIFF_CONTEXT_LINES = 3          # Implementation note.
+_FILE_DIFF_PRE_READ_LIMIT = 100_000  # Implementation note.
+_FILE_DIFF_OUTPUT_LIMIT = 20_000  # Implementation note.
+_FILE_DIFF_CONTEXT_LINES = 3  # Implementation note.
 _FILE_ROLLBACK_CONTENT_LIMIT = 100_000
 
 
@@ -1302,6 +1490,7 @@ def _try_read_pre_content(path: str) -> str | None:
     if not path:
         return None
     import os
+
     try:
         if not os.path.isfile(path):
             return None
@@ -1316,7 +1505,9 @@ def _try_read_pre_content(path: str) -> str | None:
 
 
 def _compute_unified_diff(
-    old: str, new: str, path: str,
+    old: str,
+    new: str,
+    path: str,
 ) -> str | None:
     old_n = old.replace("\r\n", "\n")
     new_n = new.replace("\r\n", "\n")
@@ -1324,13 +1515,16 @@ def _compute_unified_diff(
         return None
     old, new = old_n, new_n
     import difflib
-    lines = list(difflib.unified_diff(
-        old.splitlines(keepends=True),
-        new.splitlines(keepends=True),
-        fromfile=f"a/{path}",
-        tofile=f"b/{path}",
-        n=_FILE_DIFF_CONTEXT_LINES,
-    ))
+
+    lines = list(
+        difflib.unified_diff(
+            old.splitlines(keepends=True),
+            new.splitlines(keepends=True),
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
+            n=_FILE_DIFF_CONTEXT_LINES,
+        )
+    )
     if not lines:
         return None
     diff = "".join(lines)
@@ -1479,7 +1673,9 @@ def _emit_file_op_from_step(
             new_size = len(new_content.encode("utf-8"))
     if new_content is not None and action != "delete":
         diff = _compute_unified_diff(
-            pre_content or "", new_content, path,
+            pre_content or "",
+            new_content,
+            path,
         )
     elif action == "delete" and pre_content is not None:
         diff = _compute_unified_diff(pre_content, "", path)

@@ -72,6 +72,20 @@ def _loop_terminal_reason(run: LoopRun) -> str:
     return ""
 
 
+def _loop_policy_summary(run: LoopRun) -> dict[str, Any]:
+    policy = run.policy
+    return {
+        "max_attempts": int(policy.max_attempts),
+        "max_iterations": int(policy.max_iterations),
+        "verifier_profile": str(policy.verifier_profile or ""),
+        "auto_approve": bool(policy.auto_approve),
+        "sandbox_mode": str(policy.sandbox_mode or ""),
+        "permission_mode": str(policy.permission_mode or ""),
+        "execution_environment": str(policy.execution_environment or ""),
+        "model": str(policy.model or ""),
+    }
+
+
 def build_loop_run_findings(run: LoopRun) -> list[dict[str, Any]]:
     findings: list[dict[str, Any]] = []
     status = run.status.value
@@ -189,6 +203,8 @@ def build_loop_run_replay(run: LoopRun) -> dict[str, Any]:
             "ts": run.started_at or run.created_at,
             "goal": _preview(run.goal, limit=500),
             "mode": run.mode.value,
+            "workspace_path": str(run.workspace_path or ""),
+            "policy": _loop_policy_summary(run),
         }
     ]
 
@@ -323,10 +339,22 @@ def _loop_run_replay_fingerprint(steps: list[dict[str, Any]]) -> str:
                 "risk_level": str(approval.get("risk_level") or ""),
             }
         elif kind == "task_start":
+            policy = step.get("policy") if isinstance(step.get("policy"), dict) else {}
             item.update(
                 {
                     "goal": str(step.get("goal") or ""),
                     "mode": str(step.get("mode") or ""),
+                    "workspace_path": str(step.get("workspace_path") or ""),
+                    "policy": {
+                        "max_attempts": int(policy.get("max_attempts") or 0),
+                        "max_iterations": int(policy.get("max_iterations") or 0),
+                        "verifier_profile": str(policy.get("verifier_profile") or ""),
+                        "auto_approve": bool(policy.get("auto_approve")),
+                        "sandbox_mode": str(policy.get("sandbox_mode") or ""),
+                        "permission_mode": str(policy.get("permission_mode") or ""),
+                        "execution_environment": str(policy.get("execution_environment") or ""),
+                        "model": str(policy.get("model") or ""),
+                    },
                 }
             )
         elif kind == "task_event":

@@ -23,12 +23,17 @@ from runtime.execution.loops.models import (
     LoopRunStatus,
     RestartLoopRunRequest,
 )
-from runtime.execution.loops.recovery import build_loop_run_resume_proposal
+from runtime.execution.loops.recovery import (
+    build_loop_run_checkpoint,
+    build_loop_run_resume_proposal,
+)
 from runtime.execution.loops.replay import (
+    build_loop_run_replay,
     build_loop_run_replay_case,
     evaluate_loop_run_replay_case,
 )
 from runtime.execution.loops.store import LoopRunStore
+from runtime.platform.process.task_supervisor import TaskSupervisor, task_lease_health
 
 
 def create_loop_router(
@@ -36,6 +41,7 @@ def create_loop_router(
     store: LoopRunStore,
     controller: Any = None,
     dispatcher: Any = None,
+    task_supervisor: TaskSupervisor | None = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -47,11 +53,88 @@ def create_loop_router(
 
     router = APIRouter(tags=["loops"])
 
+    def _task_record(run_id: str) -> Any:
+        if task_supervisor is None:
+            return None
+        return task_supervisor.store.get(run_id)
+
+    def _task_health_payload(run_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
+        task = _task_record(run_id)
+        if task is None:
+            return {}, {}
+        return task.model_dump(mode="json"), task_lease_health(task)
+
+    def _recovery_audit(run: LoopRun) -> dict[str, Any]:
+        checkpoint: dict[str, Any] = {}
+        replay: dict[str, Any] = {}
+        try:
+            raw_checkpoint = build_loop_run_checkpoint(run)
+            checkpoint = {
+                "id": raw_checkpoint.get("id"),
+                "iteration": raw_checkpoint.get("iteration"),
+                "timestamp": raw_checkpoint.get("ts"),
+                "summary": raw_checkpoint.get("summary"),
+                "available": bool(raw_checkpoint.get("id")),
+            }
+        except Exception as exc:  # noqa: BLE001
+            checkpoint = {"available": False, "error": str(exc)}
+        try:
+            raw_replay = build_loop_run_replay(run)
+            replay = {
+                "case_id": raw_replay.get("case_id"),
+                "fingerprint": raw_replay.get("fingerprint"),
+                "replayable": bool(raw_replay.get("replayable")),
+                "step_count": int(raw_replay.get("step_count") or 0),
+            }
+        except Exception as exc:  # noqa: BLE001
+            replay = {"replayable": False, "step_count": 0, "error": str(exc)}
+        review = run.last_review if isinstance(run.last_review, dict) else {}
+        resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
+        review_replay = review.get("replay") if isinstance(review.get("replay"), dict) else {}
+        resume_available = run.status in {LoopRunStatus.FAILED, LoopRunStatus.CANCELLED}
+        resume_checkpoint_id = checkpoint.get("id")
+        if isinstance(resume, dict):
+            latest = (
+                resume.get("latest_checkpoint")
+                if isinstance(resume.get("latest_checkpoint"), dict)
+                else {}
+            )
+            resume_available = bool(resume.get("available")) or resume_available
+            resume_checkpoint_id = latest.get("id") or resume_checkpoint_id
+        return {
+            "schema": "octopus.loop_recovery_audit.v1",
+            "checkpoint": checkpoint,
+            "resume": {
+                "available": bool(resume_available),
+                "latest_checkpoint_id": resume_checkpoint_id,
+                "source": resume.get("source") if isinstance(resume, dict) else None,
+            },
+            "review": {
+                "available": bool(review),
+                "score": review.get("score") if isinstance(review, dict) else None,
+                "status": review.get("status") if isinstance(review, dict) else None,
+                "finding_count": len(review.get("findings") or [])
+                if isinstance(review.get("findings"), list)
+                else 0,
+            },
+            "replay": {
+                **replay,
+                "case_id": review_replay.get("case_id") or replay.get("case_id"),
+                "fingerprint": review_replay.get("fingerprint") or replay.get("fingerprint"),
+            },
+            "safety": {
+                "raw_checkpoint_state_included": False,
+                "raw_replay_steps_included": False,
+            },
+        }
+
     def _runtime_state(run: LoopRun) -> dict[str, Any]:
         is_running = False
         is_running_fn = getattr(dispatcher, "is_running", None)
         if callable(is_running_fn):
             is_running = bool(is_running_fn(run.run_id))
+        task_run, lease_health = _task_health_payload(run.run_id)
+        recovery_audit = _recovery_audit(run)
         return LoopRunRuntimeStateResponse(
             run_id=run.run_id,
             parent_run_id=run.parent_run_id,
@@ -69,6 +152,12 @@ def create_loop_router(
             cancel_requested=bool(run.cancel_requested_at),
             cancel_requested_at=run.cancel_requested_at,
             cancel_reason=run.cancel_reason,
+            task_run=task_run,
+            task_lease_health=lease_health,
+            task_recovery=lease_health.get("recovery", {})
+            if isinstance(lease_health, dict)
+            else {},
+            recovery_audit=recovery_audit,
         ).model_dump(mode="json")
 
     def _overview(actor_id: str | None) -> dict[str, Any]:
@@ -80,6 +169,13 @@ def create_loop_router(
         by_mode: dict[str, int] = {}
         active_run_ids: list[str] = []
         reviewed_runs = 0
+        task_health_items: list[dict[str, Any]] = []
+        takeover_task_ids: list[str] = []
+        resumable_task_ids: list[str] = []
+        by_recommended_action: dict[str, int] = {}
+        checkpoint_available_count = 0
+        resume_available_count = 0
+        replay_available_count = 0
         for run in runs:
             by_status[run.status.value] = by_status.get(run.status.value, 0) + 1
             by_mode[run.mode.value] = by_mode.get(run.mode.value, 0) + 1
@@ -88,7 +184,34 @@ def create_loop_router(
             state = _runtime_state(run)
             if state["is_running"]:
                 active_run_ids.append(run.run_id)
+            recovery_audit = state.get("recovery_audit")
+            if isinstance(recovery_audit, dict):
+                checkpoint = recovery_audit.get("checkpoint")
+                resume = recovery_audit.get("resume")
+                replay = recovery_audit.get("replay")
+                if isinstance(checkpoint, dict) and checkpoint.get("available"):
+                    checkpoint_available_count += 1
+                if isinstance(resume, dict) and resume.get("available"):
+                    resume_available_count += 1
+                if isinstance(replay, dict) and replay.get("replayable"):
+                    replay_available_count += 1
+            task_health = state.get("task_lease_health")
+            if isinstance(task_health, dict) and task_health:
+                task_health_items.append(task_health)
+                action = str(task_health.get("recommended_action") or "unknown")
+                by_recommended_action[action] = by_recommended_action.get(action, 0) + 1
+                if bool(task_health.get("can_takeover")):
+                    takeover_task_ids.append(run.run_id)
+                if bool(task_health.get("can_resume")):
+                    resumable_task_ids.append(run.run_id)
         active_run_ids.sort()
+        takeover_task_ids.sort()
+        resumable_task_ids.sort()
+        unhealthy = [
+            item
+            for item in task_health_items
+            if str(item.get("state") or "") not in {"ok", "terminal"}
+        ]
         return LoopRunsOverviewResponse(
             total=len(runs),
             active_dispatches=len(active_run_ids),
@@ -96,6 +219,22 @@ def create_loop_router(
             by_status=by_status,
             by_mode=by_mode,
             reviewed_runs=reviewed_runs,
+            task_health={
+                "tracked_count": len(task_health_items),
+                "unhealthy_count": len(unhealthy),
+                "unhealthy_task_ids": [str(item.get("task_id") or "") for item in unhealthy],
+                "takeover_recommended_count": len(takeover_task_ids),
+                "resumable_count": len(resumable_task_ids),
+                "takeover_task_ids": takeover_task_ids,
+                "resumable_task_ids": resumable_task_ids,
+                "by_recommended_action": dict(sorted(by_recommended_action.items())),
+                "items": task_health_items,
+            },
+            recovery_audit={
+                "checkpoint_available_count": checkpoint_available_count,
+                "resume_available_count": resume_available_count,
+                "replay_available_count": replay_available_count,
+            },
         ).model_dump(mode="json")
 
     def _auth(request: Request) -> str | None:

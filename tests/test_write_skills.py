@@ -17,16 +17,43 @@ from runtime.execution.suckers.write_skills import (
     _edit_file,
     _edit_text_file,
     _exec_shell,
+    _ipython,
     _kill_background_exec,
     _kill_shell,
     _multi_edit_file,
     _read_background_output,
     _read_shell_output,
+    _run_git,
+    _run_quality_cmd,
     _snapshot_background_metadata,
     _write_text_file,
     register_exec_skill,
     register_write_skills,
 )
+
+
+def _stream_error_result(status: str = "sandbox_violation") -> dict[str, object]:
+    return {
+        "error": f"{status}: denied by policy",
+        "execution_policy": {
+            "schema": "octopus.execution_policy.v1",
+            "sandbox_requested": True,
+            "backend": "direct",
+            "hard": False,
+            "result": {
+                "status": status,
+                "exit_code": None,
+                "timed_out": False,
+                "cancelled": False,
+                "killed": False,
+                "stdout_truncated": False,
+                "stderr_truncated": False,
+                "output_truncated": False,
+                "error_type": status,
+            },
+        },
+    }
+
 
 # ═══════════════════════════════════════════════════════════
 # write_text_file
@@ -282,6 +309,19 @@ class TestExecShell:
         r = _exec_shell(command=["no_such_binary_xyz_1234"])
         assert "error" in r
 
+    def test_stream_error_preserves_execution_policy(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr(
+            "runtime.platform.process.streaming.stream_run",
+            lambda *args, **kwargs: _stream_error_result("sandbox_violation"),
+        )
+
+        r = _exec_shell(command=["blocked-tool"], sandbox_dir="/tmp")
+
+        assert "error" in r
+        assert r["execution_policy"]["schema"] == "octopus.execution_policy.v1"
+        assert r["execution_policy"]["result"]["status"] == "sandbox_violation"
+        assert r["execution_policy"]["result"]["error_type"] == "sandbox_violation"
+
     def test_missing_command_error(self):
         assert "error" in _exec_shell(command="")
 
@@ -367,6 +407,48 @@ class TestExecShell:
         assert "read_shell_output" in r["message"] or "read_background_output" in r["message"]
 
 
+def test_ipython_stream_error_preserves_execution_policy(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "runtime.platform.process.streaming.stream_run",
+        lambda *args, **kwargs: _stream_error_result("sandbox_violation"),
+    )
+
+    r = _ipython(code="print('blocked')")
+
+    assert "error" in r
+    assert r["execution_policy"]["result"]["status"] == "sandbox_violation"
+
+
+def test_git_stream_error_preserves_execution_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "runtime.platform.process.streaming.stream_run",
+        lambda *args, **kwargs: _stream_error_result("sandbox_violation"),
+    )
+
+    r = _run_git(tmp_path, ["status"], timeout_s=1)
+
+    assert "error" in r
+    assert r["execution_policy"]["result"]["status"] == "sandbox_violation"
+
+
+def test_quality_stream_error_preserves_execution_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        "runtime.platform.process.streaming.stream_run",
+        lambda *args, **kwargs: _stream_error_result("sandbox_violation"),
+    )
+
+    r = _run_quality_cmd(["tool"], tmp_path, timeout_s=1)
+
+    assert "error" in r
+    assert r["execution_policy"]["result"]["status"] == "sandbox_violation"
+
+
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════
@@ -387,6 +469,8 @@ class TestBackgroundExec:
         )
         assert "error" not in started
         assert started["status"] == "running"
+        assert started["execution_policy"]["result"]["status"] == "running"
+        assert started["execution_policy"]["result"]["exit_code"] is None
         task_id = started["task_id"]
 
         deadline = time.monotonic() + 3
@@ -401,6 +485,9 @@ class TestBackgroundExec:
         assert polled["exit_code"] == 0
         assert "ready" in polled["stdout"]
         assert "done" in polled["stdout"]
+        assert polled["execution_policy"]["result"]["status"] == "completed"
+        assert polled["execution_policy"]["result"]["exit_code"] == 0
+        assert polled["execution_policy"]["result"]["output_truncated"] is False
 
     def test_background_sandbox_defaults_cwd_and_scrubs_env(
         self,
@@ -500,6 +587,8 @@ class TestBackgroundExec:
         assert policy["hard"] is True
         assert policy["env_mode"] == "allowlist"
         assert policy["process_tree_kill"] is True
+        assert policy["result"]["status"] == "completed"
+        assert policy["result"]["exit_code"] == 0
 
     def test_background_output_survives_registry_loss(
         self,
@@ -533,6 +622,8 @@ class TestBackgroundExec:
         assert polled["exit_code"] == 0
         assert "ready" in polled["stdout"]
         assert "done" in polled["stdout"]
+        assert polled["execution_policy"]["result"]["status"] == "completed"
+        assert polled["execution_policy"]["result"]["exit_code"] == 0
 
     def test_lost_background_without_exit_code_is_not_marked_completed(
         self,
@@ -589,9 +680,11 @@ class TestBackgroundExec:
 
         killed = _kill_background_exec(task_id=task_id)
         assert killed["status"] in {"cancelled", "completed"}
+        assert killed["execution_policy"]["result"]["status"] in {"cancelled", "completed"}
 
         polled = _read_background_output(task_id=task_id)
         assert polled["status"] in {"cancelled", "completed"}
+        assert polled["execution_policy"]["result"]["status"] in {"cancelled", "completed"}
 
     def test_kill_background_command_kills_child_process_tree(self, tmp_path: Path):
         import sys

@@ -72,13 +72,31 @@ class OrchestrationBudget:
         with self._lock:
             return self._used < self.max_spawns
 
+    def try_charge(self, n: int = 1) -> bool:
+        """Atomically reserve spawn budget.
+
+        ``charge`` is intentionally kept as a legacy accounting primitive; use
+        this method on the hot path before actually spawning work so concurrent
+        fan-outs cannot oversubscribe the envelope.
+        """
+        if n <= 0:
+            return True
+        with self._lock:
+            if self._used + n > self.max_spawns:
+                return False
+            self._used += n
+            return True
+
     def charge(self, n: int = 1) -> None:
+        if n <= 0:
+            return
         with self._lock:
             self._used += n
 
 
 _ORCH_BUDGET: ContextVar[OrchestrationBudget | None] = ContextVar(
-    "octopus_orchestration_budget", default=None,
+    "octopus_orchestration_budget",
+    default=None,
 )
 
 

@@ -227,3 +227,48 @@ def test_loop_verifier_classifies_failures_for_repair_policy() -> None:
         )
         == "verifier_internal_error"
     )
+
+
+def test_loop_verifier_classification_prefers_execution_policy_result() -> None:
+    def policy(status: str, **result):
+        return {
+            "schema": "octopus.execution_policy.v1",
+            "result": {
+                "status": status,
+                **result,
+            },
+        }
+
+    assert (
+        _classify_finding(
+            name="typecheck",
+            command="python -m mypy .",
+            exit_code=1,
+            stdout="",
+            stderr="/usr/bin/python: No module named mypy",
+            execution_policy=policy("timed_out", timed_out=True),
+        )
+        == "verification_timeout"
+    )
+    assert (
+        _classify_finding(
+            name="test",
+            command="python -m pytest -q",
+            exit_code=1,
+            stdout="AssertionError",
+            stderr="",
+            execution_policy=policy("sandbox_violation", error_type="sandbox_violation"),
+        )
+        == "verifier_sandbox_violation"
+    )
+    assert (
+        _classify_finding(
+            name="lint",
+            command="ruff check .",
+            exit_code=1,
+            stdout="F401 unused import",
+            stderr="",
+            execution_policy=policy("cancelled", cancelled=True),
+        )
+        == "verification_cancelled"
+    )

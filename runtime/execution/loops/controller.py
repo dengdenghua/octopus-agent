@@ -101,9 +101,7 @@ def _verifier_failure_category(verifier: VerifierResult | None) -> str:
     ]
     if any(category in _NON_REPAIRABLE_VERIFIER_CATEGORIES for category in categories):
         return next(
-            category
-            for category in categories
-            if category in _NON_REPAIRABLE_VERIFIER_CATEGORIES
+            category for category in categories if category in _NON_REPAIRABLE_VERIFIER_CATEGORIES
         )
     return categories[0] if categories else "verification_failure"
 
@@ -353,6 +351,10 @@ class LoopController:
         )
         self._record_trace_run_started(run)
         run = self._recover_interrupted_attempts(run_id)
+        terminal = self._recover_verified_terminal_run(run_id)
+        if terminal is not None:
+            return terminal
+        run = self._latest_run(run_id)
         if run.status == LoopRunStatus.REPAIRING and not self._supervisor_transition(
             run,
             TaskRunStatus.REPAIRING,
@@ -520,37 +522,136 @@ class LoopController:
             raise KeyError(run_id)
         if run.status not in _ACTIVE_LOOP_STATUSES:
             return run
-        interrupted_indexes = [
-            attempt.attempt_index
+        if not any(
+            not attempt.completed_at and str(attempt.status or "") == "running"
             for attempt in run.attempts
-            if not attempt.completed_at and str(attempt.status or "") == "running"
-        ]
-        if not interrupted_indexes:
+        ):
             return run
+        return self.store.mutate(run_id, self._recover_interrupted_attempts_for_current)
+
+    def _recover_interrupted_attempts_for_current(self, current: LoopRun) -> LoopRun:
+        if current.status not in _ACTIVE_LOOP_STATUSES:
+            return current
         reason = "previous loop attempt interrupted before completion"
-        return self.store.mutate(
-            run_id,
-            lambda current, interrupted_indexes=interrupted_indexes, reason=reason: current.model_copy(
-                update={
-                    "status": LoopRunStatus.REPAIRING,
-                    "last_error": reason,
-                    "attempts": [
-                        attempt.model_copy(
-                            update={
-                                "completed_at": attempt.completed_at or _now_iso(),
-                                "status": "interrupted",
-                                "success": False,
-                                "terminated_reason": reason,
-                                "error": attempt.error or reason,
-                            }
-                        )
-                        if attempt.attempt_index in interrupted_indexes
-                        else attempt
-                        for attempt in current.attempts
-                    ],
-                }
-            ),
+        recovery_reason = "previous loop attempt recovered from half-written completion"
+        recovered = False
+        interrupted = False
+        attempts: list[LoopAttempt] = []
+        for attempt in current.attempts:
+            if attempt.completed_at or str(attempt.status or "") != "running":
+                attempts.append(attempt)
+                continue
+            if recovered_status := self._recoverable_attempt_status(attempt):
+                recovered = True
+                attempts.append(
+                    attempt.model_copy(
+                        update={
+                            "completed_at": attempt.completed_at or _now_iso(),
+                            "status": recovered_status,
+                            "success": True if recovered_status == "completed" else attempt.success,
+                            "terminated_reason": attempt.terminated_reason or recovery_reason,
+                            "final_answer": _truncate_text(attempt.final_answer),
+                            "error": "",
+                        }
+                    )
+                )
+                continue
+            interrupted = True
+            attempts.append(
+                attempt.model_copy(
+                    update={
+                        "completed_at": attempt.completed_at or _now_iso(),
+                        "status": "interrupted",
+                        "success": False,
+                        "terminated_reason": reason,
+                        "error": attempt.error or reason,
+                    }
+                )
+            )
+        if not recovered and not interrupted:
+            return current
+        return current.model_copy(
+            update={
+                "status": LoopRunStatus.VERIFYING if recovered else LoopRunStatus.REPAIRING,
+                "last_error": reason if interrupted and not recovered else "",
+                "attempts": attempts,
+            }
         )
+
+    @staticmethod
+    def _recoverable_attempt_status(attempt: LoopAttempt) -> str | None:
+        if attempt.success is True and not str(attempt.error or "").strip():
+            return "completed"
+        has_completion_snapshot = bool(
+            str(attempt.final_answer or "").strip() or attempt.completion_receipt
+        )
+        if has_completion_snapshot and not str(attempt.error or "").strip():
+            return "needs_verify"
+        return None
+
+    def _recover_verified_terminal_run(self, run_id: str) -> LoopRun | None:
+        run = self.store.get(run_id)
+        if run is None:
+            raise KeyError(run_id)
+        if run.status not in _ACTIVE_LOOP_STATUSES:
+            return None
+        attempt = self._latest_verified_attempt(run)
+        if attempt is None:
+            return None
+        if attempt.verifier_result is None:
+            return None
+        should_finalize = False
+
+        def _mutate(current: LoopRun) -> LoopRun:
+            nonlocal should_finalize
+            if current.status not in _ACTIVE_LOOP_STATUSES:
+                return current
+            current_attempt = self._latest_verified_attempt(current)
+            if current_attempt is None or current_attempt.verifier_result is None:
+                return current
+            verifier_result = current_attempt.verifier_result
+            if verifier_result.passed:
+                should_finalize = True
+                return current.model_copy(
+                    update={
+                        "status": LoopRunStatus.COMPLETED,
+                        "completed_at": current.completed_at or _now_iso(),
+                        "last_error": "",
+                        "last_verifier_result": verifier_result,
+                    }
+                )
+            error_text = _verifier_error_text(verifier_result)
+            if _verifier_failure_repairable(verifier_result) and (
+                current_attempt.attempt_index < current.policy.max_attempts
+            ):
+                return current.model_copy(
+                    update={
+                        "status": LoopRunStatus.REPAIRING,
+                        "last_error": error_text,
+                        "last_verifier_result": verifier_result,
+                    }
+                )
+            should_finalize = True
+            return current.model_copy(
+                update={
+                    "status": LoopRunStatus.FAILED,
+                    "completed_at": current.completed_at or _now_iso(),
+                    "last_error": error_text,
+                    "last_verifier_result": verifier_result,
+                }
+            )
+
+        recovered = self.store.mutate(run_id, _mutate)
+        if should_finalize:
+            return self._finalize_learning(recovered)
+        return None
+
+    @staticmethod
+    def _latest_verified_attempt(run: LoopRun) -> LoopAttempt | None:
+        if not run.attempts:
+            return None
+        attempt = run.attempts[-1]
+        return attempt if attempt.verifier_result is not None else None
 
     @staticmethod
     def _pending_verification_attempt(run: LoopRun) -> LoopAttempt | None:
@@ -915,6 +1016,14 @@ class LoopController:
             return None
         try:
             checkpoint = build_loop_run_checkpoint(run)
+            existing_checkpoint_id = self._matching_trace_checkpoint_id(run, checkpoint=checkpoint)
+            if existing_checkpoint_id is not None:
+                self._ensure_trace_terminal_event(
+                    run,
+                    checkpoint=checkpoint,
+                    checkpoint_id=existing_checkpoint_id,
+                )
+                return existing_checkpoint_id
             checkpoint_id = self.trace_store.record_checkpoint(
                 task_id=run.run_id,
                 checkpoint_type=str(checkpoint.get("checkpoint_type") or "loop_run"),
@@ -926,28 +1035,101 @@ class LoopController:
                 summary=str(checkpoint.get("summary") or ""),
                 ts=str(checkpoint.get("ts") or "") or None,
             )
-            self.trace_store.record_task_run_finished(
-                task_id=run.run_id,
-                status=self._trace_task_status(run.status),
-                thread_id=run.thread_id or run.run_id,
-                turn_id=run.run_id,
-                agent_id=_TRACE_AGENT_ID,
-                summary=str(checkpoint.get("summary") or ""),
-                reason=run.cancel_reason or run.last_error,
-                metadata={
-                    "checkpoint_id": checkpoint_id,
-                    "checkpoint_type": str(checkpoint.get("checkpoint_type") or "loop_run"),
-                    "workspace_path": run.workspace_path,
-                    "parent_run_id": run.parent_run_id,
-                    "origin_run_id": run.origin_run_id,
-                    "resume_checkpoint_id": run.resume_checkpoint_id,
-                },
-                ts=run.completed_at,
+            self._ensure_trace_terminal_event(
+                run,
+                checkpoint=checkpoint,
+                checkpoint_id=checkpoint_id,
             )
             return checkpoint_id
         except Exception as exc:  # noqa: BLE001
             _LOG.warning("loop trace terminal record failed for %s: %s", run.run_id, exc)
             return None
+
+    def _matching_trace_checkpoint_id(
+        self,
+        run: LoopRun,
+        *,
+        checkpoint: dict[str, Any],
+    ) -> int | None:
+        if self.trace_store is None:
+            return None
+        existing = self.trace_store.latest_checkpoint(
+            task_id=run.run_id,
+            checkpoint_type=str(checkpoint.get("checkpoint_type") or "loop_run"),
+        )
+        if existing is None:
+            return None
+        checkpoint_id = existing.get("id")
+        if self._terminal_trace_event(run, checkpoint_id=checkpoint_id) is not None:
+            try:
+                return int(checkpoint_id)
+            except (TypeError, ValueError):
+                return None
+        if int(existing.get("iteration") or 0) != int(checkpoint.get("iteration") or 0):
+            return None
+        if str(existing.get("summary") or "") != str(checkpoint.get("summary") or ""):
+            return None
+        state = existing.get("state") if isinstance(existing.get("state"), dict) else {}
+        if str(state.get("current_phase") or "") != run.status.value:
+            return None
+        try:
+            return int(checkpoint_id)
+        except (TypeError, ValueError):
+            return None
+
+    def _ensure_trace_terminal_event(
+        self,
+        run: LoopRun,
+        *,
+        checkpoint: dict[str, Any],
+        checkpoint_id: int,
+    ) -> None:
+        if self._terminal_trace_event(run, checkpoint_id=checkpoint_id) is not None:
+            return
+        if self.trace_store is None:
+            return
+        self.trace_store.record_task_run_finished(
+            task_id=run.run_id,
+            status=self._trace_task_status(run.status),
+            thread_id=run.thread_id or run.run_id,
+            turn_id=run.run_id,
+            agent_id=_TRACE_AGENT_ID,
+            summary=str(checkpoint.get("summary") or ""),
+            reason=run.cancel_reason or run.last_error,
+            metadata={
+                "checkpoint_id": checkpoint_id,
+                "checkpoint_type": str(checkpoint.get("checkpoint_type") or "loop_run"),
+                "workspace_path": run.workspace_path,
+                "parent_run_id": run.parent_run_id,
+                "origin_run_id": run.origin_run_id,
+                "resume_checkpoint_id": run.resume_checkpoint_id,
+            },
+            ts=run.completed_at,
+        )
+
+    def _terminal_trace_event(
+        self,
+        run: LoopRun,
+        *,
+        checkpoint_id: Any,
+    ) -> dict[str, Any] | None:
+        if self.trace_store is None:
+            return None
+        event_type = {
+            "completed": "TASK_RUN_COMPLETED",
+            "failed": "TASK_RUN_FAILED",
+            "cancelled": "TASK_RUN_CANCELLED",
+        }.get(self._trace_task_status(run.status), "TASK_RUN_FINISHED")
+        for event in self.trace_store.events(
+            task_id=run.run_id,
+            event_type=event_type,
+            limit=20,
+        ):
+            payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
+            metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+            if str(metadata.get("checkpoint_id") or "") == str(checkpoint_id or ""):
+                return event
+        return None
 
     @staticmethod
     def _trace_task_status(status: LoopRunStatus) -> str:
@@ -981,6 +1163,12 @@ class LoopController:
     def _finalize_learning(self, run: LoopRun) -> LoopRun:
         if not self._supervisor_heartbeat(run.run_id):
             return self._latest_run(run.run_id)
+        existing = self._existing_terminal_review(run)
+        if existing is not None:
+            checkpoint_id = self._review_trace_checkpoint_id(existing.last_review)
+            if not self._supervisor_transition(existing, checkpoint_id=checkpoint_id):
+                return self._latest_run(run.run_id)
+            return existing
         review = build_loop_run_review(run)
         trace_checkpoint_id = self._record_trace_terminal_artifacts(run)
         if trace_checkpoint_id is not None:
@@ -1001,6 +1189,38 @@ class LoopController:
                 }
             ),
         )
+
+    def _existing_terminal_review(self, run: LoopRun) -> LoopRun | None:
+        current = self.store.get(run.run_id)
+        if current is None:
+            raise KeyError(run.run_id)
+        review = current.last_review if isinstance(current.last_review, dict) else None
+        if review is None:
+            return None
+        if str(review.get("status") or "") != run.status.value:
+            return None
+        if current.status != run.status:
+            return None
+        return current
+
+    @staticmethod
+    def _review_trace_checkpoint_id(review: dict[str, Any] | None) -> int | None:
+        if not isinstance(review, dict):
+            return None
+        summary = review.get("summary") if isinstance(review.get("summary"), dict) else {}
+        checkpoint_id = summary.get("trace_checkpoint_id")
+        if checkpoint_id is None:
+            resume = review.get("resume") if isinstance(review.get("resume"), dict) else {}
+            latest = (
+                resume.get("latest_checkpoint")
+                if isinstance(resume.get("latest_checkpoint"), dict)
+                else {}
+            )
+            checkpoint_id = latest.get("trace_checkpoint_id")
+        try:
+            return int(checkpoint_id) if checkpoint_id is not None else None
+        except (TypeError, ValueError):
+            return None
 
     def _run_attempt(
         self,
@@ -1037,13 +1257,20 @@ class LoopController:
             if manifest is not None:
                 metadata["task_id"] = run.run_id
                 metadata["task_capability_manifest"] = manifest.model_dump(mode="json")
-        with session_scope(
-            Session(
-                actor=run.owner_id,
-                thread_id=thread_id,
-                metadata=metadata,
-            )
-        ), scoped_cancellation(cancellation_token or CancellationToken.none()):
+            metadata["task_supervisor_store_path"] = str(self.task_supervisor.store.path)
+            metadata["task_supervisor_holder_id"] = self.task_supervisor.holder_id
+            metadata["task_supervisor_lease_ttl_seconds"] = self.task_supervisor.lease_ttl_seconds
+            metadata["enforce_executor_approval"] = True
+        with (
+            session_scope(
+                Session(
+                    actor=run.owner_id,
+                    thread_id=thread_id,
+                    metadata=metadata,
+                )
+            ),
+            scoped_cancellation(cancellation_token or CancellationToken.none()),
+        ):
             return runner(
                 stack=self.stack,
                 intent=intent,
@@ -1143,9 +1370,7 @@ class LoopController:
         terminated_reason = (
             react_result.terminated_reason if react_result is not None else "runner_returned_none"
         )
-        completion_receipt = (
-            react_result.completion_receipt if react_result is not None else {}
-        )
+        completion_receipt = react_result.completion_receipt if react_result is not None else {}
         return self.store.mutate(
             run_id,
             lambda current: current.model_copy(

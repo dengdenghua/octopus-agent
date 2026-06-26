@@ -223,6 +223,77 @@ def test_run_checks_normalizes_cancelled_stream_result(tmp_path: Path, monkeypat
     assert result.stderr == "cancelled"
 
 
+def test_run_checks_caps_mocked_output_by_utf8_bytes(tmp_path: Path, monkeypatch) -> None:
+    import runtime.platform.process.streaming as streaming
+
+    def fake_stream_run(*args, **kwargs):
+        return {
+            "stdout": "\u754c" * 10,
+            "stderr": "\u9519" * 10,
+            "exit_code": 1,
+            "timed_out": False,
+        }
+
+    monkeypatch.setattr(streaming, "stream_run", fake_stream_run)
+    profile = ProjectProfile(
+        kind="unknown",
+        root=str(tmp_path),
+        checks=[{"name": "unicode", "argv": ["tool"], "display_cmd": "tool"}],
+    )
+
+    [result] = run_checks(profile, timeout_per_check=10, max_output=5)
+
+    assert result.passed is False
+    assert result.stdout == "\u754c"
+    assert result.stderr == "\u9519"
+    assert len(result.stdout.encode("utf-8")) <= 5
+    assert len(result.stderr.encode("utf-8")) <= 5
+
+
+def test_run_checks_legacy_cmd_uses_stream_policy(tmp_path: Path) -> None:
+    profile = ProjectProfile(
+        kind="legacy",
+        root=str(tmp_path),
+        checks=[
+            {
+                "name": "legacy",
+                "cmd": f"{sys.executable} -c \"print('legacy-ok')\"",
+            }
+        ],
+    )
+
+    [result] = run_checks(profile, timeout_per_check=10)
+
+    assert result.passed is True
+    assert result.stdout.strip() == "legacy-ok"
+    assert result.execution_policy["schema"] == "octopus.execution_policy.v1"
+    assert result.execution_policy["sandbox_requested"] is True
+    assert result.execution_policy["result"]["status"] == "completed"
+    assert result.execution_policy["result"]["exit_code"] == 0
+
+
+def test_run_checks_legacy_cmd_timeout_has_execution_policy(tmp_path: Path) -> None:
+    profile = ProjectProfile(
+        kind="legacy",
+        root=str(tmp_path),
+        checks=[
+            {
+                "name": "legacy-timeout",
+                "cmd": f'{sys.executable} -c "import time; time.sleep(5)"',
+            }
+        ],
+    )
+
+    [result] = run_checks(profile, timeout_per_check=0.2)
+
+    assert result.passed is False
+    assert result.exit_code == -1
+    assert result.stderr == "timeout"
+    assert result.execution_policy["schema"] == "octopus.execution_policy.v1"
+    assert result.execution_policy["result"]["status"] == "timed_out"
+    assert result.execution_policy["result"]["timed_out"] is True
+
+
 def test_run_checks_normalizes_malformed_stream_result(tmp_path: Path, monkeypatch) -> None:
     import runtime.platform.process.streaming as streaming
 

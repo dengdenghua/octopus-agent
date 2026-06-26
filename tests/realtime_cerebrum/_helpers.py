@@ -7,8 +7,6 @@ files' _set_script mutate the same objects.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 from runtime.protocol import (

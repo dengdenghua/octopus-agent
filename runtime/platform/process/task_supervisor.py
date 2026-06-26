@@ -66,6 +66,13 @@ TERMINAL_TASK_STATUSES = {
     TaskRunStatus.FAILED,
     TaskRunStatus.COMPLETED,
 }
+ACTIVE_TASK_STATUSES = {
+    TaskRunStatus.RUNNING,
+    TaskRunStatus.WAITING_APPROVAL,
+    TaskRunStatus.PAUSED,
+    TaskRunStatus.VERIFYING,
+    TaskRunStatus.REPAIRING,
+}
 
 
 DEFAULT_CAPABILITY_GROUPS: dict[str, bool] = {
@@ -171,6 +178,162 @@ class TaskRunRecord(BaseModel):
         return _clean_optional(value)
 
 
+def task_lease_health(record: TaskRunRecord) -> dict[str, Any]:
+    lease = record.lease
+    if record.status in TERMINAL_TASK_STATUSES:
+        state = "terminal"
+    elif lease is None:
+        state = "missing_lease"
+    elif lease.expired:
+        state = "expired"
+    else:
+        state = "ok"
+    recovery = task_recovery_advice(record, lease_state=state)
+    return {
+        "task_id": record.task_id,
+        "status": record.status.value,
+        "kind": record.kind,
+        "state": state,
+        "holder_id": lease.holder_id if lease is not None else None,
+        "lease_token": lease.token if lease is not None else None,
+        "lease_expires_at": lease.expires_at if lease is not None else None,
+        "lease_heartbeat_at": lease.heartbeat_at if lease is not None else None,
+        "task_heartbeat_at": record.heartbeat_at,
+        "updated_at": record.updated_at,
+        "can_takeover": recovery["can_takeover"],
+        "can_resume": recovery["can_resume"],
+        "has_checkpoint": recovery["has_checkpoint"],
+        "recommended_action": recovery["recommended_action"],
+        "recovery_reason": recovery["reason"],
+        "recovery": recovery,
+    }
+
+
+def task_recovery_advice(
+    record: TaskRunRecord,
+    *,
+    lease_state: str | None = None,
+) -> dict[str, Any]:
+    state = str(lease_state or "").strip()
+    if not state:
+        if record.status in TERMINAL_TASK_STATUSES:
+            state = "terminal"
+        elif record.lease is None:
+            state = "missing_lease"
+        elif record.lease.expired:
+            state = "expired"
+        else:
+            state = "ok"
+    has_checkpoint = bool(record.latest_checkpoint_id or record.resume_checkpoint_id)
+    can_takeover = False
+    can_resume = False
+    action = "monitor"
+    reason = "task is active with a healthy lease"
+
+    if record.status in TERMINAL_TASK_STATUSES:
+        action = "none"
+        reason = "task is already terminal"
+        if record.status in {TaskRunStatus.FAILED, TaskRunStatus.CANCELLED}:
+            can_resume = True
+            action = "resume_from_checkpoint" if has_checkpoint else "restart"
+            reason = f"task ended as {record.status.value}"
+    elif record.status == TaskRunStatus.PENDING:
+        action = "dispatch"
+        reason = "task has not started"
+    elif record.status == TaskRunStatus.WAITING_APPROVAL:
+        if bool(record.metadata.get("capability_denied")):
+            action = "capability_policy_denied"
+            reason = "task is blocked by disabled capability"
+        elif bool(record.metadata.get("approval_denied")) and not bool(
+            record.metadata.get("approval_required")
+        ):
+            action = "approval_policy_denied"
+            reason = "task is blocked by approval policy"
+        elif state in {"expired", "missing_lease"}:
+            can_takeover = True
+            action = "takeover_for_approval"
+            reason = "task is waiting for approval but has no live lease"
+        else:
+            action = "await_operator_approval"
+            reason = "task is waiting for approval"
+    elif state in {"expired", "missing_lease"}:
+        can_takeover = True
+        can_resume = has_checkpoint
+        action = "takeover_and_resume" if has_checkpoint else "takeover"
+        reason = "task has no live lease"
+    elif record.status == TaskRunStatus.PAUSED:
+        can_resume = has_checkpoint
+        action = "resume_paused_task"
+        reason = "task is paused"
+
+    return {
+        "can_takeover": can_takeover,
+        "can_resume": can_resume,
+        "has_checkpoint": has_checkpoint,
+        "recommended_action": action,
+        "reason": reason,
+        "latest_checkpoint_id": record.latest_checkpoint_id,
+        "resume_checkpoint_id": record.resume_checkpoint_id,
+    }
+
+
+def build_task_runs_overview(tasks: list[TaskRunRecord]) -> dict[str, Any]:
+    by_status: dict[str, int] = {}
+    by_kind: dict[str, int] = {}
+    by_recommended_action: dict[str, int] = {}
+    active_task_ids: list[str] = []
+    expired_lease_task_ids: list[str] = []
+    stale_nonterminal_task_ids: list[str] = []
+    leased_task_ids: list[str] = []
+    takeover_task_ids: list[str] = []
+    resumable_task_ids: list[str] = []
+    lease_health: list[dict[str, Any]] = []
+    for task in tasks:
+        status = task.status.value
+        by_status[status] = by_status.get(status, 0) + 1
+        kind = str(task.kind or "task")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+        health = task_lease_health(task)
+        action = str(health.get("recommended_action") or "unknown")
+        by_recommended_action[action] = by_recommended_action.get(action, 0) + 1
+        if bool(health.get("can_takeover")):
+            takeover_task_ids.append(task.task_id)
+        if bool(health.get("can_resume")):
+            resumable_task_ids.append(task.task_id)
+        if task.status in TERMINAL_TASK_STATUSES:
+            continue
+        active_task_ids.append(task.task_id)
+        lease_health.append(health)
+        if task.lease is None:
+            stale_nonterminal_task_ids.append(task.task_id)
+            continue
+        leased_task_ids.append(task.task_id)
+        if task.lease.expired:
+            expired_lease_task_ids.append(task.task_id)
+            stale_nonterminal_task_ids.append(task.task_id)
+    return {
+        "schema": "octopus.task_runs_overview.v1",
+        "total": len(tasks),
+        "active_count": len(active_task_ids),
+        "terminal_count": len(tasks) - len(active_task_ids),
+        "leased_count": len(leased_task_ids),
+        "expired_lease_count": len(expired_lease_task_ids),
+        "stale_nonterminal_count": len(stale_nonterminal_task_ids),
+        "takeover_recommended_count": len(takeover_task_ids),
+        "resumable_count": len(resumable_task_ids),
+        "by_status": dict(sorted(by_status.items())),
+        "by_kind": dict(sorted(by_kind.items())),
+        "by_recommended_action": dict(sorted(by_recommended_action.items())),
+        "active_task_ids": active_task_ids,
+        "expired_lease_task_ids": expired_lease_task_ids,
+        "stale_nonterminal_task_ids": stale_nonterminal_task_ids,
+        "takeover_task_ids": takeover_task_ids,
+        "resumable_task_ids": resumable_task_ids,
+        "lease_health": lease_health,
+        "generated_at": _now_iso(),
+    }
+
+
 def _empty_payload() -> dict[str, Any]:
     return {
         "schema": _SCHEMA,
@@ -243,7 +406,9 @@ class TaskSupervisorStore:
             candidate = mutator(existing, _next_lease_token)
             updated = candidate.model_copy(
                 update={
-                    "created_at": existing.created_at if existing is not None else candidate.created_at,
+                    "created_at": existing.created_at
+                    if existing is not None
+                    else candidate.created_at,
                     "updated_at": now,
                 },
                 deep=True,
@@ -271,18 +436,83 @@ class TaskSupervisorStore:
         limit: int = 100,
         offset: int = 0,
     ) -> list[TaskRunRecord]:
+        return self.list_page(
+            status=status,
+            kind=kind,
+            owner_id=owner_id,
+            thread_id=thread_id,
+            limit=limit,
+            offset=offset,
+        )["items"]
+
+    def list_page(
+        self,
+        *,
+        status: str | None = None,
+        kind: str | None = None,
+        owner_id: str | None = None,
+        thread_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        clean_limit = max(1, int(limit or 100))
+        clean_offset = max(0, int(offset or 0))
         with self._lock:
-            tasks = self._read_tasks()
+            tasks = self._filtered_tasks(
+                status=status,
+                kind=kind,
+                owner_id=owner_id,
+                thread_id=thread_id,
+            )
+            return {
+                "items": tasks[clean_offset : clean_offset + clean_limit],
+                "total": len(tasks),
+                "limit": clean_limit,
+                "offset": clean_offset,
+            }
+
+    def count(
+        self,
+        *,
+        status: str | None = None,
+        kind: str | None = None,
+        owner_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> int:
+        with self._lock:
+            return len(
+                self._filtered_tasks(
+                    status=status,
+                    kind=kind,
+                    owner_id=owner_id,
+                    thread_id=thread_id,
+                )
+            )
+
+    def _filtered_tasks(
+        self,
+        *,
+        status: str | None = None,
+        kind: str | None = None,
+        owner_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> list[TaskRunRecord]:
+        tasks = self._read_tasks()
         if status:
             tasks = [task for task in tasks if task.status.value == str(status)]
         if kind:
             tasks = [task for task in tasks if task.kind == str(kind)]
         if owner_id is not None:
-            tasks = [task for task in tasks if task.owner_id == owner_id]
+            tasks = [task for task in tasks if task.owner_id in (None, "", owner_id)]
         if thread_id is not None:
             tasks = [task for task in tasks if task.thread_id == thread_id]
         tasks.sort(key=lambda task: (task.created_at, task.task_id), reverse=True)
-        return tasks[offset: offset + limit]
+        return tasks
+
+    def overview(self) -> dict[str, Any]:
+        with self._lock:
+            tasks = self._read_tasks()
+        return build_task_runs_overview(tasks)
 
     def mutate(
         self,
@@ -412,8 +642,6 @@ class TaskSupervisor:
         metadata: dict[str, Any] | None = None,
         status: TaskRunStatus = TaskRunStatus.RUNNING,
     ) -> TaskRunRecord:
-        manifest = _coerce_manifest(capabilities, workspace_path=workspace_path)
-
         def _mutate(
             existing: TaskRunRecord | None,
             next_lease_token: Callable[[], int],
@@ -438,22 +666,82 @@ class TaskSupervisor:
             if status in TERMINAL_TASK_STATUSES:
                 completed_at = completed_at or now
                 lease = None
+            next_workspace_path = _prefer_text(
+                workspace_path,
+                existing.workspace_path if existing is not None else None,
+            )
+            manifest = _coerce_manifest(
+                capabilities
+                if capabilities is not None
+                else existing.capabilities
+                if existing is not None
+                else None,
+                workspace_path=next_workspace_path,
+            )
+            next_metadata = dict(existing.metadata) if existing is not None else {}
+            if isinstance(metadata, dict):
+                next_metadata.update(metadata)
+            if existing is not None and existing.status in TERMINAL_TASK_STATUSES:
+                events = list(next_metadata.get("restart_events") or [])
+                restart_event = {
+                    "previous_status": existing.status.value,
+                    "previous_completed_at": existing.completed_at,
+                    "previous_terminal_reason": existing.terminal_reason,
+                    "previous_checkpoint_id": existing.latest_checkpoint_id,
+                    "restarted_at": now,
+                    "holder_id": self.holder_id,
+                    "next_status": status.value,
+                }
+                events.append(restart_event)
+                next_metadata.update(
+                    {
+                        "restart": True,
+                        "restart_at": now,
+                        "restart_holder_id": self.holder_id,
+                        "restart_from_status": existing.status.value,
+                        "restart_from_checkpoint_id": existing.latest_checkpoint_id,
+                        "restart_events": events,
+                    }
+                )
             return TaskRunRecord(
                 task_id=task_id,
-                kind=kind,
-                owner_id=owner_id,
-                thread_id=thread_id,
-                parent_task_id=parent_task_id,
-                origin_task_id=origin_task_id,
-                resume_checkpoint_id=resume_checkpoint_id,
+                kind=_prefer_kind(kind, existing.kind if existing is not None else None),
+                owner_id=_prefer_text(
+                    owner_id,
+                    existing.owner_id if existing is not None else None,
+                ),
+                thread_id=_prefer_text(
+                    thread_id,
+                    existing.thread_id if existing is not None else None,
+                ),
+                parent_task_id=_prefer_text(
+                    parent_task_id,
+                    existing.parent_task_id if existing is not None else None,
+                ),
+                origin_task_id=_prefer_text(
+                    origin_task_id,
+                    existing.origin_task_id if existing is not None else None,
+                ),
+                resume_checkpoint_id=_prefer_text(
+                    resume_checkpoint_id,
+                    existing.resume_checkpoint_id if existing is not None else None,
+                ),
                 status=status,
-                title=title,
-                goal=goal,
-                mode=mode,
-                workspace_path=workspace_path,
+                title=_prefer_text(title, existing.title if existing is not None else None) or "",
+                goal=_prefer_text(goal, existing.goal if existing is not None else None) or "",
+                mode=_prefer_text(mode, existing.mode if existing is not None else None) or "",
+                workspace_path=next_workspace_path,
                 capabilities=manifest,
                 lease=lease,
-                metadata=metadata if isinstance(metadata, dict) else {},
+                terminal_reason=(
+                    existing.terminal_reason
+                    if existing is not None and status in TERMINAL_TASK_STATUSES
+                    else ""
+                ),
+                latest_checkpoint_id=existing.latest_checkpoint_id
+                if existing is not None
+                else None,
+                metadata=next_metadata,
                 started_at=(existing.started_at if existing is not None else None) or now,
                 completed_at=completed_at,
                 heartbeat_at=now,
@@ -476,6 +764,35 @@ class TaskSupervisor:
         now = _now_iso()
 
         def _mutate(current: TaskRunRecord) -> TaskRunRecord:
+            if current.status in TERMINAL_TASK_STATUSES:
+                metadata = dict(current.metadata)
+                if isinstance(metadata_patch, dict):
+                    metadata.update(metadata_patch)
+                terminal_events = list(metadata.get("terminal_transition_events") or [])
+                terminal_events.append(
+                    {
+                        "ignored_status": next_status.value,
+                        "reason": str(reason or ""),
+                        "checkpoint_id": checkpoint_id,
+                        "previous_status": current.status.value,
+                        "previous_terminal_reason": current.terminal_reason,
+                        "previous_completed_at": current.completed_at,
+                        "recorded_at": now,
+                        "holder_id": self.holder_id,
+                    }
+                )
+                metadata["terminal_transition_events"] = terminal_events
+                return current.model_copy(
+                    update={
+                        "latest_checkpoint_id": checkpoint_id
+                        if checkpoint_id is not None
+                        else current.latest_checkpoint_id,
+                        "metadata": metadata,
+                        "heartbeat_at": current.heartbeat_at or now,
+                        "lease": None,
+                    },
+                    deep=True,
+                )
             if current.status not in TERMINAL_TASK_STATUSES:
                 self._assert_current_holder(current)
             metadata = dict(current.metadata)
@@ -509,6 +826,163 @@ class TaskSupervisor:
             )
 
         record = self.store.mutate(task_id, _mutate)
+        self._remember_lease(record)
+        return record
+
+    def record_approval_decision(
+        self,
+        task_id: str,
+        *,
+        approved: bool,
+        decided_by: str | None = None,
+        reason: str = "",
+        resume_status: TaskRunStatus = TaskRunStatus.RUNNING,
+    ) -> TaskRunRecord:
+        now = _now_iso()
+        clean_reason = str(reason or "").strip()
+        clean_actor = str(decided_by or "").strip() or None
+        next_status = resume_status if approved else TaskRunStatus.PAUSED
+        if next_status in TERMINAL_TASK_STATUSES:
+            raise ValueError("approval decision cannot transition directly to terminal")
+
+        def _mutate(current: TaskRunRecord) -> TaskRunRecord:
+            if current.status != TaskRunStatus.WAITING_APPROVAL:
+                raise ValueError("task is not waiting for approval")
+            self._assert_current_holder(current)
+            metadata = dict(current.metadata)
+            if bool(metadata.get("capability_denied")):
+                raise ValueError("task is blocked by disabled capability")
+            if bool(metadata.get("approval_denied")) and not bool(
+                metadata.get("approval_required")
+            ):
+                raise ValueError("task is blocked by approval policy")
+            decisions = list(metadata.get("approval_decisions") or [])
+            decision = {
+                "approved": bool(approved),
+                "decided_by": clean_actor,
+                "reason": clean_reason,
+                "decided_at": now,
+                "tool_name": metadata.get("approval_tool_name"),
+                "approval_action": metadata.get("approval_action"),
+            }
+            decisions.append(decision)
+            metadata.update(
+                {
+                    "approval_required": False,
+                    "approval_denied": not approved,
+                    "approval_decision": "approved" if approved else "rejected",
+                    "approval_decided_by": clean_actor,
+                    "approval_decided_at": now,
+                    "approval_decision_reason": clean_reason,
+                    "approval_decisions": decisions,
+                }
+            )
+            if approved:
+                metadata.pop("approval_reason", None)
+            lease = current.lease
+            if lease is not None:
+                lease = lease.model_copy(
+                    update={
+                        "heartbeat_at": now,
+                        "expires_at": time.time() + self.lease_ttl_seconds,
+                    }
+                )
+            return current.model_copy(
+                update={
+                    "status": next_status,
+                    "terminal_reason": "" if approved else clean_reason,
+                    "metadata": metadata,
+                    "heartbeat_at": now,
+                    "completed_at": None,
+                    "lease": lease,
+                },
+                deep=True,
+            )
+
+        record = self.store.mutate(task_id, _mutate)
+        self._remember_lease(record)
+        return record
+
+    def takeover_task(
+        self,
+        task_id: str,
+        *,
+        by: str | None = None,
+        reason: str = "",
+        status: TaskRunStatus | str | None = None,
+    ) -> TaskRunRecord:
+        requested_status = (
+            status
+            if isinstance(status, TaskRunStatus)
+            else TaskRunStatus(str(status))
+            if status is not None
+            else TaskRunStatus.RUNNING
+        )
+        if requested_status in TERMINAL_TASK_STATUSES:
+            raise ValueError("takeover cannot transition directly to terminal")
+        clean_actor = str(by or "").strip() or None
+        clean_reason = str(reason or "").strip()
+
+        def _mutate(
+            existing: TaskRunRecord | None,
+            next_lease_token: Callable[[], int],
+        ) -> TaskRunRecord:
+            if existing is None:
+                raise KeyError(task_id)
+            if existing.status in TERMINAL_TASK_STATUSES:
+                raise ValueError("terminal task cannot be taken over")
+            if existing.status == TaskRunStatus.WAITING_APPROVAL and (
+                bool(existing.metadata.get("capability_denied"))
+                or (
+                    bool(existing.metadata.get("approval_denied"))
+                    and not bool(existing.metadata.get("approval_required"))
+                )
+            ):
+                raise ValueError("non-approvable task cannot be taken over")
+            lease = existing.lease
+            if lease is not None and not lease.expired and lease.holder_id != self.holder_id:
+                raise TaskLeaseConflict(task_id, lease.holder_id)
+            if lease is not None and not lease.expired and lease.holder_id == self.holder_id:
+                raise ValueError("task is already held by this worker")
+            now = _now_iso()
+            metadata = dict(existing.metadata)
+            events = list(metadata.get("takeover_events") or [])
+            event = {
+                "by": clean_actor,
+                "reason": clean_reason,
+                "previous_holder_id": lease.holder_id if lease is not None else None,
+                "previous_lease_token": lease.token if lease is not None else None,
+                "previous_status": existing.status.value,
+                "taken_over_at": now,
+            }
+            events.append(event)
+            metadata.update(
+                {
+                    "takeover": True,
+                    "takeover_by": clean_actor,
+                    "takeover_reason": clean_reason,
+                    "takeover_at": now,
+                    "takeover_events": events,
+                }
+            )
+            next_status = (
+                TaskRunStatus.WAITING_APPROVAL
+                if existing.status == TaskRunStatus.WAITING_APPROVAL
+                else requested_status
+            )
+            return existing.model_copy(
+                update={
+                    "status": next_status,
+                    "metadata": metadata,
+                    "heartbeat_at": now,
+                    "lease": self._new_lease(next_lease_token()),
+                    "completed_at": None,
+                    "terminal_reason": "",
+                },
+                deep=True,
+            )
+
+        record = self.store.upsert_mutate(task_id, _mutate)
         self._remember_lease(record)
         return record
 
@@ -610,7 +1084,25 @@ def _coerce_manifest(
     return manifest
 
 
-def manifest_from_session_metadata(metadata: dict[str, Any] | None) -> TaskCapabilityManifest | None:
+def _prefer_text(value: Any, fallback: Any = None) -> str | None:
+    text = str(value or "").strip()
+    if text:
+        return text
+    fallback_text = str(fallback or "").strip()
+    return fallback_text or None
+
+
+def _prefer_kind(value: Any, fallback: Any = None) -> str:
+    fallback_text = str(fallback or "").strip()
+    text = str(value or "").strip()
+    if fallback_text and text in {"", "task"}:
+        return fallback_text
+    return text or fallback_text or "task"
+
+
+def manifest_from_session_metadata(
+    metadata: dict[str, Any] | None,
+) -> TaskCapabilityManifest | None:
     if not isinstance(metadata, dict):
         return None
     raw = metadata.get("task_capability_manifest") or metadata.get("capability_manifest")
@@ -625,6 +1117,7 @@ def manifest_from_session_metadata(metadata: dict[str, Any] | None) -> TaskCapab
 
 
 __all__ = [
+    "ACTIVE_TASK_STATUSES",
     "DEFAULT_CAPABILITY_GROUPS",
     "LostTaskLease",
     "TERMINAL_TASK_STATUSES",
@@ -636,5 +1129,8 @@ __all__ = [
     "TaskRunStatus",
     "TaskSupervisor",
     "TaskSupervisorStore",
+    "build_task_runs_overview",
     "manifest_from_session_metadata",
+    "task_lease_health",
+    "task_recovery_advice",
 ]

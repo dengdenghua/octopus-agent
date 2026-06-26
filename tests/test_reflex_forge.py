@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from runtime.safety.recovery.evolution_router import EvolutionRouter
 from runtime.safety.recovery.reflex_forge import (
     ForgedReflexCandidate,
     ReflexForge,
     ReflexForgeConfig,
 )
-
 
 # ═══════════════════════════════════════════════════════════
 # EvolutionRouter tests
@@ -119,11 +116,13 @@ class TestReflexForge:
         assert forge.propose() == []
 
     def test_propose_clusters_similar_prompts(self):
-        fc = _make_mock_fuzzy_cache([
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-        ])
+        fc = _make_mock_fuzzy_cache(
+            [
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+            ]
+        )
         forge = ReflexForge(fuzzy_cache=fc)
         candidates = forge.propose()
         assert len(candidates) == 1
@@ -133,11 +132,13 @@ class TestReflexForge:
 
     def test_propose_filters_low_consistency(self):
         """When replies vary too much, the cluster is dropped."""
-        fc = _make_mock_fuzzy_cache([
-            {"prompt": "你好", "reply": "回复A"},
-            {"prompt": "你好", "reply": "回复B"},
-            {"prompt": "你好", "reply": "回复C"},
-        ])
+        fc = _make_mock_fuzzy_cache(
+            [
+                {"prompt": "你好", "reply": "回复A"},
+                {"prompt": "你好", "reply": "回复B"},
+                {"prompt": "你好", "reply": "回复C"},
+            ]
+        )
         forge = ReflexForge(
             fuzzy_cache=fc,
             config=ReflexForgeConfig(min_hits=3, reply_consistency_threshold=0.6),
@@ -147,10 +148,12 @@ class TestReflexForge:
         assert candidates == []
 
     def test_propose_respects_min_hits(self):
-        fc = _make_mock_fuzzy_cache([
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-        ])
+        fc = _make_mock_fuzzy_cache(
+            [
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+            ]
+        )
         forge = ReflexForge(
             fuzzy_cache=fc,
             config=ReflexForgeConfig(min_hits=3),
@@ -158,11 +161,13 @@ class TestReflexForge:
         assert forge.propose() == []
 
     def test_shadow_validate_passes_for_good_pattern(self):
-        fc = _make_mock_fuzzy_cache([
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-        ])
+        fc = _make_mock_fuzzy_cache(
+            [
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+            ]
+        )
         forge = ReflexForge(fuzzy_cache=fc)
         candidates = forge.propose()
         assert len(candidates) == 1
@@ -190,11 +195,13 @@ class TestReflexForge:
 
     def test_run_promotes_valid_candidate(self, tmp_path):
         rules_file = tmp_path / "reflex_rules.yaml"
-        fc = _make_mock_fuzzy_cache([
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-        ])
+        fc = _make_mock_fuzzy_cache(
+            [
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+            ]
+        )
         forge = ReflexForge(
             fuzzy_cache=fc,
             config=ReflexForgeConfig(
@@ -213,11 +220,13 @@ class TestReflexForge:
     def test_run_skips_existing_rule(self, tmp_path):
         rules_file = tmp_path / "reflex_rules.yaml"
         rules_file.write_text("rules: []\n", encoding="utf-8")
-        fc = _make_mock_fuzzy_cache([
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-            {"prompt": "你好", "reply": "你好！"},
-        ])
+        fc = _make_mock_fuzzy_cache(
+            [
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+                {"prompt": "你好", "reply": "你好！"},
+            ]
+        )
         forge = ReflexForge(
             fuzzy_cache=fc,
             config=ReflexForgeConfig(

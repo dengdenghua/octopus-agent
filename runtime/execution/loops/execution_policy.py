@@ -17,13 +17,34 @@ _EXECUTION_POLICY_KEYS = (
     "process_group",
     "process_tree_kill",
     "timeout_s",
+    "result",
+)
+
+_EXECUTION_POLICY_RESULT_KEYS = (
+    "status",
+    "exit_code",
+    "timed_out",
+    "cancelled",
+    "killed",
+    "stdout_truncated",
+    "stderr_truncated",
+    "output_truncated",
+    "error_type",
 )
 
 
 def execution_policy_summary(policy: dict[str, Any] | None) -> dict[str, Any]:
     if not isinstance(policy, dict) or not policy:
         return {}
-    return {key: policy[key] for key in _EXECUTION_POLICY_KEYS if key in policy}
+    summary = {key: policy[key] for key in _EXECUTION_POLICY_KEYS if key in policy}
+    result = summary.get("result")
+    if isinstance(result, dict):
+        summary["result"] = {
+            key: result[key] for key in _EXECUTION_POLICY_RESULT_KEYS if key in result
+        }
+    elif "result" in summary:
+        summary.pop("result", None)
+    return summary
 
 
 def verifier_execution_policies(result: VerifierResult | None) -> list[dict[str, Any]]:

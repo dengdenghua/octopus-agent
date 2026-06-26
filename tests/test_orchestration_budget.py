@@ -6,6 +6,7 @@ orchestration. A deterministic recipe instead runs inside an
 replaced by a single bounded total of K sub-agent spawns. With no scope the
 old per-turn behaviour is unchanged.
 """
+
 from __future__ import annotations
 
 import threading
@@ -107,19 +108,47 @@ def test_charge_is_thread_safe():
     assert budget.used == 200  # 20 threads * 10, no lost updates
 
 
+def test_try_charge_is_thread_safe_and_cap_bound():
+    budget = OrchestrationBudget(max_spawns=7)
+    barrier = threading.Barrier(20)
+    lock = threading.Lock()
+    accepted = 0
+
+    def _worker():
+        nonlocal accepted
+        barrier.wait()
+        if budget.try_charge():
+            with lock:
+                accepted += 1
+
+    threads = [threading.Thread(target=_worker) for _ in range(20)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert accepted == 7
+    assert budget.used == 7
+    assert budget.remaining() == 0
+
+
 # ── integration: call_agent_parallel under an envelope ───────────
 
 
 def _patch_bridge(monkeypatch):
     def _fake(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
         return {
-            "agent_id": agent_id, "output": f"echo:{prompt}",
-            "success": True, "error": None, "codename": "W",
+            "agent_id": agent_id,
+            "output": f"echo:{prompt}",
+            "success": True,
+            "error": None,
+            "codename": "W",
         }
 
     monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake)
     monkeypatch.setattr(
-        "runtime.execution.subagents.bridge.call_subagent", _fake,
+        "runtime.execution.subagents.bridge.call_subagent",
+        _fake,
     )
 
 
@@ -146,9 +175,47 @@ def test_envelope_blocks_call_when_exhausted(monkeypatch):
 
     _patch_bridge(monkeypatch)
     with orchestration_budget_scope(2) as budget:
-        r1 = _call_agent_parallel(specs=_specs("p1", "p2", "p3"))  # room → runs, charges 3
+        r1 = _call_agent_parallel(specs=_specs("p1", "p2", "p3"))  # 2 run, 1 refused
         r2 = _call_agent_parallel(specs=_specs("p4", "p5"))  # no room → refused
-    assert r1["success_count"] == 3
-    assert budget.used == 3
+    assert r1["success_count"] == 2
+    assert r1["partial"] is True
+    assert r1["failed"] == 1
+    assert r1["failures"][0]["error_type"] == "budget_exhausted"
+    assert budget.used == 2
     assert r2["ok"] is False
     assert "budget" in (r2.get("error") or "").lower()
+
+
+def test_parallel_fanout_cannot_oversubscribe_envelope(monkeypatch):
+    from runtime.execution.suckers.delegation_skills import _call_agent_parallel
+
+    calls: list[str] = []
+    lock = threading.Lock()
+
+    def _fake(agent_id: str = "", prompt: str = "", **_kw: Any) -> dict[str, Any]:
+        with lock:
+            calls.append(prompt)
+        return {
+            "agent_id": agent_id,
+            "output": f"echo:{prompt}",
+            "success": True,
+            "error": None,
+        }
+
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", _fake)
+    monkeypatch.setattr(
+        "runtime.execution.subagents.bridge.call_subagent",
+        _fake,
+    )
+
+    with orchestration_budget_scope(3) as budget:
+        result = _call_agent_parallel(
+            specs=_specs("p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"),
+        )
+
+    assert budget.used == 3
+    assert len(calls) == 3
+    assert result["success_count"] == 3
+    assert result["failed"] == 5
+    assert result["partial"] is True
+    assert {f["error_type"] for f in result["failures"]} == {"budget_exhausted"}
