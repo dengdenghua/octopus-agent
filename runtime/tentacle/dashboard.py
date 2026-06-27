@@ -37,6 +37,7 @@ from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from runtime.tentacle.base import ToolCall
 from runtime.tentacle.coordinator import TentacleCoordinator
+from runtime.tentacle.fleet import broadcast as fleet_broadcast
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +266,46 @@ def create_tentacle_router(
         if len(_task_history) > 100:
             _task_history.pop(0)
 
+        return record
+
+    # ── 群发（一对多群控） ──────────────────────────────
+
+    @router.post("/broadcast")
+    async def broadcast_task(body: dict[str, Any]) -> dict[str, Any]:
+        """把同一任务并发下发到多台设备并聚合结果。
+
+        body: ``{task, tentacle_ids?, max_concurrency?}``——``tentacle_ids`` 省略
+        或为 null 时对所有在线设备群发。单台失败被隔离，不影响其它设备。
+        """
+        task = body.get("task", "").strip()
+        if not task:
+            raise HTTPException(400, "Missing 'task' field")
+        tentacle_ids = body.get("tentacle_ids")
+        if tentacle_ids is not None and not isinstance(tentacle_ids, list):
+            raise HTTPException(400, "'tentacle_ids' must be a list or omitted")
+        try:
+            max_concurrency = int(body.get("max_concurrency", 8) or 8)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "'max_concurrency' must be an integer") from None
+
+        start = time.time()
+        result = await fleet_broadcast(coordinator, task, tentacle_ids, max_concurrency=max_concurrency)
+
+        record = {
+            "task_id": f"web-bcast-{int(time.time()*1000)}",
+            "task": task,
+            "broadcast": True,
+            "success": result["ok"],
+            "total": result["total"],
+            "succeeded": result["succeeded"],
+            "failed": result["failed"],
+            "results": result["results"],
+            "duration_ms": int((time.time() - start) * 1000),
+            "timestamp": time.time(),
+        }
+        _task_history.append(record)
+        if len(_task_history) > 100:
+            _task_history.pop(0)
         return record
 
     # ── 任务历史 ────────────────────────────────────────
@@ -812,6 +853,19 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
       <div id="task-result"></div>
     </div>
+
+    <div class="card" style="margin-top:20px">
+      <h2>📡 群发（群控）</h2>
+      <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:6px">
+        <input type="checkbox" id="bcast-all" checked onchange="toggleBcastAll()"> 所有在线设备
+      </label>
+      <div id="bcast-devices" style="max-height:120px;overflow:auto;margin-bottom:8px"></div>
+      <div class="task-input">
+        <input id="bcast-input" placeholder="给所有手机：打开微信签到" onkeydown="if(event.key==='Enter')broadcastTask()">
+        <button class="btn" id="bcast-btn" onclick="broadcastTask()">群发</button>
+      </div>
+      <div id="bcast-result"></div>
+    </div>
   </div>
 
   <!-- 右列 -->
@@ -874,8 +928,61 @@ async function refresh() {
         `<option value="${d.tentacle_id}">${d.tentacle_id}</option>`
       ).join('');
     sel.value = curVal;
+
+    // 群发设备多选
+    const bd = document.getElementById('bcast-devices');
+    const allOn = document.getElementById('bcast-all').checked;
+    const online = devices.filter(d => d.is_online);
+    bd.innerHTML = online.length === 0
+      ? '<div class="empty" style="padding:10px">无在线设备</div>'
+      : online.map(d =>
+          `<label style="display:block;font-size:13px;padding:2px 0">
+             <input type="checkbox" class="bcast-dev" value="${d.tentacle_id}" ${allOn ? 'disabled' : ''}> ${d.tentacle_id}
+           </label>`
+        ).join('');
   } catch(e) {
     console.error('refresh error:', e);
+  }
+}
+
+function toggleBcastAll() {
+  const dis = document.getElementById('bcast-all').checked;
+  document.querySelectorAll('.bcast-dev').forEach(c => { c.disabled = dis; if (dis) c.checked = false; });
+}
+
+async function broadcastTask() {
+  const input = document.getElementById('bcast-input');
+  const btn = document.getElementById('bcast-btn');
+  const resultDiv = document.getElementById('bcast-result');
+  const task = input.value.trim();
+  if (!task) return;
+  let ids = null;
+  if (!document.getElementById('bcast-all').checked) {
+    ids = Array.from(document.querySelectorAll('.bcast-dev:checked')).map(c => c.value);
+    if (ids.length === 0) {
+      resultDiv.innerHTML = '<div style="color:var(--red);margin-top:8px">请选择至少一台设备，或勾选"所有在线设备"</div>';
+      return;
+    }
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 群发中';
+  resultDiv.innerHTML = '';
+  try {
+    const r = await api('/broadcast', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({task, tentacle_ids: ids}),
+    });
+    const color = r.failed === 0 ? 'var(--green)' : 'var(--yellow)';
+    resultDiv.innerHTML = `<div style="color:${color};margin-top:8px">📡 ${r.total} 台 · ✓${r.succeeded} ✗${r.failed} · ${r.duration_ms}ms</div>`;
+    input.value = '';
+  } catch(e) {
+    resultDiv.innerHTML = `<div style="color:var(--red);margin-top:8px">❌ ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '群发';
+    loadHistory();
+    refresh();
   }
 }
 
@@ -890,6 +997,16 @@ async function loadHistory() {
     ll.innerHTML = tasks.map(t => {
       const cls = t.success ? 'success' : 'fail';
       const icon = t.success ? '✅' : '❌';
+      if (t.broadcast) {
+        const detail = (t.results || []).map(r =>
+          `<span class="tool">${r.tentacle_id}</span> ${r.ok ? '✓' : '✗ ' + (r.error || '')}`
+        ).join('&nbsp;&nbsp;');
+        return `<div class="log-entry ${cls}">
+          <span class="time">${fmtTime(t.timestamp)}</span>
+          📡 "${t.task}" (群发 ${t.total}台: ✓${t.succeeded} ✗${t.failed}, ${t.duration_ms}ms)
+          ${detail ? `<div class="detail">${detail}</div>` : ''}
+        </div>`;
+      }
       let detail = '';
       if (t.results) {
         detail = t.results.map(r =>
