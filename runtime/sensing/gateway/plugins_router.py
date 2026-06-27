@@ -13,6 +13,21 @@ from runtime.platform.plugins.codex_discovery import (  # re-exported
 )
 
 
+def is_public_plugin_asset_request(method: str, path: str) -> bool:
+    if method.upper() not in {"GET", "HEAD"}:
+        return False
+    parts = path.split("/")
+    return (
+        len(parts) >= 6
+        and parts[0] == ""
+        and parts[1] == "api"
+        and parts[2] == "plugins"
+        and bool(parts[3])
+        and parts[4] == "assets"
+        and bool(parts[5])
+    )
+
+
 def create_plugins_router(
     *,
     plugin_roots: list[Path] | None = None,
@@ -23,6 +38,10 @@ def create_plugins_router(
     jwt_audience: str | None = None,
 ) -> APIRouter:
     def _auth_dep(request: Request) -> None:
+        path = str(getattr(getattr(request, "url", None), "path", "") or "")
+        if is_public_plugin_asset_request(request.method, path):
+            return
+
         from runtime.adapters.web_auth import _resolve_actor
 
         _resolve_actor(

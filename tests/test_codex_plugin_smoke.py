@@ -151,6 +151,28 @@ def test_plugins_router_requires_auth_when_enabled(tmp_path: Path) -> None:
     ).status_code == 200
 
 
+def test_plugin_assets_are_public_read_only_when_auth_enabled(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path)
+    (plugin_dir / "assets").mkdir()
+    (plugin_dir / "assets" / "logo.txt").write_text("logo", encoding="utf-8")
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_plugins_router(
+            plugin_roots=[tmp_path],
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/plugins").status_code == 401
+    asset = client.get("/api/plugins/research/assets/assets/logo.txt")
+    assert asset.status_code == 200
+    assert asset.text == "logo"
+
+
 def _write_plugin(root: Path) -> Path:
     plugin_dir = root / "research"
     (plugin_dir / ".codex-plugin").mkdir(parents=True)
