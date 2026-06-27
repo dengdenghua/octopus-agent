@@ -121,16 +121,16 @@ export function CommandPalette() {
         keywords: "agent team",
       },
       {
-        to: "/workspace/skills",
+        to: "/workspace/agents?surface=chat&tab=skills",
         label: t.skillsPage.pageTitle,
         icon: SparklesIcon,
         keywords: "skill",
       },
       {
-        to: "/workspace/plugins?tab=packs",
+        to: "/workspace/agents?surface=chat&tab=plugins",
         label: t.metaSkills.title,
         icon: BoxesIcon,
-        keywords: "skill pack meta workflow template",
+        keywords: "skill pack meta workflow template plugin",
       },
       {
         to: "/workspace/store",
