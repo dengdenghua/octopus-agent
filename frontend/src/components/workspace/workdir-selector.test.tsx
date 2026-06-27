@@ -22,6 +22,8 @@ describe("<WorkDirSelector />", () => {
   });
 
   it("keeps the portaled menu open when pressing an action inside it", async () => {
+    // The "Open folder" CTA only renders with a native picker (Electron).
+    vi.stubGlobal("octopus", { dialog: { open: vi.fn() } });
     renderWithProviders(
       <WorkDirSelector
         workDir="F:/work/octopus-agent"
@@ -78,16 +80,12 @@ describe("<WorkDirSelector />", () => {
     expect(onWorkDirChange).not.toHaveBeenCalled();
   });
 
-  it("maps a browser-picked folder name back to a recent absolute workspace", async () => {
+  it("binds a recent workspace from the menu in web mode (no native picker)", async () => {
     const onWorkDirChange = vi.fn();
     localStorage.setItem(
       "octopus:recentWorkdirs",
       JSON.stringify(["/Users/dangbei/Public"]),
     );
-    vi.stubGlobal(
-      "showDirectoryPicker",
-      vi.fn().mockResolvedValue({ name: "Public" }),
-    );
 
     renderWithProviders(
       <WorkDirSelector
@@ -97,19 +95,16 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
+    // Web mode: the trigger opens the menu (no OS picker); recents are listed
+    // even in the muted variant so they can be rebound in one click.
     fireEvent.click(screen.getByTitle("Personal space"));
+    fireEvent.click(await screen.findByText("Public"));
 
-    await waitFor(() => {
-      expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/Public");
-    });
+    expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/Public");
   });
 
-  it("falls back to manual path input when browser folder picker has no path match", async () => {
+  it("offers manual path entry in web mode and binds a pasted absolute path", async () => {
     const onWorkDirChange = vi.fn();
-    vi.stubGlobal(
-      "showDirectoryPicker",
-      vi.fn().mockResolvedValue({ name: "UnknownFolder" }),
-    );
 
     renderWithProviders(
       <WorkDirSelector
@@ -119,12 +114,17 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
+    // Web mode: the trigger opens the menu with a manual-path field (no OS
+    // picker that hands back an unusable folder name).
     fireEvent.click(screen.getByTitle("Personal space"));
+    const input = await screen.findByPlaceholderText(
+      "Enter workspace directory path:",
+    );
+    expect(input).toHaveValue("");
+    fireEvent.change(input, { target: { value: "/Users/dangbei/proj" } });
+    fireEvent.submit(input.closest("form")!);
 
-    expect(
-      await screen.findByPlaceholderText("Enter workspace directory path:"),
-    ).toHaveValue("UnknownFolder");
-    expect(onWorkDirChange).not.toHaveBeenCalled();
+    expect(onWorkDirChange).toHaveBeenCalledWith("/Users/dangbei/proj");
   });
 
   it("uses the Electron native folder picker when available", async () => {

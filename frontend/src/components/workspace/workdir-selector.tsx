@@ -61,22 +61,6 @@ async function openNativeFolderPicker(
   return null;
 }
 
-async function openBrowserFolderPicker(): Promise<string | null> {
-  type DirectoryPicker = () => Promise<{ name?: string }>;
-  const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker })
-    .showDirectoryPicker;
-  if (typeof picker !== "function") return null;
-  try {
-    const handle = await picker();
-    return typeof handle?.name === "string" && handle.name.trim()
-      ? handle.name.trim()
-      : null;
-  } catch (error) {
-    swallow(error);
-    return null;
-  }
-}
-
 function readRecentWorkdirs(): string[] {
   if (typeof window === "undefined") return [];
   try {
@@ -171,17 +155,21 @@ function entryDisplayName(entry: FsTreeEntry): string {
   return fromPath || entry.name || entry.path;
 }
 
-function matchingRecentWorkDirByName(
-  folderName: string,
-  recentWorkdirs: string[],
-): string | null {
-  const normalizedName = normalizePathKey(folderName);
-  if (!normalizedName) return null;
-  return (
-    recentWorkdirs.find(
-      (dir) => normalizePathKey(basename(dir)) === normalizedName,
-    ) ?? null
-  );
+// Kept self-contained (not in the shared i18n bundle) so this touch-up stays
+// decoupled from concurrently-edited locale files.
+const WEB_PICKER_HINT: Record<"zh" | "en" | "ja" | "ko", string> = {
+  zh: "网页版无法直接选择本地文件夹。选最近用过的工作区,或在下方粘贴完整路径;需要文件夹选择器请用桌面版。",
+  en: "The web app can't pick a local folder directly. Choose a recent workspace, or paste a full path below — use the desktop app for a folder picker.",
+  ja: "ウェブ版はローカルフォルダを直接選択できません。最近のワークスペースを選ぶか、下に絶対パスを貼り付けてください（フォルダ選択はデスクトップ版）。",
+  ko: "웹 버전은 로컬 폴더를 직접 선택할 수 없습니다. 최근 작업 공간을 선택하거나 아래에 전체 경로를 붙여넣으세요(폴더 선택기는 데스크톱 앱).",
+};
+
+function webPickerHint(locale: string): string {
+  const lang = (locale || "en").slice(0, 2).toLowerCase();
+  if (lang === "zh") return WEB_PICKER_HINT.zh;
+  if (lang === "ja") return WEB_PICKER_HINT.ja;
+  if (lang === "ko") return WEB_PICKER_HINT.ko;
+  return WEB_PICKER_HINT.en;
 }
 
 export function WorkDirSelector({
@@ -192,7 +180,13 @@ export function WorkDirSelector({
   chromeless = false,
 }: WorkDirSelectorProps) {
   const isMutedVariant = variant === "muted";
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  // Native folder picker is only reachable through the Electron preload bridge.
+  // In a plain browser there is none — `showDirectoryPicker` can only hand back a
+  // folder *name*, never an absolute path the local backend can use — so the
+  // web flow leans on recent workspaces + manual paste instead of a dead picker.
+  const hasNativePicker =
+    typeof window !== "undefined" && Boolean(window.octopus?.dialog?.open);
   const [isPicking, setIsPicking] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   // ``browsePath`` drives the in-menu folder browser. When the user
@@ -380,19 +374,13 @@ export function WorkDirSelector({
 
   const handlePrimaryAction = useCallback(async () => {
     if (isPicking) return;
-    if (!window.octopus?.dialog?.open) {
-      const selectedName = await openBrowserFolderPicker();
-      const matchedPath = selectedName
-        ? matchingRecentWorkDirByName(selectedName, recentWorkdirs)
-        : null;
-      if (matchedPath) {
-        applyWorkDir(matchedPath);
-        return;
-      }
-      if (selectedName) pendingBrowserPickedNameRef.current = selectedName;
+    if (!hasNativePicker) {
+      // Web mode: don't pop the OS folder picker — it can't return a usable path
+      // and only confuses ("picked a folder, now paste it anyway"). Open the menu
+      // straight to recents + manual paste instead.
       setShowMenu(true);
-      setBrowserOpen(true);
       setNoBridgeHint(true);
+      if (!isMutedVariant) setBrowserOpen(true);
       requestAnimationFrame(() => {
         manualInputRef.current?.focus();
       });
@@ -410,7 +398,7 @@ export function WorkDirSelector({
     } finally {
       setIsPicking(false);
     }
-  }, [applyWorkDir, isMutedVariant, isPicking, recentWorkdirs, workDir]);
+  }, [applyWorkDir, hasNativePicker, isMutedVariant, isPicking, workDir]);
 
   const handleMenuToggle = useCallback(() => {
     if (isPicking) return;
@@ -489,28 +477,9 @@ export function WorkDirSelector({
 
   const upDir = parentDir(browsePath);
 
-  // Browser CTAs map to native Electron actions when available; in pure
-  // web mode they degrade to existing in-page flows (manual edit prompt
-  // for "open folder", info popups for the unimplemented ones).
+  // The "open folder" CTA only renders when a native picker exists (Electron),
+  // so this is the native path; web mode never reaches it.
   const handleOpenFolderCta = useCallback(async () => {
-    if (!window.octopus?.dialog?.open) {
-      const selectedName = await openBrowserFolderPicker();
-      const matchedPath = selectedName
-        ? matchingRecentWorkDirByName(selectedName, recentWorkdirs)
-        : null;
-      if (matchedPath) {
-        applyWorkDir(matchedPath);
-        return;
-      }
-      if (selectedName) pendingBrowserPickedNameRef.current = selectedName;
-      setShowMenu(true);
-      setBrowserOpen(true);
-      setNoBridgeHint(true);
-      requestAnimationFrame(() => {
-        manualInputRef.current?.focus();
-      });
-      return;
-    }
     setIsPicking(true);
     try {
       const selected = await openNativeFolderPicker(workDir);
@@ -523,7 +492,7 @@ export function WorkDirSelector({
     } finally {
       setIsPicking(false);
     }
-  }, [applyWorkDir, recentWorkdirs, workDir]);
+  }, [applyWorkDir, workDir]);
 
   // CTA tile for the implemented workspace picker entry point.
   const cta = (opts: {
@@ -578,9 +547,10 @@ export function WorkDirSelector({
         isMutedVariant ? "rounded-lg shadow-lg" : "rounded-xl shadow-2xl",
       )}
     >
-      {/* Primary entry point for adding a workspace. */}
+      {/* Primary entry point for adding a workspace. Only meaningful with a
+          native picker (Electron); web mode leans on recents + manual paste. */}
       <div className={cn("shrink-0", isMutedVariant ? "p-1.5" : "p-2.5")}>
-        {folderPickerCta}
+        {hasNativePicker && folderPickerCta}
         {workDir && (
           <button
             type="button"
@@ -599,7 +569,7 @@ export function WorkDirSelector({
 
         {noBridgeHint && (
           <div className="mt-2 rounded-md border border-border/50 bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
-            {t.codeMode.folderPickerPathUnavailable}
+            {webPickerHint(locale)}
           </div>
         )}
         {(!isMutedVariant || noBridgeHint) && (
@@ -631,9 +601,10 @@ export function WorkDirSelector({
         )}
       </div>
 
-      {/* Recent workspaces — colored letter-tile + path subtitle + ✓
-          for the currently active workspace */}
-      {!isMutedVariant && (
+      {/* Recent workspaces — colored letter-tile + path subtitle + ✓ for the
+          active one. Shown in the muted (web) menu too so there's a one-click
+          way to rebind without a native picker. */}
+      {(!isMutedVariant || recentWorkdirs.length > 0) && (
         <div
           className={cn(
             "border-t border-border/50",
