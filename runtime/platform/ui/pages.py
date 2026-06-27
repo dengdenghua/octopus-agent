@@ -81,8 +81,35 @@ _INDEX_HTML = """<!doctype html>
 <footer>octopus-agent · <span id="version">?</span> · <a href="/docs" style="color:#6e7278;">API docs</a></footer>
 
 <script>
+function authHeaders() {
+  const token = window.localStorage.getItem('octopus_auth_token');
+  return token ? {'Authorization': `Bearer ${token}`} : {};
+}
+function hasAuthToken() {
+  return !!window.localStorage.getItem('octopus_auth_token');
+}
+function clearAuthToken() {
+  window.localStorage.removeItem('octopus_auth_token');
+  window.localStorage.removeItem('octopus_user');
+  window.localStorage.removeItem('octopus_auth_ts');
+  window.sessionStorage.removeItem('octopus_auth_token');
+  window.sessionStorage.removeItem('octopus_user');
+}
+function showAuthRequired(id) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = '<div style="color:#6e7278;font-size:12px;">login required</div>';
+}
 async function fetchJSON(url, opts={}) {
-  const r = await fetch(url, opts);
+  const r = await fetch(url, {
+    ...opts,
+    headers: {
+      ...authHeaders(),
+      ...(opts.headers || {}),
+    },
+  });
+  if (r.status === 401) {
+    clearAuthToken();
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
@@ -112,7 +139,14 @@ async function loadSkills() {
   ).join('');
 }
 async function loadJournal() {
-  const data = await fetchJSON('/api/journal');
+  if (!hasAuthToken()) { showAuthRequired('journal'); return; }
+  let data;
+  try {
+    data = await fetchJSON('/api/journal');
+  } catch (e) {
+    showAuthRequired('journal');
+    return;
+  }
   const el = document.getElementById('journal');
   if (data.total === 0) {
     el.innerHTML = '<div style="color:#6e7278;font-size:12px;">(no events · pass --journal path to start)</div>';
@@ -127,7 +161,14 @@ async function loadJournal() {
   ].join('');
 }
 async function loadReflect() {
-  const r = await fetchJSON('/api/reflect');
+  if (!hasAuthToken()) { showAuthRequired('reflect'); return; }
+  let r;
+  try {
+    r = await fetchJSON('/api/reflect');
+  } catch (e) {
+    showAuthRequired('reflect');
+    return;
+  }
   if (r.error) {
     document.getElementById('reflect').innerHTML = `<div style="color:#6e7278;font-size:12px;">${r.error}</div>`;
     return;
@@ -175,7 +216,8 @@ async function queryKG() {
 
 async function loadProgress() {
   try {
-    const r = await (await fetch('/api/progress')).json();
+    if (!hasAuthToken()) { showAuthRequired('tasks'); return; }
+    const r = await fetchJSON('/api/progress');
     document.getElementById('taskcount').textContent = r.count;
     document.getElementById('taskrunning').textContent = r.running;
     const el = document.getElementById('tasks');
@@ -516,5 +558,3 @@ loadFile();
 </script>
 </body>
 </html>"""
-
-

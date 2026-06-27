@@ -9,6 +9,7 @@ import pytest
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient  # noqa: E402
 
+from runtime import __version__  # noqa: E402
 from runtime.platform.ui import create_app  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════
@@ -85,7 +86,7 @@ class TestBasicRoutes:
         r = client.get("/api/status")
         assert r.status_code == 200
         data = r.json()
-        assert data["version"]
+        assert data["version"] == __version__
         assert data["skill_count"] > 0
         assert "capabilities" in data
         assert set(data["capabilities"]) >= {"opentelemetry", "mcp", "httpx"}
