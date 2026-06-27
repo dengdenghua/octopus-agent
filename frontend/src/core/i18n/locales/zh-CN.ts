@@ -1356,6 +1356,7 @@ export const zhCN: Translations = {
     actionNewProject: "添加工作区/项目",
     actionNewTask: "新建任务",
     actionNewChat: "新建对话",
+    actionNew: "新建",
     sectionStart: "开始",
     actionEnableProjectGrouping: "开启项目分组",
     actionDisableProjectGrouping: "关闭项目分组",

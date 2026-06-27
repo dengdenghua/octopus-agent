@@ -1223,6 +1223,7 @@ export interface Translations {
     actionNewProject: string;
     actionNewTask: string;
     actionNewChat: string;
+    actionNew: string;
     sectionStart: string;
     actionEnableProjectGrouping: string;
     actionDisableProjectGrouping: string;
