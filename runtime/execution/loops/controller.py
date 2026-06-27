@@ -80,6 +80,27 @@ _ACTIVE_LOOP_STATUSES = frozenset(
         LoopRunStatus.REPAIRING,
     }
 )
+_VERIFIED_LOOP_MODES = frozenset({LoopMode.CODE})
+_PRODUCT_LOOP_MODES = frozenset({LoopMode.PLAN, LoopMode.SPEC, LoopMode.GOAL})
+
+
+def _loop_mode_contract(mode: LoopMode) -> str:
+    if mode == LoopMode.PLAN:
+        return (
+            "Codex Plan 模式：先读上下文、澄清风险和约束，输出可执行计划与验收标准；"
+            "除非用户明确要求执行，不进入实现或写文件。"
+        )
+    if mode == LoopMode.SPEC:
+        return (
+            "Codex Spec 模式：把需求沉淀成规格说明，包含目标、非目标、约束、"
+            "接口/数据契约、验收标准和开放问题；默认不实现。"
+        )
+    if mode == LoopMode.GOAL:
+        return (
+            "Codex Goal 模式：围绕一个可审计 objective 持续推进，受预算和迭代上限约束；"
+            "完成前必须逐项核验证据，不把部分进展说成完成。"
+        )
+    return ""
 
 
 def _failed_verifier_findings(verifier: VerifierResult | None) -> list[VerifierFinding]:
@@ -322,7 +343,7 @@ class LoopController:
             cancellation_token=cancellation_token,
         ):
             return cancelled
-        if run.mode != LoopMode.CODE:
+        if run.mode not in _VERIFIED_LOOP_MODES | _PRODUCT_LOOP_MODES:
             verifier_result = _unsupported_mode_result(run.mode)
             run = self.store.mutate(
                 run_id,
@@ -336,6 +357,7 @@ class LoopController:
                 ),
             )
             return self._finalize_learning(run)
+        requires_verifier = run.mode in _VERIFIED_LOOP_MODES
         workspace_path = _resolve_workspace_path(run, self.workspace_manager)
         supervisor_run = run.model_copy(update={"workspace_path": workspace_path})
         if not self._supervisor_start(supervisor_run):
@@ -362,6 +384,27 @@ class LoopController:
             return self._latest_run(run_id)
         pending_verification = self._pending_verification_attempt(run)
         if pending_verification is not None:
+            if not requires_verifier:
+                run = self.store.mutate(
+                    run_id,
+                    lambda current: current.model_copy(
+                        update={
+                            "status": (
+                                LoopRunStatus.COMPLETED
+                                if pending_verification.success is not False
+                                else LoopRunStatus.FAILED
+                            ),
+                            "completed_at": current.completed_at or _now_iso(),
+                            "last_error": (
+                                ""
+                                if pending_verification.success is not False
+                                else pending_verification.error
+                                or "runner did not complete successfully"
+                            ),
+                        }
+                    ),
+                )
+                return self._finalize_learning(run)
             terminal = self._verify_attempt(
                 run_id,
                 pending_verification.attempt_index,
@@ -455,6 +498,28 @@ class LoopController:
                 latest_result=react_result,
             ):
                 return cancelled
+            if not requires_verifier:
+                product_attempt_succeeded = react_result is not None and react_result.success
+                product_attempt_error = (
+                    "" if product_attempt_succeeded else "runner did not complete successfully"
+                )
+                run = self.store.mutate(
+                    run_id,
+                    lambda current, product_attempt_succeeded=product_attempt_succeeded, product_attempt_error=product_attempt_error: (
+                        current.model_copy(
+                            update={
+                                "status": (
+                                    LoopRunStatus.COMPLETED
+                                    if product_attempt_succeeded
+                                    else LoopRunStatus.FAILED
+                                ),
+                                "completed_at": _now_iso(),
+                                "last_error": product_attempt_error,
+                            }
+                        )
+                    ),
+                )
+                return self._finalize_learning(run)
             terminal = self._verify_attempt(
                 run_id,
                 attempt_index,
@@ -1240,8 +1305,22 @@ class LoopController:
             "objective": run.goal,
             "workspace_path": workspace_path,
             "mode": run.mode.value,
-            "goal_mode": run.policy.goal_mode,
-            "completion_policy": "goal" if run.policy.goal_mode else "",
+            "codex_mode": run.mode.value if run.mode in _PRODUCT_LOOP_MODES else "",
+            "goal_mode": run.policy.goal_mode or run.mode == LoopMode.GOAL,
+            "completion_policy": (
+                "goal"
+                if run.policy.goal_mode or run.mode == LoopMode.GOAL
+                else run.mode.value
+                if run.mode in {LoopMode.PLAN, LoopMode.SPEC}
+                else ""
+            ),
+            "mode_preset": (
+                f"codex.{run.mode.value}" if run.mode in _PRODUCT_LOOP_MODES else run.mode.value
+            ),
+            "workflow_preset": (
+                f"codex.{run.mode.value}" if run.mode in _PRODUCT_LOOP_MODES else ""
+            ),
+            "mode_contract": _loop_mode_contract(run.mode),
             "budget_auto_pause": run.policy.budget_auto_pause,
             "max_tokens_budget": run.policy.max_tokens_budget,
             "max_usd_budget": run.policy.max_usd_budget,

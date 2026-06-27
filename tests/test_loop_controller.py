@@ -9,6 +9,7 @@ from runtime.core.cerebrum.react_types import ReActResult
 from runtime.execution.loops.controller import LoopController
 from runtime.execution.loops.models import (
     LoopAttempt,
+    LoopMode,
     LoopPolicy,
     LoopRun,
     LoopRunStatus,
@@ -304,6 +305,106 @@ def test_loop_controller_goal_mode_passes_bounded_objective_context(tmp_path) ->
             "max_usd_budget": 1.25,
         }
     ]
+
+
+def test_loop_controller_plan_mode_completes_without_code_verifier(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    run = LoopRun(
+        goal="Draft the migration plan",
+        mode=LoopMode.PLAN,
+        workspace_path=str(workspace),
+        policy=LoopPolicy(max_attempts=3, max_iterations=2),
+    )
+    store.create(run)
+    runner_contexts: list[dict[str, object]] = []
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_contexts.append(
+            {
+                "mode": intent.user_context.get("mode"),
+                "codex_mode": intent.user_context.get("codex_mode"),
+                "completion_policy": intent.user_context.get("completion_policy"),
+                "workflow_preset": intent.user_context.get("workflow_preset"),
+                "goal_mode": intent.user_context.get("goal_mode"),
+                "mode_contract": intent.user_context.get("mode_contract"),
+            }
+        )
+        return ReActResult(final_answer="plan ready", success=True)
+
+    verifier_registry = _StubVerifierRegistry([])
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        react_runner=runner,
+    )
+
+    completed = controller.execute(run.run_id)
+
+    assert completed.status == LoopRunStatus.COMPLETED
+    assert len(completed.attempts) == 1
+    assert verifier_registry.calls == []
+    assert runner_contexts == [
+        {
+            "mode": "plan",
+            "codex_mode": "plan",
+            "completion_policy": "plan",
+            "workflow_preset": "codex.plan",
+            "goal_mode": False,
+            "mode_contract": (
+                "Codex Plan 模式：先读上下文、澄清风险和约束，输出可执行计划与验收标准；"
+                "除非用户明确要求执行，不进入实现或写文件。"
+            ),
+        }
+    ]
+
+
+def test_loop_controller_goal_loop_mode_sets_goal_contract(tmp_path) -> None:
+    store = LoopRunStore(tmp_path / "loop_runs.json")
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+    run = LoopRun(
+        goal="Finish the objective",
+        mode=LoopMode.GOAL,
+        workspace_path=str(workspace),
+        policy=LoopPolicy(max_attempts=1, max_iterations=2, goal_mode=False),
+    )
+    store.create(run)
+    runner_contexts: list[dict[str, object]] = []
+
+    def runner(*, stack, intent, agent, model=None, max_iterations=0, thread_id=None):
+        runner_contexts.append(
+            {
+                "codex_mode": intent.user_context.get("codex_mode"),
+                "completion_policy": intent.user_context.get("completion_policy"),
+                "goal_mode": intent.user_context.get("goal_mode"),
+                "workflow_preset": intent.user_context.get("workflow_preset"),
+                "mode_contract": intent.user_context.get("mode_contract"),
+            }
+        )
+        return ReActResult(final_answer="goal complete", success=True)
+
+    verifier_registry = _StubVerifierRegistry([])
+    controller = LoopController(
+        store=store,
+        stack=SimpleNamespace(name="stack"),
+        workspace_manager=WorkspaceManager(tmp_path / "workspaces"),
+        verifier_registry=verifier_registry,
+        react_runner=runner,
+    )
+
+    completed = controller.execute(run.run_id)
+
+    assert completed.status == LoopRunStatus.COMPLETED
+    assert verifier_registry.calls == []
+    assert runner_contexts[0]["codex_mode"] == "goal"
+    assert runner_contexts[0]["completion_policy"] == "goal"
+    assert runner_contexts[0]["goal_mode"] is True
+    assert runner_contexts[0]["workflow_preset"] == "codex.goal"
+    assert "Codex Goal 模式" in str(runner_contexts[0]["mode_contract"])
 
 
 def test_loop_controller_stops_on_environment_verifier_blocker(tmp_path) -> None:
