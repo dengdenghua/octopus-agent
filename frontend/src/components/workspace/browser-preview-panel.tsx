@@ -569,12 +569,18 @@ function actionEntryKey(entry: ActionLogEntry, absoluteIndex: number): string {
 interface BrowserPreviewPanelProps {
   threadId: string;
   workspacePath?: string | null;
+  /** Seed the panel with a URL to load on mount — lets the live-preview panel
+   * delegate its URL mode here (and the agent regression preview point at it)
+   * so there is one controllable URL-preview surface. Additive: when unset the
+   * panel behaves exactly as before. */
+  initialUrl?: string;
   className?: string;
 }
 
 export function BrowserPreviewPanel({
   threadId,
   workspacePath,
+  initialUrl,
   className,
 }: BrowserPreviewPanelProps) {
   const { t } = useI18n();
@@ -590,7 +596,7 @@ export function BrowserPreviewPanel({
   const [sessionHealth, setSessionHealth] =
     useState<BrowserSessionHealth | null>(null);
   const [actionLogExpanded, setActionLogExpanded] = useState(false);
-  const [urlInput, setUrlInput] = useState("");
+  const [urlInput, setUrlInput] = useState(initialUrl ?? "");
   const [loading, setLoading] = useState(true);
   const [viewportChanging, setViewportChanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1205,6 +1211,34 @@ export function BrowserPreviewPanel({
       device: browserTabDeviceForPreset(devicePreview),
     }));
   }, [devicePreview, livePreviewUrl, pageInfo.title]);
+
+  // Seed-and-load an externally supplied URL (initialUrl). Fires once per
+  // distinct URL: ensures the session and navigates, so a caller that delegates
+  // its preview here (live-preview-panel URL mode, agent regression preview)
+  // loads that page in this one controllable surface. Inert when initialUrl is
+  // unset, so existing callers are unaffected.
+  const initialUrlLoadedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const target = (initialUrl ?? "").trim();
+    if (!target || initialUrlLoadedRef.current === target) return;
+    initialUrlLoadedRef.current = target;
+    let url = target;
+    if (!/^https?:\/\//i.test(url) && !url.startsWith("about:")) {
+      url = "https://" + url;
+    }
+    setUrlInput(url);
+    void (async () => {
+      try {
+        const data = await browserApi.ensure(sessionIdentity);
+        applySessionSnapshot(data.session);
+        const info = await browserApi.navigate(sessionIdentity, url);
+        setPageInfo(info);
+        setUrlInput(info.url);
+      } catch (err) {
+        swallow(err);
+      }
+    })();
+  }, [initialUrl, sessionIdentity, applySessionSnapshot]);
 
   // ----- Render ------------------------------------------------------------
 
