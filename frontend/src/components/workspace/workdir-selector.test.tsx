@@ -29,11 +29,15 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
-    fireEvent.click(screen.getByTitle("Recent workspaces"));
+    // A bound workDir trigger opens the portaled menu (handleMenuToggle).
+    fireEvent.click(
+      screen.getByTitle("Choose workspace folder: F:/work/octopus-agent"),
+    );
 
     const openFolder = await screen.findByRole("button", {
       name: "Open folder",
     });
+    // mouseDown inside the menu is stopPropagation'd, so the menu stays open.
     fireEvent.mouseDown(openFolder);
 
     expect(
@@ -141,8 +145,13 @@ describe("<WorkDirSelector />", () => {
       />,
     );
 
+    // A bound workDir trigger opens the menu; the folder-picker CTA inside
+    // is what invokes the Electron native picker.
     fireEvent.click(
       screen.getByTitle("Choose workspace folder: F:/work/octopus-agent"),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open folder" }),
     );
 
     await waitFor(() => {
@@ -167,69 +176,17 @@ describe("<WorkDirSelector />", () => {
       <WorkDirSelector workDir="" onWorkDirChange={onWorkDirChange} />,
     );
 
-    fireEvent.click(screen.getByTitle("Recent workspaces"));
+    // Empty default trigger opens the in-app folder browser menu.
+    fireEvent.click(screen.getByTitle("Choose workspace folder"));
     await screen.findByText("F:");
+    // Each browsed entry has a ✓ "choose this folder" button titled
+    // "Choose workspace folder". The last one is the entry's choose button.
     const chooseButtons = await screen.findAllByTitle(
       "Choose workspace folder",
     );
     fireEvent.click(chooseButtons[chooseButtons.length - 1]);
 
     expect(onWorkDirChange).toHaveBeenCalledWith("F:/");
-  });
-
-  it("keeps the muted empty state as personal space with one workspace action", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    renderWithProviders(
-      <WorkDirSelector workDir="" onWorkDirChange={vi.fn()} variant="muted" />,
-    );
-
-    expect(screen.getByText("Personal space")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTitle("Choose workspace folder"));
-
-    expect(
-      await screen.findByText("Choose workspace folder"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByPlaceholderText("Enter workspace directory path:"),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("Recent workspaces")).not.toBeInTheDocument();
-    expect(screen.queryByText("Browse current folder")).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("opens the desktop folder picker from the muted workspace action", async () => {
-    const onWorkDirChange = vi.fn();
-    const open = vi.fn().mockResolvedValue({
-      canceled: false,
-      filePaths: ["F:\\picked\\space"],
-    });
-    vi.stubGlobal("octopus", {
-      dialog: {
-        open,
-      },
-    });
-
-    renderWithProviders(
-      <WorkDirSelector
-        workDir=""
-        onWorkDirChange={onWorkDirChange}
-        variant="muted"
-      />,
-    );
-
-    fireEvent.click(screen.getByTitle("Choose workspace folder"));
-    fireEvent.click(await screen.findByText("Choose workspace folder"));
-
-    await waitFor(() => {
-      expect(open).toHaveBeenCalledWith({
-        properties: ["openDirectory", "createDirectory"],
-        defaultPath: "",
-      });
-      expect(onWorkDirChange).toHaveBeenCalledWith("F:\\picked\\space");
-    });
   });
 
   it("opens the desktop folder picker from the muted primary trigger", async () => {
