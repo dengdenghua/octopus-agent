@@ -66,9 +66,64 @@ _LEGACY_CONTROL_PLANE_PREFIXES = (
     "/api/team/role-models",
 )
 
+_LOCAL_GUEST_TOKEN = "__guest__"
+
 
 def _path_matches_prefix(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix + "/")
+
+
+def _is_public_plugin_asset_request(method: str, path: str) -> bool:
+    if method.upper() not in {"GET", "HEAD"}:
+        return False
+    parts = path.split("/")
+    return (
+        len(parts) >= 6
+        and parts[0] == ""
+        and parts[1] == "api"
+        and parts[2] == "plugins"
+        and bool(parts[3])
+        and parts[4] == "assets"
+        and bool(parts[5])
+    )
+
+
+def _install_local_guest_identity(
+    *,
+    identity_store: Any,
+    local_auth_config: Any,
+) -> None:
+    """Keep the old frontend guest token working in local dev auth mode."""
+    if identity_store is None or local_auth_config is None:
+        return
+    if not getattr(local_auth_config, "enabled", False):
+        return
+    if not getattr(local_auth_config, "allow_any_username", False):
+        return
+    if getattr(local_auth_config, "password_required", False):
+        return
+    actor_prefix = str(getattr(local_auth_config, "actor_prefix", "local:"))
+    actor_id = f"{actor_prefix}local"
+    if hasattr(identity_store, "get") and identity_store.get(actor_id) is not None:
+        return
+    try:
+        from runtime.safety.auth.identity import Identity
+
+        identity_store.add(
+            Identity(
+                actor_id=actor_id,
+                roles=tuple(getattr(local_auth_config, "default_roles", ()) or ()),
+                metadata={
+                    "provider": "local",
+                    "username": "local",
+                    "display_name": "Guest",
+                    "legacy_guest_token": True,
+                },
+            ),
+            api_key_plaintext=_LOCAL_GUEST_TOKEN,
+        )
+    except ValueError:
+        return
 
 
 def _install_legacy_control_plane_auth(
@@ -89,6 +144,8 @@ def _install_legacy_control_plane_auth(
         if request.method == "OPTIONS":
             return await call_next(request)
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
+        if _is_public_plugin_asset_request(request.method, path):
+            return await call_next(request)
         if not any(
             _path_matches_prefix(path, prefix)
             for prefix in _LEGACY_CONTROL_PLANE_PREFIXES
@@ -228,10 +285,31 @@ def create_app(
         if molili_jwt_secret and molili_config
         else getattr(local_auth_config, "jwt_audience", None) if local_auth_config else None
     )
+    local_auth_runtime_config = local_auth_config
+    if (
+        local_auth_config is not None
+        and getattr(local_auth_config, "enabled", False)
+        and cocoloop_jwt_secret
+        and getattr(local_auth_config, "jwt_secret", None) != cocoloop_jwt_secret
+    ):
+        try:
+            local_auth_runtime_config = local_auth_config.model_copy(
+                update={
+                    "jwt_secret": cocoloop_jwt_secret,
+                    "jwt_issuer": cocoloop_jwt_issuer,
+                    "jwt_audience": cocoloop_jwt_audience,
+                }
+            )
+        except AttributeError:
+            local_auth_runtime_config = local_auth_config
     if cocoloop_identity_store is None and auth_enabled:
         from runtime.safety.auth.identity import IdentityStore
 
         cocoloop_identity_store = IdentityStore()
+    _install_local_guest_identity(
+        identity_store=cocoloop_identity_store,
+        local_auth_config=local_auth_runtime_config,
+    )
     if (
         local_auth_config is not None
         and getattr(local_auth_config, "enabled", False)
@@ -1070,8 +1148,8 @@ def create_app(
         app.include_router(account_router)
         app.include_router(proxy_router)
 
-    if local_auth_config is not None and getattr(
-        local_auth_config,
+    if local_auth_runtime_config is not None and getattr(
+        local_auth_runtime_config,
         "enabled",
         False,
     ):
@@ -1079,7 +1157,7 @@ def create_app(
 
         app.include_router(
             create_local_auth_router(
-                config=local_auth_config,
+                config=local_auth_runtime_config,
                 identity_store=cocoloop_identity_store,
             )
         )
@@ -1121,7 +1199,7 @@ def create_app(
             skill_library_dirs=list(dict.fromkeys(_skill_library_dirs)),
             include_default_skill_library=(registry is None or stack is not None),
             molili_config=molili_config,
-            local_auth_config=local_auth_config,
+            local_auth_config=local_auth_runtime_config,
             identity_store=cocoloop_identity_store,
             molili_jwt_secret=cocoloop_jwt_secret,
             jwt_issuer=cocoloop_jwt_issuer,
