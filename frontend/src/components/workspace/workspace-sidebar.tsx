@@ -20,7 +20,6 @@ import {
   PuzzleIcon,
   Trash2Icon,
   UsersRoundIcon,
-  WorkflowIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,7 +35,7 @@ import {
 } from "@/core/events";
 
 import { SettingsDialog } from "./settings";
-import { AgentFooter, TeamFooter } from "./sidebar-footer";
+import { AgentFooter } from "./sidebar-footer";
 
 import {
   Collapsible,
@@ -64,6 +63,12 @@ import {
   SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -134,19 +139,6 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
 // (交企业版);保留团队/多人协作。Agent 管理统一收敛到左下角角色切换。
 const COMPANY_ORG_ROUTES: NavRoute[] = [
   { to: "/workspace/team/new", labelKey: "navTeam", icon: UsersRoundIcon },
-];
-
-const COMPANY_CAPABILITY_ROUTES: NavRoute[] = [
-  {
-    to: "/workspace/agents?surface=company",
-    labelKey: "navHR",
-    icon: BotIcon,
-  },
-  {
-    to: "/workspace/intelligence?surface=company",
-    labelKey: "navIntelligence",
-    icon: BrainIcon,
-  },
 ];
 
 const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
@@ -520,10 +512,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   );
   const chatCapabilityItems = useMemo(
     () => resolveRoutes(CHAT_CAPABILITY_ROUTES),
-    [resolveRoutes],
-  );
-  const companyCapabilityItems = useMemo(
-    () => resolveRoutes(COMPANY_CAPABILITY_ROUTES),
     [resolveRoutes],
   );
   const nasLibraryItems = useMemo(
@@ -946,9 +934,15 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       void queryClient.invalidateQueries({ queryKey: ["threads", "search"] });
     }
   };
-  const companySurfaceActive = isCompanySurfaceActive(pathname, search);
   const browserSurfaceActive = isBrowserSurfaceRoute(pathname);
   const sidebarConversationThreads = conversationThreads;
+  // Unified history: merge conversation threads + team task threads,
+  // sorted by updatedAt so the most recent activity surfaces first.
+  const allHistoryThreads = useMemo(() => {
+    return [...sidebarConversationThreads, ...teamTaskThreads].sort((a, b) =>
+      (b.updatedAt || "").localeCompare(a.updatedAt || ""),
+    );
+  }, [sidebarConversationThreads, teamTaskThreads]);
 
   return (
     <Sidebar
@@ -964,13 +958,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       {/* Implementation note. */}
       <SidebarHeader className="relative h-11 shrink-0 items-center justify-center border-b border-white/40 bg-transparent px-2.5 py-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:px-0 dark:border-white/10">
         <WorkspaceSurfaceSwitch
-          active={
-            browserSurfaceActive
-              ? "browser"
-              : companySurfaceActive
-                ? "work"
-                : "agent"
-          }
+          active={browserSurfaceActive ? "browser" : "agent"}
         />
         <div className="absolute right-0.5 top-1/2 -translate-y-1/2 group-data-[collapsible=icon]:left-1/2 group-data-[collapsible=icon]:right-auto group-data-[collapsible=icon]:-translate-x-1/2">
           <CollapseToggle compact />
@@ -982,71 +970,41 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           space back. */}
       <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
         <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
-          <SurfaceCreateButton
-            companySurfaceActive={companySurfaceActive}
-            activeAgentId={activeAgentId}
-          />
+          <SurfaceCreateButton activeAgentId={activeAgentId} />
         </SidebarGroup>
-        {companySurfaceActive ? (
-          <>
-            <NavSection
-              label={t.sidebar.navSwarm}
-              items={companyOrgItems}
-              pathname={pathname}
-            />
-            <NavSection items={companyCapabilityItems} pathname={pathname} />
-            <LocalDatabaseSection
-              title={resolveLabel("navDatabase")}
-              items={nasLibraryItems}
-              pathname={pathname}
-              search={search}
-            />
-            <ProjectsSection
-              groups={projectOrder}
-              byProject={byProject}
-              pathname={pathname}
-              draftOpen={projectDraftOpen}
-              deletableProjects={deletableProjects}
-              deletingProject={deletingProject}
-              groupingEnabled={projectGroupingEnabled}
-              onDraftCommit={saveProjectName}
-              onDraftCancel={() => setProjectDraftOpen(false)}
-              onDeleteProject={deleteProject}
-              onToggleGrouping={toggleProjectGrouping}
-            />
-            <OngoingTasksSection items={ongoingWorkItems} pathname={pathname} />
-            <ChatsSection
-              threads={teamTaskThreads}
-              pathname={pathname}
-              label={t.sidebar.sectionTaskHistory}
-              emptyLabel={t.sidebar.noTaskHistory}
-              newActionLabel={t.sidebar.actionNewTask}
-              newPath="/workspace/team/new"
-            />
-          </>
-        ) : (
-          <>
-            <NavSection items={chatCapabilityItems} pathname={pathname} />
-            <ProjectsSection
-              groups={projectOrder}
-              byProject={byProject}
-              pathname={pathname}
-              draftOpen={projectDraftOpen}
-              deletableProjects={deletableProjects}
-              deletingProject={deletingProject}
-              groupingEnabled={projectGroupingEnabled}
-              onDraftCommit={saveProjectName}
-              onDraftCancel={() => setProjectDraftOpen(false)}
-              onDeleteProject={deleteProject}
-              onToggleGrouping={toggleProjectGrouping}
-            />
-            <ChatsSection
-              threads={sidebarConversationThreads}
-              pathname={pathname}
-              label={t.sidebar.sectionChats}
-            />
-          </>
-        )}
+        {/* Unified sidebar — no more surface branching. All navigation
+            items are always visible regardless of the current route. */}
+        <NavSection items={chatCapabilityItems} pathname={pathname} />
+        <NavSection
+          label={t.sidebar.navSwarm}
+          items={companyOrgItems}
+          pathname={pathname}
+        />
+        <LocalDatabaseSection
+          title={resolveLabel("navDatabase")}
+          items={nasLibraryItems}
+          pathname={pathname}
+          search={search}
+        />
+        <ProjectsSection
+          groups={projectOrder}
+          byProject={byProject}
+          pathname={pathname}
+          draftOpen={projectDraftOpen}
+          deletableProjects={deletableProjects}
+          deletingProject={deletingProject}
+          groupingEnabled={projectGroupingEnabled}
+          onDraftCommit={saveProjectName}
+          onDraftCancel={() => setProjectDraftOpen(false)}
+          onDeleteProject={deleteProject}
+          onToggleGrouping={toggleProjectGrouping}
+        />
+        <OngoingTasksSection items={ongoingWorkItems} pathname={pathname} />
+        <ChatsSection
+          threads={allHistoryThreads}
+          pathname={pathname}
+          label={t.sidebar.sectionChats}
+        />
         {/* Hidden directory input — used as the Safari/Firefox fallback
             when showDirectoryPicker is unavailable. webkitdirectory
             forces a folder selection instead of a single file. */}
@@ -1063,7 +1021,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border/40 p-1.5">
-        {companySurfaceActive ? <TeamFooter /> : <AgentFooter />}
+        <AgentFooter />
       </SidebarFooter>
       <SidebarRail />
       <SettingsDialog
@@ -1365,7 +1323,7 @@ export const __testing = {
   isAgentSurfaceActive,
 };
 
-type WorkspaceSurfaceMode = "agent" | "work" | "browser";
+type WorkspaceSurfaceMode = "agent" | "browser";
 
 export function WorkspaceSurfaceSwitch({
   active,
@@ -1377,13 +1335,6 @@ export function WorkspaceSurfaceSwitch({
   const { t } = useI18n();
   const { materialTheme } = useAppearance();
   const items = [
-    {
-      to: COMPANY_WORKSPACE_ROUTE,
-      label: t.sidebar.navCompany,
-      icon: WorkflowIcon,
-      active: active === "work",
-      kind: "icon" as const,
-    },
     {
       to: PRIMARY_WORKSPACE_ROUTE,
       label: "Octopus",
@@ -1403,12 +1354,12 @@ export function WorkspaceSurfaceSwitch({
   return (
     <div
       className={cn(
-        "grid min-w-0 grid-cols-[30px_minmax(0,1fr)_30px] items-center gap-0.5 rounded-[14px] p-px",
+        "grid min-w-0 grid-cols-[minmax(0,1fr)_30px] items-center gap-0.5 rounded-[14px] p-px",
         materialTheme === "liquid"
           ? "octo-liquid-glass octo-liquid-glass--thin"
           : "border border-border/70 bg-muted/70 shadow-[0_1px_2px_rgba(15,23,42,0.06)]",
-        placement === "sidebar" && "w-[150px]",
-        placement === "topbar" && "w-[150px] translate-x-0",
+        placement === "sidebar" && "w-[120px]",
+        placement === "topbar" && "w-[120px] translate-x-0",
         placement === "sidebar" && "-translate-x-3",
         "group-data-[collapsible=icon]:hidden",
       )}
@@ -1461,47 +1412,52 @@ export function WorkspaceSurfaceSwitch({
 
 function SurfaceCreateButton({
   activeAgentId,
-  companySurfaceActive,
 }: {
   activeAgentId: string | null;
-  companySurfaceActive: boolean;
 }) {
   const { t } = useI18n();
   const navigate = useNavigate();
   const chatRoute = activeAgentId
     ? `/workspace/agents/${encodeURIComponent(activeAgentId)}/chats/new`
     : PRIMARY_WORKSPACE_ROUTE;
-  const createAction = companySurfaceActive
-    ? {
-        label: t.sidebar.actionNewTask,
-        icon: PlusIcon,
-        to: "/workspace/team/new",
-      }
-    : {
-        label: t.sidebar.actionNewChat,
-        icon: MessageSquarePlusIcon,
-        to: chatRoute,
-      };
-  const CreateIcon = createAction.icon;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
         <button
           type="button"
-          title={createAction.label}
-          aria-label={createAction.label}
-          onClick={() => navigate(createAction.to)}
+          title={t.sidebar.actionNew}
+          aria-label={t.sidebar.actionNew}
           className="flex h-7 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-border/40 bg-background/48 px-3 text-[11px] font-medium text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[background-color,border-color,color,box-shadow] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:px-0"
         >
-          <CreateIcon className="size-4" />
+          <PlusIcon className="size-4" />
           <span className="group-data-[collapsible=icon]:sr-only">
-            {createAction.label}
+            {t.sidebar.actionNew}
           </span>
         </button>
-      </TooltipTrigger>
-      <TooltipContent side="right">{createAction.label}</TooltipContent>
-    </Tooltip>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        side="bottom"
+        align="start"
+        sideOffset={6}
+        className="w-48 rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10"
+      >
+        <DropdownMenuItem
+          onSelect={() => navigate(chatRoute)}
+          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs"
+        >
+          <MessageSquarePlusIcon className="size-4 shrink-0" />
+          {t.sidebar.actionNewChat}
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => navigate("/workspace/team/new")}
+          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs"
+        >
+          <PlusIcon className="size-4 shrink-0" />
+          {t.sidebar.actionNewTask}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

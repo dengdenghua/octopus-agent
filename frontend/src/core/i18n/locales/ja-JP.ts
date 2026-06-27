@@ -1404,6 +1404,7 @@ export const jaJP: Translations = {
     actionNewProject: "Add workspace/project",
     actionNewTask: "New task",
     actionNewChat: "New chat",
+    actionNew: "New",
     sectionStart: "Start",
     actionEnableProjectGrouping: "Enable project grouping",
     actionDisableProjectGrouping: "Disable project grouping",
