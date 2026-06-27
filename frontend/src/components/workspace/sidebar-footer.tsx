@@ -259,7 +259,18 @@ export function AgentFooter() {
     const nonCli = footerAgents.filter((a) => !isLocalCliAgent(a));
     const hubAgents = nonCli.filter(isHubDefaultAgent).sort(sortHubDefaultAgents);
     const customAgents = nonCli.filter((a) => !isHubDefaultAgent(a));
-    return [...hubAgents, ...customAgents];
+    // Dedupe by base display name: "Eve / Siren" and "Eve" share the base
+    // "Eve". Hub-defaults win, so the echo_* variants of the same character
+    // don't show up as duplicates next to the general agent.
+    const seenBases = new Set<string>();
+    const result: Agent[] = [];
+    for (const a of [...hubAgents, ...customAgents]) {
+      const base = (a.display_name || a.name).split(/\s*\/\s*/)[0]?.trim().toLowerCase();
+      if (base && seenBases.has(base)) continue;
+      if (base) seenBases.add(base);
+      result.push(a);
+    }
+    return result;
   }, [footerAgents]);
   const cliPartnerAgents = useMemo(
     () => footerAgents.filter(isLocalCliAgent),
