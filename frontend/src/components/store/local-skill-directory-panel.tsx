@@ -1,26 +1,140 @@
 import { type ReactNode, useMemo, useState } from "react";
 import {
+  Activity,
+  ArrowUpRight,
+  AtSign,
+  Award,
+  Banknote,
   BarChart3,
-  Boxes,
+  Beaker,
+  Binary,
+  BookMarked,
+  BookOpen,
   Bot,
+  Boxes,
+  Brain,
   BriefcaseBusiness,
+  Brush,
+  Bug,
+  Building2,
+  Calculator,
+  Calendar,
+  CalendarCheck,
+  Camera,
   CheckCircle2,
+  CheckSquare,
+  ClipboardCheck,
+  Clock,
+  Cloud,
+  CloudCog,
   Code2,
+  Cog,
+  Coins,
+  Compass,
+  Component,
+  Container,
+  Cpu,
+  CreditCard,
   Database,
+  DollarSign,
+  Eraser,
+  Eye,
+  File,
+  FileBadge,
+  FileBarChart,
+  FileCheck,
+  FileCode,
+  FileSpreadsheet,
   FileText,
+  Film,
+  Fingerprint,
+  Flag,
+  FlaskConical,
+  FolderOpen,
+  GitBranch,
+  GitCommit,
+  Globe,
   GraduationCap,
+  Handshake,
+  HardDrive,
+  Hash,
+  Headphones,
+  Heart,
+  Image,
+  Inbox,
+  Key,
+  Landmark,
+  Languages,
+  Layers,
+  LayoutDashboard,
+  LayoutTemplate,
+  Library,
+  Lightbulb,
+  LineChart,
+  ListTodo,
   Loader2,
+  Lock,
   Mail,
+  Medal,
+  Megaphone,
+  MessagesSquare,
+  Mic,
+  Microscope,
+  Milestone,
+  Monitor,
+  Music,
+  Network,
+  Package,
   Palette,
   PenLine,
+  Pencil,
+  PencilRuler,
+  Phone,
+  PieChart,
+  PiggyBank,
   Plus,
+  Presentation,
+  Puzzle,
+  Quote,
+  Radar,
+  Receipt,
+  Rocket,
+  Route,
+  Scale,
+  ScanLine,
+  Scroll,
+  ScrollText,
   Search,
   SearchCheck,
+  Send,
+  Server,
+  Settings2,
+  Share,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
+  ShoppingBag,
+  ShoppingCart,
+  Siren,
+  Sparkles,
+  Star,
+  Store,
+  Table,
+  Tag,
+  Target,
   Terminal,
+  TestTube,
+  ThumbsUp,
+  Timer,
+  TrendingUp,
+  Type,
+  UserCheck,
+  Users,
   Video,
-  WalletCards,
+  Wallet,
+  Workflow,
   Wrench,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,62 +152,121 @@ import {
   useLocalSkillCategoryLabel,
 } from "./store-utils";
 
-const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
-  "browser-search": SearchCheck,
-  "agent-tools": Bot,
-  "webapp-frontend": Palette,
-  "backend-api": Database,
-  "code-quality": Code2,
-  "devops-cloud": Terminal,
-  "office-docs": FileText,
-  "slides-report": FileText,
-  "chart-viz": BarChart3,
-  "writing-editing": PenLine,
-  "marketing-copy": PenLine,
-  "seo-growth": BarChart3,
-  ecommerce: BriefcaseBusiness,
-  "market-product": BriefcaseBusiness,
-  "project-goal": CheckCircle2,
-  "finance-stock": WalletCards,
-  "finance-model": WalletCards,
-  "data-stats": BarChart3,
-  "data-insight": BarChart3,
-  "academic-paper": GraduationCap,
-  "deep-research": SearchCheck,
-  "education-coach": GraduationCap,
-  "hr-career": BriefcaseBusiness,
-  "email-comms": Mail,
-  "legal-compliance": ShieldCheck,
-  "security-audit": ShieldCheck,
-  "design-creative": Palette,
-  "media-audio-video": Video,
-  "personal-productivity": CheckCircle2,
+const CATEGORY_ICON_POOL: Record<string, LucideIcon[]> = {
+  "browser-search": [SearchCheck, Globe, Compass, Radar, ScanLine],
+  "agent-tools": [Bot, Cpu, Puzzle, Workflow, Brain],
+  "webapp-frontend": [Layers, LayoutDashboard, Component, Monitor, Globe],
+  "backend-api": [Server, Database, Network, CloudCog, GitBranch],
+  "code-quality": [Code2, GitCommit, Bug, ShieldCheck, FileCode],
+  "devops-cloud": [Cloud, Server, Container, HardDrive, Terminal],
+  "office-docs": [FileText, FileSpreadsheet, FileCheck, ClipboardCheck, ScrollText],
+  "slides-report": [Presentation, Monitor, LayoutTemplate, Image, Star],
+  "chart-viz": [BarChart3, FileBarChart, LineChart, PieChart, Activity],
+  "writing-editing": [PenLine, Pencil, PencilRuler, Type, BookOpen],
+  "marketing-copy": [Megaphone, Sparkles, Tag, Target, Send],
+  "seo-growth": [TrendingUp, Search, ArrowUpRight, Hash, Eye],
+  ecommerce: [ShoppingCart, ShoppingBag, Store, CreditCard, Package],
+  "market-product": [BriefcaseBusiness, Handshake, TrendingUp, ShoppingCart, Target, Medal],
+  "project-goal": [CheckCircle2, Flag, Target, Milestone, ListTodo],
+  "finance-stock": [Wallet, Banknote, DollarSign, Coins, TrendingUp],
+  "finance-model": [Calculator, FileSpreadsheet, Banknote, PiggyBank, Coins],
+  "data-stats": [BarChart3, FileBarChart, Table, Binary, Activity],
+  "data-insight": [LineChart, Activity, Eye, Lightbulb, Microscope],
+  "academic-paper": [GraduationCap, BookOpen, BookMarked, Library, Scroll],
+  "deep-research": [SearchCheck, Microscope, FlaskConical, Beaker, TestTube],
+  "education-coach": [GraduationCap, BookOpen, Lightbulb, Star, Award],
+  "hr-career": [Users, UserCheck, BriefcaseBusiness, Award, Medal],
+  "email-comms": [Mail, Send, MessagesSquare, Inbox, AtSign],
+  "legal-compliance": [Scale, Shield, ShieldCheck, ScrollText, FileBadge],
+  "security-audit": [ShieldAlert, Lock, Fingerprint, Key, Bug],
+  "design-creative": [Palette, Brush, PencilRuler, Image, Layers],
+  "media-audio-video": [Video, Film, Music, Mic, Camera],
+  "personal-productivity": [CheckSquare, Timer, Clock, ListTodo, CalendarCheck],
+  other: [Wrench, Cog, Settings2, Puzzle, Sparkles],
 };
 
-function skillTone(category: string) {
-  if (category.includes("browser") || category.includes("research")) {
-    return "border-sky-500/20 bg-sky-500/10 text-sky-600 dark:text-sky-300";
+const CATEGORY_TONE_MAP: Record<string, string> = {
+  "browser-search":
+    "border-sky-500/30 bg-gradient-to-br from-sky-500/20 to-blue-400/10 text-sky-600 dark:text-sky-300 shadow-sm shadow-sky-500/15",
+  "agent-tools":
+    "border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-teal-400/10 text-emerald-600 dark:text-emerald-300 shadow-sm shadow-emerald-500/15",
+  "webapp-frontend":
+    "border-violet-500/30 bg-gradient-to-br from-violet-500/20 to-purple-400/10 text-violet-600 dark:text-violet-300 shadow-sm shadow-violet-500/15",
+  "backend-api":
+    "border-indigo-500/30 bg-gradient-to-br from-indigo-500/20 to-blue-500/10 text-indigo-600 dark:text-indigo-300 shadow-sm shadow-indigo-500/15",
+  "code-quality":
+    "border-blue-500/30 bg-gradient-to-br from-blue-500/20 to-cyan-400/10 text-blue-600 dark:text-blue-300 shadow-sm shadow-blue-500/15",
+  "devops-cloud":
+    "border-orange-500/30 bg-gradient-to-br from-orange-500/20 to-amber-400/10 text-orange-600 dark:text-orange-300 shadow-sm shadow-orange-500/15",
+  "office-docs":
+    "border-rose-500/30 bg-gradient-to-br from-rose-500/20 to-pink-400/10 text-rose-600 dark:text-rose-300 shadow-sm shadow-rose-500/15",
+  "slides-report":
+    "border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/20 to-pink-400/10 text-fuchsia-600 dark:text-fuchsia-300 shadow-sm shadow-fuchsia-500/15",
+  "chart-viz":
+    "border-cyan-500/30 bg-gradient-to-br from-cyan-500/20 to-sky-400/10 text-cyan-600 dark:text-cyan-300 shadow-sm shadow-cyan-500/15",
+  "writing-editing":
+    "border-teal-500/30 bg-gradient-to-br from-teal-500/20 to-cyan-400/10 text-teal-600 dark:text-teal-300 shadow-sm shadow-teal-500/15",
+  "marketing-copy":
+    "border-pink-500/30 bg-gradient-to-br from-pink-500/20 to-rose-400/10 text-pink-600 dark:text-pink-300 shadow-sm shadow-pink-500/15",
+  "seo-growth":
+    "border-green-500/30 bg-gradient-to-br from-green-500/20 to-emerald-400/10 text-green-600 dark:text-green-300 shadow-sm shadow-green-500/15",
+  ecommerce:
+    "border-amber-500/30 bg-gradient-to-br from-amber-500/20 to-yellow-400/10 text-amber-600 dark:text-amber-300 shadow-sm shadow-amber-500/15",
+  "market-product":
+    "border-yellow-500/30 bg-gradient-to-br from-yellow-500/20 to-orange-300/10 text-yellow-600 dark:text-yellow-300 shadow-sm shadow-yellow-500/15",
+  "project-goal":
+    "border-green-500/30 bg-gradient-to-br from-green-500/20 to-teal-400/10 text-green-600 dark:text-green-300 shadow-sm shadow-green-500/15",
+  "finance-stock":
+    "border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-green-400/10 text-emerald-600 dark:text-emerald-300 shadow-sm shadow-emerald-500/15",
+  "finance-model":
+    "border-lime-500/30 bg-gradient-to-br from-lime-500/20 to-green-400/10 text-lime-600 dark:text-lime-300 shadow-sm shadow-lime-500/15",
+  "data-stats":
+    "border-indigo-500/30 bg-gradient-to-br from-indigo-500/20 to-violet-400/10 text-indigo-600 dark:text-indigo-300 shadow-sm shadow-indigo-500/15",
+  "data-insight":
+    "border-purple-500/30 bg-gradient-to-br from-purple-500/20 to-violet-400/10 text-purple-600 dark:text-purple-300 shadow-sm shadow-purple-500/15",
+  "academic-paper":
+    "border-blue-500/30 bg-gradient-to-br from-blue-500/20 to-indigo-400/10 text-blue-600 dark:text-blue-300 shadow-sm shadow-blue-500/15",
+  "deep-research":
+    "border-cyan-500/30 bg-gradient-to-br from-cyan-500/20 to-blue-400/10 text-cyan-600 dark:text-cyan-300 shadow-sm shadow-cyan-500/15",
+  "education-coach":
+    "border-violet-500/30 bg-gradient-to-br from-violet-500/20 to-indigo-400/10 text-violet-600 dark:text-violet-300 shadow-sm shadow-violet-500/15",
+  "hr-career":
+    "border-orange-500/30 bg-gradient-to-br from-orange-500/20 to-red-300/10 text-orange-600 dark:text-orange-300 shadow-sm shadow-orange-500/15",
+  "email-comms":
+    "border-sky-500/30 bg-gradient-to-br from-sky-500/20 to-cyan-400/10 text-sky-600 dark:text-sky-300 shadow-sm shadow-sky-500/15",
+  "legal-compliance":
+    "border-stone-500/30 bg-gradient-to-br from-stone-500/20 to-zinc-400/10 text-stone-600 dark:text-stone-300 shadow-sm shadow-stone-500/15",
+  "security-audit":
+    "border-red-500/30 bg-gradient-to-br from-red-500/20 to-rose-400/10 text-red-600 dark:text-red-300 shadow-sm shadow-red-500/15",
+  "design-creative":
+    "border-pink-500/30 bg-gradient-to-br from-pink-500/20 to-fuchsia-400/10 text-pink-600 dark:text-pink-300 shadow-sm shadow-pink-500/15",
+  "media-audio-video":
+    "border-purple-500/30 bg-gradient-to-br from-purple-500/20 to-fuchsia-400/10 text-purple-600 dark:text-purple-300 shadow-sm shadow-purple-500/15",
+  "personal-productivity":
+    "border-teal-500/30 bg-gradient-to-br from-teal-500/20 to-green-400/10 text-teal-600 dark:text-teal-300 shadow-sm shadow-teal-500/15",
+  other:
+    "border-slate-500/30 bg-gradient-to-br from-slate-500/20 to-gray-400/10 text-slate-600 dark:text-slate-300 shadow-sm shadow-slate-500/15",
+};
+
+function hashString(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h << 5) - h + str.charCodeAt(i);
+    h |= 0;
   }
-  if (category.includes("finance") || category.includes("market")) {
-    return "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-300";
-  }
-  if (category.includes("data") || category.includes("chart")) {
-    return "border-violet-500/20 bg-violet-500/10 text-violet-600 dark:text-violet-300";
-  }
-  if (category.includes("design") || category.includes("media")) {
-    return "border-pink-500/20 bg-pink-500/10 text-pink-600 dark:text-pink-300";
-  }
-  if (category.includes("security") || category.includes("legal")) {
-    return "border-rose-500/20 bg-rose-500/10 text-rose-600 dark:text-rose-300";
-  }
-  if (
-    category.includes("code") ||
-    category.includes("backend") ||
-    category.includes("devops")
-  ) {
-    return "border-blue-500/20 bg-blue-500/10 text-blue-600 dark:text-blue-300";
-  }
-  return "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300";
+  return Math.abs(h);
+}
+
+function getSkillIcon(category: string, skillName: string): LucideIcon {
+  const pool = CATEGORY_ICON_POOL[category] ?? CATEGORY_ICON_POOL.other ?? [Wrench];
+  return pool[hashString(skillName) % pool.length] ?? pool[0] ?? Wrench;
+}
+
+function skillTone(category: string): string {
+  return (
+    CATEGORY_TONE_MAP[category] ??
+    "border-slate-500/30 bg-gradient-to-br from-slate-500/20 to-gray-400/10 text-slate-600 dark:text-slate-300 shadow-sm shadow-slate-500/15"
+  );
 }
 
 type LocalSkillDirectoryPanelProps = {
@@ -301,8 +474,10 @@ export function LocalSkillDirectoryPanel({
           {visibleSkills.length ? (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
               {visibleSkills.map((skill) => {
-                const SkillIcon =
-                  CATEGORY_ICON_MAP[skill.localCategory] ?? Wrench;
+                const SkillIcon = getSkillIcon(
+                  skill.localCategory,
+                  skill.name,
+                );
                 return (
                   <article
                     key={skill.name}
