@@ -1,6 +1,11 @@
 import { createRoot } from "react-dom/client";
 import { HashRouter } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 
 import { AppRouter } from "./router";
 import { ThemeProvider } from "./components/theme-provider";
@@ -16,12 +21,61 @@ import { installHashRouterShellUrlNormalizer } from "./core/router/hash-shell-ur
 
 import "./styles/globals.css";
 
+// Auth-failure handling for the FE↔BE link. Two distinct cases:
+//  - 401 (unauthenticated): the token is missing/expired/invalid → clear it and
+//    bounce to login. This stops the request storm at its source: once the page
+//    reloads to the login screen, every polling hook unmounts.
+//  - 403 (forbidden): authenticated but not allowed → DO NOT log out; just don't
+//    retry (retrying a forbidden call never succeeds).
+const AUTH_TOKEN_KEYS = ["octopus_auth_token", "octopus_auth_ts", "octopus_user"];
+let authBounced = false;
+
+function errMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err ?? "");
+}
+function isUnauthenticated(err: unknown): boolean {
+  return /\b401\b|unauthorized/i.test(errMessage(err));
+}
+function isAuthError(err: unknown): boolean {
+  return /\b401\b|\b403\b|unauthorized|forbidden/i.test(errMessage(err));
+}
+function handleAuthFailure(): void {
+  if (authBounced) return; // fire once — avoid reload loops mid-storm
+  // Only bounce a REAL failing session. If the token is absent (already logged
+  // out / on the login screen) or the deliberate guest sentinel, do nothing —
+  // this is what makes the reload loop-safe: after we clear the token below, any
+  // further 401 sees no token and returns here.
+  const tok = localStorage.getItem("octopus_auth_token");
+  if (!tok || tok === "__guest__") return;
+  authBounced = true;
+  try {
+    AUTH_TOKEN_KEYS.forEach((k) => localStorage.removeItem(k));
+  } catch {
+    // localStorage may be unavailable; the reload still re-runs auth bootstrap.
+  }
+  // AuthProvider's bootstrap shows the login screen when no token is present.
+  window.location.reload();
+}
+
 const queryClient = new QueryClient({
+  // Any query/mutation that 401s clears auth and bounces to login once — kills
+  // the silent "shell rendered, panels empty, requests storming" dead-loop.
+  queryCache: new QueryCache({
+    onError: (err) => {
+      if (isUnauthenticated(err)) handleAuthFailure();
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (err) => {
+      if (isUnauthenticated(err)) handleAuthFailure();
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 30_000,
       gcTime: 5 * 60_000,
-      retry: 1,
+      // Never retry auth failures (401/403) — retrying only doubles the storm.
+      retry: (failureCount, err) => !isAuthError(err) && failureCount < 1,
       refetchOnWindowFocus: false,
     },
   },
