@@ -22,24 +22,54 @@ from runtime.sensing.model_router import (  # noqa: E402
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, payload: Any = None, text: str = ""):
+    def __init__(
+        self,
+        status_code: int,
+        payload: Any = None,
+        text: str = "",
+        lines: list[str] | None = None,
+    ):
         self.status_code = status_code
         self._payload = payload
         self.text = text if text else (
             __import__("json").dumps(payload) if payload is not None else ""
         )
+        self._lines = list(lines or [])
 
     def json(self):
         if self._payload is None:
             raise ValueError("not json")
         return self._payload
 
+    def read(self):
+        return self.text.encode("utf-8")
+
+    def iter_lines(self):
+        return iter(self._lines)
+
+
+class _FakeStream:
+    def __init__(self, response: _FakeResponse) -> None:
+        self._response = response
+
+    def __enter__(self) -> _FakeResponse:
+        return self._response
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
 
 class _FakeClient:
     """Implementation note."""
 
-    def __init__(self, response: _FakeResponse | None = None, raise_exc: Exception | None = None):
+    def __init__(
+        self,
+        response: _FakeResponse | None = None,
+        raise_exc: Exception | None = None,
+        responses: list[_FakeResponse] | None = None,
+    ):
         self._response = response
+        self._responses = list(responses or [])
         self._raise = raise_exc
         self.calls: list[dict[str, Any]] = []
 
@@ -47,7 +77,24 @@ class _FakeClient:
         self.calls.append({"url": url, "json": json, "headers": headers})
         if self._raise:
             raise self._raise
+        if self._responses:
+            return self._responses.pop(0)
         return self._response
+
+    def stream(self, method: str, url: str, *, json=None, headers=None):
+        self.calls.append({
+            "method": method,
+            "url": url,
+            "json": json,
+            "headers": headers,
+        })
+        if self._raise:
+            raise self._raise
+        if self._responses:
+            return _FakeStream(self._responses.pop(0))
+        if self._response is None:
+            raise AssertionError("fake stream response missing")
+        return _FakeStream(self._response)
 
     def close(self):
         pass
@@ -128,6 +175,168 @@ class TestRequestShape:
         # endpoint would 400 on).
         assert payload["reasoning_effort"] == "high"
         assert payload["thinking"] == {"type": "enabled"}
+
+    def test_thinking_400_retries_without_openai_extension_fields(self):
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {"error": {"message": "openai_error"}}),
+            _FakeResponse(200, _openai_response("fallback ok")),
+        ])
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        resp = r.call(
+            _req(content="hard problem").model_copy(
+                update={
+                    "enable_thinking": True,
+                    "reasoning_effort": "xhigh",
+                },
+            ),
+        )
+
+        assert resp.text == "fallback ok"
+        assert len(fake.calls) == 2
+        first_payload = fake.calls[0]["json"]
+        second_payload = fake.calls[1]["json"]
+        assert first_payload["reasoning_effort"] == "high"
+        assert first_payload["thinking"] == {"type": "enabled"}
+        assert second_payload["model"] == first_payload["model"]
+        assert "reasoning_effort" not in second_payload
+        assert "thinking" not in second_payload
+
+    def test_strict_custom_model_omits_sampling_parameters(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        import json as _json
+
+        custom_models_path = tmp_path / "custom_models.json"
+        custom_models_path.write_text(
+            _json.dumps({
+                "kimi-code": {
+                    "id": "kimi-code",
+                    "name": "kimi-code",
+                    "provider": "openai",
+                    "models": ["kimi-k2.7-code"],
+                    "omit_sampling_parameters": True,
+                },
+            }),
+            encoding="utf-8",
+        )
+        from runtime.platform.process.paths import app_paths
+
+        original = app_paths()
+
+        class _Patched:
+            pass
+
+        _Patched.custom_models_path = custom_models_path
+
+        def _getattr(self, name: str) -> object:
+            return getattr(original, name)
+
+        _Patched.__getattr__ = _getattr
+
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.app_paths",
+            lambda: _Patched(),
+        )
+
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        r.call(_req(model="kimi-k2.7-code"))
+
+        payload = fake.calls[0]["json"]
+        assert payload["model"] == "kimi-k2.7-code"
+        assert "temperature" not in payload
+        assert payload["max_tokens"] == 128
+
+    def test_thinking_custom_model_lifts_tiny_token_budget(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        import json as _json
+
+        custom_models_path = tmp_path / "custom_models.json"
+        custom_models_path.write_text(
+            _json.dumps({
+                "kimi-code": {
+                    "id": "kimi-code",
+                    "name": "kimi-code",
+                    "provider": "openai",
+                    "models": ["kimi-for-coding"],
+                    "supports_thinking": True,
+                    "omit_sampling_parameters": True,
+                },
+            }),
+            encoding="utf-8",
+        )
+        from runtime.platform.process.paths import app_paths
+
+        original = app_paths()
+
+        class _Patched:
+            pass
+
+        _Patched.custom_models_path = custom_models_path
+
+        def _getattr(self, name: str) -> object:
+            return getattr(original, name)
+
+        _Patched.__getattr__ = _getattr
+
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.app_paths",
+            lambda: _Patched(),
+        )
+
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        r.call(_req(model="kimi-for-coding").model_copy(update={"max_tokens": 32}))
+
+        payload = fake.calls[0]["json"]
+        assert payload["model"] == "kimi-for-coding"
+        assert payload["max_tokens"] == 128
+        assert "temperature" not in payload
+
+    def test_stream_thinking_400_retries_without_openai_extension_fields(self):
+        import json as _json
+
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {"error": {"message": "openai_error"}}),
+            _FakeResponse(
+                200,
+                lines=[
+                    "data: "
+                    + _json.dumps({
+                        "choices": [{
+                            "delta": {"content": "stream ok"},
+                            "finish_reason": None,
+                        }],
+                    }),
+                    "data: [DONE]",
+                ],
+            ),
+        ])
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        events = list(
+            r.call_stream(
+                _req(content="hard problem").model_copy(
+                    update={
+                        "enable_thinking": True,
+                        "reasoning_effort": "xhigh",
+                    },
+                ),
+            ),
+        )
+
+        assert [event.type for event in events] == ["text_delta", "done"]
+        assert events[-1].final.text == "stream ok"
+        assert len(fake.calls) == 2
+        assert "thinking" in fake.calls[0]["json"]
+        assert "thinking" not in fake.calls[1]["json"]
+        assert "reasoning_effort" not in fake.calls[1]["json"]
 
     def test_reasoning_effort_mapping_to_native_openai(self):
         from runtime.sensing.model_router.openai_router import (
@@ -313,6 +522,20 @@ class TestErrors:
         assert "http_402" in message
         assert "模型账户余额不足" in message
         assert "Insufficient account balance" not in message
+
+    def test_generic_openai_error_is_diagnostic(self):
+        fake = _FakeClient(response=_FakeResponse(400, {
+            "error": {"message": "openai_error"},
+        }))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        with pytest.raises(OpenAIRouterError) as exc:
+            r.call(_req())
+
+        message = str(exc.value)
+        assert "http_400" in message
+        assert "上游 OpenAI 兼容接口拒绝请求" in message
+        assert "切换到可用模型" in message
 
     def test_network_error_wrapped(self):
         fake = _FakeClient(raise_exc=ConnectionError("refused"))
