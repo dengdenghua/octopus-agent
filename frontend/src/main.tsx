@@ -18,6 +18,7 @@ import { AuthProvider } from "./providers/AuthProvider";
 import { AppearanceBootstrap } from "./hooks/use-appearance";
 import { installPageAgentBridge } from "./core/page-agent-bridge";
 import { installHashRouterShellUrlNormalizer } from "./core/router/hash-shell-url";
+import { installAuthFetchInterceptor } from "./core/auth/fetch-interceptor";
 
 import "./styles/globals.css";
 
@@ -82,6 +83,9 @@ const queryClient = new QueryClient({
 });
 
 async function bootstrap() {
+  // Attach the bearer token to backend /api requests app-wide BEFORE any fetch
+  // fires, so token-less calls can't 401 and trip the auth-failure handler.
+  installAuthFetchInterceptor();
   installHashRouterShellUrlNormalizer();
   installPageAgentBridge();
 
