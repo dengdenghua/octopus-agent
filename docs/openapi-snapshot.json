@@ -1006,6 +1006,17 @@
             "title": "Name",
             "type": "string"
           },
+          "omit_sampling_parameters": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omit Sampling Parameters"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
@@ -1020,6 +1031,17 @@
               }
             ],
             "title": "Supports Thinking"
+          },
+          "supports_tool_use": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supports Tool Use"
           },
           "supports_vision": {
             "anyOf": [
@@ -2206,7 +2228,10 @@
       },
       "LoopMode": {
         "enum": [
-          "code"
+          "code",
+          "plan",
+          "spec",
+          "goal"
         ],
         "title": "LoopMode",
         "type": "string"
@@ -2218,10 +2243,20 @@
             "title": "Auto Approve",
             "type": "boolean"
           },
+          "budget_auto_pause": {
+            "default": true,
+            "title": "Budget Auto Pause",
+            "type": "boolean"
+          },
           "execution_environment": {
             "default": "local",
             "title": "Execution Environment",
             "type": "string"
+          },
+          "goal_mode": {
+            "default": false,
+            "title": "Goal Mode",
+            "type": "boolean"
           },
           "max_attempts": {
             "default": 2,
@@ -2236,6 +2271,20 @@
             "minimum": 1.0,
             "title": "Max Iterations",
             "type": "integer"
+          },
+          "max_tokens_budget": {
+            "default": 50000,
+            "maximum": 2000000.0,
+            "minimum": 1.0,
+            "title": "Max Tokens Budget",
+            "type": "integer"
+          },
+          "max_usd_budget": {
+            "default": 0.5,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Max Usd Budget",
+            "type": "number"
           },
           "model": {
             "anyOf": [
@@ -2259,7 +2308,7 @@
             "type": "string"
           },
           "verifier_profile": {
-            "default": "python_repo_patch",
+            "default": "auto",
             "title": "Verifier Profile",
             "type": "string"
           }
@@ -2543,6 +2592,11 @@
             ],
             "title": "Parent Run Id"
           },
+          "recovery_audit": {
+            "additionalProperties": true,
+            "title": "Recovery Audit",
+            "type": "object"
+          },
           "resume_checkpoint_id": {
             "anyOf": [
               {
@@ -2576,6 +2630,21 @@
           },
           "status": {
             "$ref": "#/components/schemas/LoopRunStatus"
+          },
+          "task_lease_health": {
+            "additionalProperties": true,
+            "title": "Task Lease Health",
+            "type": "object"
+          },
+          "task_recovery": {
+            "additionalProperties": true,
+            "title": "Task Recovery",
+            "type": "object"
+          },
+          "task_run": {
+            "additionalProperties": true,
+            "title": "Task Run",
+            "type": "object"
           },
           "updated_at": {
             "title": "Updated At",
@@ -2642,10 +2711,20 @@
             "title": "By Status",
             "type": "object"
           },
+          "recovery_audit": {
+            "additionalProperties": true,
+            "title": "Recovery Audit",
+            "type": "object"
+          },
           "reviewed_runs": {
             "default": 0,
             "title": "Reviewed Runs",
             "type": "integer"
+          },
+          "task_health": {
+            "additionalProperties": true,
+            "title": "Task Health",
+            "type": "object"
           },
           "total": {
             "default": 0,
@@ -3557,6 +3636,30 @@
         "title": "SubagentPolicyDecisionBody",
         "type": "object"
       },
+      "TaskApprovalDecisionRequest": {
+        "properties": {
+          "approved": {
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "title": "TaskApprovalDecisionRequest",
+        "type": "object"
+      },
       "TaskAssigneeWire": {
         "description": "Who the task is assigned to. Polymorphic so a task can target\nAI roster members AND human participants in the same field.",
         "properties": {
@@ -3574,6 +3677,23 @@
           "ref"
         ],
         "title": "TaskAssigneeWire",
+        "type": "object"
+      },
+      "TaskTakeoverRequest": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "TaskTakeoverRequest",
         "type": "object"
       },
       "TeamMemberWire": {
@@ -4178,6 +4298,11 @@
       },
       "VerifierFinding": {
         "properties": {
+          "category": {
+            "default": "",
+            "title": "Category",
+            "type": "string"
+          },
           "command": {
             "default": "",
             "title": "Command",
@@ -4187,6 +4312,11 @@
             "default": 0,
             "title": "Duration Ms",
             "type": "integer"
+          },
+          "execution_policy": {
+            "additionalProperties": true,
+            "title": "Execution Policy",
+            "type": "object"
           },
           "exit_code": {
             "default": 0,
@@ -4223,6 +4353,11 @@
         "properties": {
           "checked_at": {
             "title": "Checked At",
+            "type": "string"
+          },
+          "failure_category": {
+            "default": "",
+            "title": "Failure Category",
             "type": "string"
           },
           "findings": {
@@ -25366,6 +25501,57 @@
         ]
       }
     },
+    "/api/task-runs/overview": {
+      "get": {
+        "operationId": "api_task_runs_overview_api_task_runs_overview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Runs Overview Api Task Runs Overview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Runs Overview",
+        "tags": [
+          "task-runs"
+        ]
+      }
+    },
     "/api/task-runs/{task_id}": {
       "get": {
         "operationId": "api_task_run_api_task_runs__task_id__get",
@@ -25405,6 +25591,121 @@
           }
         },
         "summary": "Api Task Run",
+        "tags": [
+          "task-runs"
+        ]
+      }
+    },
+    "/api/task-runs/{task_id}/approval-decision": {
+      "post": {
+        "operationId": "api_task_run_approval_decision_api_task_runs__task_id__approval_decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskApprovalDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Run Approval Decision Api Task Runs  Task Id  Approval Decision Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Run Approval Decision",
+        "tags": [
+          "task-runs"
+        ]
+      }
+    },
+    "/api/task-runs/{task_id}/takeover": {
+      "post": {
+        "operationId": "api_task_run_takeover_api_task_runs__task_id__takeover_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/TaskTakeoverRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Run Takeover Api Task Runs  Task Id  Takeover Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Run Takeover",
         "tags": [
           "task-runs"
         ]
@@ -27174,6 +27475,52 @@
         "summary": " Telemetry Stats",
         "tags": [
           "stub"
+        ]
+      }
+    },
+    "/api/tentacle/broadcast": {
+      "post": {
+        "description": "把同一任务并发下发到多台设备并聚合结果。\n\nbody: ``{task, tentacle_ids?, max_concurrency?}``——``tentacle_ids`` 省略\n或为 null 时对所有在线设备群发。单台失败被隔离，不影响其它设备。",
+        "operationId": "broadcast_task_api_tentacle_broadcast_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Broadcast Task Api Tentacle Broadcast Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Broadcast Task",
+        "tags": [
+          "tentacle"
         ]
       }
     },
