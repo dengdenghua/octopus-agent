@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircleIcon,
+  BoxesIcon,
   BotIcon,
   Building2Icon,
   ChevronDownIcon,
   ImportIcon,
   Loader2Icon,
   PlusIcon,
+  PuzzleIcon,
   SearchIcon,
   StoreIcon,
 } from "lucide-react";
@@ -54,6 +56,8 @@ import { AgentCard } from "./agent-card";
 import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
+import { LocalSkillDirectoryPanel } from "@/components/store/unified-store";
+import { SkillPacksTab } from "@/components/workspace/agents/skill-packs-tab";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -520,6 +524,463 @@ function AgentsTab({
 }
 
 // ---------------------------------------------------------------------------
+// Plugins Tab (extracted from plugins page, embedded into Hub)
+// ---------------------------------------------------------------------------
+
+import {
+  listPlugins,
+  hubListPlugins,
+  hubGetPluginConfig,
+  hubUpdatePluginConfig,
+} from "@/core/plugins/api";
+import type { PluginInfo, HubPluginInfo } from "@/core/plugins/types";
+import { getBackendBaseURL } from "@/core/config";
+import { Input as UiInput } from "@/components/ui/input";
+import { Label as UiLabel } from "@/components/ui/label";
+import {
+  Dialog as UiDialog,
+  DialogClose as UiDialogClose,
+  DialogContent as UiDialogContent,
+  DialogDescription as UiDialogDescription,
+  DialogFooter as UiDialogFooter,
+  DialogHeader as UiDialogHeader,
+  DialogTitle as UiDialogTitle,
+} from "@/components/ui/dialog";
+import {
+  CheckCircle as CheckCircleIcon,
+  XCircle as XCircleIcon,
+  Settings2 as Settings2Icon,
+} from "lucide-react";
+import { useOpenCreatePluginChat } from "@/components/store/store-utils";
+
+type PluginEntry =
+  | { plugin: HubPluginInfo; source: "hub" }
+  | { plugin: PluginInfo; source: "legacy" };
+type PluginStatusFilter = "all" | "enabled" | "disabled";
+
+function pluginImageUrl(plugin: PluginInfo | HubPluginInfo): string | null {
+  const p = plugin as PluginInfo;
+  const raw = p.logo_url || p.icon_url;
+  if (!raw) return null;
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  return `${getBackendBaseURL()}${raw}`;
+}
+
+function pluginSurfaceBadges(entry: PluginEntry): string[] {
+  if (entry.source === "hub") {
+    const labels = entry.plugin.capabilities
+      .map((capability) => capability.type)
+      .filter(Boolean)
+      .map((type) => {
+        if (type === "skill") return "技能";
+        if (type === "channel") return "通道";
+        if (type === "api") return "API";
+        if (type === "config_ui") return "配置";
+        return type;
+      });
+    return Array.from(new Set(labels)).slice(0, 4);
+  }
+  const surfaces = entry.plugin.smoke?.surfaces;
+  const badges: string[] = [];
+  if (surfaces?.mcp) badges.push("MCP");
+  if (surfaces?.apps) badges.push("App");
+  if (surfaces?.skills) badges.push("技能");
+  if (surfaces?.commands) badges.push("命令");
+  if (surfaces?.capabilities && !badges.includes("API")) badges.push("能力");
+  return badges.slice(0, 5);
+}
+
+function HubPluginConfigDialog({
+  plugin,
+  open,
+  onOpenChange,
+}: {
+  plugin: HubPluginInfo;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [config, setConfig] = useState<Record<string, unknown>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      hubGetPluginConfig(plugin.id)
+        .then(setConfig)
+        .catch((e) => swallow(e));
+    }
+  }, [plugin.id, open]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await hubUpdatePluginConfig(plugin.id, config);
+      onOpenChange(false);
+    } catch (e) {
+      swallow(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const schema = plugin.config_schema as
+    | {
+        properties?: Record<
+          string,
+          {
+            type?: string;
+            title?: string;
+            description?: string;
+            format?: string;
+          }
+        >;
+      }
+    | undefined;
+  const properties = schema?.properties;
+
+  return (
+    <UiDialog open={open} onOpenChange={onOpenChange}>
+      <UiDialogContent className="max-w-md">
+        <UiDialogHeader>
+          <UiDialogTitle>{plugin.name} 配置</UiDialogTitle>
+          <UiDialogDescription>
+            配置 {plugin.name} 插件的运行参数
+          </UiDialogDescription>
+        </UiDialogHeader>
+
+        <div className="space-y-4 py-2">
+          {properties && Object.keys(properties).length > 0 ? (
+            Object.entries(properties).map(([key, prop]) => (
+              <div key={key} className="space-y-1">
+                <UiLabel htmlFor={`cfg-${key}`}>{prop.title || key}</UiLabel>
+                {prop.description && (
+                  <p className="text-xs text-muted-foreground">
+                    {prop.description}
+                  </p>
+                )}
+                <UiInput
+                  id={`cfg-${key}`}
+                  type={
+                    prop.format === "password"
+                      ? "password"
+                      : prop.type === "integer"
+                        ? "number"
+                        : "text"
+                  }
+                  value={String(config[key] ?? "")}
+                  onChange={(e) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      [key]:
+                        prop.type === "integer"
+                          ? parseInt(e.target.value) || 0
+                          : e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">此插件无需配置</p>
+          )}
+        </div>
+
+        <UiDialogFooter>
+          <UiDialogClose asChild>
+            <Button variant="outline">取消</Button>
+          </UiDialogClose>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "保存中..." : "保存"}
+          </Button>
+        </UiDialogFooter>
+      </UiDialogContent>
+    </UiDialog>
+  );
+}
+
+function PluginListItem({
+  entry,
+  onConfigure,
+}: {
+  entry: PluginEntry;
+  onConfigure: (plugin: HubPluginInfo) => void;
+}) {
+  const { plugin } = entry;
+  const hubPlugin = entry.source === "hub" ? entry.plugin : null;
+  const imageUrl = pluginImageUrl(plugin);
+  const hasConfig = Boolean(
+    hubPlugin?.config_schema && Object.keys(hubPlugin.config_schema).length > 0,
+  );
+  const statusTitle = plugin.error
+    ? plugin.error
+    : plugin.enabled
+      ? "已启用"
+      : "未启用";
+  const surfaceBadges = pluginSurfaceBadges(entry);
+
+  return (
+    <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border/45 bg-card/55 px-3 py-3 shadow-sm transition-colors hover:border-primary/20 hover:bg-card">
+      <div
+        className={cn(
+          "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm",
+          !plugin.enabled && "bg-muted/40",
+        )}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt=""
+            className="size-8 object-contain"
+            loading="lazy"
+          />
+        ) : (
+          <PuzzleIcon
+            className={cn(
+              "size-5",
+              plugin.enabled ? "text-primary" : "text-muted-foreground",
+            )}
+          />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="truncate text-[15px] font-semibold leading-5">
+            {plugin.name}
+          </h3>
+        </div>
+        <p className="mt-1 line-clamp-1 text-sm leading-5 text-muted-foreground">
+          {plugin.description}
+        </p>
+        {surfaceBadges.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {surfaceBadges.map((badge) => (
+              <span
+                key={badge}
+                className="rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground"
+              >
+                {badge}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        {hasConfig && hubPlugin && (
+          <button
+            type="button"
+            aria-label={`配置 ${plugin.name}`}
+            onClick={() => onConfigure(hubPlugin)}
+            className="flex size-8 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Settings2Icon className="size-4" />
+          </button>
+        )}
+        <span
+          title={statusTitle}
+          className={cn(
+            "flex size-8 items-center justify-center rounded-lg bg-muted/55 transition-colors",
+            plugin.error
+              ? "text-rose-500"
+              : plugin.enabled
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+                : "text-foreground hover:bg-muted",
+          )}
+        >
+          {plugin.error ? (
+            <XCircleIcon className="size-5" />
+          ) : plugin.enabled ? (
+            <CheckCircleIcon className="size-5" />
+          ) : (
+            <PlusIcon className="size-5" />
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
+  const { t } = useI18n();
+  const openCreatePluginChat = useOpenCreatePluginChat();
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [hubPlugins, setHubPlugins] = useState<HubPluginInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [configTarget, setConfigTarget] = useState<HubPluginInfo | null>(null);
+  const [pluginQuery, setPluginQuery] = useState("");
+  const [pluginAuthorFilter, setPluginAuthorFilter] = useState("all");
+  const [pluginStatusFilter, setPluginStatusFilter] =
+    useState<PluginStatusFilter>("all");
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [legacy, hub] = await Promise.all([
+        listPlugins().catch(() => [] as PluginInfo[]),
+        hubListPlugins().catch(() => [] as HubPluginInfo[]),
+      ]);
+      setPlugins(legacy);
+      setHubPlugins(hub);
+    } catch (e) {
+      swallow(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Sync external search (from Hub header) into plugin query
+  useEffect(() => {
+    if (searchQuery) setPluginQuery(searchQuery);
+  }, [searchQuery]);
+
+  const pluginEntries = useMemo<PluginEntry[]>(() => {
+    const hubEntries = hubPlugins
+      .filter((plugin) => plugin.id !== "openproject-pm")
+      .map((plugin) => ({ plugin, source: "hub" as const }));
+    const legacyEntries = plugins.map((plugin) => ({
+      plugin,
+      source: "legacy" as const,
+    }));
+    return [...hubEntries, ...legacyEntries].sort((a, b) =>
+      a.plugin.name.localeCompare(b.plugin.name),
+    );
+  }, [hubPlugins, plugins]);
+
+  const pluginAuthors = useMemo(() => {
+    return Array.from(
+      new Set(pluginEntries.map(({ plugin }) => plugin.author).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b));
+  }, [pluginEntries]);
+
+  const filteredPluginEntries = useMemo(() => {
+    const needle = pluginQuery.trim().toLowerCase();
+    return pluginEntries.filter(({ plugin }) => {
+      if (
+        pluginAuthorFilter !== "all" &&
+        plugin.author !== pluginAuthorFilter
+      ) {
+        return false;
+      }
+      if (pluginStatusFilter === "enabled" && !plugin.enabled) return false;
+      if (pluginStatusFilter === "disabled" && plugin.enabled) return false;
+      if (!needle) return true;
+      return [
+        plugin.name,
+        plugin.description,
+        plugin.author,
+        plugin.version,
+        plugin.state,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [pluginAuthorFilter, pluginEntries, pluginQuery, pluginStatusFilter]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <PuzzleIcon className="size-8 animate-pulse text-purple-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative w-full lg:max-w-[320px]">
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <UiInput
+            aria-label="搜索插件"
+            className="h-9 rounded-lg border-border/60 bg-background pl-9 text-xs"
+            placeholder="搜索插件"
+            value={pluginQuery}
+            onChange={(event) => setPluginQuery(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            aria-label="按作者筛选插件"
+            className="h-9 shrink-0 rounded-lg border border-transparent bg-muted/60 px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+            value={pluginAuthorFilter}
+            onChange={(event) => setPluginAuthorFilter(event.target.value)}
+          >
+            <option value="all">全部作者</option>
+            {pluginAuthors.map((author) => (
+              <option key={author} value={author}>
+                Built by {author}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="按状态筛选插件"
+            className="h-9 shrink-0 rounded-lg border border-transparent bg-muted/60 px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+            value={pluginStatusFilter}
+            onChange={(event) =>
+              setPluginStatusFilter(
+                event.target.value as PluginStatusFilter,
+              )
+            }
+          >
+            <option value="all">全部</option>
+            <option value="enabled">已启用</option>
+            <option value="disabled">未启用</option>
+          </select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 rounded-lg px-3 text-xs"
+            onClick={openCreatePluginChat}
+          >
+            <PlusIcon className="mr-1.5 size-3.5" />
+            创建
+          </Button>
+        </div>
+      </div>
+
+      {filteredPluginEntries.length > 0 ? (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
+          {filteredPluginEntries.map((entry) => (
+            <PluginListItem
+              key={`${entry.source}-${entry.plugin.id}`}
+              entry={entry}
+              onConfigure={setConfigTarget}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 py-12 text-center">
+          <PuzzleIcon className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">
+            {pluginEntries.length === 0
+              ? t.plugins.emptyTitle
+              : "没有匹配的插件"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground/60">
+            {pluginEntries.length === 0
+              ? t.plugins.emptyHint
+              : "换个关键词或筛选条件试试"}
+          </p>
+        </div>
+      )}
+
+      {configTarget && (
+        <HubPluginConfigDialog
+          plugin={configTarget}
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setConfigTarget(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Unified Component
 // ---------------------------------------------------------------------------
 
@@ -540,7 +1001,14 @@ export function AgentWorldUnified() {
 
   // State
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState(() => "agents");
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    if (tab === "plugins") return "plugins";
+    if (tab === "skills") return "skills";
+    return "agents";
+  });
+  const [skillView, setSkillView] = useState<"directory" | "packs">("directory");
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
   const [importOpen, setImportOpen] = useState(false);
@@ -578,8 +1046,12 @@ export function AgentWorldUnified() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get("tab");
-    // Hub is the only visible tab for now; legacy tab params land here.
-    if (tab === "agents" || tab === "enterprise") {
+    if (tab === "plugins") {
+      setActiveTab("plugins");
+    } else if (tab === "skills" || tab === "packs" || tab === "skill-packs") {
+      setActiveTab("skills");
+      setSkillView(tab === "skill-packs" ? "packs" : "directory");
+    } else if (tab === "agents" || tab === "enterprise") {
       setActiveTab("agents");
     }
     if (params.get("connect") === "local") {
@@ -725,6 +1197,20 @@ export function AgentWorldUnified() {
                   {t.agentWorldUnified.roleLibrary}
                 </TabsTrigger>
               )}
+              <TabsTrigger
+                value="plugins"
+                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+              >
+                <PuzzleIcon className="h-3.5 w-3.5" />
+                {t.plugins.pageTitle}
+              </TabsTrigger>
+              <TabsTrigger
+                value="skills"
+                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+              >
+                <BoxesIcon className="h-3.5 w-3.5" />
+                {t.plugins.tabSkillMarket}
+              </TabsTrigger>
               {SHOW_ENTERPRISE_ASSETS && (
                 <TabsTrigger
                   value="enterprise"
@@ -746,6 +1232,20 @@ export function AgentWorldUnified() {
                 onCategoryChange={setActiveCategory}
                 onSelectAgent={handleSelectAgent}
                 onInstallChange={handleInstallChange}
+              />
+            </TabsContent>
+
+            <TabsContent value="plugins" className="mt-0">
+              <PluginsTabContent searchQuery={searchQuery} />
+            </TabsContent>
+
+            <TabsContent value="skills" className="mt-0">
+              <LocalSkillDirectoryPanel
+                allButtonPosition="end"
+                onDirectorySelect={() => setSkillView("directory")}
+                onSkillPacksSelect={() => setSkillView("packs")}
+                skillPacksContent={<SkillPacksTab variant="embedded" />}
+                skillPacksSelected={skillView === "packs"}
               />
             </TabsContent>
 

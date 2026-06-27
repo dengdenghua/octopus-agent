@@ -17,7 +17,6 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   PlusIcon,
-  PuzzleIcon,
   Trash2Icon,
   UsersRoundIcon,
   type LucideIcon,
@@ -117,11 +116,6 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
     to: "/workspace/intelligence?surface=chat",
     labelKey: "navIntelligence",
     icon: BrainIcon,
-  },
-  {
-    to: "/workspace/plugins?surface=chat",
-    labelKey: "navPlugins",
-    icon: PuzzleIcon,
   },
   {
     to: "/workspace/evolution?surface=chat",
