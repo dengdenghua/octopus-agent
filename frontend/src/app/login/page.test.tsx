@@ -21,7 +21,7 @@ vi.mock("react-router-dom", async () => {
 });
 
 vi.mock("@/core/auth/api", () => ({
-  getAuthProviders: () => getAuthProvidersMock(),
+  getAuthProviderInfo: () => getAuthProvidersMock(),
   moliliSmsSend: (phone: string) => smsSendMock(phone),
   isMoliliDisabled: () => false,
   authHeaders: () => ({}),
@@ -81,7 +81,7 @@ describe("LoginPage", () => {
     smsSendMock.mockReset();
     smsLoginMock.mockReset();
     getAuthProvidersMock.mockReset();
-    getAuthProvidersMock.mockResolvedValue(["molili"]);
+    getAuthProvidersMock.mockResolvedValue([{ id: "molili" }]);
   });
 
   afterEach(() => {

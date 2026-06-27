@@ -96,34 +96,50 @@ export async function getAuthStatus(): Promise<AuthStatus> {
   return (await res.json()) as AuthStatus;
 }
 
+export interface AuthProviderInfo {
+  id: string;
+  label?: string;
+  mock_mode?: boolean;
+  allow_any_username?: boolean;
+  password_required?: boolean;
+  endpoint?: string;
+  endpoint_send?: string;
+  endpoint_verify?: string;
+}
+
 /** Backend reports which login providers are wired · empty list means
- * guest-only (no Molili, no local-auth). UI uses this to hide login CTAs
- * when there's no provider they could actually authenticate against.
- * Returns empty list on any error so the UI fails closed (show nothing). */
-export async function getAuthProviders(): Promise<string[]> {
+ * no interactive login providers are configured. Returns empty list on
+ * any error so the UI fails closed (show nothing). */
+export async function getAuthProviderInfo(): Promise<AuthProviderInfo[]> {
   try {
     const res = await fetch(`${getBackendBaseURL()}/api/auth/providers`);
     if (!res.ok) return [];
     const data = (await res.json()) as {
-      providers?: Array<{ id: string }> | string[];
+      providers?: AuthProviderInfo[] | string[];
     };
     if (!data.providers) return [];
-    // Implementation note.
+    // Backwards-compatible with the old string[] shape.
     if (data.providers.length > 0 && typeof data.providers[0] === "object") {
-      return (data.providers as Array<{ id: string }>).map((p) => p.id);
+      return data.providers as AuthProviderInfo[];
     }
-    return data.providers as string[];
+    return (data.providers as string[]).map((id) => ({ id }));
   } catch (e) {
     swallow(e);
     return [];
   }
 }
 
+export async function getAuthProviders(): Promise<string[]> {
+  return (await getAuthProviderInfo()).map((p) => p.id);
+}
+
 export async function login(request: LoginRequest): Promise<LoginResponse> {
-  const res = await fetch(`${getBackendBaseURL()}/api/auth/login`, {
+  const body: Record<string, unknown> = { username: request.username };
+  if (request.password) body.password = request.password;
+  const res = await fetch(`${getBackendBaseURL()}/api/auth/local/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };

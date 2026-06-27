@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
-  CheckCircle2Icon,
   KeyRoundIcon,
   SmartphoneIcon,
   SparklesIcon,
@@ -24,7 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  getAuthProviders,
+  type AuthProviderInfo,
+  getAuthProviderInfo,
   isMoliliDisabled,
   moliliSmsSend,
 } from "@/core/auth/api";
@@ -217,24 +217,36 @@ function SmsLoginForm() {
   );
 }
 
-function GuestLoginForm() {
+function LocalLoginForm({
+  passwordRequired,
+}: {
+  passwordRequired: boolean;
+}) {
   const navigate = useNavigate();
-  const { guestLogin } = useAuth();
+  const { login } = useAuth();
   const { t } = useI18n();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername || (passwordRequired && !password)) {
+      toast.error(t.auth.errors.fillRequired);
+      return;
+    }
     setSubmitting(true);
     try {
-      await guestLogin();
-      toast.success(t.auth.success.guestEntered);
-      setTimeout(() => {
-        navigate("/workspace", { replace: true });
-      }, 100);
+      await login({
+        username: trimmedUsername,
+        ...(password ? { password } : {}),
+      });
+      toast.success(t.auth.success.loginSuccess);
+      navigate("/workspace", { replace: true });
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : t.auth.errors.enterFailed,
+        err instanceof Error ? err.message : t.auth.errors.loginFailed,
       );
     } finally {
       setSubmitting(false);
@@ -243,27 +255,46 @@ function GuestLoginForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="rounded-xl border border-border bg-muted p-4">
-        <p className="text-sm font-medium text-foreground">
-          {t.auth.guestMode.title}
-        </p>
-        <ul className="mt-2 space-y-1.5 text-xs text-muted-foreground">
-          {t.auth.guestMode.features.map((feature, index) => (
-            <li key={index} className="flex items-start gap-2">
-              <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-500" />
-              <span>{feature}</span>
-            </li>
-          ))}
-        </ul>
+      <div className="rounded-lg border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+        {t.loginPage.localBanner}
       </div>
+      <div className="space-y-2">
+        <Label htmlFor="local-username">{t.registerPage.usernameLabel}</Label>
+        <div className="relative">
+          <UserCircle2Icon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            id="local-username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={t.registerPage.usernamePlaceholder}
+            autoComplete="username"
+            className="pl-9"
+          />
+        </div>
+      </div>
+      {passwordRequired && (
+        <div className="space-y-2">
+          <Label htmlFor="local-password">{t.registerPage.passwordLabel}</Label>
+          <div className="relative">
+            <KeyRoundIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+            <Input
+              id="local-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={t.registerPage.passwordPlaceholder}
+              autoComplete="current-password"
+              className="pl-9"
+            />
+          </div>
+        </div>
+      )}
       <Button
         type="submit"
-        variant="outline"
         className="w-full"
         disabled={submitting}
       >
-        <UserCircle2Icon className="size-4" />
-        {submitting ? t.auth.entering : t.auth.enterDirectly}
+        {submitting ? t.auth.loggingIn : t.auth.login}
         {!submitting && <ArrowRightIcon className="size-4" />}
       </Button>
     </form>
@@ -274,14 +305,15 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { authStatus, isLoading, isAuthenticated } = useAuth();
   const { t } = useI18n();
-  const [authProviders, setAuthProviders] = useState<string[] | null>(null);
+  const [authProviders, setAuthProviders] =
+    useState<AuthProviderInfo[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadAuthProviders() {
       for (let attempt = 0; attempt < AUTH_PROVIDER_RETRY_COUNT; attempt += 1) {
-        const providers = await getAuthProviders();
+        const providers = await getAuthProviderInfo();
         if (cancelled) return;
         if (providers.length > 0 || attempt === AUTH_PROVIDER_RETRY_COUNT - 1) {
           setAuthProviders(providers);
@@ -298,7 +330,8 @@ export default function LoginPage() {
   }, []);
 
   const providersReady = authProviders !== null;
-  const hasMolili = authProviders?.includes("molili") ?? false;
+  const hasMolili = authProviders?.some((p) => p.id === "molili") ?? false;
+  const localProvider = authProviders?.find((p) => p.id === "local") ?? null;
 
   useEffect(() => {
     if (isLoading) return;
@@ -401,23 +434,33 @@ export default function LoginPage() {
                 <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
                   {t.common.loading}
                 </div>
-              ) : hasMolili ? (
+              ) : hasMolili && localProvider ? (
                 <Tabs defaultValue="sms" className="w-full">
                   <TabsList className="mb-5 grid w-full grid-cols-2">
                     <TabsTrigger value="sms">{t.auth.phoneNumber}</TabsTrigger>
-                    <TabsTrigger value="guest">
-                      {t.auth.guestMode.title}
+                    <TabsTrigger value="local">
+                      {localProvider.label ?? t.registerPage.usernameLabel}
                     </TabsTrigger>
                   </TabsList>
                   <TabsContent value="sms">
                     <SmsLoginForm />
                   </TabsContent>
-                  <TabsContent value="guest">
-                    <GuestLoginForm />
+                  <TabsContent value="local">
+                    <LocalLoginForm
+                      passwordRequired={localProvider.password_required === true}
+                    />
                   </TabsContent>
                 </Tabs>
+              ) : hasMolili ? (
+                <SmsLoginForm />
+              ) : localProvider ? (
+                <LocalLoginForm
+                  passwordRequired={localProvider.password_required === true}
+                />
               ) : (
-                <GuestLoginForm />
+                <div className="rounded-lg border border-border bg-muted px-3 py-4 text-center text-sm text-muted-foreground">
+                  {t.loginPage.errorServiceDisabled}
+                </div>
               )}
 
               {authStatus?.allow_registration && (

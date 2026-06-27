@@ -49,7 +49,6 @@ interface PendingRequest {
 
 const DEFAULT_INITIAL_BACKOFF = 500;
 const DEFAULT_MAX_BACKOFF = 15_000;
-const GUEST_AUTH_TOKEN = "__guest__";
 
 // Delta notification methods that participate in delta-coalescing.
 // Used by the coalesce step (which merges N consecutive deltas with the
@@ -222,7 +221,7 @@ export class RealtimeClient {
 
   private buildUrl(): string {
     const token = this.opts.authToken?.() ?? null;
-    if (!token || token === GUEST_AUTH_TOKEN) return this.opts.url;
+    if (!token) return this.opts.url;
     const sep = this.opts.url.includes("?") ? "&" : "?";
     return `${this.opts.url}${sep}token=${encodeURIComponent(token)}`;
   }
