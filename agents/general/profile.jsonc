@@ -1,4 +1,4 @@
-// Octopus Agent profile · edit this to tune the agent.
+// Octopus Agent profile · general
 
 {
   "id": "general",
@@ -108,5 +108,8 @@
       "teasing",
       "serious"
     ]
+  },
+  "capabilities": {
+    "code_mode_unlock": false
   }
 }
