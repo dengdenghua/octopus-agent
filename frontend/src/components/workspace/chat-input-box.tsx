@@ -72,6 +72,10 @@ import {
   type AgentModeName,
   type AuditIntensity,
 } from "./mode-selector";
+import {
+  PersonalModeSelector,
+  type PersonalMode,
+} from "./personal-mode-selector";
 
 /**
  * Simplified chat composer for the /workspace/chats route. Same visual
@@ -111,6 +115,9 @@ export interface ChatInputBoxProps {
   codeModeUnlocked?: boolean;
   projectAgentMode?: AgentModeName;
   auditIntensity?: AuditIntensity;
+  /** Personal-space work mode (general/build/research). Surfaced only when no
+   * project dir is bound; the parent threads it into the turn as personal_mode. */
+  personalMode?: PersonalMode;
   projectDetection?: DetectResponse | null;
   reasoningEffort?: ReasoningEffort;
   /** When set, this chat targets a local CLI partner (e.g. "codex-cli"); the
@@ -123,6 +130,7 @@ export interface ChatInputBoxProps {
   onPermissionModeChange?: (mode: PermissionMode) => void;
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;
+  onPersonalModeChange?: (mode: PersonalMode) => void;
   onProjectDetectionChange?: (detection: DetectResponse | null) => void;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
   onModelChange?: (modelName: string) => void;
@@ -237,6 +245,7 @@ export function ChatInputBox({
   codeModeUnlocked = false,
   projectAgentMode = "develop",
   auditIntensity = "standard",
+  personalMode = "general",
   projectDetection: _projectDetection,
   reasoningEffort,
   partnerId,
@@ -245,6 +254,7 @@ export function ChatInputBox({
   onPermissionModeChange,
   onProjectAgentModeChange,
   onAuditIntensityChange,
+  onPersonalModeChange,
   onProjectDetectionChange,
   onReasoningEffortChange,
   onModelChange,
@@ -382,10 +392,14 @@ export function ChatInputBox({
     !isProjectMode &&
     (displayAgentName === "general" || displayAgentLabel === "Agent");
   const showAgentSegment = false;
+  // Personal-space work mode (general/build/research) shows only when no project
+  // dir is bound — the project ModeSelector takes over once a folder is picked.
+  const showPersonalModeSegment = !hasWorkDir && !isProjectMode;
   const statusSegmentCount =
     (showAgentSegment ? 1 : 0) +
     (showWorkDirSegment ? 1 : 0) +
-    (showModeSegment ? 1 : 0);
+    (showModeSegment ? 1 : 0) +
+    (showPersonalModeSegment ? 1 : 0);
   const showStatusStrip = statusSegmentCount > 0;
 
   useEffect(() => {
@@ -1397,6 +1411,21 @@ export function ChatInputBox({
                     />
                   </>
                 )}
+              </>
+            ) : null}
+            {showPersonalModeSegment ? (
+              <>
+                {(showAgentSegment || showWorkDirSegment) && (
+                  <span
+                    className="h-3 w-px shrink-0 bg-border/35"
+                    aria-hidden="true"
+                  />
+                )}
+                <PersonalModeSelector
+                  mode={personalMode}
+                  chromeless
+                  onModeChange={onPersonalModeChange ?? (() => undefined)}
+                />
               </>
             ) : null}
           </div>

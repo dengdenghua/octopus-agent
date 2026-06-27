@@ -42,6 +42,8 @@ import type {
   DetectionSignals,
 } from "@/components/workspace/mode-selector";
 import type { ReasoningMode } from "@/components/workspace/reasoning-mode";
+import type { PersonalMode } from "@/components/workspace/personal-mode-selector";
+import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay";
 import type { PromptInputFilePart } from "@/core/uploads";
 import { ChatPageLayout } from "@/components/workspace/chat-page-layout";
 import { ChatStreamingFooter } from "@/components/workspace/chat-streaming-footer";
@@ -92,11 +94,7 @@ import {
   permissionRuntimeConfig,
 } from "@/core/permissions";
 import { startDeepResearch, type ResearchJob } from "@/core/research/api";
-import {
-  getRecordingStatus,
-  startRecording,
-  stopRecording,
-} from "@/core/teach-repeat/api";
+import { getRecordingStatus } from "@/core/teach-repeat/api";
 import type { RecordingStatus } from "@/core/teach-repeat/types";
 import { ACTIVE_AGENT_EVENT, ACTIVE_AGENT_KEY } from "@/core/agents/active";
 import { useAgent } from "@/core/agents/hooks";
@@ -452,17 +450,18 @@ function ChatHeaderAgentBadge({
 
 function ChatHeaderRecButton({
   threadId,
-  title,
+  onOpen,
+  isRecording,
 }: {
   threadId: string;
-  title: string;
+  onOpen: () => void;
+  isRecording: boolean;
 }) {
   const [status, setStatus] = useState<RecordingStatus>({
     recording: false,
     step_count: 0,
     name: "",
   });
-  const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!threadId || threadId === "new") return;
@@ -477,83 +476,37 @@ function ChatHeaderRecButton({
     void refresh();
   }, [refresh]);
 
+  // The floating RecRecorderOverlay owns start/stop now; this chip only opens it
+  // and mirrors live state. ``isRecording`` (from the overlay) flips instantly;
+  // the poll keeps the step counter fresh and recovers state on reload.
+  const recording = isRecording || status.recording;
   useEffect(() => {
-    if (!status.recording) return;
+    if (!recording) return;
     const timer = window.setInterval(() => void refresh(), 3000);
     return () => window.clearInterval(timer);
-  }, [refresh, status.recording]);
-
-  const toggleRecording = useCallback(async () => {
-    if (!threadId || threadId === "new" || busy) return;
-    if (!status.recording) {
-      const confirmed = window.confirm(
-        "开始录制本轮对话与操作？录制内容会用于生成可复用的回放/学习技能；未确认前不会录制。",
-      );
-      if (!confirmed) return;
-      setBusy(true);
-      try {
-        await startRecording({
-          thread_id: threadId,
-          name: title?.trim() || "对话回放学习",
-          description: "用户手动开启的对话区 REC 录制。",
-        });
-        await refresh();
-        toast.success("REC 已开始");
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "REC 启动失败");
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
-    const confirmed = window.confirm("停止录制并生成可复用工作流？");
-    if (!confirmed) return;
-    setBusy(true);
-    try {
-      const result = await stopRecording({ thread_id: threadId, use_llm: true });
-      await refresh();
-      const forged = result.forged?.length ? result.forged.join("、") : "";
-      if (result.status === "promoted" && forged) {
-        toast.success(`已从本轮对话锻造技能：${forged}`);
-      } else if (result.status === "quarantined") {
-        toast.success("已生成技能候选（含敏感操作，待人工审批）");
-      } else if (result.status === "no_successful_trajectory") {
-        toast.message("本轮暂无可锻造的成功操作轨迹");
-      } else {
-        toast.success(`录制完成：${result.name}`);
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "REC 停止失败");
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, refresh, status.recording, threadId, title]);
+  }, [refresh, recording]);
 
   return (
     <button
       type="button"
-      onClick={() => void toggleRecording()}
-      disabled={!threadId || threadId === "new" || busy}
+      onClick={onOpen}
+      disabled={!threadId || threadId === "new"}
       title={
-        status.recording
-          ? `录制中 · ${status.step_count} 步，点击停止`
-          : "REC：确认后录制本轮对话并学习为可复用回放技能"
+        recording
+          ? `录制中 · ${status.step_count} 步，点击打开录制器`
+          : "REC：录制本轮对话并学习为可复用回放技能"
       }
       className={cn(
         "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2 text-[11px] font-semibold transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-        status.recording
+        recording
           ? "bg-red-500/12 text-red-600 hover:bg-red-500/18 dark:text-red-400"
           : "bg-muted/45 text-muted-foreground hover:bg-muted/70 hover:text-foreground",
-        busy && "opacity-60",
       )}
     >
-      <CircleDotIcon
-        className={cn("size-3.5", status.recording && "animate-pulse")}
-      />
+      <CircleDotIcon className={cn("size-3.5", recording && "animate-pulse")} />
       <span>REC</span>
-      {status.recording && (
+      {recording && status.step_count > 0 && (
         <span className="font-mono text-[10px] opacity-70">
           {status.step_count}
         </span>
@@ -633,6 +586,12 @@ function ChatsPageContent({
     useState<AuditIntensity>("standard");
   const [projectDetection, setProjectDetection] =
     useState<DetectResponse | null>(null);
+  // Personal-space work mode (general/build/research) — only meaningful when no
+  // project dir is bound; threaded into the turn context as personal_mode.
+  const [personalMode, setPersonalMode] = useState<PersonalMode>("general");
+  // REC floating recorder overlay (replaces the old confirm() start/stop flow).
+  const [recOverlayOpen, setRecOverlayOpen] = useState(false);
+  const [recIsRecording, setRecIsRecording] = useState(false);
   // Work directory for Agent project/code state. Empty means personal
   // Agent chat; selecting a local folder promotes this page into code
   // mode without mixing it with the separate Team workspace.
@@ -979,6 +938,10 @@ function ChatsPageContent({
       workflow_preset: isProjectCodeMode
         ? workflowPresetForMode(projectAgentMode, auditIntensity)
         : undefined,
+      // Personal-space work mode — the inverse gate of the project fields above.
+      // Backend react_loop reads personal_mode for deep-research + the personal
+      // agent-mode prompt; only sent when NOT bound to a project dir.
+      personal_mode: !isProjectCodeMode ? personalMode : undefined,
       skill_pack_profile: isProjectCodeMode
         ? projectModePreset.skillPackProfile
         : undefined,
@@ -1720,7 +1683,8 @@ function ChatsPageContent({
                 <div className="ml-auto flex shrink-0 items-center gap-1">
                   <ChatHeaderRecButton
                     threadId={threadId}
-                    title={thread?.values?.title || initialPrompt || ""}
+                    onOpen={() => setRecOverlayOpen(true)}
+                    isRecording={recIsRecording}
                   />
                   {(thread?.values?.title || initialPrompt) && (
                     <ShareMenu
@@ -1867,9 +1831,11 @@ function ChatsPageContent({
                       codeModeUnlocked={codeModeUnlocked}
                       projectAgentMode={projectAgentMode}
                       auditIntensity={auditIntensity}
+                      personalMode={personalMode}
                       projectDetection={projectDetection}
                       onProjectAgentModeChange={setProjectAgentMode}
                       onAuditIntensityChange={setAuditIntensity}
+                      onPersonalModeChange={setPersonalMode}
                       onProjectDetectionChange={setProjectDetection}
                       contextTokens={contextTokens}
                       maxContextTokens={maxContextTokens}
@@ -2012,6 +1978,14 @@ function ChatsPageContent({
           />
         </ChatBox>
         <ChatsDrawer open={chatsDrawerOpen} onOpenChange={setChatsDrawerOpen} />
+        <RecRecorderOverlay
+          open={recOverlayOpen}
+          threadId={threadId}
+          defaultName={thread?.values?.title || initialPrompt || "对话回放学习"}
+          initiallyRecording={recIsRecording}
+          onClose={() => setRecOverlayOpen(false)}
+          onRecordingChange={setRecIsRecording}
+        />
       </ThreadProviders>
     </SubtasksProvider>
   );
