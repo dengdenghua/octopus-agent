@@ -40,11 +40,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.platform.ui.app import create_app
+from runtime.sensing.gateway.config_router import create_config_router
+from runtime.sensing.model_router import ModelDispatchRouter, ModelRouter
 
 # ═══════════════════════════════════════════════════════════
 # Fixtures
@@ -254,6 +258,8 @@ class TestCustomModelsUpsert:
             "max_tokens": 12000,
             "supports_thinking": True,
             "supports_vision": False,
+            "supports_tool_use": True,
+            "omit_sampling_parameters": True,
             "default_headers": {"X-Test": "yes"},
         }
         r = client.put(
@@ -276,6 +282,8 @@ class TestCustomModelsUpsert:
         assert "max_tokens" not in stored["claude-mirror"]
         assert stored["claude-mirror"]["supports_thinking"] is True
         assert stored["claude-mirror"]["supports_vision"] is False
+        assert stored["claude-mirror"]["supports_tool_use"] is True
+        assert stored["claude-mirror"]["omit_sampling_parameters"] is True
         assert stored["claude-mirror"]["default_headers"] == {"X-Test": "yes"}
 
     def test_update_preserves_prior_api_key(
@@ -333,6 +341,54 @@ class TestCustomModelsUpsert:
         assert entry["supports_thinking"] is False
         assert entry["supports_vision"] is False
         assert entry["default_headers"] == {}
+
+    def test_registers_entry_id_and_concrete_model_ids(
+        self,
+        isolated_cwd: Path,
+    ) -> None:
+        class _Fallback(ModelRouter):
+            def call(self, request):
+                raise AssertionError("fallback should not be called")
+
+        dispatcher = ModelDispatchRouter(fallback=_Fallback())
+        stack = SimpleNamespace(planner=SimpleNamespace(router=dispatcher))
+        app = FastAPI()
+        app.include_router(create_config_router(stack=stack).router)
+        client = TestClient(app)
+
+        r = client.put(
+            "/api/config/custom-models/kimi-code",
+            json={
+                "name": "Kimi Code",
+                "provider": "openai",
+                "base_url": "https://api.kimi.com/coding/v1",
+                "api_key": "sk-test",
+                "models": ["kimi-for-coding", "kimi-for-coding-fast"],
+                "display_name": "K2.7 Code",
+                "supports_tool_use": True,
+                "omit_sampling_parameters": True,
+            },
+        )
+        assert r.status_code == 200
+        assert dispatcher.has("kimi-code")
+        assert dispatcher.has("kimi-for-coding")
+        assert dispatcher.has("kimi-for-coding-fast")
+
+        r = client.put(
+            "/api/config/custom-models/kimi-code",
+            json={"models": ["kimi-for-coding-v2"]},
+        )
+        assert r.status_code == 200
+        assert dispatcher.has("kimi-code")
+        assert not dispatcher.has("kimi-for-coding")
+        assert not dispatcher.has("kimi-for-coding-fast")
+        assert dispatcher.has("kimi-for-coding-v2")
+
+        r = client.delete("/api/config/custom-models/kimi-code")
+        assert r.status_code == 200
+        assert r.json()["removed"] is True
+        assert not dispatcher.has("kimi-code")
+        assert not dispatcher.has("kimi-for-coding-v2")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -408,6 +464,32 @@ class TestLlmModelsMerge:
         blob = repr(data)
         assert "mirror-x" in blob or "Mirror X" in blob
         assert "supports_thinking" in blob
+
+    def test_custom_model_flags_appear_in_merged_list(
+        self,
+        client: TestClient,
+    ) -> None:
+        client.put(
+            "/api/config/custom-models/kimi-code",
+            json={
+                "name": "Kimi Code", "provider": "openai",
+                "base_url": "https://api.kimi.com/coding/v1",
+                "api_key": "sk-x", "models": ["kimi-for-coding"],
+                "display_name": "K2.7 Code",
+                "omit_sampling_parameters": True,
+            },
+        )
+
+        data = client.get("/api/llm-models").json()
+        rows = [
+            row for row in data["models"]
+            if row.get("entry_id") == "kimi-code"
+        ]
+        assert rows
+        assert rows[0]["id"] == "kimi-for-coding"
+        assert rows[0]["display_name"] == "K2.7 Code"
+        assert rows[0]["supports_tool_use"] is True
+        assert rows[0]["omit_sampling_parameters"] is True
 
 
 # ═══════════════════════════════════════════════════════════

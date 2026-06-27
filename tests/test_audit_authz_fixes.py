@@ -420,6 +420,27 @@ def test_local_auth_jwt_reaches_control_and_auth_aware_routes(
     assert client.get("/api/agents", headers=headers).status_code != 401
 
 
+def test_local_auth_dev_mode_accepts_legacy_guest_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
+
+    monkeypatch.chdir(tmp_path)
+    app = create_app(
+        cocoloop_require_auth=True,
+        local_auth_config=LocalAuthConfig(
+            enabled=True,
+            allow_any_username=True,
+            jwt_secret="0123456789abcdef0123456789ABCDEF!",
+        ),
+    )
+    client = TestClient(app)
+
+    headers = {"Authorization": "Bearer __guest__"}
+    assert client.get("/api/memory", headers=headers).status_code != 401
+    assert client.get("/api/agents", headers=headers).status_code != 401
+
+
 def test_local_auth_jwt_audience_is_issued_and_enforced(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
