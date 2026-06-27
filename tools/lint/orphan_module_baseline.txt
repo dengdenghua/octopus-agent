@@ -5,7 +5,14 @@
 # that dynamic dependency — keep it, it's not a bug.
 
 runtime/core/hearts/gill_pump.py
+runtime/execution/loops/dispatcher.py
 runtime/execution/skill_aliases.py
 runtime/execution/suckers/echo_skills.py
 runtime/execution/suckers/enterprise_skills.py
+runtime/platform/lifecycle/data_migration.py
+runtime/platform/lifecycle/demo.py
+runtime/platform/plugins/plugin_compat.py
+runtime/platform/process/event_bridge.py
+runtime/platform/process/turn_model.py
+runtime/platform/runtime_policy/feature_flags.py
 runtime/tentacle/mobile/capabilities.py
