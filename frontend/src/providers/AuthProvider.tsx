@@ -130,6 +130,7 @@ interface AuthContextType {
   isGuest: boolean;
   login: (request: LoginRequest) => Promise<void>;
   smsLogin: (phone: string, code: string) => Promise<void>;
+  /** Deprecated: guest mode is disabled when auth is enabled. */
   guestLogin: () => Promise<void>;
   register: (request: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
@@ -137,10 +138,6 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-function _writeGuestState(guestUser: User): void {
-  _writeToken(GUEST_USER_ID, guestUser);
-}
 
 function _clearGuestState(): void {
   _clearTokens();
@@ -155,31 +152,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isAuthenticated =
     !!user && !isPlaceholderUserId(user.user_id) && !user.is_guest;
-  const isGuest =
-    !!user && (user.is_guest || isPlaceholderUserId(user.user_id));
-
-  const bootstrapGuest = useCallback(() => {
-    const guestUser: User = {
-      user_id: GUEST_USER_ID,
-      username: t.auth.guestUser,
-      email: "",
-      is_guest: true,
-    };
-    _writeGuestState(guestUser);
-    setUser(guestUser);
-  }, [t.auth.guestUser]);
+  const isGuest = false;
 
   const initAuth = useCallback(async () => {
     const token = getToken();
     const storedUser = getStoredUser();
     const tokenUser = userFromJwt(token);
     const localUser = storedUser || tokenUser;
-    if (token && token !== GUEST_USER_ID && localUser && !localUser.is_guest) {
+    if (token === GUEST_USER_ID || storedUser?.is_guest) {
+      _clearGuestState();
+      setUser(null);
+    } else if (token && localUser && !localUser.is_guest) {
       setUser(normalizeUserIdentity(localUser as User, tokenUser));
-    } else if (storedUser?.is_guest && token === GUEST_USER_ID) {
-      setUser(storedUser);
     } else {
-      bootstrapGuest();
+      setUser(null);
     }
     setIsLoading(false);
 
@@ -202,14 +188,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const msg = err instanceof Error ? err.message : "";
           if (/401|Unauthorized/i.test(msg)) {
             _clearGuestState();
-            bootstrapGuest();
+            setUser(null);
           }
         }
       }
     } catch (e) {
       swallow(e);
     }
-  }, [bootstrapGuest]);
+  }, []);
 
   useEffect(() => {
     if (initializedRef.current) return;
@@ -241,15 +227,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const guestLogin = useCallback(async () => {
-    const guestUser: User = {
-      user_id: GUEST_USER_ID,
-      username: t.auth.guestUser,
-      email: "",
-      is_guest: true,
-    };
-    _writeGuestState(guestUser);
-    setUser(guestUser);
-  }, [t.auth.guestUser]);
+    _clearGuestState();
+    setUser(null);
+    throw new Error(t.auth.notLoggedIn);
+  }, [t.auth.notLoggedIn]);
 
   const register = useCallback(async (request: RegisterRequest) => {
     const newUser = await registerApi(request);

@@ -420,7 +420,7 @@ def test_local_auth_jwt_reaches_control_and_auth_aware_routes(
     assert client.get("/api/agents", headers=headers).status_code != 401
 
 
-def test_local_auth_dev_mode_accepts_legacy_guest_token(
+def test_local_auth_dev_mode_rejects_legacy_guest_token(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from runtime.adapters.integrations.local_auth.config import LocalAuthConfig
@@ -437,8 +437,8 @@ def test_local_auth_dev_mode_accepts_legacy_guest_token(
     client = TestClient(app)
 
     headers = {"Authorization": "Bearer __guest__"}
-    assert client.get("/api/memory", headers=headers).status_code != 401
-    assert client.get("/api/agents", headers=headers).status_code != 401
+    assert client.get("/api/memory", headers=headers).status_code == 401
+    assert client.get("/api/agents", headers=headers).status_code == 401
 
 
 def test_local_auth_jwt_audience_is_issued_and_enforced(

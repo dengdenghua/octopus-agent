@@ -117,7 +117,7 @@ describe("RealtimeClient", () => {
     client.close();
   });
 
-  it("omits the guest sentinel token from the websocket URL", async () => {
+  it("adds supplied auth tokens to the websocket URL", async () => {
     const client = new RealtimeClient({
       url: "ws://test/api/realtime",
       authToken: () => "__guest__",
@@ -127,7 +127,9 @@ describe("RealtimeClient", () => {
 
     client.connect();
 
-    expect(FakeWebSocket.lastInstance!.url).toBe("ws://test/api/realtime");
+    expect(FakeWebSocket.lastInstance!.url).toBe(
+      "ws://test/api/realtime?token=__guest__",
+    );
     client.close();
   });
 

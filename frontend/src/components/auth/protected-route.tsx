@@ -9,7 +9,7 @@ import { useAuth } from "@/providers/AuthProvider";
  * all users are allowed through — matching the backend's behavior.
  */
 export function ProtectedRoute() {
-  const { isLoading, authStatus, isAuthenticated, isGuest } = useAuth();
+  const { isLoading, authStatus, isAuthenticated } = useAuth();
 
   // Still loading auth status — show nothing to avoid flash
   if (isLoading) {
@@ -21,8 +21,8 @@ export function ProtectedRoute() {
     return <Outlet />;
   }
 
-  // Auth enabled but not authenticated and not guest — redirect to login
-  if (!isAuthenticated && !isGuest) {
+  // Auth enabled requires a real authenticated account.
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 

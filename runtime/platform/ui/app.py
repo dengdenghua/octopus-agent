@@ -66,9 +66,6 @@ _LEGACY_CONTROL_PLANE_PREFIXES = (
     "/api/team/role-models",
 )
 
-_LOCAL_GUEST_TOKEN = "__guest__"
-
-
 def _path_matches_prefix(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix + "/")
 
@@ -86,44 +83,6 @@ def _is_public_plugin_asset_request(method: str, path: str) -> bool:
         and parts[4] == "assets"
         and bool(parts[5])
     )
-
-
-def _install_local_guest_identity(
-    *,
-    identity_store: Any,
-    local_auth_config: Any,
-) -> None:
-    """Keep the old frontend guest token working in local dev auth mode."""
-    if identity_store is None or local_auth_config is None:
-        return
-    if not getattr(local_auth_config, "enabled", False):
-        return
-    if not getattr(local_auth_config, "allow_any_username", False):
-        return
-    if getattr(local_auth_config, "password_required", False):
-        return
-    actor_prefix = str(getattr(local_auth_config, "actor_prefix", "local:"))
-    actor_id = f"{actor_prefix}local"
-    if hasattr(identity_store, "get") and identity_store.get(actor_id) is not None:
-        return
-    try:
-        from runtime.safety.auth.identity import Identity
-
-        identity_store.add(
-            Identity(
-                actor_id=actor_id,
-                roles=tuple(getattr(local_auth_config, "default_roles", ()) or ()),
-                metadata={
-                    "provider": "local",
-                    "username": "local",
-                    "display_name": "Guest",
-                    "legacy_guest_token": True,
-                },
-            ),
-            api_key_plaintext=_LOCAL_GUEST_TOKEN,
-        )
-    except ValueError:
-        return
 
 
 def _install_legacy_control_plane_auth(
@@ -306,10 +265,6 @@ def create_app(
         from runtime.safety.auth.identity import IdentityStore
 
         cocoloop_identity_store = IdentityStore()
-    _install_local_guest_identity(
-        identity_store=cocoloop_identity_store,
-        local_auth_config=local_auth_runtime_config,
-    )
     if (
         local_auth_config is not None
         and getattr(local_auth_config, "enabled", False)
