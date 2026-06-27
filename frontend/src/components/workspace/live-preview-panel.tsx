@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { PreviewConsole } from "./preview-console";
+import { BrowserPreviewPanel } from "./browser-preview-panel";
 
 const CodeEditor = lazy(() =>
   import("./code-editor").then((module) => ({
@@ -59,6 +60,12 @@ interface LivePreviewPanelProps {
   onSendDiagnosticToChat?: (diagnostic: PreviewDiagnostic) => void;
   browserRegressionEnabled?: boolean;
   onToggleBrowserRegression?: () => void;
+  /** Thread + workspace identity. When set and previewUrl is a non-blob http(s)
+   * URL, the panel delegates to BrowserPreviewPanel — the single unified,
+   * controllable URL-preview surface (real <webview>+CDP in Electron, screenshot
+   * /iframe fallback on the web). The inline srcDoc/html mode is unaffected. */
+  threadId?: string;
+  workspacePath?: string | null;
   className?: string;
 }
 
@@ -75,6 +82,8 @@ export function LivePreviewPanel({
   onSendDiagnosticToChat,
   browserRegressionEnabled = false,
   onToggleBrowserRegression,
+  threadId,
+  workspacePath,
   className,
 }: LivePreviewPanelProps) {
   const { t } = useI18n();
@@ -267,6 +276,27 @@ ${jsContent || "// No JavaScript"}
 </script>
 </body>
 </html>`;
+
+  // Unify the two browser surfaces: a non-blob http(s) preview URL is rendered
+  // through the one controllable BrowserPreviewPanel (Electron <webview>+CDP, or
+  // screenshot/iframe fallback on the web) instead of a bare, uncontrollable
+  // <iframe>. Inline srcDoc/html previews stay here (the diagnostics bridge has
+  // no equivalent on a remote page). Requires a threadId to bind the session.
+  if (
+    threadId &&
+    previewUrl &&
+    !previewUrl.startsWith("blob:") &&
+    /^https?:\/\//i.test(previewUrl)
+  ) {
+    return (
+      <BrowserPreviewPanel
+        threadId={threadId}
+        workspacePath={workspacePath}
+        initialUrl={previewUrl}
+        className={className}
+      />
+    );
+  }
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
