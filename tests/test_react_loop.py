@@ -595,6 +595,40 @@ def test_goal_mode_keeps_caller_iteration_cap() -> None:
     assert started["max_iterations"] == 1
 
 
+def test_react_loop_injects_codex_plan_mode_guidance() -> None:
+    router = _CapturingRouter(["Final Answer: plan ready"])
+    intent = _intent("Plan the migration")
+    intent.user_context.update(
+        {
+            "codex_mode": "plan",
+            "completion_policy": "plan",
+            "workflow_preset": "codex.plan",
+            "mode_contract": "Custom plan contract",
+        }
+    )
+
+    _events, result = _drain(stream_react_loop(
+        _FakeStack(router),
+        intent,
+        agent=None,
+        max_iterations=1,
+        planning_mode=True,
+    ))
+
+    assert result is not None
+    all_text = "\n".join(
+        msg.content
+        for msg in router.requests[0].messages
+        if isinstance(msg.content, str)
+    )
+    assert "codex.plan" in all_text
+    assert "Plan 模式" in all_text
+    assert "Custom plan contract" in all_text
+    assert "不要主动进入实现或写文件" in all_text
+    assert "CODEX PLAN/SPEC LOCK" in all_text
+    assert "PLAN-FIRST MODE" not in all_text
+
+
 def test_react_loop_multi_turn_then_final() -> None:
     router = _ScriptedRouter([
         "Thought: 先想想\nAction: none\n",
