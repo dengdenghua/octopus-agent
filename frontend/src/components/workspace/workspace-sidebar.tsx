@@ -119,11 +119,6 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
     icon: BrainIcon,
   },
   {
-    to: "/workspace/knowledge?surface=chat",
-    labelKey: "navKnowledgeGraph",
-    icon: DatabaseIcon,
-  },
-  {
     to: "/workspace/plugins?surface=chat",
     labelKey: "navPlugins",
     icon: PuzzleIcon,
@@ -142,6 +137,11 @@ const COMPANY_ORG_ROUTES: NavRoute[] = [
 ];
 
 const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
+  {
+    to: "/workspace/knowledge?surface=chat",
+    labelKey: "navKnowledgeGraph",
+    icon: DatabaseIcon,
+  },
   {
     to: "/workspace/storage?surface=company&library=apps",
     labelKey: "libraryApps",
@@ -1213,7 +1213,9 @@ function isStorageRouteActive(pathname: string) {
     path === "/workspace/nas" ||
     path.startsWith("/workspace/nas/") ||
     path === "/workspace/database" ||
-    path.startsWith("/workspace/database/")
+    path.startsWith("/workspace/database/") ||
+    path === "/workspace/knowledge" ||
+    path.startsWith("/workspace/knowledge/")
   );
 }
 
@@ -1222,6 +1224,12 @@ function isStorageLibraryRouteActive(
   search: string,
   to: string,
 ) {
+  const targetPath = routePath(to);
+  // Knowledge graph has its own route, not a ?library= param.
+  if (targetPath === "/workspace/knowledge") {
+    const path = routePath(pathname);
+    return path === "/workspace/knowledge" || path.startsWith("/workspace/knowledge/");
+  }
   if (!isStorageRouteActive(pathname)) return false;
   const targetLibrary = new URLSearchParams(routeSearch(to)).get("library");
   if (!targetLibrary) return false;
