@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from runtime.protocol import (
     ErrorItem,
     ItemStatus,
+    ItemType,
     ServerMethod,
     Turn,
     TurnParams,
@@ -59,6 +60,44 @@ if TYPE_CHECKING:
     from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
 
 _logger = logging.getLogger(__name__)
+
+
+def _turn_has_observable_output(turn: Turn) -> bool:
+    """Return true once the runtime produced anything visible beyond input.
+
+    A turn that only contains the user's message but no agent text, no
+    reasoning, no tool/file/artifact/error item is a silent failure. It
+    should not be marked completed because the UI has nothing meaningful
+    to render and the user sees a stuck/empty answer.
+    """
+    for item in turn.items:
+        item_type = getattr(item, "type", None)
+        if item_type in {
+            ItemType.USER_MESSAGE,
+            ItemType.STEERING_USER_MESSAGE,
+        }:
+            continue
+        if item_type == ItemType.AGENT_MESSAGE:
+            if str(getattr(item, "text", "") or "").strip():
+                return True
+            continue
+        if item_type == ItemType.REASONING:
+            if (
+                str(getattr(item, "content", "") or "").strip()
+                or bool(getattr(item, "summary", None))
+            ):
+                return True
+            continue
+        if item_type == ItemType.PLAN:
+            if str(getattr(item, "text", "") or "").strip():
+                return True
+            continue
+        if item_type == ItemType.TODO_LIST:
+            if bool(getattr(item, "plan", None)):
+                return True
+            continue
+        return True
+    return False
 
 
 async def _start_turn(
@@ -538,6 +577,30 @@ async def _start_turn(
                 turn,
                 intent=intent,
                 failure_source="verification_required",
+            )
+            runtime._snapshot_to_thread_store(thread_id, log, intent)
+            return turn
+
+        if not _turn_has_observable_output(turn):
+            err = ErrorItem(
+                message=(
+                    "模型执行结束但没有返回任何可见输出。"
+                    "请重试，或切换到其他可用模型后再试。"
+                ),
+                error_info={
+                    "code": "empty_model_output",
+                    "model": validated.model,
+                },
+            )
+            turn.items.append(err)
+            await runtime._emit_item_started(turn, log, emitter, err)
+            await runtime._emit_item_completed(turn, log, emitter, err)
+            turn.status = TurnStatus.FAILED
+            log.turn_completed(thread_id, turn.id, turn.status)
+            runtime._record_failed_turn_proposal(
+                turn,
+                intent=intent,
+                failure_source="empty_model_output",
             )
             runtime._snapshot_to_thread_store(thread_id, log, intent)
             return turn

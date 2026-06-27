@@ -767,6 +767,24 @@ def stream_react_loop(
     _workflow_preset_value = str(
         _uc.get("workflow_preset") or _metadata.get("workflow_preset") or ""
     ).strip().lower()
+    _codex_mode_value = str(
+        _uc.get("codex_mode") or _metadata.get("codex_mode") or ""
+    ).strip().lower()
+    _completion_policy_value = str(
+        _uc.get("completion_policy") or _metadata.get("completion_policy") or ""
+    ).strip().lower()
+    _is_codex_composer_plan_or_spec = _codex_mode_value in {
+        "plan",
+        "spec",
+    } or _completion_policy_value in {"plan", "spec"}
+    _mode_contract_value = str(
+        _uc.get("mode_contract") or _metadata.get("mode_contract") or ""
+    ).strip()
+    _is_goal_mode = (
+        _is_goal_mode
+        or _codex_mode_value == "goal"
+        or _completion_policy_value == "goal"
+    )
     _personal_mode_value = str(
         _uc.get("personal_mode") or _metadata.get("personal_mode") or ""
     ).strip().lower()
@@ -899,7 +917,6 @@ def stream_react_loop(
                 "但要先保留恢复上下文。\n"
                 "</goal-mode-guidance>"
             )
-
         # Long-task / large-context guidance — only relevant when the
         # turn is going to be more than a couple of rounds. Skipping
         # short / chat turns keeps the system prompt small for them
@@ -1022,6 +1039,32 @@ def stream_react_loop(
                 "  参数 → 必须串行(分两轮 emit),不要塞一起。\n"
                 "</tool-choice-policy>"
             )
+    if not _is_code_mode:
+        _workflow_preset_prompt = _build_workflow_preset_prompt(_workflow_preset_value)
+        if _workflow_preset_prompt:
+            system_parts.append(_workflow_preset_prompt)
+    if _mode_contract_value:
+        system_parts.append(
+            "\n<mode-contract>\n"
+            + _mode_contract_value[:4000]
+            + "\n</mode-contract>"
+        )
+    if _is_codex_composer_plan_or_spec:
+        system_parts.append(
+            "\n<codex-composer-mode>\n"
+            "当前为 Codex 风格 "
+            + (
+                "Spec"
+                if _codex_mode_value == "spec" or _completion_policy_value == "spec"
+                else "Plan"
+            )
+            + " 模式。默认产出计划/规格和验收口径,不要主动进入实现或写文件; "
+            "可以读取必要上下文来提高计划/规格质量。不要把计划模式解释为"
+            "先计划再自动执行；若用户明确要求继续执行,再按普通执行模式推进。"
+            "若同时存在 code-mode 指令,本模式覆盖其中"
+            "执行/写入阶段要求,仅保留代码理解、上下文读取和验收设计要求。\n"
+            "</codex-composer-mode>"
+        )
     try:
         from runtime.core.cerebrum.output_styles import render_output_style
 
@@ -1279,7 +1322,16 @@ def stream_react_loop(
                 )
     else:
         system_parts.append(REACT_NO_TOOLS_NOTE)
-    if planning_mode:
+    if planning_mode and _is_codex_composer_plan_or_spec:
+        system_parts.append(
+            "CODEX PLAN/SPEC LOCK — This turn is a composer-applied "
+            "Plan/Spec mode. Use tools only for read-only context gathering "
+            "when necessary. Do not write files, run side-effecting commands, "
+            "create artifacts, or continue into implementation by default. "
+            "The Final Answer should be the requested plan/specification and "
+            "acceptance criteria, not executed changes.",
+        )
+    elif planning_mode:
         # New semantics (2026-05-31): "plan first, then execute" — not
         # "plan only and stop". Long tasks benefit from a written plan
         # before tool work, but the user should NOT have to send a

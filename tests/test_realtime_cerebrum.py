@@ -261,6 +261,34 @@ def test_text_delta_maps_to_agent_message(gateway: Any) -> None:
     assert agent_items[0]["status"] == "completed"
 
 
+def test_empty_react_completion_becomes_visible_error(gateway: Any) -> None:
+    client, _ = gateway
+    _set_script([{"type": "react_completed"}])
+
+    with client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-empty-output",
+                "input": [{"type": "text", "text": "do work"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    turn = out["response"].result["turn"]
+    assert turn["status"] == "failed"
+    error_items = [it for it in turn["items"] if it["type"] == "error"]
+    assert len(error_items) == 1
+    assert error_items[0]["errorInfo"]["code"] == "empty_model_output"
+    completed_errors = [
+        n.params["item"]
+        for n in out["notifications"]
+        if n.method == "item/completed"
+        and n.params["item"]["type"] == "error"
+    ]
+    assert completed_errors
+
+
 def test_todo_write_emits_plan_update_and_resume_snapshot(gateway: Any) -> None:
     client, _ = gateway
     _set_script(
