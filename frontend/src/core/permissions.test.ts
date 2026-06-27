@@ -34,9 +34,9 @@ describe("permissionRuntimeConfig", () => {
     });
   });
 
-  it("maps legacy plan to the default confirmation mode", () => {
+  it("maps plan to the confirm-on-request sandbox with planning flagged", () => {
     expect(permissionRuntimeConfig("plan")).toEqual({
-      mode: "default",
+      mode: "plan",
       approvalPolicy: "on-request",
       sandboxPolicy: {
         type: "workspaceWrite",
@@ -44,7 +44,7 @@ describe("permissionRuntimeConfig", () => {
       },
       execution_environment: "sandbox",
       sandbox_mode: "sandbox",
-      planningMode: false,
+      planningMode: true,
     });
   });
 

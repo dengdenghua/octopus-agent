@@ -40,7 +40,7 @@ export function normalizePermissionMode(value: unknown): PermissionMode {
   ) {
     return "bypassPermissions";
   }
-  if (normalized === "plan") return "default";
+  if (normalized === "plan") return "plan";
   return "default";
 }
 
@@ -70,6 +70,8 @@ export function permissionRuntimeConfig(
     },
     execution_environment: "sandbox",
     sandbox_mode: "sandbox",
-    planningMode: false,
+    // Plan mode keeps the same confirm-on-request sandbox but flags the turn as
+    // planning-only (the payload builder forwards planningMode to the backend).
+    planningMode: mode === "plan",
   };
 }
