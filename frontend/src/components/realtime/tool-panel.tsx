@@ -91,6 +91,8 @@ export function ToolPanel({
             cssContent={previewCss}
             jsContent={previewJs}
             onSendDiagnosticToChat={onSendDiagnosticToChat}
+            threadId={threadId}
+            workspacePath={workDir}
             className="h-full"
           />
         ) : (
