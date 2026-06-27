@@ -7,6 +7,8 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from runtime import __version__
+
 
 def create_health_router(
     *,
@@ -57,7 +59,7 @@ def create_health_router(
                 return False
 
         return {
-            "version": "0.1.0",
+            "version": __version__,
             "tagline": "biomimetic self-evolving agent OS",
             "skill_count": len(state.registry),
             "journal_source": (
