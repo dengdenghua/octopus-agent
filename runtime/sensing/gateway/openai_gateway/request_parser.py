@@ -138,6 +138,22 @@ def _custom_model_entry(model_name: str) -> dict[str, Any] | None:
         return None
 
 
+def _entry_matches_model(entry: dict[str, Any], model_name: str) -> bool:
+    needle = str(model_name or "").strip()
+    if not needle:
+        return False
+    for key in ("id", "name", "model", "model_performance"):
+        if str(entry.get(key) or "").strip() == needle:
+            return True
+    raw_models = entry.get("models")
+    if isinstance(raw_models, list):
+        return any(
+            isinstance(item, str) and item.strip() == needle
+            for item in raw_models
+        )
+    return False
+
+
 def _custom_model_entry_for(model_name: str, resolved_model: str) -> dict[str, Any] | None:
     entry = _custom_model_entry(model_name) or _custom_model_entry(resolved_model)
     if entry is not None:
@@ -152,9 +168,10 @@ def _custom_model_entry_for(model_name: str, resolved_model: str) -> dict[str, A
         if not isinstance(custom_data, dict):
             return None
         for candidate in custom_data.values():
-            if (
-                isinstance(candidate, dict)
-                and str(candidate.get("model") or "") == resolved_model
+            if not isinstance(candidate, dict):
+                continue
+            if _entry_matches_model(candidate, model_name) or _entry_matches_model(
+                candidate, resolved_model,
             ):
                 return candidate
     except Exception as exc:  # noqa: BLE001

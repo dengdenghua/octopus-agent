@@ -13,7 +13,10 @@ from fastapi.testclient import TestClient  # noqa: E402
 from runtime.platform.config import AgentConfig, PlannerConfig, build_from_config  # noqa: E402
 from runtime.platform.models import ParsedIntent  # noqa: E402
 from runtime.sensing.gateway import create_openai_router  # noqa: E402
-from runtime.sensing.gateway.openai_gateway import _stream_direct_llm_fallback  # noqa: E402
+from runtime.sensing.gateway.openai_gateway import (  # noqa: E402
+    _direct_llm_fallback_with_usage,
+    _stream_direct_llm_fallback,
+)
 from runtime.sensing.gateway.openai_gateway.request_parser import (  # noqa: E402
     _model_runtime_options,
 )
@@ -293,6 +296,78 @@ def test_custom_openai_compat_model_returns_unbounded(tmp_path, monkeypatch):
 
     assert supports_thinking is True
     assert max_tokens is None
+
+
+def test_custom_openai_compat_models_list_variant_returns_unbounded(
+    tmp_path,
+    monkeypatch,
+):
+    """Runtime options must reverse-lookup concrete rows from models[].
+
+    The in-app picker exposes variants like ``kimi-for-coding`` as rows,
+    while the persisted custom-model entry is keyed by a friendlier id
+    such as ``kimi-code``. The stream fallback asks for options by the
+    variant id, so this must not fall through to built-in model defaults.
+    """
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "custom_models.json").write_text(
+        json.dumps({
+            "kimi-code": {
+                "models": ["kimi-for-coding"],
+                "supports_thinking": True,
+                "provider": "openai",
+            }
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+
+    supports_thinking, max_tokens = _model_runtime_options(
+        "kimi-for-coding",
+        "kimi-for-coding",
+    )
+
+    assert supports_thinking is True
+    assert max_tokens is None
+
+
+def test_direct_llm_fallback_strips_inline_reasoning_from_reply():
+    class _Router:
+        default_model = "gpt-5-test"
+
+        def call(self, _request):
+            return ModelResponse(
+                text=(
+                    "<details>\n<summary>Reasoning</summary>\n"
+                    "private scratchpad\n</details>\n\nfinal answer"
+                ),
+                thinking="private scratchpad",
+                input_tokens=7,
+                output_tokens=11,
+            )
+
+    class _Planner:
+        router = _Router()
+        planner_model = "gpt-5-test"
+
+    class _Stack:
+        planner = _Planner()
+        journal = None
+
+    intent = ParsedIntent(
+        raw="test",
+        intent_type="task",
+        normalized_goal="test",
+        user_context={"conversation_messages": [{"role": "user", "content": "test"}]},
+    )
+
+    reply, usage = _direct_llm_fallback_with_usage(
+        _Stack(), intent, agent=None, model="gpt-5-test",
+    )
+
+    assert reply == "final answer"
+    assert usage == {"input_tokens": 7, "output_tokens": 11}
 
 
 # ═══════════════════════════════════════════════════════════

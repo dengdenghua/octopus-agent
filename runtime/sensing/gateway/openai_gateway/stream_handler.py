@@ -18,6 +18,36 @@ from .context_manager import _build_messages_for_llm, _runtime_soul_for_agent
 from .request_parser import _model_runtime_options, _resolve_custom_model_router
 
 
+def _strip_inline_thinking_markup(text: str) -> str:
+    """Remove provider/model thinking markup from user-facing text.
+
+    Reasoning has its own event/metadata channel. Leaving an inline
+    ``<details><summary>思考过程`` block in ``content`` makes downstream
+    clients treat the reasoning trace as ordinary answer text.
+    """
+    import re
+
+    stripped = re.sub(
+        r"<thinking>.*?</thinking>\s*",
+        "",
+        text or "",
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    stripped = re.sub(
+        r"<thinking>.*$",
+        "",
+        stripped,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    stripped = re.sub(
+        r"<details\b[^>]*>\s*<summary>[^<]*(?:思考过程|thinking|reasoning)[^<]*</summary>.*?</details>\s*",
+        "",
+        stripped,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    return stripped.lstrip()
+
+
 def _commit_direct_llm_cost(
     stack: Any,
     usage: dict[str, int] | None,
@@ -135,7 +165,7 @@ def _direct_llm_fallback_impl(
         from runtime.platform.process.session import current_session
         from runtime.platform.runtime_policy.identity_filter import filter_text
         filtered = filter_text(
-            resp.text,
+            _strip_inline_thinking_markup(resp.text),
             session=current_session(),
             user_message=intent.normalized_goal,
             agent=agent,
@@ -155,9 +185,6 @@ def _direct_llm_fallback_impl(
             "output_tokens": int(getattr(resp, "output_tokens", 0) or 0),
         }
         _commit_direct_llm_cost(stack, usage, agent, reason="direct_llm_fallback")
-        if thinking:
-            from .response_formatter import _wrap_with_thinking_block
-            return _wrap_with_thinking_block(thinking, filtered), usage
         return filtered, usage
     except Exception as _exc:  # noqa: BLE001
         import logging as _lg
@@ -266,16 +293,8 @@ def _stream_direct_llm_fallback(
             yield text[i:i + chunk_size]
 
     def _clean_final_text(text: str) -> str:
-        import re as _re
-        stripped = _re.sub(
-            r"<thinking>.*?</thinking>\s*", "",
-            text, flags=_re.DOTALL,
-        )
-        stripped = _re.sub(
-            r"<thinking>.*$", "", stripped, flags=_re.DOTALL,
-        ).lstrip()
         return filter_text(
-            stripped,
+            _strip_inline_thinking_markup(text),
             session=current_session(),
             user_message=intent.normalized_goal,
             agent=agent,

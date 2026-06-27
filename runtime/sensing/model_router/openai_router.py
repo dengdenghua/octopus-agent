@@ -29,6 +29,7 @@ except ImportError:  # pragma: no cover
 
 _DEFAULT_INPUT_USD_PER_TOKEN = 1e-7
 _DEFAULT_OUTPUT_USD_PER_TOKEN = 3e-7
+_MIN_THINKING_OUTPUT_TOKENS = 128
 
 # OpenAI's reasoning_effort only accepts minimal/low/medium/high. Octopus's
 # xhigh tier (and the ultra/extra_high aliases that normalize to it) has no
@@ -114,6 +115,15 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     json=payload,
                     headers=self._build_headers(),
                 )
+                if _should_retry_without_openai_thinking(
+                    resp.status_code, payload,
+                ):
+                    fallback_payload = _without_openai_thinking(payload)
+                    resp = client.post(
+                        f"{self.base_url}/chat/completions",
+                        json=fallback_payload,
+                        headers=self._build_headers(),
+                    )
             except Exception as e:  # noqa: BLE001
                 raise OpenAIRouterError(
                     f"http_error: {type(e).__name__}: {e}"
@@ -204,14 +214,34 @@ class OpenAIModelRouter(Provider, ModelRouter):
             with client.stream(
                 "POST", url, json=payload, headers=self._build_headers(),
             ) as r:
-                if r.status_code >= 400:
-                    r.read()
-                    raise OpenAIRouterError(
-                        _format_openai_http_error(r.status_code, r.text)
+                if r.status_code < 400:
+                    yield from iter_openai_sse(
+                        r, model=model, provider="openai_compat",
                     )
-                yield from iter_openai_sse(
-                    r, model=model, provider="openai_compat",
-                )
+                    return
+                r.read()
+                first_status = r.status_code
+                first_text = r.text
+
+            if _should_retry_without_openai_thinking(first_status, payload):
+                fallback_payload = _without_openai_thinking(payload)
+                with client.stream(
+                    "POST", url,
+                    json=fallback_payload,
+                    headers=self._build_headers(),
+                ) as r:
+                    if r.status_code < 400:
+                        yield from iter_openai_sse(
+                            r, model=model, provider="openai_compat",
+                        )
+                        return
+                    r.read()
+                    first_status = r.status_code
+                    first_text = r.text
+
+            raise OpenAIRouterError(
+                _format_openai_http_error(first_status, first_text)
+            )
         finally:
             if close_after:
                 client.close()
@@ -232,10 +262,21 @@ class OpenAIModelRouter(Provider, ModelRouter):
         payload: dict[str, Any] = {
             "model": model,
             "messages": msgs,
-            "temperature": request.temperature,
         }
-        if request.max_tokens is not None:
-            payload["max_tokens"] = request.max_tokens
+        if not self._model_omits_sampling_parameters(model):
+            payload["temperature"] = request.temperature
+        max_tokens = request.max_tokens
+        if (
+            (
+                request.enable_thinking
+                or self._custom_model_supports_thinking(model)
+            )
+            and max_tokens is not None
+            and max_tokens < _MIN_THINKING_OUTPUT_TOKENS
+        ):
+            max_tokens = _MIN_THINKING_OUTPUT_TOKENS
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         # Native function calling · OpenAI ``tools`` spec shape is
         # ``[{type:"function", function:{name, description, parameters}}]``
         # where parameters is JSON Schema (== our input_schema).
@@ -281,32 +322,43 @@ class OpenAIModelRouter(Provider, ModelRouter):
         explicitly declared incompatibility, so we don't accidentally
         disable working providers.
         """
-        try:
-            from runtime.platform.process.paths import app_paths
-        except ImportError:
-            return True
-        path = app_paths().custom_models_path
-        try:
-            import json as _json
-            from pathlib import Path
-            p = Path(path)
-            if not p.exists():
-                return True
-            with open(p, encoding="utf-8") as fh:
-                data = _json.load(fh)
-        except (OSError, ValueError):
-            return True
+        data = _read_custom_models()
         if not isinstance(data, dict):
             return True
-        # Match by id, name, or the inner ``model`` field — the same
-        # alias resolution ``request_parser`` does.
         for entry in data.values():
-            if not isinstance(entry, dict):
-                continue
-            ids = {entry.get("id"), entry.get("name"), entry.get("model")}
-            if model in ids and entry.get("supports_tool_use") is False:
+            if (
+                _entry_matches_model(entry, model)
+                and entry.get("supports_tool_use") is False
+            ):
                 return False
         return True
+
+    @staticmethod
+    def _model_omits_sampling_parameters(model: str) -> bool:
+        """Return True for strict OpenAI-compatible coding endpoints.
+
+        Some coding-model gateways reject sampling knobs entirely (or
+        require their undocumented defaults). Operators can declare
+        ``omit_sampling_parameters=true`` in ``custom_models.json`` so
+        Octopus sends only model/messages/max_tokens/tool fields.
+        """
+        data = _read_custom_models()
+        if not isinstance(data, dict):
+            return False
+        for entry in data.values():
+            if _entry_matches_model(entry, model):
+                return bool(entry.get("omit_sampling_parameters"))
+        return False
+
+    @staticmethod
+    def _custom_model_supports_thinking(model: str) -> bool:
+        data = _read_custom_models()
+        if not isinstance(data, dict):
+            return False
+        for entry in data.values():
+            if _entry_matches_model(entry, model):
+                return bool(entry.get("supports_thinking"))
+        return False
 
     def _build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -407,6 +459,45 @@ class OpenAIModelRouter(Provider, ModelRouter):
 # ═══════════════════════════════════════════════════════════
 
 
+def _read_custom_models() -> dict[str, Any] | None:
+    try:
+        from runtime.platform.process.paths import app_paths
+
+        path = app_paths().custom_models_path
+        if not path.exists():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError, ImportError, TypeError):
+        return None
+
+
+def _entry_matches_model(entry: Any, model: str) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    target = (model or "").strip()
+    if not target:
+        return False
+    candidates = {
+        str(value).strip()
+        for value in (
+            entry.get("id"),
+            entry.get("name"),
+            entry.get("model"),
+            entry.get("display_name"),
+        )
+        if isinstance(value, str) and value.strip()
+    }
+    raw_models = entry.get("models")
+    if isinstance(raw_models, list):
+        candidates.update(
+            str(value).strip()
+            for value in raw_models
+            if isinstance(value, str) and value.strip()
+        )
+    return target in candidates
+
+
 def _format_openai_http_error(status_code: int, body: str) -> str:
     body_preview = (body or "").strip()[:500]
     parsed_message = ""
@@ -436,7 +527,37 @@ def _format_openai_http_error(status_code: int, body: str) -> str:
         return f"http_{status_code}: 模型 API Key 无效或没有权限{suffix}"
 
     detail = parsed_message or body_preview
+    if status_code == 400 and (not detail or detail == "openai_error"):
+        return (
+            f"http_{status_code}: 上游 OpenAI 兼容接口拒绝请求"
+            f"{f'（{detail}）' if detail else ''}。"
+            "通常是模型名、API Key、额度或供应商不支持的 reasoning/thinking "
+            "参数导致；请切换到可用模型，或在模型设置里关闭该模型的思考能力后重试。"
+        )
     return f"http_{status_code}: {detail}"
+
+
+def _without_openai_thinking(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return a Chat Completions payload without thinking extensions.
+
+    OpenAI-compatible gateways disagree on reasoning knobs: some accept
+    ``reasoning_effort`` and/or ``thinking``, others return a generic
+    ``400 openai_error`` for either field. A one-shot fallback keeps custom
+    providers usable without forcing operators to know every proxy dialect.
+    """
+    fallback = dict(payload)
+    fallback.pop("reasoning_effort", None)
+    fallback.pop("thinking", None)
+    return fallback
+
+
+def _should_retry_without_openai_thinking(
+    status_code: int,
+    payload: dict[str, Any],
+) -> bool:
+    if status_code != 400:
+        return False
+    return "reasoning_effort" in payload or "thinking" in payload
 
 
 def _message_to_openai(m: Message) -> dict[str, str]:
