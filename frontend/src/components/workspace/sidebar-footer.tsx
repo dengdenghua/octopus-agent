@@ -253,20 +253,14 @@ export function AgentFooter() {
   const isLocalCliAgent = (a: Agent) =>
     a.name.startsWith("local_") || Boolean(a.capabilities?.local_partner);
   const personaAgents = useMemo(() => {
-    const hubAgents = footerAgents
-      .filter((a) => !isLocalCliAgent(a) && isHubDefaultAgent(a))
-      .sort(sortHubDefaultAgents);
-    if (
-      activeName &&
-      !hubAgents.some((agent) => agent.name === activeName)
-    ) {
-      const activeCustomAgent = footerAgents.find(
-        (agent) => !isLocalCliAgent(agent) && agent.name === activeName,
-      );
-      if (activeCustomAgent) return [activeCustomAgent, ...hubAgents];
-    }
-    return hubAgents;
-  }, [activeName, footerAgents]);
+    // Show ALL persona agents (restored — the "minimal" snapshot had narrowed
+    // this to hub-defaults + the active one, hiding the user's custom agents):
+    // hub-default agents first in their canonical order, then custom agents.
+    const nonCli = footerAgents.filter((a) => !isLocalCliAgent(a));
+    const hubAgents = nonCli.filter(isHubDefaultAgent).sort(sortHubDefaultAgents);
+    const customAgents = nonCli.filter((a) => !isHubDefaultAgent(a));
+    return [...hubAgents, ...customAgents];
+  }, [footerAgents]);
   const cliPartnerAgents = useMemo(
     () => footerAgents.filter(isLocalCliAgent),
     [footerAgents],
