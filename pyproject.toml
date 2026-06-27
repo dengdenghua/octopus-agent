@@ -27,6 +27,10 @@ dev = [
     "pytest-cov>=5.0",
     "pytest-timeout>=2.2",
     "ruff>=0.5.0,<1.0",
+    # `make security` invokes these as bare commands; declare them so a clean
+    # `make install` provides them instead of the gate silently no-opping.
+    "bandit>=1.7",
+    "pip-audit>=2.7",
 ]
 tracing = [
     "opentelemetry-api>=1.25",
