@@ -33,6 +33,9 @@ class LoopRunStatus(StrEnum):
 
 class LoopMode(StrEnum):
     CODE = "code"
+    PLAN = "plan"
+    SPEC = "spec"
+    GOAL = "goal"
 
 
 class LoopPolicy(BaseModel):
