@@ -989,8 +989,8 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
 const SHOW_LOCAL_AGENT_LIBRARY = true;
 // Enterprise assets tab is hidden on the consumer surface for now.
 const SHOW_ENTERPRISE_ASSETS = false;
-// Hub only shows locally joined agents; marketplace templates stay in install flows.
-const LOCAL_LIBRARY_INSTALLED_ONLY = true;
+// Hub shows all available agents (installed + installable).
+const LOCAL_LIBRARY_INSTALLED_ONLY = false;
 const HIDDEN_LOCAL_AGENT_IDS = new Set(["admin", "desktop_operator"]);
 
 export function AgentWorldUnified() {
