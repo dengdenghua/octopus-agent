@@ -111,6 +111,8 @@ if FASTAPI_AVAILABLE:
         max_tokens: int | None = None
         supports_thinking: bool | None = None
         supports_vision: bool | None = None
+        supports_tool_use: bool | None = None
+        omit_sampling_parameters: bool | None = None
         default_headers: dict[str, str] | None = None
 
     class CustomModelsList(BaseModel):
@@ -343,18 +345,16 @@ def create_config_router(
     # before the sub-router sees it — without that wrap mirrors
     # reject the alias as an unknown model.
 
-    def _register(entry: dict[str, Any]) -> dict[str, Any]:
-        dispatcher = getattr(
+    def _dispatcher() -> Any:
+        return getattr(
             getattr(stack, "planner", None) if stack else None, "router", None,
         )
-        if dispatcher is None or not hasattr(dispatcher, "register"):
-            return {"ok": False, "error": "planner has no ModelDispatchRouter"}
-        model_id = entry.get("id") or entry.get("name")
-        if not isinstance(model_id, str) or not model_id:
-            return {"ok": False, "error": "id required"}
-        provider = (entry.get("provider") or "openai").lower()
-        base_url = entry.get("base_url") or ""
-        api_key = entry.get("api_key") or ""
+
+    def _entry_model_id(entry: dict[str, Any]) -> str:
+        raw = entry.get("id") or entry.get("name")
+        return raw if isinstance(raw, str) else ""
+
+    def _entry_upstreams(entry: dict[str, Any], model_id: str) -> list[str]:
         # Read the open-ended ``models`` list. Falls back to legacy
         # ``model`` + optional ``model_performance`` for entries
         # persisted before the list refactor, so an in-place deploy
@@ -377,6 +377,46 @@ def create_config_router(
             ):
                 legacy.append(perf.strip())
             upstreams = legacy or [model_id]
+        return upstreams
+
+    def _entry_route_ids(entry: dict[str, Any], fallback_id: str = "") -> list[str]:
+        model_id = _entry_model_id(entry) or fallback_id
+        route_ids: list[str] = []
+        for raw in [model_id, *_entry_upstreams(entry, model_id)]:
+            route_id = str(raw or "").strip()
+            if route_id and route_id not in route_ids:
+                route_ids.append(route_id)
+        return route_ids
+
+    def _unregister_entry(
+        entry: dict[str, Any] | None,
+        *,
+        fallback_id: str = "",
+    ) -> bool:
+        dispatcher = _dispatcher()
+        if dispatcher is None or not hasattr(dispatcher, "unregister"):
+            return False
+        route_ids = (
+            _entry_route_ids(entry, fallback_id)
+            if isinstance(entry, dict)
+            else ([fallback_id] if fallback_id else [])
+        )
+        removed = False
+        for route_id in route_ids:
+            removed = bool(dispatcher.unregister(route_id)) or removed
+        return removed
+
+    def _register(entry: dict[str, Any]) -> dict[str, Any]:
+        dispatcher = _dispatcher()
+        if dispatcher is None or not hasattr(dispatcher, "register"):
+            return {"ok": False, "error": "planner has no ModelDispatchRouter"}
+        model_id = _entry_model_id(entry)
+        if not model_id:
+            return {"ok": False, "error": "id required"}
+        provider = (entry.get("provider") or "openai").lower()
+        base_url = entry.get("base_url") or ""
+        api_key = entry.get("api_key") or ""
+        upstreams = _entry_upstreams(entry, model_id)
         if not upstreams:
             return {"ok": False, "error": "models list is empty"}
         primary_model = upstreams[0]
@@ -480,18 +520,16 @@ def create_config_router(
             def default_model(self) -> str:
                 return self._default
 
-        dispatcher.register(
-            model_id, _UpstreamModelRewrite(sub_router, upstreams),
-        )
+        wrapper = _UpstreamModelRewrite(sub_router, upstreams)
+        for route_id in _entry_route_ids(entry, model_id):
+            dispatcher.register(route_id, wrapper)
         return {"ok": True, "model_id": model_id}
 
     def _unregister(model_id: str) -> bool:
-        dispatcher = getattr(
-            getattr(stack, "planner", None) if stack else None, "router", None,
+        return _unregister_entry(
+            custom_models_state.get(model_id),
+            fallback_id=model_id,
         )
-        if dispatcher is None or not hasattr(dispatcher, "unregister"):
-            return False
-        return bool(dispatcher.unregister(model_id))
 
     # Hydrate from disk + re-register each entry so the dispatcher
     # sees them on the first request.
@@ -687,8 +725,20 @@ def create_config_router(
                 if "supports_vision" in body
                 else prev.get("supports_vision", False)
             ),
+            "supports_tool_use": (
+                body["supports_tool_use"]
+                if "supports_tool_use" in body
+                else prev.get("supports_tool_use", True)
+            ),
+            "omit_sampling_parameters": (
+                body["omit_sampling_parameters"]
+                if "omit_sampling_parameters" in body
+                else prev.get("omit_sampling_parameters", False)
+            ),
             "default_headers": default_headers,
         }
+        if prev:
+            _unregister_entry(prev, fallback_id=model_id)
         custom_models_state[model_id] = entry
         _save()
         status = _register(entry)
@@ -704,9 +754,9 @@ def create_config_router(
         """Remove a custom model. Idempotent — deleting a missing id
         returns ok:true with removed:false rather than 404, matching
         the UI's double-click race semantics."""
-        custom_models_state.pop(model_id, None)
+        prev = custom_models_state.pop(model_id, None)
         _save()
-        removed = _unregister(model_id)
+        removed = _unregister_entry(prev, fallback_id=model_id)
         return {"ok": True, "removed": removed}
 
     # ─── Local-model discovery + one-click import ────────────
@@ -933,6 +983,8 @@ def create_config_router(
             "display_name": display_name,
             "supports_thinking": False,
             "supports_vision": False,
+            "supports_tool_use": True,
+            "omit_sampling_parameters": False,
             "default_headers": {},
         }
         custom_models_state[model_id] = entry
@@ -1102,6 +1154,8 @@ def create_config_router(
             provider = e.get("provider") or "openai"
             supports_thinking = bool(e.get("supports_thinking"))
             supports_vision = bool(e.get("supports_vision"))
+            supports_tool_use = bool(e.get("supports_tool_use", True))
+            omit_sampling_parameters = bool(e.get("omit_sampling_parameters"))
 
             # Expand the entry's ``models`` list into one picker row per
             # variant so the UI can show concrete model ids
@@ -1130,7 +1184,7 @@ def create_config_router(
                 # downstream callers that need to know which custom-
                 # model entry the variant came from (e.g. credentials
                 # / base_url lookup).
-                display = variant or entry_label
+                display = entry_label if len(variants) == 1 else (variant or entry_label)
                 custom.append({
                     "id": variant,
                     "name": variant,
@@ -1138,6 +1192,8 @@ def create_config_router(
                     "provider": provider,
                     "supports_thinking": supports_thinking,
                     "supports_vision": supports_vision,
+                    "supports_tool_use": supports_tool_use,
+                    "omit_sampling_parameters": omit_sampling_parameters,
                     "custom": True,
                     "entry_id": entry_id,
                 })
