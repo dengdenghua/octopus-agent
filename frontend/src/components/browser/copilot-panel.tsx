@@ -41,6 +41,7 @@ import {
   formatResults,
   parseActions,
   runActionWithRetry,
+  runBrowserHandleAction,
   withActionTimeout,
   type AgentAction,
   type ActionResult,
@@ -1058,115 +1059,6 @@ export function CopilotPanel({ webviewHandle }: Props) {
   );
 }
 
-async function runBrowserHandleAction(
-  handle: WebviewTabHandle,
-  action: AgentAction,
-  options: { confirmDangerous?: boolean } = {},
-): Promise<ActionResult> {
-  const base: ActionResult = { action, ok: false };
-  try {
-    switch (action.type) {
-      case "navigate":
-        handle.loadURL(action.url);
-        return { ...base, ok: true, detail: { url: action.url } };
-      case "extract":
-        return { ...base, ok: true, detail: await handle.extractText() };
-      case "snapshot":
-        return { ...base, ok: true, detail: await handle.capturePage() };
-      case "click":
-        return browserActionResult(
-          base,
-          await handle.runAction("click", {
-            selector: action.selector,
-          }),
-        );
-      case "type":
-        return browserActionResult(
-          base,
-          await handle.runAction("type", {
-            selector: action.selector,
-            text: action.text,
-            clear: action.clear,
-          }),
-        );
-      case "hover":
-        return browserActionResult(
-          base,
-          await handle.runAction("hover", {
-            selector: action.selector,
-          }),
-        );
-      case "scroll":
-        return browserActionResult(
-          base,
-          await handle.runAction("scroll", {
-            selector: action.selector,
-            deltaX: action.deltaX,
-            deltaY: action.deltaY,
-            y: action.deltaY,
-          }),
-        );
-      case "wait":
-        return browserActionResult(
-          base,
-          await handle.runAction("wait", {
-            selector: action.selector,
-            timeout: action.timeout,
-          }),
-        );
-      case "press":
-        return browserActionResult(
-          base,
-          await handle.runAction("press", {
-            key: action.key,
-          }),
-        );
-      case "pageAction":
-        return browserActionResult(
-          base,
-          await handle.runAction("pageAction", {
-            id: action.id,
-            confirm: options.confirmDangerous === true,
-          }),
-        );
-      case "pageInput":
-        return browserActionResult(
-          base,
-          await handle.runAction("pageInput", {
-            id: action.id,
-            text: action.text,
-            clear: action.clear,
-          }),
-        );
-      case "pageCapability":
-        return browserActionResult(
-          base,
-          await handle.runAction("pageCapability", {
-            id: action.id,
-            input: action.input,
-            confirm: options.confirmDangerous === true,
-          }),
-        );
-      case "aria":
-        return browserActionResult(
-          base,
-          await handle.runAction("aria", {
-            maxDepth: action.maxDepth,
-          }),
-        );
-      default:
-        return { ...base, ok: false, error: "unknown action type" };
-    }
-  } catch (e) {
-    swallow(e);
-    return {
-      ...base,
-      ok: false,
-      error: e instanceof Error ? e.message : String(e),
-    };
-  }
-}
-
 function needsUserConfirmation(result: ActionResult): boolean {
   if (result.ok) return false;
   if (!result.detail || typeof result.detail !== "object") return false;
@@ -1263,14 +1155,6 @@ function describePendingAction(pending: PendingConfirmation): string {
           : "";
   const reasonText = reasons.length ? ` · risk=${reasons.join(", ")}` : "";
   return `${target}${input}${reasonText}`;
-}
-
-function browserActionResult(
-  base: ActionResult,
-  detail: Record<string, unknown>,
-): ActionResult {
-  const error = typeof detail.error === "string" ? detail.error : undefined;
-  return { ...base, ok: detail.ok !== false, detail, error };
 }
 
 function QuickAction({
