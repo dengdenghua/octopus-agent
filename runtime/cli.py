@@ -362,6 +362,7 @@ _CLI_COMMANDS = frozenset({
     "quickstart",
     "reflect",
     "ui",
+    "migrate",
     "optimize",
     "resume",
     "serve",
@@ -680,6 +681,27 @@ def main(argv: list[str] | None = None) -> int:
     )
     uip.add_argument("--journal", type=Path, default=None,
                      help="JSONL journal file to visualize (default: in-memory)")
+
+    migratep = sub.add_parser(
+        "migrate",
+        help="Migrate plugins/memory/MCP from Codex/Claude into octopus.",
+    )
+    migratep.add_argument(
+        "--source", default=None,
+        help="Comma list of sources: codex,claude (default: all installed).",
+    )
+    migratep.add_argument(
+        "--apply", action="store_true",
+        help="Stage into .octopus/imported/ (default: preview only).",
+    )
+    migratep.add_argument(
+        "--activate", action="store_true",
+        help="Also activate memory + emit MCP config snippets (implies --apply).",
+    )
+    migratep.add_argument(
+        "--kinds", default=None,
+        help="Comma list to limit kinds: skill,memory,rule,mcp_server,agent,command.",
+    )
 
     optp = sub.add_parser(
         "optimize",
@@ -1137,6 +1159,16 @@ def main(argv: list[str] | None = None) -> int:
             port=args.port,
             uds=getattr(args, "uds", None),
             journal_path=args.journal,
+        )
+
+    if args.command == "migrate":
+        from runtime.cli_migrate import run_migrate
+
+        return run_migrate(
+            sources=args.source,
+            apply=args.apply or args.activate,  # --activate implies --apply
+            activate=args.activate,
+            kinds=args.kinds,
         )
 
     if args.command == "loop":
