@@ -46,6 +46,17 @@ def create_health_router(
                 out["groups"] = len(group_registry)
         return out
 
+    @router.get("/api/storage/status")
+    def api_storage_status() -> dict[str, Any]:
+        """Liveness of the octopus-storage sibling (本地数据库 / File Agent), as the
+        co-launch heartbeat last observed it. ``up=false`` means search_documents
+        degrades; the heartbeat relaunches it when autostart owns its lifecycle."""
+        from runtime.sensing.gateway.storage_supervisor import storage_status
+
+        with contextlib.suppress(Exception):
+            return storage_status()
+        return {"up": False, "heartbeat": False, "error": "unavailable"}
+
     @router.get("/api/status")
     def api_status() -> dict[str, Any]:
         from runtime.adapters.instrumentation import OTEL_AVAILABLE
