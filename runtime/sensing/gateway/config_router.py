@@ -1197,7 +1197,22 @@ def create_config_router(
                     "custom": True,
                     "entry_id": entry_id,
                 })
-        return {"models": molili_presets + custom}
+        # Octopus Mix — built-in mixture-of-agents virtual model. Selecting
+        # it routes /v1/chat/completions through proposers + aggregator
+        # (see openai_gateway/mix.py). Listed first as the octopus-native
+        # flagship; degrades to a single model if no proposer pool is set.
+        from runtime.sensing.gateway.openai_gateway.mix import MIX_MODEL_ID
+        mix_presets = [
+            {
+                "id": MIX_MODEL_ID, "name": MIX_MODEL_ID,
+                "display_name": "Octopus Mix · 多模型协同",
+                "provider": "octopus",
+                "supports_thinking": True,
+                "supports_vision": False,
+                "supports_tool_use": True,
+            },
+        ]
+        return {"models": mix_presets + molili_presets + custom}
 
     # ─── Constitution profile ────────────────────────────────
     #
