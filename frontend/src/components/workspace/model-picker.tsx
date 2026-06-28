@@ -63,6 +63,21 @@ function metaFromCatalog(m: OfficialCatalogModel): OfficialMeta {
 }
 
 /**
+ * Octopus Mix — the built-in mixture-of-agents virtual model. It's
+ * octopus-native (not in the molili catalog), so inject a synthetic
+ * "official" meta to surface it in the Official tab instead of letting it
+ * fall through to Custom. The backend advertises ``octopus-mix`` via
+ * /api/llm-models, so it resolves to a configured (selectable) row.
+ */
+const MIX_META: OfficialMeta = {
+  key: "octopus-mix",
+  id: "octopus-mix",
+  displayName: "Octopus Mix",
+  multiplier: "Mix",
+  recommended: true,
+};
+
+/**
  * Very small helper — given a custom model, derive a short right-column
  * label (provider hint). Falls back to the backend `model` field, then
  * to nothing.
@@ -304,10 +319,17 @@ export function ModelPicker({
     };
   }, []);
 
-  const officialMetas = useMemo(
-    () => moliliPack.map(metaFromCatalog),
-    [moliliPack],
-  );
+  const officialMetas = useMemo(() => {
+    const base = moliliPack.map(metaFromCatalog);
+    // Surface the built-in Mix model in the Official tab only when the
+    // backend actually advertises it (via /api/llm-models). Keeps it out of
+    // deployments where it isn't present and preserves the "no official
+    // models → fall back to Custom" behaviour.
+    const hasMix = models.some(
+      (m) => m.name === MIX_META.id || m.model === MIX_META.id,
+    );
+    return hasMix ? [MIX_META, ...base] : base;
+  }, [moliliPack, models]);
 
   const selectedMeta = useMemo(() => {
     if (!selected) return null;

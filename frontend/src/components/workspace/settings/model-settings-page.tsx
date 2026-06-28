@@ -35,6 +35,7 @@ import { getLocalSettings, saveLocalSettings } from "@/core/settings/local";
 import { registerPageAgentCapability } from "@/core/page-agent-bridge";
 import { ModelCookbook } from "@/components/workspace/model-cookbook";
 
+import { MixSettingsSection } from "./mix-settings-section";
 import { SettingsSection } from "./settings-section";
 
 // ── Provider presets ────────────────────────────────────────────
@@ -645,6 +646,9 @@ export default function ModelSettingsPage() {
     <div className="space-y-8">
       {/* Hardware-aware local-model recommendations + one-click pull */}
       <ModelCookbook />
+
+      {/* Octopus Mix · mixture-of-agents composer */}
+      <MixSettingsSection />
 
       {/* Official models */}
       {!isGuest && <OfficialModelsSection />}

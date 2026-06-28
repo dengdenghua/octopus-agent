@@ -80,6 +80,58 @@ class TestListModels:
         assert "octopus-agent/list_cwd" in ids
 
 
+class TestMixVirtualModel:
+    """octopus-mix = mixture-of-agents over /v1/chat/completions."""
+
+    def test_models_endpoint_advertises_octopus_mix(self, client):
+        ids = {m["id"] for m in client.get("/v1/models").json()["data"]}
+        assert "octopus-mix" in ids
+
+    def test_chat_completion_routes_through_mix(self, client):
+        r = client.post("/v1/chat/completions", json={
+            "model": "octopus-mix",
+            "messages": [{"role": "user", "content": "explain mixture of agents"}],
+        })
+        assert r.status_code == 200
+        data = r.json()
+        # echoes the virtual model + carries Mix provenance
+        assert data["model"] == "octopus-mix"
+        assert data["object"] == "chat.completion"
+        mix_meta = data["octopus"]["mix"]
+        assert mix_meta["proposers"] >= 1
+        assert mix_meta["drafts_used"] >= 1
+        assert mix_meta["degraded"] is False
+        assert isinstance(data["choices"][0]["message"]["content"], str)
+
+    def test_mix_streaming_emits_valid_sse(self, client):
+        r = client.post("/v1/chat/completions", json={
+            "model": "octopus-mix",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        assert r.status_code == 200
+        body = r.text
+        assert "chat.completion.chunk" in body
+        assert "data: [DONE]" in body
+
+    def test_mix_config_get_and_put(self, client, monkeypatch, tmp_path):
+        from runtime.sensing.gateway.openai_gateway import mix
+        monkeypatch.setattr(mix, "_config_path", lambda: tmp_path / "mix_config.json")
+        # default GET (no file yet) returns the shape with defaults
+        r = client.get("/api/mix-config")
+        assert r.status_code == 200
+        assert set(r.json()) >= {"proposers", "aggregator", "n"}
+        # PUT validates + persists, GET round-trips it
+        r = client.put("/api/mix-config", json={
+            "proposers": ["m1", "m2"], "aggregator": "agg", "n": 2,
+        })
+        assert r.status_code == 200
+        assert r.json()["proposers"] == ["m1", "m2"]
+        got = client.get("/api/mix-config").json()
+        assert got["aggregator"] == "agg"
+        assert got["n"] == 2
+
+
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════
