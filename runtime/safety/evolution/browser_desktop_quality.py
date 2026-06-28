@@ -23,7 +23,10 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
         title="Browser session lifecycle",
         paths=(
             "runtime/platform/ui/browser_router.py",
+            "runtime/platform/process/paths.py",
             "runtime/platform/runtime_policy/browser_sessions.py",
+            "runtime/execution/suckers/browser_backends.py",
+            "tests/test_browser_backends.py",
             "tests/test_browser_router.py",
             "tests/test_browser_sessions.py",
         ),
@@ -31,12 +34,23 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "session/status",
             "session/ensure",
             "session/health",
+            "octopus.browser_relay_bridge.v1",
+            "octopus.browser_relay_site_policy.v1",
+            "relay_allowed_hosts",
+            "relay_blocked_hosts",
+            "browser_policy_path",
+            "browser_policy.json",
+            "read_json_with_backup",
+            "atomic_write_json",
+            "OCTOPUS_BROWSER_RELAY_BASE_URL",
             "session/replay-case",
             "session/replay-case/queue",
             "browser-session:",
             "fingerprint",
             "case_id",
             "recovered_from_crash",
+            "octopus.browser_session_recovery_proof.v1",
+            "recovery_revalidated_at",
             "review_queue",
         ),
     ),
@@ -62,11 +76,14 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
         title="Desktop preview, execute, and lease safety",
         paths=(
             "runtime/sensing/gateway/computer_router.py",
+            "runtime/execution/suckers/computer_api_skills.py",
             "tests/test_computer_router.py",
         ),
         required_terms=(
             "actions/preview",
             "actions/execute",
+            "OCTOPUS_COMPUTER_API_BASE_URL",
+            "octopus.computer_api_bridge.v1",
             "computer_activity",
             "activity/replay-case",
             "activity/replay-case/queue",
@@ -75,6 +92,10 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "case_id",
             "recent_activity",
             "lease_owner_id",
+            "octopus.computer_preview_contract.v1",
+            "preview_contract",
+            "octopus.computer_execution_proof.v1",
+            "execution_proof",
             "review_queue",
         ),
     ),
@@ -93,6 +114,9 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "automation_id",
             "computer_uia_replay_assertion",
             "replay_assertion",
+            "octopus.computer_uia_grounding_trace.v1",
+            "source_trace",
+            "trace_id",
         ),
     ),
     BrowserDesktopCheck(
@@ -131,6 +155,8 @@ def compute_browser_desktop_quality(
         "total": len(checks),
         "ready": all(row["passed"] for row in checks),
         "checks": checks,
+        "browser_relay_bridge": _browser_relay_bridge_diagnostics(),
+        "computer_api_bridge": _computer_api_bridge_diagnostics(),
         "replay_trends": _browser_replay_trends(review_queue_path),
         "next_actions": [
             str(row["next_action"])
@@ -178,6 +204,62 @@ def _read_text(path: Path) -> str:
         return path.read_text(encoding="utf-8")
     except OSError:
         return ""
+
+
+def _browser_relay_bridge_diagnostics() -> dict[str, Any]:
+    try:
+        from runtime.execution.suckers.browser_backends import (
+            browser_relay_diagnostics,
+        )
+
+        diagnostics = browser_relay_diagnostics()
+        if isinstance(diagnostics, dict):
+            return diagnostics
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "schema": "octopus.browser_relay_bridge.v1",
+            "base_url": "",
+            "configured_by": "",
+            "env_keys": [],
+            "default_gateway_base_url": "",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "schema": "octopus.browser_relay_bridge.v1",
+        "base_url": "",
+        "configured_by": "",
+        "env_keys": [],
+        "default_gateway_base_url": "",
+        "error": "browser relay diagnostics unavailable",
+    }
+
+
+def _computer_api_bridge_diagnostics() -> dict[str, Any]:
+    try:
+        from runtime.execution.suckers.computer_api_skills import (
+            _computer_api_diagnostics,
+        )
+
+        diagnostics = _computer_api_diagnostics()
+        if isinstance(diagnostics, dict):
+            return diagnostics
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "schema": "octopus.computer_api_bridge.v1",
+            "base_url": "",
+            "configured_by": "",
+            "env_keys": [],
+            "default_gateway_base_url": "",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "schema": "octopus.computer_api_bridge.v1",
+        "base_url": "",
+        "configured_by": "",
+        "env_keys": [],
+        "default_gateway_base_url": "",
+        "error": "computer api diagnostics unavailable",
+    }
 
 
 def _browser_replay_trends(

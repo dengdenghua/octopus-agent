@@ -8,6 +8,9 @@ from fastapi.testclient import TestClient
 
 from runtime.platform.plugins.codex_discovery import discover_codex_plugins
 from runtime.safety.auth import Identity, IdentityStore
+from runtime.safety.evolution.plugin_migration_readiness import (
+    compute_plugin_migration_readiness,
+)
 from runtime.sensing.gateway.plugins_router import create_plugins_router
 
 
@@ -74,6 +77,12 @@ def test_codex_plugin_smoke_summary_endpoint(tmp_path: Path) -> None:
     assert data["compatibility"]["verdict"] == "fail"
     assert data["compatibility"]["surface_totals"]["skills"] == 1
     assert data["compatibility"]["surface_totals"]["mcp"] == 1
+    assert data["migration_readiness"]["schema"] == (
+        "octopus.plugin_migration_readiness.v1"
+    )
+    assert data["migration_readiness"]["total"] == 2
+    assert data["migration_readiness"]["ready"] is False
+    assert data["migration_readiness"]["blocked_count"] == 2
     assert any(
         item["id"] == "no_smoke_failures" and item["passed"] is False
         for item in data["compatibility"]["requirements"]
@@ -97,6 +106,146 @@ def test_codex_plugin_smoke_summary_marks_review_compatible_set(tmp_path: Path) 
         "Resolve inferred plugin permission defaults or mark accepted risk.",
         "Resolve plugin warnings or mark accepted risk.",
     ]
+    assert data["permission_rule_drafts"]["schema"] == (
+        "octopus.plugin_permission_rule_drafts.v1"
+    )
+    assert data["permission_rule_drafts"]["total"] == 2
+    assert data["permission_rule_drafts"]["verified"] == 2
+    assert data["migration_readiness"]["ready"] is False
+    assert data["migration_readiness"]["blocked_count"] == 1
+
+
+def test_plugin_migration_readiness_endpoint_requires_contract_artifacts(
+    tmp_path: Path,
+) -> None:
+    _write_plugin(tmp_path)
+    app = FastAPI()
+    app.include_router(create_plugins_router(plugin_roots=[tmp_path]))
+    client = TestClient(app)
+
+    response = client.get("/api/plugins/migration-readiness")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema"] == "octopus.plugin_migration_readiness.v1"
+    assert data["total"] == 1
+    assert data["ready"] is False
+    assert data["ready_count"] == 0
+    assert data["blocked_count"] == 1
+    plugin = data["plugins"][0]
+    assert plugin["schema"] == "octopus.plugin_migration_contract.v1"
+    assert plugin["migration_contract"]["schema"] == (
+        "octopus.plugin_migration_contract.v1"
+    )
+    assert "plugin migration notes are missing" in plugin["blockers"]
+    assert data["next_actions"] == [
+        "Add migration notes for research.",
+    ]
+
+
+def test_plugin_migration_readiness_endpoint_marks_release_ready_plugin(
+    tmp_path: Path,
+) -> None:
+    _write_plugin(tmp_path, include_migration_contract=True)
+    app = FastAPI()
+    app.include_router(create_plugins_router(plugin_roots=[tmp_path]))
+    client = TestClient(app)
+
+    response = client.get("/api/plugins/migration-readiness")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema"] == "octopus.plugin_migration_readiness.v1"
+    assert data["score"] == 1.0
+    assert data["ready"] is True
+    assert data["ready_count"] == 1
+    assert data["blocked_count"] == 0
+    assert data["plugins"][0]["ready"] is True
+    assert data["plugins"][0]["blockers"] == []
+    assert data["plugins"][0]["migration_contract"]["migration_notes_present"] is True
+    assert data["plugins"][0]["migration_contract"]["regression_tests_present"] is True
+
+
+def test_plugin_migration_readiness_accepts_central_contract_matrix(
+    tmp_path: Path,
+) -> None:
+    _write_plugin(tmp_path)
+    docs = tmp_path / "docs/guide"
+    docs.mkdir(parents=True)
+    (docs / "plugin-migration-matrix.md").write_text(
+        "| Plugin | Evidence |\n| --- | --- |\n| `research` | central migration contract |\n",
+        encoding="utf-8",
+    )
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    for name in (
+        "test_codex_plugin_smoke.py",
+        "test_app_meta_endpoints.py",
+        "test_apps_router.py",
+    ):
+        (tests_dir / name).write_text("def test_plugin():\n    assert True\n", encoding="utf-8")
+
+    report = compute_plugin_migration_readiness(
+        plugins=discover_codex_plugins([tmp_path]),
+        root=tmp_path,
+    )
+
+    assert report["ready"] is True
+    assert report["ready_count"] == 1
+    assert report["central_contract"]["covered_count"] == 1
+    contract = report["plugins"][0]["migration_contract"]
+    assert contract["central_migration_covered"] is True
+    assert contract["central_regression_tests_present"] is True
+    assert contract["migration_notes_present"] is False
+
+
+def test_plugin_permission_rule_drafts_endpoint_and_install(tmp_path: Path) -> None:
+    from runtime.safety.approval.approval_policy_store import load_policy
+
+    _write_plugin(tmp_path)
+    approval_policy_path = tmp_path / "permissions.json"
+    audit_path = tmp_path / "promotion_audit.json"
+    app = FastAPI()
+    app.include_router(
+        create_plugins_router(
+            plugin_roots=[tmp_path],
+            approval_policy_path=approval_policy_path,
+            promotion_audit_path=audit_path,
+        )
+    )
+    client = TestClient(app)
+
+    drafts_response = client.get("/api/plugins/permission-rule-drafts")
+    drafts = drafts_response.json()
+    draft = next(
+        item for item in drafts["drafts"]
+        if item["signed_payload"]["rule"]["tool"] == "mcp__research__*"
+    )
+    missing_confirm = client.post(
+        "/api/plugins/permission-rule-drafts/install",
+        json={"draft_id": draft["draft_id"]},
+    )
+    installed = client.post(
+        "/api/plugins/permission-rule-drafts/install",
+        json={"draft_id": draft["draft_id"], "confirm_install": True},
+    )
+    policy = load_policy(approval_policy_path)
+
+    assert drafts_response.status_code == 200
+    assert drafts["schema"] == "octopus.plugin_permission_rule_drafts.v1"
+    assert drafts["total"] == 2
+    assert drafts["verified"] == 2
+    assert missing_confirm.status_code == 400
+    assert missing_confirm.json()["detail"] == "confirm_install=true is required"
+    assert installed.status_code == 200
+    assert installed.json()["installed"] is True
+    assert installed.json()["source_kind"] == "plugin_permission_review"
+    assert len(policy.rules) == 1
+    assert policy.rules[0].effect == "deny"
+    assert policy.rules[0].tool == "mcp__research__*"
+    audit = json.loads(audit_path.read_text(encoding="utf-8"))
+    assert audit["records"][0]["event_type"] == "plugin_permission_rule_install"
+    assert audit["records"][0]["target"] == "approval_policy"
 
 
 def test_codex_plugin_smoke_summary_guides_empty_ecosystem(tmp_path: Path) -> None:
@@ -173,7 +322,7 @@ def test_plugin_assets_are_public_read_only_when_auth_enabled(tmp_path: Path) ->
     assert asset.text == "logo"
 
 
-def _write_plugin(root: Path) -> Path:
+def _write_plugin(root: Path, *, include_migration_contract: bool = False) -> Path:
     plugin_dir = root / "research"
     (plugin_dir / ".codex-plugin").mkdir(parents=True)
     (plugin_dir / "skills" / "brief").mkdir(parents=True)
@@ -198,4 +347,14 @@ def _write_plugin(root: Path) -> Path:
         json.dumps({"mcpServers": {"research": {"command": "node"}}}),
         encoding="utf-8",
     )
+    if include_migration_contract:
+        (plugin_dir / "MIGRATION.md").write_text(
+            "# Migration\n\nRelease checklist and compatibility notes.\n",
+            encoding="utf-8",
+        )
+        (plugin_dir / "tests").mkdir()
+        (plugin_dir / "tests" / "test_plugin.py").write_text(
+            "def test_plugin_contract():\n    assert True\n",
+            encoding="utf-8",
+        )
     return plugin_dir

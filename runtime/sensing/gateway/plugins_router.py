@@ -11,6 +11,16 @@ from runtime.platform.plugins.codex_discovery import (  # re-exported
     _string,
     discover_codex_plugins,
 )
+from runtime.platform.process.paths import app_paths
+from runtime.safety.evolution.governance_audit import append_governance_audit_event
+from runtime.safety.evolution.plugin_migration_readiness import (
+    compute_plugin_migration_readiness,
+)
+from runtime.safety.evolution.policy_review_rules import (
+    build_plugin_permission_rule_drafts,
+    install_policy_review_rule_draft,
+    verify_policy_review_rule_draft,
+)
 
 
 def is_public_plugin_asset_request(method: str, path: str) -> bool:
@@ -36,6 +46,8 @@ def create_plugins_router(
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    approval_policy_path: Path | None = None,
+    promotion_audit_path: Path | None = None,
 ) -> APIRouter:
     def _auth_dep(request: Request) -> None:
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
@@ -71,10 +83,15 @@ def create_plugins_router(
     @router.get("/api/plugins/smoke-summary")
     def _plugin_smoke_summary() -> dict[str, Any]:
         plugins = discover_codex_plugins(plugin_roots)
+        migration_readiness = compute_plugin_migration_readiness(plugins=plugins)
         failed: list[dict[str, Any]] = []
         review_required: list[dict[str, Any]] = []
         warnings: list[dict[str, Any]] = []
         permission_resolutions: list[dict[str, Any]] = []
+        permission_rule_drafts = build_plugin_permission_rule_drafts(
+            plugins=plugins,
+            limit=500,
+        )
         surface_totals = {
             "capabilities": 0,
             "skills": 0,
@@ -144,8 +161,90 @@ def create_plugins_router(
             "review_required": review_required,
             "warnings": warnings,
             "permission_resolutions": permission_resolutions,
+            "permission_rule_drafts": {
+                "schema": permission_rule_drafts["schema"],
+                "total": permission_rule_drafts["total"],
+                "verified": sum(
+                    1
+                    for draft in permission_rule_drafts.get("drafts") or []
+                    if verify_policy_review_rule_draft(draft).get("ok") is True
+                ),
+            },
             "compatibility": compatibility,
+            "migration_readiness": {
+                "schema": migration_readiness["schema"],
+                "score": migration_readiness["score"],
+                "ready": migration_readiness["ready"],
+                "ready_count": migration_readiness["ready_count"],
+                "total": migration_readiness["total"],
+                "blocked_count": migration_readiness["blocked_count"],
+                "review_required_count": migration_readiness["review_required_count"],
+            },
         }
+
+    @router.get("/api/plugins/migration-readiness")
+    def _plugin_migration_readiness() -> dict[str, Any]:
+        return compute_plugin_migration_readiness(
+            plugins=discover_codex_plugins(plugin_roots),
+        )
+
+    @router.get("/api/plugins/permission-rule-drafts")
+    def _plugin_permission_rule_drafts() -> dict[str, Any]:
+        report = build_plugin_permission_rule_drafts(
+            plugins=discover_codex_plugins(plugin_roots),
+            limit=500,
+        )
+        report["verified"] = sum(
+            1
+            for draft in report.get("drafts") or []
+            if verify_policy_review_rule_draft(draft).get("ok") is True
+        )
+        return report
+
+    @router.post("/api/plugins/permission-rule-drafts/install")
+    def _plugin_permission_rule_draft_install(
+        request: Request,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body = payload or {}
+        draft_id = str(body.get("draft_id") or "").strip()
+        if not draft_id:
+            raise HTTPException(400, "draft_id is required")
+        report = build_plugin_permission_rule_drafts(
+            plugins=discover_codex_plugins(plugin_roots),
+            limit=int(body.get("limit") or 500),
+        )
+        draft = next(
+            (
+                item for item in report.get("drafts") or []
+                if isinstance(item, dict) and str(item.get("draft_id") or "") == draft_id
+            ),
+            None,
+        )
+        if draft is None:
+            raise HTTPException(404, "plugin permission rule draft not found")
+        try:
+            result = install_policy_review_rule_draft(
+                draft,
+                policy_path=approval_policy_path or app_paths().permissions_path,
+                confirm_install=body.get("confirm_install") is True,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
+        append_governance_audit_event(
+            event_type="plugin_permission_rule_install",
+            target="approval_policy",
+            status="installed",
+            artifact=result,
+            decision_context={
+                "schema": "octopus.plugin_permission_rule_install_context.v1",
+                "actor": _actor_from_request(request),
+                "draft_id": draft_id,
+                "source": "plugins_router",
+            },
+            audit_path=promotion_audit_path or app_paths().promotion_audit_path,
+        )
+        return result
 
     @router.get("/api/plugins/{plugin_id}/smoke")
     def _plugin_smoke(plugin_id: str) -> dict[str, Any]:
@@ -197,6 +296,10 @@ def create_plugins_router(
         raise HTTPException(status_code=404, detail="plugin not found")
 
     return router
+
+
+def _actor_from_request(request: Request) -> str:
+    return str(getattr(getattr(request, "state", None), "actor_id", "") or "local_operator")
 
 
 def _compatibility_summary(

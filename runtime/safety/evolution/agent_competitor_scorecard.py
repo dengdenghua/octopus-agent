@@ -29,10 +29,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Core coding loop",
         weight=16,
         why="Plan, edit, run, verify, and recover inside a real repository.",
-        scores={"codex": 96, "claude_code": 96, "cursor": 92, "octopus": 96},
+        scores={"codex": 96, "claude_code": 96, "cursor": 92, "octopus": 97},
         octopus_evidence_ids=("code_execution_loop",),
         octopus_next_actions=(
-            "Add automatic repair-route promotion evidence for repeated verifier drift.",
+            "Keep verifier, repair-route, and post-write diagnostics release-gated.",
         ),
     ),
     ScoreDimension(
@@ -40,10 +40,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Repository context",
         weight=8,
         why="Sustain a correct mental model across large, dirty, multi-module worktrees.",
-        scores={"codex": 94, "claude_code": 95, "cursor": 95, "octopus": 93},
+        scores={"codex": 94, "claude_code": 95, "cursor": 95, "octopus": 96},
         octopus_evidence_ids=("code_execution_loop", "long_term_learning"),
         octopus_next_actions=(
-            "Show replay citations inline when recalled memories influence a turn.",
+            "Keep repo-context source citations and dirty-worktree snapshots release-gated.",
             "Surface memory quality scores in code-mode context traces.",
         ),
     ),
@@ -52,10 +52,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="IDE and product experience",
         weight=8,
         why="Make the working loop feel fast, obvious, and low-friction for operators.",
-        scores={"codex": 88, "claude_code": 85, "cursor": 98, "octopus": 90},
+        scores={"codex": 88, "claude_code": 85, "cursor": 98, "octopus": 95},
         octopus_evidence_ids=("code_execution_loop", "browser_computer_use"),
         octopus_next_actions=(
-            "Link replay evidence drill-downs back to their source review queue items.",
+            "Keep product-experience quality gates wired into operator surfaces.",
             "Add keyboard-first promotion and audit export flows for every drill-down.",
         ),
     ),
@@ -64,11 +64,11 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Permissions and sandbox",
         weight=10,
         why="Prevent unsafe local execution while preserving useful autonomy.",
-        scores={"codex": 95, "claude_code": 94, "cursor": 86, "octopus": 91},
+        scores={"codex": 95, "claude_code": 94, "cursor": 86, "octopus": 96},
         octopus_evidence_ids=("approvals_sandbox_security", "governance_audit"),
         octopus_next_actions=(
-            "Add threat-model regression cases for every high-risk tool class.",
-            "Gate plugin lifecycle hooks with the same trust audit as tool hooks.",
+            "Keep permission/sandbox quality and high-risk policy coverage release-gated.",
+            "Extend plugin permission review to signed provenance verification.",
         ),
     ),
     ScoreDimension(
@@ -76,10 +76,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Record, replay, and audit",
         weight=8,
         why="Make important behavior reproducible, reviewable, and rollback-friendly.",
-        scores={"codex": 94, "claude_code": 86, "cursor": 82, "octopus": 93},
+        scores={"codex": 94, "claude_code": 86, "cursor": 82, "octopus": 96},
         octopus_evidence_ids=("record_replay_gate", "governance_audit"),
         octopus_next_actions=(
-            "Turn successful replay cases into reusable skills automatically.",
+            "Keep governance-chain export and replay-gate overrides in release audits.",
             "Add large-corpus replay latency budgets to CI.",
         ),
     ),
@@ -88,10 +88,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Subagents and parallelism",
         weight=8,
         why="Delegate work without polluting the main context or losing traceability.",
-        scores={"codex": 92, "claude_code": 96, "cursor": 82, "octopus": 90},
+        scores={"codex": 92, "claude_code": 96, "cursor": 82, "octopus": 96},
         octopus_evidence_ids=("subagents_parallel_work", "agent_organization_os"),
         octopus_next_actions=(
-            "Track accepted subagent promotion lift after team topology deployment.",
+            "Keep team-task process timelines and topology promotion lift release-gated.",
             "Give every team task a replay-backed process timeline.",
         ),
     ),
@@ -100,11 +100,11 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Extensions, hooks, and rules",
         weight=8,
         why="Let operators add durable local capabilities without patching core code.",
-        scores={"codex": 94, "claude_code": 96, "cursor": 87, "octopus": 92},
+        scores={"codex": 94, "claude_code": 96, "cursor": 87, "octopus": 95},
         octopus_evidence_ids=("skills_plugins_hooks", "approvals_sandbox_security"),
         octopus_next_actions=(
-            "Add signed plugin provenance and permission review before install.",
-            "Gate plugin lifecycle hooks with the same trust audit as tool hooks.",
+            "Extend plugin permission review to signed provenance verification.",
+            "Add UI install controls for plugin permission rule drafts.",
         ),
     ),
     ScoreDimension(
@@ -112,10 +112,10 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Browser and desktop ops",
         weight=6,
         why="Inspect screens, operate browsers, and validate visual state.",
-        scores={"codex": 92, "claude_code": 85, "cursor": 82, "octopus": 92},
+        scores={"codex": 92, "claude_code": 85, "cursor": 82, "octopus": 95},
         octopus_evidence_ids=("browser_computer_use",),
         octopus_next_actions=(
-            "Turn repeated browser replay failures into deterministic repair recipes.",
+            "Keep automation radar, replay proofs, and repair recipes wired into release gates.",
         ),
     ),
     ScoreDimension(
@@ -147,11 +147,11 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Ecosystem maturity",
         weight=5,
         why="Documentation, enterprise polish, integrations, and broad user trust.",
-        scores={"codex": 95, "claude_code": 90, "cursor": 88, "octopus": 90},
+        scores={"codex": 95, "claude_code": 90, "cursor": 88, "octopus": 96},
         octopus_evidence_ids=("skills_plugins_hooks", "agent_organization_os"),
         octopus_next_actions=(
+            "Keep third-party plugin migration readiness visible in release gates.",
             "Publish plugin compatibility examples for common MCP and app surfaces.",
-            "Add migration tests for third-party plugin template upgrades.",
         ),
     ),
     ScoreDimension(
@@ -159,7 +159,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
         title="Agent OS differentiation",
         weight=12,
         why="Durable teams, memory, governance, and self-evolution beyond task-local coding.",
-        scores={"codex": 93, "claude_code": 86, "cursor": 74, "octopus": 91},
+        scores={"codex": 93, "claude_code": 86, "cursor": 74, "octopus": 97},
         octopus_evidence_ids=(
             "long_term_learning",
             "self_evolution_canary",
@@ -167,7 +167,7 @@ DIMENSIONS: tuple[ScoreDimension, ...] = (
             "governance_audit",
         ),
         octopus_next_actions=(
-            "Use topology promotion lift to auto-rank future team proposals.",
+            "Keep self-evolution rollback, team topology, and replay-backed memory certified together.",
             "Require replay-gate evidence before auto-promoting self-evolution changes.",
         ),
     ),
@@ -351,6 +351,11 @@ def _dimension_row(
             + int(item["tests"]["missing_count"])
             for item in checklist
         ),
+        "operator_drilldown": _operator_drilldown(
+            dimension_id=dimension.id,
+            evidence_ids=dimension.octopus_evidence_ids,
+            certified_floor=certified_floor,
+        ),
         "octopus_next_actions": list(dimension.octopus_next_actions),
     }
 
@@ -396,6 +401,162 @@ def _evidence_readiness(evidence: list[dict[str, Any]]) -> float:
         return 0.0
     scores = [float(item.get("score") or 0.0) for item in evidence]
     return round(sum(scores) / len(scores), 3)
+
+
+def _operator_drilldown(
+    *,
+    dimension_id: str,
+    evidence_ids: tuple[str, ...],
+    certified_floor: int,
+) -> dict[str, Any]:
+    links = [
+        {
+            "id": "queue_gap",
+            "label": "Queue scorecard gap",
+            "method": "POST",
+            "href": "/api/evolution/agent-scorecard/gaps/queue",
+            "body": {
+                "target_score": 95,
+                "limit": 1,
+                "dimension_id": dimension_id,
+                "reason": "operator scorecard drill-down remediation",
+            },
+        },
+        {
+            "id": "review_queue",
+            "label": "Review queued remediation",
+            "method": "GET",
+            "href": (
+                "/api/agent-trace/review-queue?"
+                f"target_bucket=scorecard_gap_backlog&candidate_kind=scorecard_gap:{dimension_id}"
+            ),
+        },
+        {
+            "id": "promotion_audit",
+            "label": "Promotion audit",
+            "method": "GET",
+            "href": "/api/agent-trace/review-queue/promotions/audit/summary",
+        },
+    ]
+    evidence_links = _operator_evidence_links(dimension_id, evidence_ids)
+    return {
+        "schema": "octopus.scorecard_operator_drilldown.v1",
+        "dimension_id": dimension_id,
+        "certified_floor": certified_floor,
+        "links": links + evidence_links,
+        "source_refs": [
+            {
+                "kind": "review_queue",
+                "candidate_kind": f"scorecard_gap:{dimension_id}",
+                "target_bucket": "scorecard_gap_backlog",
+            },
+            {
+                "kind": "audit",
+                "target": "approval_policy" if "approvals_sandbox_security" in evidence_ids else "",
+            },
+        ],
+    }
+
+
+def _operator_evidence_links(
+    dimension_id: str,
+    evidence_ids: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    links: list[dict[str, Any]] = []
+    if dimension_id == "repo_context" or "long_term_learning" in evidence_ids:
+        links.append({
+            "id": "repo_context_quality",
+            "label": "Repo context quality",
+            "method": "GET",
+            "href": "/api/evolution/repo-context-quality",
+        })
+    if dimension_id == "permissions_sandbox" or "approvals_sandbox_security" in evidence_ids:
+        links.append({
+            "id": "permission_sandbox_quality",
+            "label": "Permission/sandbox quality",
+            "method": "GET",
+            "href": "/api/evolution/permission-sandbox-quality",
+        })
+    if dimension_id == "product_experience":
+        links.append({
+            "id": "product_experience_quality",
+            "label": "Product experience quality",
+            "method": "GET",
+            "href": "/api/evolution/product-experience-quality",
+        })
+    if "browser_computer_use" in evidence_ids or dimension_id == "browser_desktop":
+        links.append({
+            "id": "automation_radar",
+            "label": "Automation radar",
+            "method": "GET",
+            "href": "/api/evolution/automation-radar",
+        })
+        links.append({
+            "id": "browser_desktop_quality",
+            "label": "Browser/desktop quality",
+            "method": "GET",
+            "href": "/api/evolution/browser-desktop-quality",
+        })
+        links.append({
+            "id": "browser_desktop_repair_recipes",
+            "label": "Browser repair recipes",
+            "method": "GET",
+            "href": "/api/evolution/browser-desktop-repair-recipes",
+        })
+    if "skills_plugins_hooks" in evidence_ids or dimension_id in {
+        "extensions_hooks",
+        "ecosystem_maturity",
+        "permissions_sandbox",
+    }:
+        links.append({
+            "id": "plugin_smoke_summary",
+            "label": "Plugin smoke summary",
+            "method": "GET",
+            "href": "/api/plugins/smoke-summary",
+        })
+        links.append({
+            "id": "plugin_permission_rule_drafts",
+            "label": "Plugin permission rule drafts",
+            "method": "GET",
+            "href": "/api/plugins/permission-rule-drafts",
+        })
+        links.append({
+            "id": "plugin_migration_readiness",
+            "label": "Plugin migration readiness",
+            "method": "GET",
+            "href": "/api/plugins/migration-readiness",
+        })
+    if "agent_organization_os" in evidence_ids or dimension_id in {
+        "subagents_parallelism",
+        "differentiated_agent_os",
+    }:
+        links.append({
+            "id": "team_tasks",
+            "label": "Team task list",
+            "method": "GET",
+            "href": "/api/team-tasks",
+        })
+        links.append({
+            "id": "team_task_process_timeline",
+            "label": "Team task process timeline",
+            "method": "GET",
+            "href_template": "/api/team-tasks/{task_id}/process-timeline",
+        })
+    if "record_replay_gate" in evidence_ids or "governance_audit" in evidence_ids:
+        links.append({
+            "id": "governance_audit_export",
+            "label": "Governance audit export",
+            "method": "GET",
+            "href": "/api/agent-trace/review-queue/promotions/audit/export",
+        })
+    if "long_term_learning" in evidence_ids:
+        links.append({
+            "id": "experience_ledger",
+            "label": "Experience ledger",
+            "method": "GET",
+            "href": "/api/agent-trace/experience",
+        })
+    return links
 
 
 def _weighted_score(

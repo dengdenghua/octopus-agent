@@ -576,15 +576,15 @@ class TestAgentCompetitorScorecard:
             "codex": 93,
             "claude_code": 91,
             "cursor": 86,
-            "octopus": 93,
+            "octopus": 96,
         }
-        assert report["verdict"] == "competitive"
-        assert report["ranking"][0] == {"competitor": "octopus", "score": 93}
-        assert report["evidence_adjusted_overall"]["octopus"] == 93
-        assert report["evidence_adjusted_verdict"] == "competitive"
+        assert report["verdict"] == "leading"
+        assert report["ranking"][0] == {"competitor": "octopus", "score": 96}
+        assert report["evidence_adjusted_overall"]["octopus"] == 96
+        assert report["evidence_adjusted_verdict"] == "leading"
         assert report["evidence_adjusted_ranking"][0] == {
             "competitor": "octopus",
-            "score": 93,
+            "score": 96,
         }
         assert report["scorecard_policy"] == {
             "schema": "octopus.agent_scorecard_policy.v1",
@@ -597,22 +597,51 @@ class TestAgentCompetitorScorecard:
             row for row in report["dimensions"]
             if row["id"] == "product_experience"
         )
-        assert product["octopus_baseline_score"] == 90
-        assert product["scores"]["octopus"] == 90
+        assert product["octopus_baseline_score"] == 95
+        assert product["scores"]["octopus"] == 95
         assert product["octopus_score_source"] == "external_calibrated_baseline"
-        assert product["octopus_evidence_adjusted_score"] == 90
+        assert product["octopus_evidence_adjusted_score"] == 95
         assert product["octopus_evidence_adjusted_score_source"] == "baseline"
         assert product["octopus_certified_score_floor"] == 97
         assert product["octopus_certification_score_applied"] is False
         assert product["octopus_certification_adjustment_available"] is False
+        assert any(
+            link["id"] == "product_experience_quality"
+            and link["href"] == "/api/evolution/product-experience-quality"
+            for link in product["operator_drilldown"]["links"]
+        )
+        repo_context = next(
+            row for row in report["dimensions"]
+            if row["id"] == "repo_context"
+        )
+        assert repo_context["scores"]["octopus"] == 96
+        assert repo_context["scores"]["codex"] == 94
+        assert repo_context["octopus_certified_score_floor"] == 97
+        assert any(
+            link["id"] == "repo_context_quality"
+            and link["href"] == "/api/evolution/repo-context-quality"
+            for link in repo_context["operator_drilldown"]["links"]
+        )
+        permissions = next(
+            row for row in report["dimensions"]
+            if row["id"] == "permissions_sandbox"
+        )
+        assert permissions["scores"]["octopus"] == 96
+        assert permissions["scores"]["codex"] == 95
+        assert permissions["octopus_certified_score_floor"] == 96
+        assert any(
+            link["id"] == "permission_sandbox_quality"
+            and link["href"] == "/api/evolution/permission-sandbox-quality"
+            for link in permissions["operator_drilldown"]["links"]
+        )
         browser = next(
             row for row in report["dimensions"]
             if row["id"] == "browser_desktop"
         )
         assert browser["scores"]["cursor"] == 82
-        assert browser["octopus_baseline_score"] == 92
-        assert browser["scores"]["octopus"] == 92
-        assert browser["octopus_evidence_adjusted_score"] == 92
+        assert browser["octopus_baseline_score"] == 95
+        assert browser["scores"]["octopus"] == 95
+        assert browser["octopus_evidence_adjusted_score"] == 95
         assert browser["octopus_certified_score_floor"] == 97
         assert browser["octopus_certification_score_applied"] is False
         assert browser["octopus_certification_adjustment_available"] is False
@@ -620,22 +649,44 @@ class TestAgentCompetitorScorecard:
             row for row in report["dimensions"]
             if row["id"] == "differentiated_agent_os"
         )
-        assert differentiated["scores"]["octopus"] == 91
+        assert differentiated["scores"]["octopus"] == 97
         assert differentiated["octopus_certified_score_floor"] == 97
         assert differentiated["octopus_certification_score_applied"] is False
         ecosystem = next(
             row for row in report["dimensions"]
             if row["id"] == "ecosystem_maturity"
         )
-        assert ecosystem["octopus_baseline_score"] == 90
-        assert ecosystem["scores"]["octopus"] == 90
-        assert ecosystem["octopus_evidence_adjusted_score"] == 90
-        assert ecosystem["octopus_certified_score_floor"] == 94
+        assert ecosystem["octopus_baseline_score"] == 96
+        assert ecosystem["scores"]["octopus"] == 96
+        assert ecosystem["octopus_evidence_adjusted_score"] == 96
+        assert ecosystem["octopus_certified_score_floor"] == 96
         assert ecosystem["octopus_certification_score_applied"] is False
         assert ecosystem["octopus_certification_adjustment_available"] is False
         assert ecosystem["octopus_evidence_checklist"]
         assert ecosystem["octopus_missing_evidence_count"] == 0
         assert ecosystem["octopus_ecosystem_readiness"]["score"] == 1.0
+        drilldown = ecosystem["operator_drilldown"]
+        assert drilldown["schema"] == "octopus.scorecard_operator_drilldown.v1"
+        assert drilldown["dimension_id"] == "ecosystem_maturity"
+        assert any(
+            link["id"] == "plugin_permission_rule_drafts"
+            and link["href"] == "/api/plugins/permission-rule-drafts"
+            for link in drilldown["links"]
+        )
+        assert any(
+            link["id"] == "plugin_migration_readiness"
+            and link["href"] == "/api/plugins/migration-readiness"
+            for link in drilldown["links"]
+        )
+        subagents = next(
+            row for row in report["dimensions"]
+            if row["id"] == "subagents_parallelism"
+        )
+        assert any(
+            link["id"] == "team_task_process_timeline"
+            and link["href_template"] == "/api/team-tasks/{task_id}/process-timeline"
+            for link in subagents["operator_drilldown"]["links"]
+        )
         assert report["ecosystem_readiness"]["passed"] == 5
         assert report["parity_certification"]["passed"] == 14
         assert report["parity_certification"]["ready"] is True
@@ -649,6 +700,52 @@ class TestAgentCompetitorScorecard:
         }
         assert report["octopus_strengths"]
         assert report["next_focus"] == []
+
+    def test_repo_context_quality_reports_release_evidence(self):
+        from runtime.safety.evolution.repo_context_quality import (
+            compute_repo_context_quality,
+        )
+
+        report = compute_repo_context_quality()
+
+        assert report["schema"] == "octopus.repo_context_quality.v1"
+        assert report["ready"] is True
+        assert report["score"] == 1.0
+        assert report["passed"] == report["total"]
+        assert report["dirty_worktree"]["schema"] == (
+            "octopus.dirty_worktree_awareness.v1"
+        )
+        assert report["dirty_worktree"]["command"] == "git status --short"
+
+    def test_permission_sandbox_quality_reports_policy_coverage(self):
+        from runtime.safety.evolution.permission_sandbox_quality import (
+            compute_permission_sandbox_quality,
+        )
+
+        report = compute_permission_sandbox_quality()
+
+        assert report["schema"] == "octopus.permission_sandbox_quality.v1"
+        assert report["ready"] is True
+        assert report["score"] == 1.0
+        assert report["passed"] == report["total"]
+        assert report["automation_policy_coverage"]["ready"] is True
+        assert report["automation_policy_coverage"]["installable_deny_count"] == (
+            report["automation_policy_coverage"]["total"]
+        )
+        assert report["automation_policy_coverage"]["missing_controls"] == {}
+        assert report["plugin_policy_coverage"]["ready"] is True
+
+    def test_product_experience_quality_reports_operator_surfaces(self):
+        from runtime.safety.evolution.product_experience_quality import (
+            compute_product_experience_quality,
+        )
+
+        report = compute_product_experience_quality()
+
+        assert report["schema"] == "octopus.product_experience_quality.v1"
+        assert report["ready"] is True
+        assert report["score"] == 1.0
+        assert report["passed"] == report["total"]
 
     def test_scorecard_includes_local_evidence_readiness(self, tmp_path):
         from runtime.safety.evolution.agent_competitor_scorecard import (
@@ -667,7 +764,7 @@ class TestAgentCompetitorScorecard:
             if item["id"] == "core_coding_loop"
         )
 
-        assert code_loop["scores"]["octopus"] == 96
+        assert code_loop["scores"]["octopus"] == 97
         assert code_loop["octopus_evidence_readiness"] < 0.5
         assert code_loop["octopus_missing_evidence_count"] > 0
         assert "runtime/execution/tool_engine/executor.py" in (

@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 try:
-    from fastapi import APIRouter, Query
+    from fastapi import APIRouter, HTTPException, Query, Request
     from pydantic import BaseModel, Field
 
     FASTAPI_AVAILABLE = True
@@ -65,6 +65,12 @@ if FASTAPI_AVAILABLE:
         promote_source_cases: bool = False
         actor: str = "operator_panel"
         limit: int = Field(default=20, ge=1, le=100)
+
+
+    class AutomationPolicyRuleInstallBody(BaseModel):
+        draft_id: str
+        confirm_install: bool = False
+        limit: int = Field(default=100, ge=1, le=500)
 
 _LOG = logging.getLogger("octopus.siphon.evolution_router")
 
@@ -164,6 +170,7 @@ def create_evolution_router() -> Any:
                         "octopus_evidence_adjusted_score": row.get(
                             "octopus_evidence_adjusted_score",
                         ),
+                        "operator_drilldown": row.get("operator_drilldown"),
                         "next_actions": next_actions,
                         "remediation": {
                             "schema": "octopus.scorecard_gap_remediation.v1",
@@ -177,6 +184,7 @@ def create_evolution_router() -> Any:
                             "evidence_checklist": row.get(
                                 "octopus_evidence_checklist",
                             ),
+                            "operator_drilldown": row.get("operator_drilldown"),
                         },
                         "scorecard_policy": report.get("scorecard_policy"),
                     },
@@ -217,6 +225,127 @@ def create_evolution_router() -> Any:
             )
 
             return {"ok": True, **compute_browser_desktop_quality()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/repo-context-quality")
+    def get_repo_context_quality() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.repo_context_quality import (
+                compute_repo_context_quality,
+            )
+
+            return {"ok": True, **compute_repo_context_quality()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/permission-sandbox-quality")
+    def get_permission_sandbox_quality() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.permission_sandbox_quality import (
+                compute_permission_sandbox_quality,
+            )
+
+            return {"ok": True, **compute_permission_sandbox_quality()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/product-experience-quality")
+    def get_product_experience_quality() -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.product_experience_quality import (
+                compute_product_experience_quality,
+            )
+
+            return {"ok": True, **compute_product_experience_quality()}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/automation-radar")
+    def get_automation_radar(
+        target_score: int = Query(default=95, ge=1, le=100),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.automation_radar import (
+                compute_automation_radar,
+            )
+
+            return {
+                "ok": True,
+                **compute_automation_radar(target_score=target_score),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.get("/automation-policy-rule-drafts")
+    def get_automation_policy_rule_drafts(
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.policy_review_rules import (
+                build_automation_policy_rule_drafts,
+                verify_policy_review_rule_draft,
+            )
+
+            report = build_automation_policy_rule_drafts(limit=limit)
+            report["verified"] = sum(
+                1
+                for draft in report.get("drafts") or []
+                if verify_policy_review_rule_draft(draft).get("ok") is True
+            )
+            return {"ok": True, **report}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/automation-policy-rule-drafts/install")
+    def install_automation_policy_rule_draft(
+        request: Request,
+        body: AutomationPolicyRuleInstallBody,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.platform.process.paths import app_paths
+            from runtime.safety.evolution.governance_audit import (
+                append_governance_audit_event,
+            )
+            from runtime.safety.evolution.policy_review_rules import (
+                build_automation_policy_rule_drafts,
+                install_policy_review_rule_draft,
+            )
+
+            report = build_automation_policy_rule_drafts(limit=body.limit)
+            draft = next(
+                (
+                    item for item in report.get("drafts") or []
+                    if isinstance(item, dict)
+                    and str(item.get("draft_id") or "") == body.draft_id
+                ),
+                None,
+            )
+            if draft is None:
+                raise HTTPException(404, "automation policy rule draft not found")
+            result = install_policy_review_rule_draft(
+                draft,
+                policy_path=app_paths().permissions_path,
+                confirm_install=body.confirm_install,
+            )
+            append_governance_audit_event(
+                event_type="automation_policy_rule_install",
+                target="approval_policy",
+                status="installed",
+                artifact=result,
+                decision_context={
+                    "schema": "octopus.automation_policy_rule_install_context.v1",
+                    "actor": _actor_from_request(request),
+                    "draft_id": body.draft_id,
+                    "source": "evolution_router",
+                },
+                audit_path=app_paths().promotion_audit_path,
+            )
+            return {"ok": True, **result}
+        except HTTPException:
+            raise
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -696,6 +825,10 @@ def _scorecard_gap_priority(gap: int) -> str:
     if gap >= 5:
         return "P1"
     return "P2"
+
+
+def _actor_from_request(request: Any) -> str:
+    return str(getattr(getattr(request, "state", None), "actor_id", "") or "local_operator")
 
 
 def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:

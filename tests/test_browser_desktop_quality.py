@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.safety.evolution.automation_radar import compute_automation_radar
 from runtime.safety.evolution.browser_desktop_quality import (
     compute_browser_desktop_quality,
 )
@@ -18,6 +19,10 @@ def test_browser_desktop_quality_reports_all_local_checks() -> None:
     assert report["schema"] == "octopus.browser_desktop_quality.v1"
     assert report["ready"] is True
     assert report["passed"] == report["total"]
+    assert report["browser_relay_bridge"]["schema"] == "octopus.browser_relay_bridge.v1"
+    assert report["browser_relay_bridge"]["base_url"].endswith("/api/browser/relay")
+    assert report["computer_api_bridge"]["schema"] == "octopus.computer_api_bridge.v1"
+    assert report["computer_api_bridge"]["base_url"].endswith("/api/computer")
     assert report["replay_trends"]["schema"] == "octopus.browser_desktop_replay_trends.v1"
     assert {row["id"] for row in report["checks"]} == {
         "browser_session_lifecycle",
@@ -124,3 +129,79 @@ def test_browser_desktop_quality_endpoint() -> None:
     assert data["ok"] is True
     assert data["schema"] == "octopus.browser_desktop_quality.v1"
     assert data["ready"] is True
+
+
+def test_automation_radar_reports_browser_desktop_advantage() -> None:
+    report = compute_automation_radar()
+
+    assert report["schema"] == "octopus.automation_radar.v1"
+    assert report["scope"] == "browser_desktop_visual_automation"
+    assert report["overall"]["octopus"] == 95
+    assert report["overall"]["codex"] == 93
+    assert report["verdict"] == "leading"
+    assert report["browser_desktop_quality"]["ready"] is True
+    assert report["parity_certification"]["ready"] is True
+    assert report["policy_rule_drafts"]["schema"] == (
+        "octopus.automation_policy_rule_drafts.v1"
+    )
+    assert report["policy_rule_drafts"]["ready"] is True
+    assert report["policy_rule_drafts"]["verified"] == report["policy_rule_drafts"]["total"]
+    assert report["policy_rule_coverage"]["schema"] == (
+        "octopus.automation_policy_rule_coverage.v1"
+    )
+    assert report["policy_rule_coverage"]["ready"] is True
+    session_control = next(
+        row
+        for row in report["dimensions"]
+        if row["id"] == "browser_session_control"
+    )
+    assert session_control["scores"]["octopus"] > session_control["scores"]["codex"]
+    safety = next(
+        row
+        for row in report["dimensions"]
+        if row["id"] == "automation_safety"
+    )
+    assert safety["scores"]["octopus"] > safety["scores"]["codex"]
+    assert {row["id"] for row in report["octopus_strengths"]} >= {
+        "browser_session_control",
+        "desktop_preview_execute",
+        "visual_replay_validation",
+        "repair_recipe_learning",
+        "automation_safety",
+        "productized_api_bridge",
+    }
+    assert all(row["evidence_ready"] for row in report["octopus_strengths"])
+    visual = next(
+        row
+        for row in report["dimensions"]
+        if row["id"] == "visual_replay_validation"
+    )
+    assert visual["scores"]["octopus"] > visual["scores"]["codex"]
+    assert visual["operator_drilldown"]["schema"] == (
+        "octopus.automation_radar_drilldown.v1"
+    )
+    assert any(
+        link["href"] == "/api/evolution/browser-desktop-repair-recipes"
+        for link in visual["operator_drilldown"]["links"]
+    )
+
+
+def test_automation_radar_detects_missing_workspace(tmp_path: Path) -> None:
+    report = compute_automation_radar(root=tmp_path)
+
+    assert report["browser_desktop_quality"]["ready"] is False
+    assert report["octopus_gaps"]
+    assert any(not row["evidence_ready"] for row in report["octopus_gaps"])
+
+
+def test_automation_radar_endpoint() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    data = client.get("/api/evolution/automation-radar?target_score=95").json()
+
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.automation_radar.v1"
+    assert data["overall"]["octopus"] == 95
+    assert data["ranking"][0]["competitor"] == "octopus"

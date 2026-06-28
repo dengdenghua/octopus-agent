@@ -418,6 +418,38 @@ def test_run_task_executes_runner_and_writes_done_state(tmp_path: Path) -> None:
     assert {room_id for room_id, _ in events} == {"team-alpha"}
 
 
+def test_team_task_process_timeline_persists_runner_events_and_artifacts(
+    tmp_path: Path,
+) -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+    client = _client(tmp_path, _SuccessRunner, events)
+    task = _create_task(client, title="timeline evidence smoke")
+
+    client.post(f"/api/team-tasks/{task['id']}/run")
+    done = _wait_for_status(client, task["id"], "done")
+    response = client.get(f"/api/team-tasks/{task['id']}/process-timeline")
+
+    assert response.status_code == 200
+    timeline = response.json()["timeline"]
+    assert timeline["schema"] == "octopus.team_task_process_timeline.v1"
+    assert timeline["task_id"] == task["id"]
+    assert timeline["overview"]["status"] == "done"
+    assert timeline["overview"]["event_count"] >= 3
+    assert timeline["overview"]["artifact_count"] == 1
+    assert timeline["safety"]["raw_messages_included"] is False
+    assert timeline["safety"]["process_events_persisted"] is True
+    kinds = {node["kind"] for node in timeline["timeline"]}
+    lanes = {node["lane"] for node in timeline["timeline"]}
+    assert {"task_created", "run_started", "team_role_start", "team_role_end", "run_done"} <= kinds
+    assert {"workflow", "agent", "artifact"} <= lanes
+    artifact_nodes = [
+        node for node in timeline["timeline"]
+        if node["lane"] == "artifact"
+    ]
+    assert artifact_nodes
+    assert "final output for timeline evidence smoke" in done["produced_artifacts"][0]["content"]
+
+
 def test_run_task_records_failed_state_on_runner_failure(tmp_path: Path) -> None:
     events: list[tuple[str, dict[str, Any]]] = []
     client = _client(tmp_path, _FailureRunner, events)
@@ -431,6 +463,12 @@ def test_run_task_records_failed_state_on_runner_failure(tmp_path: Path) -> None
     assert failed["metadata"]["runner"]["error"] == "boom"
     assert failed["produced_artifacts"] == []
     assert "run_failed" in [payload["event"] for _, payload in events]
+    timeline = client.get(f"/api/team-tasks/{task['id']}/process-timeline").json()["timeline"]
+    assert timeline["overview"]["status"] == "failed"
+    assert any(
+        node["kind"] == "team_role_end" and node["severity"] == "high"
+        for node in timeline["timeline"]
+    )
 
 
 def test_run_task_rejects_missing_explicit_sop_template(tmp_path: Path) -> None:

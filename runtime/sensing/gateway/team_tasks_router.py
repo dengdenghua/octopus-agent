@@ -30,6 +30,7 @@ Schema notes:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import dataclasses
 import json
 import logging
@@ -245,15 +246,36 @@ def create_team_tasks_router(
     ) -> None:
         if team_event_broadcaster is None:
             return
+        coro = None
         try:
             if loop is not None and loop.is_running():
-                asyncio.run_coroutine_threadsafe(
-                    _broadcast_task_event(room_id, payload),
-                    loop,
-                ).result(timeout=5.0)
+                coro = _broadcast_task_event(room_id, payload)
+                future = asyncio.run_coroutine_threadsafe(coro, loop)
+                coro = None
+                future.add_done_callback(_log_broadcast_result)
             else:
                 asyncio.run(_broadcast_task_event(room_id, payload))
-        except (RuntimeError, TimeoutError, OSError):
+        except (
+            RuntimeError,
+            TimeoutError,
+            concurrent.futures.CancelledError,
+            concurrent.futures.TimeoutError,
+            OSError,
+        ):
+            if coro is not None:
+                coro.close()
+            _LOG.debug("team task broadcast failed", exc_info=True)
+
+    def _log_broadcast_result(future: concurrent.futures.Future[Any]) -> None:
+        try:
+            future.result()
+        except (
+            RuntimeError,
+            TimeoutError,
+            concurrent.futures.CancelledError,
+            concurrent.futures.TimeoutError,
+            OSError,
+        ):
             _LOG.debug("team task broadcast failed", exc_info=True)
 
     def _task_payload(
@@ -286,6 +308,31 @@ def create_team_tasks_router(
             _save()
             return updated
 
+    def _append_process_event(task_id: str, event: dict[str, Any]) -> None:
+        with lock:
+            current = tasks.get(task_id)
+            if current is None:
+                return
+            metadata = dict(current.metadata)
+            events = [
+                item for item in metadata.get("process_events", [])
+                if isinstance(item, dict)
+            ]
+            events.append(_jsonable(event))
+            metadata["process_events"] = events[-300:]
+            tasks[task_id] = current.model_copy(update={
+                "metadata": metadata,
+                "updated_at": _now(),
+            })
+            _save()
+
+    def _current_metadata(task_id: str, *, fallback: dict[str, Any] | None = None) -> dict[str, Any]:
+        with lock:
+            current = tasks.get(task_id)
+            if current is None:
+                return dict(fallback or {})
+            return dict(current.metadata)
+
     def _runner_instance(event_emitter: Callable[[dict[str, Any]], None]) -> Any:
         if runner_factory is None:
             from runtime.safety.organization.team_runner import TeamRunner
@@ -316,6 +363,17 @@ def create_team_tasks_router(
             if event_type == "team_role_end" and role:
                 completed_roles.add(role)
             status = str(event.get("status") or "")
+            _append_process_event(
+                task.id,
+                {
+                    "ts": _now(),
+                    "type": event_type,
+                    "role": role,
+                    "agent_id": event.get("agent_id"),
+                    "status": status,
+                    "event": _jsonable(event),
+                },
+            )
             _broadcast_from_worker(
                 loop,
                 task.room_id,
@@ -332,6 +390,32 @@ def create_team_tasks_router(
                         "total_roles": total_roles,
                         "progress": min(1.0, len(completed_roles) / total_roles),
                     },
+                ),
+            )
+
+        def _record_terminal_event(
+            updated: TeamTaskWire,
+            *,
+            status: str,
+            error: str = "",
+        ) -> None:
+            event_type = f"run_{status}"
+            _append_process_event(
+                updated.id,
+                {
+                    "ts": updated.completed_at or _now(),
+                    "type": event_type,
+                    "status": status,
+                    "error": error,
+                },
+            )
+            _broadcast_from_worker(
+                loop,
+                updated.room_id,
+                _task_payload(
+                    updated,
+                    event=event_type,
+                    extra={"error": error} if error else None,
                 ),
             )
 
@@ -395,7 +479,7 @@ def create_team_tasks_router(
                     else ("done" if succeeded else "failed")
                 )
                 metadata = {
-                    **dict(task.metadata),
+                    **_current_metadata(task.id, fallback=task.metadata),
                     "runner": {
                         "engine": "mobile",
                         "devices": len(records),
@@ -413,10 +497,10 @@ def create_team_tasks_router(
                     updates["produced_artifacts"] = _mobile_artifacts(records)
                 updated = _persist_task(task.id, updates)
                 if updated is not None:
-                    _broadcast_from_worker(
-                        loop,
-                        updated.room_id,
-                        _task_payload(updated, event=f"run_{final_status}"),
+                    _record_terminal_event(
+                        updated,
+                        status=final_status,
+                        error=str(metadata.get("error") or ""),
                     )
                 return
 
@@ -445,7 +529,7 @@ def create_team_tasks_router(
                     else ("done" if cli_result.get("ok") else "failed")
                 )
                 metadata = {
-                    **dict(task.metadata),
+                    **_current_metadata(task.id, fallback=task.metadata),
                     "runner": {
                         "engine": "cli_team",
                         "members": cli_result.get("count", 0),
@@ -466,10 +550,10 @@ def create_team_tasks_router(
                     updates["produced_artifacts"] = _cli_team_artifacts(cli_result)
                 updated = _persist_task(task.id, updates)
                 if updated is not None:
-                    _broadcast_from_worker(
-                        loop,
-                        updated.room_id,
-                        _task_payload(updated, event=f"run_{final_status}"),
+                    _record_terminal_event(
+                        updated,
+                        status=final_status,
+                        error=str(metadata.get("error") or ""),
                     )
                 return
             runner = _runner_instance(_emit_runner_event)
@@ -483,7 +567,7 @@ def create_team_tasks_router(
                 "done" if _runner_result_success(result) else "failed"
             )
             metadata = {
-                **dict(task.metadata),
+                **_current_metadata(task.id, fallback=task.metadata),
                 "runner": _runner_metadata(result, prepared),
             }
             if final_status == "failed":
@@ -499,21 +583,22 @@ def create_team_tasks_router(
                 updates["produced_artifacts"] = _runner_artifacts(result, prepared)
             updated = _persist_task(task.id, updates)
             if updated is not None:
-                _broadcast_from_worker(
-                    loop,
-                    updated.room_id,
-                    _task_payload(updated, event=f"run_{final_status}"),
+                _record_terminal_event(
+                    updated,
+                    status=final_status,
+                    error=str(metadata.get("error") or ""),
                 )
         except Exception as exc:  # noqa: BLE001
             _LOG.exception("team task runner failed for %s", task.id)
+            error = f"{type(exc).__name__}: {exc}"
             updated = _persist_task(
                 task.id,
                 {
                     "status": "failed",
                     "completed_at": _now(),
                     "metadata": {
-                        **dict(task.metadata),
-                        "error": f"{type(exc).__name__}: {exc}",
+                        **_current_metadata(task.id, fallback=task.metadata),
+                        "error": error,
                         "runner": {
                             "topology": getattr(topology, "name", ""),
                             "meta_skill": prepared.get("meta_skill"),
@@ -522,15 +607,7 @@ def create_team_tasks_router(
                 },
             )
             if updated is not None:
-                _broadcast_from_worker(
-                    loop,
-                    updated.room_id,
-                    _task_payload(
-                        updated,
-                        event="run_failed",
-                        extra={"error": f"{type(exc).__name__}: {exc}"},
-                    ),
-                )
+                _record_terminal_event(updated, status="failed", error=error)
         finally:
             with lock:
                 running.pop(task.id, None)
@@ -651,6 +728,18 @@ def create_team_tasks_router(
             updated.room_id,
             _task_payload(updated, event="run_started"),
         )
+        _append_process_event(
+            task_id,
+            {
+                "ts": now,
+                "type": "run_started",
+                "status": "running",
+                "actor": actor,
+                "topology": metadata["runner"].get("topology"),
+                "topology_fingerprint": metadata["runner"].get("topology_fingerprint"),
+                "task_graph": metadata["runner"].get("task_graph"),
+            },
+        )
         loop = asyncio.get_running_loop()
         thread = threading.Thread(
             target=_run_task_worker,
@@ -710,6 +799,18 @@ def create_team_tasks_router(
             room_id = task.room_id
         _require_member(actor, room_id)
         return payload
+
+    @router.get("/api/team-tasks/{task_id}/process-timeline")
+    def get_task_process_timeline(request: Request, task_id: str) -> dict[str, Any]:
+        actor = _auth(request)
+        with lock:
+            task = tasks.get(task_id)
+            if task is None:
+                raise HTTPException(404, f"task not found: {task_id}")
+            room_id = task.room_id
+            payload = task.model_dump()
+        _require_member(actor, room_id)
+        return {"timeline": _team_task_process_timeline(payload)}
 
     @router.post("/api/team-tasks/{task_id}/run")
     async def run_task(request: Request, task_id: str) -> dict[str, Any]:
@@ -936,6 +1037,183 @@ def _prepare_team_run(task: TeamTaskWire) -> dict[str, Any]:
         "task_graph": task_graph,
         "topology": topology,
     }
+
+
+def _team_task_process_timeline(task: dict[str, Any]) -> dict[str, Any]:
+    metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
+    process_events = [
+        item for item in metadata.get("process_events", [])
+        if isinstance(item, dict)
+    ]
+    artifacts = [
+        item for item in task.get("produced_artifacts", [])
+        if isinstance(item, dict)
+    ]
+    nodes: list[dict[str, Any]] = []
+    created_at = str(task.get("created_at") or "")
+    updated_at = str(task.get("updated_at") or "")
+    if created_at:
+        nodes.append(_team_timeline_node(
+            node_id="task-created",
+            lane="workflow",
+            kind="task_created",
+            ts=created_at,
+            title="Task created",
+            status="pending",
+            severity="info",
+            summary=str(task.get("title") or ""),
+        ))
+    started_at = str(task.get("started_at") or "")
+    if started_at:
+        nodes.append(_team_timeline_node(
+            node_id="run-started",
+            lane="workflow",
+            kind="run_started",
+            ts=started_at,
+            title="Run started",
+            status="running",
+            severity="info",
+            summary=_runner_summary(metadata.get("runner")),
+        ))
+    for idx, event in enumerate(process_events):
+        nodes.append(_team_process_event_node(event, idx))
+    for idx, artifact in enumerate(artifacts):
+        nodes.append(_team_timeline_node(
+            node_id=f"artifact-{artifact.get('id') or idx}",
+            lane="artifact",
+            kind=str(artifact.get("type") or "artifact"),
+            ts=str(artifact.get("created_at") or task.get("completed_at") or updated_at),
+            title=str(artifact.get("title") or "Produced artifact"),
+            status="ok" if artifact.get("ok", True) is not False else "failed",
+            severity="info" if artifact.get("ok", True) is not False else "high",
+            summary=str(artifact.get("content") or "")[:500],
+            data={
+                key: value
+                for key, value in artifact.items()
+                if key not in {"content"}
+            },
+        ))
+    completed_at = str(task.get("completed_at") or "")
+    status = str(task.get("status") or "")
+    if completed_at:
+        nodes.append(_team_timeline_node(
+            node_id="run-completed",
+            lane="workflow",
+            kind=f"run_{status or 'completed'}",
+            ts=completed_at,
+            title=f"Run {status or 'completed'}",
+            status=status or "done",
+            severity="high" if status == "failed" else "medium" if status == "cancelled" else "info",
+            summary=str(metadata.get("error") or ""),
+        ))
+    nodes = sorted(nodes, key=_team_timeline_sort_key)
+    assignees = [
+        item for item in task.get("assignees", [])
+        if isinstance(item, dict)
+    ]
+    return {
+        "schema": "octopus.team_task_process_timeline.v1",
+        "task_id": task.get("id"),
+        "room_id": task.get("room_id"),
+        "overview": {
+            "title": task.get("title") or "",
+            "description": task.get("description") or "",
+            "status": status,
+            "created_by": task.get("created_by"),
+            "created_at": task.get("created_at"),
+            "started_at": task.get("started_at"),
+            "completed_at": task.get("completed_at"),
+            "updated_at": task.get("updated_at"),
+            "runner": metadata.get("runner") if isinstance(metadata.get("runner"), dict) else {},
+            "event_count": len(process_events),
+            "artifact_count": len(artifacts),
+            "assignee_count": len(assignees),
+        },
+        "assignees": assignees,
+        "artifacts": [
+            {
+                key: value for key, value in artifact.items()
+                if key != "content"
+            }
+            for artifact in artifacts
+        ],
+        "timeline": nodes,
+        "safety": {
+            "raw_messages_included": False,
+            "artifact_content_truncated": True,
+            "process_events_persisted": True,
+            "process_event_limit": 300,
+        },
+    }
+
+
+def _team_process_event_node(event: dict[str, Any], index: int) -> dict[str, Any]:
+    event_type = str(event.get("type") or "runner_event")
+    role = str(event.get("role") or "")
+    status = str(event.get("status") or "")
+    agent_id = str(event.get("agent_id") or "")
+    if event_type == "team_role_start":
+        title = f"Role started: {role or agent_id or 'agent'}"
+        lane = "agent"
+    elif event_type == "team_role_end":
+        title = f"Role finished: {role or agent_id or 'agent'}"
+        lane = "agent"
+    else:
+        title = event_type.replace("_", " ")
+        lane = "timeline"
+    severity = "high" if status in {"error", "failed", "failure"} else "info"
+    return _team_timeline_node(
+        node_id=f"process-event-{index}",
+        lane=lane,
+        kind=event_type,
+        ts=str(event.get("ts") or ""),
+        title=title,
+        status=status or "ok",
+        severity=severity,
+        summary=str(event.get("error") or event.get("output") or "")[:500],
+        data={
+            "role": role,
+            "agent_id": agent_id,
+            "event": event.get("event") if isinstance(event.get("event"), dict) else {},
+        },
+    )
+
+
+def _team_timeline_node(
+    *,
+    node_id: str,
+    lane: str,
+    kind: str,
+    ts: str,
+    title: str,
+    status: str,
+    severity: str,
+    summary: str = "",
+    data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "id": node_id,
+        "lane": lane,
+        "kind": kind,
+        "ts": ts,
+        "title": title,
+        "status": status,
+        "severity": severity,
+        "summary": summary,
+        "data": data or {},
+    }
+
+
+def _team_timeline_sort_key(node: dict[str, Any]) -> tuple[str, str]:
+    return (str(node.get("ts") or ""), str(node.get("id") or ""))
+
+
+def _runner_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    engine = value.get("engine") or value.get("topology_name") or value.get("topology")
+    status = value.get("status")
+    return " ".join(str(item) for item in (engine, status) if item)
 
 
 def _task_input_text(task: TeamTaskWire) -> str:

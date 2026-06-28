@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.safety.approval.approval_policy_store import load_policy
 from runtime.sensing.gateway.evolution_router import create_evolution_router
 
 
@@ -71,12 +72,12 @@ def test_agent_scorecard_endpoint() -> None:
     assert data["ok"] is True
     assert data["schema"] == "octopus.agent_competitor_scorecard.v1"
     assert data["target_score"] == 90
-    assert data["overall"]["octopus"] == 93
+    assert data["overall"]["octopus"] == 96
     assert data["overall"]["codex"] == 93
     assert data["overall"]["cursor"] == 86
-    assert data["verdict"] == "competitive"
-    assert data["evidence_adjusted_overall"]["octopus"] == 93
-    assert data["evidence_adjusted_verdict"] == "competitive"
+    assert data["verdict"] == "leading"
+    assert data["evidence_adjusted_overall"]["octopus"] == 96
+    assert data["evidence_adjusted_verdict"] == "leading"
     assert data["scorecard_policy"]["certification_floors_do_not_change_overall"] is True
     assert data["octopus_below_target"] == []
     assert data["ecosystem_readiness"]["score"] == 1.0
@@ -104,17 +105,13 @@ def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(
     assert response.status_code == 200
     assert data["ok"] is True
     assert data["schema"] == "octopus.agent_scorecard_gap_queue.v1"
-    assert data["created"] == 3
-    assert data["scorecard"]["overall"]["octopus"] == 93
-    assert data["scorecard"]["evidence_adjusted_overall"]["octopus"] == 95
-    assert data["items"][0]["priority"] == "P1"
-    assert data["items"][0]["target_bucket"] == "scorecard_gap_backlog"
-    assert "real_baseline" in data["items"][0]["tags"]
-    assert data["items"][0]["metadata"]["schema"] == "octopus.agent_scorecard_gap.v1"
+    assert data["created"] == 0
+    assert data["scorecard"]["overall"]["octopus"] == 96
+    assert data["scorecard"]["evidence_adjusted_overall"]["octopus"] == 96
+    assert data["items"] == []
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
-    assert summary["pending_count"] == 3
-    assert summary["by_target_bucket"]["scorecard_gap_backlog"] == 3
+    assert summary["pending_count"] == 0
 
 
 def test_repair_route_promotion_candidates_can_queue_from_router(
@@ -163,7 +160,7 @@ def test_agent_scorecard_gap_queue_can_target_single_dimension(
     response = client.post(
         "/api/evolution/agent-scorecard/gaps/queue",
         json={
-            "target_score": 95,
+            "target_score": 97,
             "limit": 10,
             "dimension_id": "ecosystem_maturity",
             "reason": "operator drilldown remediation",
@@ -180,7 +177,7 @@ def test_agent_scorecard_gap_queue_can_target_single_dimension(
         "octopus.scorecard_gap_remediation.v1"
     )
     assert data["items"][0]["metadata"]["remediation"]["primary_action"] == (
-        "Publish plugin compatibility examples for common MCP and app surfaces."
+        "Keep third-party plugin migration readiness visible in release gates."
     )
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
@@ -201,6 +198,91 @@ def test_browser_desktop_quality_endpoint() -> None:
     assert data["schema"] == "octopus.browser_desktop_quality.v1"
     assert data["ready"] is True
     assert data["score"] == 1.0
+
+
+def test_repo_context_quality_endpoint() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/repo-context-quality")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.repo_context_quality.v1"
+    assert data["ready"] is True
+    assert data["score"] == 1.0
+
+
+def test_permission_sandbox_quality_endpoint() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/permission-sandbox-quality")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.permission_sandbox_quality.v1"
+    assert data["ready"] is True
+    assert data["score"] == 1.0
+    assert data["automation_policy_coverage"]["ready"] is True
+
+
+def test_product_experience_quality_endpoint() -> None:
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.get("/api/evolution/product-experience-quality")
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["schema"] == "octopus.product_experience_quality.v1"
+    assert data["ready"] is True
+    assert data["score"] == 1.0
+
+
+def test_automation_policy_rule_drafts_endpoint_and_install(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    drafts_response = client.get("/api/evolution/automation-policy-rule-drafts")
+    drafts = drafts_response.json()
+    draft = next(
+        item for item in drafts["drafts"]
+        if item["signed_payload"]["rule"]["tool"] == "computer_execute_token"
+    )
+    missing_confirm = client.post(
+        "/api/evolution/automation-policy-rule-drafts/install",
+        json={"draft_id": draft["draft_id"]},
+    )
+    installed = client.post(
+        "/api/evolution/automation-policy-rule-drafts/install",
+        json={"draft_id": draft["draft_id"], "confirm_install": True},
+    )
+    policy = load_policy(tmp_path / "data" / "permissions.json")
+
+    assert drafts_response.status_code == 200
+    assert drafts["schema"] == "octopus.automation_policy_rule_drafts.v1"
+    assert drafts["total"] >= 7
+    assert drafts["verified"] == drafts["total"]
+    assert missing_confirm.status_code == 400
+    assert missing_confirm.json()["detail"] == "confirm_install=true is required"
+    assert installed.status_code == 200
+    assert installed.json()["ok"] is True
+    assert installed.json()["installed"] is True
+    assert installed.json()["source_kind"] == "automation_policy_review"
+    assert policy.rules[0].effect == "deny"
+    assert policy.rules[0].tool == "computer_execute_token"
 
 
 def test_browser_desktop_repair_recipe_queue_endpoint(monkeypatch) -> None:

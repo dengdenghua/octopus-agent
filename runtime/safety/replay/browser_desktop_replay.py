@@ -66,6 +66,7 @@ def _normalize_computer_activity(item: dict[str, Any]) -> dict[str, Any]:
     action = item.get("action") if isinstance(item.get("action"), dict) else {}
     risk = item.get("risk") if isinstance(item.get("risk"), dict) else {}
     detail = item.get("detail") if isinstance(item.get("detail"), dict) else {}
+    proof = item.get("proof") if isinstance(item.get("proof"), dict) else {}
     return {
         "event": str(item.get("event") or ""),
         "ok": bool(item.get("ok")),
@@ -73,6 +74,7 @@ def _normalize_computer_activity(item: dict[str, Any]) -> dict[str, Any]:
         "risk": _normalize_mapping(risk),
         "error": str(item.get("error") or ""),
         "detail": _normalize_mapping(detail),
+        "proof": _normalize_mapping(proof),
     }
 
 

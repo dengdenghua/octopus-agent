@@ -383,6 +383,31 @@
         "title": "AuthProvidersResponse",
         "type": "object"
       },
+      "AutomationPolicyRuleInstallBody": {
+        "properties": {
+          "confirm_install": {
+            "default": false,
+            "title": "Confirm Install",
+            "type": "boolean"
+          },
+          "draft_id": {
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 100,
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft_id"
+        ],
+        "title": "AutomationPolicyRuleInstallBody",
+        "type": "object"
+      },
       "Body_api_fs_import_directory_api_fs_import_directory_post": {
         "properties": {
           "files": {
@@ -2936,6 +2961,19 @@
           "providers"
         ],
         "title": "ProvidersResponse",
+        "type": "object"
+      },
+      "PullRequest": {
+        "properties": {
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag"
+        ],
+        "title": "PullRequest",
         "type": "object"
       },
       "RankRequest": {
@@ -14360,6 +14398,74 @@
         ]
       }
     },
+    "/api/cookbook/pull": {
+      "post": {
+        "description": "One-click pull a recommended model via ollama (runs in the background).",
+        "operationId": "pull_api_cookbook_pull_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PullRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pull Api Cookbook Pull Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pull",
+        "tags": [
+          "cookbook"
+        ]
+      }
+    },
+    "/api/cookbook/snapshot": {
+      "get": {
+        "description": "Detected hardware + ranked recommendations + ollama availability.",
+        "operationId": "snapshot_api_cookbook_snapshot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Snapshot Api Cookbook Snapshot Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Snapshot",
+        "tags": [
+          "cookbook"
+        ]
+      }
+    },
     "/api/cron": {
       "get": {
         "operationId": "api_cron_list_api_cron_get",
@@ -15030,6 +15136,143 @@
           }
         },
         "summary": "Queue Auto Verifier Drift",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/automation-policy-rule-drafts": {
+      "get": {
+        "operationId": "get_automation_policy_rule_drafts_api_evolution_automation_policy_rule_drafts_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Automation Policy Rule Drafts Api Evolution Automation Policy Rule Drafts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Automation Policy Rule Drafts",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/automation-policy-rule-drafts/install": {
+      "post": {
+        "operationId": "install_automation_policy_rule_draft_api_evolution_automation_policy_rule_drafts_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationPolicyRuleInstallBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Install Automation Policy Rule Draft Api Evolution Automation Policy Rule Drafts Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Automation Policy Rule Draft",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/automation-radar": {
+      "get": {
+        "operationId": "get_automation_radar_api_evolution_automation_radar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "target_score",
+            "required": false,
+            "schema": {
+              "default": 95,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Target Score",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Automation Radar Api Evolution Automation Radar Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Automation Radar",
         "tags": [
           "evolution"
         ]
@@ -17182,6 +17425,52 @@
         ]
       }
     },
+    "/api/evolution/permission-sandbox-quality": {
+      "get": {
+        "operationId": "get_permission_sandbox_quality_api_evolution_permission_sandbox_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Permission Sandbox Quality Api Evolution Permission Sandbox Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Permission Sandbox Quality",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/product-experience-quality": {
+      "get": {
+        "operationId": "get_product_experience_quality_api_evolution_product_experience_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Product Experience Quality Api Evolution Product Experience Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Product Experience Quality",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
     "/api/evolution/recommendations": {
       "get": {
         "operationId": "evolution_recommendations_api_evolution_recommendations_get",
@@ -17300,6 +17589,29 @@
           }
         },
         "summary": "Queue Repair Route Promotions",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/repo-context-quality": {
+      "get": {
+        "operationId": "get_repo_context_quality_api_evolution_repo_context_quality_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Repo Context Quality Api Evolution Repo Context Quality Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Repo Context Quality",
         "tags": [
           "evolution"
         ]
@@ -20218,16 +20530,6 @@
     "/api/kg/import": {
       "post": {
         "operationId": "api_kg_import_api_kg_import_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "request",
-            "required": true,
-            "schema": {
-              "title": "Request"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -20240,16 +20542,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "Api Kg Import",
@@ -20388,6 +20680,128 @@
           }
         },
         "summary": "Api Knowledge Neighbors",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/knowledge/path": {
+      "get": {
+        "operationId": "api_knowledge_path_api_knowledge_path_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "title": "Target",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_hops",
+            "required": false,
+            "schema": {
+              "default": 3,
+              "maximum": 6,
+              "minimum": 1,
+              "title": "Max Hops",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Knowledge Path Api Knowledge Path Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Knowledge Path",
+        "tags": [
+          "observability"
+        ]
+      }
+    },
+    "/api/knowledge/search": {
+      "get": {
+        "operationId": "api_knowledge_search_api_knowledge_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Knowledge Search Api Knowledge Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Knowledge Search",
         "tags": [
           "observability"
         ]
@@ -23123,6 +23537,103 @@
         ]
       }
     },
+    "/api/plugins/migration-readiness": {
+      "get": {
+        "operationId": "_plugin_migration_readiness_api_plugins_migration_readiness_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Migration Readiness Api Plugins Migration Readiness Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": " Plugin Migration Readiness",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/permission-rule-drafts": {
+      "get": {
+        "operationId": "_plugin_permission_rule_drafts_api_plugins_permission_rule_drafts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Permission Rule Drafts Api Plugins Permission Rule Drafts Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": " Plugin Permission Rule Drafts",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
+    "/api/plugins/permission-rule-drafts/install": {
+      "post": {
+        "operationId": "_plugin_permission_rule_draft_install_api_plugins_permission_rule_drafts_install_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response  Plugin Permission Rule Draft Install Api Plugins Permission Rule Drafts Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": " Plugin Permission Rule Draft Install",
+        "tags": [
+          "plugins"
+        ]
+      }
+    },
     "/api/plugins/smoke-summary": {
       "get": {
         "operationId": "_plugin_smoke_summary_api_plugins_smoke_summary_get",
@@ -24267,6 +24778,78 @@
         ]
       }
     },
+    "/api/searxng/disable": {
+      "post": {
+        "description": "Stop the managed SearXNG container (kept for fast re-enable).",
+        "operationId": "disable_api_searxng_disable_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Disable Api Searxng Disable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Disable",
+        "tags": [
+          "searxng"
+        ]
+      }
+    },
+    "/api/searxng/enable": {
+      "post": {
+        "description": "One-click deploy a local SearXNG container. Returns immediately; the\nimage pull + boot run in the background — poll /api/searxng/status.",
+        "operationId": "enable_api_searxng_enable_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Enable Api Searxng Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Enable",
+        "tags": [
+          "searxng"
+        ]
+      }
+    },
+    "/api/searxng/status": {
+      "get": {
+        "description": "Liveness of the optional one-click local SearXNG (private web-search\nbackend). ``up=false`` just means web search uses the default ddg\nbackend; deploy/stop go through the authenticated /api/searxng router.",
+        "operationId": "api_searxng_status_api_searxng_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Searxng Status Api Searxng Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Searxng Status",
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/api/settings/capabilities": {
       "get": {
         "operationId": "get_capabilities_api_settings_capabilities_get",
@@ -25037,6 +25620,30 @@
           }
         },
         "summary": "Api Status",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/storage/status": {
+      "get": {
+        "description": "Liveness of the octopus-storage sibling (本地数据库 / File Agent), as the\nco-launch heartbeat last observed it. ``up=false`` means search_documents\ndegrades; the heartbeat relaunches it when autostart owns its lifecycle.",
+        "operationId": "api_storage_status_api_storage_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Storage Status Api Storage Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Storage Status",
         "tags": [
           "health"
         ]
@@ -26871,6 +27478,50 @@
           }
         },
         "summary": "Update Task",
+        "tags": [
+          "team-tasks"
+        ]
+      }
+    },
+    "/api/team-tasks/{task_id}/process-timeline": {
+      "get": {
+        "operationId": "get_task_process_timeline_api_team_tasks__task_id__process_timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Task Process Timeline Api Team Tasks  Task Id  Process Timeline Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Task Process Timeline",
         "tags": [
           "team-tasks"
         ]
