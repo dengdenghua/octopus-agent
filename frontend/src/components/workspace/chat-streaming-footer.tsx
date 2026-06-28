@@ -3,6 +3,8 @@ import {
   CircleIcon,
   Loader2Icon,
   MessageCircleIcon,
+  MonitorIcon,
+  SquareActivityIcon,
   UsersIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -109,15 +111,47 @@ export function ChatStreamingFooter({
       )}
     >
       {hasLiveSignals && (
-        <div className="w-full">
+        <div className="w-full overflow-hidden rounded-2xl border border-border/60 bg-background/85 p-2.5 shadow-sm shadow-black/[0.03] backdrop-blur">
+          <div className="mb-2 flex min-w-0 items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="relative flex size-2.5 shrink-0 items-center justify-center">
+                <span className="absolute inline-flex size-2.5 animate-ping rounded-full bg-emerald-500/25" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+              </span>
+              <span className="truncate font-medium text-foreground">
+                {isTeamMode
+                  ? t.chatStreamingFooter.collaborating
+                  : normalizedMode === "code"
+                    ? t.chatStreamingFooter.coding
+                    : isDeepMode
+                      ? t.chatStreamingFooter.researching
+                      : t.chatStreamingFooter.processing}
+              </span>
+            </div>
+            <div className="hidden shrink-0 items-center gap-1.5 sm:flex">
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted/55 px-2 py-0.5">
+                <SquareActivityIcon className="size-3" />
+                {t.agentWorkbench.activityTrace}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted/55 px-2 py-0.5">
+                <MonitorIcon className="size-3" />
+                {t.agentWorkbench.computerViewLabel}
+              </span>
+            </div>
+          </div>
           <ProcessHeader
             mode={normalizedMode}
             events={semanticWorkEvents}
             expanded={detailsOpen}
             onToggle={() => setDetailsOpen((value) => !value)}
+            embedded
+          />
+          <LiveWorkbenchStrip
+            mode={normalizedMode}
+            events={semanticWorkEvents}
           />
           {detailsOpen && (
-            <div className="mt-1.5 border-l border-border/55 pl-4">
+            <div className="mt-2 border-l border-border/55 pl-4">
               <LiveToolTimeline
                 events={displayEvents}
                 className="py-0"
@@ -158,8 +192,28 @@ function SimpleThinkingFooter({
         isLoading ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
       )}
     >
-      <Loader2Icon className="size-4 animate-spin text-primary" />
-      <span>{t.chatStreamingFooter.thinking}</span>
+      <div className="flex min-w-0 items-center gap-2 rounded-xl border border-border/55 bg-background/85 px-3 py-2 shadow-sm shadow-black/[0.025] backdrop-blur">
+        <span className="relative flex size-3 shrink-0 items-center justify-center">
+          <span className="absolute inline-flex size-3 animate-ping rounded-full bg-primary/20" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-primary" />
+        </span>
+        <span className="shrink-0 font-medium text-foreground">
+          {t.chatStreamingFooter.thinking}
+        </span>
+        <span className="flex shrink-0 items-center gap-0.5" aria-hidden="true">
+          {[0, 1, 2].map((index) => (
+            <span
+              key={index}
+              className="size-1 animate-pulse rounded-full bg-primary/55"
+              style={{ animationDelay: `${index * 140}ms` }}
+            />
+          ))}
+        </span>
+        <span className="hidden min-w-0 items-center gap-1 text-[11px] text-muted-foreground sm:flex">
+          <SquareActivityIcon className="size-3" />
+          {t.agentWorkbench.activityTrace}
+        </span>
+      </div>
     </div>
   );
 }
@@ -169,11 +223,13 @@ function ProcessHeader({
   events,
   expanded,
   onToggle,
+  embedded = false,
 }: {
   mode: ReasoningMode | "code" | "team";
   events: LiveToolEvent[];
   expanded: boolean;
   onToggle: () => void;
+  embedded?: boolean;
 }) {
   const { t } = useI18n();
   const visibleEvents = semanticHeaderEvents(events);
@@ -207,7 +263,12 @@ function ProcessHeader({
   return (
     <button
       type="button"
-      className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/70 px-2.5 py-2 text-left text-xs text-muted-foreground shadow-sm shadow-black/[0.025] backdrop-blur transition-colors hover:bg-muted/25"
+      className={cn(
+        "group flex w-full items-center justify-between gap-3 rounded-xl text-left text-xs text-muted-foreground transition-colors hover:bg-muted/25",
+        embedded
+          ? "px-1.5 py-1.5"
+          : "border border-border/50 bg-background/70 px-2.5 py-2 shadow-sm shadow-black/[0.025] backdrop-blur",
+      )}
       onClick={onToggle}
       aria-expanded={expanded}
     >
@@ -239,28 +300,40 @@ function ProcessHeader({
         )}
         {running > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("running"))}
+            className={cn(
+              "rounded-full px-2 py-0.5",
+              agentRunBadgeClass("running"),
+            )}
           >
             {running} {t.chatStreamingFooter.running}
           </span>
         )}
         {waiting > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("waiting"))}
+            className={cn(
+              "rounded-full px-2 py-0.5",
+              agentRunBadgeClass("waiting"),
+            )}
           >
             {waiting} {t.chatStreamingFooter.awaitingConfirmation}
           </span>
         )}
         {done > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("done"))}
+            className={cn(
+              "rounded-full px-2 py-0.5",
+              agentRunBadgeClass("done"),
+            )}
           >
             {done} {t.chatStreamingFooter.done}
           </span>
         )}
         {error > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("error"))}
+            className={cn(
+              "rounded-full px-2 py-0.5",
+              agentRunBadgeClass("error"),
+            )}
           >
             {error} {t.chatStreamingFooter.error}
           </span>
@@ -279,6 +352,149 @@ function ProcessHeader({
       </div>
     </button>
   );
+}
+
+function LiveWorkbenchStrip({
+  mode,
+  events,
+}: {
+  mode: ReasoningMode | "code" | "team";
+  events: LiveToolEvent[];
+}) {
+  const { t } = useI18n();
+  const participants = participantSummaries(events);
+  const current =
+    [...events]
+      .reverse()
+      .find(
+        (event) =>
+          event.status === "running" || event.status === "waiting_approval",
+      ) ?? events[events.length - 1];
+  const computerLabel = current
+    ? `${workbenchKindLabel(current, t)} · ${eventSummary(current)}`
+    : t.agentWorkbench.computerViewHint;
+  const activityLabel =
+    participants.length > 0
+      ? `${participants.length} ${t.chatStreamingFooter.agentCollaboration}`
+      : t.agentWorkbench.eventsCount(events.length);
+
+  return (
+    <div className="mt-2 grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+      <div className="flex min-w-0 items-center gap-2 rounded-xl bg-muted/35 px-2.5 py-2">
+        <SquareActivityIcon className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-medium text-foreground">
+            {mode === "team"
+              ? t.message.agentCluster
+              : t.agentWorkbench.activityTrace}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {activityLabel}
+          </div>
+        </div>
+        <LivePulseDots />
+      </div>
+      <div className="flex min-w-0 items-center gap-2 rounded-xl bg-muted/35 px-2.5 py-2">
+        <MonitorIcon className="size-4 shrink-0 text-sky-600 dark:text-sky-400" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-medium text-foreground">
+            {t.agentWorkbench.computerViewLabel}
+          </div>
+          <div className="truncate text-[11px] text-muted-foreground">
+            {computerLabel}
+          </div>
+        </div>
+      </div>
+      {participants.length > 0 && (
+        <div className="flex min-w-0 flex-wrap gap-1.5 sm:col-span-2">
+          {participants.slice(0, 4).map((participant, index) => (
+            <span
+              key={participant.name}
+              title={participant.name}
+              className={cn(
+                "inline-flex min-w-0 items-center gap-1.5 rounded-full px-2 py-1 text-[11px]",
+                agentRunBadgeClass(participant.status),
+              )}
+            >
+              <span className="font-mono text-[10px]" aria-hidden="true">
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span className="truncate">
+                {t.message.agent} {String(index + 1).padStart(2, "0")}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LivePulseDots() {
+  return (
+    <span className="flex shrink-0 items-center gap-0.5" aria-hidden="true">
+      {[0, 1, 2].map((index) => (
+        <span
+          key={index}
+          className="size-1.5 animate-pulse rounded-full bg-emerald-500/65"
+          style={{ animationDelay: `${index * 140}ms` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function participantSummaries(
+  events: LiveToolEvent[],
+): { name: string; status: AgentRunState }[] {
+  const byName = new Map<string, AgentRunState>();
+  for (const event of events) {
+    const name = event.agentName ?? event.subAgentRole ?? event.agentId;
+    if (!name) continue;
+    const current = byName.get(name);
+    const next =
+      event.status === "error"
+        ? "error"
+        : event.status === "waiting_approval"
+          ? "waiting"
+          : event.status === "running"
+            ? "running"
+            : event.status === "done"
+              ? "done"
+              : "pending";
+    if (next === "error") {
+      byName.set(name, next);
+      continue;
+    }
+    if (current === "running" || current === "waiting") continue;
+    byName.set(name, next);
+  }
+  return Array.from(byName.entries()).map(([name, status]) => ({
+    name,
+    status,
+  }));
+}
+
+function workbenchKindLabel(
+  event: LiveToolEvent,
+  t: ReturnType<typeof useI18n>["t"],
+): string {
+  if (/shell|bash|terminal|exec|test|verify/i.test(event.name)) {
+    return t.agentWorkbench.kindTerminal;
+  }
+  if (/browser|browse|fetch|url/i.test(event.name)) {
+    return t.agentWorkbench.kindBrowser;
+  }
+  if (/search/i.test(event.name)) return t.agentWorkbench.kindSearch;
+  if (/read|grep|glob|list/i.test(event.name)) return t.agentWorkbench.kindRead;
+  if (/(write|edit|replace|create|patch)/i.test(event.name)) {
+    return t.agentWorkbench.kindFile;
+  }
+  if (/todo|plan/i.test(event.name)) return t.agentWorkbench.kindTodos;
+  if (/agent|swarm|delegate|spawn|team/i.test(event.name)) {
+    return t.agentWorkbench.kindAgent;
+  }
+  return t.agentWorkbench.executingTask;
 }
 
 function semanticHeaderEvents(events: LiveToolEvent[]) {

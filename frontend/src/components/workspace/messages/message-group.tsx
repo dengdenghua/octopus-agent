@@ -8,8 +8,10 @@ import {
   GlobeIcon,
   ListTodoIcon,
   MessageCircleQuestionMarkIcon,
+  MonitorIcon,
   NotebookPenIcon,
   SearchIcon,
+  SquareActivityIcon,
   ShieldAlertIcon,
   SquareTerminalIcon,
   UsersIcon,
@@ -628,8 +630,8 @@ export function MessageGroup({
           aria-live="polite"
           data-testid="live-process-strip"
           className={cn(
-            "mb-1 flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-[11px]",
-            "bg-background/70 text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+            "mb-2 min-w-0 rounded-xl border px-3 py-2 text-[11px]",
+            "bg-background/80 text-muted-foreground shadow-sm shadow-black/[0.025] backdrop-blur",
             liveProcessState === "running" &&
               "border-emerald-500/20 bg-emerald-500/[0.045]",
             liveProcessState === "waiting" &&
@@ -638,38 +640,54 @@ export function MessageGroup({
               "border-destructive/25 bg-destructive/[0.055]",
           )}
         >
-          <span className="relative flex size-2.5 shrink-0 items-center justify-center">
-            <span
-              className={cn(
-                "absolute inline-flex size-2.5 rounded-full opacity-25",
-                agentRunStatusLightClass(liveProcessState),
-                agentRunStatusLightPulseClass(liveProcessState),
-              )}
-            />
-            <span
-              className={cn(
-                "relative inline-flex size-1.5 rounded-full",
-                agentRunStatusLightClass(liveProcessState),
-              )}
-            />
-          </span>
-          <span className="shrink-0 font-medium text-foreground/85">
-            {t.messageGrouping.liveProcess}
-          </span>
-          <span
-            className={cn(
-              "shrink-0 rounded-full px-1.5 py-0.5 leading-none",
-              agentRunBadgeClass(liveProcessState),
-            )}
-          >
-            {liveProcessStatusLabel}
-          </span>
-          <span className="min-w-0 flex-1 truncate">{liveProcessSummary}</span>
-          {replayStepCount > 0 && (
-            <span className="shrink-0 rounded-full bg-muted/55 px-1.5 py-0.5 text-muted-foreground/80">
-              {t.messageGrouping.liveProcessHistory(replayStepCount)}
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="relative flex size-2.5 shrink-0 items-center justify-center">
+              <span
+                className={cn(
+                  "absolute inline-flex size-2.5 rounded-full opacity-25",
+                  agentRunStatusLightClass(liveProcessState),
+                  agentRunStatusLightPulseClass(liveProcessState),
+                )}
+              />
+              <span
+                className={cn(
+                  "relative inline-flex size-1.5 rounded-full",
+                  agentRunStatusLightClass(liveProcessState),
+                )}
+              />
             </span>
-          )}
+            <span className="shrink-0 font-medium text-foreground/85">
+              {t.messageGrouping.liveProcess}
+            </span>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 leading-none",
+                agentRunBadgeClass(liveProcessState),
+              )}
+            >
+              {liveProcessStatusLabel}
+            </span>
+            <span className="min-w-0 flex-1 truncate">
+              {liveProcessSummary}
+            </span>
+          </div>
+          <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5 pl-4">
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-background/70 px-2 py-0.5 text-muted-foreground">
+              <SquareActivityIcon className="size-3 shrink-0" />
+              <span className="truncate">{t.agentWorkbench.activityTrace}</span>
+            </span>
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-background/70 px-2 py-0.5 text-muted-foreground">
+              <MonitorIcon className="size-3 shrink-0" />
+              <span className="truncate">
+                {t.agentWorkbench.computerViewLabel}
+              </span>
+            </span>
+            {replayStepCount > 0 && (
+              <span className="inline-flex min-w-0 items-center rounded-full bg-muted/55 px-2 py-0.5 text-muted-foreground/80">
+                {t.messageGrouping.liveProcessHistory(replayStepCount)}
+              </span>
+            )}
+          </div>
         </div>
       )}
       {showTimelineToggle && (
