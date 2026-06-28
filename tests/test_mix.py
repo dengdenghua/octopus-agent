@@ -128,3 +128,25 @@ def test_mix_sse_frames_emit_valid_openai_stream() -> None:
     assert '"finish_reason": "stop"' in joined
     assert '"model": "octopus-mix"' in joined
     assert joined.rstrip().endswith("[DONE]")
+
+
+def test_mix_config_roundtrip_and_priority(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(mix, "_config_path", lambda: tmp_path / "mix_config.json")
+    # save validates: trims blanks, caps count at _MAX_PROPOSERS
+    saved = mix.save_mix_config({"proposers": ["a", " ", "b"], "aggregator": "agg", "n": 99})
+    assert saved["proposers"] == ["a", "b"]
+    assert saved["aggregator"] == "agg"
+    assert saved["n"] == mix._MAX_PROPOSERS
+    # load round-trips
+    assert mix.load_mix_config()["proposers"] == ["a", "b"]
+    # config WINS over env
+    monkeypatch.setenv("OCTOPUS_MIX_PROPOSERS", "x,y,z")
+    monkeypatch.setenv("OCTOPUS_MIX_AGGREGATOR", "env-agg")
+    assert mix._proposer_pool() == ["a", "b"]
+    assert mix._aggregator_model() == "agg"
+
+
+def test_mix_config_missing_falls_back_to_env(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(mix, "_config_path", lambda: tmp_path / "absent.json")
+    monkeypatch.setenv("OCTOPUS_MIX_PROPOSERS", "x,y")
+    assert mix._proposer_pool() == ["x", "y"]
