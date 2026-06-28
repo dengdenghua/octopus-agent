@@ -13,10 +13,12 @@ from pathlib import Path
 from .base import MigrationPlan
 from .claude_adapter import scan_claude
 from .codex_adapter import scan_codex
+from .qoder_adapter import scan_qoder
 
 _ADAPTERS = {
     "codex": scan_codex,
     "claude": scan_claude,
+    "qoder": scan_qoder,
 }
 
 SUPPORTED_SOURCES = tuple(_ADAPTERS)
