@@ -39,6 +39,7 @@ import { getBackendBaseURL } from "@/core/config";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
+import { SearxngControl } from "@/components/workspace/searxng-control";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -689,6 +690,9 @@ export default function PrivacySettingsPage() {
           />
         </div>
       </div>
+
+      {/* ─── Local private web-search backend (one-click SearXNG) ─── */}
+      <SearxngControl />
 
       {/* ─── Alternative unlock paths ─── */}
       <div className="rounded-lg border border-border/40 bg-muted/20 p-4">
