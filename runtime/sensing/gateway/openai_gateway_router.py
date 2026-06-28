@@ -16,6 +16,12 @@ from .openai_gateway.context_manager import (
     _render_conversation_history,
     _runtime_soul_for_agent,
 )
+from .openai_gateway.mix import (
+    is_mix_model,
+    mix_model_ids,
+    mix_sse_frames,
+    run_mix_chat,
+)
 from .openai_gateway.request_parser import _resolve_actor
 from .openai_gateway.response_formatter import (
     _assistant_text_from_trajectory,
@@ -213,6 +219,14 @@ def create_openai_router(
                     "created": now,
                     "owned_by": "octopus-agent",
                 }
+            ] + [
+                {
+                    "id": _mix_id,
+                    "object": "model",
+                    "created": now,
+                    "owned_by": "octopus-agent",
+                }
+                for _mix_id in mix_model_ids()
             ],
         }
 
@@ -431,6 +445,40 @@ def create_openai_router(
                 ),
             },
         )
+
+        # Mix virtual model: explicit request for mixture-of-agents
+        # orchestration. Runs BEFORE reflex so it's never short-circuited by
+        # the trivial-input fast path.
+        if is_mix_model(requested_model):
+            from runtime.sensing.model_router.molili_router import (
+                current_actor as _molili_actor_ctx,
+            )
+            _mix_agent_ctx = (
+                selected_agent.agent_id if selected_agent is not None else None
+            )
+            _mix_token = _molili_actor_ctx.set(actor)
+            try:
+                with journal_context(
+                    agent_id=_mix_agent_ctx,
+                    conversation_id=conversation_id,
+                ):
+                    mix_result = run_mix_chat(
+                        stack, intent, requested_model, default_arm,
+                        actor=actor, agent=selected_agent,
+                        run_chat=_run_chat, optimizer=prompt_optimizer,
+                    )
+            finally:
+                _molili_actor_ctx.reset(_mix_token)
+            mix_meta = mix_result.setdefault("octopus", {})
+            mix_meta["conversation_id"] = conversation_id
+            if selected_agent is not None:
+                mix_meta["agent"] = selected_agent.agent_id
+            if stream:
+                return StreamingResponse(
+                    mix_sse_frames(mix_result, requested_model),
+                    media_type="text/event-stream",
+                )
+            return mix_result
 
         reflex_response = _maybe_reflex_chat(
             reflex_router, intent, stack, requested_model, actor=actor,
