@@ -117,6 +117,14 @@ const PROVIDERS: readonly ProviderPreset[] = [
     ],
   },
   {
+    label: "Kimi Coding",
+    value: "kimi-coding",
+    baseUrl: "https://api.kimi.com/coding/v1",
+    protocol: "openai",
+    consoleUrl: "https://platform.moonshot.cn/console/api-keys",
+    suggestedModels: ["K2.7-Code", "kimi-k2.7-code"],
+  },
+  {
     label: "Zhipu · GLM",
     value: "zhipu",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
@@ -163,13 +171,54 @@ const PROVIDERS: readonly ProviderPreset[] = [
     baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     protocol: "openai",
     consoleUrl: "https://console.volcengine.com/ark",
-    // Implementation note.
-    // Implementation note.
     suggestedModels: [
       "doubao-pro-256k",
       "doubao-1-5-pro-256k",
       "doubao-pro-32k",
     ],
+  },
+  {
+    label: "Baichuan",
+    value: "baichuan",
+    baseUrl: "https://api.baichuan-ai.com/v1",
+    protocol: "openai",
+    consoleUrl: "https://platform.baichuan-ai.com/console/apikey",
+    suggestedModels: ["Baichuan4", "Baichuan3-Turbo"],
+  },
+  {
+    label: "01.AI · Yi",
+    value: "lingyiwanwu",
+    baseUrl: "https://api.lingyiwanwu.com/v1",
+    protocol: "openai",
+    consoleUrl: "https://platform.lingyiwanwu.com/",
+    suggestedModels: ["yi-lightning", "yi-large"],
+  },
+  {
+    label: "StepFun",
+    value: "stepfun",
+    baseUrl: "https://api.stepfun.com/v1",
+    protocol: "openai",
+    consoleUrl: "https://platform.stepfun.com/",
+    suggestedModels: ["step-2-mini", "step-1-8k"],
+  },
+  {
+    label: "SiliconFlow",
+    value: "siliconflow",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    protocol: "openai",
+    consoleUrl: "https://cloud.siliconflow.cn/account/ak",
+    suggestedModels: [
+      "deepseek-ai/DeepSeek-V3",
+      "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+    ],
+  },
+  {
+    label: "Baidu · Qianfan",
+    value: "qianfan",
+    baseUrl: "https://qianfan.baidubce.com/v2",
+    protocol: "openai",
+    consoleUrl: "https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application",
+    suggestedModels: ["ernie-4.5-turbo-128k", "ernie-x1-turbo-32k"],
   },
 
   // Implementation note.

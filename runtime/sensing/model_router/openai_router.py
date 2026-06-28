@@ -17,6 +17,14 @@ from .models import (
     ModelRouter,
     normalize_reasoning_effort,
 )
+from .openai_compat_providers import (
+    extract_openai_compat_reasoning,
+    extract_openai_compat_usage,
+    normalize_openai_compat_payload,
+    parse_tool_call_arguments,
+    resolve_openai_compat_profile,
+    retry_payloads_after_openai_compat_error,
+)
 
 try:
     import httpx  # type: ignore[import-untyped]
@@ -96,6 +104,9 @@ class OpenAIModelRouter(Provider, ModelRouter):
         self.extra_headers = dict(extra_headers or {})
         self._client = client  # Implementation note.
         self._owns_client = client is None
+        self._provider_profile = resolve_openai_compat_profile(
+            self.base_url, self.default_model,
+        )
 
 
     def call(self, request: ModelRequest) -> ModelResponse:
@@ -115,15 +126,16 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     json=payload,
                     headers=self._build_headers(),
                 )
-                if _should_retry_without_openai_thinking(
-                    resp.status_code, payload,
+                for fallback_payload in self._retry_payloads(
+                    resp.status_code, resp.text, payload, model,
                 ):
-                    fallback_payload = _without_openai_thinking(payload)
                     resp = client.post(
                         f"{self.base_url}/chat/completions",
                         json=fallback_payload,
                         headers=self._build_headers(),
                     )
+                    if resp.status_code < 400:
+                        break
             except Exception as e:  # noqa: BLE001
                 raise OpenAIRouterError(
                     f"http_error: {type(e).__name__}: {e}"
@@ -144,9 +156,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
 
             text, finish_reason, thinking = self._extract_text(data)
             tool_calls = self._extract_tool_calls(data)
-            usage = data.get("usage") or {}
-            input_tokens = int(usage.get("prompt_tokens", 0) or 0)
-            output_tokens = int(usage.get("completion_tokens", 0) or 0)
+            input_tokens, output_tokens = extract_openai_compat_usage(data)
             cost_usd = self._estimate_cost(model, input_tokens, output_tokens)
 
             cost = CostEntry(
@@ -223,8 +233,9 @@ class OpenAIModelRouter(Provider, ModelRouter):
                 first_status = r.status_code
                 first_text = r.text
 
-            if _should_retry_without_openai_thinking(first_status, payload):
-                fallback_payload = _without_openai_thinking(payload)
+            for fallback_payload in self._retry_payloads(
+                first_status, first_text, payload, model,
+            ):
                 with client.stream(
                     "POST", url,
                     json=fallback_payload,
@@ -238,6 +249,8 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     r.read()
                     first_status = r.status_code
                     first_text = r.text
+                    if first_status < 400:
+                        return
 
             raise OpenAIRouterError(
                 _format_openai_http_error(first_status, first_text)
@@ -309,7 +322,30 @@ class OpenAIModelRouter(Provider, ModelRouter):
         if request.enable_thinking:
             payload["reasoning_effort"] = _openai_reasoning_effort(request.reasoning_effort)
             payload["thinking"] = {"type": "enabled"}
-        return payload
+        return normalize_openai_compat_payload(
+            payload,
+            profile=self._profile_for_model(model),
+        )
+
+    def _profile_for_model(self, model: str):
+        profile = resolve_openai_compat_profile(self.base_url, model)
+        if profile.id == "openai_compat":
+            return self._provider_profile
+        return profile
+
+    def _retry_payloads(
+        self,
+        status_code: int,
+        body: str,
+        payload: dict[str, Any],
+        model: str,
+    ) -> list[dict[str, Any]]:
+        return retry_payloads_after_openai_compat_error(
+            payload,
+            status_code=status_code,
+            body=body,
+            profile=self._profile_for_model(model),
+        )
 
     @staticmethod
     def _model_supports_tool_use(model: str) -> bool:
@@ -380,7 +416,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         content = msg.get("content", "")
         if content is None:
             content = ""
-        thinking = msg.get("reasoning_content") or ""
+        thinking = extract_openai_compat_reasoning(msg)
         if isinstance(content, list):
             parts = [
                 p.get("text") or ""
@@ -428,12 +464,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
             fn = call.get("function") or {}
             name = fn.get("name") or ""
             args_raw = fn.get("arguments") or ""
-            try:
-                args = (
-                    json.loads(args_raw) if args_raw else {}
-                )
-            except json.JSONDecodeError:
-                args = {}
+            args = parse_tool_call_arguments(args_raw)
             out.append(ToolCall(
                 id=str(call.get("id") or ""),
                 name=str(name),

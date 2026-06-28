@@ -35,6 +35,27 @@ def test_iter_openai_sse_preserves_reasoning_content():
     assert events[-1].final.output_tokens == 3
 
 
+def test_iter_openai_sse_preserves_reasoning_aliases_and_byte_lines():
+    response = _FakeSSE([
+        b'data: {"choices":[{"delta":{"reasoning":"step "}}]}',
+        b'data: {"choices":[{"delta":{"thinking":"two"}}]}',
+        b'data: {"choices":[{"delta":{"content":[{"type":"text","text":"answer"}]}}]}',
+        b"data: [DONE]",
+    ])
+
+    events = list(iter_openai_sse(response, model="glm-4.6"))
+
+    assert [event.type for event in events] == [
+        "thinking_delta",
+        "thinking_delta",
+        "text_delta",
+        "done",
+    ]
+    assert events[-1].final is not None
+    assert events[-1].final.thinking == "step two"
+    assert events[-1].final.text == "answer"
+
+
 def test_iter_openai_sse_emits_streamed_tool_call():
     response = _FakeSSE([
         (
@@ -60,6 +81,22 @@ def test_iter_openai_sse_emits_streamed_tool_call():
     assert tool_event.tool_call.input == {"path": "README.md"}
     assert events[-1].final is not None
     assert events[-1].final.tool_calls == [tool_event.tool_call]
+
+
+def test_iter_openai_sse_accepts_python_repr_tool_arguments():
+    response = _FakeSSE([
+        (
+            'data: {"choices":[{"delta":{"tool_calls":[{"index":0,'
+            '"id":"call_1","type":"function","function":{"name":"read_file",'
+            '"arguments":"{\'path\': \'README.md\'}"}}]}}]}'
+        ),
+        "data: [DONE]",
+    ])
+
+    events = list(iter_openai_sse(response, model="glm-4.6"))
+
+    assert events[0].tool_call is not None
+    assert events[0].tool_call.input == {"path": "README.md"}
 
 
 def test_iter_openai_sse_preserves_finish_reason():

@@ -250,6 +250,68 @@ class TestRequestShape:
         assert "temperature" not in payload
         assert payload["max_tokens"] == 128
 
+    def test_kimi_coding_profile_omits_sampling_without_custom_flag(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(
+            base_url="https://api.kimi.com/coding/v1",
+            client=fake,
+        )
+        r.call(_req(model="kimi-k2.7-code"))
+
+        payload = fake.calls[0]["json"]
+        assert payload["model"] == "kimi-k2.7-code"
+        assert payload["max_tokens"] == 128
+        assert "temperature" not in payload
+
+    def test_moonshot_profile_clamps_temperature(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(
+            base_url="https://api.moonshot.cn/v1",
+            client=fake,
+        )
+        r.call(_req(model="moonshot-v1-128k").model_copy(update={"temperature": 1.8}))
+
+        payload = fake.calls[0]["json"]
+        assert payload["temperature"] == 1.0
+
+    def test_qwen_retries_max_tokens_as_completion_tokens(self):
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {
+                "error": {
+                    "message": "max_completion_tokens is expected instead of max_tokens",
+                },
+            }),
+            _FakeResponse(200, _openai_response("qwen ok")),
+        ])
+        r = OpenAIModelRouter(
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            client=fake,
+        )
+
+        resp = r.call(_req(model="qwen-plus"))
+
+        assert resp.text == "qwen ok"
+        assert len(fake.calls) == 2
+        assert "max_tokens" in fake.calls[0]["json"]
+        assert "max_completion_tokens" in fake.calls[1]["json"]
+        assert "max_tokens" not in fake.calls[1]["json"]
+
+    def test_minimax_thinking_payload_uses_adaptive_style(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(
+            base_url="https://api.minimaxi.com/v1",
+            client=fake,
+        )
+        r.call(
+            _req(model="MiniMax-M2").model_copy(
+                update={"enable_thinking": True, "reasoning_effort": "high"},
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        assert "reasoning_effort" not in payload
+        assert payload["thinking"] == {"type": "adaptive"}
+
     def test_thinking_custom_model_lifts_tiny_token_budget(
         self,
         monkeypatch,
@@ -432,6 +494,44 @@ class TestResponseParsing:
 
         assert resp.text == ""
         assert [call.name for call in resp.tool_calls] == ["bb_read"]
+
+    def test_python_repr_tool_arguments_are_parsed(self):
+        payload = _openai_response(text="")
+        payload["choices"][0]["message"]["content"] = None
+        payload["choices"][0]["message"]["tool_calls"] = [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "read_file", "arguments": "{'path': 'README.md'}"},
+            }
+        ]
+        fake = _FakeClient(response=_FakeResponse(200, payload))
+        r = OpenAIModelRouter(
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            client=fake,
+        )
+
+        resp = r.call(_req(model="glm-4.6"))
+
+        assert resp.tool_calls[0].name == "read_file"
+        assert resp.tool_calls[0].input == {"path": "README.md"}
+
+    def test_reasoning_aliases_and_usage_aliases_are_parsed(self):
+        payload = _openai_response(text="answer")
+        payload["choices"][0]["message"]["reasoning"] = "plan"
+        payload["choices"][0]["usage"] = {
+            "input_tokens": "11",
+            "output_tokens": "6",
+        }
+        del payload["usage"]
+        fake = _FakeClient(response=_FakeResponse(200, payload))
+        r = OpenAIModelRouter(base_url="https://api.deepseek.com/v1", client=fake)
+
+        resp = r.call(_req(model="deepseek-reasoner"))
+
+        assert resp.thinking == "plan"
+        assert resp.input_tokens == 11
+        assert resp.output_tokens == 6
 
     def test_null_text_block_is_ignored(self):
         payload = _openai_response()

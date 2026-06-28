@@ -29,6 +29,11 @@ from collections.abc import Iterator
 from typing import Any
 
 from .models import CostEntry, ModelResponse, ModelStreamEvent
+from .openai_compat_providers import (
+    extract_openai_compat_reasoning,
+    extract_openai_compat_usage,
+    parse_tool_call_arguments,
+)
 
 
 def iter_openai_sse(
@@ -95,6 +100,8 @@ def iter_openai_sse(
                 exc.__class__.__name__,
             )
             break
+        if isinstance(line, bytes):
+            line = line.decode("utf-8", errors="ignore")
         line = line.strip()
         if not line:
             continue
@@ -109,10 +116,10 @@ def iter_openai_sse(
 
         # Usage block · some providers (OpenAI, DeepSeek) include
         # ``usage`` on the final chunk even in streaming mode.
-        usage = chunk.get("usage")
-        if isinstance(usage, dict):
-            input_tokens = int(usage.get("prompt_tokens") or 0)
-            output_tokens = int(usage.get("completion_tokens") or 0)
+        chunk_input, chunk_output = extract_openai_compat_usage(chunk)
+        if chunk_input or chunk_output:
+            input_tokens = chunk_input
+            output_tokens = chunk_output
 
         choices = chunk.get("choices") or []
         if not choices:
@@ -125,14 +132,14 @@ def iter_openai_sse(
         if isinstance(chunk_finish, str) and chunk_finish:
             finish_reason = chunk_finish
         delta = choices[0].get("delta") or {}
-        reasoning_piece = delta.get("reasoning_content") or ""
+        reasoning_piece = extract_openai_compat_reasoning(delta)
         if reasoning_piece:
             accumulated_reasoning.append(reasoning_piece)
             yield ModelStreamEvent(
                 type="thinking_delta", delta=reasoning_piece,
             )
 
-        piece = delta.get("content") or ""
+        piece = _render_content_delta(delta.get("content"))
         if piece:
             accumulated.append(piece)
             yield ModelStreamEvent(type="text_delta", delta=piece)
@@ -153,8 +160,12 @@ def iter_openai_sse(
                 if isinstance(fn, dict):
                     if fn.get("name"):
                         slot["name"] = str(fn["name"])
-                    args_piece = fn.get("arguments") or ""
-                    if args_piece:
+                    args_piece = fn.get("arguments")
+                    if isinstance(args_piece, dict):
+                        slot["arguments"] = json.dumps(
+                            args_piece, ensure_ascii=False,
+                        )
+                    elif args_piece:
                         slot["arguments"] += str(args_piece)
 
     tool_calls: list[Any] = []
@@ -164,10 +175,7 @@ def iter_openai_sse(
         for index in sorted(tool_state):
             slot = tool_state[index]
             args_raw = slot.get("arguments") or ""
-            try:
-                args = json.loads(args_raw) if args_raw else {}
-            except json.JSONDecodeError:
-                args = {}
+            args = parse_tool_call_arguments(args_raw)
             tool_calls.append(ToolCall(
                 id=str(slot.get("id") or ""),
                 name=str(slot.get("name") or ""),
@@ -193,3 +201,21 @@ def iter_openai_sse(
             ),
         ),
     )
+
+
+def _render_content_delta(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("content")
+                if isinstance(text, str):
+                    parts.append(text)
+            elif isinstance(item, str):
+                parts.append(item)
+        return "".join(parts)
+    return json.dumps(value, ensure_ascii=False, default=str)

@@ -111,6 +111,20 @@ Key 来源  : https://platform.moonshot.cn/console/api-keys
 Tool use  : ✅ 严格遵循 OpenAI 规范 · 开箱即用
 ```
 
+#### Kimi Coding
+
+```
+Protocol  : OpenAI
+Base URL  : https://api.kimi.com/coding/v1
+Key 来源  : https://platform.moonshot.cn/console/api-keys
+推荐模型  :
+  - K2.7-Code
+  - kimi-k2.7-code
+Tool use  : ✅
+小坑      : coding endpoint 对采样参数更严格，运行时会自动去掉
+            temperature/top_p/reasoning_effort/thinking 等扩展字段。
+```
+
 #### 智谱 · GLM
 
 ```
@@ -183,6 +197,66 @@ Tool use  : ✅
             填的是接入点 ID 而非模型名（如 ``ep-20250123-xxxx``）
 ```
 
+#### 百川智能 · Baichuan
+
+```
+Protocol  : OpenAI
+Base URL  : https://api.baichuan-ai.com/v1
+Key 来源  : https://platform.baichuan-ai.com/console/apikey
+推荐模型  :
+  - Baichuan4
+  - Baichuan3-Turbo
+Tool use  : ✅（取决于具体模型）
+```
+
+#### 零一万物 · 01.AI Yi
+
+```
+Protocol  : OpenAI
+Base URL  : https://api.lingyiwanwu.com/v1
+Key 来源  : https://platform.lingyiwanwu.com/
+推荐模型  :
+  - yi-lightning
+  - yi-large
+Tool use  : ✅（取决于具体模型）
+```
+
+#### 阶跃星辰 · StepFun
+
+```
+Protocol  : OpenAI
+Base URL  : https://api.stepfun.com/v1
+Key 来源  : https://platform.stepfun.com/
+推荐模型  :
+  - step-2-mini
+  - step-1-8k
+Tool use  : ✅
+```
+
+#### SiliconFlow
+
+```
+Protocol  : OpenAI
+Base URL  : https://api.siliconflow.cn/v1
+Key 来源  : https://cloud.siliconflow.cn/account/ak
+推荐模型  :
+  - deepseek-ai/DeepSeek-V3
+  - Qwen/Qwen3-Coder-480B-A35B-Instruct
+Tool use  : ✅（取决于托管模型）
+```
+
+#### 百度智能云 · 千帆
+
+```
+Protocol  : OpenAI
+Base URL  : https://qianfan.baidubce.com/v2
+Key 来源  : https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application
+推荐模型  :
+  - ernie-4.5-turbo-128k
+  - ernie-x1-turbo-32k
+Tool use  : ✅（取决于具体模型）
+```
+
 ---
 
 ## 本地 / 私有部署
@@ -248,6 +322,20 @@ Tool use  : ✅（取决于选的模型）
 5. **统一成 `ModelResponse.tool_calls`** → Octopus 的 agentic loop 一视同仁
 
 **只要厂商支持 OpenAI 的 `tools` 字段（或 Anthropic / Gemini 的原生形），Octopus 就能无脑接入**。
+
+### 国产 OpenAI-compatible 兼容层
+
+运行时会按 `base_url + model` 自动识别 DeepSeek、Kimi、Kimi Coding、
+Qwen/DashScope、GLM、Doubao/Ark、MiniMax、Hunyuan、Baichuan、01.AI Yi、
+StepFun、SiliconFlow、Baidu Qianfan。识别后会做三类兼容：
+
+- **请求归一化**：Kimi Coding 自动移除采样/思考扩展；Kimi 常规接口自动把
+  `temperature` 限制到兼容范围；MiniMax 思考模型用 adaptive thinking；其他
+  国产兼容接口默认不发送 OpenAI-only `reasoning_effort/thinking`。
+- **400/422 降级重试**：上游报不支持 `tool_choice`、采样参数、`max_tokens` /
+  `max_completion_tokens` 或 schema `additionalProperties` 时，会用最小变更重试一次或多次。
+- **响应归一化**：`reasoning_content`、`reasoning`、`thinking`、`reasoning_details`
+  都会进入 Octopus 的 thinking channel；GLM 等偶发的 python-repr 工具参数会容错解析。
 
 ---
 
