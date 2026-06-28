@@ -185,7 +185,10 @@ class _BatchEntry:
         """(total, completed, failed, cancelled)."""
         total = len(self.tasks)
         completed = sum(1 for t in self.tasks.values() if t.status == "completed")
-        failed = sum(1 for t in self.tasks.values() if t.status == "failed")
+        failed = sum(
+            1 for t in self.tasks.values()
+            if t.status in ("failed", "timed_out")
+        )
         cancelled = sum(
             1 for t in self.tasks.values() if t.status == "cancelled"
         )

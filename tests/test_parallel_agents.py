@@ -432,6 +432,42 @@ class TestRunnerError:
         finally:
             o.shutdown(wait=False)
 
+    def test_timed_out_tasks_count_as_failed_in_batch_snapshots(self, orch):
+        batch = orch.dispatch([DispatchTaskInput(task_id="slow", description="x")])
+        for _ in range(100):
+            snap = orch.get_batch(batch.batch_id)
+            assert snap is not None
+            if snap.status == "completed":
+                break
+            time.sleep(0.02)
+
+        with orch._lock:
+            internal = orch._batches[batch.batch_id]
+            entry = internal.tasks["slow"]
+            entry.status = "timed_out"
+            entry.error = "runner_timeout"
+            internal.completed_at = None
+            internal.aggregated_content = None
+            orch._maybe_close_batch_locked(internal)
+
+        snap = orch.get_batch(batch.batch_id)
+        assert snap is not None
+        assert snap.status == "failed"
+        assert snap.failed_tasks == 1
+        assert snap.cancelled_tasks == 0
+        assert snap.completion_receipt["ready"] is False
+        assert snap.completion_receipt["state"]["failed"] == 1
+        assert "failed_work_items" in snap.completion_receipt["issues"]
+        final_stage = [
+            event for event in snap.event_log
+            if event.type == "stage_change" and event.stage == "final_report"
+        ][-1]
+        assert final_stage.status == "failed"
+        assert final_stage.payload["failed_tasks"] == 1
+
+        st = orch.status()
+        assert st.failed_count == 1
+
 
 # ═══════════════════════════════════════════════════════════════
 # FastAPI router
