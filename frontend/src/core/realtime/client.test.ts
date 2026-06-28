@@ -11,7 +11,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RealtimeClient } from "./client";
+import { RealtimeClient, toWebSocketURL } from "./client";
 import type { Envelope } from "./envelope";
 
 class FakeWebSocket {
@@ -469,5 +469,50 @@ describe("RealtimeClient", () => {
     }).not.toThrow();
     expect(onNotification).not.toHaveBeenCalled();
     client.close();
+  });
+});
+
+describe("toWebSocketURL", () => {
+  function withWindowLocation(
+    location: { protocol: string; host: string } | undefined,
+    assertion: () => void,
+  ) {
+    try {
+      vi.stubGlobal("window", location ? { location } : undefined);
+      assertion();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  it("uses the current browser origin for same-origin backend URLs", () => {
+    withWindowLocation({ protocol: "http:", host: "localhost:3000" }, () => {
+      expect(toWebSocketURL("", "/api/realtime")).toBe(
+        "ws://localhost:3000/api/realtime",
+      );
+    });
+  });
+
+  it("keeps the active loopback host instead of forcing localhost", () => {
+    withWindowLocation({ protocol: "http:", host: "127.0.0.1:3000" }, () => {
+      expect(toWebSocketURL("", "/api/realtime")).toBe(
+        "ws://127.0.0.1:3000/api/realtime",
+      );
+    });
+  });
+
+  it("converts explicit backend origins to websocket origins", () => {
+    expect(toWebSocketURL("http://127.0.0.1:8100", "/api/realtime")).toBe(
+      "ws://127.0.0.1:8100/api/realtime",
+    );
+    expect(toWebSocketURL("https://example.com/base", "/api/realtime")).toBe(
+      "wss://example.com/base/api/realtime",
+    );
+  });
+
+  it("returns a relative path outside the browser when no base URL is known", () => {
+    withWindowLocation(undefined, () => {
+      expect(toWebSocketURL("", "/api/realtime")).toBe("/api/realtime");
+    });
   });
 });

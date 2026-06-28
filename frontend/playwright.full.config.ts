@@ -50,7 +50,7 @@ export default defineConfig({
       timeout: 120_000,
     },
     {
-      command: `cross-env GATEWAY_PORT=${backendPort} OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase} pnpm dev -- --host 127.0.0.1 --port ${frontendPort}`,
+      command: `cross-env GATEWAY_PORT=${backendPort} OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase} pnpm dev -- --host 0.0.0.0 --port ${frontendPort}`,
       url: `http://127.0.0.1:${frontendPort}`,
       reuseExistingServer: !process.env.CI,
       timeout: 90_000,

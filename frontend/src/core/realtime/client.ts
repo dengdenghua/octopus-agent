@@ -394,7 +394,7 @@ export function createDefaultClient(args: {
   });
 }
 
-function toWebSocketURL(httpBase: string, path: string): string {
+export function toWebSocketURL(httpBase: string, path: string): string {
   const trimmed = (httpBase || "").replace(/\/+$/, "");
   if (!trimmed) {
     // Same-origin (vite dev proxy routes /api/* through to backend).
@@ -402,7 +402,7 @@ function toWebSocketURL(httpBase: string, path: string): string {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
       return `${proto}//${window.location.host}${path}`;
     }
-    return `ws://localhost:8000${path}`;
+    return path;
   }
   if (trimmed.startsWith("https://")) return `wss://${trimmed.slice(8)}${path}`;
   if (trimmed.startsWith("http://")) return `ws://${trimmed.slice(7)}${path}`;
