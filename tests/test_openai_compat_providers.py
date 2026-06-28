@@ -40,6 +40,8 @@ def test_domestic_provider_profile_detection_by_model_name() -> None:
     assert resolve_openai_compat_profile("", "doubao-pro-256k").id == "doubao"
     assert resolve_openai_compat_profile("", "MiniMax-M2").id == "minimax"
     assert resolve_openai_compat_profile("", "glm-4.6").id == "glm"
+    assert resolve_openai_compat_profile("", "K2.7 Code").id == "kimi_coding"
+    assert resolve_openai_compat_profile("", "kimi-k2.7-code").id == "kimi_coding"
 
 
 def test_profile_catalog_includes_main_domestic_providers() -> None:

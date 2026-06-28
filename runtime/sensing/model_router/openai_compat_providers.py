@@ -60,7 +60,15 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
             "api.moonshot.cn/coding",
             "/coding/v1",
         ),
-        model_markers=("kimi-code", "kimi-for-coding", "k2-code"),
+        model_markers=(
+            "kimi-code",
+            "kimi-for-coding",
+            "k2-code",
+            "k2 code",
+            "k2.7-code",
+            "k2.7 code",
+            "kimi-k2",
+        ),
         omit_sampling_parameters=True,
     ),
     OpenAICompatProviderProfile(
