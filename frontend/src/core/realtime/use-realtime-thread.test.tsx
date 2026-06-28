@@ -13,6 +13,7 @@ type IncomingRequestFn = (req: JsonRpcRequest) => Promise<unknown>;
 
 interface FakeClientHandles {
   emitRequest: (req: JsonRpcRequest) => Promise<unknown>;
+  emitOpen: () => void;
   emitClose: (code: number, reason: string) => void;
 }
 
@@ -28,6 +29,7 @@ function makeFakeClientFactory(handles: FakeClientHandles[]) {
   }) => {
     handles.push({
       emitRequest: (req) => deps.onIncomingRequest(req),
+      emitOpen: () => deps.onOpen?.(),
       emitClose: (code, reason) => deps.onClose?.(code, reason),
     });
     return {
@@ -143,6 +145,84 @@ describe("useRealtimeThread approval lifecycle", () => {
     });
 
     expect(rendered.result.current.state.pendingApprovals).toHaveLength(0);
+  });
+});
+
+describe("useRealtimeThread reconnect reconciliation", () => {
+  function turn(id: string, status: "inProgress" | "completed") {
+    return {
+      id,
+      threadId: "th",
+      status,
+      items: [],
+      startedAt: "2026-01-01T00:00:00.000Z",
+      ...(status === "completed"
+        ? { completedAt: "2026-01-01T00:00:05.000Z" }
+        : {}),
+    };
+  }
+
+  it("replaces a locally interrupted turn with server truth after reconnect", async () => {
+    const handles: FakeClientHandles[] = [];
+    let resumeCount = 0;
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => deps.onOpen?.(),
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCount += 1;
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [
+              resumeCount === 1
+                ? turn("t-live", "inProgress")
+                : turn("t-live", "completed"),
+            ],
+            hasMore: false,
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.status).toBe(
+        "inProgress",
+      ),
+    );
+
+    act(() => {
+      handles[0]!.emitClose(1006, "network lost");
+    });
+    expect(rendered.result.current.connected).toBe(false);
+    expect(rendered.result.current.state.turns[0]?.status).toBe("interrupted");
+
+    act(() => {
+      handles[0]!.emitOpen();
+    });
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.status).toBe("completed"),
+    );
+    expect(resumeCount).toBe(2);
   });
 });
 

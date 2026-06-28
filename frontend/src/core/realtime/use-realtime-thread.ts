@@ -140,6 +140,12 @@ export function useRealtimeThread(
     stateRef.current = emptyConversation(args.threadId);
     const resolvers = approvalResolvers.current;
     const timers = approvalTimers.current;
+    type ResumeResponse = {
+      thread: { id: string; path?: string };
+      turns: Conversation["turns"];
+      hasMore?: boolean;
+      totalTurns?: number;
+    };
 
     const onIncomingRequest = async (req: JsonRpcRequest): Promise<unknown> =>
       new Promise((resolve) => {
@@ -196,6 +202,52 @@ export function useRealtimeThread(
           }, timeoutMs),
         );
       });
+
+    let resumeSeq = 0;
+    const requestResume = (
+      client: RealtimeClient,
+      mode: "preserve-live" | "replace",
+    ): void => {
+      const seq = ++resumeSeq;
+      void client
+        .request<ResumeResponse>("thread/resume", {
+          threadId: args.threadId,
+          limit: RESUME_TURN_LIMIT,
+        })
+        .then((result) => {
+          if (cancelled || seq !== resumeSeq) return;
+          setState((prev) => {
+            if (mode === "preserve-live" && prev.turns.length > 0) {
+              // Live events landed before this resume response. Keep
+              // those optimistic turns, but carry the server's older-page
+              // flag so loadOlderTurns() still works.
+              const next: Conversation = {
+                ...prev,
+                resumeState: "resumed",
+                hasMoreTurns: result.hasMore === true,
+              };
+              stateRef.current = next;
+              return next;
+            }
+            const next: Conversation = {
+              ...prev,
+              turns: result.turns ?? [],
+              resumeState: "resumed",
+              hasMoreTurns: result.hasMore === true,
+            };
+            stateRef.current = next;
+            return next;
+          });
+        })
+        .catch(() => {
+          if (cancelled || seq !== resumeSeq) return;
+          setState((prev) => {
+            const next: Conversation = { ...prev, resumeState: "needsResume" };
+            stateRef.current = next;
+            return next;
+          });
+        });
+    };
 
     const onNotification = (note: {
       method: string;
@@ -265,6 +317,12 @@ export function useRealtimeThread(
       // queueing in the outbox. Drive the flag from the actual
       // socket open event instead.
       setConnected(true);
+      if (openedOnce) {
+        const client = clientRef.current;
+        if (client) requestResume(client, "replace");
+      } else {
+        openedOnce = true;
+      }
     };
 
     const factory =
@@ -288,6 +346,7 @@ export function useRealtimeThread(
         }));
 
     let cancelled = false;
+    let openedOnce = false;
     const client = factory({
       onIncomingRequest,
       onNotification,
@@ -300,52 +359,7 @@ export function useRealtimeThread(
     // flag has been replaced — onOpen drives it now (see comment on
     // ``onOpen`` above).
 
-    type ResumeResponse = {
-      thread: { id: string; path?: string };
-      turns: Conversation["turns"];
-      hasMore?: boolean;
-      totalTurns?: number;
-    };
-    void client
-      .request<ResumeResponse>("thread/resume", {
-        threadId: args.threadId,
-        limit: RESUME_TURN_LIMIT,
-      })
-      .then((result) => {
-        if (cancelled) return;
-        setState((prev) => {
-          if (prev.turns.length > 0) {
-            // Live events landed before this resume response. We keep
-            // the live turns, but the server's hasMore still tells us
-            // whether older turns exist on disk — must carry it, or
-            // loadOlderTurns() stays permanently disabled and the
-            // "load earlier" banner never appears.
-            const next: Conversation = {
-              ...prev,
-              resumeState: "resumed",
-              hasMoreTurns: result.hasMore === true,
-            };
-            stateRef.current = next;
-            return next;
-          }
-          const next: Conversation = {
-            ...prev,
-            turns: result.turns ?? [],
-            resumeState: "resumed",
-            hasMoreTurns: result.hasMore === true,
-          };
-          stateRef.current = next;
-          return next;
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setState((prev) => {
-          const next: Conversation = { ...prev, resumeState: "needsResume" };
-          stateRef.current = next;
-          return next;
-        });
-      });
+    requestResume(client, "preserve-live");
 
     return () => {
       cancelled = true;
