@@ -204,7 +204,7 @@ def test_retry_plan_reports_reason_and_payload_delta() -> None:
         profile=profile,
     )
 
-    assert [item.reason for item in plan] == [
+    assert [item.reason for item in plan][:3] == [
         "drop_thinking_fields",
         "drop_tool_choice",
         "rename_max_tokens",
@@ -213,6 +213,47 @@ def test_retry_plan_reports_reason_and_payload_delta() -> None:
     assert plan[1].removed_fields == ("tool_choice",)
     assert plan[2].removed_fields == ("max_tokens",)
     assert plan[2].added_fields == ("max_completion_tokens",)
+    assert plan[-1].reason == "combined_compatibility_fallback"
+
+
+def test_retry_plan_adds_combined_fallback_for_multi_field_rejections() -> None:
+    profile = resolve_openai_compat_profile("https://api.kimi.com/coding/v1")
+    plan = plan_openai_compat_retries(
+        {
+            "model": "kimi-k2.7-code",
+            "messages": [],
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "max_tokens": 8,
+            "tool_choice": "auto",
+            "reasoning_effort": "high",
+            "thinking": {"type": "enabled"},
+        },
+        status_code=400,
+        body=(
+            "unsupported reasoning_effort, tool_choice, temperature and "
+            "max_completion_tokens"
+        ),
+        profile=profile,
+    )
+
+    combined = next(
+        item for item in plan if item.reason == "combined_compatibility_fallback"
+    )
+    assert combined.removed_fields == (
+        "max_tokens",
+        "reasoning_effort",
+        "temperature",
+        "thinking",
+        "tool_choice",
+        "top_p",
+    )
+    assert combined.added_fields == ("max_completion_tokens",)
+    assert combined.payload == {
+        "model": "kimi-k2.7-code",
+        "messages": [],
+        "max_completion_tokens": 8,
+    }
 
 
 def test_tool_schema_retry_strips_additional_properties() -> None:

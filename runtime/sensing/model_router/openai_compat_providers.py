@@ -272,6 +272,8 @@ def plan_openai_compat_retries(
 
     variants: list[OpenAICompatRetryPayload] = []
     seen: set[str] = {_payload_fingerprint(payload)}
+    cascade = dict(payload)
+    cascade_reasons: list[str] = []
 
     def add(reason: str, candidate: dict[str, Any]) -> None:
         fp = _payload_fingerprint(candidate)
@@ -294,11 +296,16 @@ def plan_openai_compat_retries(
         candidate.pop("reasoning_effort", None)
         candidate.pop("thinking", None)
         add("drop_thinking_fields", candidate)
+        cascade.pop("reasoning_effort", None)
+        cascade.pop("thinking", None)
+        cascade_reasons.append("drop_thinking_fields")
 
     if profile.retry_without_tool_choice and "tool_choice" in payload:
         candidate = dict(payload)
         candidate.pop("tool_choice", None)
         add("drop_tool_choice", candidate)
+        cascade.pop("tool_choice", None)
+        cascade_reasons.append("drop_tool_choice")
 
     if (
         profile.retry_without_sampling
@@ -311,6 +318,8 @@ def plan_openai_compat_retries(
         candidate = dict(payload)
         _remove_sampling_parameters(candidate)
         add("drop_sampling_parameters", candidate)
+        _remove_sampling_parameters(cascade)
+        cascade_reasons.append("drop_sampling_parameters")
 
     if (
         profile.retry_max_tokens_as_completion_tokens
@@ -321,6 +330,9 @@ def plan_openai_compat_retries(
         candidate = dict(payload)
         candidate["max_completion_tokens"] = candidate.pop("max_tokens")
         add("rename_max_tokens", candidate)
+        if "max_tokens" in cascade and "max_completion_tokens" not in cascade:
+            cascade["max_completion_tokens"] = cascade.pop("max_tokens")
+        cascade_reasons.append("rename_max_tokens")
 
     if "tools" in payload and _mentions_any(
         lower,
@@ -329,6 +341,11 @@ def plan_openai_compat_retries(
         candidate = dict(payload)
         candidate["tools"] = _strict_tools(candidate.get("tools"))
         add("strict_tool_schema", candidate)
+        cascade["tools"] = _strict_tools(cascade.get("tools"))
+        cascade_reasons.append("strict_tool_schema")
+
+    if len(cascade_reasons) > 1:
+        add("combined_compatibility_fallback", cascade)
 
     return variants
 
