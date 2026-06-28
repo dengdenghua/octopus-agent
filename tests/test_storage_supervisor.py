@@ -111,3 +111,62 @@ def test_stop_storage_terminates_child() -> None:
     ss.stop_storage()
     assert p.terminated is True
     assert ss._proc is None
+
+
+def test_should_restart_decision() -> None:
+    base = dict(
+        autostart=True,
+        proc_alive=False,
+        resolvable=True,
+        now=100.0,
+        last_restart=0.0,
+        backoff_s=30.0,
+    )
+    # down + autostart + resolvable + dead child + past backoff → relaunch
+    assert ss._should_restart(up=False, **base) is True
+    # storage is up → never
+    assert ss._should_restart(up=True, **base) is False
+    # we don't own its lifecycle → never
+    assert ss._should_restart(up=False, **{**base, "autostart": False}) is False
+    # our child is still (re)booting → give it a cycle
+    assert ss._should_restart(up=False, **{**base, "proc_alive": True}) is False
+    # command can't be resolved → can't relaunch
+    assert ss._should_restart(up=False, **{**base, "resolvable": False}) is False
+    # within the backoff window → hold off (no thrash)
+    assert ss._should_restart(up=False, **{**base, "last_restart": 80.0}) is False
+
+
+def test_storage_status_probes_on_demand_without_heartbeat(monkeypatch) -> None:
+    monkeypatch.setattr(ss, "_heartbeat_started", False)
+    with ss._status_lock:
+        ss._state["heartbeat"] = False
+    monkeypatch.setattr(ss, "_already_up", lambda: True)
+    assert ss.storage_status()["up"] is True
+    monkeypatch.setattr(ss, "_already_up", lambda: False)
+    assert ss.storage_status()["up"] is False
+
+
+def test_heartbeat_gated_on_autostart_and_idempotent(monkeypatch) -> None:
+    monkeypatch.setattr(ss, "_heartbeat_started", False)
+    with ss._status_lock:
+        ss._state["heartbeat"] = False
+    started = {"n": 0}
+
+    class _T:
+        def __init__(self, **_k) -> None:
+            pass
+
+        def start(self) -> None:
+            started["n"] += 1
+
+    monkeypatch.setattr(ss.threading, "Thread", _T)
+    # autostart off → no supervision thread
+    monkeypatch.delenv("OCTOPUS_STORAGE_AUTOSTART", raising=False)
+    ss.start_storage_heartbeat()
+    assert started["n"] == 0
+    # autostart on → starts exactly once, repeat calls are no-ops
+    monkeypatch.setenv("OCTOPUS_STORAGE_AUTOSTART", "1")
+    ss.start_storage_heartbeat()
+    ss.start_storage_heartbeat()
+    assert started["n"] == 1
+    monkeypatch.setattr(ss, "_heartbeat_started", False)

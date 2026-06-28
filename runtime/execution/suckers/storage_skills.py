@@ -25,6 +25,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 from .registry import Skill, SkillRegistry
@@ -41,6 +42,23 @@ def _base_url() -> str:
     return (raw or _DEFAULT_URL).rstrip("/")
 
 
+def _storage_token() -> str | None:
+    """Bearer token for Storage's local API. Env override first, else the token
+    file Storage writes (``~/.octopus/storage/api_token``). Storage now requires
+    it — without the header every call (and the liveness probe) 401s and Storage
+    looks 'down' even when it is healthy and serving."""
+    raw = (os.environ.get("OCTOPUS_STORAGE_TOKEN") or "").strip()
+    if raw:
+        return raw
+    try:
+        token = (Path.home() / ".octopus" / "storage" / "api_token").read_text(
+            encoding="utf-8"
+        ).strip()
+        return token or None
+    except OSError:
+        return None
+
+
 def _request(
     method: str,
     path: str,
@@ -51,11 +69,15 @@ def _request(
     """One best-effort call to Storage. Returns the decoded JSON object, or
     ``None`` when Storage is unreachable / errored — never raises."""
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Content-Type": "application/json"}
+    token = _storage_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(
         _base_url() + path,
         data=data,
         method=method,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 — local http to a user-configured service
@@ -68,6 +90,24 @@ def _request(
 def storage_manifest(*, timeout: float = _TIMEOUT_S) -> dict[str, Any] | None:
     """Probe Storage's ``/v1/manifest`` — ``None`` when the service is down."""
     return _request("GET", "/v1/manifest", timeout=timeout)
+
+
+def storage_alive(*, timeout: float = 1.5) -> bool:
+    """Liveness probe: True when Storage RESPONDS at all — including an auth
+    error. A 401/403 means the server is up and answering (restarting it won't
+    fix auth), so a supervisor must treat that as 'up' rather than thrash-restart
+    a healthy Storage. Only a connection failure / timeout counts as down."""
+    req = urllib.request.Request(_base_url() + "/v1/manifest", method="GET")
+    token = _storage_token()
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout):  # noqa: S310 — local http
+            return True
+    except urllib.error.HTTPError:
+        return True  # got an HTTP response → the server is up (even if 4xx)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
 
 
 def _unavailable() -> dict[str, Any]:
