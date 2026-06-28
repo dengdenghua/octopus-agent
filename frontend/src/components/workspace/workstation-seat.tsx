@@ -1,0 +1,129 @@
+import type { ReactNode } from "react";
+import { BotIcon } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+
+export interface WorkstationSeatProps {
+  /** Display name (codename / member name). Truncated when long. */
+  name: string;
+  /** Emoji or single-glyph avatar. Ignored when ``avatarUrl`` is set. */
+  avatar?: string | null;
+  /** Image avatar URL (takes precedence over ``avatar``). */
+  avatarUrl?: string | null;
+  /** Custom avatar node (e.g. an icon) used when no emoji/image is available. */
+  avatarNode?: ReactNode;
+  /** Letter to show when there is no avatar/image/node (e.g. a human initial). */
+  fallbackInitial?: string;
+  /** Render the small bot glyph badge over the avatar (AI members). */
+  showBotBadge?: boolean;
+  /** ``bg-*`` class for the trailing status dot. Omit to hide the dot. */
+  dotClassName?: string;
+  /** Accessible label / tooltip for the status dot. */
+  dotLabel?: string;
+  /** Inline badge after the name (e.g. 队长 / You). */
+  badge?: ReactNode;
+  /** Decorative trailing hint (e.g. an @ icon revealed on hover). Non-interactive. */
+  trailing?: ReactNode;
+  /** Native title tooltip (role / description / task). */
+  title?: string;
+  /** Active/focused styling. */
+  selected?: boolean;
+  /** Click handler — renders the seat as a button when provided. */
+  onClick?: () => void;
+  /** Constrain the name width (used in the horizontal dock). */
+  compactName?: boolean;
+  className?: string;
+  /** aria-label override for the button form. */
+  ariaLabel?: string;
+}
+
+/**
+ * The shared "工位" (workstation seat) atom rendered by BOTH the agent-mode
+ * subagent dock and the team-mode roster, so a runtime subagent and a team
+ * member read as the same kind of thing. Presentation-only: the status dot's
+ * meaning (run-state vs presence) is supplied by the caller via
+ * ``dotClassName`` so each surface keeps its own semantics.
+ */
+export function WorkstationSeat({
+  name,
+  avatar,
+  avatarUrl,
+  avatarNode,
+  fallbackInitial,
+  showBotBadge,
+  dotClassName,
+  dotLabel,
+  badge,
+  trailing,
+  title,
+  selected,
+  onClick,
+  compactName,
+  className,
+  ariaLabel,
+}: WorkstationSeatProps) {
+  const base =
+    "group/seat inline-flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-colors";
+  const tone = selected
+    ? "border-foreground/30 bg-muted/50 text-foreground"
+    : "border-border/60 bg-background/85 text-foreground hover:bg-muted/40";
+
+  const inner = (
+    <>
+      <span className="relative grid size-7 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-[14px] leading-none">
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={name} className="size-full object-cover" />
+        ) : avatar?.trim() ? (
+          <span aria-hidden="true">{avatar}</span>
+        ) : avatarNode ? (
+          avatarNode
+        ) : (
+          <span className="text-[11px] font-semibold text-muted-foreground">
+            {(fallbackInitial ?? name.charAt(0)).toUpperCase()}
+          </span>
+        )}
+        {showBotBadge && (
+          <span className="absolute -bottom-0.5 -right-0.5 grid size-3 place-items-center rounded-full bg-background">
+            <BotIcon className="size-2 text-muted-foreground" aria-hidden="true" />
+          </span>
+        )}
+      </span>
+      <span
+        className={cn(
+          "truncate text-[13px] font-medium",
+          compactName && "max-w-28",
+        )}
+      >
+        {name}
+      </span>
+      {badge}
+      {dotClassName && (
+        <span
+          className={cn("size-1.5 shrink-0 rounded-full", dotClassName)}
+          aria-label={dotLabel}
+          title={dotLabel}
+        />
+      )}
+      {trailing}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        aria-label={ariaLabel ?? name}
+        className={cn(base, tone, className)}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <div title={title} className={cn(base, tone, className)}>
+      {inner}
+    </div>
+  );
+}

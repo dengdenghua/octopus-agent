@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 import { BrowserPreviewPanel } from "./browser-preview-panel";
 import { LivePreviewPanel } from "./live-preview-panel";
+import { WorkstationSeat } from "./workstation-seat";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
 import {
   DropdownMenu,
@@ -1522,61 +1523,45 @@ function SubagentDock({
         <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
           {t.agentWorkbenchPanel.workbenchSlots}
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <button
-            type="button"
+        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <WorkstationSeat
+            name={t.agentWorkbenchPanel.mainController}
+            avatarNode={
+              <BotIcon
+                className="size-3.5 text-muted-foreground"
+                aria-hidden="true"
+              />
+            }
+            selected={selectedAgentId === null}
             onClick={onSelectMain}
-            aria-label={t.agentWorkbenchPanel.viewMainAgentSlot}
+            dotClassName={agentRunDotClass(mainRunState)}
+            ariaLabel={t.agentWorkbenchPanel.viewMainAgentSlot}
             title={t.agentWorkbenchPanel.mainAgentProcessTitle}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 border-b border-transparent py-1 text-[11px] font-medium transition-colors",
-              selectedAgentId === null
-                ? "border-foreground/60 text-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <BotIcon className="size-3.5" aria-hidden="true" />
-            <span>{t.agentWorkbenchPanel.mainController}</span>
-            <span
-              className={cn(
-                "size-1.5 rounded-full",
-                agentRunDotClass(mainRunState),
-              )}
-            />
-          </button>
+            compactName
+            className="shrink-0"
+          />
           {agents.map((agent) => {
-            const active = selectedAgentId === agent.id;
             const label = agent.codename ?? agent.name ?? agent.label;
             return (
-              <button
+              <WorkstationSeat
                 key={agent.id}
-                type="button"
+                name={repairMojibakeText(label)}
+                avatar={agent.avatar}
+                avatarNode={
+                  <BotIcon
+                    className="size-3.5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                }
+                selected={selectedAgentId === agent.id}
                 onClick={() => onSelectAgent(agent.id)}
-                aria-label={t.agentWorkbenchPanel.viewAgentProcess(label)}
+                dotClassName={agentRunDotClass(agent.status)}
+                dotLabel={dockAgentStatusLabel(agent.status, t)}
+                ariaLabel={t.agentWorkbenchPanel.viewAgentProcess(label)}
                 title={`${label}: ${agent.task}`}
-                className={cn(
-                  "inline-flex min-w-0 shrink-0 items-center gap-1.5 border-b border-transparent py-1 text-[11px] font-medium transition-colors",
-                  active
-                    ? "border-foreground/60 text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {agent.avatar ? (
-                  <span className="text-xs leading-none" aria-hidden="true">
-                    {agent.avatar}
-                  </span>
-                ) : (
-                  <BotIcon className="size-3.5" aria-hidden="true" />
-                )}
-                <span className="max-w-28 truncate">{repairMojibakeText(label)}</span>
-                <span
-                  className={cn(
-                    "size-1.5 rounded-full",
-                    agentRunDotClass(agent.status),
-                  )}
-                  aria-label={dockAgentStatusLabel(agent.status, t)}
-                />
-              </button>
+                compactName
+                className="shrink-0"
+              />
             );
           })}
         </div>
