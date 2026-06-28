@@ -536,6 +536,142 @@ def create_config_router(
             fallback_id=model_id,
         )
 
+    def _compat_diagnostic_for_entry(entry: dict[str, Any]) -> dict[str, Any]:
+        provider = str(entry.get("provider") or "openai").lower()
+        model_id = _entry_model_id(entry)
+        base_url = str(entry.get("base_url") or "")
+        upstreams = _entry_upstreams(entry, model_id)
+        header_names = sorted(
+            str(name)
+            for name in (entry.get("default_headers") or {})
+            if str(name).strip()
+        )
+        if provider not in {"openai", "openai-compatible", "openai_compat", "custom"}:
+            return {
+                "id": model_id,
+                "provider": provider,
+                "applicable": False,
+                "reason": "provider is not OpenAI-compatible",
+                "upstreams": upstreams,
+                "default_header_names": header_names,
+            }
+
+        from runtime.sensing.model_router.openai_compat_providers import (
+            apply_custom_openai_compat_profile,
+            normalize_openai_compat_payload,
+            plan_openai_compat_retries,
+            resolve_openai_compat_profile,
+        )
+
+        rows: list[dict[str, Any]] = []
+        for upstream in upstreams:
+            base_profile = resolve_openai_compat_profile(base_url, upstream)
+            profile = apply_custom_openai_compat_profile(
+                entry,
+                base_profile=base_profile,
+            )
+            original = _sample_openai_compat_payload(upstream)
+            normalized = normalize_openai_compat_payload(
+                original,
+                profile=profile,
+            )
+            removed, added, changed = _field_delta(original, normalized)
+            retry_plan = plan_openai_compat_retries(
+                normalized,
+                status_code=400,
+                body=(
+                    "unsupported reasoning_effort thinking tool_choice "
+                    "temperature top_p max_completion_tokens "
+                    "additionalProperties"
+                ),
+                profile=profile,
+            )
+            rows.append({
+                "model": upstream,
+                "profile": profile.id,
+                "profile_display_name": profile.display_name,
+                "thinking_request_style": profile.thinking_request_style,
+                "omit_sampling_parameters": profile.omit_sampling_parameters,
+                "drop_tool_choice": profile.drop_tool_choice,
+                "max_temperature": profile.max_temperature,
+                "unsupported_request_fields": list(
+                    profile.unsupported_request_fields,
+                ),
+                "normalization": {
+                    "removed_fields": removed,
+                    "added_fields": added,
+                    "changed_fields": changed,
+                    "normalized_fields": sorted(normalized),
+                    "payload": normalized,
+                },
+                "fallback_retries": [
+                    {
+                        "reason": item.reason,
+                        "removed_fields": list(item.removed_fields),
+                        "added_fields": list(item.added_fields),
+                        "changed_fields": list(item.changed_fields),
+                        "payload_fields": sorted(item.payload),
+                    }
+                    for item in retry_plan
+                ],
+            })
+        return {
+            "id": model_id,
+            "provider": provider,
+            "base_url": base_url,
+            "applicable": True,
+            "has_api_key": bool(entry.get("api_key")),
+            "default_header_names": header_names,
+            "upstreams": rows,
+        }
+
+    def _sample_openai_compat_payload(model: str) -> dict[str, Any]:
+        return {
+            "model": model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0,
+            "max_tokens": 8,
+            "reasoning_effort": "high",
+            "thinking": {"type": "enabled"},
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "diagnostic_ping",
+                        "description": "No-op compatibility probe.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {"type": "string"},
+                            },
+                            "additionalProperties": True,
+                        },
+                    },
+                },
+            ],
+            "tool_choice": "auto",
+            "parallel_tool_calls": True,
+        }
+
+    def _field_delta(
+        original: dict[str, Any],
+        normalized: dict[str, Any],
+    ) -> tuple[list[str], list[str], list[str]]:
+        original_keys = set(original)
+        normalized_keys = set(normalized)
+        return (
+            sorted(original_keys - normalized_keys),
+            sorted(normalized_keys - original_keys),
+            sorted(
+                key
+                for key in original_keys & normalized_keys
+                if original.get(key) != normalized.get(key)
+            ),
+        )
+
     # Hydrate from disk + re-register each entry so the dispatcher
     # sees them on the first request.
     _load()
@@ -659,6 +795,31 @@ def create_config_router(
                     "has_api_key": bool(entry.get("api_key")),
                 }
                 for entry in custom_models_state.values()
+            ],
+        }
+
+    @router.get("/api/config/custom-models/compat-diagnostics")
+    def api_custom_model_compat_diagnostics(
+        model_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Dry-run OpenAI-compatible request shaping for custom models.
+
+        This endpoint does **not** call an upstream model and never
+        returns API keys. It shows the operator which compat profile
+        each custom model resolves to, which request fields are
+        removed/changed before dispatch, and which fallback retries
+        would be attempted for a representative strict-provider 400.
+        """
+        entries = [
+            entry
+            for entry in custom_models_state.values()
+            if model_id is None or _entry_model_id(entry) == model_id
+        ]
+        return {
+            "schema": "octopus.openai_compat_diagnostics.v1",
+            "total": len(entries),
+            "diagnostics": [
+                _compat_diagnostic_for_entry(entry) for entry in entries
             ],
         }
 

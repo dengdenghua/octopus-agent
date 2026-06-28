@@ -404,6 +404,95 @@ class TestCustomModelsUpsert:
 
 
 # ═══════════════════════════════════════════════════════════
+# GET /api/config/custom-models/compat-diagnostics
+# ═══════════════════════════════════════════════════════════
+
+
+class TestCustomModelCompatDiagnostics:
+    def test_openai_compat_diagnostics_are_dry_run_and_secret_safe(
+        self,
+        client: TestClient,
+    ) -> None:
+        client.put(
+            "/api/config/custom-models/kimi-code",
+            json={
+                "name": "Kimi Code",
+                "provider": "openai",
+                "base_url": "https://api.kimi.com/coding/v1",
+                "api_key": "sk-realish-secret",
+                "models": ["kimi-k2.7-code"],
+                "compat_profile": "kimi_coding",
+                "drop_tool_choice": True,
+                "unsupported_request_fields": ["parallel_tool_calls"],
+                "default_headers": {
+                    "User-Agent": "OctopusSmoke/1.0",
+                    "X-Route-Token": "route-secret",
+                },
+            },
+        )
+
+        r = client.get("/api/config/custom-models/compat-diagnostics")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["schema"] == "octopus.openai_compat_diagnostics.v1"
+        assert data["total"] == 1
+
+        row = data["diagnostics"][0]
+        assert row["id"] == "kimi-code"
+        assert row["applicable"] is True
+        assert row["has_api_key"] is True
+        assert row["default_header_names"] == ["User-Agent", "X-Route-Token"]
+        blob = repr(data)
+        assert "sk-realish-secret" not in blob
+        assert "route-secret" not in blob
+
+        upstream = row["upstreams"][0]
+        assert upstream["profile"] == "kimi_coding"
+        removed = set(upstream["normalization"]["removed_fields"])
+        assert {
+            "frequency_penalty",
+            "parallel_tool_calls",
+            "presence_penalty",
+            "reasoning_effort",
+            "temperature",
+            "thinking",
+            "tool_choice",
+            "top_p",
+        }.issubset(removed)
+        assert "temperature" not in upstream["normalization"]["normalized_fields"]
+        assert "parallel_tool_calls" not in upstream["normalization"]["payload"]
+
+        reasons = {item["reason"] for item in upstream["fallback_retries"]}
+        assert "rename_max_tokens" in reasons
+        assert "strict_tool_schema" in reasons
+        assert "combined_compatibility_fallback" in reasons
+
+    def test_compat_diagnostics_marks_non_openai_entries_not_applicable(
+        self,
+        client: TestClient,
+    ) -> None:
+        client.put(
+            "/api/config/custom-models/claude-mirror",
+            json={
+                "name": "Claude Mirror",
+                "provider": "anthropic",
+                "api_key": "sk-claude-secret",
+                "models": ["claude-sonnet-4-6"],
+            },
+        )
+
+        r = client.get(
+            "/api/config/custom-models/compat-diagnostics",
+            params={"model_id": "claude-mirror"},
+        )
+        assert r.status_code == 200
+        row = r.json()["diagnostics"][0]
+        assert row["applicable"] is False
+        assert row["reason"] == "provider is not OpenAI-compatible"
+        assert "sk-claude-secret" not in repr(row)
+
+
+# ═══════════════════════════════════════════════════════════
 # DELETE /api/config/custom-models/{id}
 # ═══════════════════════════════════════════════════════════
 
