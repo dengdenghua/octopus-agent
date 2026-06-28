@@ -354,6 +354,8 @@ def run_serve(
         cocoloop_require_auth=require_ui_auth,
         server_host=host,
         server_port=port,
+        tentacle_enabled=cfg.tentacle.enabled,
+        tentacle_ws_port=cfg.tentacle.ws_port,
     )
     try:
         from runtime.cli_core import _build_reflex_router

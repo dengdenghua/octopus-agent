@@ -49,6 +49,17 @@ def test_router_exposes_route() -> None:
     assert "/api/tentacle/join-info" in paths
 
 
+def test_create_app_can_disable_tentacle_routes() -> None:
+    from fastapi.testclient import TestClient
+
+    from runtime.platform.ui import create_app
+
+    app = create_app(journal_path=None, tentacle_enabled=False)
+    r = TestClient(app).get("/api/tentacle/join-info")
+
+    assert r.status_code == 404
+
+
 def test_token_persists_across_calls(monkeypatch, tmp_path) -> None:
     import runtime.platform.process.paths as paths_mod
     from runtime.tentacle.team_bridge import get_or_create_tentacle_token

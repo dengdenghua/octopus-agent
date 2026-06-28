@@ -189,6 +189,8 @@ def create_app(
     subagent_registry: Any = None,
     server_host: str | None = None,
     server_port: int | None = None,
+    tentacle_enabled: bool = True,
+    tentacle_ws_port: int = 8765,
 ) -> Any:
     """Build the FastAPI application with all routers wired in.
 
@@ -921,73 +923,88 @@ def create_app(
     )
 
     # Mobile (tentacle) · phones running octopus-mobile connect over WebSocket
-    # (:8765) via the existing tentacle bridge and appear in the team. Mount the
-    # device dashboard router (/api/tentacle/*) into the main app and start the
-    # WS server in this app's event loop, so the team reads live device state in
-    # one process. Defensive: missing deps / port-in-use must not abort boot.
-    try:
-        from runtime.core.cerebrum.planner import StaticPlanner
-        from runtime.sensing.gateway.tentacle_join_router import (
-            create_tentacle_join_router,
-        )
-        from runtime.tentacle.coordinator import TentacleCoordinator
-        from runtime.tentacle.dashboard import create_tentacle_router
-        from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
-        from runtime.tentacle.team_bridge import (
-            get_or_create_tentacle_token,
-            set_active_coordinator,
-        )
-
-        # Shared secret a LAN phone presents to join (loopback joins tokenless).
-        _tentacle_token = get_or_create_tentacle_token()
-        _tentacle_ws_port = 8765
-
-        # Reuse the stack's planner when it can plan; else a bare StaticPlanner
-        # (the adapter degrades gracefully — a failed/empty plan just yields no
-        # device actions rather than crashing). This is the decision engine that
-        # turns a team task's natural-language goal into device tool calls.
-        _tentacle_planner = getattr(stack, "planner", None)
-        if not callable(getattr(_tentacle_planner, "plan", None)):
-            _tentacle_planner = StaticPlanner()
-        _tentacle_engine = CerebrumDecisionAdapter(_tentacle_planner).decide
-
-        _tentacle_coordinator = TentacleCoordinator(
-            host="0.0.0.0",
-            port=_tentacle_ws_port,
-            dashboard_port=None,
-            decision_engine=_tentacle_engine,
-            auth_token=_tentacle_token,
-        )
-        app.include_router(
-            create_tentacle_router(
-                _tentacle_coordinator,
-                identity_store=cocoloop_identity_store,
-                require_auth=cocoloop_require_auth,
-                jwt_secret=cocoloop_jwt_secret,
-                jwt_issuer=cocoloop_jwt_issuer,
-                jwt_audience=cocoloop_jwt_audience,
+    # via the existing tentacle bridge and appear in the team. Mount the device
+    # dashboard router (/api/tentacle/*) into the main app and start the WS
+    # server in this app's event loop, so the team reads live device state in
+    # one process. Deterministic e2e configs can disable this bridge to avoid
+    # binding a fixed LAN port unrelated to the web gateway.
+    if tentacle_enabled:
+        try:
+            _tentacle_ws_port = int(tentacle_ws_port)
+            if not (1 <= _tentacle_ws_port <= 65535):
+                raise ValueError("tentacle_ws_port must be between 1 and 65535")
+        except (TypeError, ValueError):
+            logging.getLogger(__name__).warning(
+                "invalid tentacle_ws_port=%r; falling back to 8765",
+                tentacle_ws_port,
             )
-        )
-        app.include_router(
-            create_tentacle_join_router(ws_port=_tentacle_ws_port, auth_token=_tentacle_token)
-        )
-        app.state.tentacle_coordinator = _tentacle_coordinator
-        set_active_coordinator(_tentacle_coordinator)
+            _tentacle_ws_port = 8765
 
-        @app.on_event("startup")
-        async def _start_tentacle_bridge() -> None:
-            try:
-                await _tentacle_coordinator.start()
-            except Exception:  # noqa: BLE001
-                logging.getLogger(__name__).warning(
-                    "tentacle WS server failed to start; phones can't join the team",
-                    exc_info=True,
+        try:
+            from runtime.core.cerebrum.planner import StaticPlanner
+            from runtime.sensing.gateway.tentacle_join_router import (
+                create_tentacle_join_router,
+            )
+            from runtime.tentacle.coordinator import TentacleCoordinator
+            from runtime.tentacle.dashboard import create_tentacle_router
+            from runtime.tentacle.mobile.cerebrum_adapter import CerebrumDecisionAdapter
+            from runtime.tentacle.team_bridge import (
+                get_or_create_tentacle_token,
+                set_active_coordinator,
+            )
+
+            # Shared secret a LAN phone presents to join (loopback joins tokenless).
+            _tentacle_token = get_or_create_tentacle_token()
+
+            # Reuse the stack's planner when it can plan; else a bare StaticPlanner
+            # (the adapter degrades gracefully — a failed/empty plan just yields no
+            # device actions rather than crashing). This is the decision engine that
+            # turns a team task's natural-language goal into device tool calls.
+            _tentacle_planner = getattr(stack, "planner", None)
+            if not callable(getattr(_tentacle_planner, "plan", None)):
+                _tentacle_planner = StaticPlanner()
+            _tentacle_engine = CerebrumDecisionAdapter(_tentacle_planner).decide
+
+            _tentacle_coordinator = TentacleCoordinator(
+                host="0.0.0.0",
+                port=_tentacle_ws_port,
+                dashboard_port=None,
+                decision_engine=_tentacle_engine,
+                auth_token=_tentacle_token,
+            )
+            app.include_router(
+                create_tentacle_router(
+                    _tentacle_coordinator,
+                    identity_store=cocoloop_identity_store,
+                    require_auth=cocoloop_require_auth,
+                    jwt_secret=cocoloop_jwt_secret,
+                    jwt_issuer=cocoloop_jwt_issuer,
+                    jwt_audience=cocoloop_jwt_audience,
                 )
-    except Exception:  # noqa: BLE001
-        logging.getLogger(__name__).warning(
-            "tentacle bridge unavailable (missing deps?); phones can't join the team",
-            exc_info=True,
-        )
+            )
+            app.include_router(
+                create_tentacle_join_router(
+                    ws_port=_tentacle_ws_port,
+                    auth_token=_tentacle_token,
+                )
+            )
+            app.state.tentacle_coordinator = _tentacle_coordinator
+            set_active_coordinator(_tentacle_coordinator)
+
+            @app.on_event("startup")
+            async def _start_tentacle_bridge() -> None:
+                try:
+                    await _tentacle_coordinator.start()
+                except Exception:  # noqa: BLE001
+                    logging.getLogger(__name__).warning(
+                        "tentacle WS server failed to start; phones can't join the team",
+                        exc_info=True,
+                    )
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning(
+                "tentacle bridge unavailable (missing deps?); phones can't join the team",
+                exc_info=True,
+            )
 
     # Generic semantic ranking · /api/retrieve/rank — order candidate texts by
     # meaning (configurable embedder, lexical fallback). A connected phone uses
@@ -1785,10 +1802,19 @@ def create_app(
     # honors interval from ``ui.ambient_suggestions_interval_sec``.
     try:
         from runtime.memory.skills_lib.ambient_suggestions_scheduler import (
+            AmbientSchedulerConfig,
             get_ambient_scheduler,
         )
 
-        get_ambient_scheduler().start()
+        get_ambient_scheduler().start(
+            AmbientSchedulerConfig(
+                enabled=feature_flags.is_on("ui.ambient_suggestions"),
+                interval_sec=max(
+                    60,
+                    int(feature_flags.value("ui.ambient_suggestions_interval_sec", 21600)),
+                ),
+            )
+        )
     except Exception as _ambs_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning(
             "ambient_suggestions_scheduler failed to start: %s",

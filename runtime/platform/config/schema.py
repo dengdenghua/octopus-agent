@@ -298,6 +298,16 @@ class SchedulerConfig(BaseModel):
     max_workers: int = Field(default=1, ge=1, le=128)
 
 
+class TentacleConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # Mobile/cross-device bridge. Enabled by default to preserve the existing
+    # serve behavior; deterministic e2e configs can disable it to avoid binding
+    # the fixed LAN WebSocket port.
+    enabled: bool = True
+    ws_port: int = Field(default=8765, ge=1, le=65535)
+
+
 class AgentConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
@@ -319,6 +329,7 @@ class AgentConfig(BaseModel):
     molili: MoliliConfig = Field(default_factory=MoliliConfig)
     local_auth: LocalAuthConfig = Field(default_factory=LocalAuthConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
+    tentacle: TentacleConfig = Field(default_factory=TentacleConfig)
 
     intel_sources: list[IntelSourceConfig] = Field(default_factory=list)
     mcp_servers: list[MCPServerConfigEntry] = Field(default_factory=list)

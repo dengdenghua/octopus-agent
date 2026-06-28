@@ -1,0 +1,56 @@
+# Offline config for Playwright full-stack smoke tests.
+#
+# Keep this deterministic: no real model keys, no SMS/local auth gate, no
+# scheduled intel jobs. The purpose is to prove the frontend, Vite proxy, and
+# FastAPI backend boot together and expose the core workspace routes.
+name: e2e-octopus
+version_compat: "0.2"
+preset: null
+
+planner:
+  type: static
+  model: mock/planner
+  max_nodes: 10
+
+budget:
+  max_tokens: 10000
+  max_usd: 0.10
+  max_latency_ms: 120000
+
+immunity:
+  trusted_sources:
+    - "skill://public/*"
+    - "skill://all_skills/plugin-creator"
+  self_whitelist:
+    - "cerebrum"
+    - "ganglia"
+    - "arms/*"
+    - "react_loop"
+    - "react_arm"
+  unknown_policy: quarantine
+  enable_adaptive: false
+
+safety:
+  allow_client_approval_bypass: true
+
+learn:
+  learn_from_journal: null
+  learn_memories_from_journal: null
+  learn_kg_from_journal: null
+  rewrite_from_journal: null
+  assess_recipe_from_journal: null
+
+intel_sources: []
+mcp_servers: []
+journal_file: null
+enable_web_skills: true
+default_arm_id: code_arm
+
+molili:
+  enabled: false
+
+local_auth:
+  enabled: false
+
+tentacle:
+  enabled: false

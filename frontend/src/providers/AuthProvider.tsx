@@ -159,17 +159,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const storedUser = getStoredUser();
     const tokenUser = userFromJwt(token);
     const localUser = storedUser || tokenUser;
-    if (token === GUEST_USER_ID || storedUser?.is_guest) {
-      _clearGuestState();
-      setUser(null);
-    } else if (token && localUser && !localUser.is_guest) {
-      setUser(normalizeUserIdentity(localUser as User, tokenUser));
-    } else {
-      setUser(null);
-    }
-    setIsLoading(false);
-
     try {
+      if (token === GUEST_USER_ID || storedUser?.is_guest) {
+        _clearGuestState();
+        setUser(null);
+      } else if (token && localUser && !localUser.is_guest) {
+        setUser(normalizeUserIdentity(localUser as User, tokenUser));
+      } else {
+        setUser(null);
+      }
       const status = await getAuthStatus().catch(() => null);
       if (status) setAuthStatus(status);
       if (token && token !== GUEST_USER_ID) {
@@ -194,6 +192,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (e) {
       swallow(e);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 

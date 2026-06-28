@@ -326,6 +326,45 @@ class TestSharedJournal:
         assert rc == 0
         assert captured_app["cocoloop_require_auth"] is True
 
+    def test_serve_passes_tentacle_config_to_app(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        cfg = _write_cfg(tmp_path)
+        with cfg.open("a", encoding="utf-8") as f:
+            f.write(
+                "\ntentacle:\n"
+                "  enabled: false\n"
+                "  ws_port: 8877\n"
+            )
+
+        import uvicorn
+        from fastapi import FastAPI
+
+        import runtime.platform.ui as ui_module
+
+        captured_app = {}
+
+        def spy_create_app(journal_path=None, **kwargs):
+            captured_app.update(kwargs)
+            return FastAPI()
+
+        monkeypatch.setattr(ui_module, "create_app", spy_create_app)
+        monkeypatch.setattr(uvicorn, "run", lambda *a, **kw: None)
+
+        from runtime.cli import run_serve
+
+        rc = run_serve(
+            config_path=cfg,
+            host="127.0.0.1",
+            port=8000,
+            learn_interval_s=0,
+            color=False,
+        )
+
+        assert rc == 0
+        assert captured_app["tentacle_enabled"] is False
+        assert captured_app["tentacle_ws_port"] == 8877
+
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
