@@ -523,6 +523,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     | "account"
     | "models"
     | "automation"
+    | "privacy"
   >("appearance");
 
   const openSettingsSection = useCallback((tab?: string) => {
@@ -533,7 +534,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       tab === "memory" ||
       tab === "notification" ||
       tab === "about" ||
-      tab === "automation"
+      tab === "automation" ||
+      tab === "privacy"
         ? tab
         : "appearance";
     setSettingsDefaultSection(next);
