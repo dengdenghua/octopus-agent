@@ -130,6 +130,45 @@ class TestKgEndpoint:
         assert data["kg_size"] == 0
         assert data["triples"] == []
 
+    def test_imported_long_entity_keeps_full_edge_target(
+        self,
+        client: TestClient,
+    ) -> None:
+        long_object = "object:" + "x" * 260
+        imported = client.post(
+            "/api/kg/import",
+            json={
+                "source": "test_import",
+                "triples": [
+                    {
+                        "subject": "subject:a",
+                        "predicate": "mentions",
+                        "object": long_object,
+                        "confidence": 0.91,
+                    }
+                ],
+            },
+        )
+
+        assert imported.status_code == 200, imported.text
+        assert imported.json()["imported"] == 1
+
+        graph = client.get("/api/knowledge/graph", params={"limit": 20})
+
+        assert graph.status_code == 200, graph.text
+        data = graph.json()
+        entity_ids = {entity["id"] for entity in data["entities"]}
+        rel = next(
+            relationship
+            for relationship in data["relationships"]
+            if relationship["relationship_type"] == "mentions"
+        )
+        assert long_object in entity_ids
+        assert rel["target_name"] == long_object
+        assert rel["target_name"] in entity_ids
+        assert rel["status"] == "active"
+        assert rel["source_ref"] == "test_import"
+
 
 # ═══════════════════════════════════════════════════════════
 # /api/progress

@@ -6464,11 +6464,31 @@ export interface Translations {
     graphView: string;
     listView: string;
     searchPlaceholder: string;
-    layouts: {
-      ring: string;
-      star: string;
-      layers: string;
-      clusters: string;
+    entityTypes: {
+      center: string;
+      subject: string;
+      object: string;
+      neighbor: string;
+    };
+    controls: {
+      filters: string;
+      focus: string;
+      groups: string;
+      display: string;
+      forces: string;
+      evidence: string;
+      labels: string;
+      links: string;
+      stars: string;
+      autoRotate: string;
+      confidence: string;
+      degree: string;
+      updated: string;
+      nodeSize: string;
+      linkWidth: string;
+      linkDistance: string;
+      spread: string;
+      fitGraph: string;
     };
     nodeAndEdgeStats: (n: number, e: number) => string;
   };
