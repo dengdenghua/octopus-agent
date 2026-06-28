@@ -1215,9 +1215,15 @@ def run_ui(
     # Opt-in co-launch of the octopus-storage sibling (File Agent backend), so a
     # single-machine user gets one command. Off by default; best-effort.
     with contextlib.suppress(Exception):
-        from runtime.sensing.gateway.storage_supervisor import maybe_start_storage
+        from runtime.sensing.gateway.storage_supervisor import (
+            maybe_start_storage,
+            start_storage_heartbeat,
+        )
 
         maybe_start_storage()
+        # Keep storage up for the whole session: detect late boot / crashes and
+        # relaunch, instead of the old one-shot 10s readiness probe.
+        start_storage_heartbeat()
 
     if uds:
         import os

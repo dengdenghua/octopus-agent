@@ -26,11 +26,28 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 _LOG = logging.getLogger("octopus.storage_supervisor")
 _proc: subprocess.Popen | None = None
 _lock = threading.Lock()
+
+# Heartbeat supervision: how often to probe liveness, and the minimum gap between
+# restart attempts (so a wedged / boot-looping storage can't be thrash-restarted).
+_HEARTBEAT_INTERVAL_S = 20.0
+_RESTART_BACKOFF_S = 30.0
+
+# Liveness + restart state, surfaced via storage_status() for a status endpoint / UI.
+_status_lock = threading.Lock()
+_state: dict[str, Any] = {
+    "up": False,
+    "last_check_ts": 0.0,
+    "restart_count": 0,
+    "last_restart_ts": 0.0,
+    "heartbeat": False,
+}
+_heartbeat_started = False
 
 
 def _autostart_enabled() -> bool:
@@ -80,22 +97,81 @@ def resolve_storage_command() -> list[str] | None:
 
 
 def _already_up() -> bool:
-    from runtime.execution.suckers.storage_skills import storage_manifest
+    # Liveness, not auth: a 401 means Storage is up (restarting won't fix auth),
+    # so storage_alive treats any HTTP response as up — only a connection failure
+    # is 'down'. This keeps the heartbeat from thrash-restarting a healthy Storage.
+    from runtime.execution.suckers.storage_skills import storage_alive
 
-    return storage_manifest(timeout=1.5) is not None
+    return storage_alive(timeout=1.5)
+
+
+def storage_status() -> dict[str, Any]:
+    """Snapshot of storage liveness for a status endpoint / UI light. Returns the
+    heartbeat-cached value when the heartbeat is running; otherwise probes once on
+    demand so the answer is still correct when storage is externally managed."""
+    with _status_lock:
+        snap = dict(_state)
+    if not snap["heartbeat"]:
+        up = _already_up()
+        snap["up"] = up
+        snap["last_check_ts"] = time.time()
+    return snap
+
+
+def _record(up: bool) -> None:
+    with _status_lock:
+        _state["up"] = up
+        _state["last_check_ts"] = time.time()
+
+
+def _launch(cmd: list[str]) -> bool:
+    """Spawn the storage child (shell-free, resolved argv). Idempotent: returns
+    True without respawning when a live child already exists."""
+    global _proc
+    with _lock:
+        if _proc is not None and _proc.poll() is None:
+            return True
+        _proc = subprocess.Popen(  # noqa: S603 — argv list, shell=False, resolved command
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        atexit.register(stop_storage)
+    _LOG.info("octopus-storage launched: %s", " ".join(cmd))
+    return True
+
+
+def _should_restart(
+    *,
+    up: bool,
+    autostart: bool,
+    proc_alive: bool,
+    resolvable: bool,
+    now: float,
+    last_restart: float,
+    backoff_s: float,
+) -> bool:
+    """Pure restart decision (keeps the heartbeat loop testable + thrash-free):
+    relaunch only when storage is DOWN, we own its lifecycle (autostart), we can
+    resolve the launch command, our own child isn't already (re)booting, and we
+    haven't just tried within the backoff window."""
+    if up or not autostart or not resolvable or proc_alive:
+        return False
+    return (now - last_restart) >= backoff_s
 
 
 def maybe_start_storage() -> str:
     """Co-launch storage when opt-in + not already up + resolvable. Returns a
     status: ``disabled`` / ``already_running`` / ``not_found`` / ``started`` /
     ``error``. Non-blocking — readiness is logged from a background thread, so
-    server boot is never delayed. Never raises."""
-    global _proc
+    server boot is never delayed. Never raises. Ongoing supervision (restart on
+    death) is the heartbeat's job — see start_storage_heartbeat()."""
     if not _autostart_enabled():
         return "disabled"
     try:
         if _already_up():
             _LOG.info("octopus-storage already running; not co-launching")
+            _record(True)
             return "already_running"
         cmd = resolve_storage_command()
         if cmd is None:
@@ -104,16 +180,7 @@ def maybe_start_storage() -> str:
                 "(install it, or set OCTOPUS_STORAGE_CMD)"
             )
             return "not_found"
-        with _lock:
-            if _proc is not None and _proc.poll() is None:
-                return "started"
-            _proc = subprocess.Popen(  # noqa: S603 — argv list, shell=False, resolved command
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            atexit.register(stop_storage)
-        _LOG.info("octopus-storage co-launching: %s", " ".join(cmd))
+        _launch(cmd)
         threading.Thread(target=_wait_ready, name="storage-ready", daemon=True).start()
         return "started"
     except Exception as exc:  # noqa: BLE001 — autostart is strictly best-effort
@@ -132,6 +199,63 @@ def _wait_ready(*, attempts: int = 20, interval: float = 0.5) -> None:
             return
         time.sleep(interval)
     _LOG.info("octopus-storage not ready yet; search_documents will pick it up once it is")
+
+
+def start_storage_heartbeat() -> None:
+    """Start the ongoing supervision heartbeat once (idempotent, daemon thread).
+
+    No-op unless autostart owns storage's lifecycle — when storage is externally
+    managed we observe but don't restart it. Upgrades the old one-shot 10s
+    readiness window into continuous liveness + restart-on-death, so a storage
+    that boots late or crashes mid-session is picked back up instead of silently
+    leaving ``search_documents`` degraded forever."""
+    global _heartbeat_started
+    if not _autostart_enabled():
+        return
+    with _status_lock:
+        if _heartbeat_started:
+            return
+        _heartbeat_started = True
+        _state["heartbeat"] = True
+    threading.Thread(
+        target=_heartbeat_loop, name="storage-heartbeat", daemon=True
+    ).start()
+    _LOG.info("octopus-storage heartbeat supervisor started")
+
+
+def _heartbeat_loop() -> None:
+    while True:
+        time.sleep(_HEARTBEAT_INTERVAL_S)
+        try:
+            up = _already_up()
+            _record(up)
+            if up:
+                continue
+            cmd = resolve_storage_command()
+            proc = _proc
+            proc_alive = proc is not None and proc.poll() is None
+            with _status_lock:
+                last_restart = float(_state["last_restart_ts"])
+            if _should_restart(
+                up=up,
+                autostart=_autostart_enabled(),
+                proc_alive=proc_alive,
+                resolvable=cmd is not None,
+                now=time.time(),
+                last_restart=last_restart,
+                backoff_s=_RESTART_BACKOFF_S,
+            ):
+                assert cmd is not None  # resolvable=True guaranteed it
+                _launch(cmd)
+                with _status_lock:
+                    _state["restart_count"] = int(_state["restart_count"]) + 1
+                    _state["last_restart_ts"] = time.time()
+                _LOG.warning(
+                    "storage heartbeat: octopus-storage was down — relaunched (%s)",
+                    " ".join(cmd),
+                )
+        except Exception as exc:  # noqa: BLE001 — the heartbeat must never die
+            _LOG.debug("storage heartbeat tick error: %s", exc)
 
 
 def stop_storage() -> None:
