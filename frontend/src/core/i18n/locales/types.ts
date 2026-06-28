@@ -2669,6 +2669,19 @@ export interface Translations {
         removeTooltip: string;
         empty: string;
       };
+      compatDiagnostics: {
+        title: string;
+        loading: string;
+        unavailable: string;
+        notApplicable: string;
+        fallbacks: (count: number) => string;
+        headers: (names: string) => string;
+        removedFields: (fields: string, count: number) => string;
+        changedFields: (fields: string, count: number) => string;
+        addedFields: (fields: string, count: number) => string;
+        retryReasons: (reasons: string, count: number) => string;
+        loadFailed: string;
+      };
       localModels: {
         title: string;
         subtitle: string;

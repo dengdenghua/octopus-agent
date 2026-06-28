@@ -2925,6 +2925,23 @@ export const zhCN: Translations = {
         removeTooltip: "删除该模型 ID",
         empty: "至少需要一个模型 ID",
       },
+      compatDiagnostics: {
+        title: "兼容诊断",
+        loading: "正在加载兼容诊断",
+        unavailable: "兼容诊断暂不可用",
+        notApplicable: "不是 OpenAI 兼容模型",
+        fallbacks: (count: number) => `${count} 个 fallback`,
+        headers: (names: string) => `请求头: ${names}`,
+        removedFields: (fields: string, count: number) =>
+          `剥离 ${count > 5 ? `${fields}…` : fields}`,
+        changedFields: (fields: string, count: number) =>
+          `改写 ${count > 5 ? `${fields}…` : fields}`,
+        addedFields: (fields: string, count: number) =>
+          `新增 ${count > 5 ? `${fields}…` : fields}`,
+        retryReasons: (reasons: string, count: number) =>
+          `重试策略: ${count > 4 ? `${reasons}…` : reasons}`,
+        loadFailed: "加载兼容诊断失败",
+      },
       localModels: {
         title: "本地模型",
         subtitle:

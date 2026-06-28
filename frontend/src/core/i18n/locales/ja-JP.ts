@@ -3115,6 +3115,24 @@ export const jaJP: Translations = {
         removeTooltip: "このモデル ID を削除",
         empty: "モデル ID は1つ以上必要です",
       },
+      compatDiagnostics: {
+        title: "Compat",
+        loading: "Loading compatibility diagnostics",
+        unavailable: "Compatibility diagnostics unavailable",
+        notApplicable: "Not an OpenAI-compatible entry",
+        fallbacks: (count: number) =>
+          `${count} fallback${count === 1 ? "" : "s"}`,
+        headers: (names: string) => `headers: ${names}`,
+        removedFields: (fields: string, count: number) =>
+          `drops ${count > 5 ? `${fields}…` : fields}`,
+        changedFields: (fields: string, count: number) =>
+          `changes ${count > 5 ? `${fields}…` : fields}`,
+        addedFields: (fields: string, count: number) =>
+          `adds ${count > 5 ? `${fields}…` : fields}`,
+        retryReasons: (reasons: string, count: number) =>
+          `retry plan: ${count > 4 ? `${reasons}…` : reasons}`,
+        loadFailed: "Failed to load compatibility diagnostics",
+      },
       localModels: {
         title: "ローカルモデル",
         subtitle:

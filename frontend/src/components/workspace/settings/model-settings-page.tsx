@@ -1,6 +1,7 @@
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
+  InfoIcon,
   EyeIcon,
   EyeOffIcon,
   Loader2Icon,
@@ -218,7 +219,8 @@ const PROVIDERS: readonly ProviderPreset[] = [
     value: "qianfan",
     baseUrl: "https://qianfan.baidubce.com/v2",
     protocol: "openai",
-    consoleUrl: "https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application",
+    consoleUrl:
+      "https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application",
     suggestedModels: ["ernie-4.5-turbo-128k", "ernie-x1-turbo-32k"],
   },
 
@@ -291,6 +293,39 @@ interface ModelConfig {
   max_tokens?: number | null;
 }
 
+interface CompatDiagnosticUpstream {
+  model: string;
+  profile?: string | null;
+  profile_display_name?: string | null;
+  normalization?: {
+    removed_fields?: string[];
+    added_fields?: string[];
+    changed_fields?: string[];
+    normalized_fields?: string[];
+  };
+  fallback_retries?: Array<{
+    reason?: string;
+    removed_fields?: string[];
+    added_fields?: string[];
+    changed_fields?: string[];
+  }>;
+}
+
+interface CompatDiagnostic {
+  id: string;
+  provider?: string | null;
+  applicable: boolean;
+  reason?: string | null;
+  has_api_key?: boolean;
+  default_header_names?: string[];
+  upstreams?: CompatDiagnosticUpstream[];
+}
+
+type CompatDiagnosticState =
+  | { status: "idle" | "loading"; byId: Record<string, CompatDiagnostic> }
+  | { status: "ready"; byId: Record<string, CompatDiagnostic> }
+  | { status: "error"; byId: Record<string, CompatDiagnostic>; error: string };
+
 // Parse `Header-Name: value` lines into a dict. Blank lines and lines
 // lacking a colon are ignored so users can leave helper comments.
 function parseHeadersText(text: string): Record<string, string> {
@@ -334,10 +369,63 @@ function validateBaseUrl(url: string): string | null {
   return null;
 }
 
+function collectCompatFields(
+  diagnostic: CompatDiagnostic | undefined,
+  key: "removed_fields" | "added_fields" | "changed_fields",
+): string[] {
+  const seen = new Set<string>();
+  for (const upstream of diagnostic?.upstreams ?? []) {
+    const values = upstream.normalization?.[key] ?? [];
+    for (const value of values) {
+      if (typeof value === "string" && value.trim()) seen.add(value);
+    }
+  }
+  return Array.from(seen).sort();
+}
+
+function countCompatRetries(diagnostic: CompatDiagnostic | undefined): number {
+  return (diagnostic?.upstreams ?? []).reduce(
+    (total, upstream) =>
+      total +
+      (Array.isArray(upstream.fallback_retries)
+        ? upstream.fallback_retries.length
+        : 0),
+    0,
+  );
+}
+
+function summarizeCompatProfiles(
+  diagnostic: CompatDiagnostic | undefined,
+): string[] {
+  const seen = new Set<string>();
+  for (const upstream of diagnostic?.upstreams ?? []) {
+    const label = upstream.profile_display_name || upstream.profile;
+    if (typeof label === "string" && label.trim()) seen.add(label);
+  }
+  return Array.from(seen);
+}
+
+function summarizeCompatRetryReasons(
+  diagnostic: CompatDiagnostic | undefined,
+): string[] {
+  const seen = new Set<string>();
+  for (const upstream of diagnostic?.upstreams ?? []) {
+    for (const retry of upstream.fallback_retries ?? []) {
+      if (retry.reason) seen.add(retry.reason);
+    }
+  }
+  return Array.from(seen).sort();
+}
+
 // ── Main page ──────────────────────────────────────────────────
 export default function ModelSettingsPage() {
   const { t } = useI18n();
   const [models, setModels] = useState<ModelConfig[]>([]);
+  const [compatDiagnostics, setCompatDiagnostics] =
+    useState<CompatDiagnosticState>({
+      status: "idle",
+      byId: {},
+    });
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingModel, setEditingModel] = useState<string | null>(null);
@@ -352,6 +440,47 @@ export default function ModelSettingsPage() {
   // (/api/config/custom-models/*). The legacy /api/models was the
   // OpenAI-compat gateway's *skills-as-models* listing and had no
   // writable CRUD on this backend — writing to it was silently no-op.
+  const fetchCompatDiagnostics = useCallback(async () => {
+    setCompatDiagnostics((prev) => ({
+      status: "loading",
+      byId: prev.byId,
+    }));
+    try {
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/custom-models/compat-diagnostics`,
+        {
+          headers: authHeaders(),
+        },
+      );
+      if (!res.ok) {
+        throw new Error(
+          `Failed to fetch compatibility diagnostics: ${res.status}`,
+        );
+      }
+      const data = await res.json();
+      const diagnostics = Array.isArray(data?.diagnostics)
+        ? (data.diagnostics as CompatDiagnostic[])
+        : [];
+      const byId: Record<string, CompatDiagnostic> = {};
+      for (const row of diagnostics) {
+        if (typeof row?.id === "string" && row.id.trim()) {
+          byId[row.id] = row;
+        }
+      }
+      setCompatDiagnostics({ status: "ready", byId });
+    } catch (error) {
+      swallow(error);
+      setCompatDiagnostics((prev) => ({
+        status: "error",
+        byId: prev.byId,
+        error:
+          error instanceof Error
+            ? error.message
+            : t.settings.model.compatDiagnostics.loadFailed,
+      }));
+    }
+  }, [t.settings.model.compatDiagnostics.loadFailed]);
+
   const fetchModels = useCallback(async () => {
     try {
       const res = await fetch(
@@ -366,13 +495,14 @@ export default function ModelSettingsPage() {
       const data = await res.json();
       const list = data.models || [];
       setModels(list);
+      void fetchCompatDiagnostics();
     } catch (error) {
       console.error(error);
       toast.error(t.settings.model.loadFailed);
     } finally {
       setLoading(false);
     }
-  }, [t.settings.model.loadFailed]);
+  }, [fetchCompatDiagnostics, t.settings.model.loadFailed]);
 
   const checkGateway = useCallback(async () => {
     setGatewayStatus("checking");
@@ -505,6 +635,7 @@ export default function ModelSettingsPage() {
             supports_thinking: model.supports_thinking,
             supports_vision: model.supports_vision,
             isDefault: model.name === defaultModelName,
+            compat_diagnostic: compatDiagnostics.byId[model.name] ?? null,
           })),
         }),
       }),
@@ -640,7 +771,14 @@ export default function ModelSettingsPage() {
     return () => {
       unregisters.forEach((unregister) => unregister());
     };
-  }, [checkGateway, defaultModelName, fetchModels, gatewayStatus, models]);
+  }, [
+    checkGateway,
+    compatDiagnostics.byId,
+    defaultModelName,
+    fetchModels,
+    gatewayStatus,
+    models,
+  ]);
 
   return (
     <div className="space-y-8">
@@ -681,6 +819,7 @@ export default function ModelSettingsPage() {
             <div className="rounded-lg border border-border divide-y divide-border">
               {models.map((m) => {
                 const list = Array.isArray(m.models) ? m.models : [];
+                const diagnostic = compatDiagnostics.byId[m.name];
                 return (
                   <div
                     key={m.name}
@@ -722,6 +861,10 @@ export default function ModelSettingsPage() {
                           ))}
                         </ul>
                       )}
+                      <CompatDiagnosticSummary
+                        diagnostic={diagnostic}
+                        status={compatDiagnostics.status}
+                      />
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       {defaultModelName === m.name ? (
@@ -922,6 +1065,114 @@ export default function ModelSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CompatDiagnosticSummary({
+  diagnostic,
+  status,
+}: {
+  diagnostic?: CompatDiagnostic;
+  status: CompatDiagnosticState["status"];
+}) {
+  const { t } = useI18n();
+
+  if (status === "loading" && !diagnostic) {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <Loader2Icon className="size-3 animate-spin" />
+        {t.settings.model.compatDiagnostics.loading}
+      </div>
+    );
+  }
+
+  if (!diagnostic) {
+    return status === "error" ? (
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <AlertTriangleIcon className="size-3.5 text-amber-500" />
+        {t.settings.model.compatDiagnostics.unavailable}
+      </div>
+    ) : null;
+  }
+
+  if (!diagnostic.applicable) {
+    return (
+      <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+        <InfoIcon className="size-3.5" />
+        <span>
+          {diagnostic.reason ||
+            t.settings.model.compatDiagnostics.notApplicable}
+        </span>
+      </div>
+    );
+  }
+
+  const profiles = summarizeCompatProfiles(diagnostic);
+  const removed = collectCompatFields(diagnostic, "removed_fields");
+  const changed = collectCompatFields(diagnostic, "changed_fields");
+  const added = collectCompatFields(diagnostic, "added_fields");
+  const fallbackCount = countCompatRetries(diagnostic);
+  const retryReasons = summarizeCompatRetryReasons(diagnostic);
+  const headerNames = diagnostic.default_header_names ?? [];
+
+  return (
+    <div className="mt-3 space-y-2 border-l border-border pl-3 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 font-medium text-foreground/80">
+          <CheckCircle2Icon className="size-3.5 text-emerald-500" />
+          {t.settings.model.compatDiagnostics.title}
+        </span>
+        {profiles.length > 0 && (
+          <span className="rounded border border-border px-1.5 py-0.5">
+            {profiles.join(", ")}
+          </span>
+        )}
+        <span className="rounded border border-border px-1.5 py-0.5">
+          {t.settings.model.compatDiagnostics.fallbacks(fallbackCount)}
+        </span>
+        {headerNames.length > 0 && (
+          <span className="rounded border border-border px-1.5 py-0.5">
+            {t.settings.model.compatDiagnostics.headers(headerNames.join(", "))}
+          </span>
+        )}
+      </div>
+      {(removed.length > 0 || changed.length > 0 || added.length > 0) && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {removed.length > 0 && (
+            <span title={removed.join(", ")}>
+              {t.settings.model.compatDiagnostics.removedFields(
+                removed.slice(0, 5).join(", "),
+                removed.length,
+              )}
+            </span>
+          )}
+          {changed.length > 0 && (
+            <span title={changed.join(", ")}>
+              {t.settings.model.compatDiagnostics.changedFields(
+                changed.slice(0, 5).join(", "),
+                changed.length,
+              )}
+            </span>
+          )}
+          {added.length > 0 && (
+            <span title={added.join(", ")}>
+              {t.settings.model.compatDiagnostics.addedFields(
+                added.slice(0, 5).join(", "),
+                added.length,
+              )}
+            </span>
+          )}
+        </div>
+      )}
+      {retryReasons.length > 0 && (
+        <div title={retryReasons.join(", ")}>
+          {t.settings.model.compatDiagnostics.retryReasons(
+            retryReasons.slice(0, 4).join(", "),
+            retryReasons.length,
+          )}
+        </div>
+      )}
     </div>
   );
 }

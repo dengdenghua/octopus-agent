@@ -48,7 +48,16 @@ beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
   // The default model name is loaded from a /api/config call on mount.
-  fetchMock.mockResolvedValue(jsonOk({ default: "", models: [] }));
+  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+      return jsonOk({
+        schema: "octopus.openai_compat_diagnostics.v1",
+        diagnostics: [],
+      });
+    }
+    return jsonOk({ default: "", models: [] });
+  });
 });
 
 afterEach(() => {
@@ -64,25 +73,45 @@ function jsonOk(body: unknown) {
   };
 }
 
+function mockModelSettingsFetch({
+  models,
+  diagnostics = [],
+}: {
+  models: unknown[];
+  diagnostics?: unknown[];
+}) {
+  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/api/config/custom-models/compat-diagnostics")) {
+      return jsonOk({
+        schema: "octopus.openai_compat_diagnostics.v1",
+        diagnostics,
+      });
+    }
+    if (url.includes("/api/config/custom-models")) {
+      return jsonOk({ models });
+    }
+    return jsonOk({ default: "", models: [] });
+  });
+}
+
 describe("ModelSettingsPage · custom-model list rendering", () => {
   it("renders the full models list for an entry with multiple slots", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonOk({
-        models: [
-          {
-            id: "openai-prod",
-            name: "openai-prod",
-            display_name: "My OpenAI",
-            models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
-            provider: "openai",
-            base_url: "https://api.openai.com/v1",
-            has_api_key: true,
-            supports_thinking: false,
-            supports_vision: false,
-          },
-        ],
-      }),
-    );
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "openai-prod",
+          name: "openai-prod",
+          display_name: "My OpenAI",
+          models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
+          provider: "openai",
+          base_url: "https://api.openai.com/v1",
+          has_api_key: true,
+          supports_thinking: false,
+          supports_vision: false,
+        },
+      ],
+    });
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 
@@ -98,24 +127,90 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(screen.getByText("gpt-4.1")).toBeInTheDocument();
   });
 
+  it("renders OpenAI-compatible diagnostics for a strict domestic provider", async () => {
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "kimi-code",
+          name: "kimi-code",
+          display_name: "Kimi Code",
+          models: ["kimi-k2.7-code"],
+          provider: "openai",
+          base_url: "https://api.kimi.com/coding/v1",
+          has_api_key: true,
+          supports_thinking: false,
+          supports_vision: false,
+        },
+      ],
+      diagnostics: [
+        {
+          id: "kimi-code",
+          provider: "openai",
+          applicable: true,
+          has_api_key: true,
+          default_header_names: ["User-Agent"],
+          upstreams: [
+            {
+              model: "kimi-k2.7-code",
+              profile: "kimi_coding",
+              profile_display_name: "Kimi Coding",
+              normalization: {
+                removed_fields: [
+                  "parallel_tool_calls",
+                  "reasoning_effort",
+                  "temperature",
+                  "tool_choice",
+                ],
+                added_fields: [],
+                changed_fields: ["tools"],
+              },
+              fallback_retries: [
+                { reason: "strict_tool_schema", removed_fields: [] },
+                {
+                  reason: "combined_compatibility_fallback",
+                  removed_fields: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Kimi Code")).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("兼容诊断")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Kimi Coding")).toBeInTheDocument();
+    expect(screen.getByText("2 个 fallback")).toBeInTheDocument();
+    expect(screen.getByText("请求头: User-Agent")).toBeInTheDocument();
+    expect(screen.getByText(/parallel_tool_calls/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/combined_compatibility_fallback/),
+    ).toBeInTheDocument();
+  });
+
   it("renders a single-model entry without a trailing junk chip", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonOk({
-        models: [
-          {
-            id: "single",
-            name: "single",
-            display_name: "Single",
-            models: ["gpt-4o-mini"],
-            provider: "openai",
-            base_url: "https://api.openai.com/v1",
-            has_api_key: true,
-            supports_thinking: false,
-            supports_vision: false,
-          },
-        ],
-      }),
-    );
+    mockModelSettingsFetch({
+      models: [
+        {
+          id: "single",
+          name: "single",
+          display_name: "Single",
+          models: ["gpt-4o-mini"],
+          provider: "openai",
+          base_url: "https://api.openai.com/v1",
+          has_api_key: true,
+          supports_thinking: false,
+          supports_vision: false,
+        },
+      ],
+    });
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 
