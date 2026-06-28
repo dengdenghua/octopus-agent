@@ -345,6 +345,24 @@ class TestRequestShape:
         assert "temperature" not in payload
         assert r._profile_for_model("K2.7 Code").id == "kimi_coding"
 
+    def test_kimi_k2_general_model_name_keeps_sampling_on_plain_proxy(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(
+            base_url="https://proxy.example/v1",
+            client=fake,
+        )
+        r.call(
+            _req(model="kimi-k2-0711-preview").model_copy(
+                update={"temperature": 1.8},
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        assert payload["model"] == "kimi-k2-0711-preview"
+        assert payload["temperature"] == 1.0
+        assert payload["max_tokens"] == 128
+        assert r._profile_for_model("kimi-k2-0711-preview").id == "kimi"
+
     def test_moonshot_profile_clamps_temperature(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(

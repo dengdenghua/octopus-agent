@@ -42,6 +42,7 @@ def test_domestic_provider_profile_detection_by_model_name() -> None:
     assert resolve_openai_compat_profile("", "glm-4.6").id == "glm"
     assert resolve_openai_compat_profile("", "K2.7 Code").id == "kimi_coding"
     assert resolve_openai_compat_profile("", "kimi-k2.7-code").id == "kimi_coding"
+    assert resolve_openai_compat_profile("", "kimi-k2-0711-preview").id == "kimi"
 
 
 def test_profile_catalog_includes_main_domestic_providers() -> None:
@@ -128,6 +129,26 @@ def test_kimi_coding_payload_omits_sampling_and_thinking_extensions() -> None:
     assert "top_p" not in payload
     assert "reasoning_effort" not in payload
     assert "thinking" not in payload
+
+
+def test_kimi_k2_general_model_keeps_sampling_on_plain_proxy() -> None:
+    profile = resolve_openai_compat_profile(
+        "https://proxy.example/v1",
+        "kimi-k2-0711-preview",
+    )
+    payload = normalize_openai_compat_payload(
+        {
+            "model": "kimi-k2-0711-preview",
+            "messages": [],
+            "temperature": 1.7,
+            "top_p": 0.9,
+        },
+        profile=profile,
+    )
+
+    assert profile.id == "kimi"
+    assert payload["temperature"] == 1.0
+    assert payload["top_p"] == 0.9
 
 
 def test_kimi_general_clamps_temperature_but_keeps_tools() -> None:
