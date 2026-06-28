@@ -28,7 +28,9 @@ const LABELS = {
     speedUnit: "tok/s",
     estMem: "约",
     verdict: { fits: "可运行", tight: "勉强可运行", offload: "需 offload（较慢）" } as Record<string, string>,
-    note: "目录与带宽表为人工快照，随新芯片/模型会过时，仅供参考。",
+    note: "估算仅供参考；带宽表为人工快照，吞吐为粗略估计。",
+    sourceLive: "实时 · HuggingFace 热门",
+    sourceStatic: "内置快照（正在获取最新…）",
   },
   en: {
     title: "Local model recommendations",
@@ -41,7 +43,9 @@ const LABELS = {
     speedUnit: "tok/s",
     estMem: "~",
     verdict: { fits: "Runs well", tight: "Tight fit", offload: "Needs offload (slower)" } as Record<string, string>,
-    note: "Catalog & bandwidth tables are a hand-curated snapshot; treat as guidance.",
+    note: "Estimates only; bandwidth tables are a snapshot and throughput is approximate.",
+    sourceLive: "Live · HuggingFace trending",
+    sourceStatic: "Built-in snapshot (fetching latest…)",
   },
 };
 
@@ -159,7 +163,9 @@ export function ModelCookbook() {
               />
             ))}
           </div>
-          <p className="mt-2 text-[10px] text-muted-foreground/70">{t.note}</p>
+          <p className="mt-2 text-[10px] text-muted-foreground/70">
+            {snapshot?.source === "huggingface" ? t.sourceLive : t.sourceStatic} · {t.note}
+          </p>
         </>
       )}
     </div>

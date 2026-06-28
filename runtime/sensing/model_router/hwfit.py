@@ -60,12 +60,13 @@ class Hardware:
 
 @dataclass
 class ModelSpec:
-    tag: str  # the ollama pull tag, e.g. "qwen2.5:7b"
+    tag: str  # the ollama pull tag, e.g. "qwen2.5:7b" or "hf.co/<repo>:Q4_K_M"
     label: str
     params_b: float  # total params, billions
     family: str
     arch_rank: int  # rough capability/recency tier (higher = newer/stronger)
     active_params_b: float | None = None  # for MoE; defaults to params_b (dense)
+    weight_gb: float | None = None  # measured GGUF size (live catalog); overrides the estimate
 
     def active(self) -> float:
         return self.active_params_b or self.params_b
@@ -271,10 +272,12 @@ def _score(rec_verdict: str, arch_rank: int, params_b: float, tps: float | None)
         return 0.0
     speed = 0.0
     if tps is not None:
-        # Saturating bonus: reward usable interactivity, don't let a tiny-but-fast
-        # model outrank a capable one that's still comfortably fast.
-        speed = min(tps, 40.0) / 4.0
-    return base + arch_rank * 2.0 + min(params_b, 40.0) * 0.8 + speed
+        # Saturating bonus: reward usable interactivity, but cap it so a tiny
+        # toy model can't outrank a far more capable one that's still fast enough.
+        speed = min(tps, 30.0) / 6.0
+    # Capability (size) is weighted ahead of raw speed so a mid-size model beats a
+    # 1B that only wins on tokens/s.
+    return base + arch_rank * 2.0 + min(params_b, 40.0) * 1.4 + speed
 
 
 def recommend(
@@ -293,11 +296,20 @@ def recommend(
     installed = installed or set()
     out: list[Recommendation] = []
     for spec in catalog or default_catalog():
-        mem = estimate_mem_gb(spec.params_b, quant)
+        if spec.weight_gb:
+            # Live catalog: a measured GGUF size beats the params×bpp estimate.
+            mem = round(spec.weight_gb + _OVERHEAD_GB, 1)
+            tps = (
+                round(hardware.bandwidth_gbps / spec.weight_gb, 1)
+                if hardware.bandwidth_gbps
+                else None
+            )
+        else:
+            mem = estimate_mem_gb(spec.params_b, quant)
+            tps = estimate_tps(spec.active(), quant, hardware.bandwidth_gbps)
         verdict = _verdict(mem, hardware.vram_gb)
         if verdict == "too_big":
             continue
-        tps = estimate_tps(spec.active(), quant, hardware.bandwidth_gbps)
         out.append(
             Recommendation(
                 tag=spec.tag,
@@ -409,13 +421,26 @@ def pull_states() -> dict[str, str]:
 
 def cookbook_snapshot() -> dict[str, object]:
     """Everything the UI needs in one call: hardware + ranked recommendations,
-    with installed flags, ollama availability, and in-flight pulls."""
+    with installed flags, ollama availability, in-flight pulls, and the catalog
+    source. Prefers the live HuggingFace catalog; falls back to the static
+    snapshot on a cold cache / offline (serve-stale-while-revalidate)."""
     hw = detect_hardware()
     inst = installed_models()
-    recs = recommend(hw, installed=inst)
+    specs = None
+    source = "static"
+    try:
+        from runtime.sensing.model_router.hf_catalog import dynamic_catalog
+
+        specs = dynamic_catalog()
+        if specs:
+            source = "huggingface"
+    except Exception:  # noqa: BLE001 — live catalog is strictly best-effort
+        specs = None
+    recs = recommend(hw, specs or default_catalog(), installed=inst)
     return {
         "hardware": asdict(hw),
         "ollama_available": ollama_available(),
         "recommendations": [asdict(r) for r in recs],
         "pulls": pull_states(),
+        "source": source,
     }
