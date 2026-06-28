@@ -1261,6 +1261,20 @@ def create_app(
         )
     )
 
+    # ─── Local-model cookbook · hardware-aware recommendations + pull ──
+    # GET /api/cookbook/snapshot (public) + POST /api/cookbook/pull (auth-gated).
+    from runtime.platform.ui.cookbook_router import create_cookbook_router
+
+    app.include_router(
+        create_cookbook_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
+
     # ─── FS router · extracted to fs_router.py ─────────
     # The 3 endpoints + 2 helpers that used to live here inline now
     # sit in runtime/sensing/siphon/fs_router.py. Same contract ·
