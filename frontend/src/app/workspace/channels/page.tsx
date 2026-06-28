@@ -664,7 +664,6 @@ function ChannelCard({
                   rel="noreferrer"
                   className="ml-1 text-primary underline underline-offset-2 hover:opacity-80 cursor-pointer"
                   onClick={(e) => {
-                    console.log("Help URL clicked:", row.help_url);
                     if (!row.help_url || row.help_url === "#") {
                       e.preventDefault();
                       toast.info(t.channels.helpDocsComingSoon);

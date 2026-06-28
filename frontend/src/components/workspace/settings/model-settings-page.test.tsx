@@ -27,6 +27,14 @@ vi.mock("@/providers/AuthProvider", () => ({
   }),
 }));
 
+// ModelCookbook fetches /api/cookbook/snapshot on mount — unrelated to the
+// custom-model list under test here, and its fetch would consume the
+// order-dependent mockResolvedValueOnce below. Stub it out so the page's
+// /api/config/custom-models fetch deterministically receives the mock.
+vi.mock("@/components/workspace/model-cookbook", () => ({
+  ModelCookbook: () => null,
+}));
+
 const fetchMock = vi.fn();
 
 beforeEach(() => {
