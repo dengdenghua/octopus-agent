@@ -388,4 +388,30 @@ describe("<ModelPicker />", () => {
     await user.click(trigger);
     expect(await screen.findByRole("menu")).toBeInTheDocument();
   });
+
+  it("surfaces octopus-mix in the Official tab when advertised", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      withProviders(
+        <ModelPicker
+          models={[
+            {
+              name: "octopus-mix",
+              display_name: "Octopus Mix · 多模型协同",
+              provider: "octopus",
+            },
+            { name: "minimax-m2.5", display_name: "MiniMax M2.5" },
+          ]}
+          value="octopus-mix"
+          onChange={onChange}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "选择模型" }));
+    const menu = await screen.findByRole("menu");
+    const root = menu.parentElement ?? menu;
+    // models advertises octopus-mix → it classifies as Official (not Custom)
+    expect(root.textContent ?? "").toContain("Octopus Mix");
+  });
 });

@@ -80,6 +80,41 @@ class TestListModels:
         assert "octopus-agent/list_cwd" in ids
 
 
+class TestMixVirtualModel:
+    """octopus-mix = mixture-of-agents over /v1/chat/completions."""
+
+    def test_models_endpoint_advertises_octopus_mix(self, client):
+        ids = {m["id"] for m in client.get("/v1/models").json()["data"]}
+        assert "octopus-mix" in ids
+
+    def test_chat_completion_routes_through_mix(self, client):
+        r = client.post("/v1/chat/completions", json={
+            "model": "octopus-mix",
+            "messages": [{"role": "user", "content": "explain mixture of agents"}],
+        })
+        assert r.status_code == 200
+        data = r.json()
+        # echoes the virtual model + carries Mix provenance
+        assert data["model"] == "octopus-mix"
+        assert data["object"] == "chat.completion"
+        mix_meta = data["octopus"]["mix"]
+        assert mix_meta["proposers"] >= 1
+        assert mix_meta["drafts_used"] >= 1
+        assert mix_meta["degraded"] is False
+        assert isinstance(data["choices"][0]["message"]["content"], str)
+
+    def test_mix_streaming_emits_valid_sse(self, client):
+        r = client.post("/v1/chat/completions", json={
+            "model": "octopus-mix",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        })
+        assert r.status_code == 200
+        body = r.text
+        assert "chat.completion.chunk" in body
+        assert "data: [DONE]" in body
+
+
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════
