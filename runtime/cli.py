@@ -1225,6 +1225,18 @@ def run_ui(
         # relaunch, instead of the old one-shot 10s readiness probe.
         start_storage_heartbeat()
 
+    # Opt-in one-click local SearXNG for the private web-search backend (Docker
+    # container; off by default via OCTOPUS_SEARXNG_AUTOSTART). Graceful: no
+    # Docker → web search just uses the default ddg backend.
+    with contextlib.suppress(Exception):
+        from runtime.sensing.gateway.searxng_supervisor import (
+            maybe_start_searxng,
+            start_searxng_heartbeat,
+        )
+
+        maybe_start_searxng()
+        start_searxng_heartbeat()
+
     if uds:
         import os
         with contextlib.suppress(FileNotFoundError):

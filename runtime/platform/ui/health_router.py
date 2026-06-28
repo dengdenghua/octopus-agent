@@ -57,6 +57,17 @@ def create_health_router(
             return storage_status()
         return {"up": False, "heartbeat": False, "error": "unavailable"}
 
+    @router.get("/api/searxng/status")
+    def api_searxng_status() -> dict[str, Any]:
+        """Liveness of the optional one-click local SearXNG (private web-search
+        backend). ``up=false`` just means web search uses the default ddg
+        backend; deploy/stop go through the authenticated /api/searxng router."""
+        from runtime.sensing.gateway.searxng_supervisor import searxng_status
+
+        with contextlib.suppress(Exception):
+            return searxng_status()
+        return {"up": False, "heartbeat": False, "error": "unavailable"}
+
     @router.get("/api/status")
     def api_status() -> dict[str, Any]:
         from runtime.adapters.instrumentation import OTEL_AVAILABLE
