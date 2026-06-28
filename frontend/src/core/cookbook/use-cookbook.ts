@@ -38,6 +38,7 @@ export interface CookbookSnapshot {
   ollama_available: boolean;
   recommendations: CookbookRec[];
   pulls: Record<string, string>;
+  source?: string; // "huggingface" (live) | "static" (snapshot / cold cache)
 }
 
 const KEY = ["cookbook-snapshot"] as const;
@@ -47,6 +48,7 @@ const EMPTY: CookbookSnapshot = {
   ollama_available: false,
   recommendations: [],
   pulls: {},
+  source: "static",
 };
 
 async function fetchSnapshot(signal?: AbortSignal): Promise<CookbookSnapshot> {
@@ -62,13 +64,17 @@ export function useCookbook(): {
   const { data, isLoading } = useQuery({
     queryKey: KEY,
     queryFn: ({ signal }) => fetchSnapshot(signal),
-    // Only poll while a pull is in flight; otherwise this is static enough.
+    // Poll while a pull is in flight, or while the catalog is still the cold-start
+    // static fallback (the live HuggingFace list arrives a moment later); stop once
+    // it's live and idle.
     refetchInterval: (query) => {
       const s = query.state.data;
-      const pulling = s ? Object.values(s.pulls || {}).some((v) => v === "pulling") : false;
-      return pulling ? 4_000 : false;
+      if (!s) return 6_000;
+      const pulling = Object.values(s.pulls || {}).some((v) => v === "pulling");
+      const awaitingLive = s.source !== "huggingface";
+      return pulling || awaitingLive ? 6_000 : false;
     },
-    staleTime: 10_000,
+    staleTime: 5_000,
     refetchOnWindowFocus: false,
   });
   return { snapshot: data, isLoading };
