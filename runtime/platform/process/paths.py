@@ -57,6 +57,10 @@ class AppPaths:
         return self.data_dir / "review_queue.json"
 
     @property
+    def browser_desktop_runtime_evidence_path(self) -> Path:
+        return self.data_dir / "browser_desktop_runtime_evidence.json"
+
+    @property
     def subagent_policy_path(self) -> Path:
         return self.data_dir / "subagent_policy.json"
 
@@ -110,6 +114,11 @@ class AppPaths:
         gateway-backed interactive provider.
         """
         return self.data_dir / "permissions.json"
+
+    @property
+    def computer_automation_policy_path(self) -> Path:
+        """Where desktop automation app allow/deny decisions are persisted."""
+        return self.data_dir / "computer_automation_policy.json"
 
     @property
     def hooks_path(self) -> Path:

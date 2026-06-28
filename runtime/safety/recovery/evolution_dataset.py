@@ -411,7 +411,12 @@ def _normalize_cluster_text(text: str) -> str:
 def _failure_repair_category(failure: dict[str, Any]) -> str:
     route = str(failure.get("primary_repair_route") or "").strip().lower()
     source = str(failure.get("failure_source") or "").strip().lower()
-    if route and source in {"verification_failed", "verification_required", ""}:
+    if route and source in {
+        "verification_failed",
+        "verification_required",
+        "provider_compatibility_matrix",
+        "",
+    }:
         return route
     category = str(failure.get("category") or "").strip().lower()
     return source or category or "unclassified"

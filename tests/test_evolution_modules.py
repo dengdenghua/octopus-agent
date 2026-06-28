@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from runtime.platform.config.schema import EvolveConfig, PlannerConfig, _pick_cheaper
@@ -300,6 +303,35 @@ class TestGovernanceFitness:
         assert len(bundle["audit_sha256"]) == 64
         assert len(bundle["chain_sha256"]) == 64
 
+    def test_governance_audit_export_bundle_accepts_explicit_chain_secret(self, tmp_path):
+        from runtime.safety.evolution.governance_audit import (
+            append_governance_audit_event,
+            export_governance_audit_bundle,
+        )
+
+        audit_path = tmp_path / "promotion_audit.json"
+        chain_path = tmp_path / "promotion_audit_chain.jsonl"
+        secret = b"explicit-governance-secret"
+        append_governance_audit_event(
+            event_type="record_replay_audit_probe",
+            target="record_replay_audit",
+            status="passed",
+            artifact={"probe": True},
+            decision_context={"replay_gate": {"passed": True}},
+            audit_path=audit_path,
+            audit_chain_path=chain_path,
+            audit_chain_secret=secret,
+        )
+
+        bundle = export_governance_audit_bundle(
+            audit_path=audit_path,
+            audit_chain_path=chain_path,
+            audit_chain_secret=secret,
+        )
+
+        assert bundle["integrity"]["ok"] is True
+        assert bundle["chain"]["line_count"] == 1
+
     def test_governance_penalty_is_scoped_to_agent(self, tmp_path):
         audit_path = tmp_path / "promotion_audit.json"
         audit_path.write_text(
@@ -522,7 +554,7 @@ class TestAgentCompetitorScorecard:
             compute_ecosystem_readiness,
         )
 
-        missing = compute_ecosystem_readiness(root=tmp_path)
+        missing = compute_ecosystem_readiness(root=tmp_path, include_probe=False)
 
         assert missing["score"] == 0.0
         assert missing["missing_count"] == 5
@@ -540,7 +572,7 @@ class TestAgentCompetitorScorecard:
             encoding="utf-8",
         )
 
-        partial = compute_ecosystem_readiness(root=tmp_path)
+        partial = compute_ecosystem_readiness(root=tmp_path, include_probe=False)
 
         assert partial["passed"] == 4
         assert partial["missing_count"] == 1
@@ -556,7 +588,7 @@ class TestAgentCompetitorScorecard:
             encoding="utf-8",
         )
 
-        ready = compute_ecosystem_readiness(root=tmp_path)
+        ready = compute_ecosystem_readiness(root=tmp_path, include_probe=False)
 
         assert ready["score"] == 1.0
         assert ready["passed"] == 5
@@ -568,86 +600,471 @@ class TestAgentCompetitorScorecard:
             compute_agent_competitor_scorecard,
         )
 
-        report = compute_agent_competitor_scorecard()
+        report = compute_agent_competitor_scorecard(use_runtime_evidence_cache=False)
 
         assert report["schema"] == "octopus.agent_competitor_scorecard.v1"
         assert sum(dimension.weight for dimension in DIMENSIONS) == 100
         assert report["overall"] == {
             "codex": 93,
             "claude_code": 91,
+            "kimi_agent_swarm": 90,
             "cursor": 86,
-            "octopus": 93,
+            "octopus": 96,
         }
-        assert report["verdict"] == "competitive"
-        assert report["ranking"][0] == {"competitor": "octopus", "score": 93}
-        assert report["evidence_adjusted_overall"]["octopus"] == 93
-        assert report["evidence_adjusted_verdict"] == "competitive"
+        assert report["verdict"] == "leading"
+        assert report["ranking"][0] == {"competitor": "octopus", "score": 96}
+        assert report["evidence_adjusted_overall"]["octopus"] == 96
+        assert report["evidence_adjusted_verdict"] == "leading"
         assert report["evidence_adjusted_ranking"][0] == {
             "competitor": "octopus",
-            "score": 93,
+            "score": 96,
         }
         assert report["scorecard_policy"] == {
             "schema": "octopus.agent_scorecard_policy.v1",
-            "overall": "external_calibrated_baseline",
+            "overall": "external_calibrated_baseline_with_verified_recalibration",
             "evidence_adjusted_overall": "internal_certification_floor",
             "certification_floors_do_not_change_overall": True,
+            "verified_recalibration": (
+                "ecosystem maturity can move above the conservative baseline "
+                "only when readiness docs, evidence checklists, certification "
+                "floors, and threat-model controls are all green"
+            ),
+            "browser_desktop_runtime_gate": (
+                "browser/desktop scores keep the conservative baseline when "
+                "only the offline runtime contract is complete, move one point "
+                "above Codex with verified cold-start bootstrap readiness, move "
+                "higher only with live or fresh cached runtime evidence plus a "
+                "browser/desktop capability canary, and are lowered when the "
+                "contract or runtime gate exposes a real blocker"
+            ),
         }
+        radar = report["radar"]
+        assert radar["schema"] == "octopus.agent_scorecard_radar.v1"
+        assert radar["axis_count"] == len(report["dimensions"])
+        assert radar["axes"][0] == {
+            "id": "core_coding_loop",
+            "title": "Core coding loop",
+            "weight": 15,
+        }
+        assert radar["series"]["octopus"][0] == 97
+        assert radar["series"]["kimi_agent_swarm"][0] == 92
+        assert len(radar["series"]["octopus"]) == len(report["dimensions"])
+        assert radar["evidence_adjusted_series"]["octopus"] == radar["series"]["octopus"]
+        assert radar["octopus_advantage_count"] == 13
+        assert radar["octopus_gap_count"] == 0
+        assert radar["octopus_gap_edges"] == []
+        assert radar["octopus_true_advantage_count"] == 13
+        assert radar["octopus_true_strict_advantage_count"] == 13
+        assert radar["octopus_true_tie_count"] == 0
+        assert radar["octopus_true_gap_count"] == 0
+        assert radar["octopus_true_gap_edges"] == []
+        assert radar["octopus_true_tie_edges"] == []
+        assert "radar-beta" in radar["mermaid"]
+        assert "model_provider_runtime" in radar["mermaid"]
+        provider_runtime = report["provider_runtime"]
+        assert provider_runtime["schema"] == "octopus.agent_scorecard_provider_runtime.v1"
+        assert provider_runtime["available"] is True
+        assert provider_runtime["score"] >= 0
+        assert provider_runtime["verdict"] in {"pass", "review", "fail"}
+        assert provider_runtime["row_count"] == len(provider_runtime["rows"])
+        assert provider_runtime["policy"]["secrets_redacted"] is True
+        assert provider_runtime["policy"][
+            "configured_profile_gaps_are_not_builtin_support_gaps"
+        ] is True
+        assert provider_runtime["builtin_profile_coverage"]["ready"] is True
+        assert provider_runtime["builtin_profile_coverage"]["missing_profiles"] == []
+        assert provider_runtime["configured_profile_gaps"] == provider_runtime["coverage_gaps"]
+        assert report["tool_threat_model"]["schema"] == "octopus.tool_threat_model.v1"
+        assert report["tool_threat_model"]["verdict"] == "pass"
+        assert report["tool_threat_model"]["ready"] is True
         assert report["octopus_below_target"] == []
+        core = next(
+            row for row in report["dimensions"]
+            if row["id"] == "core_coding_loop"
+        )
+        assert core["octopus_baseline_score"] == 96
+        assert core["scores"]["octopus"] == 97
+        assert core["octopus_certified_score_floor"] == 97
+        assert core["octopus_score_source"] == (
+            "verified_core_coding_loop_recalibration"
+        )
+        assert core["octopus_core_coding_loop"] == report["core_coding_loop"]
+        assert report["core_coding_loop"]["ready"] is True
+        assert report["core_coding_loop"]["score"] == 1.0
+        assert report["core_coding_loop"]["canary_ready"] is True
+        assert report["core_coding_loop"]["canary"]["ready"] is True
+        assert core["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "core_coding_loop",
+            "applied": True,
+            "previous_score": 96,
+            "score": 97,
+            "source": "core_coding_loop_readiness",
+            "requirements": {
+                "core_coding_loop_readiness_complete": True,
+                "core_coding_loop_canary_ready": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_97": True,
+            },
+        }
+        repo_context = next(
+            row for row in report["dimensions"]
+            if row["id"] == "repo_context"
+        )
+        assert repo_context["octopus_baseline_score"] == 94
+        assert repo_context["scores"]["octopus"] == 96
+        assert repo_context["scores"]["claude_code"] == 95
+        assert repo_context["scores"]["cursor"] == 95
+        assert repo_context["octopus_score_source"] == (
+            "verified_repo_context_recalibration"
+        )
+        assert repo_context["octopus_certified_score_floor"] == 97
+        assert repo_context["octopus_repo_context"] == report["repo_context"]
+        assert report["repo_context"]["ready"] is True
+        assert report["repo_context"]["probe"]["english_identifier_retrieval"] is True
+        assert report["repo_context"]["probe"]["cjk_bigram_retrieval"] is True
+        assert report["repo_context"]["probe"]["source_sink_fidelity"] is True
+        assert report["repo_context"]["probe"]["dirty_worktree_awareness"] is True
+        assert "repo_context_readiness" in {
+            item["id"] for item in repo_context["octopus_evidence"]
+        }
+        assert repo_context["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "repo_context",
+            "applied": True,
+            "previous_score": 94,
+            "score": 96,
+            "source": "repo_context_readiness",
+            "requirements": {
+                "repo_context_readiness_complete": True,
+                "dirty_worktree_probe_ready": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_96": True,
+            },
+        }
         product = next(
             row for row in report["dimensions"]
             if row["id"] == "product_experience"
         )
         assert product["octopus_baseline_score"] == 90
-        assert product["scores"]["octopus"] == 90
-        assert product["octopus_score_source"] == "external_calibrated_baseline"
-        assert product["octopus_evidence_adjusted_score"] == 90
-        assert product["octopus_evidence_adjusted_score_source"] == "baseline"
-        assert product["octopus_certified_score_floor"] == 97
+        assert product["scores"]["octopus"] == 99
+        assert product["octopus_score_source"] == (
+            "verified_product_experience_recalibration"
+        )
+        assert product["octopus_evidence_adjusted_score"] == 99
+        assert product["octopus_evidence_adjusted_score_source"] == (
+            "verified_product_experience_recalibration"
+        )
+        assert product["octopus_certified_score_floor"] == 99
         assert product["octopus_certification_score_applied"] is False
         assert product["octopus_certification_adjustment_available"] is False
+        assert product["octopus_product_experience"] == report["product_experience"]
+        assert report["product_experience"]["ready"] is True
+        assert report["product_experience"]["score"] == 1.0
+        assert report["product_experience"]["probe"]["competitor_gap_routing"] is True
+        assert report["product_experience"]["probe"]["keyboard_audit_export"] is True
+        assert report["product_experience"]["probe"]["closed_loop_drilldown"] is True
+        assert "product_experience_readiness" in {
+            item["id"] for item in product["octopus_evidence"]
+        }
+        assert product["octopus_recalibration_applied"] is True
+        assert product["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "product_experience",
+            "applied": True,
+            "previous_score": 90,
+            "score": 99,
+            "source": "product_experience_readiness",
+            "requirements": {
+                "product_experience_readiness_complete": True,
+                "competitor_gap_probe_ready": True,
+                "keyboard_audit_export_ready": True,
+                "closed_loop_drilldown_ready": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_99": True,
+            },
+        }
+        record_replay = next(
+            row for row in report["dimensions"]
+            if row["id"] == "record_replay_audit"
+        )
+        assert record_replay["octopus_baseline_score"] == 95
+        assert record_replay["scores"]["octopus"] == 96
+        assert record_replay["octopus_score_source"] == (
+            "verified_record_replay_audit_recalibration"
+        )
+        assert record_replay["octopus_record_replay_audit"] == (
+            report["record_replay_audit"]
+        )
+        assert report["record_replay_audit"]["ready"] is True
+        assert report["record_replay_audit"]["score"] == 1.0
+        assert report["record_replay_audit"]["probe"]["trace_replay"]["ok"] is True
+        assert report["record_replay_audit"]["probe"]["governance_audit"]["ok"] is True
+        assert report["record_replay_audit"]["probe"]["native_replay"]["ok"] is True
+        assert record_replay["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "record_replay_audit",
+            "applied": True,
+            "previous_score": 95,
+            "score": 96,
+            "source": "record_replay_audit_readiness",
+            "requirements": {
+                "record_replay_audit_readiness_complete": True,
+                "task_run_replay_gate_probe_ready": True,
+                "governance_audit_chain_probe_ready": True,
+                "native_replay_oracle_probe_ready": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_96": True,
+            },
+        }
         browser = next(
             row for row in report["dimensions"]
             if row["id"] == "browser_desktop"
         )
         assert browser["scores"]["cursor"] == 82
         assert browser["octopus_baseline_score"] == 92
-        assert browser["scores"]["octopus"] == 92
-        assert browser["octopus_evidence_adjusted_score"] == 92
+        assert browser["scores"]["octopus"] == 93
+        assert browser["octopus_evidence_adjusted_score"] == 93
         assert browser["octopus_certified_score_floor"] == 97
         assert browser["octopus_certification_score_applied"] is False
         assert browser["octopus_certification_adjustment_available"] is False
+        assert browser["octopus_browser_desktop_quality"] == (
+            report["browser_desktop_quality"]
+        )
+        assert browser["octopus_score_source"] == "browser_desktop_cold_start_readiness"
+        assert report["browser_desktop_quality"]["ready"] is False
+        assert report["browser_desktop_quality"]["static_ready"] is True
+        assert report["browser_desktop_quality"]["cold_start_ready"] is True
+        assert report["browser_desktop_quality"]["cold_start_readiness"]["ready"] is True
+        assert report["browser_desktop_quality"]["cold_start_readiness"]["probe"]["ok"] is True
+        assert report["browser_desktop_quality"]["runtime_contract_ready"] is True
+        assert report["browser_desktop_quality"]["runtime_contract"]["ready"] is True
+        assert report["browser_desktop_quality"]["runtime_contract"]["score"] == 1.0
+        assert report["browser_desktop_quality"]["runtime_readiness"]["ready"] is False
+        assert report["browser_desktop_quality"]["productization_ready"] is True
+        assert report["browser_desktop_quality"]["productization_readiness"]["ready"] is True
+        assert report["browser_desktop_quality"]["productization_readiness"]["probe"]["ok"] is True
+        assert report["browser_desktop_quality"]["repair_recipe_quality_gate"]["ready"] is True
+        assert report["browser_desktop_quality"]["capability_canary_ready"] is False
+        assert "in_app_browser_runtime" in (
+            report["browser_desktop_quality"]["capability_canary"]["blockers"]
+        )
+        assert "desktop_execute_replay_flow" in (
+            report["browser_desktop_quality"]["capability_canary"]["blockers"]
+        )
+        assert browser["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "browser_desktop",
+            "applied": True,
+            "direction": "cold_start_up",
+            "previous_score": 92,
+            "score": 93,
+            "source": "browser_desktop_cold_start_readiness",
+            "requirements": {
+                "browser_desktop_static_quality_complete": True,
+                "browser_desktop_runtime_contract_ready": True,
+                "browser_desktop_runtime_ready": False,
+                "browser_desktop_productization_ready": True,
+                "chrome_relay_and_desktop_policy_probe_ready": True,
+                "deterministic_repair_gate_ready": True,
+                "browser_desktop_capability_canary_ready": False,
+                "desktop_execute_replay_ready": False,
+                "real_chrome_profile_ready": False,
+                "browser_desktop_cold_start_ready": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_94": True,
+            },
+            "runtime": {
+                "score": 0.357,
+                "ready": False,
+                "blocker_count": 0,
+                "warn_count": 5,
+            },
+        }
+        permissions = next(
+            row for row in report["dimensions"]
+            if row["id"] == "permissions_sandbox"
+        )
+        assert permissions["scores"]["octopus"] == 96
+        assert permissions["octopus_certified_score_floor"] == 96
+        assert permissions["octopus_score_source"] == (
+            "verified_permissions_sandbox_recalibration"
+        )
+        assert permissions["octopus_tool_threat_model"] == report["tool_threat_model"]
+        assert permissions["octopus_permissions_sandbox_readiness"] == (
+            report["permissions_sandbox_readiness"]
+        )
+        assert report["permissions_sandbox_readiness"]["ready"] is True
+        assert report["permissions_sandbox_readiness"]["probe"]["sandbox"]["ok"] is True
+        assert (
+            report["permissions_sandbox_readiness"]["probe"]["access_log_redaction"]["ok"]
+            is True
+        )
+        assert "tool_threat_model" in {
+            item["id"] for item in permissions["octopus_evidence"]
+        }
+        extensions = next(
+            row for row in report["dimensions"]
+            if row["id"] == "extensions_hooks"
+        )
+        assert extensions["scores"]["octopus"] == 97
+        assert extensions["octopus_certified_score_floor"] == 97
+        assert extensions["octopus_extension_hooks"] == report["extension_hooks"]
+        assert extensions["octopus_score_source"] == "verified_extension_hooks_recalibration"
+        assert report["extension_hooks"]["ready"] is True
+        assert report["extension_hooks"]["probe"]["signed_provenance"] is True
+        assert "tool_threat_model" in {
+            item["id"] for item in extensions["octopus_evidence"]
+        }
+        assert extensions["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "extensions_hooks",
+            "applied": True,
+            "previous_score": 96,
+            "score": 97,
+            "source": "extension_hooks_readiness",
+            "requirements": {
+                "extension_hooks_readiness_complete": True,
+                "signed_provenance_probe_ready": True,
+                "tool_threat_model_ready": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_97": True,
+            },
+        }
+        model_provider = next(
+            row for row in report["dimensions"]
+            if row["id"] == "model_provider_runtime"
+        )
+        assert model_provider["scores"]["octopus"] == 96
+        assert model_provider["octopus_score_source"] == (
+            "verified_model_provider_runtime_recalibration"
+        )
+        assert model_provider["octopus_provider_runtime"] == provider_runtime
+        assert model_provider["octopus_model_provider_runtime_readiness"] == (
+            report["model_provider_runtime_readiness"]
+        )
+        assert report["model_provider_runtime_readiness"]["ready"] is True
+        assert report["model_provider_runtime_readiness"]["probe"]["payload_shape"]["ok"] is True
+        assert report["model_provider_runtime_readiness"]["probe"]["failure_export"]["ok"] is True
+        assert model_provider["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "model_provider_runtime",
+            "applied": True,
+            "previous_score": 95,
+            "score": 96,
+            "source": "model_provider_runtime_readiness",
+            "requirements": {
+                "model_provider_runtime_readiness_complete": True,
+                "provider_matrix_probe_ready": True,
+                "payload_shape_probe_ready": True,
+                "failure_export_probe_ready": True,
+                "builtin_profile_coverage_ready": True,
+                "secrets_redacted": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_96": True,
+            },
+        }
+        subagents = next(
+            row for row in report["dimensions"]
+            if row["id"] == "subagents_parallelism"
+        )
+        assert subagents["octopus_baseline_score"] == 94
+        assert subagents["scores"]["octopus"] == 99
+        assert subagents["scores"]["claude_code"] == 96
+        assert subagents["scores"]["kimi_agent_swarm"] == 98
+        assert subagents["leader"] == "octopus"
+        assert subagents["octopus_score_source"] == (
+            "verified_swarm_strict_lead_recalibration"
+        )
+        assert subagents["octopus_certified_score_floor"] == 99
+        assert subagents["octopus_multi_agent_orchestration"] == (
+            report["multi_agent_orchestration"]
+        )
+        assert subagents["octopus_swarm_scale"] == report["swarm_scale"]
+        assert report["swarm_scale"]["ready"] is True
+        assert report["swarm_scale"]["probe"]["critical_path_speedup_passed"] is True
+        assert report["swarm_scale"]["probe"]["failure_isolation"] is True
+        assert report["swarm_scale"]["probe"]["batch_metrics_ready"] is True
+        assert report["swarm_scale"]["probe"]["batch_metrics"]["schema"] == (
+            "octopus.parallel_agent_batch_metrics.v1"
+        )
+        assert "multi_agent_orchestration_readiness" in {
+            item["id"] for item in subagents["octopus_evidence"]
+        }
+        assert "swarm_scale_readiness" in {
+            item["id"] for item in subagents["octopus_evidence"]
+        }
+        assert subagents["octopus_recalibration_applied"] is True
+        assert subagents["octopus_recalibration"]["requirements"] == {
+            "orchestration_readiness_complete": True,
+            "evidence_checklist_complete": True,
+            "certified_floor_96": True,
+            "swarm_scale_ready": True,
+            "certified_floor_98": True,
+            "batch_metrics_ready": True,
+            "certified_floor_99": True,
+        }
+        assert subagents["octopus_recalibration"]["source"] == (
+            "swarm_scale_batch_metrics"
+        )
         differentiated = next(
             row for row in report["dimensions"]
             if row["id"] == "differentiated_agent_os"
         )
-        assert differentiated["scores"]["octopus"] == 91
-        assert differentiated["octopus_certified_score_floor"] == 97
+        assert differentiated["scores"]["octopus"] == 96
+        assert differentiated["octopus_certified_score_floor"] == 99
         assert differentiated["octopus_certification_score_applied"] is False
         ecosystem = next(
             row for row in report["dimensions"]
             if row["id"] == "ecosystem_maturity"
         )
-        assert ecosystem["octopus_baseline_score"] == 90
-        assert ecosystem["scores"]["octopus"] == 90
-        assert ecosystem["octopus_evidence_adjusted_score"] == 90
-        assert ecosystem["octopus_certified_score_floor"] == 94
+        assert ecosystem["octopus_baseline_score"] == 94
+        assert ecosystem["scores"]["octopus"] == 96
+        assert ecosystem["octopus_score_source"] == "verified_ecosystem_recalibration"
+        assert ecosystem["octopus_evidence_adjusted_score"] == 96
+        assert ecosystem["octopus_certified_score_floor"] == 96
         assert ecosystem["octopus_certification_score_applied"] is False
         assert ecosystem["octopus_certification_adjustment_available"] is False
+        assert ecosystem["octopus_recalibration_applied"] is True
+        assert ecosystem["octopus_recalibration"] == {
+            "schema": "octopus.scorecard_recalibration.v1",
+            "dimension_id": "ecosystem_maturity",
+            "applied": True,
+            "previous_score": 94,
+            "score": 96,
+            "source": "ecosystem_readiness_and_lifecycle_evidence",
+            "requirements": {
+                "ecosystem_readiness_complete": True,
+                "plugin_compatibility_probe_ready": True,
+                "evidence_checklist_complete": True,
+                "certified_floor_96": True,
+                "tool_threat_model_ready": True,
+            },
+        }
+        assert "tool_threat_model" in {
+            item["id"] for item in ecosystem["octopus_evidence"]
+        }
         assert ecosystem["octopus_evidence_checklist"]
         assert ecosystem["octopus_missing_evidence_count"] == 0
         assert ecosystem["octopus_ecosystem_readiness"]["score"] == 1.0
+        assert ecosystem["octopus_ecosystem_readiness"]["probe_ready"] is True
+        assert ecosystem["octopus_ecosystem_readiness"]["probe"]["ok"] is True
         assert report["ecosystem_readiness"]["passed"] == 5
-        assert report["parity_certification"]["passed"] == 14
+        assert report["multi_agent_orchestration"]["ready"] is True
+        assert report["multi_agent_orchestration"]["score"] == 1.0
+        assert report["parity_certification"]["passed"] == 25
         assert report["parity_certification"]["ready"] is True
         assert report["parity_certification"]["by_kind"]["operational_excellence"] == {
-            "passed": 4,
-            "total": 4,
+            "passed": 6,
+            "total": 6,
         }
         assert report["parity_certification"]["by_kind"]["advantage"] == {
-            "passed": 4,
-            "total": 4,
+            "passed": 13,
+            "total": 13,
         }
         assert report["octopus_strengths"]
+        assert report["octopus_competitor_gaps"] == []
+        assert report["octopus_competitor_ties"] == []
         assert report["next_focus"] == []
 
     def test_scorecard_includes_local_evidence_readiness(self, tmp_path):
@@ -677,6 +1094,143 @@ class TestAgentCompetitorScorecard:
             code_loop["octopus_evidence_checklist"][0]["tests"]["missing"]
         )
         assert report["codex_gap"]["combined_score"] < 1.0
+
+    def test_ecosystem_maturity_recalibration_requires_evidence(self, tmp_path):
+        from runtime.safety.evolution.agent_competitor_scorecard import (
+            compute_agent_competitor_scorecard,
+        )
+
+        report = compute_agent_competitor_scorecard(root=tmp_path)
+        ecosystem = next(
+            row for row in report["dimensions"]
+            if row["id"] == "ecosystem_maturity"
+        )
+
+        assert ecosystem["scores"]["octopus"] == 94
+        assert ecosystem["octopus_score_source"] == "external_calibrated_baseline"
+        assert ecosystem["octopus_recalibration_applied"] is False
+        assert ecosystem["octopus_recalibration"]["requirements"] == {
+            "ecosystem_readiness_complete": False,
+            "plugin_compatibility_probe_ready": True,
+            "evidence_checklist_complete": False,
+            "certified_floor_96": False,
+            "tool_threat_model_ready": False,
+        }
+
+    def test_subagent_parallelism_recalibration_requires_evidence(self, tmp_path):
+        from runtime.safety.evolution.agent_competitor_scorecard import (
+            compute_agent_competitor_scorecard,
+        )
+
+        report = compute_agent_competitor_scorecard(root=tmp_path)
+        subagents = next(
+            row for row in report["dimensions"]
+            if row["id"] == "subagents_parallelism"
+        )
+
+        assert subagents["scores"]["octopus"] == 94
+        assert subagents["octopus_score_source"] == "external_calibrated_baseline"
+        assert subagents["octopus_recalibration_applied"] is False
+        assert subagents["octopus_recalibration"]["requirements"] == {
+            "orchestration_readiness_complete": False,
+            "evidence_checklist_complete": False,
+            "certified_floor_96": False,
+            "swarm_scale_ready": False,
+            "certified_floor_98": False,
+            "batch_metrics_ready": True,
+            "certified_floor_99": False,
+        }
+
+    def test_repo_context_recalibration_requires_evidence(self, tmp_path):
+        from runtime.safety.evolution.agent_competitor_scorecard import (
+            compute_agent_competitor_scorecard,
+        )
+
+        report = compute_agent_competitor_scorecard(root=tmp_path)
+        repo_context = next(
+            row for row in report["dimensions"]
+            if row["id"] == "repo_context"
+        )
+
+        assert repo_context["scores"]["octopus"] == 94
+        assert repo_context["octopus_score_source"] == "external_calibrated_baseline"
+        assert repo_context["octopus_recalibration_applied"] is False
+        assert repo_context["octopus_recalibration"]["requirements"] == {
+            "repo_context_readiness_complete": False,
+            "dirty_worktree_probe_ready": True,
+            "evidence_checklist_complete": False,
+            "certified_floor_96": False,
+        }
+
+    def test_product_experience_recalibration_requires_evidence(self, tmp_path):
+        from runtime.safety.evolution.agent_competitor_scorecard import (
+            compute_agent_competitor_scorecard,
+        )
+
+        report = compute_agent_competitor_scorecard(root=tmp_path)
+        product = next(
+            row for row in report["dimensions"]
+            if row["id"] == "product_experience"
+        )
+
+        assert product["scores"]["octopus"] == 90
+        assert product["octopus_score_source"] == "external_calibrated_baseline"
+        assert product["octopus_recalibration_applied"] is False
+        assert product["octopus_recalibration"]["requirements"] == {
+            "product_experience_readiness_complete": False,
+            "competitor_gap_probe_ready": True,
+            "keyboard_audit_export_ready": True,
+            "closed_loop_drilldown_ready": True,
+            "evidence_checklist_complete": False,
+            "certified_floor_99": False,
+        }
+
+    def test_record_replay_audit_recalibration_requires_evidence(self, tmp_path):
+        from runtime.safety.evolution.agent_competitor_scorecard import (
+            compute_agent_competitor_scorecard,
+        )
+
+        report = compute_agent_competitor_scorecard(root=tmp_path)
+        record_replay = next(
+            row for row in report["dimensions"]
+            if row["id"] == "record_replay_audit"
+        )
+
+        assert record_replay["scores"]["octopus"] == 95
+        assert record_replay["octopus_score_source"] == "external_calibrated_baseline"
+        assert record_replay["octopus_recalibration_applied"] is False
+        assert record_replay["octopus_recalibration"]["requirements"] == {
+            "record_replay_audit_readiness_complete": False,
+            "task_run_replay_gate_probe_ready": True,
+            "governance_audit_chain_probe_ready": True,
+            "native_replay_oracle_probe_ready": True,
+            "evidence_checklist_complete": False,
+            "certified_floor_96": False,
+        }
+
+    def test_agent_scorecard_report_script_prints_radar_markdown(self):
+        root = Path(__file__).resolve().parents[1]
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/agent_scorecard_report.py",
+                "--format",
+                "markdown",
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+
+        assert result.returncode == 0
+        assert "# Agent Runtime Scorecard" in result.stdout
+        assert "```mermaid" in result.stdout
+        assert "radar-beta" in result.stdout
+        assert "| Model provider runtime |" in result.stdout
+        assert "Kimi Agent Swarm" in result.stdout
 
 
 # ═══════════════════════════════════════════════════════════

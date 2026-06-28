@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { cn } from "@/lib/utils";
 
 interface WorkspaceLayoutProps {
@@ -66,7 +68,7 @@ export function WorkspaceLayout({
               isEmptyState && "flex items-center justify-center",
             )}
           >
-            {mainContent}
+            <ErrorBoundary>{mainContent}</ErrorBoundary>
           </div>
 
           {/* Implementation note. */}
@@ -79,7 +81,7 @@ export function WorkspaceLayout({
             className="workspace-panel-subtle ml-3 hidden min-h-0 shrink-0 flex-col overflow-hidden lg:flex"
             style={{ width: rightPanelWidth }}
           >
-            {rightPanel}
+            <ErrorBoundary>{rightPanel}</ErrorBoundary>
           </aside>
         )}
       </div>

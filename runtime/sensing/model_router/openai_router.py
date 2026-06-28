@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from runtime.adapters.instrumentation import record_gen_ai_cost, trace_stage
@@ -16,6 +17,7 @@ from .models import (
     ModelResponse,
     ModelRouter,
     normalize_reasoning_effort,
+    thinking_budget_for_effort,
 )
 
 try:
@@ -47,9 +49,50 @@ _OPENAI_REASONING_EFFORT: dict[str, str] = {
 }
 
 
+@dataclass(frozen=True)
+class OpenAICompatModelCapabilities:
+    """Provider/model quirks for OpenAI-compatible chat endpoints.
+
+    The OpenAI-compatible label is a wire-shape promise, not a guarantee that
+    every provider accepts every optional field. Custom-model entries can
+    declare the differences explicitly; this resolver centralizes the defaults
+    so payload construction does not grow a pile of provider-specific branches.
+    """
+
+    supports_tool_use: bool = True
+    supports_thinking: bool = False
+    omit_sampling_parameters: bool = False
+    omit_system_messages: bool = False
+    thinking_wire_format: str = "openai"
+
+
 def _openai_reasoning_effort(value: Any) -> str:
     """Map an octopus reasoning-effort tier onto a value native OpenAI accepts."""
     return _OPENAI_REASONING_EFFORT.get(normalize_reasoning_effort(value) or "high", "high")
+
+
+def resolve_openai_compat_model_capabilities(
+    model: str,
+    entry: dict[str, Any] | None = None,
+) -> OpenAICompatModelCapabilities:
+    """Resolve OpenAI-compatible protocol quirks for a model.
+
+    ``entry`` is an optional custom-model row from ``custom_models.json``.
+    Passing it lets audits and config tooling evaluate a candidate entry
+    without first persisting it. When omitted, the resolver reads the persisted
+    custom-model registry and falls back to conservative built-in defaults.
+    """
+    if entry is not None:
+        return _entry_openai_compat_capabilities(entry, model)
+    data = _read_custom_models()
+    if isinstance(data, dict):
+        for existing in data.values():
+            if _entry_matches_model(existing, model):
+                return _entry_openai_compat_capabilities(existing, model)
+    return OpenAICompatModelCapabilities(
+        omit_system_messages=_model_defaults_omit_system_messages(model),
+        thinking_wire_format=_model_defaults_thinking_wire_format(model),
+    )
 
 
 class OpenAIRouterError(LLMResponseFormatError):
@@ -248,6 +291,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
 
 
     def _build_payload(self, request: ModelRequest, model: str) -> dict[str, Any]:
+        caps = self._model_capabilities(model)
         # Message shape · caller may hand us Anthropic-style
         # block lists (tool_use / tool_result) that we need to
         # translate into OpenAI's flat function-call format
@@ -255,21 +299,22 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # translator; it falls back to the old 1-to-1 mapping
         # when no blocks are present.
         msgs = _messages_to_openai(request.messages)
-        if "glm-5.1" in (model or "").lower():
+        if caps.omit_system_messages:
             msgs = [m for m in msgs if m.get("role") != "system"]
         if request.images_b64 and msgs:
             _attach_images_to_last_user_openai(msgs, request.images_b64)
+        msgs = _sanitize_openai_messages(msgs)
         payload: dict[str, Any] = {
             "model": model,
             "messages": msgs,
         }
-        if not self._model_omits_sampling_parameters(model):
+        if not caps.omit_sampling_parameters:
             payload["temperature"] = request.temperature
         max_tokens = request.max_tokens
         if (
             (
                 request.enable_thinking
-                or self._custom_model_supports_thinking(model)
+                or caps.supports_thinking
             )
             and max_tokens is not None
             and max_tokens < _MIN_THINKING_OUTPUT_TOKENS
@@ -290,7 +335,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         # model id, so the LLM doesn't get a tools spec it can't act
         # on. The caller (ReAct loop / ephemeral runner) will see
         # the lack of tool_calls and fall back to text-only synthesis.
-        if request.tools and self._model_supports_tool_use(model):
+        if request.tools and caps.supports_tool_use:
             payload["tools"] = [
                 {
                     "type": "function",
@@ -307,9 +352,17 @@ class OpenAIModelRouter(Provider, ModelRouter):
             # default behavior and works for agentic loops.
             payload["tool_choice"] = "auto"
         if request.enable_thinking:
-            payload["reasoning_effort"] = _openai_reasoning_effort(request.reasoning_effort)
-            payload["thinking"] = {"type": "enabled"}
+            _apply_thinking_wire_format(
+                payload,
+                request,
+                caps,
+                max_tokens=max_tokens,
+            )
         return payload
+
+    @staticmethod
+    def _model_capabilities(model: str) -> OpenAICompatModelCapabilities:
+        return resolve_openai_compat_model_capabilities(model)
 
     @staticmethod
     def _model_supports_tool_use(model: str) -> bool:
@@ -322,16 +375,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         explicitly declared incompatibility, so we don't accidentally
         disable working providers.
         """
-        data = _read_custom_models()
-        if not isinstance(data, dict):
-            return True
-        for entry in data.values():
-            if (
-                _entry_matches_model(entry, model)
-                and entry.get("supports_tool_use") is False
-            ):
-                return False
-        return True
+        return OpenAIModelRouter._model_capabilities(model).supports_tool_use
 
     @staticmethod
     def _model_omits_sampling_parameters(model: str) -> bool:
@@ -342,23 +386,21 @@ class OpenAIModelRouter(Provider, ModelRouter):
         ``omit_sampling_parameters=true`` in ``custom_models.json`` so
         Octopus sends only model/messages/max_tokens/tool fields.
         """
-        data = _read_custom_models()
-        if not isinstance(data, dict):
-            return False
-        for entry in data.values():
-            if _entry_matches_model(entry, model):
-                return bool(entry.get("omit_sampling_parameters"))
-        return False
+        return OpenAIModelRouter._model_capabilities(model).omit_sampling_parameters
+
+    @staticmethod
+    def _model_omits_system_messages(model: str) -> bool:
+        """Whether to drop system-role messages before sending.
+
+        Some OpenAI-compatible coding endpoints reject ``role=system`` or
+        handle it poorly. Prefer explicit custom-model configuration, with a
+        tiny compatibility default for known strict GLM variants.
+        """
+        return OpenAIModelRouter._model_capabilities(model).omit_system_messages
 
     @staticmethod
     def _custom_model_supports_thinking(model: str) -> bool:
-        data = _read_custom_models()
-        if not isinstance(data, dict):
-            return False
-        for entry in data.values():
-            if _entry_matches_model(entry, model):
-                return bool(entry.get("supports_thinking"))
-        return False
+        return OpenAIModelRouter._model_capabilities(model).supports_thinking
 
     def _build_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -498,6 +540,130 @@ def _entry_matches_model(entry: Any, model: str) -> bool:
     return target in candidates
 
 
+def _entry_openai_compat_capabilities(
+    entry: dict[str, Any],
+    model: str,
+) -> OpenAICompatModelCapabilities:
+    return OpenAICompatModelCapabilities(
+        supports_tool_use=bool(entry.get("supports_tool_use", True)),
+        supports_thinking=bool(entry.get("supports_thinking", False)),
+        omit_sampling_parameters=bool(entry.get("omit_sampling_parameters", False)),
+        omit_system_messages=bool(
+            entry.get(
+                "omit_system_messages",
+                _model_defaults_omit_system_messages(model),
+            )
+        ),
+        thinking_wire_format=_entry_thinking_wire_format(entry, model),
+    )
+
+
+def _model_defaults_omit_system_messages(model: str) -> bool:
+    return "glm-5.1" in (model or "").lower()
+
+
+def _model_defaults_thinking_wire_format(model: str) -> str:
+    m = (model or "").lower()
+    if "qwen" in m or "通义" in m:
+        return "qwen_enable_thinking"
+    if "deepseek-reasoner" in m or "deepseek-r1" in m:
+        return "implicit"
+    return "openai"
+
+
+def _entry_thinking_wire_format(entry: dict[str, Any], model: str) -> str:
+    for key in (
+        "thinking_wire_format",
+        "thinking_parameter_style",
+        "thinking_protocol",
+    ):
+        if key in entry:
+            return _normalize_thinking_wire_format(entry.get(key))
+    haystack = _entry_haystack(entry, model)
+    if "dashscope" in haystack or "qwen" in haystack or "通义" in haystack:
+        return "qwen_enable_thinking"
+    if "deepseek-reasoner" in haystack or "deepseek-r1" in haystack:
+        return "implicit"
+    return _model_defaults_thinking_wire_format(model)
+
+
+def _entry_haystack(entry: dict[str, Any], model: str) -> str:
+    raw = [
+        model,
+        entry.get("id"),
+        entry.get("name"),
+        entry.get("display_name"),
+        entry.get("provider"),
+        entry.get("base_url"),
+    ]
+    models = entry.get("models")
+    if isinstance(models, list):
+        raw.extend(models)
+    return " ".join(str(value or "") for value in raw).lower()
+
+
+def _normalize_thinking_wire_format(value: Any) -> str:
+    raw = str(value or "").strip().lower().replace("-", "_")
+    aliases = {
+        "": "openai",
+        "default": "openai",
+        "openai_compat": "openai",
+        "openai_extensions": "openai",
+        "qwen": "qwen_enable_thinking",
+        "dashscope": "qwen_enable_thinking",
+        "enable_thinking": "qwen_enable_thinking",
+        "model_default": "implicit",
+        "auto": "implicit",
+        "none": "implicit",
+        "off": "implicit",
+        "disabled": "implicit",
+        "reasoning": "reasoning_effort",
+        "thinking": "thinking_object",
+    }
+    normalized = aliases.get(raw, raw)
+    supported = {
+        "openai",
+        "qwen_enable_thinking",
+        "implicit",
+        "reasoning_effort",
+        "thinking_object",
+    }
+    return normalized if normalized in supported else "openai"
+
+
+def _apply_thinking_wire_format(
+    payload: dict[str, Any],
+    request: ModelRequest,
+    caps: OpenAICompatModelCapabilities,
+    *,
+    max_tokens: int | None,
+) -> None:
+    wire_format = _normalize_thinking_wire_format(caps.thinking_wire_format)
+    if wire_format == "implicit":
+        return
+    if wire_format == "qwen_enable_thinking":
+        payload["enable_thinking"] = True
+        budget = thinking_budget_for_effort(
+            normalize_reasoning_effort(request.reasoning_effort),
+            max_tokens,
+        )
+        if max_tokens is None or budget < max_tokens:
+            payload["thinking_budget"] = budget
+        return
+    if wire_format == "reasoning_effort":
+        payload["reasoning_effort"] = _openai_reasoning_effort(
+            request.reasoning_effort,
+        )
+        return
+    if wire_format == "thinking_object":
+        payload["thinking"] = {"type": "enabled"}
+        return
+    payload["reasoning_effort"] = _openai_reasoning_effort(
+        request.reasoning_effort,
+    )
+    payload["thinking"] = {"type": "enabled"}
+
+
 def _format_openai_http_error(status_code: int, body: str) -> str:
     body_preview = (body or "").strip()[:500]
     parsed_message = ""
@@ -548,6 +714,8 @@ def _without_openai_thinking(payload: dict[str, Any]) -> dict[str, Any]:
     fallback = dict(payload)
     fallback.pop("reasoning_effort", None)
     fallback.pop("thinking", None)
+    fallback.pop("enable_thinking", None)
+    fallback.pop("thinking_budget", None)
     return fallback
 
 
@@ -557,7 +725,10 @@ def _should_retry_without_openai_thinking(
 ) -> bool:
     if status_code != 400:
         return False
-    return "reasoning_effort" in payload or "thinking" in payload
+    return any(
+        key in payload
+        for key in ("reasoning_effort", "thinking", "enable_thinking", "thinking_budget")
+    )
 
 
 def _message_to_openai(m: Message) -> dict[str, str]:
@@ -567,6 +738,151 @@ def _message_to_openai(m: Message) -> dict[str, str]:
     """
     content = m.content if isinstance(m.content, str) else ""
     return {"role": m.role, "content": content}
+
+
+def _coerce_openai_content(content: Any) -> str | list[Any]:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return content
+    return json.dumps(content, ensure_ascii=False, default=str)
+
+
+def _openai_content_is_empty(content: Any) -> bool:
+    if content is None:
+        return True
+    if isinstance(content, str):
+        return not content.strip()
+    if isinstance(content, list):
+        for block in content:
+            if not isinstance(block, dict):
+                if str(block or "").strip():
+                    return False
+                continue
+            btype = block.get("type")
+            if btype == "text":
+                if str(block.get("text") or "").strip():
+                    return False
+                continue
+            # Image/media blocks are meaningful even without text.
+            if btype in {"image_url", "input_image", "image"}:
+                return False
+            if block:
+                return False
+        return True
+    return not str(content).strip()
+
+
+def _sanitize_openai_tool_calls(
+    tool_calls: Any,
+    *,
+    message_index: int,
+) -> list[dict[str, Any]]:
+    if not isinstance(tool_calls, list):
+        return []
+    sanitized: list[dict[str, Any]] = []
+    for raw_call in tool_calls:
+        if not isinstance(raw_call, dict):
+            continue
+        fn = raw_call.get("function")
+        if not isinstance(fn, dict):
+            continue
+        name = str(fn.get("name") or "").strip()
+        if not name:
+            continue
+        arguments = fn.get("arguments")
+        if arguments is None or arguments == "":
+            arguments = "{}"
+        elif not isinstance(arguments, str):
+            arguments = json.dumps(arguments, ensure_ascii=False, default=str)
+        sanitized.append({
+            "id": str(raw_call.get("id") or f"call_{message_index}_{len(sanitized)}"),
+            "type": "function",
+            "function": {
+                "name": name,
+                "arguments": arguments,
+            },
+        })
+    return sanitized
+
+
+def _sanitize_openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize chat history for strict OpenAI-compatible providers.
+
+    Several compatible gateways are stricter than OpenAI's own endpoint:
+    they reject empty assistant turns, orphan ``tool`` messages, non-string
+    tool-call arguments, or blank system/user messages. The kernel may still
+    produce those shapes while recovering from empty model output or provider
+    tool-call quirks, so the router boundary cleans them before they go on the
+    wire.
+    """
+    out: list[dict[str, Any]] = []
+    known_tool_call_ids: set[str] = set()
+    unpaired_tool_call_ids: list[str] = []
+
+    for index, raw_msg in enumerate(messages):
+        if not isinstance(raw_msg, dict):
+            continue
+        role = str(raw_msg.get("role") or "").strip()
+        if role not in {"system", "user", "assistant", "tool"}:
+            role = "user"
+
+        if role == "assistant":
+            content = _coerce_openai_content(raw_msg.get("content", ""))
+            tool_calls = _sanitize_openai_tool_calls(
+                raw_msg.get("tool_calls"),
+                message_index=index,
+            )
+            if _openai_content_is_empty(content) and not tool_calls:
+                continue
+            msg: dict[str, Any] = {"role": "assistant", "content": content}
+            if tool_calls:
+                msg["tool_calls"] = tool_calls
+                for call in tool_calls:
+                    call_id = str(call.get("id") or "")
+                    if call_id:
+                        known_tool_call_ids.add(call_id)
+                        unpaired_tool_call_ids.append(call_id)
+            out.append(msg)
+            continue
+
+        if role == "tool":
+            content = _coerce_openai_content(raw_msg.get("content", ""))
+            if _openai_content_is_empty(content):
+                content = "(empty tool result)"
+            call_id = str(raw_msg.get("tool_call_id") or "").strip()
+            if not call_id and unpaired_tool_call_ids:
+                call_id = unpaired_tool_call_ids.pop(0)
+            elif call_id in unpaired_tool_call_ids:
+                unpaired_tool_call_ids.remove(call_id)
+            if call_id and call_id in known_tool_call_ids:
+                out.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": content,
+                })
+            else:
+                # Tool output without a matching assistant tool_call is invalid
+                # OpenAI history. Keep the evidence as plain user context.
+                out.append({
+                    "role": "user",
+                    "content": (
+                        "Tool result without matching tool call"
+                        f"{f' ({call_id})' if call_id else ''}: {content}"
+                    ),
+                })
+            continue
+
+        content = _coerce_openai_content(raw_msg.get("content", ""))
+        if _openai_content_is_empty(content):
+            continue
+        out.append({"role": role, "content": content})
+
+    if not out:
+        out.append({"role": "user", "content": "Continue."})
+    return out
 
 
 def _messages_to_openai(messages: list[Message]) -> list[dict[str, Any]]:

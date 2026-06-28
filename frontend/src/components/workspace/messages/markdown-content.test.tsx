@@ -87,3 +87,25 @@ describe("<MarkdownContent /> Mermaid", () => {
     expect(await screen.findByText("Rendered Mermaid")).toBeInTheDocument();
   });
 });
+
+describe("<MarkdownContent /> Widget", () => {
+  it("renders a ```widget fence in a sandboxed null-origin iframe", () => {
+    renderMarkdown('```widget\n<div id="x">hi widget</div>\n```');
+
+    const iframe = screen.getByTitle("interactive widget");
+    // SECURITY: sandbox must be exactly "allow-scripts" — adding
+    // allow-same-origin would let untrusted agent code escape the sandbox.
+    expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
+    const srcdoc = iframe.getAttribute("srcdoc") ?? "";
+    expect(srcdoc).toContain("hi widget");
+    expect(srcdoc).not.toContain("allow-same-origin");
+  });
+
+  it("treats html-widget as an alias", () => {
+    renderMarkdown("```html-widget\n<button>go</button>\n```");
+
+    const iframe = screen.getByTitle("interactive widget");
+    expect(iframe).toHaveAttribute("sandbox", "allow-scripts");
+    expect(iframe.getAttribute("srcdoc") ?? "").toContain("<button>go</button>");
+  });
+});

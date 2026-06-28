@@ -3,6 +3,7 @@ import {
   BarChart3Icon,
   CheckCircle2Icon,
   Clock3Icon,
+  CopyIcon,
   GitBranchIcon,
   ListChecksIcon,
   RefreshCwIcon,
@@ -77,6 +78,7 @@ import {
   type OrganizationTopologyProposalsReport,
   type SubagentFitnessReport,
 } from "@/core/agent-trace/api";
+import { copyTextToClipboard } from "@/core/clipboard";
 import { fetchPluginSmokeSummary } from "@/core/plugins/api";
 import type { PluginSmokeSummary } from "@/core/plugins/types";
 import { swallow } from "@/core/utils/log";
@@ -280,6 +282,7 @@ const EMPTY_AGENT_SCORECARD: AgentCompetitorScorecard = {
   verdict: "behind",
   dimensions: [],
   octopus_below_target: [],
+  octopus_competitor_gaps: [],
   octopus_strengths: [],
   next_focus: [],
 };
@@ -710,9 +713,11 @@ export function AgentOperatorPanel() {
   const onQueueRealScorecardGaps = async () => {
     setBusyId("queue-scorecard-gaps");
     try {
+      const scope = scorecardGapScope(agentScorecard);
       const result = await queueAgentScorecardGaps({
         targetScore: agentScorecard.target_score,
         limit: 10,
+        scope,
       });
       setLastApplyResult(
         `Queued ${result.total} real scorecard gap review item(s).`,
@@ -730,10 +735,12 @@ export function AgentOperatorPanel() {
   const onQueueScorecardGap = async (dimensionId: string) => {
     setBusyId(`queue-scorecard-gap:${dimensionId}`);
     try {
+      const scope = scorecardGapScope(agentScorecard, dimensionId);
       const result = await queueAgentScorecardGaps({
         targetScore: agentScorecard.target_score,
         limit: 1,
         dimensionId,
+        scope,
         reason: "operator scorecard drill-down remediation",
       });
       setLastApplyResult(
@@ -1095,18 +1102,33 @@ function CompetitorScorecardCard({
   const evidenceAdjustedOctopusScore =
     report.evidence_adjusted_overall?.octopus ?? octopusScore;
   const belowTarget = report.octopus_below_target ?? [];
+  const competitorGaps = report.octopus_competitor_gaps ?? [];
+  const competitorTies = report.octopus_competitor_ties ?? [];
+  const activeGaps =
+    belowTarget.length > 0
+      ? belowTarget
+      : competitorGaps.length > 0
+        ? competitorGaps
+        : competitorTies;
+  const activeGapKind = scorecardGapScope(report);
   const strengths = report.octopus_strengths ?? [];
   const certification = report.parity_certification;
-  const topGap = belowTarget
+  const topGap = activeGaps
     .slice()
     .sort(
-      (lhs, rhs) => rhs.octopus_gap_to_target - lhs.octopus_gap_to_target,
+      (lhs, rhs) =>
+        (rhs.octopus_competitor_gap ?? rhs.octopus_gap_to_target ?? 0) -
+        (lhs.octopus_competitor_gap ?? lhs.octopus_gap_to_target ?? 0),
     )[0];
   const selectedGap =
-    belowTarget.find((dimension) => dimension.id === selectedGapId) ?? topGap;
+    activeGaps.find((dimension) => dimension.id === selectedGapId) ?? topGap;
   const selectedGapChecklist = selectedGap?.octopus_evidence_checklist ?? [];
   const selectedGapQueueItem = selectedGap
-    ? scorecardGapQueueItemForDimension(queueItems, selectedGap.id)
+    ? scorecardGapQueueItemForDimension(
+        queueItems,
+        selectedGap.id,
+        activeGapKind,
+      )
     : null;
   const healthy = octopusScore >= report.target_score;
   return (
@@ -1140,7 +1162,11 @@ function CompetitorScorecardCard({
             {error
               ? error
               : topGap
-                ? `${topGap.title} is ${topGap.octopus_gap_to_target} point(s) under target`
+                ? activeGapKind === "best_competitor_gap"
+                  ? `${topGap.title} is ${topGap.octopus_competitor_gap ?? 0} point(s) behind best competitor`
+                  : activeGapKind === "strict_lead_gap"
+                    ? `${topGap.title} is tied with best competitor; strict lead needs ${topGap.octopus_strict_lead_gap ?? 1} point(s)`
+                  : `${topGap.title} is ${topGap.octopus_gap_to_target} point(s) under target`
                 : certification?.ready
                   ? `Certification passed ${certification.passed}/${certification.total}`
                   : "Octopus is at or above the target across tracked dimensions"}
@@ -1151,18 +1177,19 @@ function CompetitorScorecardCard({
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <div className="grid grid-cols-5 gap-2 text-right font-mono text-[11px]">
+          <div className="grid grid-cols-6 gap-2 text-right font-mono text-[11px]">
             <GateStat label="Octo real" value={octopusScore} />
             <GateStat label="Evidence" value={evidenceAdjustedOctopusScore} />
             <GateStat label="Codex" value={report.overall.codex ?? 0} />
             <GateStat label="Claude" value={report.overall.claude_code ?? 0} />
+            <GateStat label="Kimi" value={report.overall.kimi_agent_swarm ?? 0} />
             <GateStat label="Cursor" value={report.overall.cursor ?? 0} />
           </div>
           <Button
             variant="outline"
             size="sm"
             className="h-7 px-2 text-[11px]"
-            disabled={queueBusy || belowTarget.length === 0}
+            disabled={queueBusy || activeGaps.length === 0}
             onClick={onQueueRealGaps}
           >
             <ListChecksIcon
@@ -1196,10 +1223,14 @@ function CompetitorScorecardCard({
         </div>
         <div className="rounded-md border border-background/70 bg-background/60 px-2 py-1.5">
           <div className="mb-1 text-[11px] font-medium text-muted-foreground">
-            Below 90 real baseline
+            {belowTarget.length > 0
+              ? "Below 90 real baseline"
+              : competitorGaps.length > 0
+                ? "Best competitor gaps"
+                : "Strict lead ties"}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {belowTarget.length === 0 ? (
+            {activeGaps.length === 0 ? (
               <>
                 <Badge variant="outline" className="text-[10px]">
                   clear
@@ -1219,7 +1250,7 @@ function CompetitorScorecardCard({
                 )}
               </>
             ) : (
-              belowTarget.slice(0, 5).map((dimension) => (
+              activeGaps.slice(0, 5).map((dimension) => (
                 <button
                   key={dimension.id}
                   type="button"
@@ -1234,6 +1265,11 @@ function CompetitorScorecardCard({
                   onClick={() => setSelectedGapId(dimension.id)}
                 >
                   {dimension.title} {dimension.scores.octopus}
+                  {activeGapKind === "best_competitor_gap"
+                    ? ` vs ${dimension.octopus_best_competitor_score ?? "?"}`
+                    : activeGapKind === "strict_lead_gap"
+                      ? ` tied ${dimension.octopus_best_competitor_score ?? "?"}`
+                    : ""}
                 </button>
               ))
             )}
@@ -1251,6 +1287,7 @@ function CompetitorScorecardCard({
           applyBusy={applyBusy}
           onQueue={() => onQueueGap(selectedGap.id)}
           onApplyPromoted={onApplyPromoted}
+          gapKind={activeGapKind}
         />
       )}
 
@@ -1287,6 +1324,7 @@ function ScorecardGapDrilldown({
   applyBusy,
   onQueue,
   onApplyPromoted,
+  gapKind,
 }: {
   gap: AgentCompetitorScorecard["dimensions"][number];
   checklist: NonNullable<
@@ -1298,18 +1336,71 @@ function ScorecardGapDrilldown({
   applyBusy: boolean;
   onQueue: () => void;
   onApplyPromoted: () => void;
+  gapKind?: ScorecardGapScope;
 }) {
-  const realScore = gap.octopus_baseline_score ?? gap.scores.octopus;
+  const realScore = gap.octopus_baseline_score ?? gap.scores.octopus ?? 0;
   const evidenceScore =
     gap.octopus_evidence_adjusted_score ??
     gap.evidence_adjusted_scores?.octopus ??
     realScore;
+  const competitorNames =
+    gap.octopus_best_competitors?.map(competitorLabel).join(", ") || "best";
+  const competitorGap =
+    gap.octopus_competitor_gap ??
+    Math.max(0, (gap.octopus_best_competitor_score ?? realScore) - realScore);
+  const strictLeadGap = gap.octopus_strict_lead_gap ?? 1;
   const nextActions = gap.octopus_next_actions ?? [];
+  const [auditCopied, setAuditCopied] = useState(false);
+  const auditSummaryText = useMemo(
+    () =>
+      buildScorecardGapAuditSummary({
+        gap,
+        gapKind,
+        realScore,
+        evidenceScore,
+        competitorGap,
+        competitorNames,
+        queueItem,
+        auditSummary,
+      }),
+    [
+      auditSummary,
+      competitorGap,
+      competitorNames,
+      evidenceScore,
+      gap,
+      gapKind,
+      queueItem,
+      realScore,
+    ],
+  );
+  const copyAuditSummary = useCallback(async () => {
+    await copyTextToClipboard(auditSummaryText);
+    setAuditCopied(true);
+    window.setTimeout(() => setAuditCopied(false), 1200);
+  }, [auditSummaryText]);
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const key = event.key.toLowerCase();
+      if ((event.metaKey || event.ctrlKey) && key === "enter" && !queueBusy) {
+        event.preventDefault();
+        onQueue();
+      }
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === "c") {
+        event.preventDefault();
+        void copyAuditSummary();
+      }
+    },
+    [copyAuditSummary, onQueue, queueBusy],
+  );
   return (
     <div
       id="scorecard-gap-drilldown"
       role="region"
       aria-label={`Scorecard gap drill-down for ${gap.title}`}
+      aria-keyshortcuts="Control+Enter Meta+Enter Control+Shift+C Meta+Shift+C"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       className="mt-2 rounded-md border border-background/70 bg-background/60 px-2 py-1.5"
     >
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
@@ -1335,8 +1426,22 @@ function ScorecardGapDrilldown({
             evidence {evidenceScore}
           </Badge>
           <Badge variant="outline" className="text-[10px]">
-            gap {gap.octopus_gap_to_target}
+            {gapKind === "best_competitor_gap"
+              ? "vs best"
+              : gapKind === "strict_lead_gap"
+                ? "strict lead"
+                : "gap"}{" "}
+            {gapKind === "best_competitor_gap"
+              ? competitorGap
+              : gapKind === "strict_lead_gap"
+                ? strictLeadGap
+              : gap.octopus_gap_to_target}
           </Badge>
+          {gapKind === "best_competitor_gap" || gapKind === "strict_lead_gap" ? (
+            <Badge variant="outline" className="text-[10px]">
+              {competitorNames} {gap.octopus_best_competitor_score ?? "--"}
+            </Badge>
+          ) : null}
         </div>
       </div>
 
@@ -1362,7 +1467,19 @@ function ScorecardGapDrilldown({
             variant="outline"
             size="sm"
             className="h-7 px-2 text-[11px]"
+            aria-keyshortcuts="Control+Shift+C Meta+Shift+C"
+            onClick={() => void copyAuditSummary()}
+          >
+            <CopyIcon className="mr-1.5 size-3" />
+            {auditCopied ? "Copied audit" : "Copy audit"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-[11px]"
             disabled={queueBusy}
+            aria-keyshortcuts="Control+Enter Meta+Enter"
             onClick={onQueue}
           >
             <ListChecksIcon
@@ -2489,19 +2606,98 @@ function shortId(id: string) {
 
 function competitorLabel(id: string) {
   if (id === "claude_code") return "Claude";
+  if (id === "kimi_agent_swarm") return "Kimi";
   if (id === "octopus") return "Octopus";
   if (id === "codex") return "Codex";
   if (id === "cursor") return "Cursor";
   return id;
 }
 
+type ScorecardGapScope =
+  | "below_target"
+  | "best_competitor_gap"
+  | "strict_lead_gap";
+
+function scorecardGapScope(
+  report: AgentCompetitorScorecard,
+  dimensionId?: string,
+): ScorecardGapScope {
+  const matches = (
+    dimensions: AgentCompetitorScorecard["dimensions"] | undefined,
+  ) =>
+    dimensionId
+      ? (dimensions ?? []).some((dimension) => dimension.id === dimensionId)
+      : (dimensions ?? []).length > 0;
+  if (matches(report.octopus_below_target)) return "below_target";
+  if (matches(report.octopus_competitor_gaps)) return "best_competitor_gap";
+  return "strict_lead_gap";
+}
+
+function buildScorecardGapAuditSummary({
+  gap,
+  gapKind,
+  realScore,
+  evidenceScore,
+  competitorGap,
+  competitorNames,
+  queueItem,
+  auditSummary,
+}: {
+  gap: AgentCompetitorScorecard["dimensions"][number];
+  gapKind?: ScorecardGapScope;
+  realScore: number;
+  evidenceScore: number;
+  competitorGap: number;
+  competitorNames: string;
+  queueItem: AgentTraceReviewQueueItem | null;
+  auditSummary: AgentTracePromotionAuditSummary;
+}) {
+  const lines = [
+    "# Scorecard Gap Audit",
+    `dimension: ${gap.id}`,
+    `title: ${gap.title}`,
+    `scope: ${gapKind ?? "below_target"}`,
+    `real_score: ${realScore}`,
+    `evidence_score: ${evidenceScore}`,
+    gapKind === "best_competitor_gap" || gapKind === "strict_lead_gap"
+      ? `best_competitor: ${competitorNames} ${gap.octopus_best_competitor_score ?? "--"}`
+      : `target_gap: ${gap.octopus_gap_to_target ?? 0}`,
+    gapKind === "best_competitor_gap"
+      ? `competitor_gap: ${competitorGap}`
+      : gapKind === "strict_lead_gap"
+        ? `strict_lead_gap: ${gap.octopus_strict_lead_gap ?? 1}`
+      : `target_score_gap: ${gap.octopus_gap_to_target ?? 0}`,
+    `source_review_queue_item: ${queueItem?.id ?? "not linked"}`,
+    `queue_item: ${queueItem?.id ?? "not queued"}`,
+    `queue_status: ${queueItem?.status ?? "none"}`,
+    `audit_entries: ${auditSummary.total}`,
+    `missing_evidence: ${gap.octopus_missing_evidence_count ?? 0}`,
+  ];
+  const actions = gap.octopus_next_actions ?? [];
+  if (actions.length > 0) {
+    lines.push("next_actions:");
+    lines.push(...actions.slice(0, 3).map((action) => `- ${action}`));
+  }
+  return lines.join("\n");
+}
+
 function scorecardGapQueueItemForDimension(
   items: AgentTraceReviewQueueItem[],
   dimensionId: string,
+  scope?: ScorecardGapScope,
 ) {
   return (
     items.find((item) => {
       const metadata = item.metadata ?? {};
+      if (scope === "best_competitor_gap" && metadata.scope !== scope) {
+        return false;
+      }
+      if (scope === "strict_lead_gap" && metadata.scope !== scope) {
+        return false;
+      }
+      if (scope === "below_target" && metadata.scope && metadata.scope !== scope) {
+        return false;
+      }
       return (
         metadata.dimension_id === dimensionId ||
         item.candidate_kind === `scorecard_gap:${dimensionId}` ||

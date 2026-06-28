@@ -214,7 +214,26 @@ def _format_skill_catalog(
         except (AttributeError, TypeError, ValueError):  # noqa: BLE001
             return True
 
-    names = [n for n in names if n not in hidden_in_react and _enabled(n)]
+    # Imported external-plugin skills (e.g. ``codex://plugin/...``) are
+    # registered so they stay callable + discoverable via search_skills /
+    # search_capabilities, but kept OUT of the always-on catalog. There can be
+    # hundreds of them; the plugin model is on-demand ("dynamic injection"),
+    # not resident-in-every-prompt. The model finds them via search, then
+    # calls them — at which point their SKILL.md instructions inject lazily.
+    _search_only_prefixes = ("codex://plugin/", "imported://")
+
+    def _search_only(name: str) -> bool:
+        try:
+            ts = str(getattr(registry.get(name), "trusted_source", "") or "")
+        except (AttributeError, TypeError, ValueError):  # noqa: BLE001
+            return False
+        return ts.startswith(_search_only_prefixes)
+
+    names = [
+        n
+        for n in names
+        if n not in hidden_in_react and _enabled(n) and not _search_only(n)
+    ]
 
     if agent is not None:
         allowed: set[str] | None

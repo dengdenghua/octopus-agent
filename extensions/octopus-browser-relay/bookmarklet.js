@@ -1,8 +1,9 @@
 (() => {
   const marker = "__OCTOPUS_BOOKMARKLET_RELAY__";
   const current = document.currentScript?.src || "http://127.0.0.1:8000/api/browser/relay/bookmarklet.js";
-  const apiBase = new URL(current).origin;
-  const appOrigin = new URL(current).searchParams.get("app") || "http://localhost:3000";
+  const currentUrl = new URL(current);
+  const apiBase = currentUrl.origin;
+  const appOrigin = currentUrl.searchParams.get("app") || "http://localhost:3000";
   const roles = [
     ["general", "默认助手"],
     ["coder", "代码助手"],

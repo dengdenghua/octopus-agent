@@ -1176,12 +1176,6 @@ export function AgentRoleProfileDialog({
       );
     }).length ?? 0;
   const permissionTotalCount = permissionsQuery.data?.length ?? 0;
-  const permissionSummary = permissionTotalCount
-    ? t.armsEditor.permissionEffectiveCount(
-        permissionEffectiveCount,
-        permissionTotalCount,
-      )
-    : t.agentConfig.guarded;
   const roleLabel = meta.role ?? agent.category;
   const typeLabel = meta.type ?? agent.category;
   const identityRows = [
@@ -1207,7 +1201,7 @@ export function AgentRoleProfileDialog({
       icon: CircuitBoard,
       label: t.agentConfig.configureProfileAction,
       shortLabel: t.agentConfig.basicTitle,
-      metric: `${t.agentConfig.descriptionLabel} / ${t.agentConfig.promptSubtitle}`,
+      metric: t.agentConfig.descriptionLabel,
       hint: t.agentConfig.configureProfileHint,
       onClick: () => setProfileOpen(true),
     },
@@ -1216,7 +1210,7 @@ export function AgentRoleProfileDialog({
       icon: Wrench,
       label: t.agentConfig.configureArmAction,
       shortLabel: "ARM",
-      metric: t.agentConfig.armCount(form.arms.length),
+      metric: `${form.arms.length}`,
       hint: t.agentConfig.configureArmHint,
       onClick: () => openArmsConfig("arms"),
     },
@@ -1225,7 +1219,7 @@ export function AgentRoleProfileDialog({
       icon: Sparkles,
       label: t.agentConfig.browseSkillWhitelist,
       shortLabel: "Skill",
-      metric: t.agentConfig.skillCount(desiredPrivateSkills.length),
+      metric: `${desiredPrivateSkills.length}`,
       hint: t.agentConfig.configureSkillsHint,
       onClick: () => openArmsConfig("skills"),
     },
@@ -1237,7 +1231,7 @@ export function AgentRoleProfileDialog({
         /^调整|^Configure\s+/i,
         "",
       ),
-      metric: permissionSummary,
+      metric: `${permissionEffectiveCount}/${permissionTotalCount}`,
       hint: t.agentConfig.configurePermissionsHint,
       onClick: () => openArmsConfig("permissions"),
     },
@@ -1382,6 +1376,7 @@ export function AgentRoleProfileDialog({
                           <div
                             key={`${label}-${value}`}
                             className="min-w-0 bg-[#2a2a2a]/92 px-2.5 py-2"
+                            title={value}
                           >
                             <div className="truncate font-mono text-[9px] uppercase tracking-[0.12em] text-white/36">
                               {label}

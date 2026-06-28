@@ -145,6 +145,32 @@ function normalizeWorkDirKey(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
+function readInitialChatWorkDir(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const candidates = [
+      window.localStorage.getItem(CHAT_WORKDIR_KEY),
+      window.localStorage.getItem(CODE_WORKDIR_KEY),
+    ];
+    for (const candidate of candidates) {
+      if (candidate && isAbsolutePath(candidate)) return candidate;
+    }
+
+    const raw = window.localStorage.getItem(RECENT_WORKDIRS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) {
+      const firstValid = parsed.find(
+        (item): item is string =>
+          typeof item === "string" && isAbsolutePath(item),
+      );
+      if (firstValid) return firstValid;
+    }
+  } catch (e) {
+    swallow(e, "storage");
+  }
+  return "";
+}
+
 function rememberChatWorkDir(dir: string) {
   if (typeof window === "undefined") return;
   try {
@@ -577,7 +603,6 @@ function ChatsPageContent({
   const [focusedWorkbenchAgentId, setFocusedWorkbenchAgentId] = useState<
     string | null
   >(null);
-  const settledWorkbenchAutoDismissedRef = useRef<string | null>(null);
   const [discussionOnly, setDiscussionOnly] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   const [projectAgentMode, setProjectAgentMode] =
@@ -595,7 +620,7 @@ function ChatsPageContent({
   // Work directory for Agent project/code state. Empty means personal
   // Agent chat; selecting a local folder promotes this page into code
   // mode without mixing it with the separate Team workspace.
-  const [workDir, setWorkDir] = useState<string>(() => "");
+  const [workDir, setWorkDir] = useState<string>(() => readInitialChatWorkDir());
   const localStartedThreadIdRef = useRef<string | null>(null);
   const handleWorkDirChange = useCallback((dir: string) => {
     setWorkDir(dir);
@@ -637,8 +662,6 @@ function ChatsPageContent({
       return;
     }
     if (!persistedThreadWorkspacePath) {
-      setWorkDir("");
-      rememberChatWorkDir("");
       return;
     }
     setWorkDir((current) => {
@@ -1211,12 +1234,7 @@ function ChatsPageContent({
     agentRunSettled &&
     !hasCompletedAgentOutput &&
     !hasPausedOrPendingBackgroundTask;
-  const shouldHideSettledProcessChrome =
-    agentRunSettled && hasCompletedAgentOutput;
-  const currentTodoEvents = shouldHideSettledProcessChrome
-    ? []
-    : agentDisplayEvents;
-  const hasCurrentTodos = currentTodoEvents.some(
+  const hasCurrentTodos = agentDisplayEvents.some(
     (event) => event.name === "todo_write" && event.input,
   );
   const hasRenderableAgentWorkbench = useMemo(
@@ -1239,8 +1257,7 @@ function ChatsPageContent({
   );
   const showAgentProgressPill =
     hasRenderableAgentWorkbench &&
-    hasCurrentTodos &&
-    !shouldHideSettledProcessChrome;
+    hasCurrentTodos;
   const canOpenAgentWorkbench =
     !isNewThread ||
     hasRenderableAgentWorkbench ||
@@ -1259,10 +1276,6 @@ function ChatsPageContent({
     !showResearchHistory &&
     !(showResearch && (!!researchJob || !!researchError));
   const artifactCount = artifacts?.length ?? 0;
-  const settledWorkbenchTurnKey = useMemo(() => {
-    const latestMessage = thread.messages[thread.messages.length - 1];
-    return `${threadId}:${latestMessage?.id ?? thread.messages.length}`;
-  }, [thread.messages, threadId]);
 
   useEffect(() => {
     if (!canOpenAgentWorkbench) {
@@ -1273,29 +1286,6 @@ function ChatsPageContent({
       setAgentWorkbenchTabTouched(false);
     }
   }, [canOpenAgentWorkbench, hasRenderableAgentWorkbench]);
-
-  useEffect(() => {
-    if (
-      !hasRenderableAgentWorkbench ||
-      !shouldHideSettledProcessChrome ||
-      artifactsOpen ||
-      showAgentPlan
-    ) {
-      return;
-    }
-    if (settledWorkbenchAutoDismissedRef.current === settledWorkbenchTurnKey) {
-      return;
-    }
-    settledWorkbenchAutoDismissedRef.current = settledWorkbenchTurnKey;
-    setAgentWorkbenchDismissed(true);
-    setAgentWorkbenchTabTouched(false);
-  }, [
-    artifactsOpen,
-    hasRenderableAgentWorkbench,
-    settledWorkbenchTurnKey,
-    shouldHideSettledProcessChrome,
-    showAgentPlan,
-  ]);
 
   useEffect(() => {
     if (thread.isLoading) {
@@ -1802,7 +1792,7 @@ function ChatsPageContent({
                       />
                     ) : (
                       <TodoPanel
-                        liveToolEvents={currentTodoEvents}
+                        liveToolEvents={agentDisplayEvents}
                         className="relative z-10"
                         defaultOpen={false}
                       />

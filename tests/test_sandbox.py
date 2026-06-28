@@ -224,11 +224,55 @@ class TestLimits:
 
     def test_missing_executable_rejected(self, workspace: Path) -> None:
         runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
-        with pytest.raises(SandboxViolation):
-            runner.run(["this-binary-definitely-does-not-exist-xyz"])
+        if runner.backend_hard:
+            result = runner.run(["this-binary-definitely-does-not-exist-xyz"])
+            assert result.exit_code != 0
+            assert result.backend != "direct"
+            assert result.hard is True
+        else:
+            with pytest.raises(SandboxViolation):
+                runner.run(["this-binary-definitely-does-not-exist-xyz"])
 
 
 class TestBackendSeam:
+    def test_default_runner_uses_selected_process_backend(
+        self,
+        workspace: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class TaggingBackend(DirectBackend):
+            def transform(self, argv, env, cwd, policy):  # type: ignore[no-untyped-def]
+                return _python("print('selected backend')"), env, cwd
+
+        monkeypatch.setattr(
+            "runtime.safety.sandboxing.sandbox.select_process_backend",
+            lambda: __import__(
+                "runtime.safety.sandboxing.sandbox",
+                fromlist=["BackendChoice"],
+            ).BackendChoice(TaggingBackend(), "tagged", hard=True),
+        )
+
+        runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
+        result = runner.run(_python("print('original')"))
+
+        assert result.stdout.strip() == "selected backend"
+        assert result.backend == "tagged"
+        assert result.hard is True
+
+    def test_soft_mode_runner_uses_direct_backend(
+        self,
+        workspace: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_PROCESS_SANDBOX", "soft")
+
+        runner = SandboxRunner(SandboxPolicy(workspace=workspace, timeout_s=10.0))
+        result = runner.run(_python("print('soft')"))
+
+        assert result.stdout.strip() == "soft"
+        assert result.backend == "direct"
+        assert result.hard is False
+
     def test_direct_backend_passes_through(self, workspace: Path) -> None:
         runner = SandboxRunner(
             SandboxPolicy(workspace=workspace, timeout_s=10.0),

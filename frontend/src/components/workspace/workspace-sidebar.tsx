@@ -19,6 +19,7 @@ import {
   PlusIcon,
   Trash2Icon,
   UsersRoundIcon,
+  WorkflowIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -102,8 +103,6 @@ type NavRoute = {
   label?: string;
 };
 const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
-// 「工作」surface 的落地页。公司 PM(/workspace/company)已删(交企业版),
-// 工作 surface 改以团队/多人协作为主,落地到团队页。
 const COMPANY_WORKSPACE_ROUTE = "/workspace/team";
 
 const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
@@ -118,24 +117,19 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
     icon: BrainIcon,
   },
   {
-    to: "/workspace/evolution?surface=chat",
-    labelKey: "navEvolution",
-    icon: DnaIcon,
-  },
-];
-
-// 工作 surface 的组织导航。公司 PM(工作台/项目/任务/里程碑/AI 助手)已移除
-// (交企业版);保留团队/多人协作。Agent 管理统一收敛到左下角角色切换。
-const COMPANY_ORG_ROUTES: NavRoute[] = [
-  { to: "/workspace/team/new", labelKey: "navTeam", icon: UsersRoundIcon },
-];
-
-const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
-  {
     to: "/workspace/knowledge?surface=chat",
     labelKey: "navKnowledgeGraph",
     icon: DatabaseIcon,
   },
+  {
+    to: "/workspace/evolution?surface=chat",
+    labelKey: "navEvolution",
+    icon: DnaIcon,
+  },
+  { to: "/workspace/team/new", labelKey: "navTeam", icon: UsersRoundIcon },
+];
+
+const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
   {
     to: "/workspace/storage?surface=company&library=apps",
     labelKey: "libraryApps",
@@ -159,6 +153,11 @@ const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
   {
     to: "/workspace/storage?surface=company&library=sources",
     labelKey: "libraryAuthorizedDirs",
+    icon: FolderPlusIcon,
+  },
+  {
+    to: "/workspace/migrate",
+    label: "迁移 / Migrate",
     icon: FolderPlusIcon,
   },
 ];
@@ -500,10 +499,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       })),
     [resolveLabel],
   );
-  const companyOrgItems = useMemo(
-    () => resolveRoutes(COMPANY_ORG_ROUTES),
-    [resolveRoutes],
-  );
   const chatCapabilityItems = useMemo(
     () => resolveRoutes(CHAT_CAPABILITY_ROUTES),
     [resolveRoutes],
@@ -523,6 +518,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     | "account"
     | "models"
     | "automation"
+    | "mcp"
     | "privacy"
   >("appearance");
 
@@ -535,6 +531,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       tab === "notification" ||
       tab === "about" ||
       tab === "automation" ||
+      tab === "mcp" ||
       tab === "privacy"
         ? tab
         : "appearance";
@@ -971,11 +968,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
         <NavSection items={chatCapabilityItems} pathname={pathname} />
-        <NavSection
-          label={t.sidebar.navSwarm}
-          items={companyOrgItems}
-          pathname={pathname}
-        />
         <LocalDatabaseSection
           title={resolveLabel("navDatabase")}
           items={nasLibraryItems}
@@ -1068,8 +1060,8 @@ function LocalDatabaseSection({
   search: string;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(true);
   const active = isStorageRouteActive(pathname);
+  const [open, setOpen] = useState(active);
 
   return (
     <SidebarGroup className="p-0 px-1 group-data-[collapsible=icon]:px-0">
@@ -1292,9 +1284,7 @@ function isCompanySurfaceRoute(pathname: string) {
     pathname === "/workspace/knowledge" ||
     pathname.startsWith("/workspace/knowledge/") ||
     pathname === "/workspace/plugins" ||
-    pathname.startsWith("/workspace/plugins/") ||
-    pathname === "/workspace/skills" ||
-    pathname.startsWith("/workspace/skills/")
+    pathname.startsWith("/workspace/plugins/")
   );
 }
 
@@ -2096,43 +2086,40 @@ function OngoingTasksSection({
   pathname: string;
 }) {
   const { t } = useI18n();
+  if (items.length === 0) return null;
   return (
     <div className="mt-2 group-data-[collapsible=icon]:hidden">
       <SidebarGroup className="p-0 px-2 pb-0">
         <SectionHeader label={t.sidebar.sectionOngoing} />
-        {items.length === 0 ? (
-          <EmptyHint>{t.sidebar.noOngoingTasks}</EmptyHint>
-        ) : (
-          <ul className="mt-0.5 space-y-px">
-            {items.map((item) => {
-              const active = pathname === routePath(item.href);
-              return (
-                <li key={item.id}>
-                  <Link
-                    to={item.href}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "flex min-h-8 items-center gap-2 rounded-md px-2 py-1 text-xs opacity-78 transition-[opacity,background-color] duration-150",
-                      "hover:bg-muted/40 hover:opacity-100",
-                      active &&
-                        "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] opacity-100",
-                    )}
-                  >
-                    <OngoingStatusDot status={item.status} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate leading-tight text-foreground/90">
-                        {item.title}
-                      </span>
-                      <span className="block truncate text-[10px] leading-tight text-muted-foreground/70">
-                        {item.subtitle}
-                      </span>
+        <ul className="mt-0.5 space-y-px">
+          {items.map((item) => {
+            const active = pathname === routePath(item.href);
+            return (
+              <li key={item.id}>
+                <Link
+                  to={item.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex min-h-8 items-center gap-2 rounded-md px-2 py-1 text-xs opacity-78 transition-[opacity,background-color] duration-150",
+                    "hover:bg-muted/40 hover:opacity-100",
+                    active &&
+                      "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] opacity-100",
+                  )}
+                >
+                  <OngoingStatusDot status={item.status} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate leading-tight text-foreground/90">
+                      {item.title}
                     </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                    <span className="block truncate text-[10px] leading-tight text-muted-foreground/70">
+                      {item.subtitle}
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </SidebarGroup>
     </div>
   );
@@ -2254,7 +2241,7 @@ function ChatsSection({
   }, [navigate, newPath]);
   const sectionLabel = label ?? tr.sidebar.sectionChats;
   const actionLabel = newActionLabel ?? tr.sidebar.actionNewChat;
-  const visibleLimit = 20;
+  const visibleLimit = 12;
   const displayedThreads = useMemo(() => {
     const current = threads.find((thread) => pathname.includes(thread.id));
     const recent = threads.slice(0, visibleLimit);

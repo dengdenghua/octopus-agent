@@ -521,6 +521,128 @@ class TestHealthCheck:
         result = reg.probe()
         assert result["status"] == "pass"
 
+    def test_journal_check_warns_on_recovered_corrupt_lines(self):
+        from runtime.platform.observability.health import HealthRegistry, journal_check
+
+        journal = MagicMock()
+        journal.read_all.return_value = []
+        journal.diagnostics.return_value = {
+            "schema": "octopus.journal_diagnostics.v1",
+            "skipped_total": 2,
+            "skipped_lines": [{"line_number": 7}],
+        }
+        reg = HealthRegistry(parallel=False)
+        reg.register(journal_check(journal))
+
+        result = reg.probe()
+
+        assert result["status"] == "warn"
+        check = result["checks"][0]
+        assert check["status"] == "warn"
+        assert "skipping 2 corrupt" in check["detail"]
+        assert check["metadata"]["diagnostics"]["skipped_total"] == 2
+
+    def test_code_mode_runtime_check_passes_offline(self):
+        from runtime.platform.observability.code_mode_health import (
+            code_mode_runtime_check,
+        )
+        from runtime.platform.observability.health import HealthRegistry
+
+        reg = HealthRegistry(parallel=False)
+        reg.register(code_mode_runtime_check())
+
+        result = reg.probe()
+
+        assert result["status"] == "pass"
+        check = result["checks"][0]
+        assert check["name"] == "code_mode_runtime"
+        assert check["metadata"]["checks"]["react_empty_assistant_history"]["passed"] is True
+        assert check["metadata"]["checks"]["openai_compat_payload_hygiene"]["passed"] is True
+
+    def test_code_mode_runtime_check_uses_cold_start_timeout_budget(self):
+        from runtime.platform.observability.code_mode_health import (
+            code_mode_runtime_check,
+        )
+
+        check = code_mode_runtime_check()
+
+        assert check.timeout_seconds == 5.0
+
+    def test_provider_compatibility_check_passes_offline(self, tmp_path):
+        import json
+
+        from runtime.platform.observability.health import HealthRegistry
+        from runtime.platform.observability.provider_compat_health import (
+            provider_compatibility_check,
+        )
+
+        custom_models = tmp_path / "custom_models.json"
+        custom_models.write_text(
+            json.dumps({
+                "kimi-code": {
+                    "id": "kimi-code",
+                    "provider": "openai",
+                    "base_url": "https://api.kimi.com/coding/v1",
+                    "api_key": "sk-secret",
+                    "models": ["kimi-for-coding"],
+                    "supports_thinking": True,
+                    "omit_sampling_parameters": True,
+                }
+            }),
+            encoding="utf-8",
+        )
+        reg = HealthRegistry(parallel=False)
+        reg.register(provider_compatibility_check(custom_models_path=custom_models))
+
+        result = reg.probe()
+
+        assert result["status"] == "pass"
+        check = result["checks"][0]
+        assert check["name"] == "provider_compatibility"
+        assert check["metadata"]["row_count"] == 1
+        assert check["metadata"]["rows"][0]["profile"] == "kimi_coding"
+
+    def test_provider_compatibility_check_warns_without_failing_readiness(self, tmp_path):
+        import json
+
+        from runtime.platform.observability.health import HealthRegistry
+        from runtime.platform.observability.provider_compat_health import (
+            provider_compatibility_check,
+        )
+
+        custom_models = tmp_path / "custom_models.json"
+        custom_models.write_text(
+            json.dumps({
+                "qwen-bad": {
+                    "id": "qwen-bad",
+                    "provider": "openai",
+                    "base_url": "https://dashscope.aliyuncs.com/api/v1",
+                    "api_key": "sk-secret",
+                    "models": ["qwen3-max"],
+                    "supports_thinking": True,
+                    "thinking_wire_format": "openai",
+                }
+            }),
+            encoding="utf-8",
+        )
+        reg = HealthRegistry(parallel=False)
+        reg.register(provider_compatibility_check(custom_models_path=custom_models))
+
+        result = reg.probe()
+
+        assert result["status"] == "warn"
+        check = result["checks"][0]
+        assert check["status"] == "warn"
+        assert check["metadata"]["review_rows"] == 1
+        assert {
+            code
+            for row in check["metadata"]["rows"]
+            for code in row["finding_codes"]
+        } == {
+            "qwen_base_url_not_compatible_mode",
+            "thinking_wire_format_mismatch",
+        }
+
     def test_metrics_integration(self):
         from runtime.platform.observability.health import HealthCheck, HealthRegistry
         from runtime.platform.observability.metrics import MetricsRegistry

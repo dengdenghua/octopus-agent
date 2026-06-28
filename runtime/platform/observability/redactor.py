@@ -99,6 +99,10 @@ _BUILTIN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
             r"|\bsk_(?:live|test)_[A-Za-z0-9]{20,}\b"
             # Stripe restricted
             r"|\brk_(?:live|test)_[A-Za-z0-9]{20,}\b"
+            # Domestic / OpenAI-compatible provider keys.  These commonly use
+            # ``sk-vendor-...`` prefixes and otherwise slipped past the legacy
+            # OpenAI-only pattern.
+            r"|\bsk-(?:kimi|moonshot|deepseek|zhipu|glm|qwen|ark|volc|siliconflow|baichuan)-[A-Za-z0-9_\-]{20,}\b"
             # Slack bot / user / app tokens
             r"|\bxox[bpasr]-[A-Za-z0-9\-]{10,}\b"
             # Twilio account SID / auth token are 32-hex; account SIDs

@@ -273,6 +273,19 @@ def _normalize_execution_environment(value: Any, *, permission_mode: str) -> str
     return "sandbox"
 
 
+def _workspace_path_from_metadata(meta: dict[str, Any]) -> Path | None:
+    wp = meta.get("workspace_path")
+    if not isinstance(wp, str) or not wp.strip():
+        return None
+    try:
+        candidate = Path(wp).expanduser()
+        if candidate.is_absolute():
+            return candidate.resolve()
+    except (OSError, ValueError):
+        return None
+    return None
+
+
 def agent_has_capability(agent: Any, name: str) -> bool:
     """Check whether ``agent`` has the named capability flag set.
 
@@ -496,18 +509,9 @@ def resolve_execution_scope(session: Session | None) -> ExecutionScope:
 
     readable_roots = write_scope.roots
     writable_roots = write_scope.roots
-    workspace_path: Path | None = None
+    workspace_path = _workspace_path_from_metadata(meta)
 
-    wp = meta.get("workspace_path")
-    if isinstance(wp, str) and wp.strip():
-        try:
-            candidate = Path(wp).expanduser()
-            if candidate.is_absolute():
-                workspace_path = candidate.resolve()
-        except (OSError, ValueError):
-            workspace_path = None
-
-    if write_scope.mode == "code" and workspace_path is not None:
+    if workspace_path is not None and str(meta.get("mode") or "") == "code":
         readable_roots = (
             workspace_path,
             *tuple(root for root in write_scope.roots if root != workspace_path),

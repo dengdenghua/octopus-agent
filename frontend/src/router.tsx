@@ -49,7 +49,6 @@ const PluginsPage = lazy(() => import("./app/plugins/page"));
 const WorkspaceLayout = lazy(() => import("./app/workspace/layout"));
 const ChatPage = lazy(() => import("./app/workspace/chats/[thread_id]/page"));
 const TeamIndexPage = lazy(() => import("./app/workspace/team/page"));
-const TeamNewPage = lazy(() => import("./app/workspace/team/new/page"));
 const TeamJoinPage = lazy(() => import("./app/workspace/team/join/page"));
 const TeamPage = lazy(() => import("./app/workspace/team/[thread_id]/page"));
 const BrowserPage = lazy(() => import("./app/workspace/browser/page"));
@@ -58,10 +57,8 @@ const DesktopOrganizerPage = lazy(
   () => import("./app/workspace/desktop-organizer/page"),
 );
 const MobilePage = lazy(() => import("./app/workspace/mobile/page"));
-const McpPage = lazy(() => import("./app/workspace/mcp/page"));
 const AgentsPage = lazy(() => import("./app/workspace/agents/page"));
 const AgentsNewPage = lazy(() => import("./app/workspace/agents/new/page"));
-const SkillsPage = lazy(() => import("./app/workspace/skills/page"));
 // /workspace/store now redirects to /workspace/agents (HR/agent market).
 // The StorePage component is unused but the file remains for browser/page.tsx
 // which still imports UnifiedStoreOverlay from the same module.
@@ -85,6 +82,7 @@ const IntelligencePage = lazy(
 );
 const KnowledgePage = lazy(() => import("./app/workspace/knowledge/page"));
 const StoragePage = lazy(() => import("./app/workspace/storage/page"));
+const MigratePage = lazy(() => import("./app/workspace/migrate/page"));
 const EvolutionPage = lazy(() => import("./app/workspace/evolution/page"));
 const WorkflowsPage = lazy(() => import("./app/workspace/workflows/page"));
 // Standalone replay surface. See app/workspace/replay/page.tsx.
@@ -148,7 +146,7 @@ export function AppRouter() {
               />
               <Route path="code/:threadId" element={<LegacyCodeRedirect />} />
               <Route path="team" element={<TeamIndexPage />} />
-              <Route path="team/new" element={<TeamNewPage />} />
+              <Route path="team/new" element={<TeamPage />} />
               <Route path="team/join" element={<TeamJoinPage />} />
               <Route path="team/:threadId" element={<TeamPage />} />
               <Route path="browser" element={<BrowserPage />} />
@@ -158,14 +156,12 @@ export function AppRouter() {
                 element={<DesktopOrganizerPage />}
               />
               <Route path="mobile" element={<MobilePage />} />
-              <Route path="mcp" element={<McpPage />} />
               <Route
                 path="agents/:agentName/chats/:threadId"
                 element={<ChatPage />}
               />
               <Route path="agents" element={<AgentsPage />} />
               <Route path="agents/new" element={<AgentsNewPage />} />
-              <Route path="skills" element={<SkillsPage />} />
               <Route path="plugins" element={<PluginsPage />} />
               <Route
                 path="store"
@@ -181,6 +177,7 @@ export function AppRouter() {
               />
               <Route path="knowledge" element={<KnowledgePage />} />
               <Route path="storage" element={<StoragePage />} />
+              <Route path="migrate" element={<MigratePage />} />
               <Route path="nas" element={<StorageRedirect />} />
               <Route path="database" element={<StorageRedirect />} />
               <Route path="evolution" element={<EvolutionPage />} />

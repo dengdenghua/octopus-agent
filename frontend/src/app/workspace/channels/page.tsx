@@ -183,7 +183,7 @@ export default function ChannelsPage() {
         fetch(`${getBackendBaseURL()}/api/agents`),
       ]);
       if (!chRes.ok)
-        throw new Error(`Failed to load channels: ${chRes.status}`);
+        throw new Error(t.channels.loadFailedDetail(String(chRes.status)));
       const ch = (await chRes.json()) as ChannelRow[];
       setRows(ch);
       if (agRes.ok) {
@@ -193,7 +193,7 @@ export default function ChannelsPage() {
       setError(null);
     } catch (e) {
       swallow(e);
-      setError(e instanceof Error ? e.message : "Unknown error");
+      setError(e instanceof Error ? e.message : t.channels.unknownError);
     } finally {
       setLoading(false);
     }
@@ -323,7 +323,7 @@ export default function ChannelsPage() {
                   </div>
                   <div>
                     <div className="text-muted-foreground text-xs font-medium uppercase tracking-[0.18em]">
-                      Channel Ops
+                      {t.channels.channelOps}
                     </div>
                     <h1 className="text-xl font-semibold tracking-tight">
                       {t.channels.title}
@@ -806,6 +806,7 @@ function Metric({
   /* Implementation note. */
   onClick?: () => void;
 }) {
+  const { t } = useI18n();
   const body = (
     <>
       <div className="text-[14px] font-semibold tabular-nums">{value}</div>
@@ -829,7 +830,7 @@ function Metric({
         "hover:border-primary/40 hover:bg-primary/[0.04]",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
       )}
-      title="点击查看详情"
+      title={t.channels.clickToViewDetails}
     >
       {body}
     </button>

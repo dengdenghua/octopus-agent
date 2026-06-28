@@ -645,6 +645,28 @@ def test_react_loop_multi_turn_then_final() -> None:
     assert router.calls == 2
 
 
+def test_react_loop_does_not_append_empty_assistant_history() -> None:
+    router = _CapturingRouter([
+        "",
+        "Final Answer: recovered",
+    ])
+
+    result = run_react_loop(
+        _FakeStack(router), _intent("修复 code-mode"), agent=None, max_iterations=3,
+    )
+
+    assert result is not None
+    assert result.final_answer == "recovered"
+    assert len(router.requests) == 2
+    second_messages = router.requests[1].messages
+    assert not any(
+        message.role == "assistant"
+        and isinstance(message.content, str)
+        and not message.content.strip()
+        for message in second_messages
+    )
+
+
 def test_react_loop_continues_length_limited_final_answer() -> None:
     router = _CapturingRouter(
         [

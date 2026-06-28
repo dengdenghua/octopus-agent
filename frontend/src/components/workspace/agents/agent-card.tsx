@@ -64,7 +64,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
   return (
     <>
       <Card
-        className="group flex cursor-pointer flex-col overflow-hidden rounded-lg border-border/55 bg-card/75 py-0 shadow-sm transition-colors duration-150 hover:border-primary/25 hover:bg-card"
+        className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border-border/60 bg-card/70 py-0 shadow-sm transition-all duration-150 hover:border-primary/25 hover:bg-card hover:shadow-md"
         onClick={() => onSelect?.(agent)}
       >
         <CardHeader className="px-3 py-3">

@@ -606,10 +606,9 @@ export function MessageGroup({
       className={cn(
         "w-full gap-1",
         // Code mode: render the work-log as a distinct, bounded "process lane"
-        // (faint panel) so it reads as its own region, not noise above the
-        // answer. Other modes keep the lighter left-rule treatment.
+        // with the same left-rail language as the rest of the live trace.
         codeMode
-          ? "rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
+          ? "border-l border-border/60 bg-transparent pl-3"
           : "border-l border-border/60 pl-4",
         className,
       )}
@@ -628,14 +627,14 @@ export function MessageGroup({
           aria-live="polite"
           data-testid="live-process-strip"
           className={cn(
-            "mb-1 flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-[11px]",
-            "bg-background/70 text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)]",
+            "mb-1 flex min-w-0 items-center gap-2 border-y border-border/35 px-1 py-1.5 text-[11px]",
+            "bg-background/40 text-muted-foreground",
             liveProcessState === "running" &&
-              "border-emerald-500/20 bg-emerald-500/[0.045]",
+              "border-y-emerald-500/20 bg-emerald-500/[0.025]",
             liveProcessState === "waiting" &&
-              "border-amber-500/25 bg-amber-500/[0.055]",
+              "border-y-amber-500/25 bg-amber-500/[0.035]",
             liveProcessState === "error" &&
-              "border-destructive/25 bg-destructive/[0.055]",
+              "border-y-destructive/25 bg-destructive/[0.035]",
           )}
         >
           <span className="relative flex size-2.5 shrink-0 items-center justify-center">
@@ -658,7 +657,7 @@ export function MessageGroup({
           </span>
           <span
             className={cn(
-              "shrink-0 rounded-full px-1.5 py-0.5 leading-none",
+              "shrink-0 rounded px-1.5 py-0.5 leading-none",
               agentRunBadgeClass(liveProcessState),
             )}
           >
@@ -666,7 +665,7 @@ export function MessageGroup({
           </span>
           <span className="min-w-0 flex-1 truncate">{liveProcessSummary}</span>
           {replayStepCount > 0 && (
-            <span className="shrink-0 rounded-full bg-muted/55 px-1.5 py-0.5 text-muted-foreground/80">
+            <span className="shrink-0 rounded bg-muted/45 px-1.5 py-0.5 text-muted-foreground/80">
               {t.messageGrouping.liveProcessHistory(replayStepCount)}
             </span>
           )}

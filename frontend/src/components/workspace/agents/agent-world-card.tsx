@@ -137,7 +137,7 @@ export function AgentWorldCard({
   const keySkillCount = agent.key_skills?.length ?? 0;
   const hasCapabilityPack = keySkillCount > 0;
   const iconFallback = (
-    <span className="bg-gradient-to-br from-primary/12 to-muted/35 text-primary flex h-full w-full items-center justify-center rounded-sm">
+    <span className="bg-gradient-to-br from-primary/12 to-muted/35 text-primary flex h-full w-full items-center justify-center rounded-lg">
       {agent.icon || catStyle.icon}
     </span>
   );
@@ -178,16 +178,11 @@ export function AgentWorldCard({
   return (
     <Card
       className={cn(
-        "group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border-border/70 bg-card/86 py-0 transition-all duration-200 ease-out",
-        "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-[0_0_24px_hsl(var(--primary)/0.10)]",
-        "before:pointer-events-none before:absolute before:left-0 before:top-0 before:h-3 before:w-3 before:border-l before:border-t before:border-primary/45",
-        "after:pointer-events-none after:absolute after:bottom-0 after:right-0 after:h-3 after:w-3 after:border-b after:border-r after:border-primary/30",
+        "group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border-border/60 bg-card/70 py-0 shadow-sm transition-all duration-200 ease-out",
+        "hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-md",
       )}
       onClick={() => onSelect?.(agent)}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-primary/35" />
-      <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-200 [background-image:linear-gradient(180deg,transparent_0,transparent_94%,hsl(var(--primary)/0.16)_95%,transparent_100%)] [background-size:100%_18px] group-hover:opacity-100" />
-      {/* Featured shimmer accent */}
       {agent.is_featured && (
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-500/60 via-primary/40 to-violet-500/60" />
       )}
@@ -272,7 +267,7 @@ export function AgentWorldCard({
           size="sm"
           variant={installed ? "outline" : "default"}
           className={cn(
-            "h-7 rounded-sm px-3 text-xs transition-all",
+            "h-7 rounded-lg px-3 text-xs transition-all",
             !installed && "shadow-sm hover:shadow-md",
           )}
           disabled={installing}

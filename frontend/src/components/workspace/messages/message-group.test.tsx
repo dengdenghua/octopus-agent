@@ -446,7 +446,10 @@ describe("MessageGroup reasoning grouping", () => {
     expect(
       screen.queryByText("Inspect the user request before editing."),
     ).not.toBeInTheDocument();
-    expect(screen.getByTestId("live-process-strip")).toBeInTheDocument();
+    const liveProcessStrip = screen.getByTestId("live-process-strip");
+    expect(liveProcessStrip).toBeInTheDocument();
+    expect(liveProcessStrip.className).toContain("border-y");
+    expect(liveProcessStrip.className).not.toContain("rounded-md");
     expect(screen.getByText("Live process")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
     expect(screen.getByText("1 replay step")).toBeInTheDocument();

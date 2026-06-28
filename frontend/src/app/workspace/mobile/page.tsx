@@ -1466,7 +1466,7 @@ function MeTab({
               <div className="flex-1">
                 <div className="text-base font-bold">{APP_NAME}</div>
                 <div className="text-xs text-muted-foreground">
-                  为你24小时在线，有问题随时来找我吧。
+                  为你 24 小时在线，有问题随时来找我吧。
                 </div>
               </div>
             </div>

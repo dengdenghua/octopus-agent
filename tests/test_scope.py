@@ -654,6 +654,33 @@ class TestExecutionScope:
         assert scope.allows_write(wp / "src" / "main.py")
         assert scope.allows_read(wp / "src" / "main.py")
 
+    def test_locked_code_agent_can_read_bound_workspace_without_write_access(
+        self, mk_session, tmp_path: Path, data_dir: Path,
+    ):
+        from runtime.platform.process.scope import resolve_execution_scope
+
+        wp = tmp_path / "project"
+        wp.mkdir()
+        (wp / "src").mkdir()
+
+        sess = mk_session(
+            agent_id="general",
+            caps={},
+            mode="code",
+            thread_id="t-readonly-code",
+        )
+        sess.metadata["workspace_path"] = str(wp)
+        scope = resolve_execution_scope(sess)
+
+        assert scope.mode == "chat"
+        assert scope.requested_mode == "code"
+        assert scope.primary_read == wp
+        assert scope.allows_read(wp / "src" / "main.py")
+        assert not scope.allows_write(wp / "src" / "main.py")
+        assert scope.primary_write == (
+            data_dir / "workspaces" / "t-readonly-code" / "output" / "final"
+        )
+
     def test_plan_execution_scope_has_no_write_roots(self, mk_session):
         from runtime.platform.process.scope import resolve_execution_scope
 

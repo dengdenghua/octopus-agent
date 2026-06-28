@@ -8,7 +8,7 @@
  * this phase). The richer replay-timeline + skill-card review is a later phase;
  * here the done state shows the forge result and points at the skill library.
  *
- * Chinese-only copy, matching the existing REC button (which is not i18n'd).
+ * Copy is now driven by the teachRepeat i18n namespace.
  */
 
 import {
@@ -27,6 +27,7 @@ import {
   stopRecording,
 } from "@/core/teach-repeat/api";
 import type { StopRecordingResponse } from "@/core/teach-repeat/types";
+import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,7 @@ export function RecRecorderOverlay({
   onClose,
   onRecordingChange,
 }: RecRecorderOverlayProps) {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>("idle");
   const [name, setName] = useState(defaultName);
   const [countdown, setCountdown] = useState(COUNTDOWN_FROM);
@@ -89,8 +91,8 @@ export function RecRecorderOverlay({
     try {
       await startRecording({
         thread_id: threadId,
-        name: name.trim() || "对话回放学习",
-        description: "用户通过悬浮录制器开启的 REC 录制。",
+        name: name.trim() || t.teachRepeat.defaultName,
+        description: t.teachRepeat.defaultDescription,
       });
       recStartRef.current = Date.now();
       setElapsed(0);
@@ -98,7 +100,7 @@ export function RecRecorderOverlay({
       setPhase("recording");
       onRecordingChange?.(true);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "REC 启动失败");
+      toast.error(error instanceof Error ? error.message : t.teachRepeat.startFailed);
       setPhase("idle");
     } finally {
       startingRef.current = false;
@@ -152,7 +154,7 @@ export function RecRecorderOverlay({
       setPhase("done");
       onRecordingChange?.(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "REC 停止失败");
+      toast.error(error instanceof Error ? error.message : t.teachRepeat.stopFailed);
       setPhase("recording");
     }
   }, [threadId, onRecordingChange]);
@@ -162,7 +164,7 @@ export function RecRecorderOverlay({
   return (
     <div
       role="dialog"
-      aria-label="录制器"
+      aria-label={t.teachRepeat.recorderTitle}
       className="fixed bottom-5 right-5 z-[120] w-[260px] rounded-2xl border border-border/60 bg-background/95 p-4 shadow-2xl ring-1 ring-border/30 backdrop-blur"
     >
       <div className="mb-2 flex items-center justify-between">
@@ -173,14 +175,14 @@ export function RecRecorderOverlay({
               phase === "recording" && "animate-pulse text-red-500",
             )}
           />
-          录制器
+          {t.teachRepeat.recorderTitle}
         </span>
         {(phase === "idle" || phase === "done") && (
           <button
             type="button"
             onClick={onClose}
             className="text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="关闭"
+            aria-label={t.common.close}
           >
             <XIcon className="size-4" />
           </button>
@@ -191,12 +193,12 @@ export function RecRecorderOverlay({
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-[11px] text-muted-foreground">
-              录什么任务?
+              {t.teachRepeat.taskLabel}
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="例如：导出本周对账单到飞书"
+              placeholder={t.teachRepeat.taskPlaceholder}
               className="w-full rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-border-strong"
             />
           </div>
@@ -214,10 +216,10 @@ export function RecRecorderOverlay({
             )}
           >
             <CircleDotIcon className="size-3.5" />
-            开始录制
+            {t.teachRepeat.startRecording}
           </button>
           <p className="text-[10px] leading-tight text-muted-foreground">
-            录制本轮操作轨迹,停止后自动提炼成可复用、可回放的技能;敏感操作会被隔离待审。
+            {t.teachRepeat.recordingHint}
           </p>
         </div>
       )}
@@ -227,7 +229,7 @@ export function RecRecorderOverlay({
           <div className="flex size-16 items-center justify-center rounded-full border-2 border-red-500/60 text-3xl font-semibold text-red-600 dark:text-red-400">
             {countdown > 0 ? countdown : "·"}
           </div>
-          <span className="text-[11px] text-muted-foreground">准备录制…</span>
+          <span className="text-[11px] text-muted-foreground">{t.teachRepeat.countdownReady}</span>
         </div>
       )}
 
@@ -239,7 +241,7 @@ export function RecRecorderOverlay({
               {formatElapsed(elapsed)}
             </span>
             <span className="text-[11px] text-muted-foreground">
-              · {stepCount} 步
+              {t.teachRepeat.elapsedSteps(stepCount)}
             </span>
           </div>
           <button
@@ -248,7 +250,7 @@ export function RecRecorderOverlay({
             className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-500/12 px-3 py-2 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/18 dark:text-red-400"
           >
             <SquareIcon className="size-3.5" />
-            停止并提炼技能
+            {t.teachRepeat.stopAndExtract}
           </button>
         </div>
       )}
@@ -257,7 +259,7 @@ export function RecRecorderOverlay({
         <div className="flex flex-col items-center justify-center gap-2 py-5">
           <Loader2Icon className="size-5 animate-spin text-muted-foreground" />
           <span className="text-[11px] text-muted-foreground">
-            正在分析录制、提炼技能…
+            {t.teachRepeat.analyzing}
           </span>
         </div>
       )}
@@ -270,7 +272,7 @@ export function RecRecorderOverlay({
             onClick={onClose}
             className="w-full rounded-lg border border-border-strong bg-transparent px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
           >
-            完成
+            {t.teachRepeat.done}
           </button>
         </div>
       )}
@@ -279,6 +281,7 @@ export function RecRecorderOverlay({
 }
 
 function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
+  const { t } = useI18n();
   const forged = result?.forged ?? [];
   const status = result?.status;
 
@@ -287,11 +290,11 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
       <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
         <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
           <SparklesIcon className="size-3.5" />
-          已学会技能
+          {t.teachRepeat.learnedSkill}
         </div>
         <div className="text-[11px] text-foreground">{forged.join("、")}</div>
         <p className="mt-1.5 text-[10px] text-muted-foreground">
-          可在技能库 /record 面板里回放与参数化复用。
+          {t.teachRepeat.skillLibraryHint}
         </p>
       </div>
     );
@@ -299,20 +302,20 @@ function DoneSummary({ result }: { result: StopRecordingResponse | null }) {
   if (status === "quarantined") {
     return (
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-[11px] text-amber-700 dark:text-amber-300">
-        已生成技能候选,含敏感操作,已隔离待人工审批。
+        {t.teachRepeat.quarantined}
       </div>
     );
   }
   if (status === "no_successful_trajectory") {
     return (
       <div className="rounded-xl border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
-        本轮暂无可提炼的成功操作轨迹,换个更明确的任务再录一次。
+        {t.teachRepeat.noTrajectory}
       </div>
     );
   }
   return (
     <div className="rounded-xl border border-border bg-muted/40 p-3 text-[11px] text-muted-foreground">
-      录制完成{result?.name ? `：${result.name}` : ""}。
+      {t.teachRepeat.recordingComplete(result?.name)}
     </div>
   );
 }

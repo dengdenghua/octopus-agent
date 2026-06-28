@@ -99,13 +99,13 @@ export function agentRunProgressBarClass(status: AgentRunStatusInput): string {
 export function agentRunBadgeClass(status: AgentRunStatusInput): string {
   const state = agentRunStateFromStatus(status);
   if (state === "running") {
-    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300";
+    return "rounded-full bg-emerald-500/10 text-emerald-700 transition-colors dark:text-emerald-300";
   }
   if (state === "waiting") {
-    return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    return "rounded-full bg-amber-500/10 text-amber-700 transition-colors dark:text-amber-300";
   }
-  if (state === "error") return "bg-destructive/10 text-destructive";
-  return "bg-muted text-muted-foreground";
+  if (state === "error") return "rounded-full bg-destructive/10 text-destructive transition-colors";
+  return "rounded-full bg-muted text-muted-foreground transition-colors";
 }
 
 export function agentRunTextClass(status: AgentRunStatusInput): string {
@@ -129,18 +129,18 @@ export function agentRunIconClass(status: AgentRunStatusInput): string {
 export function agentRunPanelClass(status: AgentRunStatusInput): string {
   const state = agentRunStateFromStatus(status);
   if (state === "running") {
-    return "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+    return "rounded-lg border-emerald-500/25 bg-emerald-500/10 text-emerald-600 transition-all duration-200 dark:text-emerald-400";
   }
   if (state === "waiting") {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+    return "rounded-lg border-amber-500/30 bg-amber-500/10 text-amber-700 transition-all duration-200 dark:text-amber-300";
   }
   if (state === "error") {
-    return "border-destructive/35 bg-destructive/10 text-destructive";
+    return "rounded-lg border-destructive/35 bg-destructive/10 text-destructive transition-all duration-200";
   }
   if (state === "done") {
-    return "border-sky-500/25 bg-sky-500/10 text-sky-600 dark:text-sky-400";
+    return "rounded-lg border-sky-500/25 bg-sky-500/10 text-sky-600 transition-all duration-200 dark:text-sky-400";
   }
-  return "border-border/70 bg-muted/45 text-muted-foreground";
+  return "rounded-lg border-border/70 bg-muted/45 text-muted-foreground transition-all duration-200";
 }
 
 export function agentRunRobotButtonClass(status: AgentRunStatusInput): string {

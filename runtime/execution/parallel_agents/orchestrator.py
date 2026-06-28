@@ -231,7 +231,106 @@ class _BatchEntry:
             file_write_observability=file_write_lease_snapshot(
                 self.runtime_session_metadata,
             ),
+            batch_metrics=_batch_metrics(self),
         )
+
+
+def _batch_metrics(batch: _BatchEntry) -> dict[str, object]:
+    tasks = list(batch.tasks.values())
+    starts = [
+        entry.started_at.timestamp()
+        for entry in tasks
+        if entry.started_at is not None
+    ]
+    finishes = [
+        entry.completed_at.timestamp()
+        for entry in tasks
+        if entry.completed_at is not None
+    ]
+    durations = [
+        float(duration)
+        for entry in tasks
+        if (duration := entry.duration()) is not None
+    ]
+    execution_window_seconds = (
+        max(finishes) - min(starts)
+        if starts and finishes else 0.0
+    )
+    observed_serial_work_seconds = sum(durations)
+    critical_path_speedup = (
+        observed_serial_work_seconds / execution_window_seconds
+        if execution_window_seconds > 0.0 else 0.0
+    )
+    event_sequences = [
+        int(event.sequence)
+        for event in batch.event_log
+        if event.sequence is not None
+    ]
+    status_by_task = {
+        entry.task_id: entry.status
+        for entry in tasks
+    }
+    return {
+        "schema": "octopus.parallel_agent_batch_metrics.v1",
+        "task_count": len(tasks),
+        "planned_phase_count": (
+            len(batch.plan.phases)
+            if batch.plan is not None else 0
+        ),
+        "parallel_phase_count": (
+            sum(1 for phase in batch.plan.phases if phase.parallel)
+            if batch.plan is not None else 0
+        ),
+        "started_count": len(starts),
+        "finished_count": len(finishes),
+        "completed_count": sum(1 for entry in tasks if entry.status == "completed"),
+        "failed_count": sum(1 for entry in tasks if entry.status == "failed"),
+        "cancelled_count": sum(1 for entry in tasks if entry.status == "cancelled"),
+        "execution_window_seconds": round(max(execution_window_seconds, 0.0), 4),
+        "observed_serial_work_seconds": round(observed_serial_work_seconds, 4),
+        "critical_path_speedup": round(critical_path_speedup, 3),
+        "max_active_estimate": _max_active_estimate(tasks),
+        "failure_isolation": _failure_isolation_ok(tasks),
+        "event_sequences_contiguous": event_sequences == list(
+            range(1, len(event_sequences) + 1),
+        ),
+        "conflict_count": len(batch.conflicts),
+        "conflicts": list(batch.conflicts),
+        "status_by_task": status_by_task,
+    }
+
+
+def _max_active_estimate(tasks: list[_TaskEntry]) -> int:
+    marks: list[tuple[float, int]] = []
+    for entry in tasks:
+        if entry.started_at is None:
+            continue
+        started = entry.started_at.timestamp()
+        completed = (
+            entry.completed_at.timestamp()
+            if entry.completed_at is not None else started
+        )
+        marks.append((started, 1))
+        marks.append((max(completed, started), -1))
+    active = 0
+    max_active = 0
+    for _, delta in sorted(marks, key=lambda item: (item[0], -item[1])):
+        active += delta
+        max_active = max(max_active, active)
+    return max_active
+
+
+def _failure_isolation_ok(tasks: list[_TaskEntry]) -> bool:
+    failed = [entry for entry in tasks if entry.status == "failed"]
+    if not failed:
+        return True
+    succeeded = [
+        entry
+        for entry in tasks
+        if entry.status == "completed"
+        and not any(dep in {item.task_id for item in failed} for dep in entry.depends_on)
+    ]
+    return bool(succeeded)
 
 
 # ─── orchestrator ────────────────────────────────────────────
@@ -754,6 +853,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             payload={
                 "total_tasks": len(batch.tasks),
                 "completed_tasks": batch.counts()[1],
+                "batch_metrics": _batch_metrics(batch),
             },
         )
         self._broadcast_locked(batch, ev)

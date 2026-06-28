@@ -19,11 +19,32 @@ from .registry import Skill, SkillRegistry
 _BASE_URL = "http://127.0.0.1:8000/api/computer"
 _TIMEOUT_SECONDS = 90
 
+# In-process service token for authenticating to the local ``/api/computer``
+# service when control-plane auth is enabled. Held in memory only (NOT an env
+# var) so it is never inherited by exec_shell child processes.
+_internal_token: str | None = None
+
+
+def set_internal_api_token(token: str | None) -> None:
+    """Inject / clear the service token the computer loop skills use to reach
+    the local ``/api/computer`` service.
+
+    ``create_app`` sets it to a freshly-minted service API key when
+    control-plane auth is on, so the in-process loop skills
+    (observe/plan/preview/execute) authenticate instead of getting 401'd.
+    When auth is off it stays ``None`` and no Authorization header is sent
+    (the endpoint is open in single-user dev).
+    """
+    global _internal_token
+    _internal_token = token or None
+
 
 def _call(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     url = f"{_BASE_URL}{path}"
     data = None if body is None else json.dumps(body).encode("utf-8")
     headers = {"Content-Type": "application/json"}
+    if _internal_token:
+        headers["Authorization"] = f"Bearer {_internal_token}"
     req = urllib_request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib_request.urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:

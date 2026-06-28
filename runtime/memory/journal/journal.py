@@ -367,6 +367,19 @@ class Journal:
     def read_all(self) -> list[JournalEvent]:
         raise NotImplementedError
 
+    def diagnostics(self) -> dict[str, Any]:
+        events = self.read_all()
+        return {
+            "schema": "octopus.journal_diagnostics.v1",
+            "path": "",
+            "parsed_events": len(events),
+            "cache_byte_pos": 0,
+            "parsed_line_count": len(events),
+            "skipped_total": 0,
+            "skipped_lines": [],
+            "pending_tail_bytes": 0,
+        }
+
     def read_by_task(self, task_id: TaskId) -> list[JournalEvent]:
         return [e for e in self.read_all() if e.task_id == task_id]
 
@@ -1091,7 +1104,10 @@ class JSONLJournal(Journal):
         self._lock = Lock()
         self._cache: list[JournalEvent] = []
         self._cache_byte_pos: int = 0
+        self._cache_line_count: int = 0
         self._skipped_total: int = 0
+        self._skipped_lines: list[dict[str, Any]] = []
+        self._pending_tail_bytes: int = 0
         self._max_size_bytes = max_size_bytes
         self._keep_ratio = max(0.1, min(0.9, keep_ratio))
         self._audit_chain = audit_chain
@@ -1383,7 +1399,10 @@ class JSONLJournal(Journal):
         # Invalidate cache · next read_all() reparses from scratch.
         self._cache = []
         self._cache_byte_pos = 0
+        self._cache_line_count = 0
         self._skipped_total = 0
+        self._skipped_lines = []
+        self._pending_tail_bytes = 0
         import logging
 
         logging.getLogger(__name__).info(
@@ -1400,6 +1419,10 @@ class JSONLJournal(Journal):
                 # appear later and we want to parse it from scratch).
                 self._cache = []
                 self._cache_byte_pos = 0
+                self._cache_line_count = 0
+                self._skipped_total = 0
+                self._skipped_lines = []
+                self._pending_tail_bytes = 0
                 return []
 
             file_size = self._path.stat().st_size
@@ -1411,7 +1434,10 @@ class JSONLJournal(Journal):
                 # File shrank (manual truncate / rotation) → invalidate.
                 self._cache = []
                 self._cache_byte_pos = 0
+                self._cache_line_count = 0
                 self._skipped_total = 0
+                self._skipped_lines = []
+                self._pending_tail_bytes = 0
 
             # Read only the tail that's new since last parse. Using
             # binary mode + seek avoids decoder issues when a multi-byte
@@ -1421,10 +1447,24 @@ class JSONLJournal(Journal):
             with self._path.open("rb") as f:
                 f.seek(self._cache_byte_pos)
                 new_bytes = f.read()
-                new_pos = self._cache_byte_pos + len(new_bytes)
+            parse_bytes = new_bytes
+            if new_bytes and not new_bytes.endswith(b"\n"):
+                last_newline = new_bytes.rfind(b"\n")
+                if last_newline < 0:
+                    self._pending_tail_bytes = len(new_bytes)
+                    return list(self._cache)
+                parse_bytes = new_bytes[: last_newline + 1]
+                self._pending_tail_bytes = len(new_bytes) - len(parse_bytes)
+            else:
+                self._pending_tail_bytes = 0
+            new_pos = self._cache_byte_pos + len(parse_bytes)
 
-            new_text = new_bytes.decode("utf-8", errors="replace")
-            for _lineno_offset, raw in enumerate(new_text.splitlines(), 1):
+            byte_offset = self._cache_byte_pos
+            for raw_bytes in parse_bytes.splitlines(keepends=True):
+                self._cache_line_count += 1
+                line_byte_offset = byte_offset
+                byte_offset += len(raw_bytes)
+                raw = raw_bytes.decode("utf-8", errors="replace")
                 line = raw.strip()
                 if not line:
                     continue
@@ -1432,18 +1472,41 @@ class JSONLJournal(Journal):
                     self._cache.append(_parse_event(line))
                 except (json.JSONDecodeError, TypeError, ValueError) as exc:
                     self._skipped_total += 1
+                    skipped = {
+                        "line_number": self._cache_line_count,
+                        "byte_offset": line_byte_offset,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[:240],
+                    }
+                    self._skipped_lines.append(skipped)
+                    self._skipped_lines = self._skipped_lines[-20:]
                     if self._skipped_total == 1:
                         import logging
 
                         logging.getLogger(__name__).warning(
                             "journal %s: unparseable event %s at "
-                            "byte ~%d · skipping (and any subsequent)",
+                            "line %d byte ~%d · skipping corrupted line and "
+                            "continuing with subsequent events",
                             self._path,
                             type(exc).__name__,
-                            self._cache_byte_pos,
+                            self._cache_line_count,
+                            line_byte_offset,
                         )
             self._cache_byte_pos = new_pos
             return list(self._cache)
+
+    def diagnostics(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "schema": "octopus.journal_diagnostics.v1",
+                "path": str(self._path),
+                "parsed_events": len(self._cache),
+                "cache_byte_pos": self._cache_byte_pos,
+                "parsed_line_count": self._cache_line_count,
+                "skipped_total": self._skipped_total,
+                "skipped_lines": list(self._skipped_lines),
+                "pending_tail_bytes": self._pending_tail_bytes,
+            }
 
     def __len__(self) -> int:
         if not self._path.exists():

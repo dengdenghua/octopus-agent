@@ -1,8 +1,10 @@
 import {
   ChevronDownIcon,
   CircleIcon,
+  EyeIcon,
   Loader2Icon,
   MessageCircleIcon,
+  PlayCircleIcon,
   UsersIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -104,7 +106,7 @@ export function ChatStreamingFooter({
   return (
     <div
       className={cn(
-        "my-2 flex flex-col items-start gap-2 transition-all duration-200",
+        "my-2 flex flex-col items-start gap-1.5 transition-all duration-200",
         shouldShow ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
       )}
     >
@@ -154,7 +156,7 @@ function SimpleThinkingFooter({
   return (
     <div
       className={cn(
-        "my-2 flex items-center gap-2 text-sm text-muted-foreground transition-all duration-200",
+        "my-2 flex items-center gap-2 border-l border-border/60 pl-3 text-sm text-muted-foreground transition-all duration-200",
         isLoading ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
       )}
     >
@@ -202,19 +204,24 @@ function ProcessHeader({
           ? "running"
           : done > 0
             ? "done"
-            : "pending";
+          : "pending";
+  const progressLabel =
+    total > 0
+      ? t.chatStreamingFooter.currentProgress(done + error, total)
+      : t.chatStreamingFooter.executing;
 
   return (
     <button
       type="button"
-      className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/70 px-2.5 py-2 text-left text-xs text-muted-foreground shadow-sm shadow-black/[0.025] backdrop-blur transition-colors hover:bg-muted/25"
+      data-testid="chat-execution-strip"
+      className="group flex w-full items-center justify-between gap-3 rounded-xl border border-border/55 bg-background/90 px-3 py-2.5 text-left text-xs text-muted-foreground shadow-sm backdrop-blur transition-all duration-200 hover:border-border hover:bg-muted/20 hover:shadow-md"
       onClick={onToggle}
       aria-expanded={expanded}
     >
       <div className="flex min-w-0 items-center gap-2">
         <span
           className={cn(
-            "flex size-6 items-center justify-center rounded-lg border",
+            "flex size-6 items-center justify-center border",
             agentRunPanelClass(headerState),
           )}
         >
@@ -227,49 +234,59 @@ function ProcessHeader({
           )}
         </span>
         <div className="min-w-0">
-          <div className="font-medium text-foreground">{phase.title}</div>
+          <div className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+            <span className="shrink-0">{t.chatStreamingFooter.agentExecuting}</span>
+            <span className="h-3 w-px shrink-0 bg-border/75" />
+            <span className="min-w-0 truncate">{phase.title}</span>
+          </div>
           <div className="truncate text-[10px] leading-4">{phase.subtitle}</div>
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-1 text-[10px]">
+        <span className="hidden rounded bg-muted/60 px-1.5 py-0.5 text-muted-foreground sm:inline">
+          {progressLabel}
+        </span>
         {participants.length > 0 && (
-          <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-violet-700 dark:text-violet-300">
+          <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-700 dark:text-violet-300">
             {participants.length} Agent
           </span>
         )}
         {running > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("running"))}
+            className={cn("rounded px-1.5 py-0.5", agentRunBadgeClass("running"))}
           >
             {running} {t.chatStreamingFooter.running}
           </span>
         )}
         {waiting > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("waiting"))}
+            className={cn("rounded px-1.5 py-0.5", agentRunBadgeClass("waiting"))}
           >
             {waiting} {t.chatStreamingFooter.awaitingConfirmation}
           </span>
         )}
         {done > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("done"))}
+            className={cn("rounded px-1.5 py-0.5", agentRunBadgeClass("done"))}
           >
             {done} {t.chatStreamingFooter.done}
           </span>
         )}
         {error > 0 && (
           <span
-            className={cn("rounded-full px-2 py-0.5", agentRunBadgeClass("error"))}
+            className={cn("rounded px-1.5 py-0.5", agentRunBadgeClass("error"))}
           >
             {error} {t.chatStreamingFooter.error}
           </span>
         )}
-        {total > 0 && (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground">
-            {done + error}/{total}
-          </span>
-        )}
+        <span className="hidden items-center gap-1 rounded bg-muted/50 px-1.5 py-0.5 text-muted-foreground md:inline-flex">
+          <EyeIcon className="size-3" />
+          {t.chatStreamingFooter.viewResult}
+        </span>
+        <span className="hidden items-center gap-1 rounded bg-foreground px-1.5 py-0.5 text-background md:inline-flex">
+          <PlayCircleIcon className="size-3" />
+          {t.chatStreamingFooter.replay}
+        </span>
         <ChevronDownIcon
           className={cn(
             "size-3.5 transition-transform group-hover:text-foreground",

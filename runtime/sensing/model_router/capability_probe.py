@@ -250,7 +250,18 @@ def _run_probes(
 
 def _probe_streaming(router: Any, *, model: str, timeout_s: float) -> bool | None:
     """Return True if the router can stream, False if not, None on error."""
+    from .models import ModelRouter
+
     stream_fn = getattr(router, "stream", None)
+    if stream_fn is None:
+        call_stream_fn = getattr(router, "call_stream", None)
+        router_call_stream = getattr(type(router), "call_stream", None)
+        if (
+            call_stream_fn is not None
+            and router_call_stream is not None
+            and router_call_stream is not ModelRouter.call_stream
+        ):
+            stream_fn = call_stream_fn
     if stream_fn is None:
         return False
     try:

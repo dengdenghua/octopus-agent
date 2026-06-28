@@ -163,6 +163,8 @@ def test_repair_route_promotion_candidates_queue_to_review(tmp_path: Path) -> No
     assert item["candidate_kind"] == "repair_route_promotion:verification_required"
     assert item["target_bucket"] == "experiment_backlog"
     assert item["metadata"]["promotion_candidate"]["route"] == "verification_required"
+    assert item["metadata"]["requires_passing_rerun"] is True
+    assert item["metadata"]["passing_rerun_attached"] is False
     assert "promotion_candidate" in item["tags"]
 
 
@@ -201,10 +203,11 @@ def test_repair_route_quality_counts_review_queue_governance(
 
     assert before["score"] < 0.85
     assert queued["created"] == 1
-    assert pending["score"] > before["score"]
     assert pending["ready"] is False
-    assert pending["quality_gate"]["blockers"] == ["pending_repair_route_review"]
-    assert pending["quality_gate"]["signals"]["governed_route_count"] == 1
+    assert "pending_repair_route_review" in pending["quality_gate"]["blockers"]
+    assert "failed_verifications" in pending["quality_gate"]["blockers"]
+    assert pending["quality_gate"]["signals"]["review_covered_route_count"] == 1
+    assert pending["quality_gate"]["signals"]["governed_route_count"] == 0
     assert pending["quality_gate"]["signals"]["pending_governance_count"] == 1
     route = pending["routes"][0]
     assert route["governance"]["covered"] is True
@@ -216,7 +219,22 @@ def test_repair_route_quality_counts_review_queue_governance(
     ReviewQueue(review_queue_path).decide(
         queued["items"][0]["id"],
         action="promoted",
-        reason="passing rerun attached",
+        reason="operator approved but forgot rerun evidence",
+    )
+    promoted_without_rerun = compute_repair_route_quality(
+        ledger_path=ledger_path,
+        review_queue_path=review_queue_path,
+    )
+
+    assert promoted_without_rerun["ready"] is False
+    assert "promoted_without_passing_rerun" in (
+        promoted_without_rerun["quality_gate"]["blockers"]
+    )
+
+    ReviewQueue(review_queue_path).update_metadata(
+        queued["items"][0]["id"],
+        metadata_patch={"passing_rerun_attached": True},
+        tags=["passing_rerun"],
     )
     decided = compute_repair_route_quality(
         ledger_path=ledger_path,
@@ -226,4 +244,6 @@ def test_repair_route_quality_counts_review_queue_governance(
     assert decided["score"] >= 0.85
     assert decided["ready"] is True
     assert decided["quality_gate"]["blockers"] == []
+    assert decided["quality_gate"]["signals"]["governed_route_count"] == 1
     assert decided["routes"][0]["governance"]["status"] == "promoted"
+    assert decided["routes"][0]["governance"]["passing_rerun_attached"] is True

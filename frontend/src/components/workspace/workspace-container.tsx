@@ -147,6 +147,7 @@ function nameOfSegment(
   if (segment === "workspace") return t.breadcrumb.workspace;
   if (segment === "chats") return t.breadcrumb.chats;
   if (segment === "store") return t.sidebar.navStore;
+  if (segment === "agents") return t.sidebar.agents;
   if (segment === "intelligence") return t.sidebar.navIntelligence;
   if (segment === "channels") return t.sidebar.channels;
   if (segment === "desktop-organizer") return t.sidebar.navDesktopOrganizer;
@@ -154,15 +155,22 @@ function nameOfSegment(
   if (segment === "knowledge") return t.sidebar.navKnowledgeGraph;
   if (segment === "evolution") return t.sidebar.evolution;
   if (segment === "replay") return t.sidebar.navReplay;
-  if (segment === "workflows") return "工作流";
+  if (segment === "workflows") return t.sidebar.workflows;
   if (segment === "reflex") return t.sidebar.navReflex;
   if (segment === "observability") return t.sidebar.observability;
   if (segment === "diagnostics") return t.sidebar.diagnostics;
   if (segment === "plugins") return t.sidebar.plugins;
   if (segment === "mobile") return t.sidebar.navMobile;
-  if (segment === "computer") return "本机助手";
-  if (segment === "edit") return "Edit";
-  if (segment === "new") return "New";
+  if (segment === "computer") return t.sidebar.navComputer;
+  if (segment === "team") return t.sidebar.navTeam;
+  if (segment === "pairing") return t.sidebar.pairing;
+  if (segment === "browser") return t.sidebar.browser;
+  if (segment === "architecture") return t.sidebar.navArchitecture;
+  if (segment === "storage") return t.sidebar.navDatabase;
+  if (segment === "app-auth") return t.sidebar.appAuth;
+  if (segment === "settings") return t.common.settings;
+  if (segment === "edit") return t.common.edit;
+  if (segment === "new") return t.common.newItem;
   // Fallback for dynamic IDs (thread id, agent name, etc.) ·
   // abbreviate to first 8 chars so a long UUID doesn't blow up
   // the breadcrumb. Capitalise for visual balance.

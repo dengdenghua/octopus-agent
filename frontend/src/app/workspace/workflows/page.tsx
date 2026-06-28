@@ -27,7 +27,7 @@ export default function WorkflowsPage() {
     {
       title: "技能库",
       desc: "把稳定动作整理成可复用技能，后续在任务中直接调用。",
-      href: "/workspace/skills",
+      href: "/workspace/agents?surface=chat&tab=skills",
       icon: BrainCircuitIcon,
       label: "查看技能",
     },
@@ -77,7 +77,7 @@ export default function WorkflowsPage() {
                     </Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link to="/workspace/skills">查看技能</Link>
+                    <Link to="/workspace/agents?surface=chat&tab=skills">查看技能</Link>
                   </Button>
                 </div>
               </div>

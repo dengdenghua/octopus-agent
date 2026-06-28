@@ -39,6 +39,7 @@ import {
   WorkspaceBody,
   WorkspaceContainer,
 } from "@/components/workspace/workspace-container";
+import { StorageStatusDot } from "@/components/workspace/storage-status-dot";
 import {
   createNASIndexJob,
   createNASSource,
@@ -188,7 +189,7 @@ const DOC_TOPICS: TopicItem[] = [
     "最近更新",
     FileSearchIcon,
     "zinc",
-    ["今天", "7天", "30天"],
+    ["今天", "7 天", "30 天"],
   ),
 ];
 
@@ -601,8 +602,8 @@ export default function StoragePage() {
     <WorkspaceContainer>
       <WorkspaceBody className="overflow-hidden">
         <div className="flex size-full overflow-hidden p-2">
-          <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-lg border border-border/55 bg-white">
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <section className="workspace-panel flex min-h-0 flex-1 overflow-hidden rounded-lg border border-border/55 bg-card">
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-card">
               {serviceError && (
                 <div className="flex items-center justify-between gap-3 border-b border-amber-300/70 bg-amber-50 px-4 py-2 text-xs text-amber-900">
                   <span className="min-w-0 truncate">
@@ -611,7 +612,7 @@ export default function StoragePage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 shrink-0 rounded-md border-amber-300 bg-white px-3 text-amber-900 hover:bg-amber-100"
+                    className="h-7 shrink-0 rounded-md border-amber-300 bg-card px-3 text-amber-900 hover:bg-amber-100"
                     onClick={() => void reconnectNAS()}
                     disabled={isReconnecting}
                   >
@@ -627,11 +628,11 @@ export default function StoragePage() {
               )}
 
               {activeLibrary !== "sources" && (
-                <div className="flex shrink-0 items-center justify-end gap-1.5 border-b border-black/5 bg-[#f5f5f5] px-3 py-2">
+                <div className="flex shrink-0 items-center justify-end gap-1.5 border-b border-border/60 bg-muted px-3 py-2">
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-8 rounded-md bg-white px-2 text-xs shadow-sm"
+                    className="h-8 rounded-md bg-card px-2 text-xs shadow-sm"
                     onClick={pickFolder}
                     disabled={isPickingFolder}
                   >
@@ -641,7 +642,7 @@ export default function StoragePage() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-8 rounded-md bg-white px-2 text-xs shadow-sm"
+                    className="h-8 rounded-md bg-card px-2 text-xs shadow-sm"
                     onClick={startIndexing}
                     disabled={isIndexing || !manifest}
                   >
@@ -749,7 +750,7 @@ function ToolbarSearch({
   manifest: NASManifest | null;
 }) {
   return (
-    <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 rounded-md border border-black/10 bg-white px-2 shadow-sm sm:min-w-[300px]">
+    <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 rounded-md border border-border bg-card px-2 shadow-sm sm:min-w-[300px]">
       <div className="flex min-w-0 flex-1 items-center">
         <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
         <span className="ml-2 hidden shrink-0 text-xs text-muted-foreground xl:inline">
@@ -834,7 +835,7 @@ function TopicCenterView({
 
   return (
     <>
-      <div className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-black/5 bg-[#f7f7f7] px-4">
+      <div className="flex h-[52px] shrink-0 items-center justify-between gap-4 border-b border-border/60 bg-muted/70 px-4">
         <div className="flex items-center gap-6">
           {tabs.map((tab, index) => (
             <button
@@ -880,14 +881,14 @@ function TopicCenterView({
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[260px_minmax(420px,1fr)_320px] overflow-hidden">
-        <aside className="min-h-0 overflow-y-auto border-r border-black/5 bg-[#f7f7f7] p-3">
-          <div className="mb-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-black/5">
+        <aside className="min-h-0 overflow-y-auto border-r border-border/60 bg-muted/70 p-3">
+          <div className="mb-3 rounded-xl bg-card p-3 shadow-sm ring-1 ring-border/60">
             <div className="text-sm font-semibold">索引持续构建中</div>
             <div className="mt-1 text-xs leading-5 text-muted-foreground">
               新增文件会自动进入主题、来源和全文搜索。
             </div>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/5">
-              <div className="h-full w-2/3 rounded-full bg-black" />
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full w-2/3 rounded-full bg-primary" />
             </div>
           </div>
           <div className="space-y-1">
@@ -901,7 +902,7 @@ function TopicCenterView({
           </div>
         </aside>
 
-        <main className="min-h-0 overflow-y-auto bg-white p-4">
+        <main className="min-h-0 overflow-y-auto bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold">{tabs[0]}</div>
@@ -910,12 +911,15 @@ function TopicCenterView({
                   "聚合文档、图片、应用和本机目录，本地索引优先。"}
               </div>
             </div>
-            <Badge
-              variant="outline"
-              className="rounded-full border-black/10 bg-white"
-            >
-              本地数据库
-            </Badge>
+            <div className="flex items-center gap-2">
+              <StorageStatusDot />
+              <Badge
+                variant="outline"
+                className="rounded-full border-border bg-card"
+              >
+                本地数据库
+              </Badge>
+            </div>
           </div>
           <div className="grid gap-3 2xl:grid-cols-2">
             {recentItems.map((item) => (
@@ -924,7 +928,7 @@ function TopicCenterView({
           </div>
         </main>
 
-        <aside className="min-h-0 overflow-y-auto border-l border-black/5 bg-[#fbfbfb] p-4">
+        <aside className="min-h-0 overflow-y-auto border-l border-border/60 bg-accent/30 p-4">
           <PreviewPanel
             title="本地小脑索引"
             subtitle="文件解析、OCR、向量化在本机执行；问答可按隐私策略切换。"
@@ -953,7 +957,7 @@ function DocumentLibraryView({
 }) {
   return (
     <>
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">文档</div>
           <div className="truncate text-xs text-muted-foreground">
@@ -988,8 +992,8 @@ function DocumentLibraryView({
         </div>
       </div>
 
-      <main className="min-h-0 flex-1 overflow-hidden bg-white">
-        <div className="flex h-12 items-center justify-between border-b border-black/5 px-3">
+      <main className="min-h-0 flex-1 overflow-hidden bg-card">
+        <div className="flex h-12 items-center justify-between border-b border-border/60 px-3">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">全部文档</div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -999,19 +1003,19 @@ function DocumentLibraryView({
           <div className="flex shrink-0 items-center gap-2">
             <Badge
               variant="outline"
-              className="rounded-md border-black/10 bg-white"
+              className="rounded-md border-border bg-card"
             >
               最近
             </Badge>
             <Badge
               variant="outline"
-              className="rounded-md border-black/10 bg-white"
+              className="rounded-md border-border bg-card"
             >
               本机文档
             </Badge>
           </div>
         </div>
-        <div className="grid grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px] items-center gap-3 border-b border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="grid grid-cols-[minmax(240px,1fr)_minmax(180px,280px)_92px_120px_104px] items-center gap-3 border-b border-border/60 bg-accent/30 px-3 py-2 text-xs font-medium text-muted-foreground">
           <span>名称</span>
           <span>位置</span>
           <span>大小</span>
@@ -1023,7 +1027,7 @@ function DocumentLibraryView({
             <FileManagerRow key={item.path} item={item} />
           ))}
         </div>
-        <div className="border-t border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs text-muted-foreground">
+        <div className="border-t border-border/60 bg-accent/30 px-3 py-2 text-xs text-muted-foreground">
           文档只进入本机索引；引用到任务前不会自动进入上下文。
         </div>
       </main>
@@ -1046,7 +1050,7 @@ function ImageLibraryView({
 }) {
   return (
     <>
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">图片</div>
           <div className="truncate text-xs text-muted-foreground">
@@ -1072,7 +1076,7 @@ function ImageLibraryView({
           </Button>
           <Badge
             variant="outline"
-            className="h-8 rounded-md border-black/10 bg-white px-2.5 text-xs"
+            className="h-8 rounded-md border-border bg-card px-2.5 text-xs"
           >
             所有图片
           </Badge>
@@ -1087,23 +1091,23 @@ function ImageLibraryView({
         </div>
       </div>
 
-      <main className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] px-4 py-4 lg:px-6">
+      <main className="min-h-0 flex-1 overflow-y-auto bg-muted/70 px-4 py-4 lg:px-6">
         <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white"
+            className="rounded-md border-border bg-card"
           >
             全部 {IMAGE_FILES.length}
           </Badge>
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white"
+            className="rounded-md border-border bg-card"
           >
             已 OCR
           </Badge>
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white"
+            className="rounded-md border-border bg-card"
           >
             本机图库
           </Badge>
@@ -1131,7 +1135,7 @@ function TopicNavRow({
       type="button"
       className={cn(
         "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors",
-        active ? "bg-white shadow-sm ring-1 ring-black/5" : "hover:bg-white/70",
+        active ? "bg-card shadow-sm ring-1 ring-border/60" : "hover:bg-card/70",
       )}
     >
       <span
@@ -1156,7 +1160,7 @@ function TopicNavRow({
 function FileCard({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="group flex min-h-20 items-center gap-3 rounded-xl border border-black/5 bg-white p-3 text-left shadow-sm transition-colors hover:border-black/10 hover:bg-[#fbfbfb]">
+    <div className="group flex min-h-20 items-center gap-3 rounded-xl border border-border/60 bg-card p-3 text-left shadow-sm transition-colors hover:border-border hover:bg-accent/30">
       <div
         className={cn(
           "flex size-11 shrink-0 items-center justify-center rounded-xl",
@@ -1185,7 +1189,7 @@ function FileCard({ item }: { item: FileItem }) {
 function FileManagerRow({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="grid w-full grid-cols-[minmax(260px,1fr)_minmax(180px,260px)_100px_148px_112px] items-center gap-4 border-b border-black/[0.04] px-4 py-3 text-left last:border-b-0 hover:bg-black/[0.025]">
+    <div className="grid w-full grid-cols-[minmax(260px,1fr)_minmax(180px,260px)_100px_148px_112px] items-center gap-4 border-b border-border/40 px-4 py-3 text-left last:border-b-0 hover:bg-accent/40">
       <span className="flex min-w-0 items-center gap-3">
         <span
           className={cn(
@@ -1214,8 +1218,8 @@ function FileManagerRow({ item }: { item: FileItem }) {
 function ImageAssetTile({ item }: { item: FileItem }) {
   const Icon = item.icon;
   return (
-    <div className="group min-w-0 overflow-hidden rounded-xl border border-black/5 bg-white text-left shadow-sm transition-colors hover:border-black/10 hover:bg-[#fcfcfc]">
-      <span className="flex aspect-[4/3] w-full items-center justify-center bg-[#f7f7f7]">
+    <div className="group min-w-0 overflow-hidden rounded-xl border border-border/60 bg-card text-left shadow-sm transition-colors hover:border-border hover:bg-accent/20">
+      <span className="flex aspect-[4/3] w-full items-center justify-center bg-muted/70">
         <span
           className={cn(
             "flex size-16 items-center justify-center rounded-2xl",
@@ -1232,7 +1236,7 @@ function ImageAssetTile({ item }: { item: FileItem }) {
         {item.updated} · {item.size}
       </span>
       <div className="mt-3 flex items-center justify-between gap-2 px-3 pb-3">
-        <span className="rounded-md bg-black/[0.04] px-2 py-1 text-[10px] text-muted-foreground">
+        <span className="rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground">
           已 OCR
         </span>
         <QuickFileActions compact />
@@ -1263,7 +1267,7 @@ function QuickFileActions({ compact = false }: { compact?: boolean }) {
             title={action.label}
             aria-label={action.label}
             className={cn(
-              "grid place-items-center rounded-md text-muted-foreground transition-colors hover:bg-black/[0.06] hover:text-foreground",
+              "grid place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
               compact ? "size-7" : "size-8",
             )}
           >
@@ -1287,12 +1291,12 @@ function PreviewPanel({
   const Icon = item.icon;
   return (
     <div className="flex min-h-full flex-col">
-      <div className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <div className="rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border/60">
         <div className="text-sm font-semibold">{title}</div>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {subtitle}
         </p>
-        <div className="mt-4 rounded-xl bg-[#f7f7f7] p-4">
+        <div className="mt-4 rounded-xl bg-muted/70 p-4">
           <div
             className={cn(
               "mx-auto flex size-20 items-center justify-center rounded-2xl",
@@ -1310,7 +1314,7 @@ function PreviewPanel({
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <div className="mt-3 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border/60">
         <div className="text-sm font-semibold">来源定位</div>
         <div className="mt-3 space-y-2 text-xs text-muted-foreground">
           <div className="flex justify-between gap-3">
@@ -1328,9 +1332,9 @@ function PreviewPanel({
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-black/5">
+      <div className="mt-3 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border/60">
         <div className="text-sm font-semibold">可带入任务的片段</div>
-        <p className="mt-2 rounded-xl bg-[#f7f7f7] p-3 text-xs leading-5 text-muted-foreground">
+        <p className="mt-2 rounded-xl bg-muted/70 p-3 text-xs leading-5 text-muted-foreground">
           本地命中摘要会先停留在预览区。点击引用后，仅当前片段、文件名和来源定位进入任务上下文。
         </p>
       </div>
@@ -1338,14 +1342,14 @@ function PreviewPanel({
       <div className="mt-3 grid gap-2">
         <Button
           variant="secondary"
-          className="justify-start rounded-xl bg-white shadow-sm"
+          className="justify-start rounded-xl bg-card shadow-sm"
         >
           <FileSearchIcon className="size-4" />
           在对话中引用
         </Button>
         <Button
           variant="secondary"
-          className="justify-start rounded-xl bg-white shadow-sm"
+          className="justify-start rounded-xl bg-card shadow-sm"
         >
           <FolderOpenIcon className="size-4" />
           打开所在位置
@@ -1370,7 +1374,7 @@ function AppsView({
 }) {
   return (
     <>
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">应用</div>
           <div className="truncate text-xs text-muted-foreground">
@@ -1404,8 +1408,8 @@ function AppsView({
           </Button>
         </div>
       </div>
-      <main className="min-h-0 flex-1 overflow-hidden bg-white">
-        <div className="flex h-12 items-center justify-between border-b border-black/5 px-3">
+      <main className="min-h-0 flex-1 overflow-hidden bg-card">
+        <div className="flex h-12 items-center justify-between border-b border-border/60 px-3">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">已收录应用</div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -1414,12 +1418,12 @@ function AppsView({
           </div>
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white"
+            className="rounded-md border-border bg-card"
           >
             列表
           </Badge>
         </div>
-        <div className="grid grid-cols-[minmax(0,1fr)_140px_130px_120px] gap-3 border-b border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="grid grid-cols-[minmax(0,1fr)_140px_130px_120px] gap-3 border-b border-border/60 bg-accent/30 px-3 py-2 text-xs font-medium text-muted-foreground">
           <span>名称</span>
           <span>类型</span>
           <span>状态</span>
@@ -1438,7 +1442,7 @@ function AppsView({
 function AppListRow({ item }: { item: AppItem }) {
   const Icon = item.icon;
   return (
-    <div className="grid w-full grid-cols-[minmax(0,1fr)_140px_130px_120px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]">
+    <div className="grid w-full grid-cols-[minmax(0,1fr)_140px_130px_120px] items-center gap-3 border-b border-border/35 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/40">
       <div className="flex min-w-0 items-center gap-2.5">
         <span
           className={cn(
@@ -1461,7 +1465,7 @@ function AppListRow({ item }: { item: AppItem }) {
       <span>
         <Badge
           variant="outline"
-          className="rounded-md border-black/10 bg-white text-[11px]"
+          className="rounded-md border-border bg-card text-[11px]"
         >
           {item.status}
         </Badge>
@@ -1469,13 +1473,13 @@ function AppListRow({ item }: { item: AppItem }) {
       <span className="flex justify-end gap-1">
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
         >
           打开
         </button>
         <button
           type="button"
-          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-black/[0.05] hover:text-foreground"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent/50 hover:text-foreground"
         >
           动作
         </button>
@@ -1508,7 +1512,7 @@ function LocalDiskView({
 
   return (
     <>
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-3 lg:py-0">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-3 lg:py-0">
         <div className="flex min-w-0 flex-wrap items-center text-sm">
           {["Macintosh HD", "Users", "dangbei"].map((item, index, items) => (
             <span key={item} className="flex min-w-0 items-center">
@@ -1518,7 +1522,7 @@ function LocalDiskView({
                   "max-w-32 truncate rounded px-1.5 py-1",
                   index === items.length - 1
                     ? "font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-black/[0.04] hover:text-foreground",
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 {item}
@@ -1558,8 +1562,8 @@ function LocalDiskView({
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-white">
-          <div className="flex h-12 items-center justify-between border-b border-black/5 px-3">
+        <main className="min-h-0 min-w-0 flex-1 overflow-hidden bg-card">
+          <div className="flex h-12 items-center justify-between border-b border-border/60 px-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">dangbei</div>
               <div className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -1568,15 +1572,15 @@ function LocalDiskView({
             </div>
             <Badge
               variant="outline"
-              className="rounded-md border-black/10 bg-white"
+              className="rounded-md border-border bg-card"
             >
               当前目录
             </Badge>
           </div>
-          <div className="border-b border-black/5 bg-[#fafafa] px-3 py-2 text-xs text-muted-foreground">
+          <div className="border-b border-border/60 bg-accent/30 px-3 py-2 text-xs text-muted-foreground">
             默认停在当前用户目录，避免一进来就展开到深层项目路径。
           </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_120px_96px_36px] gap-3 border-b border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="grid grid-cols-[minmax(0,1fr)_120px_96px_36px] gap-3 border-b border-border/60 bg-accent/30 px-3 py-2 text-xs font-medium text-muted-foreground">
             <span>名称</span>
             <span>类型</span>
             <span>项目</span>
@@ -1587,7 +1591,7 @@ function LocalDiskView({
               <LocalDiskEntryRow key={item.path} item={item} />
             ))}
           </div>
-          <div className="border-t border-black/5 bg-[#fbfbfb] px-3 py-2 text-xs text-muted-foreground">
+          <div className="border-t border-border/60 bg-accent/30 px-3 py-2 text-xs text-muted-foreground">
             {manifest
               ? "常用位置与 Octopus NAS 已接入。本地数据库只保存路径、缩略图、OCR 文本和向量索引。"
               : "常用位置可直接浏览；Octopus NAS 正等待连接。本地数据库只保存路径、缩略图、OCR 文本和向量索引。"}
@@ -1603,10 +1607,10 @@ function LocalDiskEntryRow({ item }: { item: DiskItem }) {
   return (
     <button
       type="button"
-      className="grid w-full grid-cols-[minmax(0,1fr)_120px_96px_36px] items-center gap-3 border-b border-black/[0.035] px-3 py-2.5 text-left text-sm transition-colors hover:bg-black/[0.025]"
+      className="grid w-full grid-cols-[minmax(0,1fr)_120px_96px_36px] items-center gap-3 border-b border-border/35 px-3 py-2.5 text-left text-sm transition-colors hover:bg-accent/40"
     >
       <span className="flex min-w-0 items-center gap-2.5">
-        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[#f5f5f5] text-muted-foreground ring-1 ring-black/5">
+        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground ring-1 ring-border/60">
           <Icon className="size-4" />
         </span>
         <span className="min-w-0">
@@ -1645,8 +1649,8 @@ function SourcesView({
   onFolderInputChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f5f5f5] px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 bg-muted px-3 py-2 lg:h-12 lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:py-0">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">授权目录</div>
           <div className="truncate text-xs text-muted-foreground">
@@ -1656,7 +1660,7 @@ function SourcesView({
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           <Button
             size="sm"
-            className="h-8 rounded-md bg-black px-2.5 text-xs text-white hover:bg-black/85"
+            className="h-8 rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
             onClick={onPickFolder}
             disabled={isPickingFolder}
           >
@@ -1682,20 +1686,20 @@ function SourcesView({
         </div>
       </div>
 
-      <div className="grid shrink-0 gap-2 border-b border-black/5 bg-[#fbfbfb] p-3 sm:grid-cols-3">
+      <div className="grid shrink-0 gap-2 border-b border-border/60 bg-accent/30 p-3 sm:grid-cols-3">
         <Metric label="授权目录" value={String(stats.sources)} />
         <Metric label="扫描文件" value={String(stats.files)} />
         <Metric label="索引片段" value={String(stats.chunks)} />
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-black/5 px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {["Documents", "Pictures", "Downloads", "Public/octopus"].map(
             (item) => (
               <button
                 key={item}
                 type="button"
-                className="rounded-md border border-black/10 bg-white px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                className="rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
               >
                 {item}
               </button>
@@ -1705,13 +1709,13 @@ function SourcesView({
         <div className="hidden shrink-0 items-center gap-2 md:flex">
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white text-xs"
+            className="rounded-md border-border bg-card text-xs"
           >
             本地索引
           </Badge>
           <Badge
             variant="outline"
-            className="rounded-md border-black/10 bg-white text-xs"
+            className="rounded-md border-border bg-card text-xs"
           >
             原文件不上传
           </Badge>
@@ -1719,7 +1723,7 @@ function SourcesView({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="hidden grid-cols-[minmax(260px,1fr)_92px_92px_120px] border-b border-black/5 bg-[#fbfbfb] px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
+        <div className="hidden grid-cols-[minmax(260px,1fr)_92px_92px_120px] border-b border-border/60 bg-accent/30 px-4 py-2 text-xs font-medium text-muted-foreground md:grid">
           <span>目录</span>
           <span>文件</span>
           <span>片段</span>
@@ -1727,7 +1731,7 @@ function SourcesView({
         </div>
         {sources.length === 0 ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center px-8 text-center">
-            <div className="grid size-14 place-items-center rounded-xl bg-black text-white shadow-sm">
+            <div className="grid size-14 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
               <FolderPlusIcon className="size-7" />
             </div>
             <div className="mt-4 text-base font-semibold">
@@ -1739,7 +1743,7 @@ function SourcesView({
             </div>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
               <Button
-                className="rounded-md bg-black text-white hover:bg-black/85"
+                className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={onPickFolder}
                 disabled={isPickingFolder}
               >
@@ -1748,7 +1752,7 @@ function SourcesView({
               </Button>
               <Button
                 variant="secondary"
-                className="rounded-md bg-black/[0.04]"
+                className="rounded-md bg-muted"
               >
                 <ShieldCheckIcon className="size-4" />
                 查看隐私策略
@@ -1768,7 +1772,7 @@ function SourcesView({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-black/5 bg-[#fbfbfb] px-4 py-3 text-xs text-muted-foreground">
+      <div className="shrink-0 border-t border-border/60 bg-accent/30 px-4 py-3 text-xs text-muted-foreground">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span>隐私机制: 文件解析、OCR 与向量索引默认落在本机。</span>
           <span>扫描队列: 等待扫描 0 · OCR 处理中 0 · 失败文件 0</span>
@@ -1813,12 +1817,12 @@ function SearchResultsView({
   const hasHits = hits.length > 0;
   return (
     <>
-      <div className="flex shrink-0 flex-col gap-2 border-b border-black/5 bg-[#f7f7f7] px-3 py-2 lg:h-[60px] lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-4 lg:py-0">
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/60 bg-muted/70 px-3 py-2 lg:h-[60px] lg:flex-row lg:items-center lg:justify-between lg:gap-3 lg:px-4 lg:py-0">
         <div className="flex min-w-0 items-center gap-3">
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 shrink-0 rounded-lg bg-white px-2 shadow-sm ring-1 ring-black/5"
+            className="h-8 shrink-0 rounded-lg bg-card px-2 shadow-sm ring-1 ring-border/60"
             onClick={onBack}
           >
             返回{libraryLabel}
@@ -1845,7 +1849,7 @@ function SearchResultsView({
           />
           <Button
             size="sm"
-            className="h-9 shrink-0 rounded-lg bg-black px-3 text-white hover:bg-black/85"
+            className="h-9 shrink-0 rounded-lg bg-primary px-3 text-primary-foreground hover:bg-primary/90"
             disabled={!hasHits}
           >
             <MessageSquarePlusIcon className="size-4" />
@@ -1853,13 +1857,13 @@ function SearchResultsView({
           </Button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7f7f7] p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-muted/70 p-5">
         {hasHits ? (
-          <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5">
+          <div className="overflow-hidden rounded-2xl bg-card shadow-sm ring-1 ring-border/60">
             {hits.map((hit) => (
               <div
                 key={hit.chunk_id}
-                className="flex w-full items-center gap-3 border-b border-black/[0.04] px-4 py-3 text-left last:border-b-0 hover:bg-black/[0.025]"
+                className="flex w-full items-center gap-3 border-b border-border/40 px-4 py-3 text-left last:border-b-0 hover:bg-accent/40"
               >
                 <FileSearchIcon className="size-5 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
@@ -1875,7 +1879,7 @@ function SearchResultsView({
                 </div>
                 <Badge
                   variant="outline"
-                  className="rounded-full border-black/10"
+                  className="rounded-full border-border"
                 >
                   {Math.round(hit.score * 100)}%
                 </Badge>
@@ -1884,7 +1888,7 @@ function SearchResultsView({
             ))}
           </div>
         ) : (
-          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-2xl bg-white px-6 text-center shadow-sm ring-1 ring-black/5">
+          <div className="flex min-h-[340px] flex-col items-center justify-center rounded-2xl bg-card px-6 text-center shadow-sm ring-1 ring-border/60">
             <div className="grid size-14 place-items-center rounded-2xl bg-amber-50 text-amber-700">
               <FileSearchIcon className="size-6" />
             </div>
@@ -1901,7 +1905,7 @@ function SearchResultsView({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-xl bg-black/[0.04]"
+                className="rounded-xl bg-muted"
                 onClick={() => {
                   window.location.hash =
                     "/workspace/storage?surface=company&library=sources";
@@ -1912,7 +1916,7 @@ function SearchResultsView({
               <Button
                 size="sm"
                 variant="secondary"
-                className="rounded-xl bg-black/[0.04]"
+                className="rounded-xl bg-muted"
               >
                 切换隐私模式
               </Button>
@@ -1986,7 +1990,7 @@ function toneClass(tone: string) {
     violet: "bg-violet-50 text-violet-700",
     amber: "bg-amber-50 text-amber-700",
     rose: "bg-rose-50 text-rose-700",
-    zinc: "bg-zinc-100 text-zinc-700",
+    zinc: "bg-muted text-muted-foreground",
   };
   return classes[tone] ?? tone;
 }

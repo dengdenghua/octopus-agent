@@ -20,6 +20,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from runtime.execution.suckers import computer_skills, computer_uia_skills
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.platform.process.paths import app_paths
+from runtime.platform.runtime_policy.computer_automation import (
+    app_permission_decision,
+    load_computer_automation_policy,
+    update_computer_automation_policy,
+)
 from runtime.safety.replay.browser_desktop_replay import computer_activity_replay_identity
 
 try:
@@ -399,6 +404,42 @@ def create_computer_router(
             "lease_owner": owner,
         }
 
+    def _policy_decision_for_body(body: dict[str, Any] | None) -> dict[str, Any]:
+        body = body or {}
+        target_app = str(
+            body.get("target_app")
+            or body.get("app")
+            or body.get("application")
+            or body.get("window_title")
+            or "",
+        )
+        policy = load_computer_automation_policy()
+        return app_permission_decision(policy, target_app=target_app)
+
+    def _reject_if_policy_denied(
+        body: dict[str, Any] | None,
+        *,
+        action: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        decision = _policy_decision_for_body(body)
+        if decision.get("decision") == "denied":
+            _record_activity(
+                "preview_rejected",
+                ok=False,
+                action=action or {},
+                error="desktop automation policy denied target app",
+                detail={"policy_decision": decision},
+            )
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "desktop automation policy denied target app",
+                    "policy_decision": decision,
+                    "replay_evidence": _computer_replay_evidence(),
+                },
+            )
+        return decision
+
     def _goal_uia_queries(goal: str) -> list[str]:
         text = goal.strip()
         if not text:
@@ -745,12 +786,25 @@ def create_computer_router(
         lease_state = _public_lease()
         info = computer_skills._screen_info()
         uia_status = computer_uia_skills._computer_uia_status()
+        policy = load_computer_automation_policy()
         return {
             "ok": "error" not in info,
             "pyautogui_available": bool(computer_skills.PYAUTOGUI_AVAILABLE),
             "uia_available": bool(uia_status.get("available")),
             "uia": uia_status,
             "lease": lease_state,
+            "policy": {
+                "schema": policy.get("schema"),
+                "allowed_apps": policy.get("allowed_apps", []),
+                "denied_apps": policy.get("denied_apps", []),
+                "preview_required": bool(policy.get("preview_required", True)),
+                "lease_required": bool(policy.get("lease_required", True)),
+                "confirmation_required": bool(policy.get("confirmation_required", True)),
+                "screenshot_permission_required": bool(
+                    policy.get("screenshot_permission_required", True),
+                ),
+                "persisted": bool(policy.get("persisted")),
+            },
             "screen": info,
             "activity_count": len(activity),
             "recent_activity": activity[-10:],
@@ -772,6 +826,24 @@ def create_computer_router(
             ],
             "mode": "preview-confirm-execute-with-lease",
         }
+
+    @router.get("/policy")
+    def computer_policy() -> dict[str, Any]:
+        return load_computer_automation_policy()
+
+    @router.put("/policy")
+    def computer_policy_update(body: dict[str, Any]) -> dict[str, Any]:
+        updated = update_computer_automation_policy(body)
+        _record_activity(
+            "policy_updated",
+            detail={
+                "allowed_apps": updated.get("allowed_apps", []),
+                "denied_apps": updated.get("denied_apps", []),
+                "preview_required": updated.get("preview_required"),
+                "lease_required": updated.get("lease_required"),
+            },
+        )
+        return updated
 
     @router.get("/activity")
     def computer_activity(
@@ -896,17 +968,19 @@ def create_computer_router(
         _cleanup_pending()
         owner = _lease_from_body(body)
         action = _normalize_action(body)
+        policy_decision = _reject_if_policy_denied(body, action=action)
         preview = _queue_preview(action, owner)
         _record_activity(
             "preview_queued",
             action=action,
             token=str(preview["token"]),
             risk=preview["risk"],
-            detail={"lease_owner": owner},
+            detail={"lease_owner": owner, "policy_decision": policy_decision},
         )
         return {
             "ok": True,
             "lease": _public_lease(),
+            "policy_decision": policy_decision,
             **preview,
         }
 
@@ -915,6 +989,7 @@ def create_computer_router(
         _cleanup_pending()
         owner = _lease_from_body(body)
         goal = str(body.get("goal") or "")
+        policy_decision = _reject_if_policy_denied(body)
         capture = bool(body.get("capture", True))
         screenshot_data: dict[str, Any] | None = None
         if capture:
@@ -945,6 +1020,7 @@ def create_computer_router(
             "suggestions": suggestions,
             "mode": "observe-plan-confirm",
             "lease": _public_lease(),
+            "policy_decision": policy_decision,
             "limitations": [
                 "This first pass uses local heuristics and UIA semantic grounding when available.",
                 "Visual screenshot grounding is only used by /actions/vision, not this local planner.",
@@ -957,6 +1033,7 @@ def create_computer_router(
         _cleanup_pending()
         owner = _lease_from_body(body)
         goal = str(body.get("goal") or "")
+        policy_decision = _reject_if_policy_denied(body)
         output = body.get("output")
         capture = bool(body.get("capture", True))
         screenshot_data: dict[str, Any] | None = None
@@ -971,6 +1048,7 @@ def create_computer_router(
                 "suggestions": [],
                 "mode": "vision-output-adapter",
                 "lease": _public_lease(),
+                "policy_decision": policy_decision,
                 "schema": {
                     "actions": [
                         {"action": "click", "x": 100, "y": 200, "button": "left"},
@@ -1007,6 +1085,7 @@ def create_computer_router(
             "suggestions": suggestions,
             "mode": "vision-output-adapter",
             "lease": _public_lease(),
+            "policy_decision": policy_decision,
             "limitations": [
                 "This endpoint validates vision output but does not execute automatically.",
                 "Every parsed action still requires explicit user confirmation.",
@@ -1018,6 +1097,7 @@ def create_computer_router(
         _cleanup_pending()
         owner = _lease_from_body(body)
         goal = str(body.get("goal") or "")
+        policy_decision = _reject_if_policy_denied(body)
         model_id = str(body.get("model_id") or "")
         config = _vision_model_config(model_id)
         screenshot_data = screenshot({})
@@ -1029,6 +1109,7 @@ def create_computer_router(
                 "suggestions": [],
                 "mode": "vision-model",
                 "lease": _public_lease(),
+                "policy_decision": policy_decision,
                 "error": screenshot_data.get("error") or "screenshot failed",
             }
         if not config:
@@ -1039,6 +1120,7 @@ def create_computer_router(
                 "suggestions": [],
                 "mode": "vision-model",
                 "lease": _public_lease(),
+                "policy_decision": policy_decision,
                 "error": (
                     "vision model not configured · pass model_id for a custom openai-compatible "
                     "model or set OCTOPUS_COMPUTER_VISION_* env vars"
@@ -1073,6 +1155,7 @@ def create_computer_router(
             "suggestions": suggestions,
             "mode": "vision-model",
             "lease": _public_lease(),
+            "policy_decision": policy_decision,
             "raw_output": output,
             "limitations": [
                 "The screenshot is sent to the configured vision model provider.",

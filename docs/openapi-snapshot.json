@@ -544,6 +544,59 @@
         "title": "BrowserDesktopRepairRecipeRerunBody",
         "type": "object"
       },
+      "BrowserDesktopRuntimeProbeBody": {
+        "properties": {
+          "api_base_url": {
+            "default": "http://127.0.0.1:8000",
+            "title": "Api Base Url",
+            "type": "string"
+          },
+          "auto_local_auth": {
+            "default": false,
+            "title": "Auto Local Auth",
+            "type": "boolean"
+          },
+          "bearer_token_env": {
+            "default": "",
+            "title": "Bearer Token Env",
+            "type": "string"
+          },
+          "cleanup_session": {
+            "default": true,
+            "title": "Cleanup Session",
+            "type": "boolean"
+          },
+          "local_auth_password_env": {
+            "default": "",
+            "title": "Local Auth Password Env",
+            "type": "string"
+          },
+          "local_auth_username": {
+            "default": "runtime-probe",
+            "title": "Local Auth Username",
+            "type": "string"
+          },
+          "queue_browser_replay": {
+            "default": false,
+            "title": "Queue Browser Replay",
+            "type": "boolean"
+          },
+          "session_id": {
+            "default": "",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "timeout_s": {
+            "default": 5.0,
+            "maximum": 30.0,
+            "minimum": 0.1,
+            "title": "Timeout S",
+            "type": "number"
+          }
+        },
+        "title": "BrowserDesktopRuntimeProbeBody",
+        "type": "object"
+      },
       "BrowserDesktopStaleArtifactRejectionBody": {
         "properties": {
           "limit": {
@@ -1017,6 +1070,17 @@
             ],
             "title": "Omit Sampling Parameters"
           },
+          "omit_system_messages": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Omit System Messages"
+          },
           "provider": {
             "title": "Provider",
             "type": "string"
@@ -1053,6 +1117,17 @@
               }
             ],
             "title": "Supports Vision"
+          },
+          "thinking_wire_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Wire Format"
           }
         },
         "required": [
@@ -2938,6 +3013,19 @@
         "title": "ProvidersResponse",
         "type": "object"
       },
+      "PullRequest": {
+        "properties": {
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag"
+        ],
+        "title": "PullRequest",
+        "type": "object"
+      },
       "RankRequest": {
         "properties": {
           "candidates": {
@@ -3210,6 +3298,12 @@
           "reason": {
             "default": "operator_scorecard_gap_review",
             "title": "Reason",
+            "type": "string"
+          },
+          "scope": {
+            "default": "below_target",
+            "pattern": "^(below_target|best_competitor_gap|strict_lead_gap)$",
+            "title": "Scope",
             "type": "string"
           },
           "target_score": {
@@ -13617,6 +13711,72 @@
         ]
       }
     },
+    "/api/computer/policy": {
+      "get": {
+        "operationId": "computer_policy_api_computer_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Computer Policy Api Computer Policy Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Computer Policy",
+        "tags": [
+          "computer"
+        ]
+      },
+      "put": {
+        "operationId": "computer_policy_update_api_computer_policy_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Computer Policy Update Api Computer Policy Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Computer Policy Update",
+        "tags": [
+          "computer"
+        ]
+      }
+    },
     "/api/computer/screenshot": {
       "post": {
         "operationId": "screenshot_api_computer_screenshot_post",
@@ -14360,6 +14520,74 @@
         ]
       }
     },
+    "/api/cookbook/pull": {
+      "post": {
+        "description": "One-click pull a recommended model via ollama (runs in the background).",
+        "operationId": "pull_api_cookbook_pull_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PullRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Pull Api Cookbook Pull Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pull",
+        "tags": [
+          "cookbook"
+        ]
+      }
+    },
+    "/api/cookbook/snapshot": {
+      "get": {
+        "description": "Detected hardware + ranked recommendations + ollama availability.",
+        "operationId": "snapshot_api_cookbook_snapshot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Snapshot Api Cookbook Snapshot Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Snapshot",
+        "tags": [
+          "cookbook"
+        ]
+      }
+    },
     "/api/cron": {
       "get": {
         "operationId": "api_cron_list_api_cron_get",
@@ -14856,6 +15084,88 @@
               "title": "Target Score",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "include_runtime_probe",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Runtime Probe",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "api_base_url",
+            "required": false,
+            "schema": {
+              "default": "http://127.0.0.1:8000",
+              "title": "Api Base Url",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bearer_token_env",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Bearer Token Env",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "auto_local_auth",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Auto Local Auth",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "local_auth_username",
+            "required": false,
+            "schema": {
+              "default": "runtime-probe",
+              "title": "Local Auth Username",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "local_auth_password_env",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Local Auth Password Env",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "use_runtime_evidence_cache",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Use Runtime Evidence Cache",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "runtime_evidence_max_age_s",
+            "required": false,
+            "schema": {
+              "default": 1800,
+              "maximum": 86400,
+              "minimum": 1,
+              "title": "Runtime Evidence Max Age S",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -15038,6 +15348,90 @@
     "/api/evolution/browser-desktop-quality": {
       "get": {
         "operationId": "get_browser_desktop_quality_api_evolution_browser_desktop_quality_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_runtime_probe",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Runtime Probe",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "api_base_url",
+            "required": false,
+            "schema": {
+              "default": "http://127.0.0.1:8000",
+              "title": "Api Base Url",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bearer_token_env",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Bearer Token Env",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "auto_local_auth",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Auto Local Auth",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "local_auth_username",
+            "required": false,
+            "schema": {
+              "default": "runtime-probe",
+              "title": "Local Auth Username",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "local_auth_password_env",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Local Auth Password Env",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "use_runtime_evidence_cache",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Use Runtime Evidence Cache",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "runtime_evidence_max_age_s",
+            "required": false,
+            "schema": {
+              "default": 1800,
+              "maximum": 86400,
+              "minimum": 1,
+              "title": "Runtime Evidence Max Age S",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15050,6 +15444,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Browser Desktop Quality",
@@ -15395,6 +15799,56 @@
           }
         },
         "summary": "Rerun Browser Desktop Repair Recipe Batch",
+        "tags": [
+          "evolution"
+        ]
+      }
+    },
+    "/api/evolution/browser-desktop-runtime-probe": {
+      "post": {
+        "operationId": "run_browser_desktop_runtime_probe_endpoint_api_evolution_browser_desktop_runtime_probe_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/BrowserDesktopRuntimeProbeBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Browser Desktop Runtime Probe Endpoint Api Evolution Browser Desktop Runtime Probe Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Browser Desktop Runtime Probe Endpoint",
         "tags": [
           "evolution"
         ]
@@ -21262,6 +21716,160 @@
         ]
       }
     },
+    "/api/mcp-oauth/authorize": {
+      "post": {
+        "operationId": "authorize_api_mcp_oauth_authorize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Authorize Api Mcp Oauth Authorize Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Authorize",
+        "tags": [
+          "mcp-oauth"
+        ]
+      }
+    },
+    "/api/mcp-oauth/callback": {
+      "get": {
+        "operationId": "callback_api_mcp_oauth_callback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Code",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "State",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Error",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Callback Api Mcp Oauth Callback Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Callback",
+        "tags": [
+          "mcp-oauth"
+        ]
+      }
+    },
+    "/api/mcp-oauth/start": {
+      "post": {
+        "description": "Auto-discover a server's OAuth endpoints (+ register a client if the\nissuer supports DCR), then return the authorize URL — so the UI only has\nto supply ``server`` + ``url``.",
+        "operationId": "start_api_mcp_oauth_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Start Api Mcp Oauth Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "mcp-oauth"
+        ]
+      }
+    },
     "/api/mcp/config": {
       "get": {
         "operationId": "api_mcp_config_api_mcp_config_get",
@@ -22174,6 +22782,102 @@
         "summary": " Metrics Summary",
         "tags": [
           "stub"
+        ]
+      }
+    },
+    "/api/migrate/apply": {
+      "post": {
+        "operationId": "apply_api_migrate_apply_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Apply Api Migrate Apply Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Apply",
+        "tags": [
+          "migrate"
+        ]
+      }
+    },
+    "/api/migrate/preview": {
+      "get": {
+        "operationId": "preview_api_migrate_preview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sources"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Api Migrate Preview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview",
+        "tags": [
+          "migrate"
         ]
       }
     },
@@ -24244,6 +24948,78 @@
         ]
       }
     },
+    "/api/searxng/disable": {
+      "post": {
+        "description": "Stop the managed SearXNG container (kept for fast re-enable).",
+        "operationId": "disable_api_searxng_disable_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Disable Api Searxng Disable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Disable",
+        "tags": [
+          "searxng"
+        ]
+      }
+    },
+    "/api/searxng/enable": {
+      "post": {
+        "description": "One-click deploy a local SearXNG container. Returns immediately; the\nimage pull + boot run in the background — poll /api/searxng/status.",
+        "operationId": "enable_api_searxng_enable_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Enable Api Searxng Enable Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Enable",
+        "tags": [
+          "searxng"
+        ]
+      }
+    },
+    "/api/searxng/status": {
+      "get": {
+        "description": "Liveness of the optional one-click local SearXNG (private web-search\nbackend). ``up=false`` just means web search uses the default ddg\nbackend; deploy/stop go through the authenticated /api/searxng router.",
+        "operationId": "api_searxng_status_api_searxng_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Searxng Status Api Searxng Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Searxng Status",
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/api/settings/capabilities": {
       "get": {
         "operationId": "get_capabilities_api_settings_capabilities_get",
@@ -25014,6 +25790,30 @@
           }
         },
         "summary": "Api Status",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/storage/status": {
+      "get": {
+        "description": "Liveness of the octopus-storage sibling (本地数据库 / File Agent), as the\nco-launch heartbeat last observed it. ``up=false`` means search_documents\ndegrades; the heartbeat relaunches it when autostart owns its lifecycle.",
+        "operationId": "api_storage_status_api_storage_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Storage Status Api Storage Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Storage Status",
         "tags": [
           "health"
         ]

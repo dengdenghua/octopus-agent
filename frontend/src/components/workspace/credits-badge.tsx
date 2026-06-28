@@ -7,8 +7,8 @@ import { useI18n } from "@/core/i18n/hooks";
 
 function formatCredits(n: number | undefined | null): string | null {
   if (n === undefined || n === null || Number.isNaN(n)) return null;
-  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}亿`;
-  if (n >= 10_000) return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}万`;
+  if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)} 亿`;
+  if (n >= 10_000) return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)} 万`;
   if (n >= 1_000) return n.toLocaleString();
   return String(n);
 }

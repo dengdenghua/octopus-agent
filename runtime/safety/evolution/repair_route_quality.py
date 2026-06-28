@@ -92,6 +92,11 @@ def _quality_gate(
     governed_routes = {
         route
         for route, state in governance.items()
+        if state.get("covered") and state.get("passing_rerun_attached") is True
+    }
+    review_covered_routes = {
+        route
+        for route, state in governance.items()
         if state.get("covered")
     }
     unresolved_routes = [
@@ -133,6 +138,13 @@ def _quality_gate(
         1 for state in governance.values()
         if state.get("covered") and str(state.get("status") or "") == "pending"
     )
+    promoted_without_rerun_count = sum(
+        1
+        for state in governance.values()
+        if state.get("covered")
+        and str(state.get("status") or "") == "promoted"
+        and state.get("passing_rerun_attached") is not True
+    )
     penalty = min(
         0.85,
         (top_share * 0.22)
@@ -143,6 +155,8 @@ def _quality_gate(
     )
     if pending_governance_count:
         penalty = min(0.85, penalty + min(pending_governance_count, 3) * 0.025)
+    if promoted_without_rerun_count:
+        penalty = min(0.85, penalty + min(promoted_without_rerun_count, 3) * 0.025)
     score = round(max(0.0, 1.0 - penalty), 3)
     blockers: list[str] = []
     if unresolved_unverified_code_changes:
@@ -155,6 +169,8 @@ def _quality_gate(
         blockers.append("dominant_failure_route")
     if pending_governance_count:
         blockers.append("pending_repair_route_review")
+    if promoted_without_rerun_count:
+        blockers.append("promoted_without_passing_rerun")
     return {
         "schema": "octopus.repair_route_quality_gate.v1",
         "score": score,
@@ -168,8 +184,10 @@ def _quality_gate(
             "promotion_candidate_count": len(unresolved_candidates),
             "p0_candidate_count": p0_candidate_count,
             "governed_route_count": len(governed_routes),
+            "review_covered_route_count": len(review_covered_routes),
             "unresolved_route_count": len(unresolved_routes),
             "pending_governance_count": pending_governance_count,
+            "promoted_without_rerun_count": promoted_without_rerun_count,
         },
     }
 
@@ -226,6 +244,9 @@ def queue_repair_route_promotion_candidates(
             metadata={
                 "schema": PROMOTION_CANDIDATE_SCHEMA,
                 "promotion_candidate": candidate,
+                "promotion_gate": candidate.get("promotion_gate") or {},
+                "requires_passing_rerun": True,
+                "passing_rerun_attached": False,
                 "quality_report": {
                     "schema": SCHEMA,
                     "window_limit": limit,
@@ -464,6 +485,8 @@ def _repair_route_governance(
             "occurrences": int(row.get("occurrences") or 1),
             "decided_at": str(row.get("decided_at") or ""),
             "decision_reason": str(row.get("decision_reason") or ""),
+            "requires_passing_rerun": bool(metadata.get("requires_passing_rerun") is True),
+            "passing_rerun_attached": bool(metadata.get("passing_rerun_attached") is True),
         }
         if existing is None or _governance_rank(status) > _governance_rank(
             str(existing.get("status") or ""),

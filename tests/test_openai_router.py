@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -15,6 +16,7 @@ from runtime.sensing.model_router import (  # noqa: E402
     OpenAIModelRouter,
     OpenAIRouterError,
 )
+from runtime.sensing.model_router.models import ToolSpec  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════
 # fake httpx client
@@ -128,6 +130,33 @@ def _openai_response(text: str = "hi back", *, prompt_tokens: int = 10, completi
     }
 
 
+def _patch_custom_models(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    payload: dict[str, Any],
+):
+    custom_models_path = tmp_path / "custom_models.json"
+    custom_models_path.write_text(json.dumps(payload), encoding="utf-8")
+    from runtime.platform.process.paths import app_paths
+
+    original = app_paths()
+
+    class _Patched:
+        pass
+
+    _Patched.custom_models_path = custom_models_path
+
+    def _getattr(self, name: str) -> object:
+        return getattr(original, name)
+
+    _Patched.__getattr__ = _getattr
+
+    monkeypatch.setattr(
+        "runtime.platform.process.paths.app_paths",
+        lambda: _Patched(),
+    )
+
+
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════
@@ -156,6 +185,113 @@ class TestRequestShape:
         assert payload["messages"] == [{"role": "user", "content": "ping"}]
         assert payload["max_tokens"] == 128
         assert payload["temperature"] == 0.0
+
+    def test_empty_assistant_history_is_not_sent_to_strict_providers(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        r.call(ModelRequest(
+            model="kimi-for-coding",
+            messages=[
+                Message(role="system", content=""),
+                Message(role="user", content="修复测试"),
+                Message(role="assistant", content=""),
+                Message(role="assistant", content=[{"type": "text", "text": "   "}]),
+                Message(role="user", content="继续"),
+            ],
+            max_tokens=128,
+            temperature=0.0,
+        ))
+
+        payload = fake.calls[0]["json"]
+        assert payload["messages"] == [
+            {"role": "user", "content": "修复测试"},
+            {"role": "user", "content": "继续"},
+        ]
+
+    def test_native_tool_history_survives_openai_compat_sanitization(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        r.call(ModelRequest(
+            model="deepseek-v4-pro",
+            messages=[
+                Message(role="user", content="读文件"),
+                Message(role="assistant", content=[
+                    {
+                        "type": "tool_use",
+                        "id": "call_read",
+                        "name": "read_file",
+                        "input": {"path": "README.md"},
+                    }
+                ]),
+                Message(role="user", content=[
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_read",
+                        "content": "README contents",
+                    }
+                ]),
+            ],
+            max_tokens=128,
+            temperature=0.0,
+        ))
+
+        payload = fake.calls[0]["json"]
+        assert payload["messages"] == [
+            {"role": "user", "content": "读文件"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_read",
+                        "type": "function",
+                        "function": {
+                            "name": "read_file",
+                            "arguments": '{"path": "README.md"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_read",
+                "content": "README contents",
+            },
+        ]
+
+    def test_orphan_tool_result_becomes_user_observation(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        r.call(ModelRequest(
+            model="qwen-code",
+            messages=[
+                Message(role="user", content="继续"),
+                Message(role="user", content=[
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "missing_call",
+                        "content": "tool output",
+                    }
+                ]),
+            ],
+            max_tokens=128,
+            temperature=0.0,
+        ))
+
+        payload = fake.calls[0]["json"]
+        assert payload["messages"] == [
+            {"role": "user", "content": "继续"},
+            {
+                "role": "user",
+                "content": (
+                    "Tool result without matching tool call "
+                    "(missing_call): tool output"
+                ),
+            },
+        ]
 
     def test_reasoning_effort_is_sent_when_thinking_enabled(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
@@ -201,6 +337,52 @@ class TestRequestShape:
         assert second_payload["model"] == first_payload["model"]
         assert "reasoning_effort" not in second_payload
         assert "thinking" not in second_payload
+
+    def test_custom_model_capabilities_control_payload_shape(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        _patch_custom_models(
+            monkeypatch,
+            tmp_path,
+            {
+                "strict-cn-code": {
+                    "id": "strict-cn-code",
+                    "name": "strict-cn-code",
+                    "provider": "openai",
+                    "models": ["strict-cn-code-upstream"],
+                    "supports_tool_use": False,
+                    "supports_thinking": True,
+                    "omit_sampling_parameters": True,
+                    "omit_system_messages": True,
+                },
+            },
+        )
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        router = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        router.call(
+            ModelRequest(
+                model="strict-cn-code-upstream",
+                messages=[
+                    Message(role="system", content="system policy"),
+                    Message(role="user", content="fix the bug"),
+                ],
+                max_tokens=32,
+                temperature=0.7,
+                tools=[ToolSpec(name="read_file", description="read a file")],
+            )
+        )
+
+        payload = fake.calls[0]["json"]
+        assert payload["messages"] == [
+            {"role": "user", "content": "fix the bug"},
+        ]
+        assert payload["max_tokens"] == 128
+        assert "temperature" not in payload
+        assert "tools" not in payload
+        assert "tool_choice" not in payload
 
     def test_strict_custom_model_omits_sampling_parameters(
         self,
@@ -250,6 +432,60 @@ class TestRequestShape:
         assert "temperature" not in payload
         assert payload["max_tokens"] == 128
 
+    def test_custom_model_can_omit_system_messages(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        import json as _json
+
+        custom_models_path = tmp_path / "custom_models.json"
+        custom_models_path.write_text(
+            _json.dumps({
+                "glm-code": {
+                    "id": "glm-code",
+                    "name": "glm-code",
+                    "provider": "openai",
+                    "models": ["glm-code-strict"],
+                    "omit_system_messages": True,
+                },
+            }),
+            encoding="utf-8",
+        )
+        from runtime.platform.process.paths import app_paths
+
+        original = app_paths()
+
+        class _Patched:
+            pass
+
+        _Patched.custom_models_path = custom_models_path
+
+        def _getattr(self, name: str) -> object:
+            return getattr(original, name)
+
+        _Patched.__getattr__ = _getattr
+
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.app_paths",
+            lambda: _Patched(),
+        )
+
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        r.call(ModelRequest(
+            model="glm-code-strict",
+            messages=[
+                Message(role="system", content="system policy"),
+                Message(role="user", content="hello"),
+            ],
+            max_tokens=128,
+            temperature=0.0,
+        ))
+
+        payload = fake.calls[0]["json"]
+        assert payload["messages"] == [{"role": "user", "content": "hello"}]
+
     def test_thinking_custom_model_lifts_tiny_token_budget(
         self,
         monkeypatch,
@@ -298,6 +534,113 @@ class TestRequestShape:
         assert payload["model"] == "kimi-for-coding"
         assert payload["max_tokens"] == 128
         assert "temperature" not in payload
+
+    def test_qwen_custom_model_uses_enable_thinking_wire_format(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        import json as _json
+
+        custom_models_path = tmp_path / "custom_models.json"
+        custom_models_path.write_text(
+            _json.dumps({
+                "qwen-code": {
+                    "id": "qwen-code",
+                    "name": "qwen-code",
+                    "provider": "openai",
+                    "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    "models": ["qwen3-max"],
+                    "supports_thinking": True,
+                },
+            }),
+            encoding="utf-8",
+        )
+        from runtime.platform.process.paths import app_paths
+
+        original = app_paths()
+
+        class _Patched:
+            pass
+
+        _Patched.custom_models_path = custom_models_path
+
+        def _getattr(self, name: str) -> object:
+            return getattr(original, name)
+
+        _Patched.__getattr__ = _getattr
+
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.app_paths",
+            lambda: _Patched(),
+        )
+
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        router = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        router.call(_req(model="qwen3-max").model_copy(update={
+            "enable_thinking": True,
+            "reasoning_effort": "low",
+            "max_tokens": 2048,
+        }))
+
+        payload = fake.calls[0]["json"]
+        assert payload["enable_thinking"] is True
+        assert payload["thinking_budget"] == 1024
+        assert "reasoning_effort" not in payload
+        assert "thinking" not in payload
+
+    def test_deepseek_reasoner_uses_implicit_thinking_wire_format(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        import json as _json
+
+        custom_models_path = tmp_path / "custom_models.json"
+        custom_models_path.write_text(
+            _json.dumps({
+                "deepseek-reasoner": {
+                    "id": "deepseek-reasoner",
+                    "name": "deepseek-reasoner",
+                    "provider": "openai",
+                    "base_url": "https://api.deepseek.com/v1",
+                    "models": ["deepseek-reasoner"],
+                    "supports_thinking": True,
+                },
+            }),
+            encoding="utf-8",
+        )
+        from runtime.platform.process.paths import app_paths
+
+        original = app_paths()
+
+        class _Patched:
+            pass
+
+        _Patched.custom_models_path = custom_models_path
+
+        def _getattr(self, name: str) -> object:
+            return getattr(original, name)
+
+        _Patched.__getattr__ = _getattr
+
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.app_paths",
+            lambda: _Patched(),
+        )
+
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        router = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+        router.call(_req(model="deepseek-reasoner").model_copy(update={
+            "enable_thinking": True,
+            "reasoning_effort": "low",
+        }))
+
+        payload = fake.calls[0]["json"]
+        assert "enable_thinking" not in payload
+        assert "thinking_budget" not in payload
+        assert "reasoning_effort" not in payload
+        assert "thinking" not in payload
 
     def test_stream_thinking_400_retries_without_openai_extension_fields(self):
         import json as _json

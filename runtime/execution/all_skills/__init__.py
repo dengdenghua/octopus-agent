@@ -464,6 +464,37 @@ def register_all(registry: SkillRegistry) -> None:
             type(exc).__name__, exc,
         )
 
+    # Imported Codex-format plugins (``.octopus/plugins/codex/<plugin>/``)
+    # ship SKILL.md bundles in the same shape as the public skills above.
+    # Register them through the same loader so they become callable instead
+    # of catalog-only shells. Tagged ``codex://plugin/<plugin>`` for trust.
+    try:
+        from runtime.execution.suckers.codex_plugin_skills import (
+            register_codex_plugin_skills,
+        )
+
+        register_codex_plugin_skills(registry)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "codex plugin skills failed to register (%s: %s) — skipping",
+            type(exc).__name__, exc,
+        )
+
+    # Skills imported from other tools via the migration apply step
+    # (.octopus/imported/<source>/skills/). Same SKILL.md loader, tagged
+    # imported://<source>, kept search-only like codex plugin skills.
+    try:
+        from runtime.execution.suckers.imported_skills import (
+            register_imported_skills,
+        )
+
+        register_imported_skills(registry)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning(
+            "imported skills failed to register (%s: %s) — skipping",
+            type(exc).__name__, exc,
+        )
+
 
 def register_base(registry: SkillRegistry) -> None:
     """Register only the atomic base skills.

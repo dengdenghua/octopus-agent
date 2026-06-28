@@ -169,6 +169,7 @@ def export_governance_audit_bundle(
     *,
     audit_path: str | Path | None = None,
     audit_chain_path: str | Path | None = None,
+    audit_chain_secret: str | bytes | None = None,
 ) -> dict[str, Any]:
     """Return a self-contained governance audit export bundle."""
     path = Path(audit_path) if audit_path is not None else app_paths().promotion_audit_path
@@ -183,6 +184,7 @@ def export_governance_audit_bundle(
     integrity = verify_governance_audit_chain(
         audit_path=path,
         audit_chain_path=chain_path,
+        audit_chain_secret=audit_chain_secret,
     )
     return {
         "schema": "octopus.governance_audit_export.v1",

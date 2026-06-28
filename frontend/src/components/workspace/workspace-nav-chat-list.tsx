@@ -3,10 +3,9 @@ import {
   FolderIcon,
   MoreHorizontal,
   PlusIcon,
-  SparklesIcon,
   Trash2,
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
 
 import {
@@ -30,7 +29,6 @@ import {
 } from "@/components/ui/sidebar";
 import { useI18n } from "@/core/i18n/hooks";
 import { useDeleteProject, useProjects } from "@/core/projects/hooks";
-import { useFeatureSeen } from "@/hooks/use-feature-seen";
 
 import { CreateProjectDialog } from "./create-project-dialog";
 
@@ -112,15 +110,10 @@ export function WorkspaceNavChatList({
   showOnlyProjects?: boolean;
 }) {
   const { t } = useI18n();
-  const { pathname } = useLocation();
   const { data: projects = [] } = useProjects();
   const { mutate: deleteProject } = useDeleteProject();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const skillsSeen = useFeatureSeen(
-    "skills",
-    pathname.startsWith("/workspace/skills"),
-  );
 
   useEffect(() => {
     setMounted(true);
@@ -148,30 +141,6 @@ export function WorkspaceNavChatList({
 
   return (
     <>
-      <SidebarGroup className="pt-0">
-        <SidebarMenu>
-          <SidebarMenuItem className="group-data-[collapsible=icon]:px-0 px-1.5 mt-0">
-            <SidebarMenuButton
-              isActive={pathname.startsWith("/workspace/skills")}
-              asChild
-              className="text-muted-foreground rounded-lg py-1 text-[13px] transition-all duration-150 hover:bg-muted hover:text-foreground data-[active=true]:bg-muted data-[active=true]:text-foreground data-[active=true]:font-medium"
-            >
-              <Link to="/workspace/skills">
-                <SparklesIcon className="size-[15px]" />
-                <span className="flex items-center gap-1.5">
-                  {t.sidebar.skills}
-                  {!skillsSeen && (
-                    <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium leading-none text-primary">
-                      NEW
-                    </span>
-                  )}
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarGroup>
-
       {/* Projects below nav links when showProjects is true */}
       {showProjects && mounted && (
         <ProjectCollapsible

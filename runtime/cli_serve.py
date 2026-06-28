@@ -393,30 +393,11 @@ def run_serve(
 
     runner.start()
     try:
-        import logging as _logging
-        _NOISY_ROUTES = (  # noqa: N806
-            "/api/agents",
-            "/api/llm-models",
-            "/api/files/stream",
-            "/api/preview/stream",
-            "/api/evolution/status",
-            "/api/auth/status",
-            "/api/auth/providers",
-            "/api/threads/search",
-            "/api/tasks?",
-            "/api/regeneration/status",
-            "/history HTTP",
+        from runtime.platform.observability.access_log_redactor import (
+            install_uvicorn_access_filter,
         )
 
-        class _DropPollingAccess(_logging.Filter):
-            def filter(self, record: _logging.LogRecord) -> bool:
-                msg = record.getMessage()
-                if " 200 " not in msg and " 304 " not in msg:
-                    return True
-                return all(r not in msg for r in _NOISY_ROUTES)
-
-        _logging.getLogger("uvicorn.access").addFilter(_DropPollingAccess())
-
+        install_uvicorn_access_filter()
     except Exception as exc:
         logging.getLogger(__name__).debug("uvicorn filter setup failed: %s", exc)
 

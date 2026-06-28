@@ -72,6 +72,7 @@ def create_browser_router(
     jwt_secret: str | None = None,
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
+    relay_token: str = "",
 ) -> APIRouter:
     """Create the ``/api/browser/*`` session and relay router.
 
@@ -83,7 +84,24 @@ def create_browser_router(
     enabled it enforces 401 across every browser endpoint.
     """
 
+    clean_relay_token = str(relay_token or "").strip()
+
     def _auth_dep(request: Request) -> None:
+        path = str(getattr(getattr(request, "url", None), "path", "") or "")
+        if clean_relay_token and path.startswith("/api/browser/relay/"):
+            if path in {
+                "/api/browser/relay/connect-page",
+                "/api/browser/relay/bookmarklet.js",
+            }:
+                return
+            token = str(
+                request.query_params.get("relay_token")
+                or request.cookies.get("octopus_relay_token")
+                or request.headers.get("x-octopus-relay-token")
+                or ""
+            ).strip()
+            if token == clean_relay_token:
+                return
         from runtime.adapters.web_auth import _resolve_actor
 
         _resolve_actor(
@@ -360,6 +378,88 @@ def create_browser_router(
                 if path:
                     return path
         return None
+
+    def _browser_relay_connect_page_html(api_base: str = "", relay_token_value: str = "") -> str:
+        clean_base = str(api_base or "").strip() or "http://127.0.0.1:8000"
+        if not re.fullmatch(r"https?://(?:127\.0\.0\.1|localhost)(?::\d{1,5})?", clean_base):
+            clean_base = "http://127.0.0.1:8000"
+        relay_script = f"{clean_base}/api/browser/relay/bookmarklet.js"
+        escaped_script = html.escape(relay_script, quote=True)
+        escaped_base = html.escape(clean_base, quote=True)
+        escaped_relay_token = html.escape(relay_token_value, quote=True)
+        return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Octopus Chrome Relay Probe</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #111827;
+      background: #f8fafc;
+    }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+    }}
+    main {{
+      width: min(680px, calc(100vw - 40px));
+      padding: 28px;
+      border: 1px solid #d1d5db;
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, .08);
+    }}
+    h1 {{ margin: 0 0 10px; font-size: 24px; }}
+    p {{ line-height: 1.55; }}
+    code {{
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #eef2ff;
+      color: #3730a3;
+    }}
+    #status {{ font-weight: 650; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Octopus Chrome Relay Probe</h1>
+    <p id="status">Connecting this real browser tab to Octopus...</p>
+    <p>
+      This local page loads the Octopus bookmarklet relay from
+      <code>{escaped_base}</code> so the runtime probe can verify a real
+      Chrome/Chromium profile without clicking, typing, or leaving localhost.
+    </p>
+    <p>Probe text marker: browser desktop real Chrome profile relay ready.</p>
+  </main>
+  <script>
+    (() => {{
+      const fallbackToken = "{escaped_relay_token}";
+      const hash = new URLSearchParams(location.hash.slice(1));
+      const relayToken = hash.get("relay_token") || fallbackToken;
+      if (relayToken) {{
+        document.cookie = [
+          "octopus_relay_token=" + encodeURIComponent(relayToken),
+          "Max-Age=600",
+          "Path=/api/browser/relay",
+          "SameSite=Lax"
+        ].join("; ");
+        if (location.hash) {{
+          history.replaceState(null, document.title, location.pathname + location.search);
+        }}
+      }}
+      const script = document.createElement("script");
+      script.src = "{escaped_script}";
+      script.async = true;
+      document.head.appendChild(script);
+    }})();
+  </script>
+</body>
+</html>"""
 
     def _now_ts() -> int:
         return browser_session_center.now()
@@ -1315,6 +1415,21 @@ def create_browser_router(
             raise HTTPException(404, "bookmarklet relay script not found")
         return FileResponse(script_path, media_type="application/javascript")
 
+    @router.get("/api/browser/relay/connect-page")
+    def api_browser_relay_connect_page(
+        api_base_url: str = Query("http://127.0.0.1:8000"),
+        relay_token: str = Query(""),
+    ) -> Response:
+        relay_token_value = (
+            str(relay_token or "").strip()
+            if clean_relay_token and str(relay_token or "").strip() == clean_relay_token
+            else ""
+        )
+        return Response(
+            _browser_relay_connect_page_html(api_base_url, relay_token_value),
+            media_type="text/html",
+        )
+
     @router.get("/api/browser/relay/bookmarklet-poll")
     def api_browser_relay_bookmarklet_poll(
         callback: str = Query(""),
@@ -1369,6 +1484,41 @@ def create_browser_router(
         except (OSError, ValueError):  # noqa: BLE001 — browser session cleanup; best-effort
             pass
         return {"opened": True, "path": str(extension_path)}
+
+    @router.post("/api/browser/open-real-chrome-relay")
+    def api_browser_open_real_chrome_relay(body: dict[str, Any] | None = None) -> dict[str, Any]:
+        body = body or {}
+        api_base_url = str(body.get("api_base_url") or "http://127.0.0.1:8000").strip()
+        if not re.fullmatch(r"https?://(?:127\.0\.0\.1|localhost)(?::\d{1,5})?", api_base_url):
+            api_base_url = "http://127.0.0.1:8000"
+        connect_url = f"{api_base_url}/api/browser/relay/connect-page?api_base_url={api_base_url}"
+        if clean_relay_token:
+            connect_url = f"{connect_url}#relay_token={clean_relay_token}"
+        executable = _preferred_browser_executable()
+        try:
+            if executable:
+                subprocess.Popen([executable, connect_url])
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", "-a", "Google Chrome", connect_url])
+            elif os.name == "nt":
+                os.startfile(connect_url)  # type: ignore[attr-defined]
+            else:
+                subprocess.Popen(["xdg-open", connect_url])
+        except (OSError, ValueError) as exc:
+            return {
+                "ok": False,
+                "opened": False,
+                "url": connect_url,
+                "browser_path": executable or "",
+                "error": str(exc),
+            }
+        return {
+            "ok": True,
+            "opened": True,
+            "url": connect_url,
+            "browser_path": executable or "",
+            "mode": "local_bookmarklet_connect_page",
+        }
 
     @router.get("/api/browser/extension-path")
     def api_browser_extension_path() -> dict[str, Any]:

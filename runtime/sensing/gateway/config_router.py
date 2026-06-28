@@ -113,6 +113,8 @@ if FASTAPI_AVAILABLE:
         supports_vision: bool | None = None
         supports_tool_use: bool | None = None
         omit_sampling_parameters: bool | None = None
+        omit_system_messages: bool | None = None
+        thinking_wire_format: str | None = None
         default_headers: dict[str, str] | None = None
 
     class CustomModelsList(BaseModel):
@@ -735,6 +737,16 @@ def create_config_router(
                 if "omit_sampling_parameters" in body
                 else prev.get("omit_sampling_parameters", False)
             ),
+            "omit_system_messages": (
+                body["omit_system_messages"]
+                if "omit_system_messages" in body
+                else prev.get("omit_system_messages", False)
+            ),
+            "thinking_wire_format": (
+                body["thinking_wire_format"]
+                if "thinking_wire_format" in body
+                else prev.get("thinking_wire_format", "openai")
+            ),
             "default_headers": default_headers,
         }
         if prev:
@@ -985,6 +997,8 @@ def create_config_router(
             "supports_vision": False,
             "supports_tool_use": True,
             "omit_sampling_parameters": False,
+            "omit_system_messages": False,
+            "thinking_wire_format": "openai",
             "default_headers": {},
         }
         custom_models_state[model_id] = entry
@@ -1156,6 +1170,8 @@ def create_config_router(
             supports_vision = bool(e.get("supports_vision"))
             supports_tool_use = bool(e.get("supports_tool_use", True))
             omit_sampling_parameters = bool(e.get("omit_sampling_parameters"))
+            omit_system_messages = bool(e.get("omit_system_messages"))
+            thinking_wire_format = str(e.get("thinking_wire_format") or "openai")
 
             # Expand the entry's ``models`` list into one picker row per
             # variant so the UI can show concrete model ids
@@ -1194,6 +1210,8 @@ def create_config_router(
                     "supports_vision": supports_vision,
                     "supports_tool_use": supports_tool_use,
                     "omit_sampling_parameters": omit_sampling_parameters,
+                    "omit_system_messages": omit_system_messages,
+                    "thinking_wire_format": thinking_wire_format,
                     "custom": True,
                     "entry_id": entry_id,
                 })

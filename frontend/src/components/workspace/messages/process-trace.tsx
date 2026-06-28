@@ -119,10 +119,11 @@ export function ProcessTrace({
 
   return (
     <div
+      data-testid="process-trace-timeline"
       className={cn(
         "border-l px-3 py-1.5",
         live
-          ? "mb-3 border-primary/35"
+          ? "mb-3 border-primary/35 bg-primary/[0.015]"
           : "mb-2 border-border/55 text-muted-foreground",
       )}
     >
@@ -174,7 +175,7 @@ export function ProcessTrace({
             phaseState.phases.slice(0, open ? 7 : 3).map((phase) => (
               <div
                 key={phase.id}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm"
+                className="flex items-center gap-2 border-b border-border/20 px-1 py-1.5 text-sm last:border-b-0"
               >
                 {phase.status === "running" ? (
                   <Loader2Icon className="size-3.5 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
@@ -239,8 +240,8 @@ function AgentClusterCard({
 }) {
   const { t } = useI18n();
   return (
-    <div className="rounded-xl border border-border/55 bg-background/85 px-3 py-2.5 shadow-sm">
-      <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="border-l border-border/45 pl-3" data-testid="agent-cluster-timeline">
+      <div className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
         <NetworkIcon className="size-4 shrink-0 text-sky-500" />
         <span className="font-medium text-foreground">
           {t.message.agentCluster}
@@ -249,7 +250,7 @@ function AgentClusterCard({
           {t.dispatchCard.parallelTasks(agents.length)}
         </span>
       </div>
-      <div className="space-y-2">
+      <div className="divide-y divide-border/25">
         {agents.map((agent) => (
           <AgentClusterRow
             key={agent.id}
@@ -276,11 +277,11 @@ function AgentClusterRow({
       <button
         type="button"
         onClick={() => emitAgentWorkbenchFocus({ agentId: agent.id })}
-        className="flex w-full items-center gap-2 rounded-lg bg-muted/35 px-2.5 py-2 text-left text-sm transition-colors hover:bg-muted/60"
+        className="flex w-full items-center gap-2 px-1 py-2 text-left text-sm transition-colors hover:bg-muted/35"
       >
         <span
           className={cn(
-            "flex size-7 shrink-0 items-center justify-center rounded-md border bg-background",
+            "flex size-7 shrink-0 items-center justify-center border bg-background",
             agentRunPanelClass(agent.status),
           )}
         >
@@ -430,11 +431,14 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         : "done";
 
   return (
-    <div className="rounded-xl border border-border/55 bg-background/85 px-3 py-2 shadow-sm">
+    <div
+      className="border-l border-border/45 pl-3"
+      data-testid="process-trace-section"
+    >
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 text-left"
+        className="flex w-full items-center gap-2 py-1 text-left"
       >
         {status === "running" ? (
           <Loader2Icon className="size-4 shrink-0 animate-spin text-emerald-600 dark:text-emerald-400" />
@@ -455,7 +459,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
               {section.summary}
             </span>
           </div>
-          <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+          <div className="mt-1 h-px overflow-hidden bg-muted">
             <div
               className={cn(
                 "h-full transition-all",
@@ -473,7 +477,7 @@ function TraceSectionCard({ section }: { section: TraceSection }) {
         />
       </button>
       {open && (
-        <div className="mt-3 space-y-1.5 border-l border-border/45 pl-3">
+        <div className="mt-1.5 space-y-1.5 border-l border-border/35 pl-3">
           {section.events.map((event) => (
             <TraceEventLine key={event.id} event={event} />
           ))}

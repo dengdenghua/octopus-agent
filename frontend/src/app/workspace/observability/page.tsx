@@ -1115,8 +1115,7 @@ function HemolymphPanel() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold">
-            {t.observabilityPage.historyPrefix} {data.snapshots.length}{" "}
-            {t.observabilityPage.tabJournal}
+            {t.observabilityPage.historyPrefix(data.snapshots.length)}
           </CardTitle>
         </CardHeader>
         <CardContent>

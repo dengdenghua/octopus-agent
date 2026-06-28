@@ -260,6 +260,8 @@ class TestCustomModelsUpsert:
             "supports_vision": False,
             "supports_tool_use": True,
             "omit_sampling_parameters": True,
+            "omit_system_messages": True,
+            "thinking_wire_format": "qwen_enable_thinking",
             "default_headers": {"X-Test": "yes"},
         }
         r = client.put(
@@ -284,6 +286,8 @@ class TestCustomModelsUpsert:
         assert stored["claude-mirror"]["supports_vision"] is False
         assert stored["claude-mirror"]["supports_tool_use"] is True
         assert stored["claude-mirror"]["omit_sampling_parameters"] is True
+        assert stored["claude-mirror"]["omit_system_messages"] is True
+        assert stored["claude-mirror"]["thinking_wire_format"] == "qwen_enable_thinking"
         assert stored["claude-mirror"]["default_headers"] == {"X-Test": "yes"}
 
     def test_update_preserves_prior_api_key(
@@ -477,6 +481,8 @@ class TestLlmModelsMerge:
                 "api_key": "sk-x", "models": ["kimi-for-coding"],
                 "display_name": "K2.7 Code",
                 "omit_sampling_parameters": True,
+                "omit_system_messages": True,
+                "thinking_wire_format": "openai",
             },
         )
 
@@ -490,6 +496,8 @@ class TestLlmModelsMerge:
         assert rows[0]["display_name"] == "K2.7 Code"
         assert rows[0]["supports_tool_use"] is True
         assert rows[0]["omit_sampling_parameters"] is True
+        assert rows[0]["omit_system_messages"] is True
+        assert rows[0]["thinking_wire_format"] == "openai"
 
 
 # ═══════════════════════════════════════════════════════════

@@ -47,6 +47,7 @@ export const jaJP: Translations = {
     save: "Save",
     install: "Install",
     create: "Create",
+    newItem: "New",
     import: "Import",
     export: "Export",
     exportAsMarkdown: "Export as Markdown",
@@ -1267,6 +1268,20 @@ export const jaJP: Translations = {
     cardCapabilities: "Capabilities",
     statusEnabled: "Enabled",
     statusDisabled: "Disabled",
+    allAuthors: "すべての作成者",
+    allStatuses: "すべての状態",
+    capabilitySkill: "Skill",
+    capabilityChannel: "Channel",
+    capabilityApi: "API",
+    capabilityConfig: "Config",
+    capabilityCommand: "Command",
+    capabilityCapability: "Capability",
+    configTitle: (name: string) => `${name} configuration`,
+    configDescription: (name: string) => `Configure runtime parameters for ${name}`,
+    configAria: (name: string) => `Configure ${name}`,
+    noConfig: "No configuration required for this plugin",
+    noMatchTitle: "No matching plugins",
+    noMatchHint: "Try a different keyword or filter",
     emptyTitle: "No plugins registered",
     emptyHint: "Install plugins to extend agent capabilities",
   },
@@ -1352,6 +1367,7 @@ export const jaJP: Translations = {
     navKnowledgeGraph: "Knowledge Base",
     navReflex: "Reflex Rules",
     navIntelligence: "Automation",
+    navSkills: "Skills",
     navMcp: "MCP",
     navStore: "Market",
     navEvolution: "Evolution",
@@ -1609,20 +1625,6 @@ export const jaJP: Translations = {
     cdpConChrome144Only: "Only supports Chrome 144+.",
   },
 
-  // MCP Connection Center
-  mcpCenter: {
-    integrations: "Integrations",
-    connectionCenter: "MCP Connection Center",
-    connectionCenterDesc:
-      "Manage Model Context Protocol services centrally — connect external tools, browsers, and data sources to your workspace.",
-    toolExtension: "Tool Extension",
-    toolExtensionDesc:
-      "Connect local or remote MCP services to give agents access to more external capabilities.",
-    configGovernance: "Config Governance",
-    configGovernanceDesc:
-      "Maintain service status, parameters, and scope from a unified page, reducing integration complexity.",
-  },
-
   // Intelligence Center
   intelligenceCenter: {
     researchOps: "Automation Ops",
@@ -1638,6 +1640,7 @@ export const jaJP: Translations = {
   // Channels
   channels: {
     title: "Channels",
+    channelOps: "Channel Ops",
     description:
       "Configure messaging platforms for AI agent interactions — all connection data stored locally.",
     serviceRunning: "Service running",
@@ -1731,6 +1734,8 @@ export const jaJP: Translations = {
     connectedCount: (n: number) => `${n} connected`,
     loading: "Loading channels...",
     loadFailed: "Failed to load channels",
+    loadFailedDetail: (status: string) => `Server returned error (${status}), please check if the channel service is running`,
+    unknownError: "Unknown error, please try again later",
     retry: "Retry",
     noRegistered: "No messaging channels registered.",
     noRegisteredDescription:
@@ -1759,6 +1764,7 @@ export const jaJP: Translations = {
     handlingMessages: "Handling messages for this channel",
     rebindOrUnbind: "Rebind / Unbind",
     helpDocsComingSoon: "Help docs coming soon",
+    clickToViewDetails: "Click to view details",
   },
 
   // Pairing Authorization
@@ -3334,6 +3340,8 @@ export const jaJP: Translations = {
     noMatchingEntities: "No matching entities",
     noMatchingEntitiesHint:
       "Try a different keyword, or clear the search to view all knowledge entities.",
+    wiki: "Wiki",
+    files: "Files",
   },
 
   // Background Tasks
@@ -4456,6 +4464,28 @@ Strategy:
     used: "used",
     noDescription: "No description",
     duplicate: "Duplicate",
+    recorderTitle: "Recorder",
+    taskLabel: "What task to record?",
+    taskPlaceholder: "e.g., Export this week's reconciliation to Feishu",
+    recordingHint:
+      "Record this round of operations; stopping will extract a reusable, replayable skill. Sensitive actions will be quarantined for review.",
+    countdownReady: "Ready to record…",
+    elapsedSteps: (count: number) => `· ${count} steps`,
+    stopAndExtract: "Stop & extract skill",
+    analyzing: "Analyzing recording and extracting skill…",
+    done: "Done",
+    learnedSkill: "Skill learned",
+    skillLibraryHint: "Replay and parameterize it in the skill library /record panel.",
+    quarantined:
+      "Skill candidate generated with sensitive actions; quarantined for manual approval.",
+    noTrajectory:
+      "No successful trajectory to extract this round. Try a more specific task.",
+    recordingComplete: (name?: string) =>
+      `Recording complete${name ? `: ${name}` : ""}.`,
+    startFailed: "REC failed to start",
+    stopFailed: "REC failed to stop",
+    defaultName: "Conversation Replay Learning",
+    defaultDescription: "REC recording started via the floating recorder.",
   },
 
   // Parallel Agents
@@ -5867,6 +5897,11 @@ Strategy:
     tooltipUntested: "• Untested",
     testedDotTitle: "Tested",
     noDescription: "No description",
+    loadFailed: "Failed to load skills",
+    loadFailedDetail: (status: string) => `Server returned error (${status}), please check if the backend service is running`,
+    unknownError: "Unknown error, please try again later",
+    hideInternalSkills: "Hide internal skills",
+    showInternalSkills: (n: number) => `Show internal ${n}`,
   },
 
   // Activity indicators (file ops + preview refresh)
@@ -6185,20 +6220,6 @@ Strategy:
     loadingEditor: "Loading editor...",
   },
 
-  // AppAuth wrapper page
-  appAuthWrapperPage: {
-    securityKicker: "Security",
-    pageTitle: "App Authorization",
-    pageSubtitle:
-      "Manage application access tokens and authorization settings.",
-    feature1Title: "Access Control",
-    feature1Desc:
-      "Control which applications can access your workspace resources.",
-    feature2Title: "Token Management",
-    feature2Desc:
-      "Create, rotate, and revoke API tokens for secure integrations.",
-  },
-
   // Observability page
   observabilityPage: {
     pageTitle: "Observability",
@@ -6317,7 +6338,7 @@ Strategy:
     noComposeRecordsHint:
       "Data will appear after planner calls ContextComposer.compose().",
     total: "Total",
-    historyPrefix: "History · Last",
+    historyPrefix: (count: number) => `履歴 · 最近 ${count} 件`,
     hemolymphTable: {
       ts: "ts",
       usedBudget: "used / budget",
@@ -7167,6 +7188,7 @@ Strategy:
     listView: "List view",
     searchPlaceholder: "Search entities...",
     layouts: {
+      force: "力指向",
       ring: "Ring",
       star: "Star",
       layers: "Layers",
@@ -7422,10 +7444,15 @@ Strategy:
     coding: "Coding...",
     processing: "Processing...",
     thinking: "Thinking...",
+    executing: "Executing task...",
+    agentExecuting: "Octopus Agent is executing",
     running: "Running",
     done: "Done",
     error: "Error",
     completed: "Completed",
+    currentProgress: (current, total) => `Current progress ${current}/${total}`,
+    viewResult: "View result",
+    replay: "Replay",
     agentCollaboration: "Agent(s) collaborating",
     readyToReadEditVerify: "Ready to read, edit, and verify code",
     readyToBreakdownAndGather:

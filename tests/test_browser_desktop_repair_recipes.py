@@ -9,8 +9,11 @@ from pathlib import Path
 
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.safety.evolution.browser_desktop_repair_recipes import (
+    AUTOMATION_PLAYBOOK_SCHEMA,
+    FAILURE_TAXONOMY_SCHEMA,
     QUEUE_SCHEMA,
     RECIPE_SCHEMA,
+    REPAIR_ROUTE_SCHEMA,
     SCHEMA,
     STALE_REJECTION_SCHEMA,
     VERIFICATION_SCHEMA,
@@ -75,6 +78,17 @@ def test_browser_desktop_repair_recipes_cluster_pixel_cases(tmp_path: Path) -> N
         "browser-pixel::shot-1.png",
     ]
     assert recipe["evidence_summary"]["failure_reason"] == "not enough changed pixels"
+    assert recipe["failure_taxonomy"]["schema"] == FAILURE_TAXONOMY_SCHEMA
+    assert recipe["failure_taxonomy"]["failure_class"] == (
+        "visual_delta_below_threshold"
+    )
+    assert recipe["repair_route"]["schema"] == REPAIR_ROUTE_SCHEMA
+    assert recipe["repair_route"]["route_id"] == "browser_pixel_replay_refresh"
+    assert recipe["automation_playbook"]["schema"] == AUTOMATION_PLAYBOOK_SCHEMA
+    assert recipe["automation_playbook"]["steps"][-1]["type"] == "pixel_compare"
+    assert recipe["quality_signals"]["has_failure_taxonomy"] is True
+    assert recipe["quality_signals"]["has_repair_route"] is True
+    assert recipe["quality_signals"]["has_automation_playbook"] is True
     assert "fresh before/after screenshot" in " ".join(recipe["recommended_steps"])
     assert recipe["promotion_gate"]["requires_replay_rerun"] is True
 
@@ -114,7 +128,66 @@ def test_browser_desktop_repair_recipes_queue_dedupes(tmp_path: Path) -> None:
     assert item["target_bucket"] == "browser_desktop_repair_recipe"
     assert item["source"] == "browser_desktop_repair_recipe"
     assert item["metadata"]["recipe"]["candidate_kind"] == "browser_session_replay_case"
+    assert item["metadata"]["recipe"]["failure_taxonomy"]["failure_class"] == (
+        "browser_page_crash"
+    )
+    assert item["metadata"]["recipe"]["repair_route"]["route_id"] == (
+        "browser_session_health_recovery"
+    )
+    assert item["metadata"]["recipe"]["automation_playbook"]["steps"][-1] == {
+        "type": "browser_session_health",
+        "session_id": "workspace",
+    }
     assert "repair_recipe" in item["tags"]
+
+
+def test_browser_desktop_repair_recipes_classify_desktop_policy_denial(
+    tmp_path: Path,
+) -> None:
+    queue_path = tmp_path / "review_queue.json"
+    queue = ReviewQueue(queue_path)
+    queue.upsert_item(
+        source="computer_activity_replay",
+        source_kind="browser_desktop_replay",
+        candidate_kind="computer_activity_replay_case",
+        priority="P0",
+        target_bucket="browser_desktop_replay",
+        title="Review computer automation replay case",
+        text="Computer automation replay case captured for operator review.",
+        metadata={
+            "schema": "octopus.computer_activity_replay_case.v1",
+            "case_id": "computer-activity:policy",
+            "fingerprint": "desktop-policy",
+            "pending_count": 1,
+            "last_activity": {
+                "event": "preview_rejected",
+                "ok": False,
+                "error": "desktop automation policy denied target app",
+                "action": {"action": "click", "x": 10, "y": 20},
+                "detail": {
+                    "policy_decision": {
+                        "decision": "denied",
+                        "reason": "target app is denied",
+                    }
+                },
+            },
+        },
+        tags=["computer", "desktop", "replay_case"],
+    )
+
+    report = compute_browser_desktop_repair_recipes(review_queue_path=queue_path)
+    recipe = report["recipes"][0]
+
+    assert recipe["candidate_kind"] == "computer_activity_replay_case"
+    assert recipe["failure_taxonomy"]["failure_class"] == "desktop_policy_denied"
+    assert recipe["failure_taxonomy"]["surface"] == "desktop"
+    assert recipe["repair_route"]["route_id"] == "desktop_policy_review"
+    assert recipe["repair_route"]["strategy"] == "surface_policy_decision_before_retry"
+    assert recipe["automation_playbook"]["steps"][0]["type"] == "computer_policy_check"
+    assert recipe["quality_signals"]["has_failure_taxonomy"] is True
+    assert recipe["quality_signals"]["has_repair_route"] is True
+    assert recipe["quality_signals"]["has_automation_playbook"] is True
+    assert report["quality_gate"]["ready"] is True
 
 
 def test_reject_stale_browser_desktop_replay_artifacts(tmp_path: Path) -> None:
@@ -132,7 +205,7 @@ def test_reject_stale_browser_desktop_replay_artifacts(tmp_path: Path) -> None:
         tags=["browser", "pixel", "replay_case"],
     )["items"][0]
     live_path = tmp_path / "live.png"
-    live_path.write_bytes(b"not a real png but still present")
+    live_path.write_bytes(_png(2, 2, [(255, 255, 255, 255)] * 4))
     queue.upsert_item(
         source="browser_pixel_replay_gate",
         source_kind="browser_desktop_replay",
@@ -168,6 +241,69 @@ def test_reject_stale_browser_desktop_replay_artifacts(tmp_path: Path) -> None:
     assert result["rejected"][0]["id"] == stale_item["id"]
     assert result["rejected"][1]["id"] == stale_desktop["id"]
     assert summary["by_status"] == {"pending": 1, "rejected": 2}
+
+
+def test_reject_stale_browser_desktop_replay_artifacts_rejects_invalid_png(
+    tmp_path: Path,
+) -> None:
+    queue_path = tmp_path / "review_queue.json"
+    queue = ReviewQueue(queue_path)
+    invalid_png = tmp_path / "invalid.png"
+    invalid_png.write_bytes(b"not-a-real-png")
+    item = queue.upsert_item(
+        source="browser_pixel_replay_gate",
+        source_kind="browser_desktop_replay",
+        candidate_kind="browser_pixel_replay_gate_case",
+        priority="P0",
+        target_bucket="browser_desktop_replay",
+        title="Review invalid browser pixel replay gate",
+        text="Browser pixel replay gate needs review.",
+        metadata={"artifact": {"local_path": str(invalid_png)}},
+        tags=["browser", "pixel", "replay_case"],
+    )["items"][0]
+
+    result = reject_stale_browser_desktop_replay_artifacts(
+        review_queue_path=queue_path,
+    )
+    rows = queue.items(target_bucket="browser_desktop_replay")["items"]
+
+    assert result["rejected_count"] == 1
+    assert result["rejected"][0]["id"] == item["id"]
+    assert "invalid png evidence" in result["rejected"][0]["artifact_path"]
+    assert rows[0]["status"] == "rejected"
+
+
+def test_reject_stale_browser_desktop_replay_artifacts_rejects_pytest_residue(
+    tmp_path: Path,
+) -> None:
+    queue_path = tmp_path / "review_queue.json"
+    queue = ReviewQueue(queue_path)
+    artifact_dir = tmp_path / "pytest-123" / "artifacts"
+    artifact_dir.mkdir(parents=True)
+    artifact = artifact_dir / "valid.png"
+    artifact.write_bytes(_png(2, 2, [(255, 255, 255, 255)] * 4))
+    item = queue.upsert_item(
+        source="browser_pixel_replay_gate",
+        source_kind="browser_desktop_replay",
+        candidate_kind="browser_pixel_replay_gate_case",
+        priority="P0",
+        target_bucket="browser_desktop_replay",
+        title="Review pytest browser pixel replay gate",
+        text="Browser pixel replay gate needs review.",
+        metadata={
+            "replay": {"replayable": False},
+            "artifact": {"local_path": str(artifact)},
+        },
+        tags=["browser", "pixel", "replay_case"],
+    )["items"][0]
+
+    result = reject_stale_browser_desktop_replay_artifacts(
+        review_queue_path=queue_path,
+    )
+
+    assert result["rejected_count"] == 1
+    assert result["rejected"][0]["id"] == item["id"]
+    assert "unreplayable pytest artifact" in result["rejected"][0]["artifact_path"]
 
 
 def test_reject_stale_browser_desktop_replay_artifacts_archives_stale_recipe(

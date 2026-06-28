@@ -277,10 +277,12 @@ export function AgentProgressPill({
             <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-muted">
               <div
                 className={cn(
-                  "h-full transition-all duration-300",
+                  "h-full transition-all duration-500 ease-out",
                   displayPhase.status === "error"
                     ? "bg-destructive"
-                    : "bg-foreground/55",
+                    : displayPhase.status === "waiting_approval"
+                      ? "bg-amber-500"
+                      : "bg-gradient-to-r from-emerald-500 to-emerald-400",
                 )}
                 style={{ width: `${percent}%` }}
               />

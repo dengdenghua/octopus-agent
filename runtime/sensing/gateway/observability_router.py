@@ -357,7 +357,17 @@ def create_observability_router(
             }
             for e in events[-limit:]
         ]
-        return {"total": len(events), "counts": counts, "recent": tail}
+        diagnostics = (
+            journal.diagnostics()
+            if hasattr(journal, "diagnostics") and callable(journal.diagnostics)
+            else None
+        )
+        return {
+            "total": len(events),
+            "counts": counts,
+            "recent": tail,
+            "diagnostics": diagnostics,
+        }
 
     # ─── /api/journal/timeline ─────────────────────────────
     @router.get("/api/journal/timeline")

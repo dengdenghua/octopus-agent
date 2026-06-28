@@ -271,6 +271,40 @@ class TestCapabilityProbe:
         # MockModelRouter has no stream() method → streaming=False
         assert caps.supports_streaming is False
 
+    def test_probe_detects_call_stream_override(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from runtime.sensing.model_router import capability_probe as _mod
+        from runtime.sensing.model_router.capability_probe import probe_provider
+        from runtime.sensing.model_router.models import (
+            ModelResponse,
+            ModelRouter,
+            ModelStreamEvent,
+        )
+
+        monkeypatch.setattr(
+            _mod, "_disk_cache_path", lambda: tmp_path / "provider_caps.json"
+        )
+
+        class StreamingRouter(ModelRouter):
+            provider_name = "streaming-test"
+
+            def call(self, req: Any) -> ModelResponse:
+                return ModelResponse(text="ok", model=req.model, provider="test")
+
+            def call_stream(self, req: Any):
+                yield ModelStreamEvent(type="text_delta", delta="o")
+                yield ModelStreamEvent(
+                    type="done",
+                    final=ModelResponse(text="ok", model=req.model, provider="test"),
+                )
+
+        caps = probe_provider(StreamingRouter(), model="streaming/v1")
+
+        assert caps.supports_streaming is True
+
     def test_probe_result_cached_in_memory(self):
         from runtime.sensing.model_router.capability_probe import (
             get_cached_capabilities,

@@ -56,25 +56,42 @@ function jsonOk(body: unknown) {
   };
 }
 
+// URL-aware fetch routing for the custom-model rendering tests.
+//
+// On mount the settings page fans out several GETs — the custom-models
+// list (twice: ``fetchModels`` + the gateway probe) and the cookbook's
+// ``/api/cookbook/snapshot`` (fired by react-query). Their order isn't
+// guaranteed, so an ordered ``mockResolvedValueOnce`` is fragile: the
+// cookbook fetch consumes the once-payload first and the custom-models
+// load falls through to the empty default, rendering nothing. Route by
+// URL instead — same approach the local-model tests below already use.
+function mockSettingsFetch(customModels: unknown) {
+  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/api/config/custom-models")) {
+      return jsonOk(customModels);
+    }
+    return jsonOk({ default: "", models: [] });
+  });
+}
+
 describe("ModelSettingsPage · custom-model list rendering", () => {
   it("renders the full models list for an entry with multiple slots", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonOk({
-        models: [
-          {
-            id: "openai-prod",
-            name: "openai-prod",
-            display_name: "My OpenAI",
-            models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
-            provider: "openai",
-            base_url: "https://api.openai.com/v1",
-            has_api_key: true,
-            supports_thinking: false,
-            supports_vision: false,
-          },
-        ],
-      }),
-    );
+    mockSettingsFetch({
+      models: [
+        {
+          id: "openai-prod",
+          name: "openai-prod",
+          display_name: "My OpenAI",
+          models: ["gpt-4o-mini", "gpt-4o", "gpt-4.1"],
+          provider: "openai",
+          base_url: "https://api.openai.com/v1",
+          has_api_key: true,
+          supports_thinking: false,
+          supports_vision: false,
+        },
+      ],
+    });
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 
@@ -91,23 +108,21 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
   });
 
   it("renders a single-model entry without a trailing junk chip", async () => {
-    fetchMock.mockResolvedValueOnce(
-      jsonOk({
-        models: [
-          {
-            id: "single",
-            name: "single",
-            display_name: "Single",
-            models: ["gpt-4o-mini"],
-            provider: "openai",
-            base_url: "https://api.openai.com/v1",
-            has_api_key: true,
-            supports_thinking: false,
-            supports_vision: false,
-          },
-        ],
-      }),
-    );
+    mockSettingsFetch({
+      models: [
+        {
+          id: "single",
+          name: "single",
+          display_name: "Single",
+          models: ["gpt-4o-mini"],
+          provider: "openai",
+          base_url: "https://api.openai.com/v1",
+          has_api_key: true,
+          supports_thinking: false,
+          supports_vision: false,
+        },
+      ],
+    });
 
     renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
 

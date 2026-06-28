@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 try:
@@ -25,6 +26,24 @@ if FASTAPI_AVAILABLE:
         limit: int = Field(default=10, ge=1, le=50)
         reason: str = "operator_scorecard_gap_review"
         dimension_id: str = ""
+        scope: str = Field(
+            default="below_target",
+            pattern="^(below_target|best_competitor_gap|strict_lead_gap)$",
+        )
+
+
+    class BrowserDesktopRuntimeProbeBody(BaseModel):
+        api_base_url: str = "http://127.0.0.1:8000"
+        session_id: str = ""
+        timeout_s: float = Field(default=5.0, ge=0.1, le=30.0)
+        queue_browser_replay: bool = False
+        cleanup_session: bool = True
+        real_chrome_relay: bool = False
+        open_real_chrome_relay: bool = False
+        bearer_token_env: str = ""
+        auto_local_auth: bool = False
+        local_auth_username: str = "runtime-probe"
+        local_auth_password_env: str = ""
 
 
     class VerifierDriftQueueBody(BaseModel):
@@ -87,6 +106,14 @@ def create_evolution_router() -> Any:
     @router.get("/agent-scorecard")
     def get_agent_scorecard(
         target_score: int = Query(default=90, ge=1, le=100),
+        include_runtime_probe: bool = Query(default=False),
+        api_base_url: str = Query(default="http://127.0.0.1:8000"),
+        bearer_token_env: str = Query(default=""),
+        auto_local_auth: bool = Query(default=False),
+        local_auth_username: str = Query(default="runtime-probe"),
+        local_auth_password_env: str = Query(default=""),
+        use_runtime_evidence_cache: bool = Query(default=True),
+        runtime_evidence_max_age_s: int = Query(default=1800, ge=1, le=86400),
     ) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.agent_competitor_scorecard import (
@@ -95,7 +122,25 @@ def create_evolution_router() -> Any:
 
             return {
                 "ok": True,
-                **compute_agent_competitor_scorecard(target_score=target_score),
+                **compute_agent_competitor_scorecard(
+                    target_score=target_score,
+                    include_runtime_probe=include_runtime_probe,
+                    api_base_url=api_base_url,
+                    bearer_token=(
+                        os.environ.get(bearer_token_env, "")
+                        if bearer_token_env
+                        else ""
+                    ),
+                    auto_local_auth=auto_local_auth,
+                    local_auth_username=local_auth_username,
+                    local_auth_password=(
+                        os.environ.get(local_auth_password_env, "")
+                        if local_auth_password_env
+                        else ""
+                    ),
+                    use_runtime_evidence_cache=use_runtime_evidence_cache,
+                    runtime_evidence_max_age_s=runtime_evidence_max_age_s,
+                ),
             }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
@@ -119,14 +164,19 @@ def create_evolution_router() -> Any:
             created = 0
             updated = 0
             items: list[dict[str, Any]] = []
-            rows = sorted(
-                report.get("octopus_below_target") or [],
-                key=lambda row: (
-                    int(row.get("octopus_gap_to_target") or 0),
-                    int(row.get("weight") or 0),
-                ),
-                reverse=True,
-            )
+            if body.scope == "best_competitor_gap":
+                rows = _scorecard_competitor_gap_rows(report)
+            elif body.scope == "strict_lead_gap":
+                rows = _scorecard_competitor_tie_rows(report)
+            else:
+                rows = sorted(
+                    report.get("octopus_below_target") or [],
+                    key=lambda row: (
+                        int(row.get("octopus_gap_to_target") or 0),
+                        int(row.get("weight") or 0),
+                    ),
+                    reverse=True,
+                )
             if body.dimension_id:
                 wanted_dimension = str(body.dimension_id).strip()
                 rows = [
@@ -141,22 +191,39 @@ def create_evolution_router() -> Any:
                     continue
                 dimension_id = str(row.get("id") or "unknown")
                 next_actions = row.get("octopus_next_actions")
+                gap_value = int(
+                    row.get("octopus_strict_lead_gap")
+                    if body.scope == "strict_lead_gap"
+                    else (
+                        row.get("octopus_competitor_gap")
+                        if body.scope == "best_competitor_gap"
+                        else row.get("octopus_gap_to_target")
+                    )
+                    or 0,
+                )
                 result = queue.upsert_item(
                     source="agent_scorecard_gap",
                     source_kind="scorecard_gap",
                     candidate_kind=f"scorecard_gap:{dimension_id}",
-                    priority=_scorecard_gap_priority(
-                        int(row.get("octopus_gap_to_target") or 0),
-                    ),
+                    priority=_scorecard_gap_priority(gap_value),
                     target_bucket="scorecard_gap_backlog",
                     title=f"Raise {row.get('title') or row.get('id') or 'scorecard gap'}",
-                    text=_scorecard_gap_text(row, reason=body.reason),
+                    text=_scorecard_gap_text(
+                        row,
+                        reason=body.reason,
+                        scope=body.scope,
+                    ),
                     metadata={
                         "schema": "octopus.agent_scorecard_gap.v1",
                         "dimension_id": row.get("id"),
                         "title": row.get("title"),
+                        "scope": body.scope,
                         "target_score": body.target_score,
                         "gap": row.get("octopus_gap_to_target"),
+                        "competitor_gap": row.get("octopus_competitor_gap"),
+                        "strict_lead_gap": row.get("octopus_strict_lead_gap"),
+                        "best_competitors": row.get("octopus_best_competitors"),
+                        "best_competitor_score": row.get("octopus_best_competitor_score"),
                         "scores": row.get("scores"),
                         "evidence_adjusted_scores": row.get(
                             "evidence_adjusted_scores",
@@ -204,19 +271,91 @@ def create_evolution_router() -> Any:
                         "evidence_adjusted_overall",
                     ),
                     "below_target_count": len(report.get("octopus_below_target") or []),
+                    "competitor_gap_count": len(
+                        report.get("octopus_competitor_gaps") or [],
+                    ),
+                    "competitor_tie_count": len(
+                        report.get("octopus_competitor_ties") or [],
+                    ),
                 },
             }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
     @router.get("/browser-desktop-quality")
-    def get_browser_desktop_quality() -> dict[str, Any]:
+    def get_browser_desktop_quality(
+        include_runtime_probe: bool = Query(default=False),
+        api_base_url: str = Query(default="http://127.0.0.1:8000"),
+        bearer_token_env: str = Query(default=""),
+        auto_local_auth: bool = Query(default=False),
+        local_auth_username: str = Query(default="runtime-probe"),
+        local_auth_password_env: str = Query(default=""),
+        use_runtime_evidence_cache: bool = Query(default=True),
+        runtime_evidence_max_age_s: int = Query(default=1800, ge=1, le=86400),
+    ) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.browser_desktop_quality import (
                 compute_browser_desktop_quality,
             )
 
-            return {"ok": True, **compute_browser_desktop_quality()}
+            return {
+                "ok": True,
+                **compute_browser_desktop_quality(
+                    include_runtime_probe=include_runtime_probe,
+                    api_base_url=api_base_url,
+                    bearer_token=(
+                        os.environ.get(bearer_token_env, "")
+                        if bearer_token_env
+                        else ""
+                    ),
+                    auto_local_auth=auto_local_auth,
+                    local_auth_username=local_auth_username,
+                    local_auth_password=(
+                        os.environ.get(local_auth_password_env, "")
+                        if local_auth_password_env
+                        else ""
+                    ),
+                    use_runtime_evidence_cache=use_runtime_evidence_cache,
+                    runtime_evidence_max_age_s=runtime_evidence_max_age_s,
+                ),
+            }
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    @router.post("/browser-desktop-runtime-probe")
+    def run_browser_desktop_runtime_probe_endpoint(
+        body: BrowserDesktopRuntimeProbeBody | None = None,
+    ) -> dict[str, Any]:
+        try:
+            from runtime.safety.evolution.browser_desktop_runtime_probe import (
+                run_browser_desktop_runtime_probe,
+            )
+
+            body = body or BrowserDesktopRuntimeProbeBody()
+            return {
+                "ok": True,
+                **run_browser_desktop_runtime_probe(
+                    api_base_url=body.api_base_url,
+                    session_id=body.session_id or None,
+                    timeout_s=body.timeout_s,
+                    queue_browser_replay=body.queue_browser_replay,
+                    cleanup_session=body.cleanup_session,
+                    bearer_token=(
+                        os.environ.get(body.bearer_token_env, "")
+                        if body.bearer_token_env
+                        else ""
+                    ),
+                    auto_local_auth=body.auto_local_auth,
+                    local_auth_username=body.local_auth_username,
+                    local_auth_password=(
+                        os.environ.get(body.local_auth_password_env, "")
+                        if body.local_auth_password_env
+                        else ""
+                    ),
+                    real_chrome_relay=body.real_chrome_relay,
+                    open_real_chrome_relay=body.open_real_chrome_relay,
+                ),
+            }
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -698,7 +837,71 @@ def _scorecard_gap_priority(gap: int) -> str:
     return "P2"
 
 
-def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:
+def _scorecard_competitor_gap_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    dimensions = {
+        str(row.get("id") or ""): row
+        for row in report.get("dimensions") or []
+        if isinstance(row, dict)
+    }
+    radar = report.get("radar") if isinstance(report.get("radar"), dict) else {}
+    rows: list[dict[str, Any]] = []
+    for edge in radar.get("octopus_true_gap_edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        dimension_id = str(edge.get("id") or "")
+        row = dict(dimensions.get(dimension_id) or {})
+        if not row:
+            continue
+        row["octopus_competitor_gap"] = abs(int(edge.get("gap") or 0))
+        row["octopus_best_competitors"] = list(edge.get("best_competitors") or [])
+        row["octopus_best_competitor_score"] = edge.get("best_competitor_score")
+        rows.append(row)
+    return sorted(
+        rows,
+        key=lambda row: (
+            int(row.get("octopus_competitor_gap") or 0),
+            int(row.get("weight") or 0),
+        ),
+        reverse=True,
+    )
+
+
+def _scorecard_competitor_tie_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    dimensions = {
+        str(row.get("id") or ""): row
+        for row in report.get("dimensions") or []
+        if isinstance(row, dict)
+    }
+    radar = report.get("radar") if isinstance(report.get("radar"), dict) else {}
+    rows: list[dict[str, Any]] = []
+    for edge in radar.get("octopus_true_tie_edges") or []:
+        if not isinstance(edge, dict):
+            continue
+        dimension_id = str(edge.get("id") or "")
+        row = dict(dimensions.get(dimension_id) or {})
+        if not row:
+            continue
+        row["octopus_competitor_gap"] = 0
+        row["octopus_strict_lead_gap"] = int(edge.get("strict_lead_gap") or 1)
+        row["octopus_best_competitors"] = list(edge.get("best_competitors") or [])
+        row["octopus_best_competitor_score"] = edge.get("best_competitor_score")
+        rows.append(row)
+    return sorted(
+        rows,
+        key=lambda row: (
+            int(row.get("weight") or 0),
+            str(row.get("id") or ""),
+        ),
+        reverse=True,
+    )
+
+
+def _scorecard_gap_text(
+    row: dict[str, Any],
+    *,
+    reason: str,
+    scope: str = "below_target",
+) -> str:
     scores = row.get("scores") if isinstance(row.get("scores"), dict) else {}
     adjusted = (
         row.get("evidence_adjusted_scores")
@@ -717,6 +920,33 @@ def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:
             f"target gap: {row.get('octopus_gap_to_target', 0)}."
         ),
     ]
+    if scope == "best_competitor_gap":
+        best_competitors = ", ".join(
+            str(item) for item in row.get("octopus_best_competitors") or []
+        )
+        lines = [
+            f"Best-competitor gap for `{row.get('title') or row.get('id')}`.",
+            (
+                f"Octopus baseline: {scores.get('octopus', 0)}; "
+                f"best competitor: {row.get('octopus_best_competitor_score', 0)} "
+                f"({best_competitors or 'unknown'}); "
+                f"gap: {row.get('octopus_competitor_gap', 0)}."
+            ),
+        ]
+    elif scope == "strict_lead_gap":
+        best_competitors = ", ".join(
+            str(item) for item in row.get("octopus_best_competitors") or []
+        )
+        lines = [
+            f"Strict-lead gap for `{row.get('title') or row.get('id')}`.",
+            (
+                f"Octopus baseline: {scores.get('octopus', 0)}; "
+                f"best competitor: {row.get('octopus_best_competitor_score', 0)} "
+                f"({best_competitors or 'unknown'}); "
+                "current relation: tied; "
+                f"strict lead gap: {row.get('octopus_strict_lead_gap', 1)}."
+            ),
+        ]
     if adjusted:
         lines.append(
             "Internal evidence-adjusted score: "

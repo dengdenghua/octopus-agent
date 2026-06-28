@@ -36,6 +36,7 @@ export interface Translations {
     save: string;
     install: string;
     create: string;
+    newItem: string;
     import: string;
     export: string;
     exportAsMarkdown: string;
@@ -1089,6 +1090,20 @@ export interface Translations {
     cardCapabilities: string;
     statusEnabled: string;
     statusDisabled: string;
+    allAuthors: string;
+    allStatuses: string;
+    capabilitySkill: string;
+    capabilityChannel: string;
+    capabilityApi: string;
+    capabilityConfig: string;
+    capabilityCommand: string;
+    capabilityCapability: string;
+    configTitle: (name: string) => string;
+    configDescription: (name: string) => string;
+    configAria: (name: string) => string;
+    noConfig: string;
+    noMatchTitle: string;
+    noMatchHint: string;
     emptyTitle: string;
     emptyHint: string;
   };
@@ -1173,6 +1188,7 @@ export interface Translations {
     navKnowledgeGraph: string;
     navReflex: string;
     navIntelligence: string;
+    navSkills: string;
     navMcp: string;
     navStore: string;
     navEvolution: string;
@@ -1410,17 +1426,6 @@ export interface Translations {
     cdpConChrome144Only: string;
   };
 
-  // MCP Connection Center
-  mcpCenter: {
-    integrations: string;
-    connectionCenter: string;
-    connectionCenterDesc: string;
-    toolExtension: string;
-    toolExtensionDesc: string;
-    configGovernance: string;
-    configGovernanceDesc: string;
-  };
-
   // Intelligence Center
   intelligenceCenter: {
     researchOps: string;
@@ -1435,6 +1440,7 @@ export interface Translations {
   // Channels
   channels: {
     title: string;
+    channelOps: string;
     description: string;
     serviceRunning: string;
     serviceStopped: string;
@@ -1516,6 +1522,8 @@ export interface Translations {
     connectedCount: (n: number) => string;
     loading: string;
     loadFailed: string;
+    loadFailedDetail: (status: string) => string;
+    unknownError: string;
     retry: string;
     noRegistered: string;
     noRegisteredDescription: string;
@@ -1540,6 +1548,7 @@ export interface Translations {
     handlingMessages: string;
     rebindOrUnbind: string;
     helpDocsComingSoon: string;
+    clickToViewDetails: string;
   };
 
   // Pairing Authorization
@@ -2880,6 +2889,8 @@ export interface Translations {
     clearSearch: string;
     noMatchingEntities: string;
     noMatchingEntitiesHint: string;
+    wiki: string;
+    files: string;
   };
 
   // Background Tasks
@@ -3852,6 +3863,24 @@ export interface Translations {
     used: string;
     noDescription: string;
     duplicate: string;
+    recorderTitle: string;
+    taskLabel: string;
+    taskPlaceholder: string;
+    recordingHint: string;
+    countdownReady: string;
+    elapsedSteps: (count: number) => string;
+    stopAndExtract: string;
+    analyzing: string;
+    done: string;
+    learnedSkill: string;
+    skillLibraryHint: string;
+    quarantined: string;
+    noTrajectory: string;
+    recordingComplete: (name?: string) => string;
+    startFailed: string;
+    stopFailed: string;
+    defaultName: string;
+    defaultDescription: string;
   };
 
   // Parallel Agents
@@ -5149,7 +5178,7 @@ export interface Translations {
     toastBrowserAuthCancelled: string;
   };
 
-  // Skills page (app/workspace/skills/page.tsx)
+  // Skills (now shown in Hub agents?tab=skills)
   skillsPage: {
     pageTitle: string;
     pageSubtitle: string;
@@ -5181,6 +5210,11 @@ export interface Translations {
     tooltipUntested: string;
     testedDotTitle: string;
     noDescription: string;
+    loadFailed: string;
+    loadFailedDetail: (status: string) => string;
+    unknownError: string;
+    hideInternalSkills: string;
+    showInternalSkills: (n: number) => string;
   };
 
   // FileActivityIndicator + PreviewRefreshIndicator (observability chrome)
@@ -5474,17 +5508,6 @@ export interface Translations {
     loadingEditor: string;
   };
 
-  // AppAuth wrapper page (app/workspace/app-auth/page.tsx)
-  appAuthWrapperPage: {
-    securityKicker: string;
-    pageTitle: string;
-    pageSubtitle: string;
-    feature1Title: string;
-    feature1Desc: string;
-    feature2Title: string;
-    feature2Desc: string;
-  };
-
   // Observability page (app/observability/page.tsx)
   observabilityPage: {
     pageTitle: string;
@@ -5591,7 +5614,7 @@ export interface Translations {
     noComposeRecords: string;
     noComposeRecordsHint: string;
     total: string;
-    historyPrefix: string;
+    historyPrefix: (count: number) => string;
     hemolymphTable: {
       ts: string;
       usedBudget: string;
@@ -6465,6 +6488,7 @@ export interface Translations {
     listView: string;
     searchPlaceholder: string;
     layouts: {
+      force: string;
       ring: string;
       star: string;
       layers: string;
@@ -6520,10 +6544,15 @@ export interface Translations {
     coding: string;
     processing: string;
     thinking: string;
+    executing: string;
+    agentExecuting: string;
     running: string;
     done: string;
     error: string;
     completed: string;
+    currentProgress: (current: number, total: number) => string;
+    viewResult: string;
+    replay: string;
     agentCollaboration: string;
     readyToReadEditVerify: string;
     readyToBreakdownAndGather: string;

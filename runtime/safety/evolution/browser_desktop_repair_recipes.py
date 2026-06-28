@@ -24,6 +24,10 @@ QUEUE_SCHEMA = "octopus.browser_desktop_repair_recipe_queue.v1"
 VERIFICATION_SCHEMA = "octopus.browser_desktop_repair_recipe_verifications.v1"
 EVIDENCE_SCHEMA = "octopus.browser_desktop_repair_recipe_evidence.v1"
 STALE_REJECTION_SCHEMA = "octopus.browser_desktop_stale_replay_artifact_rejection.v1"
+QUALITY_GATE_SCHEMA = "octopus.browser_desktop_repair_recipe_quality_gate.v1"
+FAILURE_TAXONOMY_SCHEMA = "octopus.browser_desktop_failure_taxonomy.v1"
+REPAIR_ROUTE_SCHEMA = "octopus.browser_desktop_repair_route.v1"
+AUTOMATION_PLAYBOOK_SCHEMA = "octopus.browser_desktop_automation_playbook.v1"
 
 
 def compute_browser_desktop_repair_recipes(
@@ -65,9 +69,31 @@ def compute_browser_desktop_repair_recipes(
         "total_pending_cases": len(rows),
         "recipe_count": len(recipes),
         "recipes": recipes,
+        "quality_gate": _quality_gate_from_recipes(recipes, pending_count=len(rows)),
         "ready": len(rows) == 0,
         "next_actions": _next_actions(recipes, len(rows)),
     }
+
+
+def compute_browser_desktop_repair_recipe_quality_gate(
+    *,
+    review_queue_path: str | Path | None = None,
+    limit: int = 1000,
+    min_occurrences: int = 1,
+) -> dict[str, Any]:
+    report = compute_browser_desktop_repair_recipes(
+        review_queue_path=review_queue_path,
+        limit=limit,
+        min_occurrences=min_occurrences,
+    )
+    recipes = [
+        row for row in report.get("recipes") or []
+        if isinstance(row, dict)
+    ]
+    return _quality_gate_from_recipes(
+        recipes,
+        pending_count=int(report.get("total_pending_cases") or 0),
+    )
 
 
 def queue_browser_desktop_repair_recipes(
@@ -825,9 +851,34 @@ def _source_artifact_check(recipe: dict[str, Any]) -> dict[str, Any] | None:
 def _stale_source_artifact(metadata: dict[str, Any]) -> str:
     artifact = metadata.get("artifact") if isinstance(metadata.get("artifact"), dict) else {}
     local_path = str(artifact.get("local_path") or "").strip()
-    if local_path and not Path(local_path).is_file():
+    if not local_path:
+        return ""
+    path = Path(local_path)
+    if not path.is_file():
         return local_path
+    if path.suffix.lower() == ".png" and not _valid_png_header(path):
+        return f"{local_path} (invalid png evidence)"
+    replay = _dict(metadata.get("replay"))
+    if replay.get("replayable") is False and _is_pytest_temp_path(path):
+        return f"{local_path} (unreplayable pytest artifact)"
     return ""
+
+
+def _valid_png_header(path: Path) -> bool:
+    try:
+        data = path.read_bytes()[:33]
+    except OSError:
+        return False
+    if len(data) < 33 or not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return False
+    return data[12:16] == b"IHDR"
+
+
+def _is_pytest_temp_path(path: Path) -> bool:
+    return any(
+        part.startswith("pytest-") or part.startswith("pytest-of-")
+        for part in path.parts
+    )
 
 
 def _stale_computer_activity_replay(
@@ -1030,13 +1081,136 @@ def _recipe_from_cluster(key: str, rows: list[dict[str, Any]]) -> dict[str, Any]
         "case_ids": case_ids,
         "fingerprints": fingerprints,
         "evidence_summary": _evidence_summary(kind, metadata, len(rows)),
+        "failure_taxonomy": _failure_taxonomy(kind, metadata),
+        "repair_route": _repair_route(kind, metadata),
+        "automation_playbook": _automation_playbook(kind, metadata),
         "recommended_steps": _recommended_steps(kind, metadata),
         "verification_plan": _verification_plan(kind, metadata),
+        "quality_signals": _recipe_quality_signals(kind, metadata, rows),
         "promotion_gate": {
             "schema": "octopus.browser_desktop_repair_recipe_gate.v1",
             "requires_operator_review": True,
             "requires_replay_rerun": True,
             "requires_fresh_visual_or_activity_evidence": True,
+            "blocks_auto_promotion": True,
+        },
+    }
+
+
+def _recipe_quality_signals(
+    kind: str,
+    metadata: dict[str, Any],
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    verification_plan = _verification_plan(kind, metadata)
+    taxonomy = _failure_taxonomy(kind, metadata)
+    repair_route = _repair_route(kind, metadata)
+    playbook = _automation_playbook(kind, metadata)
+    evidence_required = [
+        str(item)
+        for item in verification_plan.get("evidence_required") or []
+        if str(item or "")
+    ]
+    api_checks = [
+        str(item)
+        for item in verification_plan.get("api_checks") or []
+        if str(item or "")
+    ]
+    return {
+        "schema": "octopus.browser_desktop_repair_recipe_quality_signals.v1",
+        "deterministic_cluster": len(rows) >= 1 and kind in {
+            "browser_pixel_replay_gate_case",
+            "browser_session_replay_case",
+            "computer_activity_replay_case",
+        },
+        "source_item_count": len(rows),
+        "has_case_identity": bool(
+            _unique_strings(_case_id(_dict(row.get("metadata"))) for row in rows)
+        ),
+        "has_fingerprint": bool(
+            _unique_strings(
+                str(_dict(row.get("metadata")).get("fingerprint") or "")
+                for row in rows
+            )
+        ),
+        "has_api_checks": bool(api_checks),
+        "has_required_evidence": bool(evidence_required),
+        "has_failure_taxonomy": (
+            taxonomy.get("schema") == FAILURE_TAXONOMY_SCHEMA
+            and bool(taxonomy.get("failure_class"))
+            and bool(taxonomy.get("signals"))
+        ),
+        "has_repair_route": (
+            repair_route.get("schema") == REPAIR_ROUTE_SCHEMA
+            and bool(repair_route.get("route_id"))
+            and bool(repair_route.get("strategy"))
+            and bool(repair_route.get("verification_evidence"))
+        ),
+        "has_automation_playbook": (
+            playbook.get("schema") == AUTOMATION_PLAYBOOK_SCHEMA
+            and bool(playbook.get("steps"))
+            and bool(playbook.get("rollback"))
+        ),
+        "requires_replay_rerun": True,
+        "blocks_auto_promotion": True,
+    }
+
+
+def _quality_gate_from_recipes(
+    recipes: list[dict[str, Any]],
+    *,
+    pending_count: int,
+) -> dict[str, Any]:
+    blockers: list[str] = []
+    if pending_count > 0 and not recipes:
+        blockers.append("pending_replay_without_recipe")
+    required_signal_names = (
+        "deterministic_cluster",
+        "has_failure_taxonomy",
+        "has_repair_route",
+        "has_automation_playbook",
+        "has_api_checks",
+        "has_required_evidence",
+        "requires_replay_rerun",
+        "blocks_auto_promotion",
+    )
+    checked = 0
+    passed = 0
+    for recipe in recipes:
+        signals = _dict(recipe.get("quality_signals"))
+        missing = [
+            name for name in required_signal_names
+            if signals.get(name) is not True
+        ]
+        checked += len(required_signal_names)
+        passed += len(required_signal_names) - len(missing)
+        if missing:
+            blockers.append(
+                f"{recipe.get('recipe_id') or 'recipe'} missing {', '.join(missing)}"
+            )
+        gate = _dict(recipe.get("promotion_gate"))
+        if gate.get("requires_replay_rerun") is not True:
+            blockers.append(
+                f"{recipe.get('recipe_id') or 'recipe'} does not require replay rerun"
+            )
+        if gate.get("blocks_auto_promotion") is not True:
+            blockers.append(
+                f"{recipe.get('recipe_id') or 'recipe'} does not block auto promotion"
+            )
+    score = round(passed / checked, 3) if checked else (1.0 if pending_count == 0 else 0.0)
+    ready = not blockers and score >= 1.0
+    return {
+        "schema": QUALITY_GATE_SCHEMA,
+        "score": score,
+        "ready": ready,
+        "recipe_count": len(recipes),
+        "pending_count": pending_count,
+        "blockers": blockers,
+        "signals": {
+            "checked": checked,
+            "passed": passed,
+            "required": list(required_signal_names),
+            "requires_replay_rerun": True,
             "blocks_auto_promotion": True,
         },
     }
@@ -1079,6 +1253,217 @@ def _evidence_summary(kind: str, metadata: dict[str, Any], occurrences: int) -> 
             "pending_count": metadata.get("pending_count"),
         }
     return {"occurrences": occurrences}
+
+
+def _failure_taxonomy(kind: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    if kind == "browser_pixel_replay_gate_case":
+        reason = _pixel_reason(metadata)
+        artifact = _dict(metadata.get("artifact"))
+        failure_class = "visual_noop_or_blank_frame"
+        if "changed pixels" in reason.lower():
+            failure_class = "visual_delta_below_threshold"
+        elif "blank" in reason.lower():
+            failure_class = "blank_or_unrendered_screenshot"
+        elif "invalid" in reason.lower():
+            failure_class = "invalid_visual_artifact"
+        return {
+            "schema": FAILURE_TAXONOMY_SCHEMA,
+            "surface": "browser",
+            "failure_class": failure_class,
+            "severity": "P0",
+            "signals": _unique_strings([
+                reason,
+                _artifact_shape(metadata),
+                str(artifact.get("local_path") or artifact.get("filename") or ""),
+            ]),
+            "probable_root_causes": [
+                "stale screenshot evidence",
+                "action did not mutate the visible page",
+                "viewport or render timing drifted from the recorded case",
+            ],
+        }
+    if kind == "browser_session_replay_case":
+        health = _dict(metadata.get("health"))
+        last_action = _dict(metadata.get("last_action"))
+        issues = [
+            str(item)
+            for item in health.get("issues") or []
+            if str(item or "")
+        ]
+        action_status = str(last_action.get("status") or "")
+        failure_class = "browser_session_unhealthy"
+        if "crash" in " ".join(issues).lower():
+            failure_class = "browser_page_crash"
+        elif action_status == "failed":
+            failure_class = "browser_action_failed"
+        elif not health.get("healthy", True):
+            failure_class = "browser_health_check_failed"
+        return {
+            "schema": FAILURE_TAXONOMY_SCHEMA,
+            "surface": "browser",
+            "failure_class": failure_class,
+            "severity": "P1",
+            "signals": _unique_strings([
+                *issues,
+                action_status,
+                str(last_action.get("action") or ""),
+                str(last_action.get("detail") or ""),
+            ]),
+            "probable_root_causes": [
+                "stale or crashed browser session",
+                "navigation or action failed before replay evidence was captured",
+                "session health was not checked after recovery",
+            ],
+        }
+    if kind == "computer_activity_replay_case":
+        last_activity = _dict(metadata.get("last_activity"))
+        action = _dict(last_activity.get("action"))
+        detail = _dict(last_activity.get("detail"))
+        policy = _dict(detail.get("policy_decision"))
+        error = str(last_activity.get("error") or "")
+        failure_class = "desktop_activity_needs_replay"
+        if policy.get("decision") == "denied" or "policy denied" in error.lower():
+            failure_class = "desktop_policy_denied"
+        elif action.get("source") == "uia" and not action.get("matched_control"):
+            failure_class = "desktop_uia_grounding_missing"
+        elif last_activity.get("ok") is False:
+            failure_class = "desktop_action_failed"
+        return {
+            "schema": FAILURE_TAXONOMY_SCHEMA,
+            "surface": "desktop",
+            "failure_class": failure_class,
+            "severity": "P0" if failure_class == "desktop_policy_denied" else "P1",
+            "signals": _unique_strings([
+                str(last_activity.get("event") or ""),
+                str(action.get("action") or ""),
+                error,
+                str(policy.get("reason") or ""),
+            ]),
+            "probable_root_causes": [
+                "desktop preview or execute evidence was not replayed",
+                "active app policy or lease state changed during automation",
+                "UIA grounding may not match the current desktop tree",
+            ],
+        }
+    return {
+        "schema": FAILURE_TAXONOMY_SCHEMA,
+        "surface": "unknown",
+        "failure_class": "unknown_browser_desktop_replay_failure",
+        "severity": "P2",
+        "signals": ["unknown replay case"],
+        "probable_root_causes": ["unclassified browser/desktop replay case"],
+    }
+
+
+def _repair_route(kind: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    taxonomy = _failure_taxonomy(kind, metadata)
+    failure_class = str(taxonomy.get("failure_class") or "unknown")
+    verification = _verification_plan(kind, metadata)
+    if kind == "browser_pixel_replay_gate_case":
+        route_id = "browser_pixel_replay_refresh"
+        strategy = "recapture_before_after_and_compare_pixels"
+        actions = [
+            "reset_isolated_browser_session",
+            "navigate_to_recorded_url_when_available",
+            "capture_before_screenshot",
+            "replay_action_or_reload",
+            "capture_after_screenshot",
+            "run_pixel_assertion_and_delta_check",
+        ]
+    elif kind == "browser_session_replay_case":
+        route_id = "browser_session_health_recovery"
+        strategy = "restart_session_rerun_last_action_and_verify_health"
+        actions = [
+            "ensure_browser_session",
+            "rerun_last_browser_action",
+            "capture_session_replay_case",
+            "check_session_health",
+        ]
+    elif kind == "computer_activity_replay_case":
+        route_id = (
+            "desktop_policy_review"
+            if failure_class == "desktop_policy_denied"
+            else "desktop_preview_execute_replay"
+        )
+        strategy = (
+            "surface_policy_decision_before_retry"
+            if failure_class == "desktop_policy_denied"
+            else "replay_preview_execute_under_same_lease"
+        )
+        actions = [
+            "inspect_desktop_policy_decision",
+            "recreate_preview_token",
+            "verify_low_or_reviewed_risk",
+            "rerun_activity_replay_case",
+            "attach_uia_or_activity_evidence",
+        ]
+    else:
+        route_id = "browser_desktop_manual_replay_review"
+        strategy = "classify_and_rerun_replay_case"
+        actions = ["classify_failure", "rerun_replay_case", "attach_evidence"]
+    return {
+        "schema": REPAIR_ROUTE_SCHEMA,
+        "route_id": route_id,
+        "failure_class": failure_class,
+        "strategy": strategy,
+        "actions": actions,
+        "verification_evidence": [
+            str(item)
+            for item in verification.get("evidence_required") or []
+            if str(item or "")
+        ],
+        "api_checks": [
+            str(item)
+            for item in verification.get("api_checks") or []
+            if str(item or "")
+        ],
+        "promotion_policy": {
+            "requires_operator_review": True,
+            "requires_fresh_evidence": True,
+            "blocks_auto_promotion_until_verified": True,
+        },
+    }
+
+
+def _automation_playbook(kind: str, metadata: dict[str, Any]) -> dict[str, Any]:
+    route = _repair_route(kind, metadata)
+    if kind == "browser_pixel_replay_gate_case":
+        steps = [
+            {"type": "browser_session_reset", "session_id": "derived_from_recipe"},
+            {"type": "browser_session_ensure", "headless": True},
+            {"type": "browser_screenshot", "label": "before"},
+            {"type": "browser_action", "action": "reload"},
+            {"type": "browser_screenshot", "label": "after"},
+            {"type": "pixel_compare", "threshold_source": "recorded_failure"},
+        ]
+        rollback = ["reset_derived_browser_session"]
+    elif kind == "browser_session_replay_case":
+        session_id = str(metadata.get("session_id") or "workspace")
+        steps = [
+            {"type": "browser_session_ensure", "session_id": session_id},
+            {"type": "browser_replay_case", "session_id": session_id},
+            {"type": "browser_session_health", "session_id": session_id},
+        ]
+        rollback = ["reset_session_if_health_fails"]
+    elif kind == "computer_activity_replay_case":
+        steps = [
+            {"type": "computer_policy_check"},
+            {"type": "computer_preview", "lease": "same_owner"},
+            {"type": "computer_activity_replay_case"},
+            {"type": "uia_assertion_when_available"},
+        ]
+        rollback = ["release_computer_lease", "expire_preview_token"]
+    else:
+        steps = [{"type": "manual_replay_review"}]
+        rollback = ["leave_source_case_pending"]
+    return {
+        "schema": AUTOMATION_PLAYBOOK_SCHEMA,
+        "route_id": route.get("route_id"),
+        "steps": steps,
+        "rollback": rollback,
+        "idempotency_key": _playbook_idempotency_key(kind, metadata),
+        "evidence_contract": route.get("verification_evidence") or [],
+    }
 
 
 def _recommended_steps(kind: str, metadata: dict[str, Any]) -> list[str]:
@@ -1156,6 +1541,18 @@ def _case_id(metadata: dict[str, Any]) -> str:
     return str(metadata.get("case_id") or replay.get("case_id") or "")
 
 
+def _playbook_idempotency_key(kind: str, metadata: dict[str, Any]) -> str:
+    seed = "|".join((
+        kind,
+        _case_id(metadata),
+        str(metadata.get("fingerprint") or ""),
+        _pixel_reason(metadata) if kind == "browser_pixel_replay_gate_case" else "",
+        str(_dict(metadata.get("last_action")).get("action") or ""),
+        str(_dict(_dict(metadata.get("last_activity")).get("action")).get("action") or ""),
+    ))
+    return hashlib.sha256(seed.encode()).hexdigest()[:16]
+
+
 def _recipe_text(recipe: dict[str, Any]) -> str:
     steps = recipe.get("recommended_steps")
     step_text = "\n".join(
@@ -1221,7 +1618,9 @@ __all__ = [
     "RECIPE_SCHEMA",
     "SCHEMA",
     "VERIFICATION_SCHEMA",
+    "QUALITY_GATE_SCHEMA",
     "attach_browser_desktop_repair_recipe_evidence",
+    "compute_browser_desktop_repair_recipe_quality_gate",
     "compute_browser_desktop_repair_recipes",
     "compute_browser_desktop_repair_recipe_verifications",
     "queue_browser_desktop_repair_recipes",

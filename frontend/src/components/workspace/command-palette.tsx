@@ -63,6 +63,13 @@ export function CommandPalette() {
     window.dispatchEvent(new Event("octopus:open-settings"));
   }, []);
 
+  const handleOpenMcpSettings = useCallback(() => {
+    setOpen(false);
+    window.dispatchEvent(
+      new CustomEvent("octopus:open-settings", { detail: { tab: "mcp" } }),
+    );
+  }, []);
+
   const handleShowShortcuts = useCallback(() => {
     setOpen(false);
     setShortcutsOpen(true);
@@ -143,12 +150,6 @@ export function CommandPalette() {
         label: t.channels.title,
         icon: CableIcon,
         keywords: "channel connector messaging",
-      },
-      {
-        to: "/workspace/mcp",
-        label: t.sidebar.navMcp,
-        icon: PlugIcon,
-        keywords: "mcp integration",
       },
       {
         to: "/workspace/architecture",
@@ -246,6 +247,10 @@ export function CommandPalette() {
               <SettingsIcon className="mr-2 h-4 w-4" />
               {t.common.settings}
               <CommandShortcut>{metaKey},</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={handleOpenMcpSettings}>
+              <PlugIcon className="mr-2 h-4 w-4" />
+              {t.sidebar.navMcp}
             </CommandItem>
             <CommandItem onSelect={handleShowShortcuts}>
               <KeyboardIcon className="mr-2 h-4 w-4" />

@@ -271,6 +271,8 @@ export interface AgentScorecardGapQueueResult {
     verdict?: string;
     evidence_adjusted_overall?: Record<string, number>;
     below_target_count?: number;
+    competitor_gap_count?: number;
+    competitor_tie_count?: number;
   };
 }
 
@@ -745,6 +747,15 @@ export interface BrowserDesktopQualityReport {
     latest: Array<Record<string, unknown>>;
     next_actions: string[];
   };
+  repair_recipe_quality_gate?: {
+    schema: "octopus.browser_desktop_repair_recipe_quality_gate.v1" | string;
+    score: number;
+    ready: boolean;
+    recipe_count?: number;
+    pending_count?: number;
+    blockers: string[];
+    signals: Record<string, unknown>;
+  };
   next_actions: string[];
 }
 
@@ -771,6 +782,15 @@ export interface BrowserDesktopRepairRecipesReport {
   total_pending_cases: number;
   recipe_count: number;
   recipes: BrowserDesktopRepairRecipe[];
+  quality_gate?: {
+    schema: "octopus.browser_desktop_repair_recipe_quality_gate.v1" | string;
+    score: number;
+    ready: boolean;
+    recipe_count: number;
+    pending_count: number;
+    blockers: string[];
+    signals: Record<string, unknown>;
+  };
   ready: boolean;
   next_actions: string[];
 }
@@ -911,7 +931,26 @@ export interface AgentCompetitorScorecardDimension {
   }>;
   octopus_missing_evidence_count?: number;
   octopus_ecosystem_readiness?: AgentEcosystemReadiness;
+  octopus_competitor_gap?: number;
+  octopus_strict_lead_gap?: number;
+  octopus_best_competitors?: string[];
+  octopus_best_competitor_score?: number;
   octopus_next_actions: string[];
+}
+
+export interface AgentScorecardRadarEdge {
+  id: string;
+  title: string;
+  weight: number;
+  octopus: number;
+  codex?: number;
+  best_competitor_score?: number;
+  best_competitors?: string[];
+  gap: number;
+  strict_lead_gap?: number;
+  relation: "ahead" | "behind" | "tied" | string;
+  leader?: string;
+  competitor_scores?: Record<string, number>;
 }
 
 export interface AgentEcosystemReadiness {
@@ -948,8 +987,22 @@ export interface AgentCompetitorScorecard {
   };
   dimensions: AgentCompetitorScorecardDimension[];
   octopus_below_target: AgentCompetitorScorecardDimension[];
+  octopus_competitor_gaps?: AgentCompetitorScorecardDimension[];
+  octopus_competitor_ties?: AgentCompetitorScorecardDimension[];
   octopus_strengths: AgentCompetitorScorecardDimension[];
   next_focus: string[];
+  radar?: {
+    schema?: string;
+    octopus_gap_count?: number;
+    octopus_advantage_count?: number;
+    octopus_true_gap_count?: number;
+    octopus_true_advantage_count?: number;
+    octopus_true_strict_advantage_count?: number;
+    octopus_true_tie_count?: number;
+    octopus_true_gap_edges?: AgentScorecardRadarEdge[];
+    octopus_true_tie_edges?: AgentScorecardRadarEdge[];
+    octopus_vs_best_edges?: AgentScorecardRadarEdge[];
+  };
   ecosystem_readiness?: AgentEcosystemReadiness;
   parity_certification?: {
     schema: "octopus.parity_certification.v1" | string;
@@ -1160,6 +1213,7 @@ export async function queueAgentScorecardGaps(options?: {
   limit?: number;
   reason?: string;
   dimensionId?: string;
+  scope?: "below_target" | "best_competitor_gap" | "strict_lead_gap";
 }): Promise<AgentScorecardGapQueueResult> {
   return postJson<AgentScorecardGapQueueResult>(
     "/api/evolution/agent-scorecard/gaps/queue",
@@ -1168,6 +1222,7 @@ export async function queueAgentScorecardGaps(options?: {
       limit: options?.limit ?? 10,
       reason: options?.reason ?? "operator panel real score gap review",
       dimension_id: options?.dimensionId ?? "",
+      scope: options?.scope ?? "below_target",
     },
   );
 }

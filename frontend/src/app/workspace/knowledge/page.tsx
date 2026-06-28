@@ -64,11 +64,11 @@ export default function KnowledgePage() {
               </TabsTrigger>
               <TabsTrigger value="wiki" className="h-8 gap-1.5 px-3 text-xs">
                 <FileTextIcon className="size-3.5" />
-                Wiki
+                {t.knowledgeGraph.wiki}
               </TabsTrigger>
               <TabsTrigger value="files" className="h-8 gap-1.5 px-3 text-xs">
                 <DatabaseIcon className="size-3.5" />
-                Files
+                {t.knowledgeGraph.files}
               </TabsTrigger>
             </TabsList>
           </Tabs>

@@ -37,6 +37,15 @@ class TestRedactor:
         assert "sk-proj" not in out
         assert "[REDACTED:api_key]" in out
 
+    def test_redacts_kimi_style_api_key(self):
+        from runtime.platform.observability.redactor import redact_text
+
+        out = redact_text(
+            "KIMI_API_KEY=sk-kimi-abcdefghijklmnopqrstuvwxyz0123456789ABCDE"
+        )
+        assert "sk-kimi" not in out
+        assert "[REDACTED:api_key]" in out
+
     def test_redacts_aws_access_key_id(self):
         from runtime.platform.observability.redactor import redact_text
 

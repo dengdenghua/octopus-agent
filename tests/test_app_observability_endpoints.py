@@ -71,6 +71,8 @@ class TestJournalEndpoint:
         assert data["total"] == 0
         assert data["counts"] == {}
         assert data["recent"] == []
+        assert data["diagnostics"]["schema"] == "octopus.journal_diagnostics.v1"
+        assert data["diagnostics"]["skipped_total"] == 0
 
     def test_respects_limit(self, client: TestClient) -> None:
         # Just verify the query param is plumbed · no events yet so

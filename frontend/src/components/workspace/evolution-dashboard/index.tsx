@@ -315,7 +315,7 @@ function EvolutionStage({
           </span>
           <Icon className={cn("size-3.5", stage.done && "text-primary")} />
         </div>
-        <span className="text-[11px] tabular-nums">
+        <span className="inline-flex items-baseline gap-0.5 text-[11px] tabular-nums">
           {stage.value}
           {stage.unit}
         </span>

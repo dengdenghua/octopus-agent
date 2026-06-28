@@ -164,3 +164,26 @@ class TestHealthEndpoint:
         assert data["agents"] == 0
         assert data["channels"] == []
         assert data["groups"] == 0
+
+    def test_readyz_includes_code_mode_runtime_probe(self, tmp_path: Path):
+        app = create_app(journal_path=tmp_path / "events.jsonl")
+        response = TestClient(app).get("/readyz")
+
+        assert response.status_code == 200
+        data = response.json()
+        names = {check["name"] for check in data["checks"]}
+        assert "code_mode_runtime" in names
+        probe = next(check for check in data["checks"] if check["name"] == "code_mode_runtime")
+        assert probe["status"] == "pass"
+
+    def test_readyz_includes_provider_compatibility_probe(self, tmp_path: Path):
+        app = create_app(journal_path=tmp_path / "events.jsonl")
+        response = TestClient(app).get("/readyz")
+
+        assert response.status_code == 200
+        data = response.json()
+        names = {check["name"] for check in data["checks"]}
+        assert "provider_compatibility" in names
+        probe = next(check for check in data["checks"] if check["name"] == "provider_compatibility")
+        assert probe["status"] in {"pass", "warn"}
+        assert "row_count" in probe["metadata"]

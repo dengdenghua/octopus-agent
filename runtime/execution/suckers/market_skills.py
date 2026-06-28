@@ -290,13 +290,29 @@ def register_market_skills(
     all_skills_dir: Path | None = None,
     respect_enabled_flag: bool = True,
     verify_tests: bool = True,
+    source: str | None = None,
 ) -> int:
+    """Register every ``<all_skills_dir>/<name>/SKILL.md`` as a callable skill.
+
+    ``source`` overrides the ``trusted_source`` prefix for provenance. The
+    default (``None``) tags bundled skills ``skill://all_skills/<name>``;
+    pass e.g. ``codex://plugin/github`` so externally-imported plugin skills
+    carry their real origin and the TrustEngine can gate them accordingly.
+    """
     if all_skills_dir is None:
         # runtime/execution/suckers/market_skills.py → runtime/execution/all_skills
         all_skills_dir = Path(__file__).resolve().parent.parent / "all_skills"
     all_skills_dir = Path(all_skills_dir)
     if not all_skills_dir.is_dir():
         return 0
+
+    def _trusted(dir_name: str, *, alias: bool = False) -> str:
+        base = (
+            f"{source.rstrip('/')}/{dir_name}"
+            if source
+            else f"skill://all_skills/{dir_name}"
+        )
+        return f"{base}#alias" if alias else base
 
     enabled_map = _load_enabled_set(all_skills_dir) if respect_enabled_flag else None
     registered = 0
@@ -387,7 +403,7 @@ def register_market_skills(
                     description=description,
                     affinity=affinity,
                     cost_profile="low",
-                    trusted_source=f"skill://all_skills/{dir_name}",
+                    trusted_source=_trusted(dir_name),
                     handler=_make_prompt_handler(
                         skill_dir, name, body, allowed_tuple,
                     ),
@@ -412,7 +428,7 @@ def register_market_skills(
                         description=description,
                         affinity=affinity,
                         cost_profile="low",
-                        trusted_source=f"skill://all_skills/{dir_name}#alias",
+                        trusted_source=_trusted(dir_name, alias=True),
                         handler=_make_prompt_handler(
                             skill_dir, alias, body, allowed_tuple,
                         ),

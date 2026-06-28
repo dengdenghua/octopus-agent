@@ -198,3 +198,50 @@ class TestJSONLJournal:
         assert events[0].drift_id == 42
         assert events[0].protocol_id == "http_api_contract"
         assert events[0].status == "acknowledged"
+
+    def test_corrupt_line_is_isolated_and_later_events_recover(
+        self,
+        tmp_path: Path,
+        sample_trajectory,
+    ):
+        path = tmp_path / "j.jsonl"
+        first = JSONLJournal(path)
+        first.write_trajectory(sample_trajectory)
+        good_line = path.read_text(encoding="utf-8")
+        path.write_text(
+            good_line + "{bad json\n" + good_line,
+            encoding="utf-8",
+        )
+
+        reader = JSONLJournal(path)
+        events = reader.read_all()
+        diagnostics = reader.diagnostics()
+
+        assert len(events) == 2
+        assert all(isinstance(event, TrajectoryEvent) for event in events)
+        assert diagnostics["skipped_total"] == 1
+        assert diagnostics["skipped_lines"][0]["line_number"] == 2
+        assert diagnostics["pending_tail_bytes"] == 0
+
+    def test_partial_tail_line_is_not_consumed_until_completed(
+        self,
+        tmp_path: Path,
+        sample_trajectory,
+    ):
+        path = tmp_path / "j.jsonl"
+        writer = JSONLJournal(path)
+        writer.write_trajectory(sample_trajectory)
+        good_line = path.read_text(encoding="utf-8")
+        path.write_text(good_line + good_line.rstrip("\n"), encoding="utf-8")
+
+        reader = JSONLJournal(path)
+        assert len(reader.read_all()) == 1
+        assert reader.diagnostics()["pending_tail_bytes"] > 0
+
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write("\n")
+
+        events = reader.read_all()
+
+        assert len(events) == 2
+        assert reader.diagnostics()["pending_tail_bytes"] == 0

@@ -18,13 +18,12 @@ platform integration each user has to install. Instead it provides:
   3. A pluggable ``Backend`` interface so a real bwrap/Seatbelt/Job
      Object backend can be wired in by the caller without touching
      the runner itself.
-  4. A no-op ``DirectBackend`` that runs subprocess directly. This is
-     the default — soft constraints still apply.
+  4. A no-op ``DirectBackend`` that runs subprocess directly when no hard
+     backend is available or the operator explicitly selects soft mode.
 
-The contract: even with the no-op backend, **a sandbox-aware caller
-gets observable behavior** (timeout, output cap, env scrubbing,
-blocked-network hints). Switching to a real backend later is a
-configuration change, not an API change.
+The contract: **a sandbox-aware caller gets observable behavior** (timeout,
+output cap, env scrubbing, blocked-network hints) even with the no-op
+fallback. When a hard backend is available, the default runner selects it.
 """
 
 from __future__ import annotations
@@ -204,6 +203,8 @@ class SandboxResult:
     truncated: bool
     timed_out: bool
     killed: bool = False
+    backend: str = "direct"
+    hard: bool = False
 
 
 class Backend(Protocol):
@@ -449,10 +450,23 @@ def _unique_paths(paths: list[Path]) -> list[Path]:
 
 
 class SandboxRunner:
-    def __init__(self, policy: SandboxPolicy, *, backend: Backend | None = None) -> None:
+    def __init__(
+        self,
+        policy: SandboxPolicy,
+        *,
+        backend: Backend | None = None,
+        warn_on_direct_backend: bool = True,
+    ) -> None:
         self.policy = policy
-        self.backend = backend or DirectBackend()
-        if isinstance(self.backend, DirectBackend):
+        choice = (
+            BackendChoice(backend, type(backend).__name__, hard=not isinstance(backend, DirectBackend))
+            if backend is not None
+            else select_process_backend()
+        )
+        self.backend = choice.backend
+        self.backend_name = choice.name
+        self.backend_hard = choice.hard
+        if warn_on_direct_backend and isinstance(self.backend, DirectBackend):
             _logger.warning(
                 "SandboxRunner is using DirectBackend — no kernel-level isolation "
                 "is applied. A misbehaving process can still damage the host "
@@ -572,6 +586,8 @@ class SandboxRunner:
             truncated=truncated,
             timed_out=timed_out,
             killed=killed,
+            backend=self.backend_name,
+            hard=self.backend_hard,
         )
 
     def _resolve_cwd(self, cwd: Path | str | None) -> Path:

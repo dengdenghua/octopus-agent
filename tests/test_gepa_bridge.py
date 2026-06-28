@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from runtime.safety.evolution.canary import CanaryConfig, CanaryManager
 from runtime.safety.evolution.proposal_ledger import ProposalLedger
+from runtime.safety.recovery import gepa_bridge
 from runtime.safety.recovery.evolution_dataset import (
     EvolutionDataset,
     EvolutionExample,
@@ -9,6 +12,7 @@ from runtime.safety.recovery.evolution_dataset import (
 from runtime.safety.recovery.gepa_bridge import (
     _merge_failure_samples,
     collect_failures_from_ledger,
+    collect_provider_compatibility_failures,
     mark_winner_proposal_applied,
     record_winner_canary_outcome,
     record_winner_proposal_and_canary,
@@ -17,6 +21,10 @@ from runtime.safety.recovery.gepa_optimizer import GepaResult, PromptCandidate
 from runtime.safety.recovery.native_replay import replay_candidates
 from runtime.safety.recovery.native_replay_sandbox import run_sandbox_replay
 from runtime.safety.recovery.native_turn_replay import replay_turn_candidates
+from runtime.sensing.model_router.provider_compat_matrix import (
+    append_provider_compatibility_history,
+    build_provider_compatibility_matrix,
+)
 
 
 def test_collect_failures_from_ledger_reads_turn_failures(tmp_path) -> None:
@@ -82,6 +90,128 @@ def test_merge_failure_samples_dedupes_and_limits() -> None:
     merged = _merge_failure_samples(primary, supplemental, limit=3)
 
     assert [sample["goal"] for sample in merged] == ["a", "b", "c"]
+
+
+def test_collect_provider_compatibility_failures_reads_history(tmp_path) -> None:
+    history = tmp_path / "provider_compat_history.jsonl"
+    report = build_provider_compatibility_matrix(
+        entries={
+            "qwen-thinking": {
+                "id": "qwen-thinking",
+                "provider": "openai",
+                "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                "api_key": "sk-secret",
+                "models": ["qwen3-max"],
+                "supports_thinking": True,
+                "thinking_wire_format": "openai",
+            }
+        },
+    )
+    append_provider_compatibility_history(report, path=history)
+
+    failures = collect_provider_compatibility_failures(
+        history_path=history,
+        limit=5,
+    )
+
+    assert len(failures) == 1
+    assert failures[0]["provider_id"] == "qwen-thinking"
+    assert failures[0]["failure_source"] == "provider_compatibility_matrix"
+    assert failures[0]["primary_repair_route"] == "provider_thinking_protocol"
+    assert "thinking_wire_format_mismatch" in failures[0]["last_error"]
+
+
+def test_merge_failure_samples_preserves_provider_repair_routes() -> None:
+    provider_failure = {
+        "goal": "Stabilize provider compatibility for qwen",
+        "last_error": "thinking_wire_format_mismatch",
+        "failure_source": "provider_compatibility_matrix",
+        "primary_repair_route": "provider_thinking_protocol",
+        "repair_routes": [{"route": "provider_thinking_protocol"}],
+    }
+
+    merged = _merge_failure_samples([], [provider_failure], limit=2)
+
+    assert merged == [provider_failure]
+
+
+def test_optimize_for_recipe_includes_provider_failures(monkeypatch, tmp_path) -> None:
+    captured: dict[str, object] = {}
+    provider_failures = [
+        {
+            "goal": "Stabilize provider compatibility for qwen",
+            "last_error": "thinking_wire_format_mismatch",
+            "failure_source": "provider_compatibility_matrix",
+            "primary_repair_route": "provider_thinking_protocol",
+            "repair_routes": [{"route": "provider_thinking_protocol"}],
+        },
+        {
+            "goal": "Stabilize provider compatibility for deepseek",
+            "last_error": "implicit thinking mismatch",
+            "failure_source": "provider_compatibility_matrix",
+            "primary_repair_route": "provider_thinking_protocol",
+            "repair_routes": [{"route": "provider_thinking_protocol"}],
+        },
+    ]
+
+    monkeypatch.setattr(gepa_bridge, "collect_failures_from_journal", lambda *_a, **_k: [])
+    monkeypatch.setattr(gepa_bridge, "collect_failures_from_ledger", lambda **_k: [])
+    monkeypatch.setattr(gepa_bridge, "collect_external_session_failures", lambda **_k: [])
+    monkeypatch.setattr(
+        gepa_bridge,
+        "collect_provider_compatibility_failures",
+        lambda **_k: provider_failures,
+    )
+    monkeypatch.setattr(
+        gepa_bridge,
+        "build_external_session_dataset",
+        lambda **_k: EvolutionDataset(),
+    )
+    monkeypatch.setattr(gepa_bridge, "evaluate_front_native", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        gepa_bridge,
+        "replay_candidates",
+        lambda *_a, **_k: SimpleNamespace(to_dict=lambda: {"candidates": []}),
+    )
+    monkeypatch.setattr(
+        gepa_bridge,
+        "run_sandbox_replay",
+        lambda *_a, **_k: SimpleNamespace(to_dict=lambda: {"candidates": []}),
+    )
+    monkeypatch.setattr(
+        gepa_bridge,
+        "replay_turn_candidates",
+        lambda *_a, **_k: SimpleNamespace(to_dict=lambda: {"candidates": []}),
+    )
+
+    def _fake_gepa_optimize(**kwargs):
+        sampled = kwargs["failure_sampler"]("seed", 5)
+        captured["sampled"] = sampled
+        return GepaResult(
+            iterations_run=1,
+            final_front=[],
+            best_avg=None,
+            history=[{"sampled": len(sampled)}],
+            elapsed_s=0.0,
+        )
+
+    monkeypatch.setattr(gepa_bridge, "gepa_optimize", _fake_gepa_optimize)
+
+    result = gepa_bridge.optimize_for_recipe(
+        seed_prompt="seed",
+        journal=SimpleNamespace(),
+        router=SimpleNamespace(),
+        ledger_path=tmp_path / "proposal_ledger.jsonl",
+        record_winner=False,
+    )
+
+    sampled = captured["sampled"]
+    assert isinstance(sampled, list)
+    assert result.iterations_run == 1
+    assert {failure["failure_source"] for failure in sampled} == {
+        "provider_compatibility_matrix",
+    }
+    assert sampled[0]["primary_repair_route"] == "provider_thinking_protocol"
 
 
 def test_record_winner_proposal_and_canary_materializes_lifecycle(tmp_path) -> None:

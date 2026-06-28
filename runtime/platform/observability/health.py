@@ -354,11 +354,30 @@ def redis_check(client: Any, *, name: str = "redis") -> HealthCheck:
 
 
 def journal_check(journal: Any, *, name: str = "journal") -> HealthCheck:
-    """Pass if the journal's ``read_all()`` succeeds without raising."""
+    """Pass if the journal can be read; warn when recovery skipped bad lines."""
     def _check() -> HealthStatus:
         try:
             journal.read_all()
-            return HealthStatus(name=name, status="pass")
+            diagnostics = (
+                journal.diagnostics()
+                if hasattr(journal, "diagnostics") and callable(journal.diagnostics)
+                else {}
+            )
+            if not isinstance(diagnostics, dict):
+                diagnostics = {}
+            skipped_total = int(diagnostics.get("skipped_total") or 0)
+            if skipped_total > 0:
+                return HealthStatus(
+                    name=name,
+                    status="warn",
+                    detail=f"recovered after skipping {skipped_total} corrupt journal line(s)",
+                    metadata={"diagnostics": diagnostics},
+                )
+            return HealthStatus(
+                name=name,
+                status="pass",
+                metadata={"diagnostics": diagnostics} if diagnostics else {},
+            )
         except (OSError, ImportError, TypeError, ValueError) as exc:
             return HealthStatus(
                 name=name, status="fail",

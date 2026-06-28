@@ -1,10 +1,6 @@
 /* Skill Packs (技能包) sub-tab for the Agent Market.
 
-   Originally lived at ``app/workspace/meta-skills/page.tsx`` as a
-   standalone workspace route. Moved into the market page so that the
-   skill-pack catalog and agent catalog share the same sidebar
-   entry-point and the user can flip between them without losing
-   context. Renders the on-disk ``meta_skills/`` YAML catalog by
+   Renders the on-disk ``meta_skills/`` YAML catalog by
    calling ``GET /api/meta-skills`` (list) and
    ``GET /api/meta-skills/{name}/mermaid`` (per-pack Mermaid
    ``flowchart`` source) on the FastAPI backend.

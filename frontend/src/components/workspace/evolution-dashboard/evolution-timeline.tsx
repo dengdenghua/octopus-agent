@@ -22,7 +22,7 @@ const STATUS_DOT_COLOR: Record<string, string> = {
   applied: "bg-emerald-500",
   pending: "bg-amber-500",
   rolled_back: "bg-red-500",
-  rejected: "bg-zinc-400 dark:bg-zinc-500",
+  rejected: "bg-muted-foreground",
 };
 
 const CANARY_PHASE_STYLE: Record<string, string> = {
@@ -40,7 +40,7 @@ const CANARY_PHASE_STYLE: Record<string, string> = {
 function canaryPhaseStyle(phase: string): string {
   return (
     CANARY_PHASE_STYLE[phase] ??
-    "bg-zinc-500/15 text-zinc-700 dark:text-zinc-300 border-zinc-500/30"
+    "bg-muted text-muted-foreground border-border"
   );
 }
 
@@ -79,7 +79,7 @@ function FitnessDiffCard({ before, after }: { before: number; after: number }) {
           <span className="text-muted-foreground w-9 shrink-0">Before</span>
           <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full rounded-full bg-zinc-400 dark:bg-zinc-500"
+              className="h-full rounded-full bg-muted-foreground"
               style={{ width: `${Math.max((safeBefore / maxVal) * 100, 2)}%` }}
             />
           </div>
@@ -119,7 +119,7 @@ function TimelineNode({
   isRollingBack?: boolean;
 }) {
   const dotColor =
-    STATUS_DOT_COLOR[record.status] ?? "bg-zinc-400 dark:bg-zinc-500";
+    STATUS_DOT_COLOR[record.status] ?? "bg-muted-foreground";
   const isCanaryKind =
     record.kind.toLowerCase().includes("canary") ||
     record.kind.toLowerCase().includes("skill");
@@ -131,25 +131,25 @@ function TimelineNode({
   const improved = delta != null ? delta >= 0 : null;
 
   return (
-    <div className="relative flex gap-3 pb-6 last:pb-0">
+    <div className="group relative flex gap-3 pb-6 last:pb-0">
       <div className="flex flex-col items-center">
         <div
           className={cn(
-            "size-3 rounded-full shrink-0 ring-2 ring-background",
+            "z-10 size-3 shrink-0 rounded-full ring-2 ring-background transition-transform duration-200 group-hover:scale-125",
             dotColor,
           )}
         />
-        <div className="flex-1 w-px bg-border/60 mt-1" />
+        <div className="mt-1 h-full w-px bg-border/60" />
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <div
           className={cn(
-            "rounded-md border border-border/40 bg-muted/30 px-3 py-2",
-            "hover:border-border/80 transition-colors",
+            "rounded-lg border border-border/40 bg-muted/30 px-3 py-2",
+            "transition-all duration-200 hover:border-border/80 hover:bg-muted/50 hover:shadow-sm",
           )}
         >
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <span className="inline-flex items-center gap-1 rounded-md bg-foreground/5 px-1.5 py-0.5 text-[10px] font-medium">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
               <GitBranchIcon className="size-3" />
               {record.kind}
             </span>

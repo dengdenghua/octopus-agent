@@ -317,6 +317,14 @@ class HttpMCPClient(MCPClient):
         so both shapes work uniformly.
         """
         headers = dict(self.config.headers) if self.config.headers else None
+        # Attach an OAuth bearer if this server has been authorized via the
+        # authorize-on-enable flow (refreshed transparently near expiry). No
+        # token → no header → unchanged behaviour.
+        from runtime.adapters.mcp_client.oauth import bearer_for_server
+
+        _bearer = bearer_for_server(self.config.name)
+        if _bearer:
+            headers = {**(headers or {}), "Authorization": f"Bearer {_bearer}"}
         timeout = max(1.0, self.config.timeout_ms / 1000.0)
         if self.config.transport == "sse":
             from mcp.client.sse import sse_client

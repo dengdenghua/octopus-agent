@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { CitationLink } from "../citations/citation-link";
 import { MermaidBlock } from "./mermaid-block";
+import { WidgetFrame } from "./widget-frame";
 
 /**
  * Chat font-size → ``prose-*`` variant.
@@ -135,6 +136,14 @@ export const MarkdownContent = memo(function MarkdownContent({
                   className="my-3"
                 />
               );
+            }
+
+            if (
+              normalizedLanguage === "widget" ||
+              normalizedLanguage === "html-widget" ||
+              normalizedLanguage === "octopus-widget"
+            ) {
+              return <WidgetFrame code={code} className="my-3" />;
             }
 
             return (

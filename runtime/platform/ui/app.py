@@ -49,6 +49,7 @@ _LEGACY_CONTROL_PLANE_PREFIXES = (
     "/api/mcp",
     "/api/memory",
     "/api/meta-skill",
+    "/api/migrate",
     "/api/meta-skills",
     "/api/path-denylist",
     "/api/permissions",
@@ -93,6 +94,7 @@ def _install_legacy_control_plane_auth(
     jwt_secret: str | None,
     jwt_issuer: str | None,
     jwt_audience: str | None,
+    browser_relay_token: str = "",
 ) -> None:
     """Add one auth gate for older HTTP control-plane routers."""
     if not require_auth:
@@ -104,6 +106,13 @@ def _install_legacy_control_plane_auth(
             return await call_next(request)
         path = str(getattr(getattr(request, "url", None), "path", "") or "")
         if _is_public_plugin_asset_request(request.method, path):
+            return await call_next(request)
+        if (
+            browser_relay_token
+            and path.startswith("/api/browser/relay/")
+            and str(request.query_params.get("relay_token") or "").strip()
+            == browser_relay_token
+        ):
             return await call_next(request)
         if not any(
             _path_matches_prefix(path, prefix)
@@ -275,6 +284,25 @@ def create_app(
             "use only for trusted local development"
         )
 
+    browser_relay_token = ""
+    if cocoloop_require_auth and cocoloop_identity_store is not None:
+        try:
+            import secrets
+
+            from runtime.safety.auth.identity import Identity
+
+            browser_relay_token = secrets.token_urlsafe(32)
+            cocoloop_identity_store.remove("service:browser-relay")
+            cocoloop_identity_store.add(
+                Identity(actor_id="service:browser-relay", roles=("service", "local")),
+                api_key_plaintext=browser_relay_token,
+            )
+        except Exception as _relay_exc:  # noqa: BLE001
+            logging.getLogger(__name__).warning(
+                "browser-relay service token setup failed (%s: %s)",
+                type(_relay_exc).__name__, _relay_exc,
+            )
+
     _install_legacy_control_plane_auth(
         app,
         identity_store=cocoloop_identity_store,
@@ -282,7 +310,37 @@ def create_app(
         jwt_secret=cocoloop_jwt_secret,
         jwt_issuer=cocoloop_jwt_issuer,
         jwt_audience=cocoloop_jwt_audience,
+        browser_relay_token=browser_relay_token,
     )
+
+    # When control-plane auth is on, the in-process computer loop skills
+    # (computer_observe/plan/preview/execute) still reach the local
+    # /api/computer service over loopback HTTP — mint a service identity +
+    # token so they authenticate instead of being 401'd. The token is held
+    # in memory only (never an env var) so exec_shell child processes can't
+    # read it. No-op when auth is off (endpoint is open in single-user dev).
+    if cocoloop_require_auth and cocoloop_identity_store is not None:
+        try:
+            import secrets
+
+            from runtime.execution.suckers.computer_api_skills import (
+                set_internal_api_token,
+            )
+            from runtime.safety.auth.identity import Identity
+
+            _svc_actor = "service:computer-loop"
+            _svc_key = secrets.token_urlsafe(32)
+            cocoloop_identity_store.remove(_svc_actor)  # drop any stale key
+            cocoloop_identity_store.add(
+                Identity(actor_id=_svc_actor, roles=("service", "local")),
+                api_key_plaintext=_svc_key,
+            )
+            set_internal_api_token(_svc_key)
+        except Exception as _svc_exc:  # noqa: BLE001 — never break app startup
+            logging.getLogger(__name__).warning(
+                "computer-loop service token setup failed (%s: %s)",
+                type(_svc_exc).__name__, _svc_exc,
+            )
 
     thread_store = None
     thread_upload_root: Path | None = None
@@ -631,6 +689,9 @@ def create_app(
     # plus a journal-readability readiness check so the pod doesn't
     # advertise itself before genome storage is reachable.
     try:
+        from runtime.platform.observability.code_mode_health import (
+            code_mode_runtime_check,
+        )
         from runtime.platform.observability.health import (
             HealthCheck,
             HealthRegistry,
@@ -638,6 +699,9 @@ def create_app(
             journal_check,
         )
         from runtime.platform.observability.metrics import get_registry as _mreg
+        from runtime.platform.observability.provider_compat_health import (
+            provider_compatibility_check,
+        )
 
         _hreg = HealthRegistry(metrics_registry=_mreg())
         _hreg.register(
@@ -649,6 +713,8 @@ def create_app(
         )
         if state.journal is not None:
             _hreg.register(journal_check(state.journal))
+        _hreg.register(code_mode_runtime_check())
+        _hreg.register(provider_compatibility_check())
         app.include_router(create_probe_router(_hreg))
         # Stash on app.state so test clients / operators can probe it
         # programmatically and so other routers can register their
@@ -1243,6 +1309,7 @@ def create_app(
             jwt_secret=cocoloop_jwt_secret,
             jwt_issuer=cocoloop_jwt_issuer,
             jwt_audience=cocoloop_jwt_audience,
+            relay_token=browser_relay_token,
         )
     )
 
@@ -1462,6 +1529,33 @@ def create_app(
 
     app.include_router(
         create_android_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
+
+    from runtime.sensing.gateway.migrate_router import create_migrate_router
+
+    app.include_router(
+        create_migrate_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
+
+    # MCP OAuth-on-enable (prefix /api/mcp-oauth is intentionally NOT in the
+    # legacy control-plane prefixes: /authorize self-gates, /callback is the
+    # provider's unauthenticated browser redirect, guarded by single-use state).
+    from runtime.sensing.gateway.mcp_oauth_router import create_mcp_oauth_router
+
+    app.include_router(
+        create_mcp_oauth_router(
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
             jwt_secret=cocoloop_jwt_secret,

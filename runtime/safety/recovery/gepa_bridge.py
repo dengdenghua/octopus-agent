@@ -241,6 +241,25 @@ def collect_failures_from_ledger(
     return out
 
 
+def collect_provider_compatibility_failures(
+    *,
+    history_path: Any | None = None,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Pull provider protocol failures recorded by compatibility canaries."""
+    try:
+        from runtime.sensing.model_router.provider_compat_matrix import (
+            extract_provider_compatibility_failures,
+        )
+
+        return extract_provider_compatibility_failures(
+            path=history_path,
+            limit=limit,
+        )
+    except (OSError, TypeError, ValueError):  # noqa: BLE001
+        return []
+
+
 def _merge_failure_samples(
     primary: list[dict[str, Any]],
     supplemental: list[dict[str, Any]],
@@ -1001,10 +1020,15 @@ def optimize_for_recipe(
         limit=eval_tasks * 2,
     )
     external_failures = collect_external_session_failures(limit=eval_tasks * 2)
+    provider_failures = collect_provider_compatibility_failures(limit=eval_tasks * 2)
     failures = _merge_failure_samples(
         _merge_failure_samples(
-            journal_failures,
-            ledger_failures,
+            _merge_failure_samples(
+                journal_failures,
+                ledger_failures,
+                limit=eval_tasks * 3,
+            ),
+            provider_failures,
             limit=eval_tasks * 3,
         ),
         external_failures,
@@ -1031,6 +1055,8 @@ def optimize_for_recipe(
             "turn_id": ex.metadata.get("turn_id"),
             "thread_id": ex.metadata.get("thread_id"),
             "code_change_paths": ex.metadata.get("code_change_paths") or [],
+            "primary_repair_route": ex.metadata.get("primary_repair_route") or "",
+            "repair_routes": ex.metadata.get("repair_routes") or [],
         }
         for ex in normalized_dataset.all_examples
     ]
@@ -1051,6 +1077,7 @@ def optimize_for_recipe(
                 ),
                 "journal_failures": len(journal_failures),
                 "ledger_failures": len(ledger_failures),
+                "provider_failures": len(provider_failures),
                 "external_failures": len(external_failures),
             }],
             elapsed_s=0.0,

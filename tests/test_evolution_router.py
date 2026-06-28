@@ -64,26 +64,107 @@ def test_agent_scorecard_endpoint() -> None:
     app.include_router(create_evolution_router())
     client = TestClient(app)
 
-    response = client.get("/api/evolution/agent-scorecard?target_score=90")
+    response = client.get(
+        "/api/evolution/agent-scorecard?target_score=90&use_runtime_evidence_cache=false",
+    )
     data = response.json()
 
     assert response.status_code == 200
     assert data["ok"] is True
     assert data["schema"] == "octopus.agent_competitor_scorecard.v1"
     assert data["target_score"] == 90
-    assert data["overall"]["octopus"] == 93
+    assert data["overall"]["octopus"] == 96
     assert data["overall"]["codex"] == 93
+    assert data["overall"]["kimi_agent_swarm"] == 90
     assert data["overall"]["cursor"] == 86
-    assert data["verdict"] == "competitive"
-    assert data["evidence_adjusted_overall"]["octopus"] == 93
-    assert data["evidence_adjusted_verdict"] == "competitive"
+    assert data["verdict"] == "leading"
+    assert data["evidence_adjusted_overall"]["octopus"] == 96
+    assert data["evidence_adjusted_verdict"] == "leading"
     assert data["scorecard_policy"]["certification_floors_do_not_change_overall"] is True
+    assert data["scorecard_policy"]["overall"] == (
+        "external_calibrated_baseline_with_verified_recalibration"
+    )
+    assert "offline runtime contract" in data["scorecard_policy"]["browser_desktop_runtime_gate"]
+    assert data["radar"]["schema"] == "octopus.agent_scorecard_radar.v1"
+    assert data["radar"]["axis_count"] == len(data["dimensions"])
+    assert data["radar"]["series"]["octopus"][0] == 97
+    assert data["radar"]["octopus_advantage_count"] == 13
+    assert data["radar"]["octopus_gap_count"] == 0
+    assert data["radar"]["octopus_gap_edges"] == []
+    assert data["radar"]["octopus_true_advantage_count"] == 13
+    assert data["radar"]["octopus_true_strict_advantage_count"] == 13
+    assert data["radar"]["octopus_true_tie_count"] == 0
+    assert data["radar"]["octopus_true_gap_count"] == 0
+    assert data["radar"]["octopus_true_gap_edges"] == []
+    assert "radar-beta" in data["radar"]["mermaid"]
+    assert data["provider_runtime"]["schema"] == (
+        "octopus.agent_scorecard_provider_runtime.v1"
+    )
+    assert data["provider_runtime"]["policy"]["secrets_redacted"] is True
+    assert data["provider_runtime"]["builtin_profile_coverage"]["ready"] is True
     assert data["octopus_below_target"] == []
+    assert data["permissions_sandbox_readiness"]["ready"] is True
+    assert data["permissions_sandbox_readiness"]["probe"]["sandbox"]["ok"] is True
+    assert data["multi_agent_orchestration"]["ready"] is True
+    assert data["multi_agent_orchestration"]["score"] == 1.0
+    assert data["product_experience"]["ready"] is True
+    assert data["product_experience"]["score"] == 1.0
+    assert data["product_experience"]["probe"]["competitor_gap_routing"] is True
+    assert data["product_experience"]["probe"]["keyboard_audit_export"] is True
+    assert data["product_experience"]["probe"]["closed_loop_drilldown"] is True
+    assert data["browser_desktop_quality"]["runtime_contract_ready"] is True
+    assert data["browser_desktop_quality"]["cold_start_ready"] is True
+    assert data["browser_desktop_quality"]["cold_start_readiness"]["ready"] is True
+    assert data["browser_desktop_quality"]["runtime_readiness"]["ready"] is False
+    assert data["repo_context"]["ready"] is True
+    assert data["repo_context"]["score"] == 1.0
+    assert data["repo_context"]["probe"]["source_sink_fidelity"] is True
+    assert data["swarm_scale"]["ready"] is True
+    assert data["swarm_scale"]["score"] == 1.0
+    assert data["swarm_scale"]["probe"]["critical_path_speedup_passed"] is True
+    assert data["swarm_scale"]["probe"]["failure_isolation"] is True
+    assert data["swarm_scale"]["probe"]["batch_metrics_ready"] is True
     assert data["ecosystem_readiness"]["score"] == 1.0
     assert data["parity_certification"]["ready"] is True
-    assert data["parity_certification"]["passed"] == 14
-    assert data["parity_certification"]["by_kind"]["operational_excellence"]["passed"] == 4
-    assert data["parity_certification"]["by_kind"]["advantage"]["passed"] == 4
+    assert data["parity_certification"]["passed"] == data["parity_certification"]["total"]
+    assert data["parity_certification"]["by_kind"]["operational_excellence"]["passed"] == 6
+    assert data["parity_certification"]["by_kind"]["advantage"]["passed"] == 13
+
+
+def test_browser_desktop_runtime_probe_endpoint_forwards_real_chrome_flags(
+    monkeypatch,
+) -> None:
+    captured = {}
+
+    def fake_probe(**kwargs):
+        captured.update(kwargs)
+        return {
+            "schema": "octopus.browser_desktop_runtime_probe.v1",
+            "ready": True,
+            "ok": True,
+        }
+
+    monkeypatch.setattr(
+        "runtime.safety.evolution.browser_desktop_runtime_probe.run_browser_desktop_runtime_probe",
+        fake_probe,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/browser-desktop-runtime-probe",
+        json={
+            "api_base_url": "http://127.0.0.1:8000",
+            "real_chrome_relay": True,
+            "open_real_chrome_relay": True,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert captured["real_chrome_relay"] is True
+    assert captured["open_real_chrome_relay"] is True
 
 
 def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(
@@ -104,17 +185,18 @@ def test_agent_scorecard_gaps_can_queue_real_baseline_backlog(
     assert response.status_code == 200
     assert data["ok"] is True
     assert data["schema"] == "octopus.agent_scorecard_gap_queue.v1"
-    assert data["created"] == 3
-    assert data["scorecard"]["overall"]["octopus"] == 93
-    assert data["scorecard"]["evidence_adjusted_overall"]["octopus"] == 95
-    assert data["items"][0]["priority"] == "P1"
+    assert data["created"] == 1
+    assert data["scorecard"]["overall"]["octopus"] == 96
+    assert data["scorecard"]["evidence_adjusted_overall"]["octopus"] == 97
+    assert data["items"][0]["priority"] == "P2"
     assert data["items"][0]["target_bucket"] == "scorecard_gap_backlog"
+    assert data["items"][0]["candidate_kind"] == "scorecard_gap:browser_desktop"
     assert "real_baseline" in data["items"][0]["tags"]
     assert data["items"][0]["metadata"]["schema"] == "octopus.agent_scorecard_gap.v1"
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
-    assert summary["pending_count"] == 3
-    assert summary["by_target_bucket"]["scorecard_gap_backlog"] == 3
+    assert summary["pending_count"] == 1
+    assert summary["by_target_bucket"]["scorecard_gap_backlog"] == 1
 
 
 def test_repair_route_promotion_candidates_can_queue_from_router(
@@ -165,7 +247,7 @@ def test_agent_scorecard_gap_queue_can_target_single_dimension(
         json={
             "target_score": 95,
             "limit": 10,
-            "dimension_id": "ecosystem_maturity",
+            "dimension_id": "browser_desktop",
             "reason": "operator drilldown remediation",
         },
     )
@@ -174,13 +256,13 @@ def test_agent_scorecard_gap_queue_can_target_single_dimension(
     assert response.status_code == 200
     assert data["ok"] is True
     assert data["created"] == 1
-    assert data["items"][0]["candidate_kind"] == "scorecard_gap:ecosystem_maturity"
-    assert data["items"][0]["metadata"]["dimension_id"] == "ecosystem_maturity"
+    assert data["items"][0]["candidate_kind"] == "scorecard_gap:browser_desktop"
+    assert data["items"][0]["metadata"]["dimension_id"] == "browser_desktop"
     assert data["items"][0]["metadata"]["remediation"]["schema"] == (
         "octopus.scorecard_gap_remediation.v1"
     )
     assert data["items"][0]["metadata"]["remediation"]["primary_action"] == (
-        "Publish plugin compatibility examples for common MCP and app surfaces."
+        "Turn repeated browser replay failures into deterministic repair recipes."
     )
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()
@@ -188,18 +270,81 @@ def test_agent_scorecard_gap_queue_can_target_single_dimension(
     assert summary["by_target_bucket"]["scorecard_gap_backlog"] == 1
 
 
+def test_agent_scorecard_gap_queue_can_target_best_competitor_gap(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/agent-scorecard/gaps/queue",
+        json={
+            "target_score": 90,
+            "limit": 10,
+            "dimension_id": "product_experience",
+            "scope": "best_competitor_gap",
+            "reason": "close competitor product UX gap",
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["created"] == 0
+    assert data["updated"] == 0
+    assert data["items"] == []
+    assert data["scorecard"]["competitor_gap_count"] == 0
+
+
+def test_agent_scorecard_gap_queue_can_target_strict_lead_ties(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/evolution/agent-scorecard/gaps/queue",
+        json={
+            "target_score": 90,
+            "limit": 10,
+            "dimension_id": "extensions_hooks",
+            "scope": "strict_lead_gap",
+            "reason": "turn hooks parity into strict lead",
+        },
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["created"] == 0
+    assert data["updated"] == 0
+    assert data["items"] == []
+    assert data["scorecard"]["competitor_gap_count"] == 0
+    assert data["scorecard"]["competitor_tie_count"] == 0
+
+
 def test_browser_desktop_quality_endpoint() -> None:
     app = FastAPI()
     app.include_router(create_evolution_router())
     client = TestClient(app)
 
-    response = client.get("/api/evolution/browser-desktop-quality")
+    response = client.get(
+        "/api/evolution/browser-desktop-quality?use_runtime_evidence_cache=false",
+    )
     data = response.json()
 
     assert response.status_code == 200
     assert data["ok"] is True
     assert data["schema"] == "octopus.browser_desktop_quality.v1"
-    assert data["ready"] is True
+    assert data["ready"] is False
+    assert data["static_ready"] is True
+    assert data["runtime_readiness"]["ready"] is False
     assert data["score"] == 1.0
 
 

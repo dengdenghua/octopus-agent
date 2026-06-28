@@ -43,9 +43,9 @@ function formatCredits(
 ): string {
   if (n === undefined || n === null || Number.isNaN(n)) return "—";
   if (n >= 100_000_000)
-    return `${(n / 100_000_000).toFixed(1)}${t.numberFormat.yi}`;
+    return `${(n / 100_000_000).toFixed(1)} ${t.numberFormat.yi}`;
   if (n >= 10_000)
-    return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)}${t.numberFormat.wan}`;
+    return `${(n / 10_000).toFixed(n >= 100_000 ? 0 : 1)} ${t.numberFormat.wan}`;
   if (n >= 1_000) return n.toLocaleString();
   return String(n);
 }

@@ -133,6 +133,58 @@ def test_router_requires_auth_when_enabled() -> None:
     ).status_code == 200
 
 
+def test_computer_policy_blocks_denied_target_app(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    client = TestClient(_app())
+
+    updated = client.put(
+        "/api/computer/policy",
+        json={
+            "allowed_apps": ["Chrome"],
+            "denied_apps": ["Keychain Access"],
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["schema"] == "octopus.computer_automation_policy.v1"
+    assert updated.json()["denied_apps"] == ["Keychain Access"]
+
+    denied = client.post(
+        "/api/computer/actions/preview",
+        json={
+            "target_app": "Keychain Access",
+            "action": "wait",
+            "ms": 10,
+        },
+    )
+    assert denied.status_code == 403
+    detail = denied.json()["detail"]
+    assert detail["policy_decision"]["decision"] == "denied"
+    assert detail["replay_evidence"]["schema"] == "octopus.computer_replay_evidence_hint.v1"
+
+    allowed = client.post(
+        "/api/computer/actions/preview",
+        json={
+            "target_app": "Chrome",
+            "action": "wait",
+            "ms": 10,
+        },
+    )
+    assert allowed.status_code == 200
+    assert allowed.json()["policy_decision"]["decision"] == "allowed"
+
+    status = client.get("/api/computer/status").json()
+    assert status["policy"]["allowed_apps"] == ["Chrome"]
+    assert status["policy"]["denied_apps"] == ["Keychain Access"]
+    assert any(
+        row["event"] == "preview_rejected"
+        and row["detail"]["policy_decision"]["decision"] == "denied"
+        for row in status["recent_activity"]
+    )
+
+
 def test_uia_tree_and_find_endpoints(monkeypatch):
     monkeypatch.setattr(platform, "system", lambda: "Windows")
     monkeypatch.setattr(computer_uia_skills, "UIA_AVAILABLE", True)

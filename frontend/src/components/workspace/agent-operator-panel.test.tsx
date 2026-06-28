@@ -54,12 +54,89 @@ const pluginApi = vi.hoisted(() => ({
   fetchPluginSmokeSummary: vi.fn(),
 }));
 
+const clipboardWriteTextMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/core/agent-trace/api", () => api);
 vi.mock("@/core/plugins/api", () => pluginApi);
+
+const productExperienceCompetitorGap = {
+  id: "product_experience",
+  title: "IDE and product experience",
+  weight: 7,
+  why: "Make the working loop feel fast, obvious, and low-friction for operators.",
+  scores: {
+    codex: 88,
+    claude_code: 85,
+    kimi_agent_swarm: 91,
+    cursor: 98,
+    octopus: 90,
+  },
+  evidence_adjusted_scores: {
+    codex: 88,
+    claude_code: 85,
+    kimi_agent_swarm: 91,
+    cursor: 98,
+    octopus: 90,
+  },
+  leader: "cursor",
+  octopus_gap_to_target: 0,
+  octopus_competitor_gap: 8,
+  octopus_best_competitors: ["cursor"],
+  octopus_best_competitor_score: 98,
+  octopus_baseline_score: 90,
+  octopus_evidence_adjusted_score: 90,
+  octopus_evidence_readiness: 1,
+  octopus_evidence: [],
+  octopus_evidence_checklist: [],
+  octopus_next_actions: [
+    "Add keyboard-first promotion and audit export flows for every drill-down.",
+  ],
+};
+
+const coreCodingStrictLeadTie = {
+  id: "core_coding_loop",
+  title: "Core coding loop",
+  weight: 15,
+  why: "Plan, edit, run, verify, and recover inside a real repository.",
+  scores: {
+    codex: 96,
+    claude_code: 96,
+    kimi_agent_swarm: 92,
+    cursor: 92,
+    octopus: 96,
+  },
+  evidence_adjusted_scores: {
+    codex: 96,
+    claude_code: 96,
+    kimi_agent_swarm: 92,
+    cursor: 92,
+    octopus: 96,
+  },
+  leader: "codex",
+  octopus_gap_to_target: 0,
+  octopus_competitor_gap: 0,
+  octopus_strict_lead_gap: 1,
+  octopus_best_competitors: ["codex", "claude_code"],
+  octopus_best_competitor_score: 96,
+  octopus_baseline_score: 96,
+  octopus_evidence_adjusted_score: 96,
+  octopus_evidence_readiness: 1,
+  octopus_evidence: [],
+  octopus_evidence_checklist: [],
+  octopus_next_actions: [
+    "Add automatic repair-route promotion evidence for repeated verifier drift.",
+  ],
+};
 
 describe("<AgentOperatorPanel />", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clipboardWriteTextMock.mockReset();
+    clipboardWriteTextMock.mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWriteTextMock },
+    });
     api.fetchAgentTraceTaskRuns.mockResolvedValue([
       {
         task_id: "turn-1",
@@ -561,10 +638,11 @@ describe("<AgentOperatorPanel />", () => {
     api.fetchAgentCompetitorScorecard.mockResolvedValue({
       schema: "octopus.agent_competitor_scorecard.v1",
       target_score: 90,
-      competitors: ["codex", "claude_code", "cursor", "octopus"],
+      competitors: ["codex", "claude_code", "kimi_agent_swarm", "cursor", "octopus"],
       overall: {
         codex: 93,
         claude_code: 91,
+        kimi_agent_swarm: 90,
         cursor: 86,
         octopus: 91,
       },
@@ -572,12 +650,14 @@ describe("<AgentOperatorPanel />", () => {
         { competitor: "codex", score: 93 },
         { competitor: "octopus", score: 91 },
         { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
         { competitor: "cursor", score: 86 },
       ],
       verdict: "competitive",
       evidence_adjusted_overall: {
         codex: 93,
         claude_code: 91,
+        kimi_agent_swarm: 90,
         cursor: 86,
         octopus: 91,
       },
@@ -585,6 +665,7 @@ describe("<AgentOperatorPanel />", () => {
         { competitor: "codex", score: 93 },
         { competitor: "octopus", score: 91 },
         { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
         { competitor: "cursor", score: 86 },
       ],
       evidence_adjusted_verdict: "competitive",
@@ -601,10 +682,17 @@ describe("<AgentOperatorPanel />", () => {
           title: "Ecosystem maturity",
           weight: 5,
           why: "Documentation, enterprise polish, integrations, and broad user trust.",
-          scores: { codex: 95, claude_code: 90, cursor: 88, octopus: 88 },
+          scores: {
+            codex: 95,
+            claude_code: 90,
+            kimi_agent_swarm: 91,
+            cursor: 88,
+            octopus: 88,
+          },
           evidence_adjusted_scores: {
             codex: 95,
             claude_code: 90,
+            kimi_agent_swarm: 91,
             cursor: 88,
             octopus: 94,
           },
@@ -651,7 +739,13 @@ describe("<AgentOperatorPanel />", () => {
           title: "Governance operator loop",
           weight: 5,
           why: "Governance loop",
-          scores: { codex: 92, claude_code: 88, cursor: 78, octopus: 94 },
+          scores: {
+            codex: 92,
+            claude_code: 88,
+            kimi_agent_swarm: 85,
+            cursor: 78,
+            octopus: 94,
+          },
           leader: "octopus",
           octopus_gap_to_target: 0,
           octopus_evidence_readiness: 1,
@@ -659,6 +753,7 @@ describe("<AgentOperatorPanel />", () => {
           octopus_next_actions: [],
         },
       ],
+      octopus_competitor_gaps: [],
       next_focus: [],
       ecosystem_readiness: {
         schema: "octopus.ecosystem_readiness.v1",
@@ -889,6 +984,7 @@ describe("<AgentOperatorPanel />", () => {
         verdict: "competitive",
         evidence_adjusted_overall: { octopus: 91 },
         below_target_count: 1,
+        competitor_gap_count: 0,
       },
     });
   });
@@ -958,6 +1054,16 @@ describe("<AgentOperatorPanel />", () => {
     expect(
       await screen.findByText("target scorecard_gap_backlog · audit 2"),
     ).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Copy audit" }));
+    await waitFor(() => {
+      expect(clipboardWriteTextMock).toHaveBeenCalledWith(
+        expect.stringContaining("# Scorecard Gap Audit"),
+      );
+    });
+    expect(clipboardWriteTextMock.mock.calls[0][0]).toContain(
+      "dimension: ecosystem_maturity",
+    );
+    expect(await screen.findByText("Copied audit")).toBeInTheDocument();
     expect(
       await screen.findByRole("button", { name: "Apply gap" }),
     ).toBeDisabled();
@@ -982,6 +1088,7 @@ describe("<AgentOperatorPanel />", () => {
         targetScore: 90,
         limit: 1,
         dimensionId: "ecosystem_maturity",
+        scope: "below_target",
         reason: "operator scorecard drill-down remediation",
       });
     });
@@ -1202,11 +1309,503 @@ describe("<AgentOperatorPanel />", () => {
       expect(api.queueAgentScorecardGaps).toHaveBeenCalledWith({
         targetScore: 90,
         limit: 10,
+        scope: "below_target",
       });
     });
     expect(
       await screen.findByText("Queued 7 real scorecard gap review item(s)."),
     ).toBeInTheDocument();
+  });
+
+  it("queues best-competitor gaps when Octopus is above target but still behind", async () => {
+    api.fetchAgentCompetitorScorecard.mockResolvedValueOnce({
+      schema: "octopus.agent_competitor_scorecard.v1",
+      target_score: 90,
+      competitors: ["codex", "claude_code", "kimi_agent_swarm", "cursor", "octopus"],
+      overall: {
+        codex: 93,
+        claude_code: 91,
+        kimi_agent_swarm: 90,
+        cursor: 86,
+        octopus: 95,
+      },
+      ranking: [
+        { competitor: "octopus", score: 95 },
+        { competitor: "codex", score: 93 },
+        { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
+        { competitor: "cursor", score: 86 },
+      ],
+      verdict: "leading",
+      evidence_adjusted_overall: {
+        codex: 93,
+        claude_code: 91,
+        kimi_agent_swarm: 90,
+        cursor: 86,
+        octopus: 95,
+      },
+      evidence_adjusted_ranking: [
+        { competitor: "octopus", score: 95 },
+        { competitor: "codex", score: 93 },
+        { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
+        { competitor: "cursor", score: 86 },
+      ],
+      evidence_adjusted_verdict: "leading",
+      scorecard_policy: {
+        schema: "octopus.agent_scorecard_policy.v1",
+        overall: "external_calibrated_baseline_with_verified_recalibration",
+        evidence_adjusted_overall: "internal_certification_floor",
+        certification_floors_do_not_change_overall: true,
+      },
+      dimensions: [productExperienceCompetitorGap],
+      octopus_below_target: [],
+      octopus_competitor_gaps: [productExperienceCompetitorGap],
+      octopus_strengths: [],
+      next_focus: [
+        "Add keyboard-first promotion and audit export flows for every drill-down.",
+      ],
+      ecosystem_readiness: {
+        schema: "octopus.ecosystem_readiness.v1",
+        score: 1,
+        passed: 5,
+        total: 5,
+        missing_count: 0,
+        topics: [],
+        next_actions: [],
+      },
+      parity_certification: {
+        schema: "octopus.parity_certification.v1",
+        passed: 19,
+        total: 19,
+        ready: true,
+        by_kind: {
+          parity: { passed: 6, total: 6 },
+          operational_excellence: { passed: 6, total: 6 },
+          advantage: { passed: 7, total: 7 },
+        },
+        requirements: [],
+        dimension_score_floors: {},
+        dimension_evidence: {},
+        next_actions: [],
+      },
+      codex_gap: {
+        schema: "octopus.codex_gap_report.v1",
+        combined_score: 1,
+        verdict: "differentiated",
+        next_focus: [],
+      },
+    });
+    api.queueAgentScorecardGaps.mockResolvedValueOnce({
+      ok: true,
+      schema: "octopus.agent_scorecard_gap_queue.v1",
+      created: 1,
+      updated: 0,
+      total: 1,
+      items: [],
+      scorecard: {
+        overall: { octopus: 95 },
+        verdict: "leading",
+        evidence_adjusted_overall: { octopus: 95 },
+        below_target_count: 0,
+        competitor_gap_count: 1,
+      },
+    });
+
+    renderWithProviders(<AgentOperatorPanel />);
+
+    expect(await screen.findByText("Best competitor gaps")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "IDE and product experience is 8 point(s) behind best competitor",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: "IDE and product experience 90 vs 98",
+      }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("vs best 8")).toBeInTheDocument();
+    expect(await screen.findByText("Cursor 98")).toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Queue real gaps/ }),
+    );
+
+    await waitFor(() => {
+      expect(api.queueAgentScorecardGaps).toHaveBeenCalledWith({
+        targetScore: 90,
+        limit: 10,
+        scope: "best_competitor_gap",
+      });
+    });
+    expect(
+      await screen.findByText("Queued 1 real scorecard gap review item(s)."),
+    ).toBeInTheDocument();
+  });
+
+  it("queues strict-lead ties when Octopus is tied with the best competitor", async () => {
+    api.fetchAgentCompetitorScorecard.mockResolvedValueOnce({
+      schema: "octopus.agent_competitor_scorecard.v1",
+      target_score: 90,
+      competitors: ["codex", "claude_code", "kimi_agent_swarm", "cursor", "octopus"],
+      overall: {
+        codex: 93,
+        claude_code: 91,
+        kimi_agent_swarm: 90,
+        cursor: 86,
+        octopus: 96,
+      },
+      ranking: [
+        { competitor: "octopus", score: 96 },
+        { competitor: "codex", score: 93 },
+        { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
+        { competitor: "cursor", score: 86 },
+      ],
+      verdict: "leading",
+      evidence_adjusted_overall: {
+        codex: 93,
+        claude_code: 91,
+        kimi_agent_swarm: 90,
+        cursor: 86,
+        octopus: 96,
+      },
+      evidence_adjusted_ranking: [
+        { competitor: "octopus", score: 96 },
+        { competitor: "codex", score: 93 },
+        { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
+        { competitor: "cursor", score: 86 },
+      ],
+      evidence_adjusted_verdict: "leading",
+      scorecard_policy: {
+        schema: "octopus.agent_scorecard_policy.v1",
+        overall: "external_calibrated_baseline_with_verified_recalibration",
+        evidence_adjusted_overall: "internal_certification_floor",
+        certification_floors_do_not_change_overall: true,
+      },
+      dimensions: [coreCodingStrictLeadTie],
+      octopus_below_target: [],
+      octopus_competitor_gaps: [],
+      octopus_competitor_ties: [coreCodingStrictLeadTie],
+      octopus_strengths: [],
+      next_focus: [
+        "Add automatic repair-route promotion evidence for repeated verifier drift.",
+      ],
+      ecosystem_readiness: {
+        schema: "octopus.ecosystem_readiness.v1",
+        score: 1,
+        passed: 5,
+        total: 5,
+        missing_count: 0,
+        topics: [],
+        next_actions: [],
+      },
+      parity_certification: {
+        schema: "octopus.parity_certification.v1",
+        passed: 20,
+        total: 20,
+        ready: true,
+        by_kind: {
+          parity: { passed: 6, total: 6 },
+          operational_excellence: { passed: 6, total: 6 },
+          advantage: { passed: 8, total: 8 },
+        },
+        requirements: [],
+        dimension_score_floors: {},
+        dimension_evidence: {},
+        next_actions: [],
+      },
+      codex_gap: {
+        schema: "octopus.codex_gap_report.v1",
+        combined_score: 1,
+        verdict: "differentiated",
+        next_focus: [],
+      },
+    });
+    api.queueAgentScorecardGaps.mockResolvedValueOnce({
+      ok: true,
+      schema: "octopus.agent_scorecard_gap_queue.v1",
+      created: 1,
+      updated: 0,
+      total: 1,
+      items: [],
+      scorecard: {
+        overall: { octopus: 96 },
+        verdict: "leading",
+        evidence_adjusted_overall: { octopus: 96 },
+        below_target_count: 0,
+        competitor_gap_count: 0,
+        competitor_tie_count: 4,
+      },
+    });
+
+    renderWithProviders(<AgentOperatorPanel />);
+
+    expect(await screen.findByText("Strict lead ties")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "Core coding loop is tied with best competitor; strict lead needs 1 point(s)",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: "Core coding loop 96 tied 96",
+      }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("strict lead 1")).toBeInTheDocument();
+    expect(await screen.findByText("Codex, Claude 96")).toBeInTheDocument();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Queue real gaps/ }),
+    );
+
+    await waitFor(() => {
+      expect(api.queueAgentScorecardGaps).toHaveBeenCalledWith({
+        targetScore: 90,
+        limit: 10,
+        scope: "strict_lead_gap",
+      });
+    });
+    expect(
+      await screen.findByText("Queued 1 real scorecard gap review item(s)."),
+    ).toBeInTheDocument();
+  });
+
+  it("supports keyboard-first scorecard gap queueing and audit copy", async () => {
+    api.fetchAgentCompetitorScorecard.mockResolvedValueOnce({
+      schema: "octopus.agent_competitor_scorecard.v1",
+      target_score: 90,
+      competitors: ["codex", "claude_code", "kimi_agent_swarm", "cursor", "octopus"],
+      overall: {
+        codex: 93,
+        claude_code: 91,
+        kimi_agent_swarm: 90,
+        cursor: 86,
+        octopus: 95,
+      },
+      ranking: [
+        { competitor: "octopus", score: 95 },
+        { competitor: "codex", score: 93 },
+        { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
+        { competitor: "cursor", score: 86 },
+      ],
+      verdict: "leading",
+      evidence_adjusted_overall: {
+        codex: 93,
+        claude_code: 91,
+        kimi_agent_swarm: 90,
+        cursor: 86,
+        octopus: 95,
+      },
+      evidence_adjusted_ranking: [
+        { competitor: "octopus", score: 95 },
+        { competitor: "codex", score: 93 },
+        { competitor: "claude_code", score: 91 },
+        { competitor: "kimi_agent_swarm", score: 90 },
+        { competitor: "cursor", score: 86 },
+      ],
+      evidence_adjusted_verdict: "leading",
+      scorecard_policy: {
+        schema: "octopus.agent_scorecard_policy.v1",
+        overall: "external_calibrated_baseline_with_verified_recalibration",
+        evidence_adjusted_overall: "internal_certification_floor",
+        certification_floors_do_not_change_overall: true,
+      },
+      dimensions: [productExperienceCompetitorGap],
+      octopus_below_target: [],
+      octopus_competitor_gaps: [productExperienceCompetitorGap],
+      octopus_strengths: [],
+      next_focus: [
+        "Add keyboard-first promotion and audit export flows for every drill-down.",
+      ],
+      ecosystem_readiness: {
+        schema: "octopus.ecosystem_readiness.v1",
+        score: 1,
+        passed: 5,
+        total: 5,
+        missing_count: 0,
+        topics: [],
+        next_actions: [],
+      },
+      parity_certification: {
+        schema: "octopus.parity_certification.v1",
+        passed: 20,
+        total: 20,
+        ready: true,
+        by_kind: {
+          parity: { passed: 6, total: 6 },
+          operational_excellence: { passed: 6, total: 6 },
+          advantage: { passed: 8, total: 8 },
+        },
+        requirements: [],
+        dimension_score_floors: {},
+        dimension_evidence: {},
+        next_actions: [],
+      },
+      codex_gap: {
+        schema: "octopus.codex_gap_report.v1",
+        combined_score: 1,
+        verdict: "differentiated",
+        next_focus: [],
+      },
+    });
+    api.queueAgentScorecardGaps.mockResolvedValueOnce({
+      ok: true,
+      schema: "octopus.agent_scorecard_gap_queue.v1",
+      created: 1,
+      updated: 0,
+      total: 1,
+      items: [],
+      scorecard: {
+        overall: { octopus: 95 },
+        verdict: "leading",
+        evidence_adjusted_overall: { octopus: 95 },
+        below_target_count: 0,
+        competitor_gap_count: 1,
+      },
+    });
+
+    renderWithProviders(<AgentOperatorPanel />);
+
+    const region = await screen.findByRole("region", {
+      name: "Scorecard gap drill-down for IDE and product experience",
+    });
+    expect(region).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Control+Enter Meta+Enter Control+Shift+C Meta+Shift+C",
+    );
+
+    fireEvent.keyDown(region, { key: "c", ctrlKey: true, shiftKey: true });
+    await waitFor(() => {
+      expect(clipboardWriteTextMock).toHaveBeenCalledWith(
+        expect.stringContaining("dimension: product_experience"),
+      );
+    });
+    expect(clipboardWriteTextMock.mock.calls[0][0]).toContain(
+      "best_competitor: Cursor 98",
+    );
+
+    fireEvent.keyDown(region, { key: "Enter", ctrlKey: true });
+    await waitFor(() => {
+      expect(api.queueAgentScorecardGaps).toHaveBeenCalledWith({
+        targetScore: 90,
+        limit: 1,
+        dimensionId: "product_experience",
+        scope: "best_competitor_gap",
+        reason: "operator scorecard drill-down remediation",
+      });
+    });
+  });
+
+  it("copies closed-loop scorecard audit evidence with source review queue item", async () => {
+    api.fetchAgentTraceReviewQueue.mockImplementation(
+      (
+        _limit: number,
+        _offset: number,
+        filters?: { targetBucket?: string },
+      ) => {
+        if (filters?.targetBucket === "scorecard_gap_backlog") {
+          return Promise.resolve([
+            {
+              id: "rq-scorecard-product",
+              source: "agent_scorecard_gap",
+              source_kind: "scorecard_gap",
+              candidate_kind: "scorecard_gap:product_experience",
+              priority: "P1",
+              target_bucket: "scorecard_gap_backlog",
+              title: "Raise IDE and product experience",
+              text: "Close product experience competitor gap.",
+              status: "pending",
+              occurrences: 1,
+              tags: ["scorecard_gap", "product_experience"],
+              metadata: {
+                schema: "octopus.agent_scorecard_gap.v1",
+                dimension_id: "product_experience",
+                scope: "best_competitor_gap",
+              },
+            },
+          ]);
+        }
+        return Promise.resolve([]);
+      },
+    );
+    api.fetchAgentCompetitorScorecard.mockResolvedValueOnce({
+      schema: "octopus.agent_competitor_scorecard.v1",
+      target_score: 90,
+      competitors: ["codex", "claude_code", "kimi_agent_swarm", "cursor", "octopus"],
+      overall: {
+        codex: 93,
+        claude_code: 91,
+        kimi_agent_swarm: 90,
+        cursor: 86,
+        octopus: 95,
+      },
+      ranking: [{ competitor: "octopus", score: 95 }],
+      verdict: "leading",
+      evidence_adjusted_overall: { octopus: 95 },
+      evidence_adjusted_ranking: [{ competitor: "octopus", score: 95 }],
+      evidence_adjusted_verdict: "leading",
+      scorecard_policy: {
+        schema: "octopus.agent_scorecard_policy.v1",
+        overall: "external_calibrated_baseline_with_verified_recalibration",
+        evidence_adjusted_overall: "internal_certification_floor",
+        certification_floors_do_not_change_overall: true,
+      },
+      dimensions: [productExperienceCompetitorGap],
+      octopus_below_target: [],
+      octopus_competitor_gaps: [productExperienceCompetitorGap],
+      octopus_strengths: [],
+      next_focus: [],
+      ecosystem_readiness: {
+        schema: "octopus.ecosystem_readiness.v1",
+        score: 1,
+        passed: 5,
+        total: 5,
+        missing_count: 0,
+        topics: [],
+        next_actions: [],
+      },
+      parity_certification: {
+        schema: "octopus.parity_certification.v1",
+        passed: 20,
+        total: 20,
+        ready: true,
+        by_kind: {
+          parity: { passed: 6, total: 6 },
+          operational_excellence: { passed: 6, total: 6 },
+          advantage: { passed: 8, total: 8 },
+        },
+        requirements: [],
+        dimension_score_floors: {},
+        dimension_evidence: {},
+        next_actions: [],
+      },
+      codex_gap: {
+        schema: "octopus.codex_gap_report.v1",
+        combined_score: 1,
+        verdict: "differentiated",
+        next_focus: [],
+      },
+    });
+
+    renderWithProviders(<AgentOperatorPanel />);
+
+    const region = await screen.findByRole("region", {
+      name: "Scorecard gap drill-down for IDE and product experience",
+    });
+    fireEvent.keyDown(region, { key: "c", ctrlKey: true, shiftKey: true });
+
+    await waitFor(() => {
+      expect(clipboardWriteTextMock).toHaveBeenCalledWith(
+        expect.stringContaining("source_review_queue_item: rq-scorecard-product"),
+      );
+    });
+    expect(clipboardWriteTextMock.mock.calls[0][0]).toContain(
+      "queue_status: pending",
+    );
   });
 
   it("queues repeated tool denials for policy review", async () => {

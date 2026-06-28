@@ -63,6 +63,12 @@ describe("ChatStreamingFooter", () => {
     expect(screen.getByText("NAS market share")).toBeInTheDocument();
     expect(screen.getByText("2 Agent")).toBeInTheDocument();
     expect(screen.queryByText(/Agent Cluster/)).not.toBeInTheDocument();
+    const executionStrip = screen.getByTestId("chat-execution-strip");
+    expect(executionStrip).toHaveTextContent("Octopus Agent is executing");
+    expect(executionStrip).toHaveTextContent("Current progress 1/2");
+    expect(executionStrip).toHaveTextContent("View result");
+    expect(executionStrip).toHaveTextContent("Replay");
+    expect(executionStrip.className).toContain("rounded-xl");
 
     expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
     expect(screen.getAllByText("Market Researcher").length).toBeGreaterThan(0);

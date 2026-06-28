@@ -6,6 +6,25 @@ from typing import Any
 
 from runtime.platform.process.paths import app_paths
 from runtime.platform.process.paths import project_root as default_project_root
+from runtime.safety.evolution.browser_desktop_runtime_evidence import (
+    DEFAULT_MAX_AGE_S,
+    load_browser_desktop_runtime_evidence,
+)
+from runtime.safety.evolution.browser_desktop_runtime_contract import (
+    compute_browser_desktop_runtime_contract,
+)
+from runtime.safety.evolution.browser_desktop_runtime_readiness import (
+    compute_browser_desktop_runtime_readiness,
+)
+from runtime.safety.evolution.browser_desktop_productization_readiness import (
+    compute_browser_desktop_productization_readiness,
+)
+from runtime.safety.evolution.browser_desktop_cold_start_readiness import (
+    compute_browser_desktop_cold_start_readiness,
+)
+from runtime.safety.evolution.browser_desktop_capability_canary import (
+    compute_browser_desktop_capability_canary,
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +130,23 @@ CHECKS: tuple[BrowserDesktopCheck, ...] = (
             "Plugin health",
         ),
     ),
+    BrowserDesktopCheck(
+        id="deterministic_repair_recipe_gate",
+        title="Deterministic browser/desktop repair recipe gate",
+        paths=(
+            "runtime/safety/evolution/browser_desktop_repair_recipes.py",
+            "runtime/sensing/gateway/evolution_router.py",
+            "tests/test_computer_use_record.py",
+            "tests/test_evolution_router.py",
+        ),
+        required_terms=(
+            "browser_desktop_repair_recipe_gate",
+            "requires_replay_rerun",
+            "rerun_browser_desktop_repair_recipe_batch",
+            "compute_browser_desktop_repair_recipe_quality_gate",
+        ),
+        weight=2,
+    ),
 )
 
 
@@ -118,26 +154,295 @@ def compute_browser_desktop_quality(
     *,
     root: str | Path | None = None,
     review_queue_path: str | Path | None = None,
+    browser_health: dict[str, Any] | None = None,
+    computer_status: dict[str, Any] | None = None,
+    computer_preview: dict[str, Any] | None = None,
+    computer_execute: dict[str, Any] | None = None,
+    computer_replay_case: dict[str, Any] | None = None,
+    chrome_relay_handshake: dict[str, Any] | None = None,
+    real_chrome_relay_probe: dict[str, Any] | None = None,
+    auth_status: dict[str, Any] | None = None,
+    operation_status: dict[str, Any] | None = None,
+    cleanup_status: dict[str, Any] | None = None,
+    include_runtime_probe: bool = False,
+    api_base_url: str = "http://127.0.0.1:8000",
+    bearer_token: str = "",
+    auto_local_auth: bool = False,
+    local_auth_username: str = "runtime-probe",
+    local_auth_password: str = "",
+    use_runtime_evidence_cache: bool = True,
+    refresh_runtime_evidence_if_stale: bool = False,
+    runtime_evidence_path: str | Path | None = None,
+    runtime_evidence_max_age_s: int = DEFAULT_MAX_AGE_S,
+    real_chrome_relay: bool = False,
+    open_real_chrome_relay: bool = False,
 ) -> dict[str, Any]:
     base = Path(root) if root is not None else default_project_root(Path(__file__))
+    runtime_probe: dict[str, Any] | None = None
+    runtime_evidence = {
+        "schema": "octopus.browser_desktop_runtime_evidence_lookup.v1",
+        "available": False,
+        "usable": False,
+        "fresh": False,
+        "reason": "runtime evidence cache was not checked",
+    }
+    if include_runtime_probe and (browser_health is None or computer_status is None):
+        try:
+            from runtime.safety.evolution.browser_desktop_runtime_probe import (
+                run_browser_desktop_runtime_probe,
+            )
+
+            runtime_probe = run_browser_desktop_runtime_probe(
+                api_base_url=api_base_url,
+                review_queue_path=review_queue_path,
+                bearer_token=bearer_token,
+                auto_local_auth=auto_local_auth,
+                local_auth_username=local_auth_username,
+                local_auth_password=local_auth_password,
+                real_chrome_relay=real_chrome_relay,
+                open_real_chrome_relay=open_real_chrome_relay,
+                evidence_path=runtime_evidence_path,
+            )
+            probe_browser = runtime_probe.get("browser_health")
+            probe_computer = runtime_probe.get("computer_status")
+            probe_preview = runtime_probe.get("computer_preview")
+            probe_execute = runtime_probe.get("computer_execute")
+            probe_replay_case = runtime_probe.get("computer_replay_case")
+            probe_auth = runtime_probe.get("auth")
+            probe_operations = runtime_probe.get("operation_status")
+            probe_cleanup = runtime_probe.get("cleanup")
+            probe_relay = runtime_probe.get("chrome_relay_handshake")
+            probe_real_relay = runtime_probe.get("real_chrome_relay_probe")
+            if browser_health is None and isinstance(probe_browser, dict):
+                browser_health = probe_browser
+            if computer_status is None and isinstance(probe_computer, dict):
+                computer_status = probe_computer
+            if computer_preview is None and isinstance(probe_preview, dict):
+                computer_preview = probe_preview
+            if computer_execute is None and isinstance(probe_execute, dict):
+                computer_execute = probe_execute
+            if computer_replay_case is None and isinstance(probe_replay_case, dict):
+                computer_replay_case = probe_replay_case
+            if auth_status is None and isinstance(probe_auth, dict):
+                auth_status = probe_auth
+            if operation_status is None and isinstance(probe_operations, dict):
+                operation_status = probe_operations
+            if cleanup_status is None and isinstance(probe_cleanup, dict):
+                cleanup_status = probe_cleanup
+            if chrome_relay_handshake is None and isinstance(probe_relay, dict):
+                chrome_relay_handshake = probe_relay
+            if real_chrome_relay_probe is None and isinstance(probe_real_relay, dict):
+                real_chrome_relay_probe = probe_real_relay
+            probe_evidence = runtime_probe.get("runtime_evidence_snapshot")
+            if isinstance(probe_evidence, dict):
+                runtime_evidence = probe_evidence
+        except Exception as exc:  # noqa: BLE001
+            runtime_probe = {
+                "schema": "octopus.browser_desktop_runtime_probe.v1",
+                "ok": False,
+                "error": str(exc),
+            }
+    elif (
+        use_runtime_evidence_cache
+        and (browser_health is None or computer_status is None)
+    ):
+        runtime_evidence = load_browser_desktop_runtime_evidence(
+            path=runtime_evidence_path,
+            max_age_s=runtime_evidence_max_age_s,
+        )
+        if (
+            runtime_evidence.get("usable") is not True
+            and refresh_runtime_evidence_if_stale
+        ):
+            try:
+                from runtime.safety.evolution.browser_desktop_runtime_probe import (
+                    run_browser_desktop_runtime_probe,
+                )
+
+                runtime_probe = run_browser_desktop_runtime_probe(
+                    api_base_url=api_base_url,
+                    review_queue_path=review_queue_path,
+                    bearer_token=bearer_token,
+                    auto_local_auth=auto_local_auth,
+                    local_auth_username=local_auth_username,
+                    local_auth_password=local_auth_password,
+                    real_chrome_relay=real_chrome_relay,
+                    open_real_chrome_relay=open_real_chrome_relay,
+                    evidence_path=runtime_evidence_path,
+                )
+                probe_evidence = runtime_probe.get("runtime_evidence_snapshot")
+                if isinstance(probe_evidence, dict):
+                    runtime_evidence = probe_evidence
+            except Exception as exc:  # noqa: BLE001
+                runtime_probe = {
+                    "schema": "octopus.browser_desktop_runtime_probe.v1",
+                    "ok": False,
+                    "error": str(exc),
+                    "refresh_reason": str(runtime_evidence.get("reason") or ""),
+                }
+        evidence = (
+            runtime_evidence.get("evidence")
+            if isinstance(runtime_evidence.get("evidence"), dict)
+            else {}
+        )
+        if runtime_evidence.get("usable") is True:
+            cached_browser = evidence.get("browser_health")
+            cached_computer = evidence.get("computer_status")
+            cached_preview = evidence.get("computer_preview")
+            cached_execute = evidence.get("computer_execute")
+            cached_replay_case = evidence.get("computer_replay_case")
+            cached_auth = evidence.get("auth")
+            cached_operations = evidence.get("operation_status")
+            cached_cleanup = evidence.get("cleanup")
+            cached_relay = evidence.get("chrome_relay_handshake")
+            cached_real_relay = evidence.get("real_chrome_relay_probe")
+            if browser_health is None and isinstance(cached_browser, dict):
+                browser_health = cached_browser
+            if computer_status is None and isinstance(cached_computer, dict):
+                computer_status = cached_computer
+            if computer_preview is None and isinstance(cached_preview, dict):
+                computer_preview = cached_preview
+            if computer_execute is None and isinstance(cached_execute, dict):
+                computer_execute = cached_execute
+            if computer_replay_case is None and isinstance(cached_replay_case, dict):
+                computer_replay_case = cached_replay_case
+            if auth_status is None and isinstance(cached_auth, dict):
+                auth_status = cached_auth
+            if operation_status is None and isinstance(cached_operations, dict):
+                operation_status = cached_operations
+            if cleanup_status is None and isinstance(cached_cleanup, dict):
+                cleanup_status = cached_cleanup
+            if chrome_relay_handshake is None and isinstance(cached_relay, dict):
+                chrome_relay_handshake = cached_relay
+            if real_chrome_relay_probe is None and isinstance(cached_real_relay, dict):
+                real_chrome_relay_probe = cached_real_relay
     checks = [_check_row(base, check) for check in CHECKS]
     total_weight = sum(int(row["weight"]) for row in checks)
     passed_weight = sum(int(row["weight"]) for row in checks if row["passed"])
     score = round(passed_weight / max(1, total_weight), 3)
+    runtime_contract = compute_browser_desktop_runtime_contract(root=base)
+    runtime_readiness = compute_browser_desktop_runtime_readiness(
+        browser_health=browser_health,
+        computer_status=computer_status,
+        computer_preview=computer_preview,
+        computer_execute=computer_execute,
+        computer_replay_case=computer_replay_case,
+        auth_status=auth_status,
+        operation_status=operation_status,
+        cleanup_status=cleanup_status,
+        review_queue_path=review_queue_path,
+    )
+    productization_readiness = compute_browser_desktop_productization_readiness(
+        root=base,
+    )
+    cold_start_readiness = compute_browser_desktop_cold_start_readiness(
+        root=base,
+        review_queue_path=review_queue_path,
+    )
+    replay_trends = _browser_replay_trends(review_queue_path)
+    repair_gate = _repair_recipe_quality_gate(review_queue_path)
+    capability_canary = compute_browser_desktop_capability_canary(
+        browser_health=browser_health,
+        computer_status=computer_status,
+        computer_preview=computer_preview,
+        computer_execute=computer_execute,
+        computer_replay_case=computer_replay_case,
+        chrome_relay_handshake=chrome_relay_handshake,
+        real_chrome_relay_probe=real_chrome_relay_probe,
+        operation_status=operation_status,
+        cleanup_status=cleanup_status,
+        runtime_readiness=runtime_readiness,
+        productization_readiness=productization_readiness,
+        cold_start_readiness=cold_start_readiness,
+        repair_recipe_quality_gate=repair_gate,
+        review_queue_path=review_queue_path,
+    )
+    next_actions = [
+        str(row["next_action"])
+        for row in checks
+        if not row["passed"]
+    ]
+    if runtime_readiness.get("ready") is not True:
+        next_actions.extend(
+            str(action)
+            for action in runtime_readiness.get("next_actions", [])
+            if str(action)
+        )
+    if runtime_contract.get("ready") is not True:
+        next_actions.extend(
+            str(action)
+            for action in runtime_contract.get("next_actions", [])
+            if str(action)
+        )
+    if productization_readiness.get("ready") is not True:
+        next_actions.extend(
+            str(action)
+            for action in productization_readiness.get("next_actions", [])
+            if str(action)
+        )
+    effective_score = _effective_browser_desktop_score(
+        static_score=score,
+        runtime_score=float(runtime_readiness.get("score") or 0.0),
+        runtime_ready=runtime_readiness.get("ready") is True,
+        runtime_contract=runtime_contract,
+        productization_score=float(productization_readiness.get("score") or 0.0),
+    )
     return {
         "schema": "octopus.browser_desktop_quality.v1",
         "score": score,
         "passed": sum(1 for row in checks if row["passed"]),
         "total": len(checks),
-        "ready": all(row["passed"] for row in checks),
+        "ready": (
+            all(row["passed"] for row in checks)
+            and runtime_readiness.get("ready") is True
+            and productization_readiness.get("ready") is True
+            and capability_canary.get("ready") is True
+        ),
         "checks": checks,
-        "replay_trends": _browser_replay_trends(review_queue_path),
-        "next_actions": [
-            str(row["next_action"])
-            for row in checks
-            if not row["passed"]
-        ],
+        "static_ready": all(row["passed"] for row in checks),
+        "static_score": score,
+        "productization_readiness": productization_readiness,
+        "productization_ready": productization_readiness.get("ready") is True,
+        "productization_score": productization_readiness.get("score"),
+        "cold_start_readiness": cold_start_readiness,
+        "cold_start_ready": cold_start_readiness.get("ready") is True,
+        "cold_start_score": cold_start_readiness.get("score"),
+        "runtime_contract": runtime_contract,
+        "runtime_contract_ready": runtime_contract.get("ready") is True,
+        "runtime_contract_score": runtime_contract.get("score"),
+        "runtime_readiness": runtime_readiness,
+        "runtime_probe": runtime_probe,
+        "runtime_evidence": runtime_evidence,
+        "runtime_score": runtime_readiness.get("score"),
+        "capability_canary": capability_canary,
+        "capability_canary_ready": capability_canary.get("ready") is True,
+        "effective_score": effective_score,
+        "replay_trends": replay_trends,
+        "repair_recipe_quality_gate": repair_gate,
+        "next_actions": next_actions,
     }
+
+
+def _effective_browser_desktop_score(
+    *,
+    static_score: float,
+    runtime_score: float,
+    runtime_ready: bool,
+    runtime_contract: dict[str, Any],
+    productization_score: float,
+) -> float:
+    contract_score = float(runtime_contract.get("score") or 0.0)
+    score = (
+        (0.35 * float(static_score))
+        + (0.30 * runtime_score)
+        + (0.20 * contract_score)
+        + (0.15 * productization_score)
+    )
+    if runtime_ready:
+        return round(score, 3)
+    if static_score >= 1.0 and runtime_contract.get("ready") is True:
+        return round(max(score, 0.82), 3)
+    return round(score, 3)
 
 
 def _check_row(base: Path, check: BrowserDesktopCheck) -> dict[str, Any]:
@@ -280,6 +585,35 @@ def _browser_repair_recipe_summary(
             for recipe in recipes[:3]
             if isinstance(recipe, dict)
         ],
+    }
+
+
+def _repair_recipe_quality_gate(
+    review_queue_path: str | Path | None,
+) -> dict[str, Any]:
+    try:
+        from runtime.safety.evolution.browser_desktop_repair_recipes import (
+            compute_browser_desktop_repair_recipe_quality_gate,
+        )
+
+        report = compute_browser_desktop_repair_recipe_quality_gate(
+            review_queue_path=review_queue_path,
+            limit=1000,
+        )
+        return report if isinstance(report, dict) else _empty_repair_quality_gate()
+    except Exception as exc:  # noqa: BLE001
+        gate = _empty_repair_quality_gate()
+        gate["error"] = str(exc)
+        return gate
+
+
+def _empty_repair_quality_gate() -> dict[str, Any]:
+    return {
+        "schema": "octopus.browser_desktop_repair_recipe_quality_gate.v1",
+        "score": 0.0,
+        "ready": False,
+        "blockers": ["quality_gate_unavailable"],
+        "signals": {},
     }
 
 

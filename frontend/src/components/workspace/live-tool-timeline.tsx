@@ -1151,8 +1151,8 @@ function ToolEventRow({
   return (
     <div
       className={cn(
-        "relative transition-all duration-200",
-        nested ? "py-1 pl-2 text-[11px]" : "py-1.5 pl-2 text-xs",
+        "group relative rounded-md px-2 py-1 transition-all duration-200 hover:bg-accent/40",
+        nested ? "text-[11px]" : "text-xs",
         event.status === "error"
           ? "text-muted-foreground"
           : "text-muted-foreground",
@@ -1160,11 +1160,17 @@ function ToolEventRow({
     >
       <div className="flex items-center gap-2">
         {event.status === "running" ? (
-          <Loader2Icon className="size-3.5 animate-spin text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="relative shrink-0">
+            <Loader2Icon className="size-3.5 animate-spin text-emerald-600 dark:text-emerald-400" />
+            <span className="absolute -inset-1 animate-ping rounded-full bg-emerald-500/20" />
+          </span>
         ) : event.status === "waiting_approval" ? (
-          <ShieldAlertIcon className="size-3.5 text-amber-500 shrink-0 animate-pulse" />
+          <span className="relative shrink-0">
+            <ShieldAlertIcon className="size-3.5 text-amber-500" />
+            <span className="absolute -inset-1 animate-pulse rounded-full bg-amber-500/20" />
+          </span>
         ) : event.status === "error" ? (
-          <XCircleIcon className="size-3.5 text-destructive shrink-0" />
+          <XCircleIcon className="size-3.5 shrink-0 text-destructive" />
         ) : (
           <CheckCircle2Icon className="size-3.5 text-emerald-500 shrink-0" />
         )}
@@ -1251,7 +1257,7 @@ function ToolEventRow({
       )}
 
       {swarmLog?.detail && (
-        <div className="mt-2 ml-5 border-l border-sky-500/25 pl-3 text-sm leading-6 text-foreground/80">
+        <div className="mt-2 ml-5 border-l border-primary/25 pl-3 text-sm leading-6 text-foreground/80 transition-all duration-200">
           {swarmLog.detail}
         </div>
       )}

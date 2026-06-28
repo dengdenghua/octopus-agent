@@ -21,6 +21,7 @@ from runtime.execution.suckers.computer_use_record import (
 from runtime.memory.journal import InMemoryJournal
 from runtime.memory.learning.review_queue import ReviewQueue
 from runtime.safety.evolution.browser_desktop_repair_recipes import (
+    compute_browser_desktop_repair_recipe_quality_gate,
     compute_browser_desktop_repair_recipes,
 )
 from runtime.safety.recovery import ForgeConfig, SkillForge
@@ -212,6 +213,37 @@ def test_repeated_failures_cluster_into_one_p0_repair_recipe(tmp_path: Any) -> N
     assert recipe["candidate_kind"] == "computer_activity_replay_case"
     assert recipe["occurrences"] == 3          # distinct rows, one cluster
     assert recipe["priority"] == "P0"          # engine escalates >= 3
+    assert recipe["quality_signals"]["deterministic_cluster"] is True
+    assert recipe["quality_signals"]["has_api_checks"] is True
+    assert recipe["quality_signals"]["has_required_evidence"] is True
+    assert recipe["promotion_gate"]["requires_replay_rerun"] is True
+    assert recipe["promotion_gate"]["blocks_auto_promotion"] is True
+    assert report["quality_gate"]["schema"] == (
+        "octopus.browser_desktop_repair_recipe_quality_gate.v1"
+    )
+    assert report["quality_gate"]["ready"] is True
+
+
+def test_repair_recipe_quality_gate_blocks_unclustered_pending_cases(
+    tmp_path: Any,
+) -> None:
+    rq = str(tmp_path / "rq.json")
+    queue = ReviewQueue(rq)
+    queue.upsert_item(
+        source="browser_desktop_replay",
+        source_kind="browser_desktop_replay",
+        candidate_kind="unknown_browser_failure",
+        priority="P1",
+        target_bucket="browser_desktop_replay",
+        title="Unknown browser failure",
+        text="No deterministic replay metadata yet.",
+    )
+
+    report = compute_browser_desktop_repair_recipe_quality_gate(review_queue_path=rq)
+
+    assert report["schema"] == "octopus.browser_desktop_repair_recipe_quality_gate.v1"
+    assert report["ready"] is False
+    assert report["blockers"]
 
 
 def test_distinct_failure_patterns_do_not_merge(tmp_path: Any) -> None:

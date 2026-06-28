@@ -70,11 +70,14 @@ def create_plugins_router(
 
     @router.get("/api/plugins/smoke-summary")
     def _plugin_smoke_summary() -> dict[str, Any]:
+        from runtime.platform.plugins.lifecycle_audit import audit_plugin_lifecycle
+
         plugins = discover_codex_plugins(plugin_roots)
         failed: list[dict[str, Any]] = []
         review_required: list[dict[str, Any]] = []
         warnings: list[dict[str, Any]] = []
         permission_resolutions: list[dict[str, Any]] = []
+        provenances: list[dict[str, Any]] = []
         surface_totals = {
             "capabilities": 0,
             "skills": 0,
@@ -96,6 +99,18 @@ def create_plugins_router(
                 if surfaces.get(surface):
                     surface_totals[surface] += 1
             trust = smoke.get("trust") if isinstance(smoke.get("trust"), dict) else {}
+            provenance = (
+                trust.get("provenance")
+                if isinstance(trust.get("provenance"), dict)
+                else {}
+            )
+            if provenance:
+                provenances.append({
+                    "plugin_id": plugin.get("id"),
+                    "plugin_name": plugin.get("name"),
+                    "signed": trust.get("signed") is True,
+                    **provenance,
+                })
             permission_resolution = (
                 smoke.get("permission_resolution")
                 if isinstance(smoke.get("permission_resolution"), dict)
@@ -126,12 +141,14 @@ def create_plugins_router(
                     "plugin_name": plugin.get("name"),
                     "warnings": plugin_warnings,
                 })
+        lifecycle_audit = audit_plugin_lifecycle(plugins)
         compatibility = _compatibility_summary(
             total=len(plugins),
             failed_count=len(failed),
             review_required_count=len(review_required),
             warning_count=sum(len(item["warnings"]) for item in warnings),
             surface_totals=surface_totals,
+            lifecycle_audit=lifecycle_audit,
         )
         return {
             "schema": "octopus.codex_plugin_smoke_summary.v1",
@@ -144,6 +161,8 @@ def create_plugins_router(
             "review_required": review_required,
             "warnings": warnings,
             "permission_resolutions": permission_resolutions,
+            "provenance": provenances,
+            "lifecycle_audit": lifecycle_audit,
             "compatibility": compatibility,
         }
 
@@ -206,7 +225,9 @@ def _compatibility_summary(
     review_required_count: int,
     warning_count: int,
     surface_totals: dict[str, int],
+    lifecycle_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    audit = lifecycle_audit if isinstance(lifecycle_audit, dict) else {}
     requirements = [
         {
             "id": "plugins_discovered",
@@ -231,11 +252,36 @@ def _compatibility_summary(
                 f"{warning_count} warning(s)"
             ),
         },
+        {
+            "id": "plugin_lifecycle_audit_visible",
+            "passed": audit.get("schema") == "octopus.plugin_lifecycle_audit.v1",
+            "detail": (
+                f"lifecycle audit verdict={audit.get('verdict', 'missing')} "
+                f"score={audit.get('score', 0)}"
+            ),
+        },
+        {
+            "id": "no_failed_lifecycle_audits",
+            "passed": int(audit.get("fail_count") or 0) == 0 and total > 0,
+            "detail": f"{int(audit.get('fail_count') or 0)} failed lifecycle audit(s)",
+        },
+        {
+            "id": "signed_provenance_visible",
+            "passed": all(
+                isinstance(row.get("trust"), dict)
+                and (
+                    row["trust"].get("signed") is not True
+                    or isinstance(row["trust"].get("provenance"), dict)
+                )
+                for row in audit.get("rows") or []
+            ) if total > 0 else False,
+            "detail": "signed plugin provenance is included in compatibility evidence",
+        },
     ]
     passed = sum(1 for item in requirements if item["passed"])
-    if failed_count > 0 or total <= 0:
+    if failed_count > 0 or total <= 0 or int(audit.get("fail_count") or 0) > 0:
         verdict = "fail"
-    elif warning_count > 0 or review_required_count > 0:
+    elif warning_count > 0 or review_required_count > 0 or audit.get("verdict") == "review":
         verdict = "review"
     else:
         verdict = "pass"

@@ -191,6 +191,21 @@ def _record_rejected_step(
     )
 
 
+def _assistant_history_has_content(content: Any) -> bool:
+    if content is None:
+        return False
+    if isinstance(content, str):
+        return bool(content.strip())
+    if isinstance(content, list):
+        return any(_assistant_history_has_content(item) for item in content)
+    if isinstance(content, dict):
+        for key in ("text", "content", "name", "input"):
+            if key in content and _assistant_history_has_content(content.get(key)):
+                return True
+        return bool(content)
+    return bool(str(content).strip())
+
+
 def _looks_like_observation_echo(text: str) -> bool:
     """True when model prose is leaked tool/protocol text, not an answer."""
     stripped = (text or "").lstrip()
@@ -2953,7 +2968,13 @@ def stream_react_loop(
             # synthesised action so the history isn't an (API-invalid) empty
             # assistant message and the model can see what it just called.
             _assistant_content = step.action
-        messages.append(Message(role="assistant", content=_assistant_content))
+        if _assistant_history_has_content(_assistant_content):
+            messages.append(Message(role="assistant", content=_assistant_content))
+        else:
+            _logger.info(
+                "react_loop iter %d · skipped empty assistant history message",
+                i + 1,
+            )
         # Length-limit continuation. When the upstream model truncated
         # its response (finish_reason=="length" / "max_tokens" / etc.)
         # the assistant message we just appended is mid-sentence — the

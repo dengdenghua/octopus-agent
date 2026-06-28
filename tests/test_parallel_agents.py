@@ -236,6 +236,12 @@ class TestDispatch:
         sequences = [event.sequence for event in snap.event_log]
         assert sequences == list(range(1, len(snap.event_log) + 1))
         assert all(event.created_at for event in snap.event_log)
+        metrics = snap.batch_metrics
+        assert metrics["schema"] == "octopus.parallel_agent_batch_metrics.v1"
+        assert metrics["task_count"] == 2
+        assert metrics["completed_count"] == 2
+        assert metrics["event_sequences_contiguous"] is True
+        assert metrics["failure_isolation"] is True
 
     def test_runner_can_emit_tool_lane_events(self):
         def runner(description, *, subagent_name, context=None, cancel_event=None):
@@ -629,6 +635,9 @@ class TestSSE:
             assert "contract_id" in task_payloads[0]["payload"]
             assert events[-1]["event"] == "batch_complete"
             assert events[-1]["data"]["batch_id"] == bid
+            assert events[-1]["data"]["payload"]["batch_metrics"]["schema"] == (
+                "octopus.parallel_agent_batch_metrics.v1"
+            )
 
     def test_stream_after_sequence_resumes_without_replaying_old_events(self, app_client):
         r = app_client.post(

@@ -25,6 +25,16 @@ def _default_plugin_roots() -> list[Path]:
     ]
 
 
+def codex_plugin_roots() -> list[Path]:
+    """Public accessor for the directories scanned for Codex-format plugins.
+
+    Shared single source of truth so the execution-layer skill bridge
+    (``suckers.codex_plugin_skills``) scans exactly the roots this module
+    discovers/catalogs from.
+    """
+    return _default_plugin_roots()
+
+
 def _read_manifest(path: Path) -> dict[str, Any] | None:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -171,11 +181,13 @@ def _plugin_smoke_check(
     if has_mcp and not manifest.get("permissions"):
         warnings.append("MCP-capable plugin has no explicit permissions declaration")
 
+    provenance = _plugin_provenance(plugin_dir, manifest)
     permission_resolution = _permission_resolution(
         manifest,
         has_mcp=has_mcp,
         warnings=warnings,
     )
+    signed = provenance["signature"].get("present") is True
     ok = not issues
     return {
         "schema": "octopus.codex_plugin_smoke.v1",
@@ -191,11 +203,41 @@ def _plugin_smoke_check(
             "commands": has_commands,
         },
         "trust": {
-            "level": "local_verified" if ok and not warnings else "local_review_required",
-            "signed": False,
+            "level": (
+                "signed_verified"
+                if ok and not warnings and signed
+                else "local_verified"
+                if ok and not warnings
+                else "local_review_required"
+            ),
+            "signed": signed,
+            "provenance": provenance,
             "reason": "local plugin manifest smoke check",
         },
         "permission_resolution": permission_resolution,
+    }
+
+
+def _plugin_provenance(plugin_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    raw = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
+    signature = raw.get("signature") if isinstance(raw.get("signature"), dict) else {}
+    source = _string(raw.get("source") or manifest.get("repository") or plugin_dir.name)
+    signature_value = _string(
+        signature.get("value")
+        or raw.get("signature")
+        or manifest.get("signature"),
+    )
+    return {
+        "schema": "octopus.codex_plugin_provenance.v1",
+        "source": source or "local_manifest",
+        "source_type": _string(raw.get("source_type"), "local"),
+        "revision": _string(raw.get("revision") or raw.get("commit")),
+        "signature": {
+            "present": bool(signature_value),
+            "kind": _string(signature.get("kind"), "manifest"),
+            "value": signature_value,
+        },
+        "manifest_path": str(plugin_dir / ".codex-plugin" / "plugin.json"),
     }
 
 

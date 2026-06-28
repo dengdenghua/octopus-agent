@@ -223,10 +223,10 @@ export function ExecutionTimeline() {
           return (
             <div
               key={tid}
-              className="rounded-xl border border-border/60 bg-background/60 overflow-hidden"
+              className="overflow-hidden rounded-xl border border-border/60 bg-background/60 transition-all duration-200 hover:border-border hover:shadow-md"
             >
               <button
-                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/30"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40"
                 onClick={() => toggle(tid)}
               >
                 {isOpen ? (
@@ -262,14 +262,14 @@ export function ExecutionTimeline() {
               </button>
 
               {isOpen && (
-                <div className="border-t border-border/40 px-4 py-3">
-                  <div className="relative ml-3 border-l-2 border-border/40 pl-6 space-y-4">
+                <div className="border-t border-border/40 px-4 py-3 transition-all duration-200">
+                  <div className="relative ml-3 space-y-4 border-l-2 border-border/40 pl-6">
                     {events.map((ev, i) => {
                       const style = eventStyle(ev.event_type);
                       return (
-                        <div key={i} className="relative">
+                        <div key={i} className="relative transition-all duration-200 hover:translate-x-0.5">
                           <div
-                            className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full text-white ${style.color}`}
+                            className={`absolute -left-[31px] top-0.5 flex size-5 items-center justify-center rounded-full text-white shadow-sm transition-transform duration-200 ${style.color}`}
                           >
                             {style.icon}
                           </div>
@@ -293,7 +293,7 @@ export function ExecutionTimeline() {
                               </span>
                             </div>
                             {ev.thought && (
-                              <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                              <div className="mt-1 rounded-lg bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground transition-all duration-150 hover:bg-muted/60">
                                 {stripTraceLabelPrefixes(ev.thought).slice(
                                   0,
                                   200,
@@ -301,7 +301,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.action && (
-                              <div className="mt-1 rounded-lg bg-blue-500/10 px-2.5 py-1.5 text-[11px] font-mono text-blue-300">
+                              <div className="mt-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-mono text-primary transition-all duration-150 hover:bg-primary/15">
                                 {stripTraceLabelPrefixes(ev.action).slice(
                                   0,
                                   150,
@@ -309,7 +309,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.observation && (
-                              <div className="mt-1 max-h-24 overflow-y-auto rounded-lg bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                              <div className="mt-1 max-h-24 overflow-y-auto rounded-lg bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground transition-all duration-150 hover:bg-muted/50">
                                 {stripTraceLabelPrefixes(ev.observation).slice(
                                   0,
                                   300,
@@ -317,7 +317,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.final_answer && (
-                              <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-400">
+                              <div className="mt-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-[11px] text-emerald-600 transition-all duration-150 hover:bg-emerald-500/15 dark:text-emerald-400">
                                 {stripTraceLabelPrefixes(ev.final_answer).slice(
                                   0,
                                   200,
@@ -325,7 +325,7 @@ export function ExecutionTimeline() {
                               </div>
                             )}
                             {ev.error && (
-                              <div className="mt-1 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-400">
+                              <div className="mt-1 rounded-lg bg-destructive/10 px-2.5 py-1.5 text-[11px] text-destructive transition-all duration-150 hover:bg-destructive/15">
                                 {ev.error.slice(0, 200)}
                               </div>
                             )}

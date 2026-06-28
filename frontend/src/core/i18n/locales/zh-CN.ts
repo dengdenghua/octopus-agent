@@ -47,6 +47,7 @@ export const zhCN: Translations = {
     save: "保存",
     install: "安装",
     create: "创建",
+    newItem: "新建",
     import: "导入",
     export: "导出",
     exportAsMarkdown: "导出为 Markdown",
@@ -64,7 +65,7 @@ export const zhCN: Translations = {
     fileSizeB: "B",
     fileSizeKB: "KB",
     fileSizeMB: "MB",
-    timeAgo: (value: number, unit: string) => `${value}${unit}前`,
+    timeAgo: (value: number, unit: string) => `${value} ${unit}前`,
     stubResponseTitle: "模拟后端响应",
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} 返回了桩数据。在真实后端接口启用前，请把当前工作区状态视为开发 fallback。`,
@@ -496,13 +497,13 @@ export const zhCN: Translations = {
     fileFallback: "文件",
     writeFile: (file: string) => `写入 ${file}`,
     writeFileWithLines: (file: string, added: number) =>
-      `写入 ${file} +${added}行`,
+      `写入 ${file} +${added} 行`,
     editFile: (file: string) => `编辑 ${file}`,
     editFileAddRemove: (file: string, added: number, removed: number) =>
       `编辑 ${file} (+${added} -${removed})`,
-    editFileAdded: (file: string, added: number) => `编辑 ${file} +${added}行`,
+    editFileAdded: (file: string, added: number) => `编辑 ${file} +${added} 行`,
     editFileRemoved: (file: string, removed: number) =>
-      `编辑 ${file} -${removed}行`,
+      `编辑 ${file} -${removed} 行`,
     executeCommand: "执行命令",
     executeCommandWith: (cmd: string) => `执行 ${cmd}`,
     planStep: "规划步骤",
@@ -925,7 +926,7 @@ export const zhCN: Translations = {
       "镭射",
       "苏郁",
     ],
-    dimensionTask: (index: number) => `维度${index} 深度调研`,
+    dimensionTask: (index: number) => `维度 ${index} 深度调研`,
     waitingToStart: "等待开机",
     waitingForPhase: "等待该阶段开始",
     phaseCompleted: "该阶段已完成",
@@ -1219,7 +1220,21 @@ export const zhCN: Translations = {
     cardStatus: "状态",
     cardCapabilities: "能力",
     statusEnabled: "启用",
-    statusDisabled: "禁用",
+    statusDisabled: "停用",
+    allAuthors: "全部作者",
+    allStatuses: "全部状态",
+    capabilitySkill: "技能",
+    capabilityChannel: "通道",
+    capabilityApi: "API",
+    capabilityConfig: "配置",
+    capabilityCommand: "命令",
+    capabilityCapability: "能力",
+    configTitle: (name: string) => `${name} 配置`,
+    configDescription: (name: string) => `配置 ${name} 插件的运行参数`,
+    configAria: (name: string) => `配置 ${name}`,
+    noConfig: "此插件无需配置",
+    noMatchTitle: "没有匹配的插件",
+    noMatchHint: "换个关键词或筛选条件试试",
     emptyTitle: "暂无注册插件",
     emptyHint: "安装插件以扩展 Agent 能力",
   },
@@ -1305,6 +1320,7 @@ export const zhCN: Translations = {
     navKnowledgeGraph: "知识库",
     navReflex: "反射规则",
     navIntelligence: "自动化",
+    navSkills: "技能",
     navMcp: "MCP",
     navStore: "市场",
     navEvolution: "自进化",
@@ -1331,7 +1347,7 @@ export const zhCN: Translations = {
     selectTeam: "选择团队",
     deleteTeam: "删除团队",
     newTeam: "新建团队",
-    teamMembers: (n: number) => `${n} 成员`,
+    teamMembers: (n: number) => `${n} 位成员`,
     lockedAgentTooltip: (name: string) => `此页面固定使用 ${name}`,
     adminAgentName: "管理员",
     switchAgentLabel: "切换 Agent",
@@ -1552,19 +1568,6 @@ export const zhCN: Translations = {
     cdpConChrome144Only: "仅支持 Chrome 144+。",
   },
 
-  // MCP Connection Center
-  mcpCenter: {
-    integrations: "集成中心",
-    connectionCenter: "MCP 连接中心",
-    connectionCenterDesc:
-      "统一管理模型上下文协议服务，把外部工具、浏览器和数据源接入工作区。",
-    toolExtension: "工具扩展",
-    toolExtensionDesc: "接入本地或远程 MCP 服务，让 Agent 能调用更多外部能力。",
-    configGovernance: "配置治理",
-    configGovernanceDesc:
-      "用统一页面维护服务状态、参数与启用范围，降低接入复杂度。",
-  },
-
   // Intelligence Center
   intelligenceCenter: {
     researchOps: "自动化运营",
@@ -1579,6 +1582,7 @@ export const zhCN: Translations = {
   // Channels
   channels: {
     title: "消息渠道",
+    channelOps: "渠道运维",
     description:
       "配置 AI 智能体与用户交互的消息平台，所有连接数据存储在本地——天亮云端。",
     serviceRunning: "服务运行中",
@@ -1664,6 +1668,8 @@ export const zhCN: Translations = {
     connectedCount: (n: number) => `${n} 个已连接`,
     loading: "加载渠道中...",
     loadFailed: "渠道加载失败",
+    loadFailedDetail: (status: string) => `服务器返回错误（${status}），请检查后端渠道服务是否正常运行`,
+    unknownError: "未知错误，请稍后重试",
     retry: "重试",
     noRegistered: "没有已注册的消息渠道。",
     noRegisteredDescription:
@@ -1690,6 +1696,7 @@ export const zhCN: Translations = {
     handlingMessages: "正在处理此渠道消息",
     rebindOrUnbind: "重新绑定 / 解绑",
     helpDocsComingSoon: "帮助文档即将上线",
+    clickToViewDetails: "点击查看详情",
   },
 
   // Pairing Authorization
@@ -3140,6 +3147,8 @@ export const zhCN: Translations = {
     clearSearch: "清除搜索",
     noMatchingEntities: "没有匹配的实体",
     noMatchingEntitiesHint: "换一个关键词，或清除搜索查看全部知识实体。",
+    wiki: "Wiki",
+    files: "文件",
   },
 
   // Background Tasks
@@ -3399,7 +3408,7 @@ export const zhCN: Translations = {
     clickToRefresh: "点击刷新截图",
     actions: (count: number) => `${count} 个操作`,
     stopAutoRefresh: "停止自动刷新",
-    startAutoRefresh: "开始自动刷新（2秒）",
+    startAutoRefresh: "开始自动刷新（2 秒）",
     toggleDevice: "切换设备",
     deviceDesktop: "电脑视图",
     deviceTablet: "平板视图 · 768×1024",
@@ -4210,6 +4219,27 @@ export const zhCN: Translations = {
     used: "已使用",
     noDescription: "暂无描述",
     duplicate: "复制",
+    recorderTitle: "录制器",
+    taskLabel: "录什么任务?",
+    taskPlaceholder: "例如：导出本周对账单到飞书",
+    recordingHint:
+      "录制本轮操作轨迹，停止后自动提炼成可复用、可回放的技能；敏感操作会被隔离待审。",
+    countdownReady: "准备录制…",
+    elapsedSteps: (count: number) => `· ${count} 步`,
+    stopAndExtract: "停止并提炼技能",
+    analyzing: "正在分析录制、提炼技能…",
+    done: "完成",
+    learnedSkill: "已学会技能",
+    skillLibraryHint: "可在技能库 /record 面板里回放与参数化复用。",
+    quarantined: "已生成技能候选，含敏感操作，已隔离待人工审批。",
+    noTrajectory:
+      "本轮暂无可提炼的成功操作轨迹，换个更明确的任务再录一次。",
+    recordingComplete: (name?: string) =>
+      `录制完成${name ? `：${name}` : ""}。`,
+    startFailed: "REC 启动失败",
+    stopFailed: "REC 停止失败",
+    defaultName: "对话回放学习",
+    defaultDescription: "用户通过悬浮录制器开启的 REC 录制。",
   },
 
   // Parallel Agents
@@ -4348,7 +4378,7 @@ export const zhCN: Translations = {
     runCompleted: "运行完成",
     runFailed: "运行失败",
     statusPrefix: "状态",
-    importSuccess: (name, nodeCount) => `导入成功: ${name} (${nodeCount} 节点)`,
+    importSuccess: (name, nodeCount) => `导入成功: ${name} (${nodeCount} 个节点)`,
     nodes: {
       llm: "LLM 调用",
       tool: "工具",
@@ -5568,6 +5598,11 @@ export const zhCN: Translations = {
     tooltipUntested: "• 未测试",
     testedDotTitle: "带测试",
     noDescription: "暂无描述",
+    loadFailed: "技能加载失败",
+    loadFailedDetail: (status: string) => `服务器返回错误（${status}），请检查后端服务是否正常`,
+    unknownError: "未知错误，请稍后重试",
+    hideInternalSkills: "隐藏内部技能",
+    showInternalSkills: (n: number) => `显示内部 ${n}`,
   },
 
   // Activity indicators (file ops + preview refresh)
@@ -5575,7 +5610,7 @@ export const zhCN: Translations = {
     recentFileActivity: (n: number) => `最近文件活动 · ${n} 条`,
     fileActivityTitle: (n: number) => `文件活动 (最近 ${n})`,
     realtimeLabel: "实时",
-    filesCount: (n: number) => `${n} 文件`,
+    filesCount: (n: number) => `${n} 个文件`,
     previewLastRefresh: (reason: string) => `上次刷新: ${reason}`,
     previewWaitingForRefresh: "等待预览刷新事件",
     previewPrefix: (count: number) => `预览 · ${count}`,
@@ -5879,17 +5914,6 @@ export const zhCN: Translations = {
     loadingEditor: "加载编辑器...",
   },
 
-  // AppAuth wrapper page
-  appAuthWrapperPage: {
-    securityKicker: "安全",
-    pageTitle: "应用授权",
-    pageSubtitle: "管理应用访问令牌和授权设置。",
-    feature1Title: "访问控制",
-    feature1Desc: "控制哪些应用可以访问你的工作区资源。",
-    feature2Title: "令牌管理",
-    feature2Desc: "为安全集成创建、轮换与撤销 API 令牌。",
-  },
-
   // Observability page
   observabilityPage: {
     pageTitle: "可观测性",
@@ -6004,7 +6028,7 @@ export const zhCN: Translations = {
     noComposeRecordsHint:
       "当 planner 调一次 ContextComposer.compose() 后就会有数据。",
     total: "总计",
-    historyPrefix: "历史 · 最近",
+    historyPrefix: (count: number) => `历史 · 最近 ${count} 条日志`,
     hemolymphTable: {
       ts: "时间",
       usedBudget: "已用 / 预算",
@@ -6069,7 +6093,7 @@ export const zhCN: Translations = {
       cost: (tokens: number, usd: number) =>
         `成本：${tokens} tokens · $${usd.toFixed(4)}`,
       lastReset: (value: string) => `上次重置：${value}`,
-      source: (source: string, events: number) => `${source} · ${events} 事件`,
+      source: (source: string, events: number) => `${source} · ${events} 个事件`,
       resetButton: "重置",
     },
     skillProposals: {
@@ -6595,7 +6619,7 @@ export const zhCN: Translations = {
     completed: "已完成",
     inProgress: "进行中",
     pending: "待开始",
-    steps: (completed, total) => `${completed}/${total} 步骤`,
+    steps: (completed, total) => `${completed}/${total} 个步骤`,
   },
 
   diagnosticsPanel: {
@@ -6657,7 +6681,7 @@ export const zhCN: Translations = {
   teamSelector: {
     selectTeam: "选择团队",
     noTeams: "暂无团队，点击下方创建",
-    memberCount: (count) => `${count} 成员`,
+    memberCount: (count) => `${count} 位成员`,
     confirmDisband: (name) => `确定要解散团队 "${name}" 吗?`,
     disbandTeam: "解散团队",
     createTeam: "新建团队",
@@ -6733,9 +6757,9 @@ export const zhCN: Translations = {
 
   evolutionIndicator: {
     clickToView: "点击查看自进化详情",
-    rulesAndMemories: (rules, memories) => `${rules} 规则 · ${memories} 记忆`,
-    deltaRules: (count) => `+${count}规`,
-    deltaMemories: (count) => `+${count}记`,
+    rulesAndMemories: (rules, memories) => `${rules} 条规则 · ${memories} 条记忆`,
+    deltaRules: (count) => `+${count} 条规则`,
+    deltaMemories: (count) => `+${count} 条记忆`,
   },
 
   evolutionExplain: {
@@ -6856,12 +6880,13 @@ export const zhCN: Translations = {
     listView: "列表视图",
     searchPlaceholder: "搜索实体...",
     layouts: {
+      force: "力导向",
       ring: "环形",
       star: "星状",
       layers: "分层",
       clusters: "聚类",
     },
-    nodeAndEdgeStats: (n: number, e: number) => `${n} 节点 · ${e} 关系`,
+    nodeAndEdgeStats: (n: number, e: number) => `${n} 个节点 · ${e} 个关系`,
   },
 
   numberFormat: {
@@ -7097,10 +7122,15 @@ export const zhCN: Translations = {
     coding: "编码中...",
     processing: "处理中...",
     thinking: "思考中...",
+    executing: "执行任务中...",
+    agentExecuting: "Octopus Agent 正在执行",
     running: "运行中",
     done: "完成",
     error: "异常",
     completed: "已完成",
+    currentProgress: (current, total) => `当前进度 ${current}/${total}`,
+    viewResult: "看结果",
+    replay: "做回放",
     agentCollaboration: "个 Agent 协作",
     readyToReadEditVerify: "准备读取、编辑并验证代码",
     readyToBreakdownAndGather: "准备拆解问题并收集证据",

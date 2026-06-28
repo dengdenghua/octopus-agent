@@ -152,6 +152,7 @@ class BatchResult(BaseModel):
     event_log: list[BatchStreamEvent] = Field(default_factory=list)
     completion_receipt: dict[str, object] = Field(default_factory=dict)
     file_write_observability: dict[str, object] = Field(default_factory=dict)
+    batch_metrics: dict[str, object] = Field(default_factory=dict)
 
 
 class OrchestratorStatus(BaseModel):
@@ -182,7 +183,6 @@ class SplitResult(BaseModel):
     dag_levels: list[list[str]] = Field(default_factory=list)
     total_levels: int = 0
     is_parallelizable: bool = False
-
 
 
 

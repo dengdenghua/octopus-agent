@@ -58,6 +58,7 @@ import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
 import { LocalSkillDirectoryPanel } from "@/components/store/unified-store";
 import { SkillPacksTab } from "@/components/workspace/agents/skill-packs-tab";
+import { useOpenCreatePluginChat } from "@/components/store/store-utils";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -376,6 +377,15 @@ function AgentsTab({
     }
   };
 
+  const installedAgents = useMemo(
+    () => visibleAgents.filter((a) => a.is_installed),
+    [visibleAgents],
+  );
+  const marketplaceAgents = useMemo(
+    () => visibleAgents.filter((a) => !a.is_installed),
+    [visibleAgents],
+  );
+
   if (loading) {
     return (
       <div data-testid="agents-loading-skeleton" className="space-y-3">
@@ -390,79 +400,71 @@ function AgentsTab({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/12 px-3 py-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <BotIcon className="h-4 w-4 shrink-0 text-primary/75" />
-          <div className="text-sm font-semibold">
-            {t.agentWorldUnified.roleLibrary}
-          </div>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {t.agentWorldUnified.roleLibraryDescription}
-        </div>
-      </div>
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 flex-1">
-          <div
-            data-testid="agents-category-scroll"
-            className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 pr-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden"
-          >
-            {AGENT_CATEGORY_FILTERS.map((category) => {
-              const CategoryIcon = CATEGORY_ICONS[category];
-              const count = categoryCounts.get(category) ?? 0;
-              const label =
-                category === "all"
-                  ? t.agentWorld.categories.all
-                  : (t.agentWorld.categories[category] ?? category);
-              return (
-                <Button
-                  key={category}
-                  type="button"
-                  variant={
-                    activeCategory === category ? "secondary" : "outline"
-                  }
-                  size="sm"
-                  onClick={() => onCategoryChange(category)}
+    <div className="space-y-5">
+      {/* Filter bar */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div
+          data-testid="agents-category-scroll"
+          className="flex flex-wrap gap-1.5"
+        >
+          {AGENT_CATEGORY_FILTERS.map((category) => {
+            const CategoryIcon = CATEGORY_ICONS[category];
+            const count = categoryCounts.get(category) ?? 0;
+            const label =
+              category === "all"
+                ? t.agentWorld.categories.all
+                : (t.agentWorld.categories[category] ?? category);
+            const active = activeCategory === category;
+            return (
+              <Button
+                key={category}
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onCategoryChange(category)}
+                className={cn(
+                  "h-8 shrink-0 gap-1 rounded-full px-3 text-xs transition-colors",
+                  active
+                    ? "bg-primary/10 text-foreground hover:bg-primary/15"
+                    : "bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <CategoryIcon className="h-3.5 w-3.5" />
+                {label}
+                <span
                   className={cn(
-                    "h-8 shrink-0 rounded-lg px-2.5 text-xs",
-                    activeCategory === category &&
-                      "border-primary/35 bg-primary/10 text-foreground",
+                    "ml-0.5 text-[10px]",
+                    active ? "text-primary/70" : "text-muted-foreground/70",
                   )}
                 >
-                  <CategoryIcon className="mr-1.5 h-3.5 w-3.5" />
-                  {label}
-                  <span className="ml-1 text-[10px] text-muted-foreground">
-                    {count}
-                  </span>
-                </Button>
-              );
-            })}
-          </div>
+                  {count}
+                </span>
+              </Button>
+            );
+          })}
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:justify-end">
-          <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
-            <span className="text-muted-foreground/80">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex items-center gap-3 rounded-full border border-border/50 bg-muted/30 px-3 py-1.5 text-xs">
+            <span className="text-muted-foreground">
               {t.agentWorldUnified.installedLabel}
+              <span className="ml-1 font-medium text-foreground">
+                {installedCount}
+              </span>
             </span>
-            <span className="ml-1 font-medium text-foreground">
-              {installedCount}
-            </span>
-          </span>
-          <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
-            <span className="text-muted-foreground/80">
+            <span className="text-border/80">|</span>
+            <span className="text-muted-foreground">
               {t.agentWorldUnified.installableLabel}
+              <span className="ml-1 font-medium text-foreground">
+                {Math.max(0, installableCount)}
+              </span>
             </span>
-            <span className="ml-1 font-medium text-foreground">
-              {Math.max(0, installableCount)}
-            </span>
-          </span>
+          </div>
           <Button
             type="button"
             size="sm"
-            variant="ghost"
-            className="h-8 rounded-lg border border-border/50 bg-background/65 px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
+            variant="outline"
+            className="h-8 rounded-full px-3 text-xs shadow-none"
             disabled={installingAll || installableAgents.length === 0}
             onClick={() => void handleInstallAll()}
             title={
@@ -486,35 +488,66 @@ function AgentsTab({
       </div>
 
       {visibleAgents.length > 0 ? (
-        <div
-          data-testid="agents-card-grid"
-          className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-        >
-          {visibleAgents.map((agent) =>
-            agent.is_installed ? (
-              <AgentCard
-                key={agent.id}
-                agent={worldAgentToAgent(agent)}
-                isDefault={agent.is_official || LOCAL_AGENT_IDS.has(agent.id)}
-                onSelect={() => onSelectAgent(agent)}
-              />
-            ) : (
-              <AgentWorldCard
-                key={agent.id}
-                agent={agent}
-                onSelect={onSelectAgent}
-                onInstallChange={onInstallChange}
-              />
-            ),
+        <div className="space-y-6">
+          {installedAgents.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">
+                  {t.agentWorldUnified.installedLabel}
+                </span>
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                  {installedAgents.length}
+                </Badge>
+              </div>
+              <div
+                data-testid="agents-installed-grid"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+              >
+                {installedAgents.map((agent) => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={worldAgentToAgent(agent)}
+                    isDefault={agent.is_official || LOCAL_AGENT_IDS.has(agent.id)}
+                    onSelect={() => onSelectAgent(agent)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {marketplaceAgents.length > 0 && (
+            <section>
+              <div className="mb-3 flex items-center gap-2">
+                <span className="text-xs font-semibold text-foreground">
+                  {t.agentWorldUnified.installableLabel}
+                </span>
+                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                  {marketplaceAgents.length}
+                </Badge>
+              </div>
+              <div
+                data-testid="agents-marketplace-grid"
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+              >
+                {marketplaceAgents.map((agent) => (
+                  <AgentWorldCard
+                    key={agent.id}
+                    agent={agent}
+                    onSelect={onSelectAgent}
+                    onInstallChange={onInstallChange}
+                  />
+                ))}
+              </div>
+            </section>
           )}
         </div>
       ) : (
         <div
           data-testid="agents-empty-state"
-          className="flex flex-col items-center py-16"
+          className="flex flex-col items-center rounded-xl border border-dashed border-border/60 bg-muted/10 py-16"
         >
-          <StoreIcon className="text-muted-foreground/30 mb-3 h-10 w-10" />
-          <p className="text-muted-foreground text-sm">
+          <StoreIcon className="mb-3 h-10 w-10 text-muted-foreground/30" />
+          <p className="text-sm text-muted-foreground">
             {t.agentWorld.noAgentsFound}
           </p>
         </div>
@@ -547,12 +580,17 @@ import {
   DialogTitle as UiDialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   CheckCircle as CheckCircleIcon,
   XCircle as XCircleIcon,
   Settings2 as Settings2Icon,
 } from "lucide-react";
-import { useOpenCreatePluginChat } from "@/components/store/store-utils";
-
 type PluginEntry =
   | { plugin: HubPluginInfo; source: "hub" }
   | { plugin: PluginInfo; source: "legacy" };
@@ -566,16 +604,19 @@ function pluginImageUrl(plugin: PluginInfo | HubPluginInfo): string | null {
   return `${getBackendBaseURL()}${raw}`;
 }
 
-function pluginSurfaceBadges(entry: PluginEntry): string[] {
+function pluginSurfaceBadges(
+  entry: PluginEntry,
+  t: ReturnType<typeof useI18n>["t"],
+): string[] {
   if (entry.source === "hub") {
     const labels = entry.plugin.capabilities
       .map((capability) => capability.type)
       .filter(Boolean)
       .map((type) => {
-        if (type === "skill") return "技能";
-        if (type === "channel") return "通道";
-        if (type === "api") return "API";
-        if (type === "config_ui") return "配置";
+        if (type === "skill") return t.plugins.capabilitySkill;
+        if (type === "channel") return t.plugins.capabilityChannel;
+        if (type === "api") return t.plugins.capabilityApi;
+        if (type === "config_ui") return t.plugins.capabilityConfig;
         return type;
       });
     return Array.from(new Set(labels)).slice(0, 4);
@@ -584,9 +625,11 @@ function pluginSurfaceBadges(entry: PluginEntry): string[] {
   const badges: string[] = [];
   if (surfaces?.mcp) badges.push("MCP");
   if (surfaces?.apps) badges.push("App");
-  if (surfaces?.skills) badges.push("技能");
-  if (surfaces?.commands) badges.push("命令");
-  if (surfaces?.capabilities && !badges.includes("API")) badges.push("能力");
+  if (surfaces?.skills) badges.push(t.plugins.capabilitySkill);
+  if (surfaces?.commands) badges.push(t.plugins.capabilityCommand);
+  if (surfaces?.capabilities && !badges.includes("API")) {
+    badges.push(t.plugins.capabilityCapability);
+  }
   return badges.slice(0, 5);
 }
 
@@ -599,6 +642,7 @@ function HubPluginConfigDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
 
@@ -641,9 +685,11 @@ function HubPluginConfigDialog({
     <UiDialog open={open} onOpenChange={onOpenChange}>
       <UiDialogContent className="max-w-md">
         <UiDialogHeader>
-          <UiDialogTitle>{plugin.name} 配置</UiDialogTitle>
+          <UiDialogTitle>
+            {t.plugins.configTitle(plugin.name)}
+          </UiDialogTitle>
           <UiDialogDescription>
-            配置 {plugin.name} 插件的运行参数
+            {t.plugins.configDescription(plugin.name)}
           </UiDialogDescription>
         </UiDialogHeader>
 
@@ -667,7 +713,7 @@ function HubPluginConfigDialog({
                         : "text"
                   }
                   value={String(config[key] ?? "")}
-                  onChange={(e) =>
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                     setConfig((prev) => ({
                       ...prev,
                       [key]:
@@ -680,16 +726,18 @@ function HubPluginConfigDialog({
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">此插件无需配置</p>
+            <p className="text-sm text-muted-foreground">
+              {t.plugins.noConfig}
+            </p>
           )}
         </div>
 
         <UiDialogFooter>
           <UiDialogClose asChild>
-            <Button variant="outline">取消</Button>
+            <Button variant="outline">{t.common.cancel}</Button>
           </UiDialogClose>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? "保存中..." : "保存"}
+            {saving ? t.common.loading : t.common.save}
           </Button>
         </UiDialogFooter>
       </UiDialogContent>
@@ -704,6 +752,7 @@ function PluginListItem({
   entry: PluginEntry;
   onConfigure: (plugin: HubPluginInfo) => void;
 }) {
+  const { t } = useI18n();
   const { plugin } = entry;
   const hubPlugin = entry.source === "hub" ? entry.plugin : null;
   const imageUrl = pluginImageUrl(plugin);
@@ -713,12 +762,12 @@ function PluginListItem({
   const statusTitle = plugin.error
     ? plugin.error
     : plugin.enabled
-      ? "已启用"
-      : "未启用";
-  const surfaceBadges = pluginSurfaceBadges(entry);
+      ? t.plugins.statusEnabled
+      : t.plugins.statusDisabled;
+  const surfaceBadges = pluginSurfaceBadges(entry, t);
 
   return (
-    <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border/45 bg-card/55 px-3 py-3 shadow-sm transition-colors hover:border-primary/20 hover:bg-card">
+    <div className="group flex min-w-0 items-center gap-3 rounded-xl border border-border/60 bg-card/70 px-3 py-3 shadow-sm transition-all hover:border-primary/25 hover:bg-card hover:shadow-md">
       <div
         className={cn(
           "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm",
@@ -743,31 +792,39 @@ function PluginListItem({
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-[15px] font-semibold leading-5">
+          <h3 className="truncate text-sm font-semibold leading-5 text-foreground">
             {plugin.name}
           </h3>
         </div>
-        <p className="mt-1 line-clamp-1 text-sm leading-5 text-muted-foreground">
+        <p className="mt-0.5 line-clamp-1 text-xs leading-4 text-muted-foreground">
           {plugin.description}
         </p>
-        {surfaceBadges.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {surfaceBadges.map((badge) => (
-              <span
-                key={badge}
-                className="rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground"
-              >
-                {badge}
-              </span>
-            ))}
-          </div>
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {surfaceBadges.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {surfaceBadges.map((badge) => (
+                <span
+                  key={badge}
+                  className="rounded-full border border-border/60 bg-muted/35 px-2 py-0.5 text-[10px] font-medium leading-4 text-muted-foreground"
+                >
+                  {badge}
+                </span>
+              ))}
+            </div>
+          )}
+          {plugin.author && (
+            <span className="text-[10px] text-muted-foreground/70">
+              {plugin.author}
+              {plugin.version ? ` · v${plugin.version}` : ""}
+            </span>
+          )}
+        </div>
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {hasConfig && hubPlugin && (
           <button
             type="button"
-            aria-label={`配置 ${plugin.name}`}
+            aria-label={t.plugins.configAria(plugin.name)}
             onClick={() => onConfigure(hubPlugin)}
             className="flex size-8 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
@@ -777,12 +834,12 @@ function PluginListItem({
         <span
           title={statusTitle}
           className={cn(
-            "flex size-8 items-center justify-center rounded-lg bg-muted/55 transition-colors",
+            "flex size-8 items-center justify-center rounded-lg transition-colors",
             plugin.error
-              ? "text-rose-500"
+              ? "bg-rose-500/10 text-rose-500"
               : plugin.enabled
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-                : "text-foreground hover:bg-muted",
+                : "bg-muted/55 text-foreground hover:bg-muted",
           )}
         >
           {plugin.error ? (
@@ -800,12 +857,10 @@ function PluginListItem({
 
 function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
   const { t } = useI18n();
-  const openCreatePluginChat = useOpenCreatePluginChat();
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [hubPlugins, setHubPlugins] = useState<HubPluginInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [configTarget, setConfigTarget] = useState<HubPluginInfo | null>(null);
-  const [pluginQuery, setPluginQuery] = useState("");
   const [pluginAuthorFilter, setPluginAuthorFilter] = useState("all");
   const [pluginStatusFilter, setPluginStatusFilter] =
     useState<PluginStatusFilter>("all");
@@ -830,11 +885,6 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
     loadData();
   }, [loadData]);
 
-  // Sync external search (from Hub header) into plugin query
-  useEffect(() => {
-    if (searchQuery) setPluginQuery(searchQuery);
-  }, [searchQuery]);
-
   const pluginEntries = useMemo<PluginEntry[]>(() => {
     const hubEntries = hubPlugins
       .filter((plugin) => plugin.id !== "openproject-pm")
@@ -855,7 +905,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
   }, [pluginEntries]);
 
   const filteredPluginEntries = useMemo(() => {
-    const needle = pluginQuery.trim().toLowerCase();
+    const needle = searchQuery.trim().toLowerCase();
     return pluginEntries.filter(({ plugin }) => {
       if (
         pluginAuthorFilter !== "all" &&
@@ -877,72 +927,87 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
         .toLowerCase()
         .includes(needle);
     });
-  }, [pluginAuthorFilter, pluginEntries, pluginQuery, pluginStatusFilter]);
+  }, [pluginAuthorFilter, pluginEntries, searchQuery, pluginStatusFilter]);
+
+  const enabledCount = useMemo(
+    () => pluginEntries.filter(({ plugin }) => plugin.enabled).length,
+    [pluginEntries],
+  );
+  const disabledCount = pluginEntries.length - enabledCount;
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <PuzzleIcon className="size-8 animate-pulse text-purple-500" />
+      <div className="flex min-h-[40vh] items-center justify-center rounded-xl border border-border/60 bg-muted/10">
+        <PuzzleIcon className="size-8 animate-pulse text-primary/60" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-5">
+      {/* Filter bar */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative w-full lg:max-w-[320px]">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <UiInput
-            aria-label="搜索插件"
-            className="h-9 rounded-lg border-border/60 bg-background pl-9 text-xs"
-            placeholder="搜索插件"
-            value={pluginQuery}
-            onChange={(event) => setPluginQuery(event.target.value)}
-          />
-        </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="按作者筛选插件"
-            className="h-9 shrink-0 rounded-lg border border-transparent bg-muted/60 px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+          <Select
             value={pluginAuthorFilter}
-            onChange={(event) => setPluginAuthorFilter(event.target.value)}
+            onValueChange={setPluginAuthorFilter}
           >
-            <option value="all">全部作者</option>
-            {pluginAuthors.map((author) => (
-              <option key={author} value={author}>
-                Built by {author}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="按状态筛选插件"
-            className="h-9 shrink-0 rounded-lg border border-transparent bg-muted/60 px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+            <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border/50 bg-muted/40 px-3 text-xs shadow-none hover:bg-muted/60">
+              <SelectValue placeholder={t.plugins.allAuthors} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.plugins.allAuthors}</SelectItem>
+              {pluginAuthors.map((author) => (
+                <SelectItem key={author} value={author}>
+                  {author}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
             value={pluginStatusFilter}
-            onChange={(event) =>
-              setPluginStatusFilter(
-                event.target.value as PluginStatusFilter,
-              )
+            onValueChange={(value) =>
+              setPluginStatusFilter(value as PluginStatusFilter)
             }
           >
-            <option value="all">全部</option>
-            <option value="enabled">已启用</option>
-            <option value="disabled">未启用</option>
-          </select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 rounded-lg px-3 text-xs"
-            onClick={openCreatePluginChat}
-          >
-            <PlusIcon className="mr-1.5 size-3.5" />
-            创建
-          </Button>
+            <SelectTrigger className="h-8 w-auto gap-2 rounded-full border-border/50 bg-muted/40 px-3 text-xs shadow-none hover:bg-muted/60">
+              <SelectValue placeholder={t.plugins.allStatuses} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t.plugins.allStatuses}</SelectItem>
+              <SelectItem value="enabled">{t.plugins.statusEnabled}</SelectItem>
+              <SelectItem value="disabled">{t.plugins.statusDisabled}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-3 rounded-full border border-border/50 bg-muted/30 px-3 py-1.5 text-xs">
+          <span className="text-muted-foreground">
+            {t.plugins.statTotal}
+            <span className="ml-1 font-medium text-foreground">
+              {pluginEntries.length}
+            </span>
+          </span>
+          <span className="text-border/80">|</span>
+          <span className="text-muted-foreground">
+            {t.plugins.statEnabled}
+            <span className="ml-1 font-medium text-emerald-600 dark:text-emerald-400">
+              {enabledCount}
+            </span>
+          </span>
+          <span className="text-border/80">|</span>
+          <span className="text-muted-foreground">
+            {t.plugins.statusDisabled}
+            <span className="ml-1 font-medium text-foreground">
+              {disabledCount}
+            </span>
+          </span>
         </div>
       </div>
 
       {filteredPluginEntries.length > 0 ? (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filteredPluginEntries.map((entry) => (
             <PluginListItem
               key={`${entry.source}-${entry.plugin.id}`}
@@ -952,17 +1017,17 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 py-12 text-center">
-          <PuzzleIcon className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+        <div className="flex flex-col items-center rounded-xl border border-dashed border-border/60 bg-muted/10 py-16 text-center">
+          <PuzzleIcon className="mb-3 size-10 text-muted-foreground/30" />
           <p className="text-sm text-muted-foreground">
             {pluginEntries.length === 0
               ? t.plugins.emptyTitle
-              : "没有匹配的插件"}
+              : t.plugins.noMatchTitle}
           </p>
           <p className="mt-1 text-xs text-muted-foreground/60">
             {pluginEntries.length === 0
               ? t.plugins.emptyHint
-              : "换个关键词或筛选条件试试"}
+              : t.plugins.noMatchHint}
           </p>
         </div>
       )}
@@ -1121,6 +1186,14 @@ export function AgentWorldUnified() {
     emitAgentChanged(agent.name);
   }, []);
 
+  const hudSwitchAgents = useMemo(() => {
+    const installed = dedupedAgents.filter((a) => a.is_installed);
+    if (selectedAgent && !selectedAgent.is_installed) {
+      return [selectedAgent, ...installed.filter((a) => a.id !== selectedAgent.id)];
+    }
+    return installed;
+  }, [dedupedAgents, selectedAgent]);
+
   const handleInstallChange = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["agents"] });
     void fetchAgents();
@@ -1133,65 +1206,127 @@ export function AgentWorldUnified() {
       : "/workspace/realtime/new";
   }, []);
 
+  const openCreatePlugin = useOpenCreatePluginChat();
+
+  const handleCreateSkill = useCallback(() => {
+    navigate("/workspace/realtime/new?mode=skill");
+  }, [navigate]);
+
+  const hubMeta = useMemo(() => {
+    switch (activeTab) {
+      case "plugins":
+        return {
+          icon: PuzzleIcon,
+          title: t.plugins.pageTitle,
+          subtitle: t.plugins.pageSubtitle,
+          searchPlaceholder: t.applicationRegistry.searchPlaceholder,
+        };
+      case "skills":
+        return {
+          icon: BoxesIcon,
+          title: t.unifiedStore.skills.title,
+          subtitle: t.unifiedStore.skills.localDesc,
+          searchPlaceholder: t.unifiedStore.skills.searchPlaceholder,
+        };
+      case "enterprise":
+        return {
+          icon: Building2Icon,
+          title: t.agentWorldUnified.enterprise,
+          subtitle: "",
+          searchPlaceholder: t.agentWorld.searchPlaceholder,
+        };
+      default:
+        return {
+          icon: BotIcon,
+          title: t.agentWorld.title,
+          subtitle: t.agentWorld.description,
+          searchPlaceholder: t.agentWorld.searchPlaceholder,
+        };
+    }
+  }, [activeTab, t]);
+
+  const HubIcon = hubMeta.icon;
+
   return (
-    <div className="relative flex size-full flex-col gap-2 px-2 pb-2 pt-2 md:px-3">
+    <div className="relative flex size-full flex-col gap-3 px-3 pb-3 pt-3">
       {!hudOnly && (
-        <div className="relative flex flex-col gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <h1 className="truncate text-sm font-semibold">
-              {t.agentWorld.title}
-            </h1>
-          </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-3">
+          <header className="flex flex-col gap-3 rounded-xl border border-border/60 bg-card/60 px-4 py-3 shadow-sm">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-background shadow-sm">
+                  <HubIcon className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="truncate text-base font-semibold tracking-tight">
+                    {hubMeta.title}
+                  </h1>
+                  {hubMeta.subtitle && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {hubMeta.subtitle}
+                    </p>
+                  )}
+                </div>
+              </div>
 
-          <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end">
-            <div className="relative w-full md:max-w-[280px]">
-              <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-              <Input
-                data-testid="agents-search-input"
-                placeholder={t.agentWorld.searchPlaceholder}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
-              />
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-end">
+                <div className="relative w-full md:max-w-[260px]">
+                  <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+                  <Input
+                    data-testid="agents-search-input"
+                    placeholder={hubMeta.searchPlaceholder}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-9 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
+                  />
+                </div>
+                {activeTab === "agents" && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" className="h-9 rounded-lg shadow-none">
+                        <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                        {t.agentWorld.addAgent}
+                        <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem
+                        onSelect={() => navigate("/workspace/agents/new")}
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                        {t.agentWorld.newAgent}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                        <ImportIcon className="h-4 w-4" />
+                        {t.agentWorld.importAgentPack}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
+                        <BotIcon className="h-4 w-4" />
+                        {t.agentWorldUnified.connectLocalPartner}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {activeTab === "plugins" && (
+                  <Button size="sm" className="h-9 rounded-lg shadow-none" onClick={openCreatePlugin}>
+                    <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                    {t.applicationRegistry.createPlugin}
+                  </Button>
+                )}
+                {activeTab === "skills" && (
+                  <Button size="sm" className="h-9 rounded-lg shadow-none" onClick={handleCreateSkill}>
+                    <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
+                    {t.settings.skills.createSkill}
+                  </Button>
+                )}
+              </div>
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="sm" className="h-8 rounded-lg shadow-none">
-                  <PlusIcon className="mr-1.5 h-3.5 w-3.5" />
-                  {t.agentWorld.addAgent}
-                  <ChevronDownIcon className="ml-1 h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem
-                  onSelect={() => navigate("/workspace/agents/new")}
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  {t.agentWorld.newAgent}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setImportOpen(true)}>
-                  <ImportIcon className="h-4 w-4" />
-                  {t.agentWorld.importAgentPack}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setConnectOpen(true)}>
-                  <BotIcon className="h-4 w-4" />
-                  {t.agentWorldUnified.connectLocalPartner}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      )}
 
-      {/* Main Content */}
-      {!hudOnly && (
-        <div className="workspace-panel relative flex-1 overflow-y-auto rounded-lg border border-border/60 bg-background/58 px-3 py-3 shadow-sm shadow-black/[0.02]">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="relative mb-3 h-auto gap-1.5 rounded-none bg-transparent p-0">
+            <TabsList className="h-auto gap-1 rounded-full bg-muted/40 p-1">
               {SHOW_LOCAL_AGENT_LIBRARY && (
                 <TabsTrigger
                   value="agents"
-                  className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+                  className="h-7 gap-1.5 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
                 >
                   <BotIcon className="h-3.5 w-3.5" />
                   {t.agentWorldUnified.roleLibrary}
@@ -1199,29 +1334,32 @@ export function AgentWorldUnified() {
               )}
               <TabsTrigger
                 value="plugins"
-                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+                className="h-7 gap-1.5 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
               >
                 <PuzzleIcon className="h-3.5 w-3.5" />
                 {t.plugins.pageTitle}
               </TabsTrigger>
               <TabsTrigger
                 value="skills"
-                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+                className="h-7 gap-1.5 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
               >
                 <BoxesIcon className="h-3.5 w-3.5" />
-                {t.plugins.tabSkillMarket}
+                {t.unifiedStore.skills.title}
               </TabsTrigger>
               {SHOW_ENTERPRISE_ASSETS && (
                 <TabsTrigger
                   value="enterprise"
-                  className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+                  className="h-7 gap-1.5 rounded-full px-3 text-xs data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm"
                 >
                   <Building2Icon className="h-3.5 w-3.5" />
                   {t.agentWorldUnified.enterprise}
                 </TabsTrigger>
               )}
             </TabsList>
+          </header>
 
+          {/* Main Content */}
+          <div className="workspace-panel relative flex-1 overflow-y-auto rounded-xl border border-border/60 bg-card/40 px-4 py-4 shadow-sm">
             <TabsContent value="agents" className="mt-0">
               <AgentsTab
                 agents={dedupedAgents}
@@ -1241,6 +1379,7 @@ export function AgentWorldUnified() {
 
             <TabsContent value="skills" className="mt-0">
               <LocalSkillDirectoryPanel
+                searchQuery={searchQuery}
                 allButtonPosition="end"
                 onDirectorySelect={() => setSkillView("directory")}
                 onSkillPacksSelect={() => setSkillView("packs")}
@@ -1252,13 +1391,13 @@ export function AgentWorldUnified() {
             <TabsContent value="enterprise" className="mt-0">
               <EnterpriseAssetsTab query={searchQuery} />
             </TabsContent>
-          </Tabs>
-        </div>
+          </div>
+        </Tabs>
       )}
 
       <AgentRoleProfileDialog
         agent={selectedAgent}
-        agents={dedupedAgents}
+        agents={hudOnly ? hudSwitchAgents : dedupedAgents}
         open={Boolean(selectedAgent)}
         onInstallChange={handleInstallChange}
         onOpenChange={(nextOpen) => {
