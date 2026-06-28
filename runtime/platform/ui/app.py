@@ -1246,6 +1246,21 @@ def create_app(
         )
     )
 
+    # ─── SearXNG control · one-click local private web-search backend ──
+    # POST /api/searxng/{enable,disable} (auth-gated; mutations spawn/stop a
+    # Docker container). Read-only liveness is the public /api/searxng/status.
+    from runtime.platform.ui.searxng_router import create_searxng_router
+
+    app.include_router(
+        create_searxng_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
+
     # ─── FS router · extracted to fs_router.py ─────────
     # The 3 endpoints + 2 helpers that used to live here inline now
     # sit in runtime/sensing/siphon/fs_router.py. Same contract ·
