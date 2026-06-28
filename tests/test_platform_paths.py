@@ -23,6 +23,7 @@ def test_app_paths_follow_octopus_data_dir(monkeypatch, tmp_path):
     assert paths.threads_path == data_dir.resolve() / "threads.jsonl"
     assert paths.agent_trace_path == data_dir.resolve() / "agent_trace.sqlite"
     assert paths.permissions_path == data_dir.resolve() / "permissions.json"
+    assert paths.browser_policy_path == data_dir.resolve() / "browser_policy.json"
 
 
 def test_octopus_data_dir_wins_over_octopus_home(monkeypatch, tmp_path):

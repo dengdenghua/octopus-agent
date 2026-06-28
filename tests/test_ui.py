@@ -91,6 +91,38 @@ class TestBasicRoutes:
         assert "capabilities" in data
         assert set(data["capabilities"]) >= {"opentelemetry", "mcp", "httpx"}
 
+    def test_runtime_self_check_reports_versions_and_loopback_aliases(self):
+        app = create_app(
+            journal_path=None,
+            server_host="localhost",
+            server_port=8000,
+        )
+        client = TestClient(app, base_url="http://localhost:8000")
+
+        r = client.get("/api/runtime/self-check")
+        data = r.json()
+
+        assert r.status_code == 200
+        assert data["schema"] == "octopus.runtime_self_check.v1"
+        assert data["ready"] is True
+        assert data["version"] == __version__
+        assert data["version_drift"]["runtime_matches_pyproject"] is True
+        assert data["version_drift"]["frontend_matches_runtime"] is True
+        assert data["backend"]["canonical_base_url"] == "http://127.0.0.1:8000"
+        assert data["backend"]["request_origin_base_url"] == "http://localhost:8000"
+        assert data["loopback_aliases"]["same_loopback_family"] is True
+        assert "http://localhost:8000" in data["loopback_aliases"]["aliases"]
+        assert "http://127.0.0.1:8000" in data["loopback_aliases"]["aliases"]
+
+    def test_runtime_self_check_uses_request_port_when_server_port_missing(self):
+        app = create_app(journal_path=None)
+        client = TestClient(app, base_url="http://127.0.0.1:8123")
+
+        data = client.get("/api/runtime/self-check").json()
+
+        assert data["backend"]["canonical_base_url"] == "http://127.0.0.1:8123"
+        assert data["backend"]["port"] == 8123
+
     def test_skills_endpoint(self, client: TestClient):
         r = client.get("/api/skills")
         assert r.status_code == 200

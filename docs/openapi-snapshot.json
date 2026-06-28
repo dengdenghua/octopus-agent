@@ -24116,6 +24116,29 @@
         ]
       }
     },
+    "/api/runtime/self-check": {
+      "get": {
+        "operationId": "api_runtime_self_check_api_runtime_self_check_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Runtime Self Check Api Runtime Self Check Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Runtime Self Check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
     "/api/safety/constitution-profile": {
       "get": {
         "operationId": "api_constitution_profile_get_api_safety_constitution_profile_get",

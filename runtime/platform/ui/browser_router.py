@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -23,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response
 
 from runtime.memory.learning.review_queue import ReviewQueue
+from runtime.platform.io import atomic_write_json, read_json_with_backup
 from runtime.platform.process.paths import app_paths, project_root
 from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
 from runtime.safety.replay.browser_desktop_replay import browser_session_replay_identity
@@ -104,7 +106,11 @@ def create_browser_router(
         "headless": True,
         "viewport_width": 1440,
         "viewport_height": 900,
+        "relay_allowed_hosts": [],
+        "relay_blocked_hosts": [],
+        "relay_require_allowlist": False,
     }
+    browser_policy_path = app_paths().browser_policy_path
     browser_session_center = BrowserSessionCenter(browser_config_state)
     browser_sessions = browser_session_center.sessions
     browser_relay_state: dict[str, Any] = {
@@ -115,6 +121,148 @@ def create_browser_router(
         "pending_commands": [],
         "command_results": {},
     }
+
+    def _normalize_relay_host_patterns(value: Any) -> list[str]:
+        raw_items: list[Any]
+        if isinstance(value, str):
+            raw_items = [item.strip() for item in value.split(",")]
+        elif isinstance(value, (list, tuple, set)):
+            raw_items = list(value)
+        else:
+            raw_items = []
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in raw_items:
+            text = str(item or "").strip().lower()
+            if not text:
+                continue
+            if "://" in text:
+                parsed = urllib.parse.urlparse(text)
+                text = parsed.hostname or ""
+            else:
+                text = text.split("/", 1)[0].split("?", 1)[0]
+                if ":" in text and not text.startswith("["):
+                    text = text.split(":", 1)[0]
+                text = text.strip("[]")
+            if not text:
+                continue
+            text = "*." + text[2:].strip(".") if text.startswith("*.") else text.strip(".")
+            if text and text not in seen:
+                seen.add(text)
+                out.append(text)
+        return out[:200]
+
+    def _browser_policy_payload() -> dict[str, Any]:
+        return {
+            "schema": "octopus.browser_relay_site_policy.v1",
+            "relay_allowed_hosts": list(browser_config_state.get("relay_allowed_hosts") or []),
+            "relay_blocked_hosts": list(browser_config_state.get("relay_blocked_hosts") or []),
+            "relay_require_allowlist": bool(
+                browser_config_state.get("relay_require_allowlist"),
+            ),
+        }
+
+    def _load_persisted_browser_policy() -> None:
+        payload = read_json_with_backup(browser_policy_path, default={})
+        if not isinstance(payload, dict):
+            return
+        if "relay_allowed_hosts" in payload:
+            browser_config_state["relay_allowed_hosts"] = _normalize_relay_host_patterns(
+                payload.get("relay_allowed_hosts"),
+            )
+        if "relay_blocked_hosts" in payload:
+            browser_config_state["relay_blocked_hosts"] = _normalize_relay_host_patterns(
+                payload.get("relay_blocked_hosts"),
+            )
+        if "relay_require_allowlist" in payload:
+            browser_config_state["relay_require_allowlist"] = bool(
+                payload.get("relay_require_allowlist"),
+            )
+
+    def _persist_browser_policy() -> None:
+        atomic_write_json(browser_policy_path, _browser_policy_payload())
+
+    _load_persisted_browser_policy()
+
+    def _relay_host_from_url(url: str) -> str:
+        try:
+            return (urllib.parse.urlparse(url).hostname or "").strip(".").lower()
+        except ValueError:
+            return ""
+
+    def _relay_host_matches(host: str, patterns: list[str]) -> bool:
+        if not host:
+            return False
+        normalized = host.strip(".").lower()
+        for pattern in patterns:
+            item = pattern.strip().lower()
+            if item == "*":
+                return True
+            if item.startswith("*."):
+                suffix = item[2:]
+                if normalized == suffix or normalized.endswith(f".{suffix}"):
+                    return True
+                continue
+            if normalized == item:
+                return True
+        return False
+
+    def _relay_policy_snapshot(
+        *,
+        decision: str = "",
+        reason: str = "",
+        target_host: str = "",
+        target_url: str = "",
+    ) -> dict[str, Any]:
+        return {
+            "schema": "octopus.browser_relay_site_policy.v1",
+            "decision": decision,
+            "reason": reason,
+            "target_host": target_host,
+            "target_url": target_url,
+            "persisted": browser_policy_path.exists(),
+            "policy_path": str(browser_policy_path),
+            "allowed_hosts": list(browser_config_state.get("relay_allowed_hosts") or []),
+            "blocked_hosts": list(browser_config_state.get("relay_blocked_hosts") or []),
+            "require_allowlist": bool(
+                browser_config_state.get("relay_require_allowlist"),
+            ),
+        }
+
+    def _relay_site_policy_decision(action: str, body: dict[str, Any]) -> dict[str, Any]:
+        active_tab = browser_relay_state.get("active_tab")
+        active_tab = active_tab if isinstance(active_tab, dict) else {}
+        target_url = str(body.get("url") or active_tab.get("url") or "").strip()
+        target_host = _relay_host_from_url(target_url)
+        if action == "navigate" and not target_host:
+            return _relay_policy_snapshot(
+                decision="block",
+                reason="missing_or_invalid_target_url",
+                target_url=target_url,
+            )
+        blocked_hosts = list(browser_config_state.get("relay_blocked_hosts") or [])
+        if _relay_host_matches(target_host, blocked_hosts):
+            return _relay_policy_snapshot(
+                decision="block",
+                reason="host_blocked",
+                target_host=target_host,
+                target_url=target_url,
+            )
+        require_allowlist = bool(browser_config_state.get("relay_require_allowlist"))
+        allowed_hosts = list(browser_config_state.get("relay_allowed_hosts") or [])
+        if require_allowlist and not _relay_host_matches(target_host, allowed_hosts):
+            return _relay_policy_snapshot(
+                decision="block",
+                reason="host_not_allowed",
+                target_host=target_host,
+                target_url=target_url,
+            )
+        return _relay_policy_snapshot(
+            decision="allow",
+            reason="host_allowed" if target_host else "no_target_host",
+            target_host=target_host,
+            target_url=target_url,
+        )
 
     def _resolve_browser_extension_path() -> Path:
         """Locate the companion browser-relay extension on disk.
@@ -1188,6 +1336,7 @@ def create_browser_router(
     @router.put("/api/browser/config")
     def api_browser_config_update(body: dict[str, Any]) -> dict[str, Any]:
         allowed_modes = {"playwright", "extension", "cdp"}
+        persist_policy = False
         for key in (
             "max_open_tabs",
             "max_saved_tabs",
@@ -1209,6 +1358,23 @@ def create_browser_router(
             browser_config_state["connection_mode"] = mode
         if "headless" in body:
             browser_config_state["headless"] = bool(body["headless"])
+        if "relay_allowed_hosts" in body:
+            browser_config_state["relay_allowed_hosts"] = _normalize_relay_host_patterns(
+                body.get("relay_allowed_hosts"),
+            )
+            persist_policy = True
+        if "relay_blocked_hosts" in body:
+            browser_config_state["relay_blocked_hosts"] = _normalize_relay_host_patterns(
+                body.get("relay_blocked_hosts"),
+            )
+            persist_policy = True
+        if "relay_require_allowlist" in body:
+            browser_config_state["relay_require_allowlist"] = bool(
+                body.get("relay_require_allowlist"),
+            )
+            persist_policy = True
+        if persist_policy:
+            _persist_browser_policy()
         return browser_config_state
 
     @router.get("/api/browser/relay/status")
@@ -1229,6 +1395,7 @@ def create_browser_router(
             "active_tab": browser_relay_state.get("active_tab"),
             "extension_path": str(extension_path),
             "manifest_exists": manifest.exists(),
+            "site_policy": _relay_policy_snapshot(),
         }
 
     @router.post("/api/browser/relay/heartbeat")
@@ -1259,11 +1426,21 @@ def create_browser_router(
         action = str(body.get("action") or "").strip()
         if not action:
             raise HTTPException(400, "action is required")
+        site_policy = _relay_site_policy_decision(action, body)
+        if site_policy["decision"] == "block":
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "browser relay site policy blocked command",
+                    "site_policy": site_policy,
+                },
+            )
         command_id = str(uuid.uuid4())
         command = {
             "id": command_id,
             "action": action,
             "params": {k: v for k, v in body.items() if k not in {"id", "action"}},
+            "site_policy": site_policy,
             "created_at": _now_ts(),
         }
         pending = list(browser_relay_state.get("pending_commands") or [])
@@ -1277,6 +1454,7 @@ def create_browser_router(
             if result is not None:
                 if result.get("ok") is False:
                     raise HTTPException(500, str(result.get("error") or "relay command failed"))
+                result.setdefault("site_policy", site_policy)
                 return result
             time.sleep(0.1)
 

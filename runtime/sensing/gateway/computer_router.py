@@ -8,6 +8,7 @@ short-lived preview token and then send that token back for execution.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import time
@@ -91,6 +92,7 @@ def create_computer_router(
         lease_state: dict[str, Any] | None = None,
         error: str = "",
         detail: dict[str, Any] | None = None,
+        proof: dict[str, Any] | None = None,
     ) -> None:
         activity.append({
             "id": uuid.uuid4().hex,
@@ -102,6 +104,7 @@ def create_computer_router(
             "lease": lease_state or _public_lease(),
             "error": error,
             "detail": detail or {},
+            "proof": proof or {},
             "created_at": time.time(),
         })
         if len(activity) > 500:
@@ -152,6 +155,7 @@ def create_computer_router(
                 "pending_count": replay_case.get("pending_count"),
                 "lease": replay_case.get("lease"),
                 "last_activity": last_activity,
+                "proof": last_activity.get("proof") if isinstance(last_activity.get("proof"), dict) else {},
             },
             tags=[
                 "computer",
@@ -189,8 +193,10 @@ def create_computer_router(
             ),
             metadata={
                 "schema": "octopus.computer_uia_replay_assertion_queue.v1",
+                "trace_id": assertion.get("trace_id"),
                 "action": action,
                 "replay_assertion": assertion,
+                "source_trace": assertion.get("source_trace") if isinstance(assertion.get("source_trace"), dict) else {},
                 "matched_control": matched,
             },
             tags=[
@@ -381,13 +387,34 @@ def create_computer_router(
             return {"waited_ms": ms}
         return {"error": f"unsupported action: {kind}"}
 
+    def _ensure_uia_replay_trace(action: dict[str, Any]) -> dict[str, Any]:
+        assertion = (
+            action.get("replay_assertion")
+            if isinstance(action.get("replay_assertion"), dict)
+            else {}
+        )
+        if not assertion or assertion.get("trace_id") and assertion.get("source_trace"):
+            return action
+        enriched = computer_uia_skills.uia_replay_assertion_for_action(action)
+        merged = {
+            **assertion,
+            "trace_id": assertion.get("trace_id") or enriched.get("trace_id"),
+            "source_trace": assertion.get("source_trace") or enriched.get("source_trace"),
+        }
+        action = dict(action)
+        action["replay_assertion"] = merged
+        return action
+
     def _queue_preview(action: dict[str, Any], owner: dict[str, str]) -> dict[str, Any]:
+        action = _ensure_uia_replay_trace(action)
         token = uuid.uuid4().hex
         risk = _risk_for(action)
+        contract = _preview_contract(action, owner, risk)
         pending[token] = {
             "token": token,
             "action": action,
             "risk": risk,
+            "preview_contract": contract,
             "created_at": time.time(),
             "lease_owner": owner,
         }
@@ -395,9 +422,97 @@ def create_computer_router(
             "token": token,
             "action": action,
             "risk": risk,
+            "preview_contract": contract,
             "expires_in_seconds": _PENDING_TTL_SECONDS,
             "lease_owner": owner,
         }
+
+    def _preview_contract(
+        action: dict[str, Any],
+        owner: dict[str, str],
+        risk: dict[str, str],
+    ) -> dict[str, Any]:
+        payload = {
+            "schema": "octopus.computer_preview_contract.v1",
+            "action": _stable_action_payload(action),
+            "lease_owner": owner,
+            "risk": risk,
+            "ttl_seconds": _PENDING_TTL_SECONDS,
+            "requires_execute_token": True,
+        }
+        payload["contract_id"] = _stable_digest(payload)
+        return payload
+
+    def _execution_proof(
+        *,
+        contract: dict[str, Any],
+        action: dict[str, Any],
+        risk: dict[str, str],
+        lease_state: dict[str, Any],
+        result: dict[str, Any],
+        ok: bool,
+    ) -> dict[str, Any]:
+        payload = {
+            "schema": "octopus.computer_execution_proof.v1",
+            "preview_contract_id": contract.get("contract_id"),
+            "action": _stable_action_payload(action),
+            "risk": risk,
+            "lease": {
+                "held": bool(lease_state.get("held")),
+                "owner_id": lease_state.get("owner_id"),
+                "owner_label": lease_state.get("owner_label"),
+            },
+            "result": _stable_result_payload(result),
+            "ok": ok,
+        }
+        payload["proof_id"] = _stable_digest(payload)
+        return payload
+
+    def _stable_action_payload(action: dict[str, Any]) -> dict[str, Any]:
+        allowed = {
+            "action",
+            "x",
+            "y",
+            "button",
+            "clicks",
+            "duration",
+            "text",
+            "interval",
+            "keys",
+            "ms",
+            "source",
+            "matched_control",
+            "replay_assertion",
+        }
+        return {
+            key: _stable_value(action.get(key))
+            for key in sorted(allowed)
+            if key in action
+        }
+
+    def _stable_result_payload(result: dict[str, Any]) -> dict[str, Any]:
+        return {
+            str(key): _stable_value(value)
+            for key, value in sorted(result.items())
+            if str(key) not in {"created_at", "timestamp", "token"}
+        }
+
+    def _stable_value(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                str(key): _stable_value(item)
+                for key, item in sorted(value.items())
+                if str(key) not in {"created_at", "timestamp", "token"}
+            }
+        if isinstance(value, list):
+            return [_stable_value(item) for item in value]
+        if isinstance(value, bool | int | float) or value is None:
+            return value
+        return str(value)
+
+    def _stable_digest(payload: dict[str, Any]) -> str:
+        raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
     def _goal_uia_queries(goal: str) -> list[str]:
         text = goal.strip()
@@ -902,7 +1017,11 @@ def create_computer_router(
             action=action,
             token=str(preview["token"]),
             risk=preview["risk"],
-            detail={"lease_owner": owner},
+            detail={
+                "lease_owner": owner,
+                "preview_contract_id": preview["preview_contract"]["contract_id"],
+            },
+            proof={"preview_contract": preview["preview_contract"]},
         )
         return {
             "ok": True,
@@ -1130,6 +1249,23 @@ def create_computer_router(
         action = item["action"]
         result = _execute(action)
         ok = "error" not in result
+        preview_contract = (
+            item.get("preview_contract")
+            if isinstance(item.get("preview_contract"), dict)
+            else _preview_contract(
+                action,
+                owner,
+                item.get("risk") if isinstance(item.get("risk"), dict) else {},
+            )
+        )
+        execution_proof = _execution_proof(
+            contract=preview_contract,
+            action=action,
+            risk=item["risk"],
+            lease_state=lease_state,
+            result=result,
+            ok=ok,
+        )
         _record_activity(
             "action_executed",
             ok=ok,
@@ -1138,7 +1274,15 @@ def create_computer_router(
             risk=item["risk"],
             lease_state=lease_state,
             error=str(result.get("error") or ""),
-            detail={"result": result},
+            detail={
+                "result": result,
+                "preview_contract_id": preview_contract.get("contract_id"),
+                "execution_proof_id": execution_proof.get("proof_id"),
+            },
+            proof={
+                "preview_contract": preview_contract,
+                "execution_proof": execution_proof,
+            },
         )
         replay_assertion = (
             action.get("replay_assertion")
@@ -1153,6 +1297,8 @@ def create_computer_router(
             "action": action,
             "risk": item["risk"],
             "result": result,
+            "preview_contract": preview_contract,
+            "execution_proof": execution_proof,
             "lease": lease_state,
             "executed_at": time.time(),
             **({"replay_assertion_queue": assertion_queue} if assertion_queue else {}),

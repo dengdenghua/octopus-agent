@@ -10,36 +10,113 @@ console.
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 from urllib import error as urllib_error
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from .registry import Skill, SkillRegistry
 
-_BASE_URL = "http://127.0.0.1:8000/api/computer"
+_DEFAULT_GATEWAY_BASE_URL = "http://127.0.0.1:8000"
+_COMPUTER_API_PATH = "/api/computer"
+_BASE_URL_ENV_KEYS = (
+    "OCTOPUS_COMPUTER_API_BASE_URL",
+    "OCTOPUS_INTERNAL_GATEWAY_BASE_URL",
+    "OCTOPUS_PUBLIC_BASE_URL",
+)
 _TIMEOUT_SECONDS = 90
 
 
+def _computer_api_base_url() -> str:
+    raw, _source = _configured_base_url()
+    return _normalize_computer_api_base_url(raw)
+
+
+def _computer_api_diagnostics() -> dict[str, Any]:
+    raw, source = _configured_base_url()
+    try:
+        base_url = _normalize_computer_api_base_url(raw)
+        error = ""
+    except ValueError as exc:
+        base_url = _normalize_computer_api_base_url(_DEFAULT_GATEWAY_BASE_URL)
+        error = str(exc)
+    return {
+        "schema": "octopus.computer_api_bridge.v1",
+        "base_url": base_url,
+        "configured_by": source,
+        "env_keys": list(_BASE_URL_ENV_KEYS),
+        "default_gateway_base_url": _DEFAULT_GATEWAY_BASE_URL,
+        "error": error,
+    }
+
+
+def _configured_base_url() -> tuple[str, str]:
+    for key in _BASE_URL_ENV_KEYS:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value, key
+    return _DEFAULT_GATEWAY_BASE_URL, "default"
+
+
+def _normalize_computer_api_base_url(raw: str) -> str:
+    value = raw.strip().rstrip("/")
+    if not value:
+        value = _DEFAULT_GATEWAY_BASE_URL
+    parsed = urllib_parse.urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"invalid computer api base url: {raw!r}")
+    path = parsed.path.rstrip("/")
+    if path.endswith(_COMPUTER_API_PATH):
+        normalized_path = path
+    elif path.endswith("/api"):
+        normalized_path = f"{path}/computer"
+    else:
+        normalized_path = f"{path}{_COMPUTER_API_PATH}"
+    return urllib_parse.urlunparse(
+        parsed._replace(path=normalized_path, params="", query="", fragment=""),
+    )
+
+
 def _call(method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-    url = f"{_BASE_URL}{path}"
+    diagnostics = _computer_api_diagnostics()
+    base_url = str(diagnostics["base_url"])
+    route = path if path.startswith("/") else f"/{path}"
+    url = f"{base_url}{route}"
     data = None if body is None else json.dumps(body).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     req = urllib_request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib_request.urlopen(req, timeout=_TIMEOUT_SECONDS) as resp:
             raw = resp.read()
-            return json.loads(raw.decode("utf-8"))
+            data = json.loads(raw.decode("utf-8"))
+            if isinstance(data, dict):
+                data.setdefault("computer_api", diagnostics)
+                return data
+            return {"ok": True, "data": data, "computer_api": diagnostics}
     except urllib_error.HTTPError as exc:
         detail = ""
         try:
             detail = exc.read().decode("utf-8")
         except Exception:  # noqa: BLE001
             detail = exc.reason
-        return {"ok": False, "error": f"computer api http {exc.code}: {detail}"}
+        return {
+            "ok": False,
+            "error": f"computer api http {exc.code}: {detail}",
+            "computer_api": diagnostics,
+        }
     except urllib_error.URLError as exc:
-        return {"ok": False, "error": f"computer api unreachable: {exc.reason}"}
+        return {
+            "ok": False,
+            "error": f"computer api unreachable at {base_url}: {exc.reason}",
+            "computer_api": diagnostics,
+        }
     except (TimeoutError, OSError, json.JSONDecodeError) as exc:
-        return {"ok": False, "error": f"computer api failed: {type(exc).__name__}: {exc}"}
+        return {
+            "ok": False,
+            "error": f"computer api failed: {type(exc).__name__}: {exc}",
+            "computer_api": diagnostics,
+        }
 
 
 def _compact_screenshot(value: Any) -> Any:
@@ -73,7 +150,11 @@ def _computer_observe(
     status = _call("GET", "/status")
     uia_tree = _call("GET", "/uia/tree?max_depth=2&max_nodes=80") if uia else None
     if not capture:
-        out: dict[str, Any] = {"ok": bool(status.get("ok")), "status": status}
+        out: dict[str, Any] = {
+            "ok": bool(status.get("ok")),
+            "status": status,
+            "computer_api": _computer_api_diagnostics(),
+        }
         if uia_tree is not None:
             out["uia"] = uia_tree
         return out
@@ -82,6 +163,7 @@ def _computer_observe(
         "ok": bool(status.get("ok")) and bool(shot.get("ok")),
         "status": status,
         "screenshot": _compact_screenshot(shot),
+        "computer_api": _computer_api_diagnostics(),
     }
     if uia_tree is not None:
         out["uia"] = uia_tree

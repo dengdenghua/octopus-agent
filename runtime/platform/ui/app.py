@@ -21,6 +21,7 @@ from runtime.execution.suckers import SkillRegistry
 from runtime.memory.journal import Journal
 from runtime.platform import feature_flags
 from runtime.platform.process.paths import app_paths, project_root, resources_root
+from runtime.platform.ui.compression import GzipStaticMiddleware
 from runtime.platform.ui.pages import (
     _INDEX_HTML,
     _REFLEX_EDITOR_HTML,
@@ -186,6 +187,8 @@ def create_app(
     default_arm: str = "code_arm",
     parallel_agent_orchestrator: Any = None,
     subagent_registry: Any = None,
+    server_host: str | None = None,
+    server_port: int | None = None,
 ) -> Any:
     """Build the FastAPI application with all routers wired in.
 
@@ -224,6 +227,10 @@ def create_app(
 
     app = FastAPI(title="octopus-agent", version=__version__)
     app.state.octopus_state = state
+
+    # Gzip the static Vite UI bundle (~18 MB raw) and JSON API responses while
+    # leaving SSE / streaming endpoints untouched. See GzipStaticMiddleware.
+    app.add_middleware(GzipStaticMiddleware)
 
     if molili_jwt_secret is None and molili_config is not None:
         molili_jwt_secret = getattr(molili_config, "jwt_secret", None)
@@ -608,6 +615,8 @@ def create_app(
             agent_registry=agent_registry,
             channel_manager=channel_manager,
             group_registry=group_registry,
+            server_host=server_host,
+            server_port=server_port,
         )
     )
 

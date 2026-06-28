@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -11,6 +14,7 @@ from runtime.platform.ui.app import create_app
 @pytest.fixture
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.delenv("OCTOPUS_BROWSER_EXTENSION_DIR", raising=False)
     return TestClient(create_app())
 
@@ -40,6 +44,28 @@ def test_browser_session_launch_and_list(client: TestClient) -> None:
     assert page_info.json() == {"url": "", "title": ""}
 
 
+def test_browser_session_health_surfaces_recovery_proof() -> None:
+    from runtime.platform.runtime_policy.browser_sessions import BrowserSessionCenter
+
+    center = BrowserSessionCenter({"headless": True}, now=lambda: 100)
+    session = center.ensure("recovering")
+    session["recovered_from_crash"] = True
+
+    before = center.health_report("recovering")
+    center.record_action(session, "navigate", "https://example.test")
+    after = center.health_report("recovering")
+
+    assert before["recovery_proof"]["schema"] == (
+        "octopus.browser_session_recovery_proof.v1"
+    )
+    assert before["recovery_proof"]["recovered_from_crash"] is True
+    assert before["recovery_proof"]["requires_operator_review"] is True
+    assert "recovered_from_crash" in before["issues"]
+    assert after["recovery_proof"]["revalidated"] is True
+    assert after["recovery_proof"]["requires_operator_review"] is False
+    assert "recovered_from_crash" not in after["issues"]
+
+
 def test_browser_config_update(client: TestClient) -> None:
     response = client.put(
         "/api/browser/config",
@@ -48,6 +74,9 @@ def test_browser_config_update(client: TestClient) -> None:
             "viewport_width": 1024,
             "viewport_height": 768,
             "headless": False,
+            "relay_allowed_hosts": ["https://Example.test/path", "*.trusted.test"],
+            "relay_blocked_hosts": "blocked.test, https://evil.test/x",
+            "relay_require_allowlist": True,
         },
     )
 
@@ -57,6 +86,117 @@ def test_browser_config_update(client: TestClient) -> None:
     assert data["viewport_width"] == 1024
     assert data["viewport_height"] == 768
     assert data["headless"] is False
+    assert data["relay_allowed_hosts"] == ["example.test", "*.trusted.test"]
+    assert data["relay_blocked_hosts"] == ["blocked.test", "evil.test"]
+    assert data["relay_require_allowlist"] is True
+
+
+def test_browser_relay_policy_persists_across_app_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+    monkeypatch.delenv("OCTOPUS_BROWSER_EXTENSION_DIR", raising=False)
+
+    first = TestClient(create_app())
+    response = first.put(
+        "/api/browser/config",
+        json={
+            "relay_allowed_hosts": ["https://Example.test/path", "*.trusted.test"],
+            "relay_blocked_hosts": "blocked.test, https://evil.test/x",
+            "relay_require_allowlist": True,
+        },
+    )
+
+    policy_path = data_dir / "browser_policy.json"
+    assert response.status_code == 200
+    assert policy_path.exists()
+    persisted = json.loads(policy_path.read_text(encoding="utf-8"))
+    assert persisted["schema"] == "octopus.browser_relay_site_policy.v1"
+    assert persisted["relay_allowed_hosts"] == ["example.test", "*.trusted.test"]
+    assert persisted["relay_blocked_hosts"] == ["blocked.test", "evil.test"]
+    assert persisted["relay_require_allowlist"] is True
+
+    second = TestClient(create_app())
+    loaded = second.get("/api/browser/config").json()
+
+    assert loaded["relay_allowed_hosts"] == ["example.test", "*.trusted.test"]
+    assert loaded["relay_blocked_hosts"] == ["blocked.test", "evil.test"]
+    assert loaded["relay_require_allowlist"] is True
+
+
+def test_browser_relay_policy_recovers_from_backup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+    monkeypatch.delenv("OCTOPUS_BROWSER_EXTENSION_DIR", raising=False)
+    (data_dir / "browser_policy.json").write_text("{not json", encoding="utf-8")
+    (data_dir / "browser_policy.json.bak").write_text(
+        json.dumps(
+            {
+                "schema": "octopus.browser_relay_site_policy.v1",
+                "relay_allowed_hosts": ["https://trusted.test/path"],
+                "relay_blocked_hosts": ["blocked.test"],
+                "relay_require_allowlist": True,
+            },
+        ),
+        encoding="utf-8",
+    )
+
+    restored = TestClient(create_app()).get("/api/browser/config").json()
+
+    assert restored["relay_allowed_hosts"] == ["trusted.test"]
+    assert restored["relay_blocked_hosts"] == ["blocked.test"]
+    assert restored["relay_require_allowlist"] is True
+
+
+def test_browser_relay_persisted_strict_allowlist_blocks_after_restart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+    monkeypatch.delenv("OCTOPUS_BROWSER_EXTENSION_DIR", raising=False)
+    first = TestClient(create_app())
+    first.put(
+        "/api/browser/config",
+        json={
+            "relay_require_allowlist": True,
+            "relay_allowed_hosts": ["*.trusted.test"],
+        },
+    )
+
+    second = TestClient(create_app())
+    second.post(
+        "/api/browser/relay/heartbeat",
+        json={
+            "extension_version": "test",
+            "active_tab": {"id": 1, "url": "https://example.test", "title": "Example"},
+        },
+    )
+
+    response = second.post(
+        "/api/browser/relay/command",
+        json={
+            "action": "navigate",
+            "url": "https://example.test/path",
+            "timeout_seconds": 0.1,
+        },
+    )
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert detail["site_policy"]["decision"] == "block"
+    assert detail["site_policy"]["reason"] == "host_not_allowed"
+    assert detail["site_policy"]["persisted"] is True
+    assert detail["site_policy"]["policy_path"].endswith("browser_policy.json")
 
 
 def test_browser_system_info_detects_macos_chrome_path(
@@ -102,6 +242,133 @@ def test_browser_relay_heartbeat_and_status(client: TestClient) -> None:
     data = status.json()
     assert data["extension_version"] == "test"
     assert data["active_tab"]["title"] == "Example"
+    assert data["site_policy"]["schema"] == "octopus.browser_relay_site_policy.v1"
+
+
+def test_browser_relay_command_includes_site_policy(client: TestClient) -> None:
+    client.post(
+        "/api/browser/relay/heartbeat",
+        json={
+            "extension_version": "test",
+            "active_tab": {"id": 1, "url": "https://example.test", "title": "Example"},
+        },
+    )
+    holder: dict[str, object] = {}
+
+    def send_command() -> None:
+        holder["response"] = client.post(
+            "/api/browser/relay/command",
+            json={
+                "action": "navigate",
+                "url": "https://example.test/page",
+                "timeout_seconds": 1,
+            },
+        )
+
+    thread = threading.Thread(target=send_command)
+    thread.start()
+    command = None
+    deadline = time.time() + 1
+    while time.time() < deadline and command is None:
+        heartbeat = client.post("/api/browser/relay/heartbeat", json={})
+        commands = heartbeat.json()["commands"]
+        command = commands[0] if commands else None
+        if command is None:
+            time.sleep(0.02)
+    assert command is not None
+    assert command["site_policy"]["decision"] == "allow"
+    client.post(
+        "/api/browser/relay/result",
+        json={"id": command["id"], "result": {"ok": True, "url": "https://example.test/page"}},
+    )
+    thread.join(timeout=2)
+    assert "response" in holder
+    response = holder["response"]
+    assert response.status_code == 200
+    assert response.json()["site_policy"]["target_host"] == "example.test"
+
+
+def test_browser_relay_blocklist_blocks_navigation(client: TestClient) -> None:
+    client.post(
+        "/api/browser/relay/heartbeat",
+        json={
+            "extension_version": "test",
+            "active_tab": {"id": 1, "url": "https://example.test", "title": "Example"},
+        },
+    )
+    client.put("/api/browser/config", json={"relay_blocked_hosts": ["blocked.test"]})
+
+    response = client.post(
+        "/api/browser/relay/command",
+        json={
+            "action": "navigate",
+            "url": "https://blocked.test/path",
+            "timeout_seconds": 0.1,
+        },
+    )
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert detail["site_policy"]["decision"] == "block"
+    assert detail["site_policy"]["reason"] == "host_blocked"
+
+
+def test_browser_relay_require_allowlist(client: TestClient) -> None:
+    client.post(
+        "/api/browser/relay/heartbeat",
+        json={
+            "extension_version": "test",
+            "active_tab": {"id": 1, "url": "https://example.test", "title": "Example"},
+        },
+    )
+    client.put(
+        "/api/browser/config",
+        json={
+            "relay_require_allowlist": True,
+            "relay_allowed_hosts": ["*.trusted.test"],
+        },
+    )
+
+    blocked = client.post(
+        "/api/browser/relay/command",
+        json={
+            "action": "navigate",
+            "url": "https://example.test/path",
+            "timeout_seconds": 0.1,
+        },
+    )
+    allowed_holder: dict[str, object] = {}
+
+    def send_allowed() -> None:
+        allowed_holder["response"] = client.post(
+            "/api/browser/relay/command",
+            json={
+                "action": "navigate",
+                "url": "https://app.trusted.test/path",
+                "timeout_seconds": 1,
+            },
+        )
+
+    thread = threading.Thread(target=send_allowed)
+    thread.start()
+    command = None
+    deadline = time.time() + 1
+    while time.time() < deadline and command is None:
+        heartbeat = client.post("/api/browser/relay/heartbeat", json={})
+        commands = heartbeat.json()["commands"]
+        command = commands[0] if commands else None
+        if command is None:
+            time.sleep(0.02)
+    assert command is not None
+    client.post(
+        "/api/browser/relay/result",
+        json={"id": command["id"], "result": {"ok": True}},
+    )
+    thread.join(timeout=2)
+
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"]["site_policy"]["reason"] == "host_not_allowed"
+    assert allowed_holder["response"].status_code == 200
 
 
 def test_browser_bookmarklet_callback_validation(client: TestClient) -> None:

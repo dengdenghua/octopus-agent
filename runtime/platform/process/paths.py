@@ -112,6 +112,16 @@ class AppPaths:
         return self.data_dir / "permissions.json"
 
     @property
+    def browser_policy_path(self) -> Path:
+        """Where browser relay site policy is persisted.
+
+        The browser relay can drive a user's real browser through the
+        companion extension, so its allow/block host policy must survive
+        process restarts instead of living only in the in-memory router.
+        """
+        return self.data_dir / "browser_policy.json"
+
+    @property
     def hooks_path(self) -> Path:
         """Where declarative tool-edge hooks are configured.
 

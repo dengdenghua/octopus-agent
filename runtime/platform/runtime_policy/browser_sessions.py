@@ -146,6 +146,8 @@ class BrowserSessionCenter:
     ) -> None:
         session["last_activity"] = self.now()
         session["action_count"] = int(session.get("action_count", 0)) + 1
+        if bool(session.get("recovered_from_crash")) and status == "ok":
+            session["recovery_revalidated_at"] = session["last_activity"]
         session.setdefault("actions", []).append(
             {
                 "action": action,
@@ -181,7 +183,9 @@ class BrowserSessionCenter:
         issues: list[str] = []
         if not snapshot["healthy"]:
             issues.append("session_unhealthy")
-        if bool(session.get("recovered_from_crash")):
+        recovered_from_crash = bool(session.get("recovered_from_crash"))
+        recovery_revalidated_at = int(session.get("recovery_revalidated_at") or 0)
+        if recovered_from_crash and not recovery_revalidated_at:
             issues.append("recovered_from_crash")
         if not actions:
             issues.append("no_actions_recorded")
@@ -200,6 +204,16 @@ class BrowserSessionCenter:
             "recent_actions": recent,
             "stale_seconds": stale_seconds,
             "replay_ready": bool(actions),
+            "recovery_proof": {
+                "schema": "octopus.browser_session_recovery_proof.v1",
+                "recovered_from_crash": recovered_from_crash,
+                "revalidated": bool(recovery_revalidated_at),
+                "revalidated_at": recovery_revalidated_at,
+                "requires_operator_review": (
+                    recovered_from_crash and not recovery_revalidated_at
+                ),
+                "replay_ready": bool(actions),
+            },
         }
 
     def snapshot(self, session: dict[str, Any]) -> dict[str, Any]:
@@ -236,6 +250,8 @@ class BrowserSessionCenter:
             "browser_regression_requires_visible_cursor": bool(
                 session.get("browser_regression_requires_visible_cursor")
             ),
+            "recovered_from_crash": bool(session.get("recovered_from_crash")),
+            "recovery_revalidated_at": int(session.get("recovery_revalidated_at") or 0),
         }
 
     def missing_snapshot(self, session_id: str) -> dict[str, Any]:
@@ -264,6 +280,8 @@ class BrowserSessionCenter:
             "browser_regression_mode": "off",
             "browser_regression_preview_url": "",
             "browser_regression_requires_visible_cursor": False,
+            "recovered_from_crash": False,
+            "recovery_revalidated_at": 0,
         }
 
     def list_snapshots(self) -> list[dict[str, Any]]:

@@ -352,6 +352,8 @@ def run_serve(
         molili_config=cfg.molili,
         local_auth_config=cfg.local_auth,
         cocoloop_require_auth=require_ui_auth,
+        server_host=host,
+        server_port=port,
     )
     try:
         from runtime.cli_core import _build_reflex_router

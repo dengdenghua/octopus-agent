@@ -168,7 +168,17 @@ def test_plan_actions_uses_uia_grounding(monkeypatch):
     assert action["source"] == "uia"
     assert action["matched_control"]["name"] == "Router Button"
     assert action["replay_assertion"]["schema"] == "octopus.computer_uia_replay_assertion.v1"
+    assert action["replay_assertion"]["trace_id"]
+    assert action["replay_assertion"]["source_trace"]["schema"] == (
+        "octopus.computer_uia_grounding_trace.v1"
+    )
+    assert action["replay_assertion"]["source_trace"]["matched_control"]["automation_id"] == (
+        "routerButton"
+    )
     assert action["replay_assertion"]["ok"] is True
+    assert data["suggestions"][0]["preview_contract"]["schema"] == (
+        "octopus.computer_preview_contract.v1"
+    )
     assert data["suggestions"][0]["token"]
 
 
@@ -187,6 +197,7 @@ def test_plan_actions_prefers_interactive_uia_match(monkeypatch):
     assert action["y"] == 230
     assert action["matched_control"]["name"] == "Router Button"
     assert action["matched_control"]["score"] > 100
+    assert action["replay_assertion"]["trace_id"]
     assert action["replay_assertion"]["ok"] is True
 
 
@@ -208,12 +219,19 @@ def test_execute_claims_computer_lease(monkeypatch):
             "lease_owner_label": "Project A",
         },
     ).json()
+    assert preview["preview_contract"]["schema"] == (
+        "octopus.computer_preview_contract.v1"
+    )
+    assert preview["preview_contract"]["requires_execute_token"] is True
     result = client.post(
         "/api/computer/actions/execute",
         json={"token": preview["token"], "lease_owner_id": "project-a"},
     ).json()
 
     assert result["ok"] is True
+    assert result["preview_contract"]["contract_id"] == preview["preview_contract"]["contract_id"]
+    assert result["execution_proof"]["schema"] == "octopus.computer_execution_proof.v1"
+    assert result["execution_proof"]["preview_contract_id"] == preview["preview_contract"]["contract_id"]
     assert result["lease"]["held"] is True
     assert result["lease"]["owner_id"] == "project-a"
     status = client.get("/api/computer/status").json()
@@ -230,6 +248,9 @@ def test_execute_claims_computer_lease(monkeypatch):
     ]
     assert activity["items"][-1]["action"]["action"] == "move"
     assert activity["items"][-1]["ok"] is True
+    assert activity["items"][-1]["proof"]["execution_proof"]["proof_id"] == (
+        result["execution_proof"]["proof_id"]
+    )
 
     replay = client.get("/api/computer/activity/replay-case").json()
     assert replay["schema"] == "octopus.computer_activity_replay_case.v1"
@@ -237,6 +258,9 @@ def test_execute_claims_computer_lease(monkeypatch):
     assert len(replay["fingerprint"]) == 16
     assert replay["replay_ready"] is True
     assert replay["last_activity"]["event"] == "action_executed"
+    assert replay["last_activity"]["proof"]["execution_proof"]["schema"] == (
+        "octopus.computer_execution_proof.v1"
+    )
 
 
 def test_computer_activity_replay_case_can_queue_operator_review(
@@ -327,6 +351,10 @@ def test_failed_uia_replay_assertion_enters_operator_review_queue(
     assert item["priority"] == "P0"
     assert item["target_bucket"] == "browser_desktop_replay"
     assert item["metadata"]["replay_assertion"]["ok"] is False
+    assert item["metadata"]["trace_id"] == result["action"]["replay_assertion"]["trace_id"]
+    assert item["metadata"]["source_trace"]["schema"] == (
+        "octopus.computer_uia_grounding_trace.v1"
+    )
     assert item["metadata"]["matched_control"]["automation_id"] == "routerButton"
 
     summary = ReviewQueue(tmp_path / "data" / "review_queue.json").summary()

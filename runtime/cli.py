@@ -1210,7 +1210,11 @@ def run_ui(
         print(str(e), file=sys.stderr)
         return 2
 
-    app = create_app(journal_path=journal_path)
+    app = create_app(
+        journal_path=journal_path,
+        server_host=host,
+        server_port=port,
+    )
 
     # Opt-in co-launch of the octopus-storage sibling (File Agent backend), so a
     # single-machine user gets one command. Off by default; best-effort.

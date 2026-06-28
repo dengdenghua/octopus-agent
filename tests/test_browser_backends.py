@@ -105,12 +105,47 @@ class TestPlaywrightBackend:
 
 
 class TestExtensionBackend:
-    def test_unwired_reports_unavailable(self):
+    def test_disconnected_default_relay_reports_unavailable(self, monkeypatch):
+        def fake_request(method, path, body=None, *, timeout_seconds=10):
+            assert method == "GET"
+            assert path == "/status"
+            return {
+                "connected": False,
+                "browser_relay": {"schema": "octopus.browser_relay_bridge.v1"},
+            }
+
+        monkeypatch.setattr(
+            "runtime.execution.suckers.browser_backends._browser_relay_request",
+            fake_request,
+        )
+
         b = ExtensionBackend()
         assert b.available() is False
-        r = b.click("#x")
-        assert r.ok is False
-        assert "not wired" in (r.error or "")
+
+    def test_default_relay_transport_maps_actions(self, monkeypatch):
+        calls = []
+
+        def fake_request(method, path, body=None, *, timeout_seconds=10):
+            calls.append((method, path, body, timeout_seconds))
+            if path == "/status":
+                return {"connected": True}
+            return {"ok": True, "url": "https://x"}
+
+        monkeypatch.setattr(
+            "runtime.execution.suckers.browser_backends._browser_relay_request",
+            fake_request,
+        )
+
+        b = ExtensionBackend()
+        assert b.available() is True
+        result = b.navigate("https://x")
+
+        assert result.ok is True
+        assert result.track is Track.EXTENSION
+        assert calls == [
+            ("GET", "/status", None, 2),
+            ("POST", "/command", {"action": "navigate", "url": "https://x"}, 10),
+        ]
 
     def test_wired_transport_maps_actions(self):
         rec = _Recorder({"ok": True})

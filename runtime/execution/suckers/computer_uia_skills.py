@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import platform
 from typing import Any
 
@@ -365,8 +367,25 @@ def uia_replay_assertion_for_action(action: dict[str, Any]) -> dict[str, Any]:
         failures.append("resolved control has no stable name or automation id")
 
     ok = not failures
+    source_trace = {
+        "schema": "octopus.computer_uia_grounding_trace.v1",
+        "source": action.get("source"),
+        "query": matched.get("query"),
+        "matched_control": {
+            "id": matched.get("id"),
+            "name": matched.get("name"),
+            "control_type": matched.get("control_type"),
+            "class_name": matched.get("class_name"),
+            "automation_id": matched.get("automation_id"),
+            "center": center,
+            "rect": rect,
+            "score": matched.get("score"),
+        },
+    }
+    trace_id = _stable_trace_id(source_trace)
     return {
         "schema": "octopus.computer_uia_replay_assertion.v1",
+        "trace_id": trace_id,
         "ok": ok,
         "reason": "passed" if ok else "; ".join(failures),
         "action": {
@@ -375,6 +394,7 @@ def uia_replay_assertion_for_action(action: dict[str, Any]) -> dict[str, Any]:
             "y": action.get("y"),
             "source": action.get("source"),
         },
+        "source_trace": source_trace,
         "matched_control": {
             "id": matched.get("id"),
             "name": matched.get("name"),
@@ -387,6 +407,11 @@ def uia_replay_assertion_for_action(action: dict[str, Any]) -> dict[str, Any]:
             "score": matched.get("score"),
         },
     }
+
+
+def _stable_trace_id(payload: dict[str, Any]) -> str:
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def register_computer_uia_skills(registry: SkillRegistry) -> int:
