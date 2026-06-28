@@ -18,12 +18,15 @@ from .models import (
     normalize_reasoning_effort,
 )
 from .openai_compat_providers import (
+    OpenAICompatProviderProfile,
+    OpenAICompatRetryPayload,
+    apply_custom_openai_compat_profile,
     extract_openai_compat_reasoning,
     extract_openai_compat_usage,
     normalize_openai_compat_payload,
     parse_tool_call_arguments,
+    plan_openai_compat_retries,
     resolve_openai_compat_profile,
-    retry_payloads_after_openai_compat_error,
 )
 
 try:
@@ -107,6 +110,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
         self._provider_profile = resolve_openai_compat_profile(
             self.base_url, self.default_model,
         )
+        self.last_compatibility_events: list[dict[str, Any]] = []
 
 
     def call(self, request: ModelRequest) -> ModelResponse:
@@ -116,6 +120,9 @@ class OpenAIModelRouter(Provider, ModelRouter):
             "eyes.openai_router.call",
             **{"octopus.model": model, "octopus.provider": "openai_compat"},
         ) as span:
+            self.last_compatibility_events = []
+            profile = self._profile_for_model(model)
+            span.set_attribute("octopus.openai_compat.profile", profile.id)
             payload = self._build_payload(request, model)
             client = self._client if self._client is not None else httpx.Client(
                 timeout=self.timeout_seconds,
@@ -126,12 +133,13 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     json=payload,
                     headers=self._build_headers(),
                 )
-                for fallback_payload in self._retry_payloads(
+                for attempt, retry in enumerate(self._retry_payloads(
                     resp.status_code, resp.text, payload, model,
-                ):
+                ), start=1):
+                    self._record_compat_retry(span, model, profile, attempt, retry)
                     resp = client.post(
                         f"{self.base_url}/chat/completions",
-                        json=fallback_payload,
+                        json=retry.payload,
                         headers=self._build_headers(),
                     )
                     if resp.status_code < 400:
@@ -198,48 +206,39 @@ class OpenAIModelRouter(Provider, ModelRouter):
         from .openai_compat_stream import iter_openai_sse
 
         model = request.model or self.default_model
-        payload = self._build_payload(request, model)
-        payload["stream"] = True
+        self.last_compatibility_events = []
 
-        client = self._client if self._client is not None else httpx.Client(
-            # Streaming-tuned timeouts: ``connect`` for the initial
-            # handshake, ``read`` is the gap between successive bytes
-            # — must be tight or a hung upstream (mimo / smaller
-            # OpenAI-compat proxies sometimes finish the model
-            # output but never send ``data: [DONE]``) leaves the
-            # request blocked indefinitely. Without a read cap the
-            # ReAct loop's interrupt watcher can't break us out
-            # because the producer thread is stuck inside
-            # ``response.iter_lines()``.
-            timeout=httpx.Timeout(
-                connect=30.0,
-                read=45.0,
-                write=30.0,
-                pool=10.0,
-            ),
-        )
-        close_after = self._client is None
-        url = f"{self.base_url}/chat/completions"
-        try:
-            with client.stream(
-                "POST", url, json=payload, headers=self._build_headers(),
-            ) as r:
-                if r.status_code < 400:
-                    yield from iter_openai_sse(
-                        r, model=model, provider="openai_compat",
-                    )
-                    return
-                r.read()
-                first_status = r.status_code
-                first_text = r.text
+        with trace_stage(
+            "eyes.openai_router.stream",
+            **{"octopus.model": model, "octopus.provider": "openai_compat"},
+        ) as span:
+            profile = self._profile_for_model(model)
+            span.set_attribute("octopus.openai_compat.profile", profile.id)
+            payload = self._build_payload(request, model)
+            payload["stream"] = True
 
-            for fallback_payload in self._retry_payloads(
-                first_status, first_text, payload, model,
-            ):
+            client = self._client if self._client is not None else httpx.Client(
+                # Streaming-tuned timeouts: ``connect`` for the initial
+                # handshake, ``read`` is the gap between successive bytes
+                # — must be tight or a hung upstream (mimo / smaller
+                # OpenAI-compat proxies sometimes finish the model
+                # output but never send ``data: [DONE]``) leaves the
+                # request blocked indefinitely. Without a read cap the
+                # ReAct loop's interrupt watcher can't break us out
+                # because the producer thread is stuck inside
+                # ``response.iter_lines()``.
+                timeout=httpx.Timeout(
+                    connect=30.0,
+                    read=45.0,
+                    write=30.0,
+                    pool=10.0,
+                ),
+            )
+            close_after = self._client is None
+            url = f"{self.base_url}/chat/completions"
+            try:
                 with client.stream(
-                    "POST", url,
-                    json=fallback_payload,
-                    headers=self._build_headers(),
+                    "POST", url, json=payload, headers=self._build_headers(),
                 ) as r:
                     if r.status_code < 400:
                         yield from iter_openai_sse(
@@ -249,15 +248,31 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     r.read()
                     first_status = r.status_code
                     first_text = r.text
-                    if first_status < 400:
-                        return
 
-            raise OpenAIRouterError(
-                _format_openai_http_error(first_status, first_text)
-            )
-        finally:
-            if close_after:
-                client.close()
+                for attempt, retry in enumerate(self._retry_payloads(
+                    first_status, first_text, payload, model,
+                ), start=1):
+                    self._record_compat_retry(span, model, profile, attempt, retry)
+                    with client.stream(
+                        "POST", url,
+                        json=retry.payload,
+                        headers=self._build_headers(),
+                    ) as r:
+                        if r.status_code < 400:
+                            yield from iter_openai_sse(
+                                r, model=model, provider="openai_compat",
+                            )
+                            return
+                        r.read()
+                        first_status = r.status_code
+                        first_text = r.text
+
+                raise OpenAIRouterError(
+                    _format_openai_http_error(first_status, first_text)
+                )
+            finally:
+                if close_after:
+                    client.close()
 
 
     def _build_payload(self, request: ModelRequest, model: str) -> dict[str, Any]:
@@ -327,11 +342,14 @@ class OpenAIModelRouter(Provider, ModelRouter):
             profile=self._profile_for_model(model),
         )
 
-    def _profile_for_model(self, model: str):
+    def _profile_for_model(self, model: str) -> OpenAICompatProviderProfile:
         profile = resolve_openai_compat_profile(self.base_url, model)
         if profile.id == "openai_compat":
-            return self._provider_profile
-        return profile
+            profile = self._provider_profile
+        return apply_custom_openai_compat_profile(
+            self._custom_model_entry_for(model),
+            base_profile=profile,
+        )
 
     def _retry_payloads(
         self,
@@ -339,13 +357,58 @@ class OpenAIModelRouter(Provider, ModelRouter):
         body: str,
         payload: dict[str, Any],
         model: str,
-    ) -> list[dict[str, Any]]:
-        return retry_payloads_after_openai_compat_error(
+    ) -> list[OpenAICompatRetryPayload]:
+        return plan_openai_compat_retries(
             payload,
             status_code=status_code,
             body=body,
             profile=self._profile_for_model(model),
         )
+
+    def _record_compat_retry(
+        self,
+        span: Any,
+        model: str,
+        profile: OpenAICompatProviderProfile,
+        attempt: int,
+        retry: OpenAICompatRetryPayload,
+    ) -> None:
+        event = {
+            "attempt": attempt,
+            "model": model,
+            "profile": profile.id,
+            "reason": retry.reason,
+            "removed_fields": list(retry.removed_fields),
+            "added_fields": list(retry.added_fields),
+            "changed_fields": list(retry.changed_fields),
+        }
+        self.last_compatibility_events.append(event)
+        span.set_attribute("octopus.openai_compat.retry_count", attempt)
+        span.set_attribute("octopus.openai_compat.retry_reason", retry.reason)
+        span.set_attribute(
+            "octopus.openai_compat.retry_reasons",
+            [item["reason"] for item in self.last_compatibility_events],
+        )
+        if retry.removed_fields:
+            span.set_attribute(
+                "octopus.openai_compat.removed_fields",
+                list(retry.removed_fields),
+            )
+        if retry.added_fields:
+            span.set_attribute(
+                "octopus.openai_compat.added_fields",
+                list(retry.added_fields),
+            )
+
+    @staticmethod
+    def _custom_model_entry_for(model: str) -> dict[str, Any] | None:
+        data = _read_custom_models()
+        if not isinstance(data, dict):
+            return None
+        for entry in data.values():
+            if _entry_matches_model(entry, model):
+                return entry
+        return None
 
     @staticmethod
     def _model_supports_tool_use(model: str) -> bool:

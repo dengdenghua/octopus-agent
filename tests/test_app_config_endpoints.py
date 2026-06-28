@@ -260,6 +260,11 @@ class TestCustomModelsUpsert:
             "supports_vision": False,
             "supports_tool_use": True,
             "omit_sampling_parameters": True,
+            "compat_profile": "kimi_coding",
+            "thinking_request_style": "none",
+            "drop_tool_choice": True,
+            "max_temperature": 0.2,
+            "unsupported_request_fields": ["parallel_tool_calls"],
             "default_headers": {"X-Test": "yes"},
         }
         r = client.put(
@@ -284,6 +289,13 @@ class TestCustomModelsUpsert:
         assert stored["claude-mirror"]["supports_vision"] is False
         assert stored["claude-mirror"]["supports_tool_use"] is True
         assert stored["claude-mirror"]["omit_sampling_parameters"] is True
+        assert stored["claude-mirror"]["compat_profile"] == "kimi_coding"
+        assert stored["claude-mirror"]["thinking_request_style"] == "none"
+        assert stored["claude-mirror"]["drop_tool_choice"] is True
+        assert stored["claude-mirror"]["max_temperature"] == 0.2
+        assert stored["claude-mirror"]["unsupported_request_fields"] == [
+            "parallel_tool_calls",
+        ]
         assert stored["claude-mirror"]["default_headers"] == {"X-Test": "yes"}
 
     def test_update_preserves_prior_api_key(
@@ -477,6 +489,10 @@ class TestLlmModelsMerge:
                 "api_key": "sk-x", "models": ["kimi-for-coding"],
                 "display_name": "K2.7 Code",
                 "omit_sampling_parameters": True,
+                "compat_profile": "kimi_coding",
+                "thinking_request_style": "none",
+                "drop_tool_choice": True,
+                "max_temperature": 0.2,
             },
         )
 
@@ -490,6 +506,10 @@ class TestLlmModelsMerge:
         assert rows[0]["display_name"] == "K2.7 Code"
         assert rows[0]["supports_tool_use"] is True
         assert rows[0]["omit_sampling_parameters"] is True
+        assert rows[0]["compat_profile"] == "kimi_coding"
+        assert rows[0]["thinking_request_style"] == "none"
+        assert rows[0]["drop_tool_choice"] is True
+        assert rows[0]["max_temperature"] == 0.2
 
 
 # ═══════════════════════════════════════════════════════════

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from runtime.sensing.model_router.openai_compat_providers import (
+    apply_custom_openai_compat_profile,
     extract_openai_compat_reasoning,
     extract_openai_compat_usage,
     known_openai_compat_profiles,
     normalize_openai_compat_payload,
     parse_tool_call_arguments,
+    plan_openai_compat_retries,
     resolve_openai_compat_profile,
     retry_payloads_after_openai_compat_error,
 )
@@ -55,6 +57,52 @@ def test_profile_catalog_includes_main_domestic_providers() -> None:
         "stepfun",
         "siliconflow",
     }.issubset(ids)
+
+
+def test_custom_entry_can_override_compat_profile_and_field_policy() -> None:
+    base = resolve_openai_compat_profile("https://proxy.example/v1", "custom-code")
+    profile = apply_custom_openai_compat_profile(
+        {
+            "compat_profile": "kimi_coding",
+            "thinking_request_style": "minimax_adaptive",
+            "drop_tool_choice": True,
+            "max_temperature": 0.2,
+            "unsupported_request_fields": ["parallel_tool_calls"],
+        },
+        base_profile=base,
+    )
+
+    assert profile.id == "kimi_coding"
+    assert profile.thinking_request_style == "minimax_adaptive"
+    assert profile.omit_sampling_parameters is True
+    assert profile.drop_tool_choice is True
+    assert profile.max_temperature == 0.2
+    assert profile.unsupported_request_fields == ("parallel_tool_calls",)
+
+
+def test_legacy_false_omit_sampling_does_not_disable_detected_profile() -> None:
+    base = resolve_openai_compat_profile("https://api.kimi.com/coding/v1", "K2.7-Code")
+    profile = apply_custom_openai_compat_profile(
+        {"omit_sampling_parameters": False},
+        base_profile=base,
+    )
+
+    assert profile.id == "kimi_coding"
+    assert profile.omit_sampling_parameters is True
+
+
+def test_explicit_compat_profile_can_disable_sampling_omission() -> None:
+    base = resolve_openai_compat_profile("https://api.kimi.com/coding/v1", "K2.7-Code")
+    profile = apply_custom_openai_compat_profile(
+        {
+            "compat_profile": "kimi_coding",
+            "omit_sampling_parameters": False,
+        },
+        base_profile=base,
+    )
+
+    assert profile.id == "kimi_coding"
+    assert profile.omit_sampling_parameters is False
 
 
 def test_kimi_coding_payload_omits_sampling_and_thinking_extensions() -> None:
@@ -138,6 +186,33 @@ def test_retry_payloads_drop_incompatible_fields_incrementally() -> None:
     assert "thinking" not in variants[0]
     assert any("tool_choice" not in variant for variant in variants)
     assert any("max_completion_tokens" in variant for variant in variants)
+
+
+def test_retry_plan_reports_reason_and_payload_delta() -> None:
+    profile = resolve_openai_compat_profile("https://dashscope.aliyuncs.com/compatible-mode/v1")
+    plan = plan_openai_compat_retries(
+        {
+            "model": "qwen-plus",
+            "messages": [],
+            "max_tokens": 8,
+            "tool_choice": "auto",
+            "reasoning_effort": "high",
+            "thinking": {"type": "enabled"},
+        },
+        status_code=400,
+        body="unsupported max_completion_tokens or tool_choice",
+        profile=profile,
+    )
+
+    assert [item.reason for item in plan] == [
+        "drop_thinking_fields",
+        "drop_tool_choice",
+        "rename_max_tokens",
+    ]
+    assert plan[0].removed_fields == ("reasoning_effort", "thinking")
+    assert plan[1].removed_fields == ("tool_choice",)
+    assert plan[2].removed_fields == ("max_tokens",)
+    assert plan[2].added_fields == ("max_completion_tokens",)
 
 
 def test_tool_schema_retry_strips_additional_properties() -> None:

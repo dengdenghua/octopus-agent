@@ -15,6 +15,7 @@ from runtime.sensing.model_router import (  # noqa: E402
     OpenAIModelRouter,
     OpenAIRouterError,
 )
+from runtime.sensing.model_router.models import ToolSpec  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════
 # fake httpx client
@@ -250,6 +251,73 @@ class TestRequestShape:
         assert "temperature" not in payload
         assert payload["max_tokens"] == 128
 
+    def test_custom_model_compat_profile_overrides_payload_policy(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        import json as _json
+
+        custom_models_path = tmp_path / "custom_models.json"
+        custom_models_path.write_text(
+            _json.dumps({
+                "manual-kimi": {
+                    "id": "manual-kimi",
+                    "name": "manual-kimi",
+                    "provider": "openai",
+                    "models": ["manual-code-model"],
+                    "compat_profile": "kimi_coding",
+                    "drop_tool_choice": True,
+                    "unsupported_request_fields": ["parallel_tool_calls"],
+                },
+            }),
+            encoding="utf-8",
+        )
+        from runtime.platform.process.paths import app_paths
+
+        original = app_paths()
+
+        class _Patched:
+            pass
+
+        _Patched.custom_models_path = custom_models_path
+
+        def _getattr(self, name: str) -> object:
+            return getattr(original, name)
+
+        _Patched.__getattr__ = _getattr
+
+        monkeypatch.setattr(
+            "runtime.platform.process.paths.app_paths",
+            lambda: _Patched(),
+        )
+
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(base_url="https://plain-proxy.example/v1", client=fake)
+        r.call(
+            _req(model="manual-code-model").model_copy(
+                update={
+                    "enable_thinking": True,
+                    "reasoning_effort": "high",
+                    "tools": [
+                        ToolSpec(
+                            name="read_file",
+                            description="read",
+                            input_schema={"type": "object"},
+                        ),
+                    ],
+                },
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        assert payload["model"] == "manual-code-model"
+        assert "temperature" not in payload
+        assert "reasoning_effort" not in payload
+        assert "thinking" not in payload
+        assert "tool_choice" not in payload
+        assert r._profile_for_model("manual-code-model").id == "kimi_coding"
+
     def test_kimi_coding_profile_omits_sampling_without_custom_flag(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(
@@ -295,6 +363,17 @@ class TestRequestShape:
         assert "max_tokens" in fake.calls[0]["json"]
         assert "max_completion_tokens" in fake.calls[1]["json"]
         assert "max_tokens" not in fake.calls[1]["json"]
+        assert r.last_compatibility_events == [
+            {
+                "attempt": 1,
+                "model": "qwen-plus",
+                "profile": "qwen",
+                "reason": "rename_max_tokens",
+                "removed_fields": ["max_tokens"],
+                "added_fields": ["max_completion_tokens"],
+                "changed_fields": [],
+            },
+        ]
 
     def test_minimax_thinking_payload_uses_adaptive_style(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))

@@ -113,6 +113,11 @@ if FASTAPI_AVAILABLE:
         supports_vision: bool | None = None
         supports_tool_use: bool | None = None
         omit_sampling_parameters: bool | None = None
+        compat_profile: str | None = None
+        thinking_request_style: str | None = None
+        drop_tool_choice: bool | None = None
+        max_temperature: float | None = None
+        unsupported_request_fields: list[str] | None = None
         default_headers: dict[str, str] | None = None
 
     class CustomModelsList(BaseModel):
@@ -733,7 +738,32 @@ def create_config_router(
             "omit_sampling_parameters": (
                 body["omit_sampling_parameters"]
                 if "omit_sampling_parameters" in body
-                else prev.get("omit_sampling_parameters", False)
+                else prev.get("omit_sampling_parameters")
+            ),
+            "compat_profile": (
+                body["compat_profile"]
+                if "compat_profile" in body
+                else prev.get("compat_profile")
+            ),
+            "thinking_request_style": (
+                body["thinking_request_style"]
+                if "thinking_request_style" in body
+                else prev.get("thinking_request_style")
+            ),
+            "drop_tool_choice": (
+                body["drop_tool_choice"]
+                if "drop_tool_choice" in body
+                else prev.get("drop_tool_choice")
+            ),
+            "max_temperature": (
+                body["max_temperature"]
+                if "max_temperature" in body
+                else prev.get("max_temperature")
+            ),
+            "unsupported_request_fields": (
+                body["unsupported_request_fields"]
+                if "unsupported_request_fields" in body
+                else prev.get("unsupported_request_fields")
             ),
             "default_headers": default_headers,
         }
@@ -984,7 +1014,12 @@ def create_config_router(
             "supports_thinking": False,
             "supports_vision": False,
             "supports_tool_use": True,
-            "omit_sampling_parameters": False,
+            "omit_sampling_parameters": None,
+            "compat_profile": None,
+            "thinking_request_style": None,
+            "drop_tool_choice": None,
+            "max_temperature": None,
+            "unsupported_request_fields": None,
             "default_headers": {},
         }
         custom_models_state[model_id] = entry
@@ -1155,7 +1190,7 @@ def create_config_router(
             supports_thinking = bool(e.get("supports_thinking"))
             supports_vision = bool(e.get("supports_vision"))
             supports_tool_use = bool(e.get("supports_tool_use", True))
-            omit_sampling_parameters = bool(e.get("omit_sampling_parameters"))
+            omit_sampling_parameters = e.get("omit_sampling_parameters")
 
             # Expand the entry's ``models`` list into one picker row per
             # variant so the UI can show concrete model ids
@@ -1193,7 +1228,15 @@ def create_config_router(
                     "supports_thinking": supports_thinking,
                     "supports_vision": supports_vision,
                     "supports_tool_use": supports_tool_use,
-                    "omit_sampling_parameters": omit_sampling_parameters,
+                    "omit_sampling_parameters": (
+                        bool(omit_sampling_parameters)
+                        if omit_sampling_parameters is not None
+                        else None
+                    ),
+                    "compat_profile": e.get("compat_profile"),
+                    "thinking_request_style": e.get("thinking_request_style"),
+                    "drop_tool_choice": e.get("drop_tool_choice"),
+                    "max_temperature": e.get("max_temperature"),
                     "custom": True,
                     "entry_id": entry_id,
                 })

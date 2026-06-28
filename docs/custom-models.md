@@ -29,6 +29,44 @@ UI 路径：`设置 → 模型 → 自定义模型 → 添加`
 
 ---
 
+## OpenAI-compat 兼容层
+
+运行时会按 `base_url` 和模型名自动识别常见方言：`deepseek`、`kimi`、`kimi_coding`、`qwen`、`glm`、`doubao`、`minimax`、`hunyuan`、`baichuan`、`yi`、`stepfun`、`siliconflow`、`qianfan`。识别后会自动处理：
+
+- strict coding endpoint 去掉 `temperature/top_p/reasoning_effort/thinking`
+- MiniMax thinking 改成 `{"thinking":{"type":"adaptive"}}`
+- Kimi 温度上限收敛到 `1.0`
+- 400/422 后按需降级：去掉 thinking 字段、去掉 `tool_choice`、把 `max_tokens` 改成 `max_completion_tokens`、收紧 tool schema
+- 兼容多家 `usage` / `reasoning` / tool arguments 的非标准返回字段
+
+如果某个代理地址或私有网关无法靠 URL 猜准，可以在 `custom_models.json` 或配置 API 里显式写：
+
+```json
+{
+  "my-kimi-code": {
+    "provider": "openai",
+    "base_url": "https://proxy.example/v1",
+    "models": ["K2.7-Code"],
+    "compat_profile": "kimi_coding",
+    "thinking_request_style": "none",
+    "drop_tool_choice": true,
+    "omit_sampling_parameters": true,
+    "max_temperature": 1.0,
+    "unsupported_request_fields": ["parallel_tool_calls"]
+  }
+}
+```
+
+可用 `compat_profile`：`openai_compat`、`deepseek`、`kimi`、`kimi_coding`、`qwen`、`glm`、`doubao`、`minimax`、`hunyuan`、`baichuan`、`yi`、`stepfun`、`siliconflow`、`qianfan`。
+
+真实供应商 smoke 默认不跑，避免 CI 消耗额度。本地验证时设置：
+
+```bash
+OCTOPUS_LIVE_MODEL_SMOKE=1 KIMI_API_KEY=sk-... .venv/bin/python -m pytest tests/test_openai_compat_provider_smoke.py -q
+```
+
+---
+
 ## 常见厂商 · 抄作业表
 
 ### 🌏 国际

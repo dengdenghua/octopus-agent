@@ -12,7 +12,7 @@ from __future__ import annotations
 import ast
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
 ThinkingRequestStyle = Literal["openai", "none", "minimax_adaptive"]
@@ -32,6 +32,15 @@ class OpenAICompatProviderProfile:
     retry_without_tool_choice: bool = True
     retry_without_sampling: bool = True
     retry_max_tokens_as_completion_tokens: bool = True
+
+
+@dataclass(frozen=True)
+class OpenAICompatRetryPayload:
+    payload: dict[str, Any]
+    reason: str
+    removed_fields: tuple[str, ...] = ()
+    added_fields: tuple[str, ...] = ()
+    changed_fields: tuple[str, ...] = ()
 
 
 GENERIC_OPENAI_PROFILE = OpenAICompatProviderProfile(
@@ -140,6 +149,10 @@ def known_openai_compat_profiles() -> tuple[OpenAICompatProviderProfile, ...]:
     return _PROFILES
 
 
+def openai_compat_profile_ids() -> tuple[str, ...]:
+    return tuple(profile.id for profile in (GENERIC_OPENAI_PROFILE, *_PROFILES))
+
+
 def resolve_openai_compat_profile(
     base_url: str,
     model: str | None = None,
@@ -158,6 +171,50 @@ def resolve_openai_compat_profile(
         ):
             return profile
     return GENERIC_OPENAI_PROFILE
+
+
+def apply_custom_openai_compat_profile(
+    entry: dict[str, Any] | None,
+    *,
+    base_profile: OpenAICompatProviderProfile,
+) -> OpenAICompatProviderProfile:
+    if not isinstance(entry, dict):
+        return base_profile
+
+    profile = _profile_by_id(entry.get("compat_profile")) or base_profile
+    updates: dict[str, Any] = {}
+
+    thinking_style = entry.get("thinking_request_style")
+    if thinking_style in ("openai", "none", "minimax_adaptive"):
+        updates["thinking_request_style"] = thinking_style
+
+    for field_name in (
+        "drop_tool_choice",
+        "retry_without_tool_choice",
+        "retry_without_sampling",
+        "retry_max_tokens_as_completion_tokens",
+    ):
+        value = entry.get(field_name)
+        if value is not None:
+            updates[field_name] = bool(value)
+
+    omit_sampling = entry.get("omit_sampling_parameters")
+    if omit_sampling is not None and (
+        omit_sampling is True or _has_explicit_compat_override(entry)
+    ):
+        updates["omit_sampling_parameters"] = bool(omit_sampling)
+
+    max_temperature = _coerce_float(entry.get("max_temperature"))
+    if max_temperature is not None:
+        updates["max_temperature"] = max_temperature
+
+    unsupported_fields = _coerce_string_tuple(entry.get("unsupported_request_fields"))
+    if unsupported_fields is not None:
+        updates["unsupported_request_fields"] = unsupported_fields
+
+    if not updates:
+        return profile
+    return replace(profile, **updates)
 
 
 def normalize_openai_compat_payload(
@@ -192,18 +249,43 @@ def retry_payloads_after_openai_compat_error(
     body: str = "",
     profile: OpenAICompatProviderProfile = GENERIC_OPENAI_PROFILE,
 ) -> list[dict[str, Any]]:
+    return [
+        item.payload
+        for item in plan_openai_compat_retries(
+            payload,
+            status_code=status_code,
+            body=body,
+            profile=profile,
+        )
+    ]
+
+
+def plan_openai_compat_retries(
+    payload: dict[str, Any],
+    *,
+    status_code: int,
+    body: str = "",
+    profile: OpenAICompatProviderProfile = GENERIC_OPENAI_PROFILE,
+) -> list[OpenAICompatRetryPayload]:
     if status_code not in (400, 422):
         return []
 
-    variants: list[dict[str, Any]] = []
+    variants: list[OpenAICompatRetryPayload] = []
     seen: set[str] = {_payload_fingerprint(payload)}
 
-    def add(candidate: dict[str, Any]) -> None:
+    def add(reason: str, candidate: dict[str, Any]) -> None:
         fp = _payload_fingerprint(candidate)
         if fp in seen:
             return
         seen.add(fp)
-        variants.append(candidate)
+        removed, added, changed = _payload_delta(payload, candidate)
+        variants.append(OpenAICompatRetryPayload(
+            payload=candidate,
+            reason=reason,
+            removed_fields=removed,
+            added_fields=added,
+            changed_fields=changed,
+        ))
 
     lower = (body or "").lower()
 
@@ -211,12 +293,12 @@ def retry_payloads_after_openai_compat_error(
         candidate = dict(payload)
         candidate.pop("reasoning_effort", None)
         candidate.pop("thinking", None)
-        add(candidate)
+        add("drop_thinking_fields", candidate)
 
     if profile.retry_without_tool_choice and "tool_choice" in payload:
         candidate = dict(payload)
         candidate.pop("tool_choice", None)
-        add(candidate)
+        add("drop_tool_choice", candidate)
 
     if (
         profile.retry_without_sampling
@@ -228,7 +310,7 @@ def retry_payloads_after_openai_compat_error(
     ):
         candidate = dict(payload)
         _remove_sampling_parameters(candidate)
-        add(candidate)
+        add("drop_sampling_parameters", candidate)
 
     if (
         profile.retry_max_tokens_as_completion_tokens
@@ -238,7 +320,7 @@ def retry_payloads_after_openai_compat_error(
     ):
         candidate = dict(payload)
         candidate["max_completion_tokens"] = candidate.pop("max_tokens")
-        add(candidate)
+        add("rename_max_tokens", candidate)
 
     if "tools" in payload and _mentions_any(
         lower,
@@ -246,7 +328,7 @@ def retry_payloads_after_openai_compat_error(
     ):
         candidate = dict(payload)
         candidate["tools"] = _strict_tools(candidate.get("tools"))
-        add(candidate)
+        add("strict_tool_schema", candidate)
 
     return variants
 
@@ -373,6 +455,74 @@ def _payload_fingerprint(payload: dict[str, Any]) -> str:
     return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
 
 
+def _payload_delta(
+    original: dict[str, Any],
+    candidate: dict[str, Any],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    original_keys = set(original)
+    candidate_keys = set(candidate)
+    removed = tuple(sorted(original_keys - candidate_keys))
+    added = tuple(sorted(candidate_keys - original_keys))
+    changed = tuple(
+        sorted(
+            key
+            for key in original_keys & candidate_keys
+            if original.get(key) != candidate.get(key)
+        )
+    )
+    return removed, added, changed
+
+
+def _profile_by_id(value: Any) -> OpenAICompatProviderProfile | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    target = value.strip().lower().replace("-", "_")
+    if target == GENERIC_OPENAI_PROFILE.id:
+        return GENERIC_OPENAI_PROFILE
+    for profile in _PROFILES:
+        if profile.id == target:
+            return profile
+    return None
+
+
+def _coerce_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_string_tuple(value: Any) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        items = [item.strip() for item in value.split(",")]
+    elif isinstance(value, list):
+        items = [str(item).strip() for item in value]
+    else:
+        return None
+    return tuple(item for item in items if item)
+
+
+def _has_explicit_compat_override(entry: dict[str, Any]) -> bool:
+    if _profile_by_id(entry.get("compat_profile")) is not None:
+        return True
+    return any(
+        entry.get(field_name) is not None
+        for field_name in (
+            "thinking_request_style",
+            "drop_tool_choice",
+            "retry_without_tool_choice",
+            "retry_without_sampling",
+            "retry_max_tokens_as_completion_tokens",
+            "max_temperature",
+            "unsupported_request_fields",
+        )
+    )
+
+
 def _mentions_any(haystack: str, needles: tuple[str, ...]) -> bool:
     return any(needle in haystack for needle in needles)
 
@@ -458,11 +608,15 @@ def _int_from_any(value: Any) -> int:
 __all__ = [
     "GENERIC_OPENAI_PROFILE",
     "OpenAICompatProviderProfile",
+    "OpenAICompatRetryPayload",
+    "apply_custom_openai_compat_profile",
     "extract_openai_compat_reasoning",
     "extract_openai_compat_usage",
     "known_openai_compat_profiles",
     "normalize_openai_compat_payload",
+    "openai_compat_profile_ids",
     "parse_tool_call_arguments",
+    "plan_openai_compat_retries",
     "resolve_openai_compat_profile",
     "retry_payloads_after_openai_compat_error",
 ]
