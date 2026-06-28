@@ -116,13 +116,13 @@ describe("<ClusterWorkbench />", () => {
     expect(unlabeled).toEqual([]);
   });
 
-  it("wraps content in labeled landmarks + tablist/progressbar roles (Kimi axe: region ×237)", () => {
+  it("wraps content in labeled landmarks + toolbar/progressbar roles (Kimi axe: region ×237)", () => {
     render(<ClusterWorkbench session={SESSION} selectedAgentId="a1" />);
     expect(screen.getByRole("region", { name: "Agent 集群" })).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "octopus's Computer" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tablist")).toBeInTheDocument();
+    expect(screen.getByRole("toolbar", { name: "选择 agent" })).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
   });
 });

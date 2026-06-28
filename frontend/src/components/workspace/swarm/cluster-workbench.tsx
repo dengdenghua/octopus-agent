@@ -434,7 +434,7 @@ export function ClusterWorkbench({
 
         {/* agent tab strip */}
         <div
-          role="tablist"
+          role="toolbar"
           aria-label="选择 agent"
           className="flex gap-2 overflow-x-auto border-b border-border/60 px-2.5 py-2"
         >
