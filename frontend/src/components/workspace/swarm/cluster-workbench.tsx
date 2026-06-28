@@ -212,14 +212,14 @@ function AgentClusterCard({
         <div className="mt-1.5 flex items-center gap-3 text-[10px] text-muted-foreground/80">
           {agent.tokenUsed != null && (
             <span className="inline-flex items-center gap-1">
-              <CoinsIcon className="size-3" />
+              <CoinsIcon className="size-3" aria-hidden="true" />
               {agent.tokenUsed.toLocaleString()}
               {agent.tokenBudget ? `/${agent.tokenBudget.toLocaleString()}` : ""}
             </span>
           )}
           {agent.stats?.rating != null && (
             <span className="inline-flex items-center gap-1">
-              <StarIcon className="size-3" />
+              <StarIcon className="size-3" aria-hidden="true" />
               {agent.stats.rating.toFixed(1)}
             </span>
           )}
@@ -310,6 +310,7 @@ function AgentDetailPanel({
         >
           <StatusIcon
             className={cn("size-3.5", isRunning(agent.status) && "animate-spin")}
+            aria-hidden="true"
           />
           {STATUS_LABELS[agent.status]}
         </span>

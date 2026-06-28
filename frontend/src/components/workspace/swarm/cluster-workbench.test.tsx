@@ -100,4 +100,29 @@ describe("<ClusterWorkbench />", () => {
     render(<ClusterWorkbench session={{ ...SESSION, agents: [] }} />);
     expect(screen.getByText("集群尚未分配 agent")).toBeInTheDocument();
   });
+
+  // a11y — assert the exact rules a live axe-core audit found Kimi's swarm page
+  // failing (svg-img-alt ×281 nodes, region ×237 nodes). Built to pass them.
+  it("has zero unlabeled decorative SVGs (Kimi axe: svg-img-alt ×281)", () => {
+    const { container } = render(
+      <ClusterWorkbench session={SESSION} selectedAgentId="a1" />,
+    );
+    const svgs = Array.from(container.querySelectorAll("svg"));
+    expect(svgs.length).toBeGreaterThan(0);
+    const unlabeled = svgs.filter(
+      (s) =>
+        s.getAttribute("aria-hidden") !== "true" && !s.getAttribute("aria-label"),
+    );
+    expect(unlabeled).toEqual([]);
+  });
+
+  it("wraps content in labeled landmarks + tablist/progressbar roles (Kimi axe: region ×237)", () => {
+    render(<ClusterWorkbench session={SESSION} selectedAgentId="a1" />);
+    expect(screen.getByRole("region", { name: "Agent 集群" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "octopus's Computer" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("tablist")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar")).toBeInTheDocument();
+  });
 });
