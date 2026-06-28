@@ -3,6 +3,7 @@
  * panels we shipped over the last several iterations.
  *
  * Surfaces:
+ *   - Runtime self-check (version drift + loopback/backend origin)
  *   - Feature flags (read + reload)
  *   - Ambient suggestions (read + accept/dismiss)
  *   - Remote backends (CRUD + ping)
@@ -22,6 +23,7 @@ import { AmbientSuggestionsPanel } from "@/components/workspace/ambient-suggesti
 import { FeatureFlagsPanel } from "@/components/workspace/feature-flags-panel";
 import { InvariantsPanel } from "@/components/workspace/invariants-panel";
 import { RemoteBackendsPanel } from "@/components/workspace/remote-backends-panel";
+import { RuntimeSelfCheckPanel } from "@/components/workspace/runtime-self-check-panel";
 import { useI18n } from "@/core/i18n/hooks";
 import {
   WorkspaceBody,
@@ -72,7 +74,7 @@ export function DiagnosticsContent() {
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-      <section className="workspace-panel rounded-[1.75rem] px-6 py-5">
+      <section className="workspace-panel rounded-lg px-6 py-5">
         <div className="flex items-center gap-3">
           <GaugeIcon className="size-5 shrink-0" aria-hidden="true" />
           <div className="flex min-w-0 flex-col">
@@ -86,8 +88,11 @@ export function DiagnosticsContent() {
         </div>
       </section>
 
-      <Tabs defaultValue="flags" className="flex flex-col gap-3">
+      <Tabs defaultValue="runtime" className="flex flex-col gap-3">
         <TabsList className="self-start">
+          <TabsTrigger value="runtime">
+            {t.diagnosticsPage.tabs.runtime}
+          </TabsTrigger>
           <TabsTrigger value="flags">
             {t.diagnosticsPage.tabs.featureFlags}
           </TabsTrigger>
@@ -101,6 +106,10 @@ export function DiagnosticsContent() {
             {t.diagnosticsPage.tabs.invariants}
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="runtime">
+          <RuntimeSelfCheckPanel />
+        </TabsContent>
 
         <TabsContent value="flags">
           <FeatureFlagsPanel />

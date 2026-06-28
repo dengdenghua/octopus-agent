@@ -1163,6 +1163,7 @@ export const enUS: Translations = {
     description:
       "Feature flags, follow-up suggestions, remote backends, and invariants — one place to see and tune them.",
     tabs: {
+      runtime: "Runtime",
       featureFlags: "Feature Flags",
       suggestions: "Suggestions",
       remote: "Remote",
@@ -1170,6 +1171,35 @@ export const enUS: Translations = {
     },
     noActiveProject:
       "No active project bound. Open a workspace project to see suggestions.",
+  },
+
+  runtimeSelfCheckPanel: {
+    title: "Runtime Self-Check",
+    ready: "ready",
+    degraded: "degraded",
+    refresh: "Refresh",
+    refreshing: "Refreshing...",
+    refreshAria: "Refresh runtime self-check",
+    loading: "Loading runtime status...",
+    loadFailed: (error) => `Failed to load runtime status: ${error}`,
+    status: "Status",
+    runtimeVersion: "Runtime version",
+    generatedAt: "Generated",
+    versions: "Versions",
+    runtime: "Runtime",
+    pyproject: "pyproject",
+    frontendPackage: "Frontend package",
+    backend: "Backend",
+    canonicalBaseUrl: "Canonical base URL",
+    requestOrigin: "Request origin",
+    host: "Host",
+    port: "Port",
+    loopbackAliases: "Loopback aliases",
+    checks: "Checks",
+    nextActions: "Next actions",
+    passed: "pass",
+    failed: "fail",
+    empty: "No data.",
   },
 
   featureFlagsPanel: {

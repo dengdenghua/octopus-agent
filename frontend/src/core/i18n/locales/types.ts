@@ -983,12 +983,43 @@ export interface Translations {
     title: string;
     description: string;
     tabs: {
+      runtime: string;
       featureFlags: string;
       suggestions: string;
       remote: string;
       invariants: string;
     };
     noActiveProject: string;
+  };
+
+  // Runtime self-check panel
+  runtimeSelfCheckPanel: {
+    title: string;
+    ready: string;
+    degraded: string;
+    refresh: string;
+    refreshing: string;
+    refreshAria: string;
+    loading: string;
+    loadFailed: (error: string) => string;
+    status: string;
+    runtimeVersion: string;
+    generatedAt: string;
+    versions: string;
+    runtime: string;
+    pyproject: string;
+    frontendPackage: string;
+    backend: string;
+    canonicalBaseUrl: string;
+    requestOrigin: string;
+    host: string;
+    port: string;
+    loopbackAliases: string;
+    checks: string;
+    nextActions: string;
+    passed: string;
+    failed: string;
+    empty: string;
   };
 
   // Feature Flags panel
