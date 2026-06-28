@@ -33,6 +33,7 @@ import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { getLocalSettings, saveLocalSettings } from "@/core/settings/local";
 import { registerPageAgentCapability } from "@/core/page-agent-bridge";
+import { ModelCookbook } from "@/components/workspace/model-cookbook";
 
 import { SettingsSection } from "./settings-section";
 
@@ -593,6 +594,9 @@ export default function ModelSettingsPage() {
 
   return (
     <div className="space-y-8">
+      {/* Hardware-aware local-model recommendations + one-click pull */}
+      <ModelCookbook />
+
       {/* Official models */}
       {!isGuest && <OfficialModelsSection />}
 
