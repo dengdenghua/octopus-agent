@@ -7,7 +7,19 @@ import { cn } from "@/lib/utils";
 
 import { Section } from "../section";
 
-const publicAssetBase = import.meta.env.BASE_URL;
+// Deterministic per-card gradients. Previously each card pulled a
+// ``public/images/<threadId>.jpg`` background, but those JPEG assets were
+// corrupted (UTF-8-mangled, ~4.5 MB of unrenderable bytes) and shipped a
+// broken background on the landing page. Gradients keep the visual design,
+// add zero network weight, and never break.
+const CARD_GRADIENTS = [
+  "linear-gradient(135deg, #4f46e5 0%, #9333ea 100%)",
+  "linear-gradient(135deg, #e11d48 0%, #f59e0b 100%)",
+  "linear-gradient(135deg, #0284c7 0%, #06b6d4 100%)",
+  "linear-gradient(135deg, #059669 0%, #14b8a6 100%)",
+  "linear-gradient(135deg, #c026d3 0%, #7c3aed 100%)",
+  "linear-gradient(135deg, #ea580c 0%, #db2777 100%)",
+];
 
 export function CaseStudySection({ className }: { className?: string }) {
   const caseStudies = [
@@ -55,7 +67,7 @@ export function CaseStudySection({ className }: { className?: string }) {
       subtitle="See how Octopus is used in the wild"
     >
       <div className="container-md mt-8 grid grid-cols-1 gap-4 px-20 md:grid-cols-2 lg:grid-cols-3">
-        {caseStudies.map((caseStudy) => (
+        {caseStudies.map((caseStudy, index) => (
           <Link
             key={caseStudy.title}
             to={
@@ -69,7 +81,7 @@ export function CaseStudySection({ className }: { className?: string }) {
               <div
                 className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-all duration-300 group-hover/card:scale-110 group-hover/card:brightness-90"
                 style={{
-                  backgroundImage: `url(${publicAssetBase}images/${caseStudy.threadId}.jpg)`,
+                  backgroundImage: CARD_GRADIENTS[index % CARD_GRADIENTS.length],
                 }}
               ></div>
               <div

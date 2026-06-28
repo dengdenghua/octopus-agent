@@ -708,6 +708,102 @@ describe("useThreadStreamRealtime permissions", () => {
     );
   });
 
+  it("does not add code capability defaults to explicit chat/react turns", async () => {
+    const startTurn = mockRealtime();
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: {
+          mode: "react",
+          permission_mode: "default",
+          personal_mode: "research",
+        },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", { text: "summarize this topic", files: [] });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    const payload = startTurn.mock.calls[0]?.[0];
+    const context = (payload?.metadata as { context?: Record<string, unknown> })
+      ?.context;
+    expect(context).toMatchObject({
+      mode: "react",
+      personal_mode: "research",
+      permission_mode: "default",
+      sandbox_mode: "sandbox",
+      execution_environment: "sandbox",
+    });
+    expect(context).not.toHaveProperty("capability_mode");
+    expect(context).not.toHaveProperty("code_mode");
+  });
+
+  it("keeps team turns in team mode without stealth code capability defaults", async () => {
+    const startTurn = mockRealtime();
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "team-thread",
+        context: {
+          mode: "team",
+          permission_mode: "default",
+          team_mode: "chat",
+          workspace_path: "/repo",
+        },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("team-thread", { text: "ask the group", files: [] });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    const payload = startTurn.mock.calls[0]?.[0];
+    const context = (payload?.metadata as { context?: Record<string, unknown> })
+      ?.context;
+    expect(context).toMatchObject({
+      mode: "team",
+      team_mode: "chat",
+      workspace_path: "/repo",
+      permission_mode: "default",
+    });
+    expect(context).not.toHaveProperty("capability_mode");
+    expect(context).not.toHaveProperty("code_mode");
+  });
+
+  it("adds code capability defaults to explicit project code turns", async () => {
+    const startTurn = mockRealtime();
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "code-thread",
+        context: {
+          mode: "code",
+          permission_mode: "default",
+          workspace_path: "/repo",
+        },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("code-thread", { text: "fix the bug", files: [] });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    expect(startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: {
+          context: expect.objectContaining({
+            mode: "code",
+            workspace_path: "/repo",
+            capability_mode: "code",
+            code_mode: "solo",
+          }),
+        },
+      }),
+    );
+  });
+
   it("sends selected reasoning effort as top-level turn effort", async () => {
     const startTurn = mockRealtime();
     const { result } = renderHook(() =>

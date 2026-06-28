@@ -910,6 +910,19 @@ export interface AgentCompetitorScorecardDimension {
     next_actions: string[];
   }>;
   octopus_missing_evidence_count?: number;
+  operator_drilldown?: {
+    schema: "octopus.scorecard_operator_drilldown.v1" | string;
+    dimension_id?: string;
+    certified_floor?: number;
+    links?: Array<{
+      id?: string;
+      label?: string;
+      method?: string;
+      href?: string;
+      body?: Record<string, unknown>;
+    }>;
+    source_refs?: Array<Record<string, unknown>>;
+  };
   octopus_ecosystem_readiness?: AgentEcosystemReadiness;
   octopus_next_actions: string[];
 }
@@ -968,6 +981,110 @@ export interface AgentCompetitorScorecard {
     verdict?: string;
     next_focus?: string[];
   };
+}
+
+export interface AutomationPolicyRuleDraftsReport {
+  ok?: boolean;
+  schema: "octopus.automation_policy_rule_drafts.v1" | string;
+  total: number;
+  verified: number;
+  drafts: Array<{
+    schema?: string;
+    draft_id: string;
+    signed_payload: {
+      schema?: string;
+      proposal_id?: string;
+      proposal_kind?: string;
+      review_queue_item_id?: string | null;
+      automation?: {
+        id?: string;
+        surface?: string;
+        tool?: string;
+      };
+      rule: {
+        effect: "deny" | "allow" | string;
+        tool: string;
+        args_contains?: string;
+        reason?: string;
+      };
+      evidence?: Record<string, unknown>;
+      review_required?: boolean;
+    };
+    signature?: {
+      schema?: string;
+      algorithm?: string;
+      digest?: string;
+    };
+  }>;
+}
+
+export interface AutomationRadarReport {
+  ok?: boolean;
+  schema: "octopus.automation_radar.v1" | string;
+  target_score: number;
+  scope: string;
+  competitors: string[];
+  overall: Record<string, number>;
+  ranking: Array<{ competitor: string; score: number }>;
+  verdict: "leading" | "competitive" | "near_parity" | "behind" | string;
+  dimensions: Array<{
+    id: string;
+    title: string;
+    weight: number;
+    why: string;
+    scores: Record<string, number>;
+    leader: string;
+    octopus_gap_to_target: number;
+    octopus_gap_to_codex: number;
+    evidence_ready: boolean;
+    evidence_checks: Array<Record<string, unknown>>;
+    missing_check_ids: string[];
+    operator_drilldown?: {
+      schema?: string;
+      dimension_id?: string;
+      links?: Array<Record<string, unknown>>;
+    };
+    next_actions: string[];
+  }>;
+  octopus_gaps: AutomationRadarReport["dimensions"];
+  octopus_strengths: AutomationRadarReport["dimensions"];
+  browser_desktop_quality: {
+    schema?: string;
+    score?: number;
+    passed?: number;
+    total?: number;
+    ready?: boolean;
+  };
+  parity_certification: {
+    schema?: string;
+    passed?: number;
+    total?: number;
+    ready?: boolean;
+  };
+  policy_rule_drafts: {
+    schema?: string;
+    total: number;
+    verified: number;
+    ready: boolean;
+    error?: string;
+  };
+  next_focus: string[];
+}
+
+export interface AutomationPolicyRuleInstallResult {
+  ok?: boolean;
+  schema: "octopus.policy_review_rule_install.v1" | string;
+  installed: boolean;
+  draft_id?: string;
+  source_kind?: string;
+  rule: {
+    effect: "deny" | "allow" | string;
+    tool: string;
+    args_contains?: string;
+    reason?: string;
+  };
+  policy_rule_count: number;
+  signature?: Record<string, unknown>;
 }
 
 export interface AgentTraceScope {
@@ -1193,6 +1310,36 @@ export async function queueRepairRoutePromotionCandidates(
 export async function fetchBrowserDesktopQuality(): Promise<BrowserDesktopQualityReport> {
   return fetchJson<BrowserDesktopQualityReport>(
     "/api/evolution/browser-desktop-quality",
+  );
+}
+
+export async function fetchAutomationRadar(
+  targetScore = 95,
+): Promise<AutomationRadarReport> {
+  const params = new URLSearchParams({ target_score: String(targetScore) });
+  return fetchJson<AutomationRadarReport>(
+    `/api/evolution/automation-radar?${params.toString()}`,
+  );
+}
+
+export async function fetchAutomationPolicyRuleDrafts(
+  limit = 100,
+): Promise<AutomationPolicyRuleDraftsReport> {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return fetchJson<AutomationPolicyRuleDraftsReport>(
+    `/api/evolution/automation-policy-rule-drafts?${params.toString()}`,
+  );
+}
+
+export async function installAutomationPolicyRuleDraft(
+  draftId: string,
+): Promise<AutomationPolicyRuleInstallResult> {
+  return postJson<AutomationPolicyRuleInstallResult>(
+    "/api/evolution/automation-policy-rule-drafts/install",
+    {
+      draft_id: draftId,
+      confirm_install: true,
+    },
   );
 }
 

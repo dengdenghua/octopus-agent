@@ -81,6 +81,34 @@ export interface PluginSmokeSummary {
     }>;
     next_actions: string[];
   };
+  migration_readiness?: {
+    schema: "octopus.plugin_migration_readiness.v1" | string;
+    score: number;
+    ready: boolean;
+    ready_count: number;
+    total: number;
+    blocked_count: number;
+    review_required_count: number;
+  };
+}
+
+export interface PluginMigrationReadiness {
+  schema: "octopus.plugin_migration_readiness.v1" | string;
+  total: number;
+  ready_count: number;
+  blocked_count: number;
+  review_required_count: number;
+  score: number;
+  ready: boolean;
+  central_contract?: {
+    schema: "octopus.plugin_migration_contract_index.v1" | string;
+    path: string;
+    present: boolean;
+    covered_count: number;
+    central_tests_present: boolean;
+  };
+  plugins: Array<Record<string, unknown>>;
+  next_actions: string[];
 }
 
 export interface PluginRuntimeProfile {

@@ -105,6 +105,54 @@ function PageLoading() {
 }
 
 export function AppRouter() {
+  // Warm the chunks a user almost always reaches next, during browser idle
+  // time, so the first navigation into the workspace and the first code block
+  // render without a visible lazy-load delay. Purely opportunistic: every
+  // fetch is fire-and-forget and failures are swallowed.
+  useEffect(() => {
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      void import("./app/workspace/layout").catch(() => {});
+      void import("./app/workspace/chats/[thread_id]/page").catch(() => {});
+      void import("shiki")
+        .then(({ codeToHtml }) =>
+          Promise.all(
+            ["javascript", "typescript", "python"].map((lang) =>
+              codeToHtml("", { lang, theme: "one-dark-pro" }),
+            ),
+          ),
+        )
+        .catch(() => {});
+    };
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void) => number;
+      }
+    ).requestIdleCallback;
+    const cic = (
+      window as unknown as {
+        cancelIdleCallback?: (handle: number) => void;
+      }
+    ).cancelIdleCallback;
+    let idleHandle: number | undefined;
+    let timeoutHandle: number | undefined;
+    if (typeof ric === "function") {
+      idleHandle = ric(warm);
+    } else {
+      timeoutHandle = window.setTimeout(warm, 1500);
+    }
+    return () => {
+      cancelled = true;
+      if (idleHandle !== undefined && typeof cic === "function") {
+        cic(idleHandle);
+      }
+      if (timeoutHandle !== undefined) {
+        window.clearTimeout(timeoutHandle);
+      }
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <Suspense fallback={<PageLoading />}>

@@ -3,6 +3,7 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 
 import type {
   CapabilityInfo,
+  PluginMigrationReadiness,
   PluginInfo,
   PluginRuntimeProfile,
   PluginSmokeSummary,
@@ -50,6 +51,21 @@ export async function fetchPluginSmokeSummary(): Promise<PluginSmokeSummary> {
     throw new Error(`Failed to get plugin smoke summary: ${res.statusText}`);
   }
   return (await res.json()) as PluginSmokeSummary;
+}
+
+export async function fetchPluginMigrationReadiness(): Promise<PluginMigrationReadiness> {
+  const res = await fetch(
+    `${getBackendBaseURL()}/api/plugins/migration-readiness`,
+    {
+      headers: authHeaders(),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(
+      `Failed to get plugin migration readiness: ${res.statusText}`,
+    );
+  }
+  return (await res.json()) as PluginMigrationReadiness;
 }
 
 export async function getPluginRuntime(

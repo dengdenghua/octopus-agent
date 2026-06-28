@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   deleteTask,
-  getTask,
   listTasks,
   pauseTask,
   resumeTask,
@@ -28,16 +27,6 @@ export function useTasks(status?: "paused" | "pending" | "active" | "all") {
     // Implementation note.
     refetchIntervalInBackground: true,
     staleTime: 1000,
-  });
-}
-
-export function useTask(taskId: string | null | undefined) {
-  return useQuery({
-    queryKey: [...TASKS_KEY, "detail", taskId],
-    queryFn: () => getTask(taskId as string),
-    enabled: Boolean(taskId),
-    refetchInterval: 2000,
-    refetchIntervalInBackground: true,
   });
 }
 

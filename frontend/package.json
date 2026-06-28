@@ -82,6 +82,7 @@
     "date-fns": "^4.1.0",
     "diff": "^8.0.4",
     "dompurify": "^3.4.0",
+    "embla-carousel-react": "^8.6.0",
     "gsap": "^3.13.0",
     "katex": "^0.16.28",
     "lucide-react": "^0.562.0",
@@ -146,11 +147,6 @@
   },
   "ct3aMetadata": {
     "initVersion": "7.40.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron"
-    ]
   },
   "packageManager": "pnpm@10.26.2"
 }

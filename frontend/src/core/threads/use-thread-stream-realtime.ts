@@ -113,6 +113,18 @@ function reasoningEffortValue(value: unknown): ReasoningEffort | undefined {
   return undefined;
 }
 
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function stripUndefinedValues(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined),
+  );
+}
+
 function toMillis(value: string | null | undefined): number {
   return toOptionalMillis(value) ?? Date.now();
 }
@@ -819,27 +831,27 @@ export function useThreadStreamRealtime(
             context && typeof context === "object"
               ? (context as Record<string, unknown>)
               : {};
-          const selectedMode =
-            typeof rawContext.mode === "string" && rawContext.mode.trim()
-              ? rawContext.mode
-              : "code";
-          const runtimeContext = {
+          const explicitMode = stringValue(rawContext.mode);
+          const selectedMode = explicitMode ?? "code";
+          const explicitCapabilityMode = stringValue(
+            rawContext.capability_mode,
+          );
+          const explicitCodeMode = stringValue(rawContext.code_mode);
+          const shouldDefaultCodeCapability =
+            !explicitMode || selectedMode === "code";
+          const runtimeContext = stripUndefinedValues({
             ...rawContext,
             mode: selectedMode,
             capability_mode:
-              typeof rawContext.capability_mode === "string" &&
-              rawContext.capability_mode.trim()
-                ? rawContext.capability_mode
-                : "code",
+              explicitCapabilityMode ??
+              (shouldDefaultCodeCapability ? "code" : undefined),
             code_mode:
-              typeof rawContext.code_mode === "string" &&
-              rawContext.code_mode.trim()
-                ? rawContext.code_mode
-                : "solo",
+              explicitCodeMode ??
+              (shouldDefaultCodeCapability ? "solo" : undefined),
             permission_mode: permissionRuntime.mode,
             sandbox_mode: permissionRuntime.sandbox_mode,
             execution_environment: permissionRuntime.execution_environment,
-          };
+          });
           const reasoningEffort = reasoningEffortValue(
             rawContext["reasoning_effort"],
           );

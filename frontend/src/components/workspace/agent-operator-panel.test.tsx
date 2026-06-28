@@ -30,6 +30,8 @@ const api = vi.hoisted(() => ({
   fetchAgentTraceReviewQueueSummary: vi.fn(),
   fetchAgentTraceTaskRuns: vi.fn(),
   fetchAgentTraceTrustDenialSummary: vi.fn(),
+  fetchAutomationPolicyRuleDrafts: vi.fn(),
+  fetchAutomationRadar: vi.fn(),
   fetchAutoVerifierMetrics: vi.fn(),
   fetchBrowserDesktopQuality: vi.fn(),
   fetchBrowserDesktopRepairRecipeVerifications: vi.fn(),
@@ -39,6 +41,7 @@ const api = vi.hoisted(() => ({
   fetchOrganizationTopologyProposals: vi.fn(),
   fetchOrganizationTopologies: vi.fn(),
   fetchSubagentFitness: vi.fn(),
+  installAutomationPolicyRuleDraft: vi.fn(),
   installAgentTracePolicyReviewRuleDraft: vi.fn(),
   queueComputerActivityReplayCase: vi.fn(),
   queueReplayEvidenceHint: vi.fn(),
@@ -406,6 +409,99 @@ describe("<AgentOperatorPanel />", () => {
       },
       next_actions: [],
     });
+    api.fetchAutomationRadar.mockResolvedValue({
+      schema: "octopus.automation_radar.v1",
+      target_score: 95,
+      scope: "browser_desktop_visual_automation",
+      competitors: ["codex", "claude_code", "cursor", "octopus"],
+      overall: {
+        codex: 93,
+        claude_code: 85,
+        cursor: 80,
+        octopus: 95,
+      },
+      ranking: [
+        { competitor: "octopus", score: 95 },
+        { competitor: "codex", score: 93 },
+      ],
+      verdict: "leading",
+      dimensions: [],
+      octopus_gaps: [
+        {
+          id: "operator_visibility",
+          title: "Operator visibility",
+          weight: 10,
+          why: "Expose automation health.",
+          scores: { codex: 93, claude_code: 86, cursor: 83, octopus: 93 },
+          leader: "codex",
+          octopus_gap_to_target: 2,
+          octopus_gap_to_codex: 0,
+          evidence_ready: true,
+          evidence_checks: [],
+          missing_check_ids: [],
+          next_actions: [
+            "Make every browser and desktop replay case reachable from the operator scorecard.",
+          ],
+        },
+      ],
+      octopus_strengths: [],
+      browser_desktop_quality: {
+        schema: "octopus.browser_desktop_quality.v1",
+        score: 1,
+        passed: 5,
+        total: 5,
+        ready: true,
+      },
+      parity_certification: {
+        schema: "octopus.parity_certification.v1",
+        passed: 14,
+        total: 14,
+        ready: true,
+      },
+      policy_rule_drafts: {
+        schema: "octopus.automation_policy_rule_drafts.v1",
+        total: 7,
+        verified: 7,
+        ready: true,
+      },
+      next_focus: [],
+    });
+    api.fetchAutomationPolicyRuleDrafts.mockResolvedValue({
+      schema: "octopus.automation_policy_rule_drafts.v1",
+      total: 7,
+      verified: 7,
+      drafts: [
+        {
+          schema: "octopus.policy_review_rule_draft.v1",
+          draft_id: "auto-prd-1",
+          signed_payload: {
+            schema: "octopus.automation_policy_review_rule_draft.v1",
+            proposal_id: "automation:desktop_execute",
+            proposal_kind: "automation_policy_review",
+            review_queue_item_id: null,
+            automation: {
+              id: "desktop_execute",
+              surface: "desktop",
+              tool: "computer_execute_token",
+            },
+            rule: {
+              effect: "deny",
+              tool: "computer_execute_token",
+              args_contains: "",
+              reason:
+                "Desktop execute tokens can move the mouse and type on the host.",
+            },
+            evidence: {},
+            review_required: true,
+          },
+          signature: {
+            schema: "octopus.policy_review_rule_signature.v1",
+            algorithm: "sha256:canonical-json",
+            digest: "auto1234567890",
+          },
+        },
+      ],
+    });
     api.fetchBrowserDesktopRepairRecipes.mockResolvedValue({
       schema: "octopus.browser_desktop_repair_recipes.v1",
       total_pending_cases: 1,
@@ -640,6 +736,31 @@ describe("<AgentOperatorPanel />", () => {
               ],
             },
           ],
+          operator_drilldown: {
+            schema: "octopus.scorecard_operator_drilldown.v1",
+            dimension_id: "ecosystem_maturity",
+            certified_floor: 94,
+            links: [
+              {
+                id: "plugin_permission_rule_drafts",
+                label: "Plugin permission rule drafts",
+                method: "GET",
+                href: "/api/plugins/permission-rule-drafts",
+              },
+              {
+                id: "team_task_timeline",
+                label: "Team task timeline",
+                method: "GET",
+                href: "/api/team-tasks/{task_id}/process-timeline",
+              },
+            ],
+            source_refs: [
+              {
+                kind: "review_queue",
+                target_bucket: "scorecard_gap_backlog",
+              },
+            ],
+          },
           octopus_next_actions: [
             "Ship stable public docs for code mode, permissions, replay, and plugins.",
           ],
@@ -817,6 +938,20 @@ describe("<AgentOperatorPanel />", () => {
         reason: "no destructive shell",
       },
       policy_rule_count: 3,
+    });
+    api.installAutomationPolicyRuleDraft.mockResolvedValue({
+      schema: "octopus.policy_review_rule_install.v1",
+      installed: true,
+      draft_id: "auto-prd-1",
+      source_kind: "automation_policy_review",
+      rule: {
+        effect: "deny",
+        tool: "computer_execute_token",
+        args_contains: "",
+        reason:
+          "Desktop execute tokens can move the mouse and type on the host.",
+      },
+      policy_rule_count: 4,
     });
     api.queueAgentTraceTaskRunReview.mockResolvedValue({
       created: 0,
@@ -1194,6 +1329,13 @@ describe("<AgentOperatorPanel />", () => {
   it("queues real scorecard gaps from the operator panel", async () => {
     renderWithProviders(<AgentOperatorPanel />);
 
+    expect(
+      await screen.findByText("Plugin permission rule drafts"),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("/api/plugins/permission-rule-drafts"),
+    ).toBeInTheDocument();
+
     fireEvent.click(
       await screen.findByRole("button", { name: /Queue real gaps/ }),
     );
@@ -1241,6 +1383,30 @@ describe("<AgentOperatorPanel />", () => {
     expect(
       await screen.findByText(
         "Installed deny rule for exec_shell · 3 policy rules",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows automation radar and installs a signed automation deny rule", async () => {
+    renderWithProviders(<AgentOperatorPanel />);
+
+    expect(await screen.findByText("Automation radar")).toBeInTheDocument();
+    expect(await screen.findByText("policy drafts 7/7")).toBeInTheDocument();
+    expect(await screen.findByText("computer_execute_token")).toBeInTheDocument();
+
+    const button = await screen.findByRole("button", {
+      name: /Install deny rule/,
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(api.installAutomationPolicyRuleDraft).toHaveBeenCalledWith(
+        "auto-prd-1",
+      );
+    });
+    expect(
+      await screen.findByText(
+        "Installed deny automation rule for computer_execute_token · 4 policy rules",
       ),
     ).toBeInTheDocument();
   });
