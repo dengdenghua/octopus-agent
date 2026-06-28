@@ -114,6 +114,23 @@ class TestMixVirtualModel:
         assert "chat.completion.chunk" in body
         assert "data: [DONE]" in body
 
+    def test_mix_config_get_and_put(self, client, monkeypatch, tmp_path):
+        from runtime.sensing.gateway.openai_gateway import mix
+        monkeypatch.setattr(mix, "_config_path", lambda: tmp_path / "mix_config.json")
+        # default GET (no file yet) returns the shape with defaults
+        r = client.get("/api/mix-config")
+        assert r.status_code == 200
+        assert set(r.json()) >= {"proposers", "aggregator", "n"}
+        # PUT validates + persists, GET round-trips it
+        r = client.put("/api/mix-config", json={
+            "proposers": ["m1", "m2"], "aggregator": "agg", "n": 2,
+        })
+        assert r.status_code == 200
+        assert r.json()["proposers"] == ["m1", "m2"]
+        got = client.get("/api/mix-config").json()
+        assert got["aggregator"] == "agg"
+        assert got["n"] == 2
+
 
 # ═══════════════════════════════════════════════════════════
 # Implementation note.

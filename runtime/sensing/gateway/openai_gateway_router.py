@@ -261,6 +261,35 @@ def create_openai_router(
             ]
         }
 
+    # ── Mix preset config (proposer pool / aggregator / count) ──
+    # Read+write the user's octopus-mix mixture so the settings UI can
+    # compose its own pool. Resolution at run time is config → env →
+    # default (see openai_gateway/mix.py).
+    @router.get("/api/mix-config")
+    def get_mix_config(request: Request) -> dict[str, Any]:
+        _resolve_actor(
+            request, identity_store, require_auth,
+            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience, jwt_leeway_seconds=jwt_leeway_seconds,
+        )
+        from .openai_gateway.mix import _DEFAULT_N, load_mix_config
+        cfg = load_mix_config()
+        return {
+            "proposers": cfg.get("proposers") or [],
+            "aggregator": cfg.get("aggregator") or "",
+            "n": cfg.get("n") or _DEFAULT_N,
+        }
+
+    @router.put("/api/mix-config")
+    def put_mix_config(body: dict[str, Any], request: Request) -> dict[str, Any]:
+        _resolve_actor(
+            request, identity_store, require_auth,
+            jwt_secret=jwt_secret, jwt_issuer=jwt_issuer,
+            jwt_audience=jwt_audience, jwt_leeway_seconds=jwt_leeway_seconds,
+        )
+        from .openai_gateway.mix import save_mix_config
+        return save_mix_config(body if isinstance(body, dict) else {})
+
     # "molili" is a PROVIDER, not a selectable model — don't include an
     # auto-routing entry here; the UI groups these under the "Official
     # (Molili)" tab and the provider itself is implicit.

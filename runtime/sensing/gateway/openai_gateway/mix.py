@@ -39,6 +39,7 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -80,7 +81,50 @@ def mix_model_ids() -> list[str]:
     return [MIX_MODEL_ID]
 
 
+def _config_path() -> Path:
+    return Path(os.path.expanduser("~/.octopus/mix_config.json"))
+
+
+def load_mix_config() -> dict[str, Any]:
+    """User-configured Mix preset (proposer pool / aggregator / count).
+
+    Persisted by the UI via PUT /api/mix-config. Best-effort: a missing or
+    malformed file yields {} so env / defaults take over. Resolution order is
+    UI config → env → built-in default.
+    """
+    try:
+        data = json.loads(_config_path().read_text("utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_mix_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Validate + persist the Mix preset; returns the cleaned config."""
+    proposers = [
+        str(m).strip()
+        for m in (cfg.get("proposers") or [])
+        if str(m or "").strip()
+    ][:_MAX_PROPOSERS]
+    try:
+        n = int(cfg.get("n") or _DEFAULT_N)
+    except (TypeError, ValueError):
+        n = _DEFAULT_N
+    clean = {
+        "proposers": proposers,
+        "aggregator": str(cfg.get("aggregator") or "").strip(),
+        "n": max(1, min(_MAX_PROPOSERS, n)),
+    }
+    path = _config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(clean, indent=2), encoding="utf-8")
+    return clean
+
+
 def _proposer_count() -> int:
+    cfg_n = load_mix_config().get("n")
+    if isinstance(cfg_n, int) and cfg_n > 0:
+        return max(1, min(_MAX_PROPOSERS, cfg_n))
     raw = (os.environ.get("OCTOPUS_MIX_N") or "").strip()
     if raw.isdigit():
         return max(1, min(_MAX_PROPOSERS, int(raw)))
@@ -88,6 +132,9 @@ def _proposer_count() -> int:
 
 
 def _proposer_pool() -> list[str]:
+    cfg_pool = load_mix_config().get("proposers")
+    if isinstance(cfg_pool, list) and cfg_pool:
+        return [str(m).strip() for m in cfg_pool if str(m or "").strip()][:_MAX_PROPOSERS]
     raw = (os.environ.get("OCTOPUS_MIX_PROPOSERS") or "").strip()
     if raw:
         models = [m.strip() for m in raw.split(",") if m.strip()]
@@ -96,6 +143,9 @@ def _proposer_pool() -> list[str]:
 
 
 def _aggregator_model() -> str:
+    cfg_agg = load_mix_config().get("aggregator")
+    if isinstance(cfg_agg, str) and cfg_agg.strip():
+        return cfg_agg.strip()
     return (os.environ.get("OCTOPUS_MIX_AGGREGATOR") or "").strip()
 
 

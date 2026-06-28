@@ -27,6 +27,13 @@ vi.mock("@/providers/AuthProvider", () => ({
   }),
 }));
 
+// MixSettingsSection fetches its own /api/mix-config + model list on mount.
+// That's unrelated to the custom-model list under test here and would perturb
+// the ordered fetch mocks below — stub it out.
+vi.mock("./mix-settings-section", () => ({
+  MixSettingsSection: () => null,
+}));
+
 const fetchMock = vi.fn();
 
 beforeEach(() => {
