@@ -79,6 +79,38 @@ function getStatusIcon(status: string, className?: string) {
   }
 }
 
+function batchStatusDotClass(status: string): string {
+  switch (status) {
+    case "running":
+      return "bg-blue-500";
+    case "completed":
+      return "bg-green-500";
+    case "failed":
+    case "timed_out":
+      return "bg-red-500";
+    case "cancelled":
+      return "bg-yellow-500";
+    case "partial":
+      return "bg-amber-500";
+    default:
+      return "bg-muted-foreground";
+  }
+}
+
+function pickFocusBatchId(batches: Record<string, string>): string | null {
+  const entries = Object.entries(batches);
+  const running = entries.find(([, status]) => status === "running");
+  return (running ?? entries[0])?.[0] ?? null;
+}
+
+function parallelStatusLabel(status: string, labels: Record<string, string>) {
+  return (
+    labels[status] ??
+    labels[status.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] ??
+    status
+  );
+}
+
 function formatDuration(seconds: number | null): string {
   if (seconds === null) return "--";
   if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`;
@@ -257,9 +289,10 @@ function AgentCard({
                 STATUS_COLORS[task.status],
               )}
             >
-              {(t.parallelAgents.statusLabels as Record<string, string>)[
-                task.status
-              ] ?? task.status}
+              {parallelStatusLabel(
+                task.status,
+                t.parallelAgents.statusLabels as Record<string, string>,
+              )}
             </span>
             {task.duration_seconds !== null && (
               <span className="text-muted-foreground ml-auto flex items-center gap-0.5 text-[10px]">
@@ -453,16 +486,21 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
     };
   }, [fetchStatus]);
 
-  // Auto-fetch the first running batch
+  // Auto-fetch the first running batch, or keep the latest terminal batch
+  // visible so failed/cancelled evidence is not hidden behind an empty state.
   useEffect(() => {
     if (!status) return;
-    const runningBatch = Object.entries(status.batches).find(
-      ([, s]) => s === "running",
-    );
-    if (runningBatch) {
-      fetchBatch(runningBatch[0]);
+    const nextBatchId = pickFocusBatchId(status.batches);
+    if (!nextBatchId) return;
+    const nextBatchStatus = status.batches[nextBatchId];
+    if (
+      nextBatchStatus === "running" ||
+      nextBatchId !== activeBatch?.batch_id ||
+      nextBatchStatus !== activeBatch?.status
+    ) {
+      fetchBatch(nextBatchId);
     }
-  }, [status, fetchBatch]);
+  }, [activeBatch?.batch_id, activeBatch?.status, status, fetchBatch]);
 
   // Cancel handlers
   const cancelTask = useCallback(
@@ -561,7 +599,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
               <ProgressRing
                 completed={activeBatch.completed_tasks}
                 total={activeBatch.total_tasks}
-                failed={activeBatch.failed_tasks}
+                failed={activeBatch.failed_tasks + activeBatch.cancelled_tasks}
                 size={36}
               />
             )}
@@ -712,13 +750,7 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
                   <span
                     className={cn(
                       "ml-1 inline-block size-1.5 rounded-lg",
-                      bstatus === "running"
-                        ? "bg-blue-500"
-                        : bstatus === "completed"
-                          ? "bg-green-500"
-                          : bstatus === "failed"
-                            ? "bg-red-500"
-                            : "bg-muted-foreground",
+                      batchStatusDotClass(bstatus),
                     )}
                   />
                 </button>

@@ -31,11 +31,11 @@ import {
 import { explainLastToolCall } from "@/core/tools/utils";
 import { cn } from "@/lib/utils";
 import {
-  type AgentRunState,
   agentRunHue,
   agentRunIconClass,
   agentRunStatusLightPulseClass,
 } from "../agent-run-status";
+import { subtaskRunState } from "./subtask-status-ui";
 
 import { CitationLink } from "../citations/citation-link";
 import { FlipDisplay } from "../flip-display";
@@ -66,14 +66,6 @@ function getStatusIcon(status: SubtaskStatus) {
       <Loader2Icon className="size-3 animate-spin text-emerald-600 dark:text-emerald-400" />
     );
   return <ClipboardListIcon className="size-3" />;
-}
-
-function subtaskRunState(status: SubtaskStatus): AgentRunState {
-  if (status === "completed") return "done";
-  if (status === "failed" || status === "timed_out") return "error";
-  if (status === "pending" || status === "cancelled") return "waiting";
-  if (isSubtaskActive(status)) return "running";
-  return "pending";
 }
 
 function getStatusLabel(

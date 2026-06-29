@@ -12,8 +12,8 @@ import {
   agentRunHue,
   agentRunPanelClass,
   agentRunStatusLightPulseClass,
-  type AgentRunState,
 } from "../agent-run-status";
+import { subtaskProgress, subtaskRunState } from "./subtask-status-ui";
 import {
   CheckCircleIcon,
   Loader2Icon,
@@ -41,14 +41,6 @@ function getStatusIcon(status: SubtaskStatus) {
   return null;
 }
 
-function subtaskRunState(status: SubtaskStatus): AgentRunState {
-  if (status === "completed") return "done";
-  if (status === "failed" || status === "timed_out") return "error";
-  if (status === "pending" || status === "cancelled") return "waiting";
-  if (isSubtaskActive(status)) return "running";
-  return "pending";
-}
-
 function MiniSubtaskRow({
   taskId,
   isLoading: _isLoading,
@@ -61,7 +53,6 @@ function MiniSubtaskRow({
   const task = useSubtask(taskId);
   const { t } = useI18n();
   const swarm = useOptionalSwarm();
-  const _isActive = task ? isSubtaskActive(task.status) : false;
 
   if (!task) return null;
 
@@ -187,19 +178,6 @@ function SubtaskHoverPreview({
       </div>
     </div>
   );
-}
-
-function subtaskProgress(task: Subtask): number {
-  if (
-    task.status === "completed" ||
-    task.status === "failed" ||
-    task.status === "cancelled" ||
-    task.status === "timed_out"
-  ) {
-    return 1;
-  }
-  if (task.status === "pending") return 0.08;
-  return Math.max(0.18, Math.min(0.92, task.progress || 0.45));
 }
 
 export function ParallelSubtasksGrid({
