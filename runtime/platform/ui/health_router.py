@@ -456,32 +456,21 @@ def _webui_dist_candidates(root: Path, env_path: str) -> list[dict[str, Any]]:
 
 
 def _model_compat_info() -> dict[str, Any]:
-    required_profile_ids = [
-        "kimi_coding",
-        "kimi",
-        "deepseek",
-        "qwen",
-        "glm",
-        "doubao",
-        "minimax",
-        "hunyuan",
-        "baichuan",
-        "yi",
-        "stepfun",
-        "siliconflow",
-        "qianfan",
-    ]
     try:
         from runtime.sensing.model_router.openai_compat_providers import (
+            REQUIRED_DOMESTIC_PROFILE_IDS,
+            audit_openai_compat_profile_catalog,
             describe_openai_compat_profile,
             known_openai_compat_profiles,
         )
 
+        required_profile_ids = list(REQUIRED_DOMESTIC_PROFILE_IDS)
         profiles = list(known_openai_compat_profiles())
+        audit = audit_openai_compat_profile_catalog(REQUIRED_DOMESTIC_PROFILE_IDS)
         summaries = [describe_openai_compat_profile(profile) for profile in profiles]
         profile_ids = [str(summary.get("id") or "") for summary in summaries]
         by_id = {str(summary.get("id") or ""): summary for summary in summaries}
-        missing = [profile_id for profile_id in required_profile_ids if profile_id not in by_id]
+        missing = list(audit["missing_required_profile_ids"])
         return {
             "schema": "octopus.openai_compat_profile_self_check.v1",
             "available": True,
@@ -489,8 +478,14 @@ def _model_compat_info() -> dict[str, Any]:
             "profile_ids": profile_ids,
             "required_profile_ids": required_profile_ids,
             "missing_required_profile_ids": missing,
-            "required_profiles_present": not missing,
+            "required_profiles_present": bool(audit["catalog_ready"]),
             "domestic_profile_count": len(required_profile_ids) - len(missing),
+            "smoke_provider_ids": audit["smoke_provider_ids"],
+            "missing_smoke_provider_ids": audit["missing_smoke_provider_ids"],
+            "orphan_smoke_provider_ids": audit["orphan_smoke_provider_ids"],
+            "resolver_mismatches": audit["resolver_mismatches"],
+            "model_alias_mismatches": audit["model_alias_mismatches"],
+            "sample_probes": audit["sample_probes"],
             "domestic_profiles": [
                 {
                     "id": profile_id,
@@ -509,6 +504,11 @@ def _model_compat_info() -> dict[str, Any]:
             "error": "",
         }
     except Exception as exc:  # noqa: BLE001
+        from runtime.sensing.model_router.openai_compat_providers import (
+            REQUIRED_DOMESTIC_PROFILE_IDS,
+        )
+
+        required_profile_ids = list(REQUIRED_DOMESTIC_PROFILE_IDS)
         return {
             "schema": "octopus.openai_compat_profile_self_check.v1",
             "available": False,
@@ -518,6 +518,12 @@ def _model_compat_info() -> dict[str, Any]:
             "missing_required_profile_ids": required_profile_ids,
             "required_profiles_present": False,
             "domestic_profile_count": 0,
+            "smoke_provider_ids": [],
+            "missing_smoke_provider_ids": required_profile_ids,
+            "orphan_smoke_provider_ids": [],
+            "resolver_mismatches": [],
+            "model_alias_mismatches": [],
+            "sample_probes": [],
             "domestic_profiles": [],
             "error": f"{type(exc).__name__}: {exc}",
         }

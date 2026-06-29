@@ -45,10 +45,36 @@ class OpenAICompatRetryPayload:
     changed_fields: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class OpenAICompatProfileProbe:
+    profile_id: str
+    base_url: str
+    model: str
+    smoke_provider_configured: bool
+    base_url_resolves_to: str
+    model_resolves_to: str
+
+
 GENERIC_OPENAI_PROFILE = OpenAICompatProviderProfile(
     id="openai_compat",
     display_name="OpenAI-compatible",
     thinking_request_style="openai",
+)
+
+REQUIRED_DOMESTIC_PROFILE_IDS: tuple[str, ...] = (
+    "kimi_coding",
+    "kimi",
+    "deepseek",
+    "qwen",
+    "glm",
+    "doubao",
+    "minimax",
+    "hunyuan",
+    "baichuan",
+    "yi",
+    "stepfun",
+    "siliconflow",
+    "qianfan",
 )
 
 _OPTIONAL_REQUEST_FIELD_FALLBACKS = (
@@ -246,6 +272,113 @@ def known_openai_compat_profiles() -> tuple[OpenAICompatProviderProfile, ...]:
 
 def openai_compat_profile_ids() -> tuple[str, ...]:
     return tuple(profile.id for profile in (GENERIC_OPENAI_PROFILE, *_PROFILES))
+
+
+def sample_openai_compat_profile_probe(
+    profile: OpenAICompatProviderProfile,
+) -> OpenAICompatProfileProbe:
+    smoke = _smoke_provider_by_id().get(profile.id)
+    base_url = (
+        smoke.base_url
+        if smoke is not None
+        else _sample_base_url_from_profile_markers(profile)
+    )
+    model = (
+        smoke.default_model
+        if smoke is not None
+        else _sample_model_from_profile_markers(profile)
+    )
+    return OpenAICompatProfileProbe(
+        profile_id=profile.id,
+        base_url=base_url,
+        model=model,
+        smoke_provider_configured=smoke is not None,
+        base_url_resolves_to=resolve_openai_compat_profile(base_url).id,
+        model_resolves_to=resolve_openai_compat_profile("", model).id,
+    )
+
+
+def audit_openai_compat_profile_catalog(
+    required_profile_ids: tuple[str, ...] = REQUIRED_DOMESTIC_PROFILE_IDS,
+) -> dict[str, Any]:
+    profiles = list(known_openai_compat_profiles())
+    profile_ids = [profile.id for profile in profiles]
+    smoke_provider_ids = list(_smoke_provider_by_id())
+    probes = [sample_openai_compat_profile_probe(profile) for profile in profiles]
+    resolver_mismatches = [
+        {
+            "profile_id": probe.profile_id,
+            "base_url": probe.base_url,
+            "model": probe.model,
+            "base_url_resolves_to": probe.base_url_resolves_to,
+            "model_resolves_to": probe.model_resolves_to,
+        }
+        for probe in probes
+        if probe.base_url_resolves_to != probe.profile_id
+    ]
+    model_alias_mismatches = [
+        {
+            "profile_id": probe.profile_id,
+            "base_url": probe.base_url,
+            "model": probe.model,
+            "model_resolves_to": probe.model_resolves_to,
+            "reason": "model_id_looks_like_upstream_model_on_aggregator",
+        }
+        for probe in probes
+        if probe.model_resolves_to != probe.profile_id
+    ]
+    missing_required = [
+        profile_id for profile_id in required_profile_ids if profile_id not in profile_ids
+    ]
+    missing_smoke = [
+        profile_id for profile_id in profile_ids if profile_id not in smoke_provider_ids
+    ]
+    orphan_smoke = [
+        provider_id for provider_id in smoke_provider_ids if provider_id not in profile_ids
+    ]
+    smoke_mismatches = [
+        {
+            "profile_id": probe.profile_id,
+            "base_url": probe.base_url,
+            "model": probe.model,
+            "base_url_resolves_to": probe.base_url_resolves_to,
+            "model_resolves_to": probe.model_resolves_to,
+        }
+        for probe in probes
+        if probe.smoke_provider_configured
+        and probe.base_url_resolves_to != probe.profile_id
+    ]
+    catalog_ready = (
+        not missing_required
+        and not missing_smoke
+        and not orphan_smoke
+        and not resolver_mismatches
+    )
+    return {
+        "schema": "octopus.openai_compat_profile_audit.v1",
+        "catalog_ready": catalog_ready,
+        "profile_count": len(profile_ids),
+        "profile_ids": profile_ids,
+        "required_profile_ids": list(required_profile_ids),
+        "missing_required_profile_ids": missing_required,
+        "smoke_provider_ids": smoke_provider_ids,
+        "missing_smoke_provider_ids": missing_smoke,
+        "orphan_smoke_provider_ids": orphan_smoke,
+        "resolver_mismatches": resolver_mismatches,
+        "model_alias_mismatches": model_alias_mismatches,
+        "smoke_resolver_mismatches": smoke_mismatches,
+        "sample_probes": [
+            {
+                "profile_id": probe.profile_id,
+                "base_url": probe.base_url,
+                "model": probe.model,
+                "smoke_provider_configured": probe.smoke_provider_configured,
+                "base_url_resolves_to": probe.base_url_resolves_to,
+                "model_resolves_to": probe.model_resolves_to,
+            }
+            for probe in probes
+        ],
+    }
 
 
 def describe_openai_compat_profile(
@@ -551,6 +684,32 @@ def _compatibility_score(profile: OpenAICompatProviderProfile) -> int:
     if profile.retry_max_tokens_as_completion_tokens:
         score -= 2
     return max(60, score)
+
+
+def _smoke_provider_by_id() -> dict[str, Any]:
+    try:
+        from runtime.sensing.model_router.openai_compat_smoke_matrix import (
+            openai_compat_smoke_providers,
+        )
+    except Exception:  # pragma: no cover - optional module import guard
+        return {}
+    return {provider.id: provider for provider in openai_compat_smoke_providers()}
+
+
+def _sample_model_from_profile_markers(profile: OpenAICompatProviderProfile) -> str:
+    markers = tuple(profile.model_markers or ())
+    marker = str(markers[0] if markers else profile.id).rstrip("-_/ ")
+    return marker or profile.id
+
+
+def _sample_base_url_from_profile_markers(profile: OpenAICompatProviderProfile) -> str:
+    markers = tuple(profile.base_url_markers or ())
+    marker = str(markers[0] if markers else "example.com/v1")
+    if marker.startswith("http://") or marker.startswith("https://"):
+        return marker.rstrip("/")
+    if marker.startswith("/"):
+        return f"https://api.example.com{marker}".rstrip("/")
+    return f"https://{marker.rstrip('/')}"
 
 
 def extract_openai_compat_reasoning(message: dict[str, Any]) -> str:
@@ -864,8 +1023,11 @@ def _int_from_any(value: Any) -> int:
 __all__ = [
     "GENERIC_OPENAI_PROFILE",
     "OpenAICompatProviderProfile",
+    "OpenAICompatProfileProbe",
     "OpenAICompatRetryPayload",
+    "REQUIRED_DOMESTIC_PROFILE_IDS",
     "apply_custom_openai_compat_profile",
+    "audit_openai_compat_profile_catalog",
     "describe_openai_compat_profile",
     "extract_openai_compat_reasoning",
     "extract_openai_compat_usage",
@@ -876,4 +1038,5 @@ __all__ = [
     "plan_openai_compat_retries",
     "resolve_openai_compat_profile",
     "retry_payloads_after_openai_compat_error",
+    "sample_openai_compat_profile_probe",
 ]

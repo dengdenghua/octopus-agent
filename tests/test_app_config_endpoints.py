@@ -477,7 +477,15 @@ class TestCustomModelCompatDiagnostics:
         assert kimi_coding["built_in"] is True
         assert kimi_coding["applicable"] is True
         assert kimi_coding["has_api_key"] is False
-        assert kimi_coding["upstreams"][0]["model"] == "kimi-k2.7-code"
+        assert kimi_coding["sample_model"] == "K2.7-Code"
+        assert kimi_coding["smoke_provider_configured"] is True
+        assert kimi_coding["resolver_check"] == {
+            "base_url_resolves_to": "kimi_coding",
+            "model_resolves_to": "kimi_coding",
+            "model_alias_mismatch": False,
+            "passed": True,
+        }
+        assert kimi_coding["upstreams"][0]["model"] == "K2.7-Code"
         assert kimi_coding["upstreams"][0]["profile"] == "kimi_coding"
         assert "drop_sampling_parameters" in kimi_coding["upstreams"][0][
             "normalization_hints"
@@ -530,6 +538,14 @@ class TestCustomModelCompatDiagnostics:
         ]
         qwen_reasons = {item["reason"] for item in qwen["fallback_retries"]}
         assert "rename_max_tokens" in qwen_reasons
+
+        siliconflow = by_id["siliconflow"]
+        assert siliconflow["resolver_check"] == {
+            "base_url_resolves_to": "siliconflow",
+            "model_resolves_to": "deepseek",
+            "model_alias_mismatch": True,
+            "passed": True,
+        }
 
     def test_openai_compat_diagnostics_are_dry_run_and_secret_safe(
         self,

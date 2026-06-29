@@ -141,10 +141,30 @@ class TestBasicRoutes:
         assert data["model_compat"]["schema"] == "octopus.openai_compat_profile_self_check.v1"
         assert data["model_compat"]["required_profiles_present"] is True
         assert data["model_compat"]["missing_required_profile_ids"] == []
+        assert data["model_compat"]["missing_smoke_provider_ids"] == []
+        assert data["model_compat"]["orphan_smoke_provider_ids"] == []
+        assert data["model_compat"]["resolver_mismatches"] == []
+        assert data["model_compat"]["model_alias_mismatches"] == [
+            {
+                "profile_id": "siliconflow",
+                "base_url": "https://api.siliconflow.cn/v1",
+                "model": "deepseek-ai/DeepSeek-V3",
+                "model_resolves_to": "deepseek",
+                "reason": "model_id_looks_like_upstream_model_on_aggregator",
+            }
+        ]
         assert data["model_compat"]["domestic_profile_count"] >= 13
+        assert len(data["model_compat"]["sample_probes"]) >= 13
         assert "kimi_coding" in data["model_compat"]["profile_ids"]
         assert "deepseek" in data["model_compat"]["profile_ids"]
         assert "qwen" in data["model_compat"]["profile_ids"]
+        probes = {
+            item["profile_id"]: item
+            for item in data["model_compat"]["sample_probes"]
+        }
+        assert probes["kimi_coding"]["smoke_provider_configured"] is True
+        assert probes["kimi_coding"]["base_url_resolves_to"] == "kimi_coding"
+        assert probes["kimi_coding"]["model_resolves_to"] == "kimi_coding"
         assert _check_by_id(data, "openai_compat_profiles")["passed"] is True
         assert _check_by_id(data, "frontend_origin")["passed"] is True
         assert _check_by_id(data, "vite_proxy_target")["passed"] is True

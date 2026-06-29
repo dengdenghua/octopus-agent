@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from runtime.sensing.model_router.openai_compat_providers import (
     apply_custom_openai_compat_profile,
+    audit_openai_compat_profile_catalog,
     describe_openai_compat_profile,
     extract_openai_compat_reasoning,
     extract_openai_compat_usage,
@@ -11,6 +12,7 @@ from runtime.sensing.model_router.openai_compat_providers import (
     plan_openai_compat_retries,
     resolve_openai_compat_profile,
     retry_payloads_after_openai_compat_error,
+    sample_openai_compat_profile_probe,
 )
 from runtime.sensing.model_router.openai_compat_smoke_matrix import (
     openai_compat_smoke_provider_ids,
@@ -73,6 +75,38 @@ def test_live_smoke_matrix_covers_every_builtin_domestic_profile() -> None:
 
     assert profile_ids <= smoke_ids
     assert len(openai_compat_smoke_providers()) == len(smoke_ids)
+
+
+def test_profile_catalog_audit_verifies_smoke_and_resolver_probes() -> None:
+    audit = audit_openai_compat_profile_catalog()
+
+    assert audit["catalog_ready"] is True
+    assert audit["missing_required_profile_ids"] == []
+    assert audit["missing_smoke_provider_ids"] == []
+    assert audit["orphan_smoke_provider_ids"] == []
+    assert audit["resolver_mismatches"] == []
+    assert audit["model_alias_mismatches"] == [
+        {
+            "profile_id": "siliconflow",
+            "base_url": "https://api.siliconflow.cn/v1",
+            "model": "deepseek-ai/DeepSeek-V3",
+            "model_resolves_to": "deepseek",
+            "reason": "model_id_looks_like_upstream_model_on_aggregator",
+        }
+    ]
+    assert len(audit["sample_probes"]) == len(known_openai_compat_profiles())
+
+
+def test_every_builtin_profile_probe_resolves_to_its_profile() -> None:
+    for profile in known_openai_compat_profiles():
+        probe = sample_openai_compat_profile_probe(profile)
+
+        assert probe.smoke_provider_configured is True
+        assert probe.base_url_resolves_to == profile.id
+        if profile.id != "siliconflow":
+            assert probe.model_resolves_to == profile.id
+        else:
+            assert probe.model_resolves_to == "deepseek"
 
 
 def test_profile_summary_exposes_policy_for_diagnostics() -> None:
