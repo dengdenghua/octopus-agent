@@ -991,6 +991,8 @@ export interface Translations {
     dockStatusError: string;
     dockStatusDone: string;
     dockStatusPending: string;
+    dockStatusPresent: string;
+    collaboratorSeat: string;
     viewAgentProcess: (label: string) => string;
     agentClusterIndependentProcess: string;
     subAgent: string;

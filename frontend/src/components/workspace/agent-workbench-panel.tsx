@@ -104,6 +104,14 @@ type ScreenPhaseGroup = {
   blocks: WorkBlock[];
 };
 
+export type WorkbenchRosterSeat = {
+  id: string;
+  name: string;
+  avatarUrl?: string | null;
+  icon?: string | null;
+  role?: "tl" | "member" | string | null;
+};
+
 function mainPhaseStatusLabel(phases: AgentPhase[], t: Translations) {
   if (phases.some((p) => p.status === "error")) {
     return t.agentWorkbenchPanel.agentStatusError;
@@ -539,6 +547,7 @@ export function AgentWorkbenchPanel({
   threadId,
   workDir,
   browserPreviewBlocks,
+  rosterSeats = [],
 }: {
   activeTab?: AgentWorkbenchTabId;
   events: LiveToolEvent[];
@@ -553,6 +562,7 @@ export function AgentWorkbenchPanel({
   className?: string;
   onClose?: () => void;
   browserPreviewBlocks?: ExtractedCodeBlocks | null;
+  rosterSeats?: WorkbenchRosterSeat[];
 }) {
   const { t } = useI18n();
   const {
@@ -616,9 +626,14 @@ export function AgentWorkbenchPanel({
   const selectedBlock =
     phaseBlocks.find((block) => block.id === selectedBlockId) ?? defaultBlock;
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
-  const selectedAgent = selectedAgentId
-    ? (agentTiles.find((agent) => agent.id === selectedAgentId) ?? null)
-    : null;
+  const selectableAgentIds = useMemo(
+    () => new Set(agentTiles.map((agent) => agent.id)),
+    [agentTiles],
+  );
+  const selectedAgent =
+    selectedAgentId && selectableAgentIds.has(selectedAgentId)
+      ? (agentTiles.find((agent) => agent.id === selectedAgentId) ?? null)
+      : null;
   const creationFocusAgent = isAgentCreationBlock(selectedBlock)
     ? agentTileForBlock(selectedBlock, agentTiles)
     : undefined;
@@ -690,11 +705,11 @@ export function AgentWorkbenchPanel({
 
   useEffect(() => {
     setSelectedAgentId((current) =>
-      current && agentTiles.some((agent) => agent.id === current)
+      current && selectableAgentIds.has(current)
         ? current
         : null,
     );
-  }, [agentTiles]);
+  }, [selectableAgentIds]);
 
   const openMainProcess = useCallback(() => {
     setSelectedAgentId(null);
@@ -721,6 +736,21 @@ export function AgentWorkbenchPanel({
     setActivityView("screen");
   }, [focusedAgentId, agentTiles]);
 
+  const visibleRosterSeats = useMemo(() => {
+    const runningAgentIds = new Set(
+      agentTiles.flatMap((agent) => [
+        agent.id,
+        agent.name,
+        agent.label,
+        agent.codename ?? "",
+      ]),
+    );
+    return rosterSeats.filter((seat) => {
+      const id = seat.id.trim();
+      if (!id) return false;
+      return !runningAgentIds.has(id) && seat.role !== "tl";
+    });
+  }, [agentTiles, rosterSeats]);
   const emptyShell = blocks.length === 0 && agentTiles.length === 0;
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases);
   const mainRunState = workbenchRunState({
@@ -732,6 +762,7 @@ export function AgentWorkbenchPanel({
     <SubagentDock
       agents={agentTiles}
       mainRunState={mainRunState}
+      rosterSeats={visibleRosterSeats}
       selectedAgentId={selectedAgent?.id ?? null}
       onSelectMain={openMainProcess}
       onSelectAgent={openSubagentProcess}
@@ -1506,12 +1537,14 @@ export function AgentWorkbenchPanel({
 function SubagentDock({
   agents,
   mainRunState,
+  rosterSeats,
   selectedAgentId,
   onSelectMain,
   onSelectAgent,
 }: {
   agents: AgentTile[];
   mainRunState: AgentRunState;
+  rosterSeats: WorkbenchRosterSeat[];
   selectedAgentId: string | null;
   onSelectMain: () => void;
   onSelectAgent: (agentId: string) => void;
@@ -1564,6 +1597,30 @@ function SubagentDock({
               />
             );
           })}
+          {rosterSeats.map((seat) => (
+            <WorkstationSeat
+              key={seat.id}
+              name={seat.name}
+              avatar={seat.icon ?? null}
+              avatarUrl={seat.avatarUrl ?? null}
+              showBotBadge
+              fallbackInitial={seat.name.charAt(0)}
+              dotClassName="bg-emerald-500"
+              dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
+              badge={
+                seat.role ? (
+                  <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {seat.role === "tl"
+                      ? t.agentWorkbenchPanel.mainController
+                      : t.agentWorkbenchPanel.collaboratorSeat}
+                  </span>
+                ) : null
+              }
+              title={`${seat.name} · ${t.agentWorkbenchPanel.collaboratorSeat}`}
+              compactName
+              className="shrink-0"
+            />
+          ))}
         </div>
       </div>
     </div>

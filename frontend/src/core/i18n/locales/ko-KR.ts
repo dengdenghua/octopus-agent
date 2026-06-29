@@ -1170,6 +1170,8 @@ export const koKR: Translations = {
     dockStatusError: "Error",
     dockStatusDone: "Completed",
     dockStatusPending: "Waiting",
+    dockStatusPresent: "Present",
+    collaboratorSeat: "Collaborator",
     viewAgentProcess: (label) => `View ${label} independent process`,
     agentClusterIndependentProcess: "Agent Cluster - Independent Process",
     subAgent: "Subagent",

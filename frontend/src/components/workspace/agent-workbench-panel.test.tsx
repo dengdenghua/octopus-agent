@@ -113,6 +113,28 @@ describe("<AgentWorkbenchPanel />", () => {
     ).toBeInTheDocument();
   });
 
+  test("renders invited collaborators as workstation seats before they run", () => {
+    renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        rosterSeats={[
+          { id: "general", name: "Eve", role: "tl" },
+          { id: "codex-cli", name: "Codex CLI", role: "member" },
+          { id: "claude-code", name: "Claude Code", role: "member" },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("工位")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "查看主 Agent 工位" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Codex CLI")).toBeInTheDocument();
+    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+    expect(screen.getAllByText("协作")).toHaveLength(2);
+  });
+
   test("renders dispatched subagent seats before lifecycle events arrive", () => {
     renderWorkbench(
       <AgentWorkbenchPanel

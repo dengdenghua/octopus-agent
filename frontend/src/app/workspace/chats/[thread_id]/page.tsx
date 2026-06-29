@@ -25,6 +25,7 @@ import {
   AgentWorkbenchPanel,
   hasAgentWorkbenchContent,
   type AgentWorkbenchTabId,
+  type WorkbenchRosterSeat,
   workspaceFocusTabFromEvents,
 } from "@/components/workspace/agent-workbench-panel";
 import {
@@ -1018,12 +1019,16 @@ function ChatsPageContent({
       ? threadOwnerAgent
       : activeAgent;
   const currentTaskAgentName = displayAgent?.name ?? effectiveAgentId;
-  const composerDisplayAgent = displayAgent ?? {
-    name: effectiveAgentId,
-    display_name: effectiveAgentId,
-    avatar_url: null,
-    icon: null,
-  };
+  const composerDisplayAgent = useMemo(
+    () =>
+      displayAgent ?? {
+        name: effectiveAgentId,
+        display_name: effectiveAgentId,
+        avatar_url: null,
+        icon: null,
+      },
+    [displayAgent, effectiveAgentId],
+  );
   const selectedCollaborators = useMemo(() => {
     const selected = new Set(selectedCollaboratorIds);
     return allTaskCollaboratorAgents.filter((agent) =>
@@ -1059,6 +1064,17 @@ function ChatsPageContent({
     return roster;
   }, [composerDisplayAgent, effectiveAgentId, selectedCollaborators]);
   const collaborationEnabled = selectedCollaborators.length > 0;
+  const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(
+    () =>
+      collaborationRoster.map((agent) => ({
+        id: agent.agent_id,
+        name: agent.display_name,
+        avatarUrl: agent.avatar_url ?? null,
+        icon: agent.icon ?? null,
+        role: agent.role,
+      })),
+    [collaborationRoster],
+  );
   const collaborationTeamName =
     firstString(threadIdentityQuery.data?.values?.title, initialPrompt) ||
     "协作任务";
@@ -1653,6 +1669,7 @@ function ChatsPageContent({
     !shouldHideSettledProcessChrome;
   const canOpenAgentWorkbench =
     !isNewThread ||
+    collaborationEnabled ||
     hasRenderableAgentWorkbench ||
     !!previewBlocks ||
     // Code mode docks the workbench (file tree / diff / terminal) like an IDE
@@ -1664,6 +1681,7 @@ function ChatsPageContent({
       // Code mode keeps the workbench docked by default (still closable —
       // honored via agentWorkbenchDismissed).
       (isProjectCodeMode && !agentWorkbenchDismissed) ||
+      (collaborationEnabled && !agentWorkbenchDismissed) ||
       (hasRenderableAgentWorkbench &&
         (!agentWorkbenchDismissed || artifactsOpen || showAgentPlan))) &&
     !showResearchHistory &&
@@ -2383,6 +2401,9 @@ function ChatsPageContent({
                   threadId={threadId}
                   workDir={workDir}
                   browserPreviewBlocks={previewBlocks}
+                  rosterSeats={
+                    collaborationEnabled ? collaborationRosterSeats : undefined
+                  }
                   onClose={closeAgentWorkbenchPanel}
                   onSelectTab={selectAgentWorkbenchTab}
                 />
