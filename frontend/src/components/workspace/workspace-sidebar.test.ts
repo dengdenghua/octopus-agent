@@ -78,8 +78,36 @@ describe("workspace sidebar thread status lights", () => {
         pending: [],
       },
       liveThreadRunStatusByHref: new Map(),
-      teamTaskThreads: [],
       threadHrefById: new Map([["thread-1", href]]),
+    });
+
+    expect(statusByHref.get(href)).toBe("waiting");
+  });
+
+  test("merges live workbench status over active background task status", () => {
+    const href = "/workspace/agents/general/chats/thread-2";
+    const statusByHref = __testing.buildThreadRunStatusByHref({
+      activeTeamTasks: [],
+      backgroundTasks: {
+        active: [
+          {
+            agent_id: "general",
+            current_iteration: 2,
+            max_iterations: 12,
+            max_tokens: 100_000,
+            max_usd: 0,
+            cost_usd: 0,
+            started_at: 1,
+            task_id: "task-2",
+            thread_id: "thread-2",
+            tokens_spent: 1200,
+          },
+        ],
+        paused: [],
+        pending: [],
+      },
+      liveThreadRunStatusByHref: new Map([[href, "waiting"]]),
+      threadHrefById: new Map([["thread-2", href]]),
     });
 
     expect(statusByHref.get(href)).toBe("waiting");

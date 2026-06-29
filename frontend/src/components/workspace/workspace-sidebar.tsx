@@ -218,13 +218,11 @@ function buildThreadRunStatusByHref({
   activeTeamTasks,
   backgroundTasks,
   liveThreadRunStatusByHref,
-  teamTaskThreads,
   threadHrefById,
 }: {
   activeTeamTasks: TeamTask[];
   backgroundTasks?: TasksListResponse;
   liveThreadRunStatusByHref?: Map<string, ThreadRunStatus>;
-  teamTaskThreads: ThreadSummary[];
   threadHrefById: Map<string, string>;
 }): Map<string, ThreadRunStatus> {
   const byHref = new Map<string, ThreadRunStatus>();
@@ -910,14 +908,12 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         activeTeamTasks,
         backgroundTasks: backgroundTasksQuery.data,
         liveThreadRunStatusByHref,
-        teamTaskThreads,
         threadHrefById,
       }),
     [
       activeTeamTasks,
       backgroundTasksQuery.data,
       liveThreadRunStatusByHref,
-      teamTaskThreads,
       threadHrefById,
     ],
   );
