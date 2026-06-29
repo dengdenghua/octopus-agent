@@ -153,10 +153,20 @@ describe("<AgentWorkbenchPanel />", () => {
     fireEvent.click(codexSeat);
 
     expect(screen.getAllByText("子电脑").length).toBeGreaterThan(0);
+    expect(screen.getByText("子电脑待命")).toBeInTheDocument();
+    expect(screen.getByText("活动轨迹")).toBeInTheDocument();
+    expect(screen.getByText("已加入当前对话")).toBeInTheDocument();
+    expect(screen.getByText("等待任务接管")).toBeInTheDocument();
+    expect(screen.getByText("独立进程尚未开始")).toBeInTheDocument();
     expect(screen.getAllByText("Codex CLI").length).toBeGreaterThan(0);
     expect(
       screen.getAllByText("子电脑已就位，等待独立进程开始输出。").length,
     ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "主电脑" }));
+
+    expect(screen.queryByText("子电脑待命")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eve · 群主" })).toBeInTheDocument();
   });
 
   test("uses the leader avatar for the main workstation in solo mode", () => {

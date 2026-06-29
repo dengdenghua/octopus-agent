@@ -1181,7 +1181,14 @@ export const jaJP: Translations = {
     collaboratorSeat: "Collaborator",
     leaderSeat: "Leader",
     collaboratorComputerWaiting:
-      "Sub computer is present, waiting for its independent process.",
+      "サブコンピューターは待機中です。独立プロセスの開始を待っています。",
+    subComputerReady: "サブコンピューター待機中",
+    subComputerReadyDescription:
+      "現在のタスクワークスペースに参加済みです。作業を引き継げます。独立プロセスが開始されると、ここに活動履歴が表示されます。",
+    collaboratorJoinedConversation: "現在の会話に参加済み",
+    handoffReady: "タスク引き継ぎ待ち",
+    independentProcessPending: "独立プロセスはまだ開始されていません",
+    switchToMainComputer: "メインコンピューターへ戻る",
     viewAgentProcess: (label) => `View ${label} independent process`,
     agentClusterIndependentProcess: "Agent Cluster - Independent Process",
     subAgent: "Subagent",

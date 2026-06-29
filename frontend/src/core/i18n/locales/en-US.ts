@@ -1185,6 +1185,13 @@ export const enUS: Translations = {
     leaderSeat: "Leader",
     collaboratorComputerWaiting:
       "Sub computer is present, waiting for its independent process.",
+    subComputerReady: "Sub computer ready",
+    subComputerReadyDescription:
+      "Joined the current task workspace and can take over work. Its activity trace will appear here once the independent process starts.",
+    collaboratorJoinedConversation: "Joined current conversation",
+    handoffReady: "Waiting for task handoff",
+    independentProcessPending: "Independent process has not started",
+    switchToMainComputer: "Switch back to main computer",
     viewAgentProcess: (label) => `View ${label} independent process`,
     agentClusterIndependentProcess: "Agent Cluster - Independent Process",
     subAgent: "Subagent",

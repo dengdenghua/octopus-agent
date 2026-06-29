@@ -1139,6 +1139,13 @@ export const zhCN: Translations = {
     collaboratorSeat: "协作",
     leaderSeat: "群主",
     collaboratorComputerWaiting: "子电脑已就位，等待独立进程开始输出。",
+    subComputerReady: "子电脑待命",
+    subComputerReadyDescription:
+      "已加入当前任务现场，可以接管工作；独立进程开始后会在这里显示活动轨迹。",
+    collaboratorJoinedConversation: "已加入当前对话",
+    handoffReady: "等待任务接管",
+    independentProcessPending: "独立进程尚未开始",
+    switchToMainComputer: "切回主电脑",
     viewAgentProcess: (label) => `查看 ${label} 独立进程`,
     agentClusterIndependentProcess: "Agent 集群 - 独立进程",
     subAgent: "子智能体",

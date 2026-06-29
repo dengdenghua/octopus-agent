@@ -1000,6 +1000,12 @@ export interface Translations {
     collaboratorSeat: string;
     leaderSeat: string;
     collaboratorComputerWaiting: string;
+    subComputerReady: string;
+    subComputerReadyDescription: string;
+    collaboratorJoinedConversation: string;
+    handoffReady: string;
+    independentProcessPending: string;
+    switchToMainComputer: string;
     viewAgentProcess: (label: string) => string;
     agentClusterIndependentProcess: string;
     subAgent: string;

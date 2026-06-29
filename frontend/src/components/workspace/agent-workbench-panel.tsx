@@ -1127,12 +1127,16 @@ export function AgentWorkbenchPanel({
 
           {/* Tool call timeline */}
           {selectedRosterSeat ? (
-            <RosterComputerPlaceholder seat={selectedRosterSeat} />
+            <RosterComputerPlaceholder
+              seat={selectedRosterSeat}
+              onOpenMain={openMainProcess}
+            />
           ) : selectedAgent ? (
             <SubagentProcessView
               agent={selectedAgent}
               blocks={screenBlocks}
               currentBlockId={screenFrame.block?.id ?? null}
+              onOpenMain={openMainProcess}
               onSelectBlock={(blockId) => {
                 setSelectedBlockId(blockId);
                 setManualBlockSelection(true);
@@ -1163,54 +1167,6 @@ export function AgentWorkbenchPanel({
               {/* Bottom agent switcher */}
             </>
           )}
-          <div className="hidden shrink-0 border-t border-border/40 bg-background/90">
-            <div className="mx-auto flex w-full max-w-2xl items-center gap-1.5 overflow-x-auto px-3 py-1.5">
-              {/* Main controller */}
-              <button
-                type="button"
-                onClick={() => setSelectedAgentId(null)}
-                className={cn(
-                  "flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-colors",
-                  !selectedAgent
-                    ? "bg-foreground/10 text-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <MonitorIcon className="size-3" />
-                {t.agentWorkbenchPanel.mainController}
-              </button>
-              {/* Subagents */}
-              {agentTiles.map((tile) => {
-                const active = selectedAgent?.id === tile.id;
-                return (
-                  <button
-                    key={tile.id}
-                    type="button"
-                    onClick={() => setSelectedAgentId(tile.id)}
-                    className={cn(
-                      "flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium transition-colors",
-                      active
-                        ? "bg-foreground/10 text-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    {tile.avatar ? (
-                      <span className="text-xs">{tile.avatar}</span>
-                    ) : (
-                      <BotIcon className="size-3" />
-                    )}
-                    <span
-                      className={cn(
-                        "inline-block size-1.5 rounded-full",
-                        agentRunDotClass(tile.status),
-                      )}
-                    />
-                    {tile.codename ?? tile.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
       )}
     </div>
@@ -1702,21 +1658,130 @@ function dockAgentStatusLabel(
   return t.agentWorkbenchPanel.dockStatusPending;
 }
 
-function RosterComputerPlaceholder({ seat }: { seat: WorkbenchRosterSeat }) {
+function ComputerScopeSwitch({
+  subLabel,
+  onOpenMain,
+}: {
+  subLabel: string;
+  onOpenMain: () => void;
+}) {
   const { t } = useI18n();
   return (
+    <div className="border-b border-border/45 px-3 pt-2">
+      <div className="flex min-w-0 items-center gap-4 text-xs font-medium">
+        <span className="min-w-0 truncate border-b-2 border-foreground pb-2 text-foreground">
+          {subLabel}
+        </span>
+        <button
+          type="button"
+          onClick={onOpenMain}
+          className="min-w-0 truncate border-b-2 border-transparent pb-2 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+          title={t.agentWorkbenchPanel.switchToMainComputer}
+        >
+          {t.agentWorkbenchPanel.mainComputer}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AgentComputerStatusCard({
+  avatar,
+  avatarUrl,
+  fallbackInitial,
+  label,
+  status,
+  statusClassName,
+  title,
+}: {
+  avatar?: string | null;
+  avatarUrl?: string | null;
+  fallbackInitial?: string;
+  label: string;
+  status: string;
+  statusClassName: string;
+  title: string;
+}) {
+  return (
+    <div className="border-t border-border/45 px-3 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-sm border border-border/55 bg-muted/20 text-base font-semibold text-foreground">
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={label}
+              className="size-full object-cover"
+            />
+          ) : avatar?.trim() ? (
+            <span aria-hidden="true">{avatar}</span>
+          ) : fallbackInitial ? (
+            fallbackInitial
+          ) : (
+            <BotIcon className="size-4 text-muted-foreground" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate font-mono text-xs font-semibold text-foreground">
+            {title}
+          </div>
+          <div className={cn("mt-0.5 truncate text-[11px]", statusClassName)}>
+            {status}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RosterComputerPlaceholder({
+  seat,
+  onOpenMain,
+}: {
+  seat: WorkbenchRosterSeat;
+  onOpenMain: () => void;
+}) {
+  const { t } = useI18n();
+  const rows = [
+    {
+      label: t.agentWorkbenchPanel.collaboratorJoinedConversation,
+      detail: `${seat.name} · ${t.agentWorkbenchPanel.dockStatusPresent}`,
+      status: "done" as const,
+    },
+    {
+      label: t.agentWorkbenchPanel.handoffReady,
+      detail: t.agentWorkbenchPanel.collaboratorComputerWaiting,
+      status: "running" as const,
+    },
+    {
+      label: t.agentWorkbenchPanel.independentProcessPending,
+      detail: t.agentWorkbenchPanel.waitingForSubagentOutput,
+      status: "pending" as const,
+    },
+  ];
+  return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 p-3">
-        <section className="overflow-hidden rounded-xl border border-border/55 bg-background/90 shadow-sm">
-          <div className="flex items-center justify-center border-b border-border/40 px-3 py-2 text-sm font-medium text-muted-foreground">
-            {t.agentWorkbenchPanel.subComputer}
+      <div className="mx-auto flex w-full max-w-2xl flex-col">
+        <ComputerScopeSwitch
+          subLabel={t.agentWorkbenchPanel.subComputer}
+          onOpenMain={onOpenMain}
+        />
+        <section className="border-b border-border/55 bg-background/85">
+          <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
+            <MonitorIcon className="size-4 text-muted-foreground" />
+            <div className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+              {t.agentWorkbenchPanel.subComputerReady}
+            </div>
+            <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+              <span className="size-2 rounded-full bg-emerald-500" />
+              {t.agentWorkbenchPanel.dockStatusPresent}
+            </span>
           </div>
           <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
-            <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-              <div className="rounded-md bg-foreground px-2.5 py-1.5 font-mono text-sm font-semibold text-background">
+            <div className="border-b border-border/45 pb-3 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
+              <div className="border-b border-border/60 pb-1.5 font-mono text-sm font-semibold text-foreground">
                 {t.agentWorkbenchPanel.subComputer}
               </div>
-              <div className="mt-7 flex size-20 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-4xl">
+              <div className="mt-7 flex size-20 items-center justify-center overflow-hidden rounded-sm border border-border bg-background text-4xl">
                 {seat.avatarUrl ? (
                   <img
                     src={seat.avatarUrl}
@@ -1743,13 +1808,9 @@ function RosterComputerPlaceholder({ seat }: { seat: WorkbenchRosterSeat }) {
                     {seat.name}
                   </div>
                   <div className="mt-1 truncate text-sm text-muted-foreground">
-                    {t.agentWorkbenchPanel.collaboratorComputerWaiting}
+                    {t.agentWorkbenchPanel.subComputerReadyDescription}
                   </div>
                 </div>
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                  <span className="size-2 rounded-full bg-emerald-500" />
-                  {t.agentWorkbenchPanel.dockStatusPresent}
-                </span>
               </div>
               <div className="mt-4 flex items-center gap-3">
                 <DotProgress progress={0.18} hue={118} cols={18} rows={3} />
@@ -1757,12 +1818,73 @@ function RosterComputerPlaceholder({ seat }: { seat: WorkbenchRosterSeat }) {
                   {t.agentWorkbenchPanel.waitingForSubagentOutput}
                 </span>
               </div>
-              <div className="mt-4 rounded-lg border border-dashed border-border/60 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-                {t.agentWorkbenchPanel.collaboratorComputerWaiting}
-              </div>
             </div>
           </div>
         </section>
+        <section className="border-b border-border/45 bg-background/70">
+          <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground">
+            <MonitorIcon className="size-4" aria-hidden="true" />
+            {t.agentWorkbench.activityTrace}
+            <span className="ml-auto text-xs font-normal">
+              {t.agentWorkbenchPanel.processRecords(rows.length)}
+            </span>
+          </div>
+          <div className="divide-y divide-border/35">
+            {rows.map((row, index) => {
+              const active = row.status === "running";
+              const Icon = row.status === "done" ? CheckIcon : CircleIcon;
+              return (
+                <div
+                  key={row.label}
+                  className={cn(
+                    "flex items-start gap-2 border-l-2 px-3 py-2 text-left",
+                    active ? "border-l-primary bg-muted/30" : "border-l-transparent",
+                  )}
+                >
+                  <span className="mt-0.5 w-5 shrink-0 font-mono text-[10px] text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <Icon
+                        className={cn(
+                          "size-3.5 shrink-0",
+                          row.status === "done"
+                            ? "text-emerald-500"
+                            : active
+                              ? "animate-pulse text-primary"
+                              : "text-muted-foreground",
+                        )}
+                      />
+                      <span className="truncate text-xs font-semibold text-foreground">
+                        {row.label}
+                      </span>
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">
+                      {row.detail}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                    {row.status === "done"
+                      ? t.agentWorkbenchPanel.dockStatusDone
+                      : active
+                        ? t.agentWorkbenchPanel.dockStatusRunning
+                        : t.agentWorkbenchPanel.dockStatusPending}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+        <AgentComputerStatusCard
+          avatar={seat.icon}
+          avatarUrl={seat.avatarUrl}
+          fallbackInitial={seat.name.charAt(0)}
+          label={seat.name}
+          status={t.agentWorkbenchPanel.dockStatusPresent}
+          statusClassName="text-emerald-600 dark:text-emerald-300"
+          title={t.agentWorkbenchPanel.subComputer}
+        />
       </div>
     </div>
   );
@@ -1772,11 +1894,13 @@ function SubagentProcessView({
   agent,
   blocks,
   currentBlockId,
+  onOpenMain,
   onSelectBlock,
 }: {
   agent: AgentTile;
   blocks: WorkBlock[];
   currentBlockId: string | null;
+  onOpenMain: () => void;
   onSelectBlock: (blockId: string) => void;
 }) {
   const { t } = useI18n();
@@ -1789,17 +1913,21 @@ function SubagentProcessView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 p-3">
-        <section className="overflow-hidden rounded-xl border border-border/55 bg-background/90 shadow-sm">
+      <div className="mx-auto flex w-full max-w-2xl flex-col">
+        <ComputerScopeSwitch
+          subLabel={`${t.agentWorkbench.kindAgent} ${agent.label}`}
+          onOpenMain={onOpenMain}
+        />
+        <section className="border-b border-border/55 bg-background/85">
           <div className="flex items-center justify-center border-b border-border/40 px-3 py-2 text-sm font-medium text-muted-foreground">
             {t.agentWorkbenchPanel.agentClusterIndependentProcess}
           </div>
           <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
-            <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
-              <div className="rounded-md bg-foreground px-2.5 py-1.5 font-mono text-sm font-semibold text-background">
+            <div className="border-b border-border/45 pb-3 sm:border-b-0 sm:border-r sm:pb-0 sm:pr-4">
+              <div className="border-b border-border/60 pb-1.5 font-mono text-sm font-semibold text-foreground">
                 {agent.label}
               </div>
-              <div className="mt-7 flex size-20 items-center justify-center rounded-lg border border-border bg-background text-4xl">
+              <div className="mt-7 flex size-20 items-center justify-center rounded-sm border border-border bg-background text-4xl">
                 {agent.avatar ? (
                   <span aria-hidden="true">{agent.avatar}</span>
                 ) : (
@@ -1861,7 +1989,7 @@ function SubagentProcessView({
                   </span>
                 )}
               </div>
-              <div className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-muted/35 px-3 py-2 text-sm leading-6 text-foreground">
+              <div className="mt-4 max-h-36 overflow-y-auto whitespace-pre-wrap break-words border-l-2 border-border/60 bg-muted/20 px-3 py-2 text-sm leading-6 text-foreground">
                 {brief || t.agentWorkbenchPanel.noTaskDescription}
               </div>
             </div>
@@ -1869,19 +1997,19 @@ function SubagentProcessView({
         </section>
 
         {blocks.length === 0 ? (
-          <div className="flex min-h-32 items-center justify-center rounded-lg border border-dashed border-border/55 bg-muted/20 px-4 text-sm text-muted-foreground">
+          <div className="flex min-h-32 items-center justify-center border-b border-border/45 bg-muted/15 px-4 text-sm text-muted-foreground">
             {t.agentWorkbenchPanel.waitingForSubagentOutput}
           </div>
         ) : (
-          <section className="rounded-xl border border-border/50 bg-background/80 p-2 shadow-sm">
-            <div className="flex items-center gap-2 px-2 pb-2 text-sm font-medium text-muted-foreground">
+          <section className="border-b border-border/45 bg-background/70">
+            <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground">
               <MonitorIcon className="size-4" aria-hidden="true" />
               {t.agentWorkbenchPanel.processReplay}
               <span className="ml-auto text-xs font-normal">
                 {t.agentWorkbench.stepCount(blocks.length)}
               </span>
             </div>
-            <div className="space-y-2">
+            <div className="divide-y divide-border/35">
               {blocks.map((block, index) => {
                 const Icon = blockIcon(block.kind);
                 const active = currentBlockId === block.id;
@@ -1896,13 +2024,13 @@ function SubagentProcessView({
                     type="button"
                     onClick={() => onSelectBlock(block.id)}
                     className={cn(
-                      "flex w-full items-start gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
+                      "flex w-full items-start gap-2 border-l-2 px-3 py-2 text-left transition-colors",
                       active
-                        ? "border-primary/45 bg-primary/5"
-                        : "border-border/40 bg-background/75 hover:bg-muted/35",
+                        ? "border-l-primary bg-muted/30"
+                        : "border-l-transparent hover:bg-muted/25",
                     )}
                   >
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                    <span className="mt-0.5 w-5 shrink-0 font-mono text-[10px] text-muted-foreground">
                       {index + 1}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -1936,7 +2064,22 @@ function SubagentProcessView({
             </div>
           </section>
         )}
+        <AgentComputerStatusCard
+          avatar={agent.avatar}
+          label={label}
+          status={dockAgentStatusLabel(agent.status, t)}
+          statusClassName={agentStatusTextClass(agent.status)}
+          title={agent.label}
+        />
       </div>
     </div>
   );
+}
+
+function agentStatusTextClass(status: AgentTile["status"]): string {
+  if (status === "running") return "text-primary";
+  if (status === "waiting_approval") return "text-amber-600 dark:text-amber-300";
+  if (status === "error") return "text-destructive";
+  if (status === "done") return "text-emerald-600 dark:text-emerald-300";
+  return "text-muted-foreground";
 }
