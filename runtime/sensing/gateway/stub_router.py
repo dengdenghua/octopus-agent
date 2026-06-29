@@ -11,30 +11,49 @@ from fastapi.routing import APIRoute
 
 _STUB_HEADER = "X-Octopus-Stub"
 _STUB_REASON_HEADER = "X-Octopus-Stub-Reason"
+_STUB_ROUTE_HEADER = "X-Octopus-Stub-Route"
+_STUB_SOURCE_HEADER = "X-Octopus-Stub-Source"
 _STUB_REASON = "compatibility_fallback"
+_STUB_SOURCE = "runtime.sensing.gateway.stub_router"
 _DISABLE_ENV = "OCTOPUS_DISABLE_STUB_API"
+_ALLOW_ENV = "OCTOPUS_ALLOW_STUB_API"
+_REAL_API_REQUIRED_ENV = "OCTOPUS_REAL_API_REQUIRED"
+_ENV_ENV = "OCTOPUS_ENV"
+_PRODUCTION_ENVS = {"prod", "production"}
+_TRUTHY = {"1", "true", "yes", "on"}
 
 
 def _envelope(data: Any) -> dict[str, Any]:
     return {"success": True, "data": data, "error": None, "meta": {}}
 
 
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in _TRUTHY
+
+
 def _stub_api_enabled(enabled: bool | None) -> bool:
     if enabled is not None:
         return enabled
-    raw = os.environ.get(_DISABLE_ENV, "").strip().lower()
-    return raw not in {"1", "true", "yes", "on"}
+    if _env_truthy(_DISABLE_ENV) or _env_truthy(_REAL_API_REQUIRED_ENV):
+        return False
+    if _env_truthy(_ALLOW_ENV):
+        return True
+    env_name = os.environ.get(_ENV_ENV, "").strip().lower()
+    return env_name not in _PRODUCTION_ENVS
 
 
 class _StubRoute(APIRoute):
 
     def get_route_handler(self) -> Callable:
         original = super().get_route_handler()
+        route_path = self.path
 
         async def tagging_handler(request: Request) -> Response:
             resp = await original(request)
             resp.headers[_STUB_HEADER] = "true"
             resp.headers[_STUB_REASON_HEADER] = _STUB_REASON
+            resp.headers[_STUB_ROUTE_HEADER] = route_path
+            resp.headers[_STUB_SOURCE_HEADER] = _STUB_SOURCE
             media = resp.headers.get("content-type", "")
             if "application/json" not in media:
                 return resp
@@ -50,6 +69,10 @@ class _StubRoute(APIRoute):
                     data["_stub"] = True
                 if "_stub_reason" not in data:
                     data["_stub_reason"] = _STUB_REASON
+                if "_stub_route" not in data:
+                    data["_stub_route"] = route_path
+                if "_stub_source" not in data:
+                    data["_stub_source"] = _STUB_SOURCE
             else:
                 return resp
             new_body = json.dumps(data, ensure_ascii=False).encode("utf-8")

@@ -28,8 +28,12 @@ def test_intelligence_post_has_stub_tag(client: TestClient) -> None:
     body = r.json()
     assert body.get("_stub") is True, f"missing _stub tag · body={body}"
     assert body.get("_stub_reason") == "compatibility_fallback"
+    assert body.get("_stub_route") == "/api/intelligence/subscriptions"
+    assert body.get("_stub_source") == "runtime.sensing.gateway.stub_router"
     assert r.headers["X-Octopus-Stub"] == "true"
     assert r.headers["X-Octopus-Stub-Reason"] == "compatibility_fallback"
+    assert r.headers["X-Octopus-Stub-Route"] == "/api/intelligence/subscriptions"
+    assert r.headers["X-Octopus-Stub-Source"] == "runtime.sensing.gateway.stub_router"
 
 
 def test_intelligence_patch_has_stub_tag(client: TestClient) -> None:
@@ -98,6 +102,7 @@ def test_account_envelope_has_stub_tag(client: TestClient) -> None:
     assert body.get("success") is True
     assert body.get("_stub") is True  # Implementation note.
     assert body.get("_stub_reason") == "compatibility_fallback"
+    assert body.get("_stub_route") == "/api/account/profile"
 
 
 # Implementation note.
@@ -134,5 +139,64 @@ def test_stub_router_can_be_disabled_by_env(monkeypatch: pytest.MonkeyPatch) -> 
     disabled_client = TestClient(app)
 
     r = disabled_client.get("/api/account/profile")
+
+    assert r.status_code == 404
+
+
+def test_stub_router_is_disabled_in_production_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_ENV", "production")
+    monkeypatch.delenv("OCTOPUS_ALLOW_STUB_API", raising=False)
+    app = FastAPI()
+    app.include_router(create_stub_router())
+    disabled_client = TestClient(app)
+
+    r = disabled_client.get("/api/account/profile")
+
+    assert r.status_code == 404
+
+
+def test_stub_router_can_be_explicitly_allowed_in_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_ENV", "production")
+    monkeypatch.setenv("OCTOPUS_ALLOW_STUB_API", "1")
+    app = FastAPI()
+    app.include_router(create_stub_router())
+    enabled_client = TestClient(app)
+
+    r = enabled_client.get("/api/account/profile")
+
+    assert r.status_code == 200
+    assert r.json().get("_stub") is True
+
+
+def test_real_api_required_disables_stub_even_when_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_ENV", "production")
+    monkeypatch.setenv("OCTOPUS_ALLOW_STUB_API", "1")
+    monkeypatch.setenv("OCTOPUS_REAL_API_REQUIRED", "1")
+    app = FastAPI()
+    app.include_router(create_stub_router())
+    disabled_client = TestClient(app)
+
+    r = disabled_client.get("/api/account/profile")
+
+    assert r.status_code == 404
+
+
+def test_create_app_respects_real_api_required(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.platform.ui.app import create_app
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("OCTOPUS_REAL_API_REQUIRED", "1")
+    app_client = TestClient(create_app())
+
+    r = app_client.get("/api/account/profile")
 
     assert r.status_code == 404

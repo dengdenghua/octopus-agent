@@ -32,7 +32,7 @@ The remaining convergence gap is behind that frontend:
 | `frontend/src/router.tsx` | `/workspace` redirects to `realtime/new`; `/workspace/realtime/:threadId` and `/workspace/chats/:threadId` render the same `ChatPage`; `/workspace/code*` redirects into realtime | Frontend is product-converged, but compatibility routes must not grow separate behavior again |
 | `frontend/src/router.tsx` | `/realtime` remains a developer index and `/realtime/:threadId` redirects into `/workspace/realtime/:threadId` | Developer and product paths can drift if docs or tests treat `/realtime` as the product shell |
 | `runtime/platform/ui/app.py` | The app mounts agents, team, parallel, deep research, MCP, fs, browser, workflow, observability, evolution, realtime, permissions, and stub routers | Broad capability surface makes the health of the main path hard to judge |
-| `runtime/sensing/siphon/stub_router.py` | Several auth/account/billing APIs return `_stub: true` compatibility responses | Frontend success can mask missing real backend capability |
+| `runtime/sensing/gateway/stub_router.py` | Compatibility APIs return `_stub: true`, `_stub_route`, `_stub_source`, and `X-Octopus-Stub-*` headers; they are disabled by default when `OCTOPUS_ENV=production` or `OCTOPUS_REAL_API_REQUIRED=1`, unless explicitly allowed for local compatibility | Frontend success can still mask missing real backend capability in development if clients ignore the stub markers |
 | `docs/GOLDEN_PATH.md` | The 10-minute path proves deterministic demo, UI, and journal basics | Useful for developer validation, but not yet the full self-evolving agent product path |
 
 ## Target Main Path
@@ -72,7 +72,7 @@ Create goal
 | Realtime gateway | Use as the main transport for new task execution |
 | Journal | Every main-path run must be replayable by thread/task |
 | Permissions router | Present approval gate, MCP trust, and filesystem scope as one permission model |
-| Stub router | Surface `_stub` clearly in UI/logs; allow production mode to disable or warn |
+| Stub router | Treat `_stub` / `_stub_route` / `X-Octopus-Stub-*` as simulated data; keep `OCTOPUS_REAL_API_REQUIRED=1` on for real-verification gates |
 | Workflow editor | Accept only run crystallization backed by evidence and eval |
 | Evolution ops | Route changes through candidate, eval, approval, promotion, and rollback |
 
@@ -87,7 +87,7 @@ Create goal
 5. Any memory, skill, workflow, or prompt candidate appears in an evolution
    review queue before promotion.
 6. Stub responses are visible as simulated data and cannot silently pass as real
-   production behavior.
+   production behavior; real-verification runs set `OCTOPUS_REAL_API_REQUIRED=1`.
 
 ## Do Not Prioritize Yet
 
