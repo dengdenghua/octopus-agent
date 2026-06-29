@@ -42,6 +42,12 @@ describe("hash router shell URL normalization", () => {
     expect(
       toHashRouterShellUrl("/workspace/agents/local%20codex/chats/abc"),
     ).toBe("/#/workspace/realtime/abc?agent=local+codex");
+    expect(toHashRouterShellUrl("/workspace/team?surface=chat")).toBe(
+      "/#/workspace/realtime/new?surface=chat",
+    );
+    expect(toHashRouterShellUrl("/workspace/realtime?agent=general")).toBe(
+      "/#/workspace/realtime/new?agent=general",
+    );
   });
 
   test("rewrites direct app path loads into hash routes", () => {
@@ -86,6 +92,18 @@ describe("hash router shell URL normalization", () => {
     normalizeHashRouterShellUrl();
 
     expect(window.location.hash).toBe("#/workspace/realtime/code-thread");
+
+    window.history.replaceState(
+      null,
+      "",
+      "/#/workspace/code/code-thread?surface=chat",
+    );
+
+    normalizeHashRouterShellUrl();
+
+    expect(window.location.hash).toBe(
+      "#/workspace/realtime/code-thread?surface=chat",
+    );
 
     window.history.replaceState(null, "", "/#/workspace/realtime/rt-thread");
 

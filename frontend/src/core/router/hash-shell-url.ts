@@ -14,49 +14,59 @@ function safeDecodePathSegment(segment: string): string {
   }
 }
 
+function splitRouteSearch(route: string): { pathname: string; search: string } {
+  const queryIndex = route.indexOf("?");
+  if (queryIndex === -1) return { pathname: route, search: "" };
+  return {
+    pathname: route.slice(0, queryIndex) || "/",
+    search: route.slice(queryIndex),
+  };
+}
+
 function canonicalWorkspaceHashRoute(route: string): string {
   const normalized = route.startsWith("/") ? route : `/${route}`;
+  const { pathname, search } = splitRouteSearch(normalized);
 
   if (
-    normalized === "/workspace" ||
-    normalized === "/workspace/" ||
-    normalized === "/workspace/realtime" ||
-    normalized === "/workspace/realtime/"
+    pathname === "/workspace" ||
+    pathname === "/workspace/" ||
+    pathname === "/workspace/realtime" ||
+    pathname === "/workspace/realtime/"
   ) {
-    return "#/workspace/realtime/new";
+    return `#/workspace/realtime/new${search}`;
   }
 
-  if (normalized === "/workspace/swarm" || normalized === "/workspace/swarm/") {
-    return "#/workspace/realtime/new";
+  if (pathname === "/workspace/swarm" || pathname === "/workspace/swarm/") {
+    return `#/workspace/realtime/new${search}`;
   }
 
   if (
-    normalized === "/workspace/code" ||
-    normalized === "/workspace/code/new" ||
-    normalized === "/workspace/team" ||
-    normalized === "/workspace/team/new"
+    pathname === "/workspace/code" ||
+    pathname === "/workspace/code/new" ||
+    pathname === "/workspace/team" ||
+    pathname === "/workspace/team/new"
   ) {
-    return "#/workspace/realtime/new";
+    return `#/workspace/realtime/new${search}`;
   }
 
-  const legacyCodeThread = normalized.match(/^\/workspace\/code\/([^/?#]+)$/);
+  const legacyCodeThread = pathname.match(/^\/workspace\/code\/([^/?#]+)$/);
   if (legacyCodeThread) {
-    return `#/workspace/realtime/${legacyCodeThread[1]}`;
+    return `#/workspace/realtime/${legacyCodeThread[1]}${search}`;
   }
 
-  const legacyTeamThread = normalized.match(
-    /^\/workspace\/team\/(?!join(?:[/?#]|$))([^?#]+)(\?[^#]*)?$/,
+  const legacyTeamThread = pathname.match(
+    /^\/workspace\/team\/(?!join(?:\/|$))([^/?#]+)$/,
   );
   if (legacyTeamThread) {
-    const [, threadId, search = ""] = legacyTeamThread;
+    const [, threadId] = legacyTeamThread;
     return `#/workspace/realtime/${threadId}${search}`;
   }
 
-  const legacyAgentChat = normalized.match(
-    /^\/workspace\/agents\/([^/?#]+)\/chats\/([^?#]+)(\?[^#]*)?$/,
+  const legacyAgentChat = pathname.match(
+    /^\/workspace\/agents\/([^/?#]+)\/chats\/([^/?#]+)$/,
   );
   if (legacyAgentChat) {
-    const [, agent, threadId, search = ""] = legacyAgentChat;
+    const [, agent, threadId] = legacyAgentChat;
     const params = new URLSearchParams(search);
     if (agent && !params.has("agent")) {
       params.set("agent", safeDecodePathSegment(agent));
