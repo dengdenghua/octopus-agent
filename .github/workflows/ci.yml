@@ -197,6 +197,34 @@ jobs:
         working-directory: frontend
         run: pnpm build
 
+  full-stack-smoke:
+    name: Full-stack browser smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.26.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Install backend dependencies
+        run: pip install -e ".[dev,serve,web]"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps chromium
+      - name: FastAPI + Vite smoke
+        run: bash scripts/verify_local.sh --full-stack-only
+
   docker-build:
     name: Docker build test
     runs-on: ubuntu-latest

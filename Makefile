@@ -1,4 +1,4 @@
-.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration lint lint-invariants lint-ruff format fix clean tree \
+.PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration verify-local verify-full-stack lint lint-invariants lint-ruff format fix clean tree \
         security \
         dev \
         up up-full down logs restart ps rebuild \
@@ -32,6 +32,12 @@ test-unit:  ## Run unit tests excluding slow and integration tests
 
 test-integration:  ## Run integration tests
 	pytest -m integration -v
+
+verify-local:  ## Run backend/frontend/full-stack local stability gates
+	bash scripts/verify_local.sh
+
+verify-full-stack:  ## Run the FastAPI + Vite localhost/127 smoke only
+	bash scripts/verify_local.sh --full-stack-only
 
 # ─── Lint ────────────────────────────────────────────
 lint: lint-invariants lint-ruff  ## Run all linters
