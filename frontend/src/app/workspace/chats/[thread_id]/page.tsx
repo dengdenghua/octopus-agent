@@ -71,6 +71,7 @@ import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import {
   TEAM_MODE_META,
   TEAM_MODES,
+  serveMeshForMode,
   type TeamMode,
 } from "@/components/workspace/team-mode-picker";
 import { toWorkBlocks } from "@/components/workspace/work-blocks";
@@ -286,6 +287,15 @@ type RightPanelPage =
   | "preview"
   | "research"
   | "history";
+
+type ChatCollaborationRosterEntry = {
+  agent_id: string;
+  name: string;
+  display_name: string;
+  avatar_url?: string | null;
+  icon?: string | null;
+  role: "tl" | "member";
+};
 
 function RightPanelMenu({
   activePage,
@@ -956,6 +966,9 @@ function ChatsPageContent({
     () => new URLSearchParams(location.search),
     [location.search],
   );
+  const initialPrompt = useMemo(() => {
+    return searchParams.get("prompt") ?? "";
+  }, [searchParams]);
   const requestedAgent = searchParams.get("agent") ?? "";
   const bookmarkletAgent = BOOKMARKLET_AGENT_IDS.has(requestedAgent)
     ? requestedAgent
@@ -1017,6 +1030,68 @@ function ChatsPageContent({
       selected.has(agent.name),
     );
   }, [allTaskCollaboratorAgents, selectedCollaboratorIds]);
+  const collaborationRoster = useMemo<ChatCollaborationRosterEntry[]>(() => {
+    const leaderName = composerDisplayAgent.name?.trim() || effectiveAgentId;
+    const roster: ChatCollaborationRosterEntry[] = [
+      {
+        agent_id: leaderName,
+        name: leaderName,
+        display_name:
+          composerDisplayAgent.display_name?.trim() ||
+          composerDisplayAgent.name?.trim() ||
+          leaderName,
+        avatar_url: composerDisplayAgent.avatar_url ?? null,
+        icon: composerDisplayAgent.icon ?? null,
+        role: "tl",
+      },
+    ];
+    for (const agent of selectedCollaborators) {
+      if (!agent.name || agent.name === leaderName) continue;
+      roster.push({
+        agent_id: agent.name,
+        name: agent.name,
+        display_name: agent.display_name?.trim() || agent.name,
+        avatar_url: agent.avatar_url ?? null,
+        icon: agent.icon ?? null,
+        role: "member",
+      });
+    }
+    return roster;
+  }, [composerDisplayAgent, effectiveAgentId, selectedCollaborators]);
+  const collaborationEnabled = selectedCollaborators.length > 0;
+  const collaborationTeamName =
+    firstString(threadIdentityQuery.data?.values?.title, initialPrompt) ||
+    "协作任务";
+  const collaborationContext = useMemo(() => {
+    if (!collaborationEnabled) return {};
+    const isCoworkMode = teamModeIntent !== "chat";
+    return {
+      agent_name: effectiveAgentId,
+      subagent_enabled: isCoworkMode,
+      is_plan_mode: isCoworkMode,
+      team_mode: isCoworkMode ? "cowork" : "chat",
+      serve_mesh: serveMeshForMode(teamModeIntent),
+      topology_id: teamModeIntent === "cluster" ? "cowork" : undefined,
+      agent_roster: collaborationRoster,
+      team_members: collaborationRoster.map((agent) => agent.display_name),
+      team_leader: collaborationRoster[0]?.display_name ?? effectiveAgentId,
+      team_id: `thread:${threadId}`,
+      team_name: collaborationTeamName,
+      project: `协作 · ${collaborationTeamName}`,
+      task_agent_refs: selectedCollaborators.map((agent) => agent.name),
+      task_agent_names: selectedCollaborators.map(
+        (agent) => agent.display_name ?? agent.name,
+      ),
+    };
+  }, [
+    collaborationEnabled,
+    collaborationRoster,
+    collaborationTeamName,
+    effectiveAgentId,
+    selectedCollaborators,
+    teamModeIntent,
+    threadId,
+  ]);
   useEffect(() => {
     setSelectedCollaboratorIds((current) =>
       current.filter((id) => id !== currentTaskAgentName),
@@ -1088,6 +1163,9 @@ function ChatsPageContent({
         : discussionOnly
           ? "chat"
           : "react";
+  const streamMode: ReasoningMode | "team" = collaborationEnabled
+    ? "team"
+    : effectiveMode;
   const threadRouteBase = isAgentRoute
     ? `/workspace/agents/${encodeURIComponent(activeAgentId)}/chats`
     : location.pathname.startsWith("/workspace/chats")
@@ -1122,9 +1200,6 @@ function ChatsPageContent({
   //      new agent's threads (metadata.agent filter changed).
   // Skip the navigate+invalidate on the FIRST observed value (page
   // mount) — only react to actual changes.
-  const initialPrompt = useMemo(() => {
-    return searchParams.get("prompt") ?? "";
-  }, [searchParams]);
   const [composerSeed, setComposerSeed] = useState(initialPrompt);
   const prevAgentRef = useRef<string | null>(null);
   const pendingRouteSyncRef = useRef<string | null>(null);
@@ -1215,7 +1290,7 @@ function ChatsPageContent({
     context: {
       ...settings.context,
       reasoning_effort: effectiveReasoningEffort,
-      mode: effectiveMode,
+      mode: streamMode,
       workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
       capability_mode: isProjectCodeMode ? "code" : undefined,
       code_mode: isProjectCodeMode ? "solo" : undefined,
@@ -1255,6 +1330,7 @@ function ChatsPageContent({
         effectiveMode === "code"
           ? "office"
           : undefined,
+      ...collaborationContext,
     },
     onStart: (startedThreadId) => {
       localStartedThreadIdRef.current = startedThreadId;
@@ -2090,6 +2166,9 @@ function ChatsPageContent({
                       : null),
                   icon: displayAgent?.icon || null,
                 }}
+                agentRoster={
+                  collaborationEnabled ? collaborationRoster : undefined
+                }
                 footer={
                   <>
                     <ChatStreamingFooter
@@ -2169,11 +2248,6 @@ function ChatsPageContent({
                       disabled={researchLoading}
                       workDir={effectiveWorkDir}
                       displayAgent={composerDisplayAgent}
-                      collaboratorAgents={selectedCollaborators}
-                      teamModeIntent={teamModeIntent}
-                      onClearCollaborators={() =>
-                        setSelectedCollaboratorIds([])
-                      }
                       showWorkDirSelector
                       onWorkDirChange={handleWorkDirChange}
                       codeModeUnlocked={codeModeUnlocked}

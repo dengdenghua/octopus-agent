@@ -772,6 +772,53 @@ describe("useThreadStreamRealtime permissions", () => {
     expect(context).not.toHaveProperty("code_mode");
   });
 
+  it("passes collaborator cluster topology while staying on the current thread", async () => {
+    const startTurn = mockRealtime();
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "chat-thread",
+        context: {
+          mode: "team",
+          permission_mode: "default",
+          team_mode: "cowork",
+          serve_mesh: "0",
+          topology_id: "cowork",
+          agent_roster: [
+            { agent_id: "general", display_name: "General", role: "tl" },
+            { agent_id: "coder", display_name: "Coder", role: "member" },
+          ],
+        },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("chat-thread", {
+        text: "继续这个任务",
+        files: [],
+      });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    const payload = startTurn.mock.calls[0]?.[0];
+    const context = (payload?.metadata as { context?: Record<string, unknown> })
+      ?.context;
+    expect(payload).toEqual(
+      expect.objectContaining({
+        topologyId: "cowork",
+      }),
+    );
+    expect(context).toMatchObject({
+      mode: "team",
+      team_mode: "cowork",
+      serve_mesh: "0",
+      topology_id: "cowork",
+      permission_mode: "default",
+    });
+    expect(context?.agent_roster).toHaveLength(2);
+    expect(context).not.toHaveProperty("capability_mode");
+    expect(context).not.toHaveProperty("code_mode");
+  });
+
   it("adds code capability defaults to explicit project code turns", async () => {
     const startTurn = mockRealtime();
     const { result } = renderHook(() =>

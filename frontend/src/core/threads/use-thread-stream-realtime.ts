@@ -117,6 +117,10 @@ function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function topologyIdValue(value: Record<string, unknown>): string | undefined {
+  return stringValue(value.topology_id) ?? stringValue(value.topologyId);
+}
+
 function stripUndefinedValues(
   value: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -855,6 +859,7 @@ export function useThreadStreamRealtime(
           const reasoningEffort = reasoningEffortValue(
             rawContext["reasoning_effort"],
           );
+          const topologyId = topologyIdValue(rawContext);
           const metadataContext = reasoningEffort
             ? { ...runtimeContext, reasoning_effort: reasoningEffort }
             : runtimeContext;
@@ -867,6 +872,7 @@ export function useThreadStreamRealtime(
             ...(permissionRuntime.planningMode ? { planningMode: true } : {}),
             ...(model ? { model } : {}),
             ...(reasoningEffort ? { effort: reasoningEffort } : {}),
+            ...(topologyId ? { topologyId } : {}),
             metadata: {
               context: metadataContext,
             } as Record<string, unknown>,

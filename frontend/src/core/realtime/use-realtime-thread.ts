@@ -51,15 +51,9 @@ export interface UseRealtimeThreadValue {
     effort?: ReasoningEffort;
     metadata?: Record<string, unknown>;
     /** Optional topology id for callers that explicitly need the
-     * runtime to route through ``_drive_team_topology`` instead of
-     * single-agent ReAct.
-     *
-     * NO CURRENT UI CALLER sets this — the swarm mode picker that
-     * used to map ``mode → topologyId`` was removed in 2026-06 along
-     * with the rest of the swarm deprecation. Field is preserved
-     * because the runtime still honors ``topologyId`` for the cowork
-     * path; if no caller sets it within 6 weeks of cowork shipping,
-     * delete this field entirely.
+     * runtime to route through the team topology path instead of
+     * single-agent ReAct. The unified chat workspace sets this when
+     * collaborators are pulled into the current task in 集群 mode.
      */
     topologyId?: string;
   }) => Promise<void>;

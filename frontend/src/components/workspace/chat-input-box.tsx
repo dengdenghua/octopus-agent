@@ -15,7 +15,6 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import {
   MentionAutocompletePopup,
@@ -29,7 +28,6 @@ import {
   consumeComposerImageEntries,
   rememberLastComposerTarget,
 } from "@/core/composer-image-inbox";
-import { dedupeAgentsByName } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Agent } from "@/core/agents/types";
@@ -74,13 +72,6 @@ import {
   PersonalModeSelector,
   type PersonalMode,
 } from "./personal-mode-selector";
-import { type TeamMode } from "./team-mode-picker";
-import {
-  createTeam,
-  dispatchTeamUpdated,
-  writePreferredTeam,
-} from "@/core/teams";
-import { uuid } from "@/core/utils/uuid";
 
 /**
  * Simplified chat composer for the /workspace/chats route. Same visual
@@ -143,9 +134,6 @@ export interface ChatInputBoxProps {
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
   onModelChange?: (modelName: string) => void;
   onModeChange?: (mode: ReasoningMode, draft?: string) => void;
-  collaboratorAgents?: Agent[];
-  teamModeIntent?: TeamMode;
-  onClearCollaborators?: () => void;
   onDeepResearch?: (
     topic: string,
     options?: DeepResearchComposerOptions,
@@ -233,15 +221,6 @@ function parseComposerUrls(value: string): string[] {
   );
 }
 
-function promptSearchParams(prompt: string, teamMode?: TeamMode): string {
-  const params = new URLSearchParams();
-  const text = prompt.trim();
-  if (text) params.set("prompt", text);
-  if (teamMode && teamMode !== "chat") params.set("teamMode", teamMode);
-  const serialized = params.toString();
-  return serialized ? `?${serialized}` : "";
-}
-
 export function ChatInputBox({
   status,
   disabled,
@@ -279,19 +258,14 @@ export function ChatInputBox({
   onReasoningEffortChange,
   onModelChange,
   onModeChange,
-  collaboratorAgents = [],
-  teamModeIntent = "cluster",
-  onClearCollaborators,
   onDeepResearch,
   onSubmit,
   onStop,
   className,
 }: ChatInputBoxProps) {
   const { t } = useI18n();
-  const navigate = useNavigate();
   const { models } = useModels();
   const [draft, setDraft] = useState(defaultValue);
-  const [routingToTeam, setRoutingToTeam] = useState(false);
   const [researchUrlText, setResearchUrlText] = useState("");
   const [researchTextTitle, setResearchTextTitle] = useState("");
   const [researchTextBody, setResearchTextBody] = useState("");
@@ -364,7 +338,7 @@ export function ChatInputBox({
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
   const isProjectMode = mode === "code" && !!workDir?.trim();
-  const isBusy = disabled || uploadingMaterials || routingToTeam;
+  const isBusy = disabled || uploadingMaterials;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const permissionLabel =
@@ -397,30 +371,6 @@ export function ChatInputBox({
     displayAgentLabel.trim().charAt(0).toUpperCase() || "A";
   const displayAgentIcon = displayAgent?.icon?.trim() || "";
   const displayAgentName = displayAgent?.name?.trim() || "";
-  const currentAgentForTeam = useMemo<Agent | null>(() => {
-    if (!displayAgentName) return null;
-    return {
-      name: displayAgentName,
-      display_name: displayAgentLabel,
-      description: displayAgentLabel,
-      icon: displayAgentIcon || null,
-      avatar_url: displayAgent?.avatar_url ?? null,
-      model: null,
-      tool_groups: null,
-    };
-  }, [
-    displayAgent?.avatar_url,
-    displayAgentIcon,
-    displayAgentLabel,
-    displayAgentName,
-  ]);
-  const teamRosterForStart = useMemo(() => {
-    const roster = currentAgentForTeam
-      ? [currentAgentForTeam, ...collaboratorAgents]
-      : collaboratorAgents;
-    return dedupeAgentsByName(roster);
-  }, [currentAgentForTeam, collaboratorAgents]);
-  const isTeamDraft = collaboratorAgents.length > 0;
   const hasWorkDir = Boolean(workDir?.trim());
   const showModeSegment = isProjectMode;
   // Surface the workspace-directory picker even in a fresh personal-space
@@ -554,32 +504,6 @@ export function ChatInputBox({
       if (result !== false) setDraft("");
       return;
     }
-    if (isTeamDraft && teamRosterForStart.length > 0 && !hasImages) {
-      setRoutingToTeam(true);
-      try {
-        const title =
-          text.split(/\n+/)[0]?.trim().slice(0, 40) ||
-          t.chatInputBox.collaboratorsTaskFallback;
-        const team = await createTeam({
-          name: title,
-          members: teamRosterForStart,
-          leaderId:
-            currentAgentForTeam?.name ?? teamRosterForStart[0]?.name ?? null,
-        });
-        writePreferredTeam(team);
-        dispatchTeamUpdated(team);
-        setDraft("");
-        onClearCollaborators?.();
-        navigate(
-          `/workspace/team/${uuid()}${promptSearchParams(text, teamModeIntent)}`,
-        );
-      } catch (error) {
-        swallow(error, "create-team-from-composer");
-      } finally {
-        setRoutingToTeam(false);
-      }
-      return;
-    }
     onSubmit?.({
       text,
       images: pendingImages.length > 0 ? pendingImages : undefined,
@@ -597,7 +521,6 @@ export function ChatInputBox({
     isDeepResearchMode,
     onDeepResearch,
     onSubmit,
-    navigate,
     parsedResearchUrls,
     researchMaterials,
     researchSources,
@@ -607,12 +530,6 @@ export function ChatInputBox({
     onPermissionModeChange,
     onCompressContext,
     pendingImages,
-    isTeamDraft,
-    teamRosterForStart,
-    currentAgentForTeam?.name,
-    teamModeIntent,
-    onClearCollaborators,
-    t,
   ]);
 
   const addMaterial = useCallback((material: Partial<ResearchMaterial>) => {
