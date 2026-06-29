@@ -61,6 +61,25 @@ _OPTIONAL_REQUEST_FIELD_FALLBACKS = (
 
 _TOOL_REQUEST_FIELDS = ("tools", "tool_choice", "parallel_tool_calls")
 
+_STRICT_SCHEMA_DROPPED_KEYS = frozenset({
+    "$anchor",
+    "$comment",
+    "$id",
+    "$schema",
+    "default",
+    "deprecated",
+    "discriminator",
+    "example",
+    "examples",
+    "externalDocs",
+    "format",
+    "nullable",
+    "readOnly",
+    "title",
+    "writeOnly",
+    "xml",
+})
+
 
 _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
     OpenAICompatProviderProfile(
@@ -778,22 +797,22 @@ def _strict_tools(value: Any) -> Any:
             fn_copy = dict(fn)
             params = fn_copy.get("parameters")
             if isinstance(params, dict):
-                fn_copy["parameters"] = _strip_additional_properties(params)
+                fn_copy["parameters"] = _normalize_strict_json_schema(params)
             copied["function"] = fn_copy
         tools.append(copied)
     return tools
 
 
-def _strip_additional_properties(schema: dict[str, Any]) -> dict[str, Any]:
+def _normalize_strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for key, value in schema.items():
-        if key == "additionalProperties":
+        if key == "additionalProperties" or key in _STRICT_SCHEMA_DROPPED_KEYS:
             continue
         if isinstance(value, dict):
-            out[key] = _strip_additional_properties(value)
+            out[key] = _normalize_strict_json_schema(value)
         elif isinstance(value, list):
             out[key] = [
-                _strip_additional_properties(item)
+                _normalize_strict_json_schema(item)
                 if isinstance(item, dict)
                 else item
                 for item in value

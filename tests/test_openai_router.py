@@ -501,10 +501,15 @@ class TestRequestShape:
                             name="read_file",
                             description="Read a project file",
                             input_schema={
+                                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                                "title": "Read file args",
                                 "type": "object",
                                 "properties": {
                                     "path": {
                                         "type": "string",
+                                        "default": "README.md",
+                                        "examples": ["README.md"],
+                                        "format": "uri-reference",
                                         "additionalProperties": False,
                                     },
                                 },
@@ -519,8 +524,14 @@ class TestRequestShape:
         payload = fake.calls[0]["json"]
         params = payload["tools"][0]["function"]["parameters"]
         assert payload["tool_choice"] == "auto"
+        assert "$schema" not in params
+        assert "title" not in params
         assert "additionalProperties" not in params
         assert "additionalProperties" not in params["properties"]["path"]
+        assert "default" not in params["properties"]["path"]
+        assert "examples" not in params["properties"]["path"]
+        assert "format" not in params["properties"]["path"]
+        assert params["properties"]["path"]["type"] == "string"
 
     def test_minimax_thinking_payload_uses_adaptive_style(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))

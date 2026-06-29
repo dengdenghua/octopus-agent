@@ -161,10 +161,15 @@ def test_strict_domestic_profile_normalizes_tool_schema_up_front() -> None:
                     "function": {
                         "name": "read",
                         "parameters": {
+                            "$schema": "https://json-schema.org/draft/2020-12/schema",
+                            "title": "Read file input",
                             "type": "object",
                             "properties": {
                                 "path": {
                                     "type": "string",
+                                    "default": "README.md",
+                                    "examples": ["README.md"],
+                                    "format": "uri-reference",
                                     "additionalProperties": False,
                                 },
                             },
@@ -180,8 +185,14 @@ def test_strict_domestic_profile_normalizes_tool_schema_up_front() -> None:
     params = payload["tools"][0]["function"]["parameters"]
     assert profile.strict_tool_schema is True
     assert "parallel_tool_calls" not in payload
+    assert "$schema" not in params
+    assert "title" not in params
     assert "additionalProperties" not in params
     assert "additionalProperties" not in params["properties"]["path"]
+    assert "default" not in params["properties"]["path"]
+    assert "examples" not in params["properties"]["path"]
+    assert "format" not in params["properties"]["path"]
+    assert params["properties"]["path"]["type"] == "string"
 
 
 def test_kimi_k2_general_model_keeps_sampling_on_plain_proxy() -> None:
