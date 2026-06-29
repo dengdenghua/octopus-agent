@@ -263,6 +263,7 @@ class TestCustomModelsUpsert:
             "compat_profile": "kimi_coding",
             "thinking_request_style": "none",
             "drop_tool_choice": True,
+            "strict_tool_schema": True,
             "max_temperature": 0.2,
             "unsupported_request_fields": ["parallel_tool_calls"],
             "default_headers": {"X-Test": "yes"},
@@ -292,6 +293,7 @@ class TestCustomModelsUpsert:
         assert stored["claude-mirror"]["compat_profile"] == "kimi_coding"
         assert stored["claude-mirror"]["thinking_request_style"] == "none"
         assert stored["claude-mirror"]["drop_tool_choice"] is True
+        assert stored["claude-mirror"]["strict_tool_schema"] is True
         assert stored["claude-mirror"]["max_temperature"] == 0.2
         assert stored["claude-mirror"]["unsupported_request_fields"] == [
             "parallel_tool_calls",
@@ -442,6 +444,9 @@ class TestCustomModelCompatDiagnostics:
         assert "drop_sampling_parameters" in kimi_coding["upstreams"][0][
             "normalization_hints"
         ]
+        assert "parallel_tool_calls" in kimi_coding["upstreams"][0][
+            "normalization"
+        ]["removed_fields"]
         assert {
             "frequency_penalty",
             "presence_penalty",
@@ -453,12 +458,12 @@ class TestCustomModelCompatDiagnostics:
             set(kimi_coding["upstreams"][0]["normalization"]["removed_fields"])
         )
 
-        qwen_reasons = {
-            item["reason"]
-            for item in by_id["qwen"]["upstreams"][0]["fallback_retries"]
-        }
+        qwen = by_id["qwen"]["upstreams"][0]
+        assert "strict_tool_schema" in qwen["normalization_hints"]
+        assert "tools" in qwen["normalization"]["changed_fields"]
+        assert "parallel_tool_calls" in qwen["normalization"]["removed_fields"]
+        qwen_reasons = {item["reason"] for item in qwen["fallback_retries"]}
         assert "rename_max_tokens" in qwen_reasons
-        assert "strict_tool_schema" in qwen_reasons
 
     def test_openai_compat_diagnostics_are_dry_run_and_secret_safe(
         self,
@@ -474,6 +479,7 @@ class TestCustomModelCompatDiagnostics:
                 "models": ["kimi-k2.7-code"],
                 "compat_profile": "kimi_coding",
                 "drop_tool_choice": True,
+                "strict_tool_schema": True,
                 "unsupported_request_fields": ["parallel_tool_calls"],
                 "default_headers": {
                     "User-Agent": "OctopusSmoke/1.0",
@@ -502,7 +508,9 @@ class TestCustomModelCompatDiagnostics:
         assert upstream["profile_summary"]["id"] == "kimi_coding"
         assert upstream["compat_score"] == upstream["profile_summary"]["compat_score"]
         assert "drop_sampling_parameters" in upstream["normalization_hints"]
+        assert "strict_tool_schema" in upstream["normalization_hints"]
         assert any("coding endpoint" in note for note in upstream["compatibility_notes"])
+        assert upstream["strict_tool_schema"] is True
         removed = set(upstream["normalization"]["removed_fields"])
         assert {
             "frequency_penalty",
@@ -519,8 +527,6 @@ class TestCustomModelCompatDiagnostics:
 
         reasons = {item["reason"] for item in upstream["fallback_retries"]}
         assert "rename_max_tokens" in reasons
-        assert "strict_tool_schema" in reasons
-        assert "combined_compatibility_fallback" in reasons
 
     def test_compat_diagnostics_marks_non_openai_entries_not_applicable(
         self,
@@ -636,6 +642,7 @@ class TestLlmModelsMerge:
                 "compat_profile": "kimi_coding",
                 "thinking_request_style": "none",
                 "drop_tool_choice": True,
+                "strict_tool_schema": True,
                 "max_temperature": 0.2,
             },
         )
@@ -653,6 +660,7 @@ class TestLlmModelsMerge:
         assert rows[0]["compat_profile"] == "kimi_coding"
         assert rows[0]["thinking_request_style"] == "none"
         assert rows[0]["drop_tool_choice"] is True
+        assert rows[0]["strict_tool_schema"] is True
         assert rows[0]["max_temperature"] == 0.2
 
 

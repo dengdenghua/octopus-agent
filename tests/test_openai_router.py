@@ -446,6 +446,42 @@ class TestRequestShape:
             },
         ]
 
+    def test_qwen_initial_payload_strips_strict_tool_schema_edges(self):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            client=fake,
+        )
+
+        r.call(
+            _req(model="qwen-plus").model_copy(
+                update={
+                    "tools": [
+                        ToolSpec(
+                            name="read_file",
+                            description="Read a project file",
+                            input_schema={
+                                "type": "object",
+                                "properties": {
+                                    "path": {
+                                        "type": "string",
+                                        "additionalProperties": False,
+                                    },
+                                },
+                                "additionalProperties": True,
+                            },
+                        ),
+                    ],
+                },
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        params = payload["tools"][0]["function"]["parameters"]
+        assert payload["tool_choice"] == "auto"
+        assert "additionalProperties" not in params
+        assert "additionalProperties" not in params["properties"]["path"]
+
     def test_minimax_thinking_payload_uses_adaptive_style(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(

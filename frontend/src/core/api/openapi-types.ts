@@ -10204,18 +10204,24 @@ export interface components {
         CustomModelEntry: {
             /** Base Url */
             base_url: string;
+            /** Compat Profile */
+            compat_profile?: string | null;
             /** Default Headers */
             default_headers?: {
                 [key: string]: string;
             } | null;
             /** Display Name */
             display_name: string;
+            /** Drop Tool Choice */
+            drop_tool_choice?: boolean | null;
             /** Has Api Key */
             has_api_key: boolean;
             /** Id */
             id: string;
             /** Max Tokens */
             max_tokens?: number | null;
+            /** Max Temperature */
+            max_temperature?: number | null;
             /** Models */
             models?: string[];
             /** Name */
@@ -10224,12 +10230,18 @@ export interface components {
             omit_sampling_parameters?: boolean | null;
             /** Provider */
             provider: string;
+            /** Strict Tool Schema */
+            strict_tool_schema?: boolean | null;
             /** Supports Thinking */
             supports_thinking?: boolean | null;
             /** Supports Tool Use */
             supports_tool_use?: boolean | null;
             /** Supports Vision */
             supports_vision?: boolean | null;
+            /** Thinking Request Style */
+            thinking_request_style?: string | null;
+            /** Unsupported Request Fields */
+            unsupported_request_fields?: string[] | null;
         };
         /** CustomModelTestResponse */
         CustomModelTestResponse: {

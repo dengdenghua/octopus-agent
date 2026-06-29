@@ -27,6 +27,7 @@ class OpenAICompatProviderProfile:
     thinking_request_style: ThinkingRequestStyle = "none"
     omit_sampling_parameters: bool = False
     drop_tool_choice: bool = False
+    strict_tool_schema: bool = False
     max_temperature: float | None = None
     unsupported_request_fields: tuple[str, ...] = field(default_factory=tuple)
     retry_without_tool_choice: bool = True
@@ -73,6 +74,7 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
             "k2.7_code",
         ),
         omit_sampling_parameters=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=(
             "coding endpoint rejects sampling knobs",
             "drops OpenAI reasoning/thinking extensions",
@@ -106,9 +108,12 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="Alibaba Cloud Qwen / DashScope",
         base_url_markers=("dashscope.aliyuncs.com", "bailian.aliyuncs.com"),
         model_markers=("qwen", "qwq", "qvq", "tongyi"),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=(
             "DashScope-compatible mode may reject OpenAI-only fields",
             "max_tokens can be retried as max_completion_tokens",
+            "tool schemas are normalized for stricter compatible-mode validation",
         ),
     ),
     OpenAICompatProviderProfile(
@@ -116,9 +121,12 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="Zhipu / Z.AI GLM",
         base_url_markers=("open.bigmodel.cn", "api.z.ai"),
         model_markers=("glm-", "chatglm", "zai/", "z.ai/"),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=(
             "GLM reasoning may arrive as reasoning",
             "legacy function_call responses are accepted",
+            "parallel_tool_calls is removed for OpenAI-compatible strict mode",
         ),
     ),
     OpenAICompatProviderProfile(
@@ -126,7 +134,12 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="Volcano Engine Doubao / Ark",
         base_url_markers=("ark.cn-beijing.volces.com", "volces.com/api/v3"),
         model_markers=("doubao",),
-        compatibility_notes=("Ark OpenAI-compatible endpoint uses strict request validation",),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
+        compatibility_notes=(
+            "Ark OpenAI-compatible endpoint uses strict request validation",
+            "tool schemas are normalized before the first request",
+        ),
     ),
     OpenAICompatProviderProfile(
         id="minimax",
@@ -134,13 +147,20 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         base_url_markers=("api.minimaxi.com", "api.minimax.io", "api.minimax.chat"),
         model_markers=("minimax", "abab"),
         thinking_request_style="minimax_adaptive",
-        compatibility_notes=("thinking requests are translated to MiniMax adaptive style",),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
+        compatibility_notes=(
+            "thinking requests are translated to MiniMax adaptive style",
+            "parallel tool-call hints are removed for stricter gateways",
+        ),
     ),
     OpenAICompatProviderProfile(
         id="hunyuan",
         display_name="Tencent Hunyuan",
         base_url_markers=("api.hunyuan.cloud.tencent.com",),
         model_markers=("hunyuan",),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=("tool schemas may require additionalProperties stripping",),
     ),
     OpenAICompatProviderProfile(
@@ -148,6 +168,8 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="Baichuan",
         base_url_markers=("api.baichuan-ai.com", "platform.baichuan-ai.com"),
         model_markers=("baichuan",),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
     OpenAICompatProviderProfile(
@@ -155,6 +177,8 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="01.AI Yi",
         base_url_markers=("api.lingyiwanwu.com", "platform.01.ai"),
         model_markers=("yi-", "yi_", "yi/"),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
     OpenAICompatProviderProfile(
@@ -162,6 +186,8 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="StepFun",
         base_url_markers=("api.stepfun.ai", "api.stepfun.com"),
         model_markers=("step-", "stepfun"),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
     OpenAICompatProviderProfile(
@@ -169,6 +195,8 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="SiliconFlow",
         base_url_markers=("api.siliconflow.cn", "api.siliconflow.com"),
         model_markers=("siliconflow/",),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=("proxy-hosted models vary; diagnostics surface normalized payloads",),
     ),
     OpenAICompatProviderProfile(
@@ -176,6 +204,8 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         display_name="Baidu Qianfan",
         base_url_markers=("qianfan.baidubce.com",),
         model_markers=("ernie", "wenxin", "qianfan"),
+        strict_tool_schema=True,
+        unsupported_request_fields=("parallel_tool_calls",),
         compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
 )
@@ -200,6 +230,8 @@ def describe_openai_compat_profile(
         normalization_hints.append("drop_sampling_parameters")
     if profile.drop_tool_choice:
         normalization_hints.append("drop_tool_choice")
+    if profile.strict_tool_schema:
+        normalization_hints.append("strict_tool_schema")
     if profile.max_temperature is not None:
         normalization_hints.append(f"max_temperature:{profile.max_temperature:g}")
     for field_name in profile.unsupported_request_fields:
@@ -257,6 +289,7 @@ def apply_custom_openai_compat_profile(
 
     for field_name in (
         "drop_tool_choice",
+        "strict_tool_schema",
         "retry_without_tool_choice",
         "retry_without_sampling",
         "retry_max_tokens_as_completion_tokens",
@@ -305,6 +338,9 @@ def normalize_openai_compat_payload(
 
     if profile.drop_tool_choice:
         normalized.pop("tool_choice", None)
+
+    if profile.strict_tool_schema and "tools" in normalized:
+        normalized["tools"] = _strict_tools(normalized.get("tools"))
 
     return normalized
 
@@ -440,6 +476,8 @@ def _compatibility_score(profile: OpenAICompatProviderProfile) -> int:
         score -= 10
     if profile.drop_tool_choice:
         score -= 8
+    if profile.strict_tool_schema:
+        score -= 3
     if profile.max_temperature is not None:
         score -= 3
     score -= min(12, len(profile.unsupported_request_fields) * 3)
@@ -633,6 +671,7 @@ def _has_explicit_compat_override(entry: dict[str, Any]) -> bool:
         for field_name in (
             "thinking_request_style",
             "drop_tool_choice",
+            "strict_tool_schema",
             "retry_without_tool_choice",
             "retry_without_sampling",
             "retry_max_tokens_as_completion_tokens",

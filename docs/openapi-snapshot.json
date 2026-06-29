@@ -521,7 +521,7 @@
             "type": "string"
           },
           "api_base_url": {
-            "default": "http://127.0.0.1:8000",
+            "default": "",
             "title": "Api Base Url",
             "type": "string"
           },
@@ -549,7 +549,7 @@
             "type": "string"
           },
           "api_base_url": {
-            "default": "http://127.0.0.1:8000",
+            "default": "",
             "title": "Api Base Url",
             "type": "string"
           },
@@ -983,6 +983,17 @@
             "title": "Base Url",
             "type": "string"
           },
+          "compat_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compat Profile"
+          },
           "default_headers": {
             "anyOf": [
               {
@@ -1001,6 +1012,17 @@
             "title": "Display Name",
             "type": "string"
           },
+          "drop_tool_choice": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drop Tool Choice"
+          },
           "has_api_key": {
             "title": "Has Api Key",
             "type": "boolean"
@@ -1008,6 +1030,17 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "max_temperature": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Temperature"
           },
           "max_tokens": {
             "anyOf": [
@@ -1046,6 +1079,17 @@
             "title": "Provider",
             "type": "string"
           },
+          "strict_tool_schema": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strict Tool Schema"
+          },
           "supports_thinking": {
             "anyOf": [
               {
@@ -1078,6 +1122,31 @@
               }
             ],
             "title": "Supports Vision"
+          },
+          "thinking_request_style": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thinking Request Style"
+          },
+          "unsupported_request_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unsupported Request Fields"
           }
         },
         "required": [
@@ -9085,6 +9154,50 @@
         ]
       }
     },
+    "/api/agents/parallel/batch/{batch_id}/recovery-snapshot": {
+      "get": {
+        "operationId": "get_batch_recovery_snapshot_api_agents_parallel_batch__batch_id__recovery_snapshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Batch Recovery Snapshot Api Agents Parallel Batch  Batch Id  Recovery Snapshot Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Batch Recovery Snapshot",
+        "tags": [
+          "parallel-agents"
+        ]
+      }
+    },
     "/api/agents/parallel/cancel-all": {
       "post": {
         "operationId": "cancel_all_api_agents_parallel_cancel_all_post",
@@ -13976,6 +14089,58 @@
         ]
       }
     },
+    "/api/config/custom-models/compat-diagnostics": {
+      "get": {
+        "description": "Dry-run OpenAI-compatible request shaping for custom models.\n\nThis endpoint does **not** call an upstream model and never\nreturns API keys. It shows the operator which compat profile\neach custom model resolves to, which request fields are\nremoved/changed before dispatch, and which fallback retries\nwould be attempted for a representative strict-provider 400.",
+        "operationId": "api_custom_model_compat_diagnostics_api_config_custom_models_compat_diagnostics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "model_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Custom Model Compat Diagnostics Api Config Custom Models Compat Diagnostics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Custom Model Compat Diagnostics",
+        "tags": [
+          "config"
+        ]
+      }
+    },
     "/api/config/custom-models/test": {
       "post": {
         "description": "Run a tiny real chat completion against a custom model.",
@@ -14275,6 +14440,30 @@
           }
         },
         "summary": "Api Scan Local Models",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/config/openai-compat-profiles": {
+      "get": {
+        "description": "List built-in OpenAI-compatible provider profiles.\n\nThis is a dry run over representative provider/model pairs: no\nupstream request is made and no API key is required. It gives\noperators a stable compatibility matrix before any custom model\nis configured.",
+        "operationId": "api_openai_compat_profiles_api_config_openai_compat_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Openai Compat Profiles Api Config Openai Compat Profiles Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api Openai Compat Profiles",
         "tags": [
           "config"
         ]
@@ -26177,6 +26366,127 @@
           }
         },
         "summary": "Api Task Runs Overview",
+        "tags": [
+          "task-runs"
+        ]
+      }
+    },
+    "/api/task-runs/recovery-queue": {
+      "get": {
+        "operationId": "api_task_runs_recovery_queue_api_task_runs_recovery_queue_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Thread Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_monitor",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Monitor",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Task Runs Recovery Queue Api Task Runs Recovery Queue Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Task Runs Recovery Queue",
         "tags": [
           "task-runs"
         ]

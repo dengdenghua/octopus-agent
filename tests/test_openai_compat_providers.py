@@ -82,6 +82,7 @@ def test_custom_entry_can_override_compat_profile_and_field_policy() -> None:
             "compat_profile": "kimi_coding",
             "thinking_request_style": "minimax_adaptive",
             "drop_tool_choice": True,
+            "strict_tool_schema": True,
             "max_temperature": 0.2,
             "unsupported_request_fields": ["parallel_tool_calls"],
         },
@@ -92,6 +93,7 @@ def test_custom_entry_can_override_compat_profile_and_field_policy() -> None:
     assert profile.thinking_request_style == "minimax_adaptive"
     assert profile.omit_sampling_parameters is True
     assert profile.drop_tool_choice is True
+    assert profile.strict_tool_schema is True
     assert profile.max_temperature == 0.2
     assert profile.unsupported_request_fields == ("parallel_tool_calls",)
 
@@ -142,6 +144,44 @@ def test_kimi_coding_payload_omits_sampling_and_thinking_extensions() -> None:
     assert "top_p" not in payload
     assert "reasoning_effort" not in payload
     assert "thinking" not in payload
+
+
+def test_strict_domestic_profile_normalizes_tool_schema_up_front() -> None:
+    profile = resolve_openai_compat_profile(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    payload = normalize_openai_compat_payload(
+        {
+            "model": "qwen-plus",
+            "messages": [],
+            "parallel_tool_calls": True,
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string",
+                                    "additionalProperties": False,
+                                },
+                            },
+                            "additionalProperties": True,
+                        },
+                    },
+                },
+            ],
+        },
+        profile=profile,
+    )
+
+    params = payload["tools"][0]["function"]["parameters"]
+    assert profile.strict_tool_schema is True
+    assert "parallel_tool_calls" not in payload
+    assert "additionalProperties" not in params
+    assert "additionalProperties" not in params["properties"]["path"]
 
 
 def test_kimi_k2_general_model_keeps_sampling_on_plain_proxy() -> None:

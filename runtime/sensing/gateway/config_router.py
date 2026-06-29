@@ -116,6 +116,7 @@ if FASTAPI_AVAILABLE:
         compat_profile: str | None = None
         thinking_request_style: str | None = None
         drop_tool_choice: bool | None = None
+        strict_tool_schema: bool | None = None
         max_temperature: float | None = None
         unsupported_request_fields: list[str] | None = None
         default_headers: dict[str, str] | None = None
@@ -600,6 +601,7 @@ def create_config_router(
                 "thinking_request_style": profile.thinking_request_style,
                 "omit_sampling_parameters": profile.omit_sampling_parameters,
                 "drop_tool_choice": profile.drop_tool_choice,
+                "strict_tool_schema": profile.strict_tool_schema,
                 "max_temperature": profile.max_temperature,
                 "unsupported_request_fields": list(
                     profile.unsupported_request_fields,
@@ -1001,6 +1003,11 @@ def create_config_router(
                 if "drop_tool_choice" in body
                 else prev.get("drop_tool_choice")
             ),
+            "strict_tool_schema": (
+                body["strict_tool_schema"]
+                if "strict_tool_schema" in body
+                else prev.get("strict_tool_schema")
+            ),
             "max_temperature": (
                 body["max_temperature"]
                 if "max_temperature" in body
@@ -1264,6 +1271,7 @@ def create_config_router(
             "compat_profile": None,
             "thinking_request_style": None,
             "drop_tool_choice": None,
+            "strict_tool_schema": None,
             "max_temperature": None,
             "unsupported_request_fields": None,
             "default_headers": {},
@@ -1482,6 +1490,7 @@ def create_config_router(
                     "compat_profile": e.get("compat_profile"),
                     "thinking_request_style": e.get("thinking_request_style"),
                     "drop_tool_choice": e.get("drop_tool_choice"),
+                    "strict_tool_schema": e.get("strict_tool_schema"),
                     "max_temperature": e.get("max_temperature"),
                     "custom": True,
                     "entry_id": entry_id,
