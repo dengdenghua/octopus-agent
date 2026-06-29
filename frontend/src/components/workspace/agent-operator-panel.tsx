@@ -37,6 +37,7 @@ import {
   fetchAgentTraceReviewQueue,
   fetchAgentTraceReviewQueueSummary,
   fetchAgentTraceTrustDenialSummary,
+  fetchTaskRecoveryQueue,
   fetchAutomationPolicyRuleDrafts,
   fetchAutomationRadar,
   fetchAutoVerifierMetrics,
@@ -59,6 +60,7 @@ import {
   queueLatestBrowserSessionReplayCase,
   queueRepairRoutePromotionCandidates,
   rejectStaleBrowserDesktopReplayArtifacts,
+  takeoverTaskRun,
   type AgentCompetitorScorecard,
   type AgentTraceProcessTimeline,
   type AgentTracePolicyReviewRuleDrafts,
@@ -67,6 +69,7 @@ import {
   type AgentTraceReplayGate,
   type AgentTraceReviewQueueItem,
   type AgentTraceReviewQueueSummary,
+  type AgentTraceTaskRecoveryQueue,
   type AgentTraceTaskRun,
   type AgentTraceTrustDenialSummary,
   type AutomationPolicyRuleDraftsReport,
@@ -103,6 +106,14 @@ const EMPTY_SUMMARY: AgentTraceReviewQueueSummary = {
   by_priority: {},
   by_target_bucket: {},
   next_actions: [],
+};
+
+const EMPTY_TASK_RECOVERY_QUEUE: AgentTraceTaskRecoveryQueue = {
+  schema: "octopus.task_recovery_queue.v1",
+  total: 0,
+  count: 0,
+  limit: 8,
+  items: [],
 };
 
 const EMPTY_AUDIT_SUMMARY: AgentTracePromotionAuditSummary = {
@@ -349,6 +360,8 @@ export function AgentOperatorPanel() {
   >([]);
   const [queueSummary, setQueueSummary] =
     useState<AgentTraceReviewQueueSummary>(EMPTY_SUMMARY);
+  const [taskRecoveryQueue, setTaskRecoveryQueue] =
+    useState<AgentTraceTaskRecoveryQueue>(EMPTY_TASK_RECOVERY_QUEUE);
   const [auditSummary, setAuditSummary] =
     useState<AgentTracePromotionAuditSummary>(EMPTY_AUDIT_SUMMARY);
   const [experienceQuality, setExperienceQuality] =
@@ -412,6 +425,7 @@ export function AgentOperatorPanel() {
       browserDesktopItems,
       scorecardGapItems,
       summary,
+      recoveryQueue,
       gate,
       audit,
       memoryQuality,
@@ -441,6 +455,7 @@ export function AgentOperatorPanel() {
         targetBucket: "scorecard_gap_backlog",
       }),
       fetchAgentTraceReviewQueueSummary(),
+      fetchTaskRecoveryQueue({ limit: 8 }),
       fetchAgentTraceReplayGate({ status: "completed" }),
       fetchAgentTracePromotionAuditSummary(),
       fetchAgentTraceExperienceQualitySummary(),
@@ -472,6 +487,7 @@ export function AgentOperatorPanel() {
     setBrowserDesktopQueueItems(browserDesktopItems);
     setScorecardGapQueueItems(scorecardGapItems);
     setQueueSummary(summary);
+    setTaskRecoveryQueue(recoveryQueue);
     setReplayGate(gate);
     setAuditSummary(audit);
     setExperienceQuality(memoryQuality);
@@ -841,6 +857,21 @@ export function AgentOperatorPanel() {
     }
   };
 
+  const onTakeoverTaskRun = async (taskId: string) => {
+    setBusyId(`takeover-task:${taskId}`);
+    try {
+      await takeoverTaskRun(taskId);
+      setLastApplyResult(`Took over task ${taskId}.`);
+      await Promise.all([refreshTaskRuns(), refreshQueue()]);
+      setError(null);
+    } catch (err) {
+      swallow(err);
+      setError(readRequestErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <section className="workspace-panel rounded-[1.5rem] px-5 py-4">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -923,6 +954,11 @@ export function AgentOperatorPanel() {
       </div>
 
       <ReplayGateCard gate={replayGate} />
+      <TaskRecoveryQueueCard
+        queue={taskRecoveryQueue}
+        busyId={busyId}
+        onTakeover={(taskId) => void onTakeoverTaskRun(taskId)}
+      />
       <CompetitorScorecardCard
         report={agentScorecard}
         error={scorecardError}
@@ -1146,6 +1182,148 @@ function TimelinePreview({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function TaskRecoveryQueueCard({
+  queue,
+  busyId,
+  onTakeover,
+}: {
+  queue: AgentTraceTaskRecoveryQueue;
+  busyId: string | null;
+  onTakeover: (taskId: string) => void;
+}) {
+  const actionable = queue.items.filter(
+    (item) => item.recommended_action !== "monitor",
+  );
+  const topItem = actionable[0] ?? queue.items[0];
+  const healthy = actionable.length === 0;
+  return (
+    <div
+      className={cn(
+        "mt-3 rounded-lg border px-3 py-2",
+        healthy
+          ? "border-emerald-500/25 bg-emerald-500/10"
+          : "border-amber-500/30 bg-amber-500/10",
+      )}
+    >
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+            <GitBranchIcon
+              className={cn(
+                "size-4",
+                healthy
+                  ? "text-emerald-700 dark:text-emerald-300"
+                  : "text-amber-700 dark:text-amber-300",
+              )}
+            />
+            Task recovery queue
+            <Badge variant="outline" className="text-[10px]">
+              {queue.total} tracked
+            </Badge>
+            <Badge
+              variant={healthy ? "outline" : "destructive"}
+              className="text-[10px]"
+            >
+              {actionable.length} action
+            </Badge>
+          </div>
+          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+            {topItem
+              ? `${taskRecoveryActionLabel(topItem.recommended_action)} · ${topItem.title || topItem.task_id}`
+              : "No stalled, failed, or approval-blocked task runs."}
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 text-right font-mono text-[11px]">
+          <GateStat label="shown" value={queue.count} />
+          <GateStat label="takeover" value={countRecovery(queue, "takeover")} />
+          <GateStat label="resume" value={countRecovery(queue, "resume")} />
+        </div>
+      </div>
+      {queue.items.length > 0 && (
+        <div className="mt-2 grid gap-2 lg:grid-cols-2">
+          {queue.items.slice(0, 4).map((item) => {
+            const busy = busyId === `takeover-task:${item.task_id}`;
+            return (
+              <div
+                key={item.task_id}
+                className="rounded-md border border-background/70 bg-background/55 px-2 py-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-xs font-medium">
+                      {item.title || item.task_id}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                      <span className="font-mono">{shortId(item.task_id)}</span>
+                      <span>{item.status ?? "unknown"}</span>
+                      {item.kind && <span>{item.kind}</span>}
+                      {item.lease_health?.state && (
+                        <span>lease {item.lease_health.state}</span>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                    P{item.priority}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Badge
+                    variant={
+                      item.recommended_action === "monitor"
+                        ? "outline"
+                        : "secondary"
+                    }
+                    className="text-[10px]"
+                  >
+                    {taskRecoveryActionLabel(item.recommended_action)}
+                  </Badge>
+                  {item.has_checkpoint && (
+                    <Badge variant="outline" className="text-[10px]">
+                      checkpoint{" "}
+                      {shortId(
+                        item.resume_checkpoint_id ||
+                          item.latest_checkpoint_id ||
+                          "available",
+                      )}
+                    </Badge>
+                  )}
+                  {item.thread_id && (
+                    <Badge variant="outline" className="text-[10px]">
+                      thread {shortId(item.thread_id)}
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <div className="text-[10px] text-muted-foreground">
+                    {item.can_resume
+                      ? "Resume-safe state is available"
+                      : item.can_takeover
+                        ? "Lease can be reclaimed"
+                        : taskRecoveryHint(item.recommended_action)}
+                  </div>
+                  {item.can_takeover && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 shrink-0 px-2 text-[11px]"
+                      disabled={busy}
+                      onClick={() => onTakeover(item.task_id)}
+                    >
+                      <GitBranchIcon className="mr-1 size-3" />
+                      Take over
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2747,6 +2925,58 @@ function EmptyPanel({ title }: { title: string }) {
 
 function shortId(id: string) {
   return id.length > 16 ? `${id.slice(0, 16)}...` : id;
+}
+
+function countRecovery(queue: AgentTraceTaskRecoveryQueue, needle: string) {
+  return queue.items.filter((item) => item.recommended_action.includes(needle))
+    .length;
+}
+
+function taskRecoveryActionLabel(action: string) {
+  switch (action) {
+    case "takeover_and_resume":
+      return "take over + resume";
+    case "takeover_for_approval":
+      return "take over approval";
+    case "resume_from_checkpoint":
+      return "resume checkpoint";
+    case "restart":
+      return "restart";
+    case "resume_paused_task":
+      return "resume paused";
+    case "takeover":
+      return "take over";
+    case "dispatch":
+      return "dispatch";
+    case "await_operator_approval":
+      return "operator approval";
+    case "approval_policy_denied":
+      return "approval denied";
+    case "capability_policy_denied":
+      return "capability denied";
+    case "monitor":
+      return "monitor";
+    default:
+      return action.replaceAll("_", " ");
+  }
+}
+
+function taskRecoveryHint(action: string) {
+  switch (action) {
+    case "resume_from_checkpoint":
+      return "Open the loop run and resume from checkpoint";
+    case "restart":
+      return "Restart the task from the latest safe state";
+    case "await_operator_approval":
+      return "Resolve the pending approval request";
+    case "approval_policy_denied":
+    case "capability_policy_denied":
+      return "Review policy before retrying";
+    case "dispatch":
+      return "Worker dispatch is pending";
+    default:
+      return taskRecoveryActionLabel(action);
+  }
 }
 
 function competitorLabel(id: string) {

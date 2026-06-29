@@ -161,6 +161,54 @@ export interface AgentTraceTaskRun {
   token_totals?: Partial<AgentTraceTokenTotals>;
 }
 
+export interface AgentTraceTaskLeaseHealth {
+  state?: string;
+  holder_id?: string | null;
+  holder_heartbeat_at?: string | null;
+  lease_expires_at?: string | null;
+  recommended_action?: string;
+  can_takeover?: boolean;
+  can_resume?: boolean;
+  recovery?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface AgentTraceTaskRecoveryQueueItem {
+  task_id: string;
+  status?: string | null;
+  kind?: string | null;
+  title?: string | null;
+  owner_id?: string | null;
+  thread_id?: string | null;
+  workspace_path?: string | null;
+  recommended_action: string;
+  priority: number;
+  can_takeover: boolean;
+  can_resume: boolean;
+  has_checkpoint: boolean;
+  latest_checkpoint_id?: string | null;
+  resume_checkpoint_id?: string | null;
+  lease_health?: AgentTraceTaskLeaseHealth;
+  updated_at?: string | null;
+  created_at?: string | null;
+}
+
+export interface AgentTraceTaskRecoveryQueue {
+  schema: "octopus.task_recovery_queue.v1" | string;
+  total: number;
+  count: number;
+  limit: number;
+  items: AgentTraceTaskRecoveryQueueItem[];
+  generated_at?: string;
+  filters?: Record<string, unknown>;
+}
+
+export interface AgentTraceTaskRunMutationResult {
+  schema: string;
+  task_run: Record<string, unknown>;
+  lease_health: AgentTraceTaskLeaseHealth;
+}
+
 export interface AgentTraceProcessTimelineNode {
   id?: string;
   lane: string;
@@ -1192,6 +1240,35 @@ export async function fetchAgentTraceTaskRuns(
     `/api/agent-trace/task-runs?${params.toString()}`,
   );
   return data.task_runs;
+}
+
+export async function fetchTaskRecoveryQueue(options?: {
+  limit?: number;
+  status?: string;
+  kind?: string;
+  threadId?: string;
+  includeMonitor?: boolean;
+}): Promise<AgentTraceTaskRecoveryQueue> {
+  const params = new URLSearchParams({
+    limit: String(options?.limit ?? 8),
+  });
+  if (options?.status) params.set("status", options.status);
+  if (options?.kind) params.set("kind", options.kind);
+  if (options?.threadId) params.set("thread_id", options.threadId);
+  if (options?.includeMonitor) params.set("include_monitor", "true");
+  return fetchJson<AgentTraceTaskRecoveryQueue>(
+    `/api/task-runs/recovery-queue?${params.toString()}`,
+  );
+}
+
+export async function takeoverTaskRun(
+  taskId: string,
+  reason = "operator recovery queue takeover",
+): Promise<AgentTraceTaskRunMutationResult> {
+  return postJson<AgentTraceTaskRunMutationResult>(
+    `/api/task-runs/${encodeURIComponent(taskId)}/takeover`,
+    { reason },
+  );
 }
 
 export async function fetchAgentTraceProcessTimeline(

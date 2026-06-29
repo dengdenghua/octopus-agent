@@ -30,6 +30,7 @@ const api = vi.hoisted(() => ({
   fetchAgentTraceReviewQueueSummary: vi.fn(),
   fetchAgentTraceTaskRuns: vi.fn(),
   fetchAgentTraceTrustDenialSummary: vi.fn(),
+  fetchTaskRecoveryQueue: vi.fn(),
   fetchAutomationPolicyRuleDrafts: vi.fn(),
   fetchAutomationRadar: vi.fn(),
   fetchAutoVerifierMetrics: vi.fn(),
@@ -51,6 +52,7 @@ const api = vi.hoisted(() => ({
   queueLatestBrowserSessionReplayCase: vi.fn(),
   queueRepairRoutePromotionCandidates: vi.fn(),
   rejectStaleBrowserDesktopReplayArtifacts: vi.fn(),
+  takeoverTaskRun: vi.fn(),
 }));
 
 const pluginApi = vi.hoisted(() => ({
@@ -155,6 +157,65 @@ describe("<AgentOperatorPanel />", () => {
         scorecard_gap_backlog: 1,
       },
       next_actions: [],
+    });
+    api.fetchTaskRecoveryQueue.mockResolvedValue({
+      schema: "octopus.task_recovery_queue.v1",
+      total: 2,
+      count: 2,
+      limit: 8,
+      generated_at: "2026-06-26T00:00:00Z",
+      filters: { include_monitor: false },
+      items: [
+        {
+          task_id: "task-expired-loop",
+          status: "running",
+          kind: "loop",
+          title: "Expired loop task",
+          owner_id: "alice",
+          thread_id: "thread-recovery-1",
+          workspace_path: null,
+          recommended_action: "takeover_and_resume",
+          priority: 108,
+          can_takeover: true,
+          can_resume: true,
+          has_checkpoint: true,
+          latest_checkpoint_id: "checkpoint-expired-loop",
+          resume_checkpoint_id: null,
+          lease_health: {
+            state: "expired",
+            holder_id: "worker-a",
+            recommended_action: "takeover_and_resume",
+            can_takeover: true,
+            can_resume: true,
+          },
+          updated_at: "2026-06-26T00:00:00Z",
+          created_at: "2026-06-25T00:00:00Z",
+        },
+        {
+          task_id: "task-failed-loop",
+          status: "failed",
+          kind: "loop",
+          title: "Failed loop task",
+          owner_id: "alice",
+          thread_id: null,
+          workspace_path: null,
+          recommended_action: "resume_from_checkpoint",
+          priority: 90,
+          can_takeover: false,
+          can_resume: true,
+          has_checkpoint: true,
+          latest_checkpoint_id: "checkpoint-failed-loop",
+          resume_checkpoint_id: "resume-failed-loop",
+          lease_health: {
+            state: "terminal",
+            recommended_action: "resume_from_checkpoint",
+            can_takeover: false,
+            can_resume: true,
+          },
+          updated_at: "2026-06-26T00:00:00Z",
+          created_at: "2026-06-25T00:00:00Z",
+        },
+      ],
     });
     api.fetchAgentTraceReplayGate.mockResolvedValue({
       schema: "octopus.replay_gate.v1",
@@ -1026,6 +1087,11 @@ describe("<AgentOperatorPanel />", () => {
         below_target_count: 1,
       },
     });
+    api.takeoverTaskRun.mockResolvedValue({
+      schema: "octopus.task_run_takeover.v1",
+      task_run: { task_id: "task-expired-loop", status: "running" },
+      lease_health: { state: "ok", recommended_action: "monitor" },
+    });
   });
 
   it("renders task runs, timeline and pending review queue", async () => {
@@ -1045,6 +1111,11 @@ describe("<AgentOperatorPanel />", () => {
     expect(
       await screen.findByText("all_replay_evaluations_passed"),
     ).toBeInTheDocument();
+    expect(await screen.findByText("Task recovery queue")).toBeInTheDocument();
+    expect(await screen.findByText("Expired loop task")).toBeInTheDocument();
+    expect(await screen.findByText("take over + resume")).toBeInTheDocument();
+    expect(await screen.findByText("resume checkpoint")).toBeInTheDocument();
+    expect(await screen.findByText("lease expired")).toBeInTheDocument();
     expect(await screen.findByText("Competitor scorecard")).toBeInTheDocument();
     expect(
       await screen.findByText("Browser/Desktop replay review"),
@@ -1201,6 +1272,23 @@ describe("<AgentOperatorPanel />", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Pending")).toBeInTheDocument();
     expect(screen.getByText("Promoted")).toBeInTheDocument();
+  });
+
+  it("takes over an expired task from the recovery queue", async () => {
+    renderWithProviders(<AgentOperatorPanel />);
+
+    const takeoverButton = await screen.findByRole("button", {
+      name: /take over/i,
+    });
+    fireEvent.click(takeoverButton);
+
+    await waitFor(() =>
+      expect(api.takeoverTaskRun).toHaveBeenCalledWith("task-expired-loop"),
+    );
+    expect(
+      await screen.findByText("Took over task task-expired-loop."),
+    ).toBeInTheDocument();
+    expect(api.fetchTaskRecoveryQueue).toHaveBeenCalledTimes(2);
   });
 
   it("promotes a pending review item", async () => {
@@ -1392,7 +1480,9 @@ describe("<AgentOperatorPanel />", () => {
 
     expect(await screen.findByText("Automation radar")).toBeInTheDocument();
     expect(await screen.findByText("policy drafts 7/7")).toBeInTheDocument();
-    expect(await screen.findByText("computer_execute_token")).toBeInTheDocument();
+    expect(
+      await screen.findByText("computer_execute_token"),
+    ).toBeInTheDocument();
 
     const button = await screen.findByRole("button", {
       name: /Install deny rule/,
