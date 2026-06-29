@@ -47,6 +47,10 @@ import {
   writePreferredTeam,
   type Team as SidebarTeam,
 } from "@/core/teams";
+import {
+  taskCollaboratorRouteForLeader,
+  writeTaskCollaboratorPreset,
+} from "@/core/collaboration/task-collaborator-preset";
 import { useMoliliLink } from "@/core/molili";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
@@ -257,7 +261,9 @@ export function AgentFooter() {
     // this to hub-defaults + the active one, hiding the user's custom agents):
     // hub-default agents first in their canonical order, then custom agents.
     const nonCli = footerAgents.filter((a) => !isLocalCliAgent(a));
-    const hubAgents = nonCli.filter(isHubDefaultAgent).sort(sortHubDefaultAgents);
+    const hubAgents = nonCli
+      .filter(isHubDefaultAgent)
+      .sort(sortHubDefaultAgents);
     const customAgents = nonCli.filter((a) => !isHubDefaultAgent(a));
     // Dedupe by base display name: "Eve / Siren" and "Eve" share the base
     // "Eve". Hub-defaults win, so the echo_* variants of the same character
@@ -265,7 +271,10 @@ export function AgentFooter() {
     const seenBases = new Set<string>();
     const result: Agent[] = [];
     for (const a of [...hubAgents, ...customAgents]) {
-      const base = (a.display_name || a.name).split(/\s*\/\s*/)[0]?.trim().toLowerCase();
+      const base = (a.display_name || a.name)
+        .split(/\s*\/\s*/)[0]
+        ?.trim()
+        .toLowerCase();
       if (base && seenBases.has(base)) continue;
       if (base) seenBases.add(base);
       result.push(a);
@@ -553,13 +562,26 @@ export function TeamFooter() {
   }, [agents]);
 
   const selectTeam = (team: SidebarTeam) => {
+    const leaderId =
+      team.leaderId?.trim() || team.members[0]?.name?.trim() || null;
+    const collaboratorIds = team.members
+      .map((member) => member.name.trim())
+      .filter((name) => name && name !== leaderId);
     setCurrentId(team.id);
     writePreferredTeam(team);
-    window.dispatchEvent(
-      new CustomEvent("octopus:select-team", { detail: team }),
-    );
     dispatchTeamUpdated(team);
-    navigate("/workspace/team/new");
+    writeTaskCollaboratorPreset({
+      leaderId,
+      collaboratorIds,
+      mode: collaboratorIds.length > 0 ? "cluster" : "chat",
+      label: team.name,
+      openPicker: false,
+    });
+    if (leaderId) {
+      setActiveName(leaderId);
+      emitAgentChanged(leaderId);
+    }
+    navigate(taskCollaboratorRouteForLeader(leaderId));
   };
 
   const selectSoloAgent = async (agent: Agent) => {
@@ -581,9 +603,16 @@ export function TeamFooter() {
     setCurrentId(soloTeam.id);
     writePreferredTeam(soloTeam);
     dispatchTeamUpdated(soloTeam);
+    writeTaskCollaboratorPreset({
+      leaderId: agent.name,
+      collaboratorIds: [],
+      mode: "chat",
+      label: agent.display_name || agent.name,
+      openPicker: false,
+    });
     setActiveName(agent.name);
     emitAgentChanged(agent.name);
-    navigate("/workspace/team/new");
+    navigate(taskCollaboratorRouteForLeader(agent.name));
   };
 
   const deleteTeam = async (team: SidebarTeam) => {
@@ -605,22 +634,13 @@ export function TeamFooter() {
   };
 
   const openCreate = () => {
-    // The CreateTeamDialog + its trigger live on the team page. Emitting
-    // ``team:create`` alone was a no-op (nothing subscribes to it), so this
-    // entry was a dead button. Two cases to cover:
-    //  - already on the team page → the live window listener opens the dialog;
-    //  - coming from another route → a sessionStorage flag the page reads on
-    //    mount (survives the /team/new → /team/:id redirect that would strip a
-    //    query param, and the event-before-listener-mount race).
-    eventBus.emit("team:create");
-    try {
-      sessionStorage.setItem("octopus:pending-create-team", "1");
-    } catch {
-      // sessionStorage unavailable (private mode); window event still covers
-      // the common already-on-team-page case.
-    }
-    navigate("/workspace/team/new");
-    window.dispatchEvent(new CustomEvent("octopus:create-team"));
+    writeTaskCollaboratorPreset({
+      leaderId: activeAgent?.name ?? "general",
+      collaboratorIds: [],
+      mode: "cluster",
+      openPicker: true,
+    });
+    navigate(taskCollaboratorRouteForLeader(activeAgent?.name));
   };
 
   return (

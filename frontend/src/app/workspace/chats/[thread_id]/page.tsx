@@ -118,6 +118,11 @@ import {
 } from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { emitAgentChanged, eventBus, useEvent } from "@/core/events";
+import {
+  consumeTaskCollaboratorPreset,
+  TASK_COLLABORATOR_PRESET_EVENT,
+  type TaskCollaboratorPreset,
+} from "@/core/collaboration/task-collaborator-preset";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, type Message } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -557,6 +562,8 @@ function TaskCollaboratorControl({
   selectedAgentIds,
   currentAgentName,
   teamMode,
+  open,
+  onOpenChange,
   onSelectedAgentIdsChange,
   onTeamModeChange,
 }: {
@@ -565,6 +572,8 @@ function TaskCollaboratorControl({
   selectedAgentIds: string[];
   currentAgentName?: string | null;
   teamMode: TeamMode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onSelectedAgentIdsChange: (ids: string[]) => void;
   onTeamModeChange: (mode: TeamMode) => void;
 }) {
@@ -623,7 +632,7 @@ function TaskCollaboratorControl({
   );
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
@@ -948,6 +957,7 @@ function ChatsPageContent({
     string[]
   >([]);
   const [teamModeIntent, setTeamModeIntent] = useState<TeamMode>("cluster");
+  const [collaboratorPickerOpen, setCollaboratorPickerOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -1035,6 +1045,40 @@ function ChatsPageContent({
       selected.has(agent.name),
     );
   }, [allTaskCollaboratorAgents, selectedCollaboratorIds]);
+  const applyTaskCollaboratorPreset = useCallback(
+    (preset: TaskCollaboratorPreset) => {
+      const nextIds = Array.from(
+        new Set(
+          (preset.collaboratorIds ?? [])
+            .map((id) => id.trim())
+            .filter((id) => id && id !== currentTaskAgentName),
+        ),
+      );
+      setSelectedCollaboratorIds(nextIds);
+      setTeamModeIntent(
+        nextIds.length > 0 ? (preset.mode ?? "cluster") : "cluster",
+      );
+      if (preset.openPicker) {
+        setCollaboratorPickerOpen(true);
+      }
+    },
+    [currentTaskAgentName],
+  );
+  useEffect(() => {
+    const storedPreset = consumeTaskCollaboratorPreset();
+    if (storedPreset) {
+      applyTaskCollaboratorPreset(storedPreset);
+    }
+    const handler = (event: Event) => {
+      const preset = (event as CustomEvent<TaskCollaboratorPreset>).detail;
+      if (preset) {
+        applyTaskCollaboratorPreset(preset);
+      }
+    };
+    window.addEventListener(TASK_COLLABORATOR_PRESET_EVENT, handler);
+    return () =>
+      window.removeEventListener(TASK_COLLABORATOR_PRESET_EVENT, handler);
+  }, [applyTaskCollaboratorPreset]);
   const collaborationRoster = useMemo<ChatCollaborationRosterEntry[]>(() => {
     const leaderName = composerDisplayAgent.name?.trim() || effectiveAgentId;
     const roster: ChatCollaborationRosterEntry[] = [
@@ -2114,6 +2158,8 @@ function ChatsPageContent({
                     selectedAgentIds={selectedCollaboratorIds}
                     currentAgentName={currentTaskAgentName}
                     teamMode={teamModeIntent}
+                    open={collaboratorPickerOpen}
+                    onOpenChange={setCollaboratorPickerOpen}
                     onSelectedAgentIdsChange={setSelectedCollaboratorIds}
                     onTeamModeChange={setTeamModeIntent}
                   />

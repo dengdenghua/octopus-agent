@@ -210,12 +210,6 @@ export function CommandPalette() {
         icon: CpuIcon,
         keywords: "computer desktop automation",
       },
-      {
-        to: "/workspace/team",
-        label: t.workspace.modes.team,
-        icon: UsersIcon,
-        keywords: "team collab",
-      },
     ],
     [t],
   );

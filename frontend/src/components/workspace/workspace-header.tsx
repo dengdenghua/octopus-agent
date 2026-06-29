@@ -23,10 +23,7 @@ function OctopusLogo({ size = 24 }: { size?: number }) {
   );
 }
 
-function getNewChatPath(pathname: string): string {
-  if (pathname?.includes("/workspace/team")) {
-    return "/workspace/team/new";
-  }
+function getNewChatPath(): string {
   return "/workspace/realtime/new";
 }
 
@@ -76,7 +73,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
               )}
               tooltip={t.sidebar.newChat}
             >
-              <Link to={getNewChatPath(pathname ?? "")}>
+              <Link to={getNewChatPath()}>
                 <MessageSquarePlus className="size-[15px] transition-transform duration-200 group-hover:rotate-12" />
                 <span className="leading-none">{t.sidebar.newChat}</span>
               </Link>
@@ -119,7 +116,7 @@ export function WorkspaceHeader({ className }: { className?: string }) {
               >
                 <Link
                   className="flex h-full items-center gap-2"
-                  to={getNewChatPath(pathname ?? "")}
+                  to={getNewChatPath()}
                 >
                   <MessageSquarePlus className="size-[15px] transition-transform duration-200 group-hover:rotate-12" />
                   <span className="leading-none">{t.sidebar.newChat}</span>
