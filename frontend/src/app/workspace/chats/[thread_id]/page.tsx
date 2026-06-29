@@ -1,10 +1,13 @@
 import {
+  CheckIcon,
   CircleDotIcon,
   Code2Icon,
   FileTextIcon,
   ListChecksIcon,
   PanelRightIcon,
   SearchIcon,
+  UserPlusIcon,
+  UsersRoundIcon,
   XIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -64,6 +67,12 @@ import { LoadOlderTurnsBanner } from "@/components/workspace/messages/load-older
 import { ThreadProviders } from "@/components/workspace/messages/context";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { ShareMenu } from "@/components/workspace/share-menu";
+import { AgentAvatar } from "@/components/workspace/sidebar-footer";
+import {
+  TEAM_MODE_META,
+  TEAM_MODES,
+  type TeamMode,
+} from "@/components/workspace/team-mode-picker";
 import { toWorkBlocks } from "@/components/workspace/work-blocks";
 import { screenBlocksForAgent } from "@/components/workspace/agent-workbench-snapshot";
 import { buildReplayFromBlocks } from "@/components/workspace/replay-from-blocks";
@@ -97,7 +106,14 @@ import { startDeepResearch, type ResearchJob } from "@/core/research/api";
 import { getRecordingStatus } from "@/core/teach-repeat/api";
 import type { RecordingStatus } from "@/core/teach-repeat/types";
 import { ACTIVE_AGENT_EVENT, ACTIVE_AGENT_KEY } from "@/core/agents/active";
-import { useAgent } from "@/core/agents/hooks";
+import {
+  dedupeAgentsByName,
+  useAgent,
+  useAgents,
+  useLocalCliAgents,
+  useMobileDevices,
+  type Agent,
+} from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { emitAgentChanged, eventBus, useEvent } from "@/core/events";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
@@ -116,6 +132,11 @@ import {
 } from "@/lib/extract-code-blocks";
 import { isAbsolutePath } from "@/lib/path-utils";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const BOOKMARKLET_AGENT_IDS = new Set([
   "general",
@@ -515,6 +536,241 @@ function ChatHeaderRecButton({
   );
 }
 
+function formatCollaboratorCount(count: number, unit: string): string {
+  return unit.length <= 1 ? `${count}${unit}` : `${count} ${unit}`;
+}
+
+function TaskCollaboratorControl({
+  agents,
+  selectedAgents,
+  selectedAgentIds,
+  currentAgentName,
+  teamMode,
+  onSelectedAgentIdsChange,
+  onTeamModeChange,
+}: {
+  agents: Agent[];
+  selectedAgents: Agent[];
+  selectedAgentIds: string[];
+  currentAgentName?: string | null;
+  teamMode: TeamMode;
+  onSelectedAgentIdsChange: (ids: string[]) => void;
+  onTeamModeChange: (mode: TeamMode) => void;
+}) {
+  const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const selectedSet = useMemo(
+    () => new Set(selectedAgentIds),
+    [selectedAgentIds],
+  );
+  const isTeamDraft = selectedAgents.length > 0;
+  const teamSize = isTeamDraft
+    ? selectedAgents.length + (currentAgentName ? 1 : 0)
+    : 1;
+  const activeMeta = isTeamDraft ? TEAM_MODE_META[teamMode] : null;
+  const ActiveIcon = activeMeta?.icon ?? UserPlusIcon;
+  const countLabel = formatCollaboratorCount(
+    teamSize,
+    t.chatInputBox.collaboratorsCountUnit,
+  );
+  const q = query.trim().toLowerCase();
+  const availableAgents = useMemo(
+    () =>
+      agents.filter((agent) => {
+        if (currentAgentName && agent.name === currentAgentName) return false;
+        if (!q) return true;
+        const label = agent.display_name ?? agent.name;
+        return (
+          label.toLowerCase().includes(q) ||
+          agent.name.toLowerCase().includes(q) ||
+          agent.description.toLowerCase().includes(q)
+        );
+      }),
+    [agents, currentAgentName, q],
+  );
+
+  const toggleAgent = useCallback(
+    (agent: Agent) => {
+      if (selectedSet.has(agent.name)) {
+        onSelectedAgentIdsChange(
+          selectedAgentIds.filter((id) => id !== agent.name),
+        );
+        return;
+      }
+      if (selectedAgentIds.length === 0 && teamMode === "chat") {
+        onTeamModeChange("cluster");
+      }
+      onSelectedAgentIdsChange([...selectedAgentIds, agent.name]);
+    },
+    [
+      onSelectedAgentIdsChange,
+      onTeamModeChange,
+      selectedAgentIds,
+      selectedSet,
+      teamMode,
+    ],
+  );
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-md border px-2 text-[12px] font-medium transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+            isTeamDraft
+              ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+              : "border-transparent bg-transparent text-muted-foreground hover:border-border/50 hover:bg-muted/50 hover:text-foreground",
+          )}
+          title={t.chatInputBox.collaborators}
+        >
+          <ActiveIcon className="size-4 shrink-0" />
+          <span className="hidden min-w-0 truncate sm:inline">
+            {activeMeta?.label ?? t.chatInputBox.collaboratorsSingle}
+          </span>
+          <span
+            className={cn(
+              "shrink-0 rounded-sm px-1.5 py-0.5 text-[10px]",
+              isTeamDraft
+                ? "bg-primary/12 text-primary"
+                : "bg-muted/65 text-muted-foreground",
+            )}
+          >
+            {countLabel}
+          </span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        side="bottom"
+        sideOffset={8}
+        className="w-[min(22rem,calc(100vw-1rem))] overflow-hidden rounded-md border-border/70 p-0 shadow-sm"
+      >
+        <div className="border-b border-border/45 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium">
+              <UsersRoundIcon className="size-4 text-primary" />
+              <span className="truncate">{t.chatInputBox.collaborators}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onSelectedAgentIdsChange([]);
+                onTeamModeChange("cluster");
+              }}
+              className="rounded-sm px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+            >
+              {t.chatInputBox.collaboratorsSingle}
+            </button>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {TEAM_MODES.map((mode) => {
+              const meta = TEAM_MODE_META[mode];
+              const Icon = meta.icon;
+              const active = isTeamDraft && teamMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  disabled={!isTeamDraft}
+                  onClick={() => onTeamModeChange(mode)}
+                  title={meta.description}
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1.5 rounded-sm border px-2.5 text-[11px] font-medium transition-colors",
+                    active
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border/55 text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                    !isTeamDraft &&
+                      "cursor-not-allowed opacity-45 hover:bg-transparent",
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                  {meta.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="p-3">
+          <label className="flex h-8 items-center gap-2 rounded-sm border border-border/50 bg-background/45 px-2">
+            <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => event.stopPropagation()}
+              placeholder={t.chatInputBox.collaboratorsSearchPlaceholder}
+              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/45"
+            />
+          </label>
+          {selectedAgents.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {selectedAgents.map((agent) => (
+                <button
+                  key={agent.name}
+                  type="button"
+                  onClick={() => toggleAgent(agent)}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-sm border border-primary/20 bg-primary/8 px-2 py-1 text-[11px] text-primary"
+                >
+                  <AgentAvatar
+                    agent={agent}
+                    className="size-4 rounded text-[9px]"
+                  />
+                  <span className="truncate">
+                    {agent.display_name ?? agent.name}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 max-h-60 overflow-y-auto pr-1">
+            <div className="space-y-1">
+              {availableAgents.slice(0, 18).map((agent) => {
+                const selected = selectedSet.has(agent.name);
+                const label = agent.display_name ?? agent.name;
+                return (
+                  <button
+                    key={agent.name}
+                    type="button"
+                    onClick={() => toggleAgent(agent)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors",
+                      selected ? "bg-primary/8" : "hover:bg-muted/55",
+                    )}
+                  >
+                    <AgentAvatar
+                      agent={agent}
+                      className="size-7 rounded-md text-[11px]"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-medium">
+                        {label}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {agent.description || agent.name}
+                      </span>
+                    </span>
+                    <span
+                      className={cn(
+                        "grid size-5 shrink-0 place-items-center rounded border",
+                        selected
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : "border-border/50 text-transparent",
+                      )}
+                    >
+                      <CheckIcon className="size-3.5" />
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 function latestArtifactFocusPathFromEvents(
   events: Array<{ input?: unknown }>,
 ): string | null {
@@ -670,6 +926,17 @@ function ChatsPageContent({
       window.removeEventListener("octopus:workdir-selected", handler);
   }, [handleWorkDirChange]);
   const { models } = useModels();
+  const { agents: builtinAgents } = useAgents();
+  const { cliAgents } = useLocalCliAgents();
+  const { mobileAgents } = useMobileDevices();
+  const allTaskCollaboratorAgents = useMemo(
+    () => dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
+    [builtinAgents, cliAgents, mobileAgents],
+  );
+  const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<
+    string[]
+  >([]);
+  const [teamModeIntent, setTeamModeIntent] = useState<TeamMode>("cluster");
 
   useEffect(() => {
     setMounted(true);
@@ -737,6 +1004,24 @@ function ChatsPageContent({
     resolvedThreadOwnerAgentId && resolvedThreadOwnerAgentId !== activeAgentId
       ? threadOwnerAgent
       : activeAgent;
+  const currentTaskAgentName = displayAgent?.name ?? effectiveAgentId;
+  const composerDisplayAgent = displayAgent ?? {
+    name: effectiveAgentId,
+    display_name: effectiveAgentId,
+    avatar_url: null,
+    icon: null,
+  };
+  const selectedCollaborators = useMemo(() => {
+    const selected = new Set(selectedCollaboratorIds);
+    return allTaskCollaboratorAgents.filter((agent) =>
+      selected.has(agent.name),
+    );
+  }, [allTaskCollaboratorAgents, selectedCollaboratorIds]);
+  useEffect(() => {
+    setSelectedCollaboratorIds((current) =>
+      current.filter((id) => id !== currentTaskAgentName),
+    );
+  }, [currentTaskAgentName]);
   const effectiveReasoningEffort = normalizeReasoningEffortForUi(
     settings.context.reasoning_effort,
   );
@@ -1730,6 +2015,15 @@ function ChatsPageContent({
                   />
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1">
+                  <TaskCollaboratorControl
+                    agents={allTaskCollaboratorAgents}
+                    selectedAgents={selectedCollaborators}
+                    selectedAgentIds={selectedCollaboratorIds}
+                    currentAgentName={currentTaskAgentName}
+                    teamMode={teamModeIntent}
+                    onSelectedAgentIdsChange={setSelectedCollaboratorIds}
+                    onTeamModeChange={setTeamModeIntent}
+                  />
                   <ChatHeaderRecButton
                     threadId={threadId}
                     onOpen={() => setRecOverlayOpen(true)}
@@ -1874,7 +2168,12 @@ function ChatsPageContent({
                       threadId={threadId}
                       disabled={researchLoading}
                       workDir={effectiveWorkDir}
-                      displayAgent={displayAgent ?? null}
+                      displayAgent={composerDisplayAgent}
+                      collaboratorAgents={selectedCollaborators}
+                      teamModeIntent={teamModeIntent}
+                      onClearCollaborators={() =>
+                        setSelectedCollaboratorIds([])
+                      }
                       showWorkDirSelector
                       onWorkDirChange={handleWorkDirChange}
                       codeModeUnlocked={codeModeUnlocked}

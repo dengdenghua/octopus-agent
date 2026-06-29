@@ -713,7 +713,7 @@ function KnowledgeGraph3DContent() {
       const known = entityType as keyof typeof t.knowledgePanel.entityTypes;
       return t.knowledgePanel.entityTypes[known] ?? entityType;
     },
-    [t.knowledgePanel.entityTypes],
+    [t],
   );
 
   const loadGraph = useCallback(async () => {

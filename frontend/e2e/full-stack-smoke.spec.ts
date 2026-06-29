@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const backendPort = process.env.GATEWAY_PORT || "18000";
 const backendBase = `http://127.0.0.1:${backendPort}`;
@@ -9,7 +9,7 @@ const frontendOrigins = [
 ];
 
 async function fetchFromPage(
-  page: import("@playwright/test").Page,
+  page: Page,
   path: string,
 ) {
   return page.evaluate(async (requestPath) => {
