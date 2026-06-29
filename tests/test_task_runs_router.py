@@ -81,6 +81,95 @@ def test_task_runs_router_lists_and_reads_supervisor_records(tmp_path):
     assert alice_body["filters"]["owner_id"] == "alice"
 
 
+def test_task_runs_router_recovery_queue_filters_and_isolates_owner(tmp_path):
+    path = tmp_path / "task_runs.json"
+    supervisor = TaskSupervisor.from_path(path, holder_id="worker-a", lease_ttl_seconds=30)
+    supervisor.start_task(
+        task_id="task-alice-expired",
+        kind="loop",
+        owner_id="alice",
+        title="Alice expired",
+    )
+    supervisor.start_task(
+        task_id="task-alice-running",
+        kind="loop",
+        owner_id="alice",
+        title="Alice running",
+    )
+    supervisor.start_task(
+        task_id="task-bob-failed",
+        kind="loop",
+        owner_id="bob",
+        title="Bob failed",
+    )
+    supervisor.transition(
+        "task-bob-failed",
+        TaskRunStatus.FAILED,
+        checkpoint_id="ckpt-bob",
+    )
+
+    def _expire(record):
+        assert record.lease is not None
+        return record.model_copy(
+            update={
+                "latest_checkpoint_id": "ckpt-alice",
+                "lease": record.lease.model_copy(update={"expires_at": time.time() - 1}),
+            },
+            deep=True,
+        )
+
+    supervisor.store.mutate("task-alice-expired", _expire)
+    identity_store = IdentityStore()
+    identity_store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    identity_store.add(Identity(actor_id="bob"), api_key_plaintext="sk-bob")
+
+    app = FastAPI()
+    app.include_router(
+        create_task_runs_router(
+            supervisor=supervisor,
+            identity_store=identity_store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    alice_queue = client.get(
+        "/api/task-runs/recovery-queue",
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    alice_with_monitor = client.get(
+        "/api/task-runs/recovery-queue",
+        params={"include_monitor": True},
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    bob_queue = client.get(
+        "/api/task-runs/recovery-queue",
+        headers={"Authorization": "Bearer sk-bob"},
+    )
+
+    assert alice_queue.status_code == 200
+    assert alice_queue.json()["schema"] == "octopus.task_recovery_queue.v1"
+    assert alice_queue.json()["filters"]["owner_id"] == "alice"
+    assert [item["task_id"] for item in alice_queue.json()["items"]] == [
+        "task-alice-expired"
+    ]
+    assert alice_queue.json()["items"][0]["recommended_action"] == "takeover_and_resume"
+    assert alice_queue.json()["items"][0]["latest_checkpoint_id"] == "ckpt-alice"
+
+    assert alice_with_monitor.status_code == 200
+    assert alice_with_monitor.json()["filters"]["include_monitor"] is True
+    assert {item["task_id"] for item in alice_with_monitor.json()["items"]} == {
+        "task-alice-expired",
+        "task-alice-running",
+    }
+
+    assert bob_queue.status_code == 200
+    assert [item["task_id"] for item in bob_queue.json()["items"]] == [
+        "task-bob-failed"
+    ]
+    assert bob_queue.json()["items"][0]["recommended_action"] == "resume_from_checkpoint"
+
+
 def test_task_runs_router_list_total_counts_filtered_rows_not_page_size(tmp_path):
     supervisor = TaskSupervisor.from_path(tmp_path / "task_runs.json", holder_id="worker-a")
     for index in range(3):

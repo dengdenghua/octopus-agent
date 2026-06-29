@@ -468,6 +468,62 @@ def test_task_lease_health_recommends_takeover_resume_and_terminal_recovery(tmp_
     assert overview["by_recommended_action"]["takeover_and_resume"] == 1
 
 
+def test_task_supervisor_recovery_queue_prioritizes_actionable_work(tmp_path):
+    path = tmp_path / "task_runs.json"
+    supervisor = TaskSupervisor.from_path(path, holder_id="worker-a", lease_ttl_seconds=30)
+    supervisor.start_task(task_id="task-monitor", kind="loop")
+    supervisor.start_task(task_id="task-expired", kind="loop", title="Expired")
+    supervisor.start_task(task_id="task-failed", kind="loop", title="Failed")
+    supervisor.transition("task-failed", TaskRunStatus.FAILED, checkpoint_id="ckpt-failed")
+    supervisor.start_task(
+        task_id="task-approval",
+        kind="loop",
+        title="Approval",
+        metadata={"approval_required": True},
+    )
+    supervisor.transition(
+        "task-approval",
+        TaskRunStatus.WAITING_APPROVAL,
+        reason="approval required",
+    )
+
+    def _expire(record):
+        assert record.lease is not None
+        return record.model_copy(
+            update={
+                "latest_checkpoint_id": "ckpt-expired",
+                "lease": record.lease.model_copy(update={"expires_at": time.time() - 1}),
+            },
+            deep=True,
+        )
+
+    supervisor.store.mutate("task-expired", _expire)
+
+    queue = supervisor.store.recovery_queue(kind="loop")
+    with_monitor = supervisor.store.recovery_queue(kind="loop", include_monitor=True)
+    limited = supervisor.store.recovery_queue(kind="loop", include_monitor=True, limit=2)
+
+    assert queue["schema"] == "octopus.task_recovery_queue.v1"
+    assert queue["total"] == 3
+    assert [item["task_id"] for item in queue["items"]] == [
+        "task-expired",
+        "task-failed",
+        "task-approval",
+    ]
+    assert queue["items"][0]["recommended_action"] == "takeover_and_resume"
+    assert queue["items"][0]["can_takeover"] is True
+    assert queue["items"][0]["can_resume"] is True
+    assert queue["items"][0]["latest_checkpoint_id"] == "ckpt-expired"
+    assert queue["items"][1]["recommended_action"] == "resume_from_checkpoint"
+    assert queue["items"][2]["recommended_action"] == "await_operator_approval"
+
+    assert with_monitor["total"] == 4
+    assert with_monitor["items"][-1]["task_id"] == "task-monitor"
+    assert with_monitor["items"][-1]["recommended_action"] == "monitor"
+    assert limited["count"] == 2
+    assert len(limited["items"]) == 2
+
+
 def test_task_lease_health_recommends_operator_approval_for_waiting_task(tmp_path):
     supervisor = TaskSupervisor.from_path(
         tmp_path / "task_runs.json",

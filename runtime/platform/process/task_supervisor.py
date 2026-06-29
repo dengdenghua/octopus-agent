@@ -334,6 +334,97 @@ def build_task_runs_overview(tasks: list[TaskRunRecord]) -> dict[str, Any]:
     }
 
 
+def build_task_recovery_queue(
+    tasks: list[TaskRunRecord],
+    *,
+    include_monitor: bool = False,
+    limit: int = 100,
+) -> dict[str, Any]:
+    clean_limit = max(1, int(limit or 100))
+    items: list[dict[str, Any]] = []
+    for task in tasks:
+        health = task_lease_health(task)
+        action = str(health.get("recommended_action") or "monitor")
+        actionable = bool(
+            health.get("can_takeover")
+            or health.get("can_resume")
+            or action
+            in {
+                "dispatch",
+                "await_operator_approval",
+                "takeover_for_approval",
+                "approval_policy_denied",
+                "capability_policy_denied",
+            }
+        )
+        if not include_monitor and not actionable:
+            continue
+        items.append(
+            {
+                "task_id": task.task_id,
+                "status": task.status.value,
+                "kind": task.kind,
+                "title": task.title,
+                "owner_id": task.owner_id,
+                "thread_id": task.thread_id,
+                "workspace_path": task.workspace_path,
+                "recommended_action": action,
+                "priority": _task_recovery_priority(action, health),
+                "can_takeover": bool(health.get("can_takeover")),
+                "can_resume": bool(health.get("can_resume")),
+                "has_checkpoint": bool(health.get("has_checkpoint")),
+                "latest_checkpoint_id": health.get("recovery", {}).get(
+                    "latest_checkpoint_id"
+                ),
+                "resume_checkpoint_id": health.get("recovery", {}).get(
+                    "resume_checkpoint_id"
+                ),
+                "lease_health": health,
+                "updated_at": task.updated_at,
+                "created_at": task.created_at,
+            }
+        )
+    items.sort(
+        key=lambda item: (
+            int(item["priority"]),
+            str(item.get("updated_at") or ""),
+            str(item.get("task_id") or ""),
+        ),
+        reverse=True,
+    )
+    return {
+        "schema": "octopus.task_recovery_queue.v1",
+        "total": len(items),
+        "count": min(len(items), clean_limit),
+        "limit": clean_limit,
+        "items": items[:clean_limit],
+        "generated_at": _now_iso(),
+    }
+
+
+def _task_recovery_priority(action: str, health: dict[str, Any]) -> int:
+    priorities = {
+        "takeover_and_resume": 100,
+        "takeover_for_approval": 95,
+        "resume_from_checkpoint": 90,
+        "restart": 80,
+        "resume_paused_task": 75,
+        "takeover": 70,
+        "dispatch": 60,
+        "await_operator_approval": 50,
+        "approval_policy_denied": 40,
+        "capability_policy_denied": 40,
+        "monitor": 10,
+        "none": 0,
+    }
+    score = priorities.get(action, 20)
+    if bool(health.get("can_takeover")):
+        score += 5
+    if bool(health.get("can_resume")):
+        score += 3
+    return score
+
+
 def _empty_payload() -> dict[str, Any]:
     return {
         "schema": _SCHEMA,
@@ -513,6 +604,29 @@ class TaskSupervisorStore:
         with self._lock:
             tasks = self._read_tasks()
         return build_task_runs_overview(tasks)
+
+    def recovery_queue(
+        self,
+        *,
+        status: str | None = None,
+        kind: str | None = None,
+        owner_id: str | None = None,
+        thread_id: str | None = None,
+        include_monitor: bool = False,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        with self._lock:
+            tasks = self._filtered_tasks(
+                status=status,
+                kind=kind,
+                owner_id=owner_id,
+                thread_id=thread_id,
+            )
+        return build_task_recovery_queue(
+            tasks,
+            include_monitor=include_monitor,
+            limit=limit,
+        )
 
     def mutate(
         self,
@@ -1129,6 +1243,7 @@ __all__ = [
     "TaskRunStatus",
     "TaskSupervisor",
     "TaskSupervisorStore",
+    "build_task_recovery_queue",
     "build_task_runs_overview",
     "manifest_from_session_metadata",
     "task_lease_health",

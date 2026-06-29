@@ -145,6 +145,37 @@ def create_task_runs_router(
             },
         }
 
+    @router.get("/api/task-runs/recovery-queue")
+    def api_task_runs_recovery_queue(
+        request: Request,
+        status: str | None = Query(default=None),
+        kind: str | None = Query(default=None),
+        owner_id: str | None = Query(default=None),
+        thread_id: str | None = Query(default=None),
+        include_monitor: bool = Query(default=False),
+        limit: int = Query(default=100, ge=1, le=500),
+    ) -> dict[str, Any]:
+        actor = _auth(request)
+        effective_owner = actor if require_auth else owner_id
+        queue = _store().recovery_queue(
+            status=status,
+            kind=kind,
+            owner_id=effective_owner,
+            thread_id=thread_id,
+            include_monitor=include_monitor,
+            limit=limit,
+        )
+        return {
+            **queue,
+            "filters": {
+                "status": status,
+                "kind": kind,
+                "owner_id": effective_owner,
+                "thread_id": thread_id,
+                "include_monitor": include_monitor,
+            },
+        }
+
     @router.get("/api/task-runs/{task_id}")
     def api_task_run(task_id: str, request: Request) -> dict[str, Any]:
         actor = _auth(request)
