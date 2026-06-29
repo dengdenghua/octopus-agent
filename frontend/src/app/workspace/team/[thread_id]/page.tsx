@@ -3,6 +3,7 @@ import {
   CheckCircle2Icon,
   ClipboardListIcon,
   FolderPlusIcon,
+  LinkIcon,
   Loader2Icon,
   MonitorIcon,
   PanelRightIcon,
@@ -973,27 +974,50 @@ export default function TeamPage() {
                       </DropdownMenu>
                     </div>
                     <div className="ml-auto flex items-center gap-2">
-                      {teamId && (
+                      {(teamId || messageAgentRoster.length > 0) && (
                         <button
                           type="button"
                           className="hidden shrink-0 rounded-lg border border-transparent px-1 transition-colors hover:border-border/50 hover:bg-muted/50 md:flex"
-                          onClick={() => setShowMembers(true)}
-                          title={t.teamMembers.title}
+                          onClick={() =>
+                            teamId
+                              ? setShowMembers(true)
+                              : setShowCreateTeam(true)
+                          }
+                          title={
+                            teamId ? t.teamMembers.title : "先选择或新建 Team"
+                          }
                         >
                           <PresenceAvatars agents={messageAgentRoster} />
                         </button>
                       )}
-                      {canInvite && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
-                          onClick={() => setShowInvite(true)}
-                          title={t.collab.inviteCollaborators}
-                        >
-                          <UserPlusIcon className="size-4" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
+                        onClick={() =>
+                          teamId ? setShowInvite(true) : setShowCreateTeam(true)
+                        }
+                        title={
+                          teamId
+                            ? t.collab.inviteCollaborators
+                            : "先选择或新建 Team 后邀请成员"
+                        }
+                      >
+                        <UserPlusIcon className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
+                        onClick={() =>
+                          teamId ? setShowInvite(true) : setShowCreateTeam(true)
+                        }
+                        title={
+                          teamId ? "分享群链接" : "先选择或新建 Team 后分享链接"
+                        }
+                      >
+                        <LinkIcon className="size-4" />
+                      </Button>
                       {canManageMembers && (
                         <Button
                           variant="ghost"
