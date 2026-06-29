@@ -691,6 +691,70 @@ class TestRequestShape:
             "drop_unsupported_fields:response_format",
         ]
 
+    def test_final_http_error_includes_compat_retry_summary(self):
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {
+                "error": {
+                    "message": "max_completion_tokens is expected instead of max_tokens",
+                },
+            }),
+            _FakeResponse(400, {
+                "error": {"message": "unsupported parameter: response_format"},
+            }),
+            _FakeResponse(400, {"error": {"message": "openai_error"}}),
+        ])
+        r = OpenAIModelRouter(
+            base_url="https://plain-proxy.example/v1",
+            client=fake,
+        )
+        r._build_payload = lambda _request, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 128,
+            "response_format": {"type": "json_object"},
+        }
+
+        with pytest.raises(OpenAIRouterError) as exc:
+            r.call(_req(model="proxy-model"))
+
+        message = str(exc.value)
+        assert "已自动尝试 OpenAI 兼容降级" in message
+        assert "rename_max_tokens" in message
+        assert "drop_unsupported_fields:response_format" in message
+        assert "移除:max_tokens" in message
+        assert "新增:max_completion_tokens" in message
+
+    def test_stream_final_http_error_includes_compat_retry_summary(self):
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {
+                "error": {
+                    "message": "max_completion_tokens is expected instead of max_tokens",
+                },
+            }),
+            _FakeResponse(400, {
+                "error": {"message": "unsupported parameter: response_format"},
+            }),
+            _FakeResponse(400, {"error": {"message": "openai_error"}}),
+        ])
+        r = OpenAIModelRouter(
+            base_url="https://plain-proxy.example/v1",
+            client=fake,
+        )
+        r._build_payload = lambda _request, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 128,
+            "response_format": {"type": "json_object"},
+        }
+
+        with pytest.raises(OpenAIRouterError) as exc:
+            list(r.call_stream(_req(model="proxy-model")))
+
+        message = str(exc.value)
+        assert "已自动尝试 OpenAI 兼容降级" in message
+        assert "rename_max_tokens" in message
+        assert "drop_unsupported_fields:response_format" in message
+
     def test_reasoning_effort_mapping_to_native_openai(self):
         from runtime.sensing.model_router.openai_router import (
             _openai_reasoning_effort,
@@ -920,6 +984,20 @@ class TestErrors:
         r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
         with pytest.raises(OpenAIRouterError, match="http_401.*Invalid"):
             r.call(_req())
+
+    def test_http_error_redacts_provider_prefixed_api_keys(self):
+        secret = "sk-kimi-" + ("A" * 32)
+        fake = _FakeClient(response=_FakeResponse(401, {
+            "error": {"message": f"invalid api key {secret}"},
+        }))
+        r = OpenAIModelRouter(base_url="http://x/v1", client=fake)
+
+        with pytest.raises(OpenAIRouterError) as exc:
+            r.call(_req())
+
+        message = str(exc.value)
+        assert secret not in message
+        assert "[REDACTED:api_key]" in message
 
     def test_http_402_balance_error_is_user_readable(self):
         fake = _FakeClient(response=_FakeResponse(402, {

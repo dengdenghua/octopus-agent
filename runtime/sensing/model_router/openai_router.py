@@ -173,7 +173,7 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     )
             except Exception as e:  # noqa: BLE001
                 raise OpenAIRouterError(
-                    f"http_error: {type(e).__name__}: {e}"
+                    f"http_error: {type(e).__name__}: {_redact_error_text(str(e))}"
                 ) from e
             finally:
                 if self._client is None:
@@ -181,7 +181,11 @@ class OpenAIModelRouter(Provider, ModelRouter):
 
             if resp.status_code >= 400:
                 raise OpenAIRouterError(
-                    _format_openai_http_error(resp.status_code, resp.text)
+                    _format_openai_http_error(
+                        resp.status_code,
+                        resp.text,
+                        compatibility_events=self.last_compatibility_events,
+                    )
                 )
 
             try:
@@ -313,7 +317,11 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     )
 
                 raise OpenAIRouterError(
-                    _format_openai_http_error(first_status, first_text)
+                    _format_openai_http_error(
+                        first_status,
+                        first_text,
+                        compatibility_events=self.last_compatibility_events,
+                    )
                 )
             finally:
                 if close_after:
@@ -659,16 +667,36 @@ def _entry_matches_model(entry: Any, model: str) -> bool:
     return target in candidates
 
 
-def _format_openai_http_error(status_code: int, body: str) -> str:
-    body_preview = (body or "").strip()[:500]
+def _redact_error_text(text: str) -> str:
+    if not text:
+        return text
+    try:
+        from runtime.platform.observability.redactor import redact_text
+
+        return redact_text(text)
+    except Exception:  # pragma: no cover - diagnostics must not fail calls
+        return text
+
+
+def _format_openai_http_error(
+    status_code: int,
+    body: str,
+    *,
+    compatibility_events: list[dict[str, Any]] | None = None,
+) -> str:
+    body_preview = _redact_error_text((body or "").strip())[:500]
     parsed_message = ""
     parsed_type = ""
     try:
         payload = json.loads(body or "{}")
         error = payload.get("error") if isinstance(payload, dict) else None
         if isinstance(error, dict):
-            parsed_message = str(error.get("message") or "").strip()
-            parsed_type = str(error.get("type") or error.get("code") or "").strip()
+            parsed_message = _redact_error_text(
+                str(error.get("message") or "").strip(),
+            )
+            parsed_type = _redact_error_text(
+                str(error.get("type") or error.get("code") or "").strip(),
+            )
     except (TypeError, json.JSONDecodeError):  # noqa: BLE001 — error body parse failed; keep empty parsed fields
         pass
 
@@ -678,24 +706,59 @@ def _format_openai_http_error(status_code: int, body: str) -> str:
         or "insufficient_balance" in lower
         or "insufficient account balance" in lower
     ):
-        return (
+        return _append_compatibility_retry_summary(
             f"http_{status_code}: 模型账户余额不足，请充值当前模型供应商账户，"
-            "或在模型选择里切换到可用模型。"
+            "或在模型选择里切换到可用模型。",
+            compatibility_events,
         )
     if status_code in (401, 403):
         detail = parsed_message or body_preview
         suffix = f"（{detail}）" if detail else ""
-        return f"http_{status_code}: 模型 API Key 无效或没有权限{suffix}"
+        return _append_compatibility_retry_summary(
+            f"http_{status_code}: 模型 API Key 无效或没有权限{suffix}",
+            compatibility_events,
+        )
 
     detail = parsed_message or body_preview
     if status_code == 400 and (not detail or detail == "openai_error"):
-        return (
+        return _append_compatibility_retry_summary(
             f"http_{status_code}: 上游 OpenAI 兼容接口拒绝请求"
             f"{f'（{detail}）' if detail else ''}。"
             "通常是模型名、API Key、额度或供应商不支持的 reasoning/thinking "
-            "参数导致；请切换到可用模型，或在模型设置里关闭该模型的思考能力后重试。"
+            "参数导致；请切换到可用模型，或在模型设置里关闭该模型的思考能力后重试。",
+            compatibility_events,
         )
-    return f"http_{status_code}: {detail}"
+    return _append_compatibility_retry_summary(
+        f"http_{status_code}: {detail}",
+        compatibility_events,
+    )
+
+
+def _append_compatibility_retry_summary(
+    message: str,
+    events: list[dict[str, Any]] | None,
+) -> str:
+    if not events:
+        return message
+    rows: list[str] = []
+    for index, event in enumerate(events, start=1):
+        reason = _redact_error_text(str(event.get("reason") or "unknown"))
+        parts: list[str] = []
+        for key, label in (
+            ("removed_fields", "移除"),
+            ("added_fields", "新增"),
+            ("changed_fields", "调整"),
+        ):
+            values = [
+                _redact_error_text(str(value))
+                for value in (event.get(key) or [])
+                if str(value).strip()
+            ]
+            if values:
+                parts.append(f"{label}:{','.join(values)}")
+        detail = f"{reason}（{';'.join(parts)}）" if parts else reason
+        rows.append(f"{index}.{detail}")
+    return f"{message} 已自动尝试 OpenAI 兼容降级：{'；'.join(rows)}。"
 
 
 def _without_openai_thinking(payload: dict[str, Any]) -> dict[str, Any]:

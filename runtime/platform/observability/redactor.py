@@ -79,8 +79,9 @@ _BUILTIN_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         re.compile(
             # Anthropic: sk-ant-api03-...
             r"\bsk-ant-api\d{2}-[A-Za-z0-9_\-]{32,}\b"
-            # OpenAI legacy: sk-... (alnum only, no underscore/dash)
-            r"|\bsk-[A-Za-z0-9]{20,}\b"
+            # Generic OpenAI-compatible provider keys, including
+            # provider-prefixed domestic keys such as ``sk-kimi-...``.
+            r"|\bsk-[A-Za-z0-9_\-]{20,}\b"
             # OpenAI new project / service-account / admin keys
             # (sk-proj-, sk-svcacct-, sk-admin-) — char class must
             # include _ and - because the body uses them.
