@@ -271,6 +271,12 @@ export interface Translations {
   // Chat Input Box
   chatInputBox: {
     quickCapabilities: string;
+    collaborators: string;
+    collaboratorsSingle: string;
+    collaboratorsCountUnit: string;
+    collaboratorsHelp: string;
+    collaboratorsSearchPlaceholder: string;
+    collaboratorsTaskFallback: string;
     addResearchMaterial: string;
     workflow: string;
     deepResearchConfig: string;

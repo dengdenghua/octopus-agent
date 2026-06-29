@@ -462,6 +462,7 @@ export function ChatInputBox({
     return dedupeAgentsByName(roster);
   }, [currentAgentForTeam, selectedCollaborators]);
   const isTeamDraft = selectedCollaborators.length > 0;
+  const teamRosterCountLabel = `${teamRosterForStart.length} ${t.chatInputBox.collaboratorsCountUnit}`;
   const TeamDraftModeIcon = isTeamDraft
     ? TEAM_MODE_META[teamModeIntent].icon
     : UsersRoundIcon;
@@ -509,6 +510,9 @@ export function ChatInputBox({
     setSelectedCollaboratorIds((current) => {
       if (current.includes(agent.name)) {
         return current.filter((id) => id !== agent.name);
+      }
+      if (current.length === 0) {
+        setTeamModeIntent((mode) => (mode === "chat" ? "cluster" : mode));
       }
       return [...current, agent.name];
     });
@@ -608,10 +612,12 @@ export function ChatInputBox({
       if (result !== false) setDraft("");
       return;
     }
-    if (isTeamDraft && teamRosterForStart.length > 0) {
+    if (isTeamDraft && teamRosterForStart.length > 0 && !hasImages) {
       setRoutingToTeam(true);
       try {
-        const title = text.split(/\n+/)[0]?.trim().slice(0, 40) || "团队任务";
+        const title =
+          text.split(/\n+/)[0]?.trim().slice(0, 40) ||
+          t.chatInputBox.collaboratorsTaskFallback;
         const team = await createTeam({
           name: title,
           members: teamRosterForStart,
@@ -664,6 +670,7 @@ export function ChatInputBox({
     teamRosterForStart,
     currentAgentForTeam?.name,
     teamModeIntent,
+    t,
   ]);
 
   const addMaterial = useCallback((material: Partial<ResearchMaterial>) => {
@@ -1037,18 +1044,20 @@ export function ChatInputBox({
           className="w-full resize-none bg-transparent px-3 py-1.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/50 disabled:opacity-60"
         />
         {collaboratorPanelOpen && (
-          <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,520px)] overflow-hidden rounded-lg border border-border/70 bg-popover shadow-md">
+          <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,520px)] overflow-hidden rounded-md border border-border/70 bg-popover shadow-sm">
             <div className="flex items-start justify-between gap-3 border-b border-border/45 px-3 py-2.5">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-[12px] font-medium text-foreground">
                   <UsersRoundIcon className="size-4 text-primary" />
-                  <span>拉人 / 队形</span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
-                    {isTeamDraft ? `${teamRosterForStart.length} 人` : "单人"}
+                  <span>{t.chatInputBox.collaborators}</span>
+                  <span className="rounded-sm bg-muted px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+                    {isTeamDraft
+                      ? teamRosterCountLabel
+                      : t.chatInputBox.collaboratorsSingle}
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                  默认单人；拉人后自动进入群聊，可在集群 / 蜂群之间切换。
+                  {t.chatInputBox.collaboratorsHelp}
                 </p>
               </div>
               <button
@@ -1056,7 +1065,7 @@ export function ChatInputBox({
                 onClick={() => setCollaboratorPanelOpen(false)}
                 className="rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
               >
-                收起
+                {t.chatInputBox.collapse}
               </button>
             </div>
 
@@ -1069,13 +1078,13 @@ export function ChatInputBox({
                     setTeamModeIntent("chat");
                   }}
                   className={cn(
-                    "h-7 rounded-md border px-2.5 text-[11px] font-medium transition-colors",
+                    "h-7 rounded-sm border px-2.5 text-[11px] font-medium transition-colors",
                     !isTeamDraft
                       ? "border-primary/30 bg-primary/10 text-primary"
                       : "border-border/55 text-muted-foreground hover:bg-muted/55 hover:text-foreground",
                   )}
                 >
-                  单人
+                  {t.chatInputBox.collaboratorsSingle}
                 </button>
                 {TEAM_MODES.map((teamMode) => {
                   const meta = TEAM_MODE_META[teamMode];
@@ -1089,7 +1098,7 @@ export function ChatInputBox({
                       onClick={() => setTeamModeIntent(teamMode)}
                       title={meta.description}
                       className={cn(
-                        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-colors",
+                        "inline-flex h-7 items-center gap-1.5 rounded-sm border px-2.5 text-[11px] font-medium transition-colors",
                         active
                           ? "border-primary/30 bg-primary/10 text-primary"
                           : "border-border/55 text-muted-foreground hover:bg-muted/55 hover:text-foreground",
@@ -1106,12 +1115,12 @@ export function ChatInputBox({
             </div>
 
             <div className="p-3">
-              <label className="flex h-8 items-center gap-2 rounded-md border border-border/50 bg-background/45 px-2">
+              <label className="flex h-8 items-center gap-2 rounded-sm border border-border/50 bg-background/45 px-2">
                 <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
                 <input
                   value={collaboratorQuery}
                   onChange={(event) => setCollaboratorQuery(event.target.value)}
-                  placeholder="搜索 Agent / 本地伙伴"
+                  placeholder={t.chatInputBox.collaboratorsSearchPlaceholder}
                   className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/45"
                 />
               </label>
@@ -1122,7 +1131,7 @@ export function ChatInputBox({
                       key={agent.name}
                       type="button"
                       onClick={() => toggleCollaborator(agent)}
-                      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-primary/20 bg-primary/8 px-2 py-1 text-[11px] text-primary"
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-sm border border-primary/20 bg-primary/8 px-2 py-1 text-[11px] text-primary"
                     >
                       <AgentAvatar
                         agent={agent}
@@ -1146,7 +1155,7 @@ export function ChatInputBox({
                         type="button"
                         onClick={() => toggleCollaborator(agent)}
                         className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                          "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left transition-colors",
                           selected ? "bg-primary/8" : "hover:bg-muted/55",
                         )}
                       >
@@ -1404,17 +1413,17 @@ export function ChatInputBox({
                 align="start"
                 side="top"
                 sideOffset={8}
-                className="w-60 rounded-lg border-border/70 p-1.5 shadow-md"
+                className="w-60 rounded-md border-border/70 p-1.5 shadow-sm"
               >
                 <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
                   {t.chatInputBox.quickCapabilities}
                 </DropdownMenuLabel>
                 <DropdownMenuItem
                   onClick={() => setCollaboratorPanelOpen((open) => !open)}
-                  className="gap-2 rounded-md text-[13px]"
+                  className="gap-2 rounded-sm text-[13px]"
                 >
                   <UserPlusIcon className="size-4" />
-                  拉人 / 队形
+                  {t.chatInputBox.collaborators}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {canUseDeepResearch && (
@@ -1655,7 +1664,7 @@ export function ChatInputBox({
                 <button
                   type="button"
                   onClick={() => setCollaboratorPanelOpen(true)}
-                  className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-1 text-foreground transition-colors hover:bg-muted/55"
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-sm px-2 py-1 text-foreground transition-colors hover:bg-muted/55"
                   title={TEAM_MODE_META[teamModeIntent].description}
                 >
                   <TeamDraftModeIcon className="size-3.5 text-primary" />
@@ -1663,7 +1672,7 @@ export function ChatInputBox({
                     {TEAM_MODE_META[teamModeIntent].label}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
-                    {teamRosterForStart.length}人
+                    {teamRosterCountLabel}
                   </span>
                 </button>
               </>

@@ -321,6 +321,13 @@ export const zhCN: Translations = {
   // Chat Input Box
   chatInputBox: {
     quickCapabilities: "工具",
+    collaborators: "拉人 / 队形",
+    collaboratorsSingle: "单人",
+    collaboratorsCountUnit: "人",
+    collaboratorsHelp:
+      "默认单人执行；加入协作者后进入团队任务，并可选择集群或蜂群队形。",
+    collaboratorsSearchPlaceholder: "搜索 Agent / 本地伙伴",
+    collaboratorsTaskFallback: "团队任务",
     addResearchMaterial: "添加资料",
     workflow: "工作流",
     deepResearchConfig: "调研设置",

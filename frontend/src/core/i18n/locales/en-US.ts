@@ -338,6 +338,13 @@ export const enUS: Translations = {
   // Chat Input Box
   chatInputBox: {
     quickCapabilities: "Tools",
+    collaborators: "Collaborators / formation",
+    collaboratorsSingle: "Solo",
+    collaboratorsCountUnit: "members",
+    collaboratorsHelp:
+      "Start solo by default; add collaborators to route the prompt into a team task with cluster or swarm formation.",
+    collaboratorsSearchPlaceholder: "Search agents / local partners",
+    collaboratorsTaskFallback: "Team task",
     addResearchMaterial: "Add material",
     workflow: "Workflow",
     deepResearchConfig: "Research settings",
