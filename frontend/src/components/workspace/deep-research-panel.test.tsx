@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test/harness";
 import type * as ParallelApi from "@/core/parallel-agents/api";
 import type * as ResearchApi from "@/core/research/api";
+import type { BatchStreamCallbacks } from "@/core/parallel-agents/api";
 
 import {
   DeepResearchPanel,
@@ -13,6 +14,7 @@ import {
 const fetchBatchMock = vi.fn();
 const streamBatchMock = vi.fn();
 const fetchDeepResearchJobMock = vi.fn();
+let streamCallbacks: BatchStreamCallbacks | null = null;
 
 vi.mock("@/core/parallel-agents/api", async () => {
   const actual = await vi.importActual<typeof ParallelApi>(
@@ -38,6 +40,13 @@ vi.mock("@/core/research/api", async () => {
 });
 
 describe("<DeepResearchPanel /> route decisions", () => {
+  beforeEach(() => {
+    fetchBatchMock.mockReset();
+    streamBatchMock.mockReset();
+    fetchDeepResearchJobMock.mockReset();
+    streamCallbacks = null;
+  });
+
   it("renders deep research subagent route decisions from batch events", async () => {
     fetchBatchMock.mockResolvedValue({
       batch_id: "batch_1",
@@ -163,6 +172,63 @@ describe("<DeepResearchPanel /> route decisions", () => {
 
     expect(await screen.findByText("Route blocked")).toBeInTheDocument();
     expect(screen.getByText("persisted route decision")).toBeInTheDocument();
+  });
+
+  it("renders cancelled batch completion as an error state, not a green done event", async () => {
+    fetchBatchMock.mockResolvedValue({
+      batch_id: "batch_1",
+      status: "cancelled",
+      total_tasks: 2,
+      completed_tasks: 1,
+      failed_tasks: 0,
+      cancelled_tasks: 1,
+      created_at: "2026-06-19T00:00:00Z",
+      completed_at: "2026-06-19T00:00:02Z",
+      results: [
+        {
+          task_id: "step_1",
+          batch_id: "batch_1",
+          description: "Compare vendors",
+          status: "cancelled",
+          result: null,
+          error: "user_cancelled",
+          started_at: null,
+          completed_at: "2026-06-19T00:00:02Z",
+          duration_seconds: null,
+          subagent_name: "virtual-research-competitor-analyst",
+          work_contract: null,
+        },
+      ],
+      aggregated_content: null,
+      aggregation_strategy: "research_synthesis",
+      conflicts: [],
+      event_log: [],
+    });
+    fetchDeepResearchJobMock.mockResolvedValue(null);
+    streamBatchMock.mockImplementation((_batchId, callbacks) => {
+      streamCallbacks = callbacks;
+      return () => undefined;
+    });
+
+    renderWithProviders(<DeepResearchPanel job={researchJob()} />);
+    await waitFor(() => expect(fetchBatchMock).toHaveBeenCalledWith("batch_1"));
+
+    streamCallbacks?.onBatchComplete?.({
+      type: "batch_complete",
+      batch_id: "batch_1",
+      status: "cancelled",
+      payload: {
+        total_tasks: 2,
+        completed_tasks: 1,
+        failed_tasks: 0,
+        cancelled_tasks: 1,
+      },
+    });
+
+    expect(await screen.findByText("Batch cancelled")).toBeInTheDocument();
+    expect(screen.getByText(/1\/2 completed/)).toBeInTheDocument();
+    expect(screen.getByText(/0 failed · 1 cancelled/)).toBeInTheDocument();
+    expect(screen.getByText("user_cancelled")).toBeInTheDocument();
   });
 });
 

@@ -101,11 +101,13 @@ export function DeepResearchPanel({
 
   const totalTasks = batch?.total_tasks ?? activeSteps.length;
   const completedTasks = batch?.completed_tasks ?? 0;
+  const settledTasks =
+    completedTasks + (batch?.failed_tasks ?? 0) + (batch?.cancelled_tasks ?? 0);
   const progressPct =
     totalTasks > 0
       ? Math.max(
           8,
-          Math.min(100, Math.round((completedTasks / totalTasks) * 100)),
+          Math.min(100, Math.round((settledTasks / totalTasks) * 100)),
         )
       : currentJob.status === "planned"
         ? 18
@@ -279,6 +281,8 @@ export function DeepResearchPanel({
               <span>{batch.status}</span>
               <span>
                 {batch.completed_tasks}/{batch.total_tasks} completed
+                {(batch.failed_tasks > 0 || batch.cancelled_tasks > 0) &&
+                  ` · ${batch.failed_tasks} failed · ${batch.cancelled_tasks} cancelled`}
               </span>
             </div>
           )}
@@ -567,8 +571,14 @@ function LiveResearchEventRow({ event }: { event: BatchStreamEvent }) {
     event.status === "completed" ||
     event.status === "failed" ||
     event.status === "cancelled" ||
+    event.status === "timed_out" ||
+    event.status === "partial" ||
     event.type === "batch_complete";
-  const isError = event.status === "failed" || event.error;
+  const isError =
+    event.status === "failed" ||
+    event.status === "cancelled" ||
+    event.status === "timed_out" ||
+    Boolean(event.error);
   const routeDecision = routeDecisionFromPayload(event.payload);
   const title =
     event.message ||
@@ -713,7 +723,8 @@ function StepRow({
   const status = task?.status ?? step.status;
   const isRunning = running || status === "running";
   const isCompleted = status === "completed";
-  const isFailed = status === "failed" || status === "timed_out";
+  const isFailed =
+    status === "failed" || status === "timed_out" || status === "cancelled";
 
   return (
     <div className="flex gap-2 rounded-lg border border-border/60 bg-background/60 p-2.5">
