@@ -56,3 +56,38 @@ describe("workspace sidebar route activation", () => {
     );
   });
 });
+
+describe("workspace sidebar thread status lights", () => {
+  test("maps paused and pending background tasks onto conversation history", () => {
+    const href = "/workspace/agents/general/chats/thread-1";
+    const statusByHref = __testing.buildThreadRunStatusByHref({
+      activeTeamTasks: [],
+      backgroundTasks: {
+        active: [],
+        paused: [
+          {
+            agent_id: "general",
+            note: "",
+            reason: "user_request",
+            requested_at: 1,
+            requested_by: "user",
+            task_id: "task-1",
+            thread_id: "thread-1",
+          },
+        ],
+        pending: [],
+      },
+      liveThreadRunStatusByHref: new Map(),
+      teamTaskThreads: [],
+      threadHrefById: new Map([["thread-1", href]]),
+    });
+
+    expect(statusByHref.get(href)).toBe("waiting");
+  });
+
+  test("keeps waiting ahead of running so colors match the workbench pause state", () => {
+    expect(__testing.mergeThreadRunStatus("running", "waiting")).toBe(
+      "waiting",
+    );
+  });
+});

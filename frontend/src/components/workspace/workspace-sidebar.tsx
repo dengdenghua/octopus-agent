@@ -80,6 +80,13 @@ import { useI18n } from "@/core/i18n/hooks";
 import type { Translations } from "@/core/i18n/locales/types";
 import { useDeleteThread, useThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
+import {
+  agentRunStatusLightClass,
+  agentRunStatusLightPulseClass,
+  type AgentRunState,
+} from "@/components/workspace/agent-run-status";
+import { useTasks } from "@/core/tasks/hooks";
+import type { TasksListResponse } from "@/core/tasks/api";
 import { useTeamTasks } from "@/core/team-tasks";
 import type { TeamTask } from "@/core/team-tasks";
 import { useActiveAgentId } from "@/core/agents/active";
@@ -174,7 +181,10 @@ type ThreadSummary = {
   agents: string[];
 };
 
-type ThreadRunStatus = "running" | "pending" | "failed" | "current";
+type ThreadRunStatus = Extract<
+  AgentRunState,
+  "running" | "waiting" | "pending" | "error"
+>;
 
 function syncThreadAgentSelection(agents: string[]) {
   if (agents.length !== 1) return;
@@ -205,33 +215,75 @@ function isConversationThreadMode(mode: string): boolean {
 }
 
 function buildThreadRunStatusByHref({
-  activeTeamThreadId,
   activeTeamTasks,
+  backgroundTasks,
+  liveThreadRunStatusByHref,
   teamTaskThreads,
+  threadHrefById,
 }: {
-  activeTeamThreadId: string | null;
   activeTeamTasks: TeamTask[];
+  backgroundTasks?: TasksListResponse;
+  liveThreadRunStatusByHref?: Map<string, ThreadRunStatus>;
   teamTaskThreads: ThreadSummary[];
+  threadHrefById: Map<string, string>;
 }): Map<string, ThreadRunStatus> {
   const byHref = new Map<string, ThreadRunStatus>();
   const activeStatuses = new Set(["running", "failed", "pending"]);
   for (const task of activeTeamTasks) {
     if (!activeStatuses.has(task.status)) continue;
+    const status = teamTaskRunStatus(task.status);
+    if (!status) continue;
     const href = `/workspace/team/${encodeURIComponent(task.room_id)}`;
-    byHref.set(
-      href,
-      mergeThreadRunStatus(byHref.get(href), task.status as ThreadRunStatus),
-    );
+    byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
   }
 
-  const activeThread = activeTeamThreadId
-    ? teamTaskThreads.find((thread) => thread.id === activeTeamThreadId)
-    : null;
-  if (activeThread && !byHref.has(activeThread.href)) {
-    byHref.set(activeThread.href, "current");
+  for (const task of backgroundTasks?.active ?? []) {
+    mergeTaskStatusForThread(byHref, threadHrefById, task.thread_id, "running");
+  }
+  for (const task of backgroundTasks?.pending ?? []) {
+    mergeTaskStatusForThread(byHref, threadHrefById, task.thread_id, "waiting");
+  }
+  for (const task of backgroundTasks?.paused ?? []) {
+    mergeTaskStatusForThread(byHref, threadHrefById, task.thread_id, "waiting");
+  }
+
+  for (const [href, status] of liveThreadRunStatusByHref ?? []) {
+    byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
   }
 
   return byHref;
+}
+
+function teamTaskRunStatus(status: TeamTask["status"]): ThreadRunStatus | null {
+  if (status === "running") return "running";
+  if (status === "pending") return "pending";
+  if (status === "failed") return "error";
+  return null;
+}
+
+function normalizeThreadRunStatus(
+  status: "running" | "waiting" | "pending" | "error" | "done" | null,
+): ThreadRunStatus | null {
+  if (
+    status === "running" ||
+    status === "waiting" ||
+    status === "pending" ||
+    status === "error"
+  ) {
+    return status;
+  }
+  return null;
+}
+
+function mergeTaskStatusForThread(
+  byHref: Map<string, ThreadRunStatus>,
+  threadHrefById: Map<string, string>,
+  threadId: string,
+  status: ThreadRunStatus,
+) {
+  const href = threadHrefById.get(threadId);
+  if (!href) return;
+  byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
 }
 
 function mergeThreadRunStatus(
@@ -239,10 +291,10 @@ function mergeThreadRunStatus(
   next: ThreadRunStatus,
 ): ThreadRunStatus {
   const priority: Record<ThreadRunStatus, number> = {
-    failed: 4,
-    running: 3,
-    pending: 2,
-    current: 1,
+    error: 4,
+    waiting: 3,
+    running: 2,
+    pending: 1,
   };
   if (!current) return next;
   return priority[next] > priority[current] ? next : current;
@@ -824,14 +876,50 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     () => activeTeamTasksQuery.data ?? [],
     [activeTeamTasksQuery.data],
   );
+  const backgroundTasksQuery = useTasks("all");
+  const threadHrefById = useMemo(() => {
+    return new Map(
+      mergedProjectRaw.map((thread) => [thread.thread_id, threadHref(thread)]),
+    );
+  }, [mergedProjectRaw]);
+  const [liveThreadRunStatusByHref, setLiveThreadRunStatusByHref] = useState<
+    Map<string, ThreadRunStatus>
+  >(() => new Map());
+  useEvent(
+    "thread:run-status",
+    ({ href, state, threadId }) => {
+      const status = normalizeThreadRunStatus(state);
+      const targetHref = href || threadHrefById.get(threadId);
+      if (!targetHref) return;
+      setLiveThreadRunStatusByHref((prev) => {
+        if (!status && !prev.has(targetHref)) return prev;
+        const next = new Map(prev);
+        if (status) {
+          next.set(targetHref, status);
+        } else {
+          next.delete(targetHref);
+        }
+        return next;
+      });
+    },
+    [threadHrefById],
+  );
   const runStatusByHref = useMemo(
     () =>
       buildThreadRunStatusByHref({
-        activeTeamThreadId,
         activeTeamTasks,
+        backgroundTasks: backgroundTasksQuery.data,
+        liveThreadRunStatusByHref,
         teamTaskThreads,
+        threadHrefById,
       }),
-    [activeTeamThreadId, activeTeamTasks, teamTaskThreads],
+    [
+      activeTeamTasks,
+      backgroundTasksQuery.data,
+      liveThreadRunStatusByHref,
+      teamTaskThreads,
+      threadHrefById,
+    ],
   );
 
   const byProject: Record<string, ThreadSummary[]> = {};
@@ -1313,9 +1401,11 @@ function isAgentSurfaceActive(pathname: string, search = "") {
 }
 
 export const __testing = {
+  buildThreadRunStatusByHref,
   isNavRouteActive,
   isCompanySurfaceActive,
   isAgentSurfaceActive,
+  mergeThreadRunStatus,
 };
 
 type WorkspaceSurfaceMode = "agent" | "browser";
@@ -1575,27 +1665,13 @@ function ThreadRunStatusLight({
   const label =
     status === "running"
       ? t.sidebar.taskStatusRunning
-      : status === "failed"
+      : status === "error"
         ? t.sidebar.taskStatusFailed
-        : status === "pending"
-          ? t.sidebar.taskStatusPending
-          : t.sidebar.currentTaskSession;
-  const toneClass =
-    status === "failed"
-      ? "bg-destructive shadow-destructive/20"
-      : status === "pending"
-        ? "bg-amber-500 shadow-amber-500/25"
-        : status === "current"
-          ? "bg-sky-500 shadow-sky-500/25"
-          : "bg-emerald-500 shadow-emerald-500/25";
-  const haloClass =
-    status === "failed"
-      ? null
-      : status === "pending"
-        ? "bg-amber-500/25"
-        : status === "current"
-          ? "bg-sky-500/25"
-          : "bg-emerald-500/25";
+        : status === "waiting"
+          ? t.agentWorkbench.waitingToContinue
+          : t.sidebar.taskStatusPending;
+  const colorClass = agentRunStatusLightClass(status);
+  const pulseClass = agentRunStatusLightPulseClass(status);
 
   return (
     <span
@@ -1606,19 +1682,20 @@ function ThreadRunStatusLight({
         className,
       )}
     >
-      {haloClass && (
+      {pulseClass && (
         <span
           className={cn(
-            "absolute inline-flex size-3 rounded-full animate-ping",
-            haloClass,
+            "absolute inline-flex size-3 rounded-full opacity-25",
+            colorClass,
+            pulseClass,
           )}
         />
       )}
       <span
         className={cn(
           "relative inline-flex size-2 rounded-full shadow-sm",
-          toneClass,
-          status !== "failed" && "animate-pulse",
+          colorClass,
+          status !== "error" && pulseClass,
         )}
       />
     </span>

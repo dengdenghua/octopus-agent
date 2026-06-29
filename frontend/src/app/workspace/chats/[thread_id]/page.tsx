@@ -99,7 +99,7 @@ import type { RecordingStatus } from "@/core/teach-repeat/types";
 import { ACTIVE_AGENT_EVENT, ACTIVE_AGENT_KEY } from "@/core/agents/active";
 import { useAgent } from "@/core/agents/hooks";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
-import { emitAgentChanged, useEvent } from "@/core/events";
+import { emitAgentChanged, eventBus, useEvent } from "@/core/events";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, type Message } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -1211,6 +1211,54 @@ function ChatsPageContent({
     agentRunSettled &&
     !hasCompletedAgentOutput &&
     !hasPausedOrPendingBackgroundTask;
+  const sidebarRunState = useMemo<
+    "running" | "waiting" | "error" | null
+  >(() => {
+    if (hasPausedOrPendingBackgroundTask) return "waiting";
+    if (agentRunFailed || (thread.error && !thread.isLoading)) return "error";
+    if (agentRunSettled) return null;
+    if (agentDisplayEvents.some((event) => event.status === "error")) {
+      return "error";
+    }
+    if (
+      agentDisplayEvents.some((event) => event.status === "waiting_approval")
+    ) {
+      return "waiting";
+    }
+    if (
+      hasActiveBackgroundTask ||
+      thread.isLoading ||
+      Boolean(thread.streamingMessage) ||
+      agentDisplayEvents.some((event) => event.status === "running")
+    ) {
+      return "running";
+    }
+    return null;
+  }, [
+    agentDisplayEvents,
+    agentRunFailed,
+    agentRunSettled,
+    hasActiveBackgroundTask,
+    hasPausedOrPendingBackgroundTask,
+    thread.error,
+    thread.isLoading,
+    thread.streamingMessage,
+  ]);
+  useEffect(() => {
+    const href = threadRouteFor(threadId);
+    eventBus.emit("thread:run-status", {
+      href,
+      state: sidebarRunState,
+      threadId,
+    });
+    return () => {
+      eventBus.emit("thread:run-status", {
+        href,
+        state: null,
+        threadId,
+      });
+    };
+  }, [sidebarRunState, threadId, threadRouteFor]);
   const shouldHideSettledProcessChrome =
     agentRunSettled && hasCompletedAgentOutput;
   const currentTodoEvents = shouldHideSettledProcessChrome

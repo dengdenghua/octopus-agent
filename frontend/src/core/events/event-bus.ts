@@ -31,6 +31,11 @@ export interface EventMap {
 
   // 聊天相关
   "chats:sort": void;
+  "thread:run-status": {
+    href?: string;
+    state: "running" | "waiting" | "pending" | "error" | "done" | null;
+    threadId: string;
+  };
 
   // 团队相关
   "team:select": { id: string; name: string };
