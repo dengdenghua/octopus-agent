@@ -447,6 +447,24 @@ class TestCustomModelCompatDiagnostics:
         assert "parallel_tool_calls" in kimi_coding["upstreams"][0][
             "normalization"
         ]["removed_fields"]
+        assert kimi_coding["upstreams"][0]["dry_run"] is True
+        assert kimi_coding["upstreams"][0]["risk_level"] in {"medium", "high"}
+        assert "sampling_parameters_removed" in kimi_coding["upstreams"][0][
+            "risk_reasons"
+        ]
+        assert "strict_provider_may_drop_optional_features" in kimi_coding[
+            "upstreams"
+        ][0]["risk_reasons"]
+        capability_status = {
+            item["capability"]: item["status"]
+            for item in kimi_coding["upstreams"][0]["capability_matrix"]
+        }
+        assert capability_status["chat_completion"] == "pass"
+        assert capability_status["streaming"] == "warn"
+        assert capability_status["tool_calling"] == "warn"
+        assert capability_status["reasoning_request"] == "warn"
+        assert capability_status["usage_accounting"] == "warn"
+        assert capability_status["fallback_retries"] == "pass"
         assert {
             "frequency_penalty",
             "presence_penalty",
@@ -462,6 +480,16 @@ class TestCustomModelCompatDiagnostics:
         assert "strict_tool_schema" in qwen["normalization_hints"]
         assert "tools" in qwen["normalization"]["changed_fields"]
         assert "parallel_tool_calls" in qwen["normalization"]["removed_fields"]
+        assert qwen["risk_level"] == "medium"
+        assert "tool_schema_normalized" in qwen["risk_reasons"]
+        assert "core_request_field_removed" not in qwen["risk_reasons"]
+        qwen_capabilities = {
+            item["capability"]: item for item in qwen["capability_matrix"]
+        }
+        assert qwen_capabilities["tool_calling"]["status"] == "warn"
+        assert "tool schema normalized" in qwen_capabilities["tool_calling"][
+            "notes"
+        ]
         qwen_reasons = {item["reason"] for item in qwen["fallback_retries"]}
         assert "rename_max_tokens" in qwen_reasons
 
@@ -510,6 +538,20 @@ class TestCustomModelCompatDiagnostics:
         assert "drop_sampling_parameters" in upstream["normalization_hints"]
         assert "strict_tool_schema" in upstream["normalization_hints"]
         assert any("coding endpoint" in note for note in upstream["compatibility_notes"])
+        assert upstream["dry_run"] is True
+        assert upstream["risk_level"] == "high"
+        assert "tool_schema_normalized" in upstream["risk_reasons"]
+        assert "tool_calling_control_removed" in upstream["risk_reasons"]
+        capability_matrix = {
+            item["capability"]: item for item in upstream["capability_matrix"]
+        }
+        assert capability_matrix["chat_completion"]["status"] == "pass"
+        assert capability_matrix["tool_calling"]["status"] == "warn"
+        assert capability_matrix["structured_output"]["status"] == "warn"
+        assert capability_matrix["fallback_retries"]["status"] == "pass"
+        assert "dry_run_representative_400" in capability_matrix[
+            "fallback_retries"
+        ]["notes"]
         assert upstream["strict_tool_schema"] is True
         removed = set(upstream["normalization"]["removed_fields"])
         assert {
