@@ -971,11 +971,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
         <NavSection items={chatCapabilityItems} pathname={pathname} />
-        <NavSection
-          label={t.sidebar.navSwarm}
-          items={companyOrgItems}
-          pathname={pathname}
-        />
+        <NavSection items={companyOrgItems} pathname={pathname} />
         <LocalDatabaseSection
           title={resolveLabel("navDatabase")}
           items={nasLibraryItems}
@@ -1068,7 +1064,7 @@ function LocalDatabaseSection({
   search: string;
 }) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const active = isStorageRouteActive(pathname);
 
   return (
@@ -1224,7 +1220,10 @@ function isStorageLibraryRouteActive(
   // Knowledge graph has its own route, not a ?library= param.
   if (targetPath === "/workspace/knowledge") {
     const path = routePath(pathname);
-    return path === "/workspace/knowledge" || path.startsWith("/workspace/knowledge/");
+    return (
+      path === "/workspace/knowledge" ||
+      path.startsWith("/workspace/knowledge/")
+    );
   }
   if (!isStorageRouteActive(pathname)) return false;
   const targetLibrary = new URLSearchParams(routeSearch(to)).get("library");
@@ -1780,7 +1779,9 @@ function ProjectGroup({
                     to={thread.href}
                     state={{
                       threadOwnerAgentId:
-                        thread.agents.length === 1 ? thread.agents[0] : undefined,
+                        thread.agents.length === 1
+                          ? thread.agents[0]
+                          : undefined,
                       workspacePath: thread.workspacePath,
                     }}
                     onMouseDown={() => syncThreadAgentSelection(thread.agents)}

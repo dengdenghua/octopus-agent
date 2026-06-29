@@ -34,7 +34,10 @@ function renderWorkbench(ui: ReactElement) {
 }
 
 function expandSummarySection(name: RegExp) {
-  fireEvent.click(screen.getByRole("button", { name }));
+  const trigger = screen.getByRole("button", { name });
+  if (trigger.getAttribute("aria-expanded") !== "true") {
+    fireEvent.click(trigger);
+  }
 }
 
 function listAfterSummaryLabel(label: string): HTMLElement {

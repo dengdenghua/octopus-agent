@@ -788,7 +788,7 @@ export function AgentSummaryPage({
 }) {
   const { t } = useI18n();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["artifacts"]),
+    new Set(["progress", "references", "artifacts"]),
   );
   const [refTab, setRefTab] = useState<ObservedReferenceTabId>("files");
   const artifactDiffEntries = useMemo(
@@ -802,7 +802,9 @@ export function AgentSummaryPage({
   const openDiffEntry = (_entry: DiffEntry, kind: "artifact" | "change") => {
     onSelectTab?.(kind === "artifact" ? "files" : "diff");
   };
-  const donePhaseCount = phases.filter((phase) => phase.status === "done").length;
+  const donePhaseCount = phases.filter(
+    (phase) => phase.status === "done",
+  ).length;
   const errorPhaseCount = phases.filter(
     (phase) => phase.status === "error",
   ).length;
@@ -917,74 +919,76 @@ export function AgentSummaryPage({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background/35">
       <div className="mx-auto w-full max-w-2xl px-5 py-4">
-        {(phases.length === 0 &&
+        {phases.length === 0 &&
           (diffEntries.length > 0 ||
-          totalReferenceItems > 0 ||
-            agentTiles.length > 0)) && (
-          <section className="border-b border-border/25 pb-4">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="truncate text-xs font-semibold text-foreground">
-                  {runningPhase?.title ??
-                    (errorPhaseCount > 0
-                      ? t.agentWorkbenchPages.progress
-                      : t.agentWorkbenchPages.dashboardOverview)}
+            totalReferenceItems > 0 ||
+            agentTiles.length > 0) && (
+            <section className="border-b border-border/25 pb-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-semibold text-foreground">
+                    {runningPhase?.title ??
+                      (errorPhaseCount > 0
+                        ? t.agentWorkbenchPages.progress
+                        : t.agentWorkbenchPages.dashboardOverview)}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground/85">
+                    {phases.length > 0 && (
+                      <span>
+                        {donePhaseCount}/{phases.length}{" "}
+                        {phaseStatusText("done")}
+                      </span>
+                    )}
+                    {errorPhaseCount > 0 && (
+                      <span className="text-destructive">
+                        {errorPhaseCount} {phaseStatusText("error")}
+                      </span>
+                    )}
+                    {diffEntries.length > 0 && (
+                      <span>
+                        {t.agentWorkbenchPages.artifacts} {diffEntries.length}
+                      </span>
+                    )}
+                    {totalReferenceItems > 0 && (
+                      <span>
+                        {t.agentWorkbenchPages.sourceCount(totalReferenceItems)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground/85">
-                  {phases.length > 0 && (
-                    <span>
-                      {donePhaseCount}/{phases.length} {phaseStatusText("done")}
-                    </span>
-                  )}
-                  {errorPhaseCount > 0 && (
-                    <span className="text-destructive">
-                      {errorPhaseCount} {phaseStatusText("error")}
-                    </span>
-                  )}
-                  {diffEntries.length > 0 && (
-                    <span>
-                      {t.agentWorkbenchPages.artifacts} {diffEntries.length}
-                    </span>
-                  )}
-                  {totalReferenceItems > 0 && (
-                    <span>
-                      {t.agentWorkbenchPages.sourceCount(totalReferenceItems)}
-                    </span>
-                  )}
-                </div>
+                {contextStats.percentage > 0 && (
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {t.agentWorkbenchPages.estimatePercentage(
+                      contextStats.percentage,
+                    )}
+                  </span>
+                )}
               </div>
-              {contextStats.percentage > 0 && (
-                <span className="shrink-0 text-[10px] text-muted-foreground">
-                  {t.agentWorkbenchPages.estimatePercentage(
-                    contextStats.percentage,
-                  )}
-                </span>
+              {phases.length > 0 && (
+                <div className="mt-2 h-px overflow-hidden bg-border/35">
+                  <div
+                    className={cn(
+                      "h-full transition-all",
+                      errorPhaseCount > 0
+                        ? "bg-destructive"
+                        : runningPhase?.status === "waiting_approval"
+                          ? "bg-amber-500"
+                          : "bg-emerald-500",
+                    )}
+                    style={{
+                      width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
+                    }}
+                  />
+                </div>
               )}
-            </div>
-            {phases.length > 0 && (
-              <div className="mt-2 h-px overflow-hidden bg-border/35">
-                <div
-                  className={cn(
-                    "h-full transition-all",
-                    errorPhaseCount > 0
-                      ? "bg-destructive"
-                      : runningPhase?.status === "waiting_approval"
-                        ? "bg-amber-500"
-                        : "bg-emerald-500",
-                  )}
-                  style={{
-                    width: `${Math.max(6, Math.round((donePhaseCount / phases.length) * 100))}%`,
-                  }}
-                />
-              </div>
-            )}
-          </section>
-        )}
+            </section>
+          )}
         {/* 进展 */}
         {phases.length > 0 && (
           <section className="border-b border-border/25 py-4">
             <button
               type="button"
+              aria-expanded={expandedSections.has("progress")}
               onClick={() => toggleSection("progress")}
               className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
             >
@@ -1025,10 +1029,7 @@ export function AgentSummaryPage({
             {expandedSections.has("progress") && (
               <ul className="mt-3 space-y-2">
                 {phases.map((phase) => (
-                  <li
-                    key={phase.id}
-                    className="flex items-center gap-2"
-                  >
+                  <li key={phase.id} className="flex items-center gap-2">
                     {phase.status === "done" ? (
                       <span className="flex size-4 shrink-0 items-center justify-center">
                         <CheckIcon className="size-2.5 text-muted-foreground" />
@@ -1058,6 +1059,7 @@ export function AgentSummaryPage({
           <section className="border-b border-border/25 py-4">
             <button
               type="button"
+              aria-expanded={expandedSections.has("artifacts")}
               onClick={() => toggleSection("artifacts")}
               className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
             >
@@ -1139,6 +1141,7 @@ export function AgentSummaryPage({
           <section className="border-b border-border/25 py-4">
             <button
               type="button"
+              aria-expanded={expandedSections.has("subagents")}
               onClick={() => toggleSection("subagents")}
               className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
             >
@@ -1212,10 +1215,7 @@ export function AgentSummaryPage({
                 </div>
                 <ul className="max-h-48 space-y-3 overflow-y-auto">
                   {agentTiles.map((tile) => (
-                    <li
-                      key={tile.id}
-                      className="flex items-start gap-3"
-                    >
+                    <li key={tile.id} className="flex items-start gap-3">
                       <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
                         <BotIcon className="size-3" />
                       </span>
@@ -1236,9 +1236,9 @@ export function AgentSummaryPage({
                                   ? "bg-emerald-500"
                                   : tile.status === "waiting_approval"
                                     ? "bg-amber-500"
-                                  : tile.status === "done"
-                                    ? "bg-muted-foreground/45"
-                                    : "bg-muted-foreground/35",
+                                    : tile.status === "done"
+                                      ? "bg-muted-foreground/45"
+                                      : "bg-muted-foreground/35",
                             )}
                             aria-hidden="true"
                           />
@@ -1277,6 +1277,7 @@ export function AgentSummaryPage({
         <section className="py-4">
           <button
             type="button"
+            aria-expanded={expandedSections.has("references")}
             onClick={() => toggleSection("references")}
             className="flex w-full items-center gap-2 text-left transition-colors hover:text-foreground"
           >
@@ -1395,10 +1396,7 @@ export function AgentSummaryPage({
                   </li>
                 ) : (
                   activeRefItems.map((ref) => (
-                    <li
-                      key={ref.id}
-                      className="flex items-center gap-3"
-                    >
+                    <li key={ref.id} className="flex items-center gap-3">
                       <ReferenceIcon
                         fallbackClassName={activeRefMeta.iconClassName}
                         Icon={ActiveRefIcon}
