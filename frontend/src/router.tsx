@@ -1,9 +1,16 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useI18n } from "@/core/i18n/hooks";
+import { legacyTeamWorkspaceTarget } from "@/core/router/legacy-workspace-routes";
 
 /**
  * Redirect old /realtime/:id bookmarks into the workspace shell.
@@ -21,6 +28,12 @@ function LegacyCodeRedirect() {
       ? "/workspace/realtime/new"
       : `/workspace/realtime/${threadId}`;
   return <HashRedirect to={target} />;
+}
+
+function LegacyTeamRedirect() {
+  const { threadId } = useParams<{ threadId?: string }>();
+  const { search } = useLocation();
+  return <HashRedirect to={legacyTeamWorkspaceTarget(threadId, search)} />;
 }
 
 function StorageRedirect() {
@@ -48,10 +61,7 @@ const PluginsPage = lazy(() => import("./app/plugins/page"));
 
 const WorkspaceLayout = lazy(() => import("./app/workspace/layout"));
 const ChatPage = lazy(() => import("./app/workspace/chats/[thread_id]/page"));
-const TeamIndexPage = lazy(() => import("./app/workspace/team/page"));
-const TeamNewPage = lazy(() => import("./app/workspace/team/new/page"));
 const TeamJoinPage = lazy(() => import("./app/workspace/team/join/page"));
-const TeamPage = lazy(() => import("./app/workspace/team/[thread_id]/page"));
 const BrowserPage = lazy(() => import("./app/workspace/browser/page"));
 const ComputerPage = lazy(() => import("./app/workspace/computer/page"));
 const DesktopOrganizerPage = lazy(
@@ -195,10 +205,11 @@ export function AppRouter() {
                 element={<HashRedirect to="/workspace/realtime/new" />}
               />
               <Route path="code/:threadId" element={<LegacyCodeRedirect />} />
-              <Route path="team" element={<TeamIndexPage />} />
-              <Route path="team/new" element={<TeamNewPage />} />
+              {/* Legacy team routes → unified task workspace */}
+              <Route path="team" element={<LegacyTeamRedirect />} />
+              <Route path="team/new" element={<LegacyTeamRedirect />} />
               <Route path="team/join" element={<TeamJoinPage />} />
-              <Route path="team/:threadId" element={<TeamPage />} />
+              <Route path="team/:threadId" element={<LegacyTeamRedirect />} />
               <Route path="browser" element={<BrowserPage />} />
               <Route path="computer" element={<ComputerPage />} />
               <Route

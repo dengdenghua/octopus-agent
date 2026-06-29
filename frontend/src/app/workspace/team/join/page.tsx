@@ -19,6 +19,7 @@ import {
   writePreferredTeam,
   type Team,
 } from "@/core/teams";
+import { legacyTeamWorkspaceTarget } from "@/core/router/legacy-workspace-routes";
 
 export default function TeamJoinPage() {
   const { t } = useI18n();
@@ -74,8 +75,8 @@ export default function TeamJoinPage() {
       toast.success(t.teamJoin.joinSuccess(result.team.name));
       navigate(
         requestedThreadId
-          ? `/workspace/team/${encodeURIComponent(requestedThreadId)}`
-          : "/workspace/team/new",
+          ? legacyTeamWorkspaceTarget(requestedThreadId)
+          : legacyTeamWorkspaceTarget("new"),
         { replace: true },
       );
     } catch {

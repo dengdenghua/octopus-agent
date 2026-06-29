@@ -1285,11 +1285,6 @@ function isNavRouteActive(pathname: string, to: string) {
   if (path === PRIMARY_WORKSPACE_ROUTE) {
     return isChatSurfaceRoute(pathname);
   }
-  if (path === "/workspace/team/new") {
-    return (
-      pathname === "/workspace/team" || pathname.startsWith("/workspace/team/")
-    );
-  }
   if (path === "/workspace/agents" && isAgentChatRoute(pathname)) {
     return false;
   }

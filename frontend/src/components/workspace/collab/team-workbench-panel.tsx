@@ -69,12 +69,12 @@ export function TeamWorkbenchPanel({
         <div className="flex min-w-0 items-end gap-1.5 sm:gap-2">
           <div className="mb-1.5 hidden h-8 shrink-0 items-center gap-2 rounded-lg border border-border/60 bg-background/85 px-2 text-xs font-medium text-muted-foreground shadow-sm min-[520px]:flex">
             <MonitorIcon className="size-4" />
-            <span>Team 工作台</span>
+            <span>协作工作台</span>
           </div>
           <div
             data-testid="team-workbench-tabs"
             role="tablist"
-            aria-label="Team 工作台"
+            aria-label="协作工作台"
             className="flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {TABS.map(({ id, label, Icon }) => {

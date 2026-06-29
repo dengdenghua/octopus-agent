@@ -1,14 +1,13 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { uuid } from "@/core/utils/uuid";
+import { legacyTeamWorkspaceTarget } from "@/core/router/legacy-workspace-routes";
 
 export default function TeamNewPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    const newThreadId = uuid();
-    navigate(`/workspace/team/${newThreadId}${location.search}`, {
+    navigate(legacyTeamWorkspaceTarget("new", location.search), {
       replace: true,
     });
   }, [location.search, navigate]);
