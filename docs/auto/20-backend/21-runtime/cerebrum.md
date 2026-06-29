@@ -53,7 +53,7 @@ tier: "core"
 | `thinking_mode.py` | Structured thinking-mode helpers. |
 | `todo_protocol.py` | Shared rules for the user-visible task checklist protocol. |
 | `token_juicer.py` | Token compression for tool observations before they enter the LLM message stream. |
-| `tool_output_sink.py` | Optional side-channel for streaming tool stdout/stderr. |
+| `tool_output_sink.py` | Compatibility re-export for the lightweight process output sink. |
 | `turn_complexity.py` | Three-tier smart model routing. |
 | `verification_policy.py` | — |
 
@@ -73,18 +73,19 @@ tier: "core"
   - `runtime/cli_serve.py`
 - **`runtime/core/`** · 1 file(s)
   - `runtime/core/graph_runtime/runtime.py`
-- **`runtime/execution/`** · 5 file(s)
+- **`runtime/execution/`** · 6 file(s)
+  - `runtime/execution/loops/controller.py`
   - `runtime/execution/misc/parallel_runner.py`
   - `runtime/execution/parallel_agents/orchestrator.py`
   - `runtime/execution/parallel_agents/stack_runner.py`
   - `runtime/execution/swarm/runtime.py`
   - `runtime/execution/tool_spec_builder.py`
-- **`runtime/memory/`** · 1 file(s)
+- **`runtime/memory/`** · 2 file(s)
+  - `runtime/memory/cowork/turn_plan.py`
   - `runtime/memory/diagnostics/trace_store.py`
-- **`runtime/platform/`** · 5 file(s)
+- **`runtime/platform/`** · 4 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/lifecycle/demo.py`
-  - `runtime/platform/process/streaming.py`
   - `runtime/platform/ui/app.py`
   - `runtime/platform/ui/reflex_admin_router.py`
 - **`runtime/safety/`** · 4 file(s)
@@ -92,13 +93,13 @@ tier: "core"
   - `runtime/safety/recovery/gepa_bridge.py`
   - `runtime/safety/recovery/workflow_applier.py`
   - `runtime/safety/validation/trust_signal.py`
-- **`runtime/sensing/`** · 12 file(s)
+- **`runtime/sensing/`** · 11 file(s)
   - `runtime/sensing/gateway/agents_router.py`
   - `runtime/sensing/gateway/config_router.py`
   - `runtime/sensing/gateway/evolution_ops/recipe_forge.py`
   - `runtime/sensing/gateway/observability_router.py`
   - `runtime/sensing/gateway/openai_gateway/context_manager.py`
-  - _… and 7 more_
+  - _… and 6 more_
 - **`runtime/tentacle/`** · 2 file(s)
   - `runtime/tentacle/coordinator.py`
   - `runtime/tentacle/mobile/cerebrum_adapter.py`

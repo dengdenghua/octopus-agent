@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "generated_at": "2026-06-25T08:34:02+00:00",
-  "files_analyzed": 33,
+  "generated_at": "2026-06-29T17:46:29+00:00",
+  "files_analyzed": 42,
   "tree": [
     {
       "type": "doc",
@@ -155,6 +155,51 @@
               "type": "doc",
               "title": "🖥️ Raven",
               "path": "20-backend/26-agents/desktop_operator.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Eve / Siren",
+              "path": "20-backend/26-agents/echo_eve.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Kane / Paladin",
+              "path": "20-backend/26-agents/echo_kane.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Leon / Chronos",
+              "path": "20-backend/26-agents/echo_leon.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Luna / Dream Walker",
+              "path": "20-backend/26-agents/echo_luna.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Mira Voss / Glass Vein",
+              "path": "20-backend/26-agents/echo_mira_voss.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Noah / Probability",
+              "path": "20-backend/26-agents/echo_noah.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Raven / Night Crow",
+              "path": "20-backend/26-agents/echo_raven.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Shion / Virus Queen",
+              "path": "20-backend/26-agents/echo_shion.md"
+            },
+            {
+              "type": "doc",
+              "title": "E Zero / White Ghost",
+              "path": "20-backend/26-agents/echo_zero.md"
             },
             {
               "type": "doc",

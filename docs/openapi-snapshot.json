@@ -348,6 +348,26 @@
         "title": "ArmWire",
         "type": "object"
       },
+      "AssignBody": {
+        "properties": {
+          "assignee": {
+            "minLength": 1,
+            "title": "Assignee",
+            "type": "string"
+          },
+          "prompt": {
+            "minLength": 1,
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignee",
+          "prompt"
+        ],
+        "title": "AssignBody",
+        "type": "object"
+      },
       "AuthProvider": {
         "additionalProperties": true,
         "properties": {
@@ -408,6 +428,23 @@
         "title": "AutomationPolicyRuleInstallBody",
         "type": "object"
       },
+      "BoardBody": {
+        "properties": {
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "title": "BoardBody",
+        "type": "object"
+      },
       "Body_api_fs_import_directory_api_fs_import_directory_post": {
         "properties": {
           "files": {
@@ -448,6 +485,51 @@
           "files"
         ],
         "title": "Body_api_thread_uploads_api_threads__thread_id__uploads_post",
+        "type": "object"
+      },
+      "BreakoutBody": {
+        "properties": {
+          "at_message": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Message"
+          },
+          "child_thread": {
+            "minLength": 1,
+            "title": "Child Thread",
+            "type": "string"
+          },
+          "grant": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant"
+          },
+          "members": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "child_thread"
+        ],
+        "title": "BreakoutBody",
         "type": "object"
       },
       "BrowserDesktopRepairRecipeEvidenceBody": {
@@ -682,6 +764,28 @@
           }
         },
         "title": "CliTeamRunRequest",
+        "type": "object"
+      },
+      "CompleteBody": {
+        "properties": {
+          "blackboard_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blackboard Key"
+          },
+          "result": {
+            "default": "",
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "title": "CompleteBody",
         "type": "object"
       },
       "ConstitutionProfileResponse": {
@@ -994,19 +1098,12 @@
             ],
             "title": "Compat Profile"
           },
-          "default_headers": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Default Headers"
+          "default_header_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Header Names",
+            "type": "array"
           },
           "display_name": {
             "title": "Display Name",
@@ -1025,6 +1122,11 @@
           },
           "has_api_key": {
             "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "has_default_headers": {
+            "default": false,
+            "title": "Has Default Headers",
             "type": "boolean"
           },
           "id": {
@@ -1961,6 +2063,39 @@
         "title": "GenerateAgentVisualsRequest",
         "type": "object"
       },
+      "GrantBody": {
+        "properties": {
+          "from_msg": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Msg"
+          },
+          "scope": {
+            "default": "all",
+            "title": "Scope",
+            "type": "string"
+          },
+          "to_msg": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Msg"
+          }
+        },
+        "title": "GrantBody",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2037,6 +2172,44 @@
           }
         },
         "title": "IndexStartRequest",
+        "type": "object"
+      },
+      "InviteBody": {
+        "properties": {
+          "at_message": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At Message"
+          },
+          "grant": {
+            "$ref": "#/components/schemas/GrantBody"
+          },
+          "kind": {
+            "default": "agent",
+            "title": "Kind",
+            "type": "string"
+          },
+          "role": {
+            "default": "participant",
+            "title": "Role",
+            "type": "string"
+          },
+          "target_id": {
+            "minLength": 1,
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id"
+        ],
+        "title": "InviteBody",
         "type": "object"
       },
       "JoinInviteRequest": {
@@ -2882,6 +3055,30 @@
         "title": "LspSymbolRequest",
         "type": "object"
       },
+      "MergeBody": {
+        "properties": {
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "title": "MergeBody",
+        "type": "object"
+      },
+      "ModeBody": {
+        "properties": {
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "ModeBody",
+        "type": "object"
+      },
       "ModeInfo": {
         "properties": {
           "description": {
@@ -3669,14 +3866,47 @@
             ],
             "title": "Name"
           },
+          "parent_task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Task Id"
+          },
           "prompt": {
             "title": "Prompt",
             "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
           },
           "share_history": {
             "default": true,
             "title": "Share History",
             "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           },
           "subagent_type": {
             "anyOf": [
@@ -3704,6 +3934,28 @@
             "default": 300,
             "title": "Timeout S",
             "type": "integer"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          },
+          "turn_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Id"
           }
         },
         "required": [
@@ -14652,6 +14904,850 @@
         "summary": "Snapshot",
         "tags": [
           "cookbook"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}": {
+      "get": {
+        "description": "Folded group state (roster + mode), the shared blackboard, the raw\nmembership timeline, and who would respond this turn under the mode.\n``until_seq`` replays the group as it was at that event (time-travel).",
+        "operationId": "get_group_api_cowork__thread_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until Seq"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Group Api Cowork  Thread Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Group",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/blackboard": {
+      "post": {
+        "description": "Write a key to the group's shared blackboard, attributed to the actor.",
+        "operationId": "write_board_api_cowork__thread_id__blackboard_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BoardBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Write Board Api Cowork  Thread Id  Blackboard Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Write Board",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/breakout": {
+      "post": {
+        "description": "Spin off a focused side-thread with a subset of members + a grant.",
+        "operationId": "breakout_fork_api_cowork__thread_id__breakout_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakoutBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Breakout Fork Api Cowork  Thread Id  Breakout Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Breakout Fork",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/breakout/{child_thread}/merge": {
+      "post": {
+        "description": "Merge a breakout's conclusion back onto the parent's blackboard.",
+        "operationId": "breakout_merge_api_cowork__thread_id__breakout__child_thread__merge_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "child_thread",
+            "required": true,
+            "schema": {
+              "title": "Child Thread",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Breakout Merge Api Cowork  Thread Id  Breakout  Child Thread  Merge Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Breakout Merge",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/catchup/{member_id}": {
+      "get": {
+        "description": "Catch-up brief for a member (roster + shared board + grant scope). The\nrealtime layer fills in recent messages via build_catchup in-process.",
+        "operationId": "catchup_api_cowork__thread_id__catchup__member_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Catchup Api Cowork  Thread Id  Catchup  Member Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Catchup",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/members": {
+      "post": {
+        "description": "Pull a member (agent or human) into the thread, with a context grant.",
+        "operationId": "invite_member_api_cowork__thread_id__members_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Invite Member Api Cowork  Thread Id  Members Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invite Member",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/members/{member_id}": {
+      "delete": {
+        "description": "Remove a member. Their past blackboard writes stay (attributed).",
+        "operationId": "remove_member_api_cowork__thread_id__members__member_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Member Api Cowork  Thread Id  Members  Member Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Member",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/mode": {
+      "post": {
+        "description": "Switch the collaboration mode (chat/cluster/swarm) — non-destructive.",
+        "operationId": "set_mode_api_cowork__thread_id__mode_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModeBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Mode Api Cowork  Thread Id  Mode Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Mode",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/nominate": {
+      "get": {
+        "description": "Self-nomination gate: of the participant agents, who is relevant enough\nto speak for ``text`` — so a swarm doesn't pile on every turn.",
+        "operationId": "nominate_turn_api_cowork__thread_id__nominate_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "text",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Text",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "threshold",
+            "required": false,
+            "schema": {
+              "default": 0.5,
+              "title": "Threshold",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Nominate Turn Api Cowork  Thread Id  Nominate Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Nominate Turn",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/plan": {
+      "get": {
+        "description": "Given a draft message, who would act this turn and how (mode →\nsingle / cluster / swarm), honouring @agent mentions. The realtime\ndriver reads this to dispatch without a manual mode switch.",
+        "operationId": "plan_api_cowork__thread_id__plan_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "text",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Text",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Plan Api Cowork  Thread Id  Plan Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/tasks": {
+      "get": {
+        "description": "Background tasks in this thread (async coworkers).",
+        "operationId": "list_tasks_api_cowork__thread_id__tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Tasks Api Cowork  Thread Id  Tasks Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "cowork"
+        ]
+      },
+      "post": {
+        "description": "Give a member a task to work in the background; result lands on the\nshared blackboard when complete.",
+        "operationId": "assign_task_api_cowork__thread_id__tasks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Assign Task Api Cowork  Thread Id  Tasks Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Task",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/tasks/summary": {
+      "get": {
+        "description": "Small operational summary for async cowork task badges/health.",
+        "operationId": "tasks_summary_api_cowork__thread_id__tasks_summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Tasks Summary Api Cowork  Thread Id  Tasks Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Tasks Summary",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/tasks/{task_id}/complete": {
+      "post": {
+        "description": "A runner reports a background task done — posts the result to the board.",
+        "operationId": "complete_task_api_cowork__thread_id__tasks__task_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Complete Task Api Cowork  Thread Id  Tasks  Task Id  Complete Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Complete Task",
+        "tags": [
+          "cowork"
+        ]
+      }
+    },
+    "/api/cowork/{thread_id}/view/{member_id}": {
+      "get": {
+        "description": "The history slice ``member_id`` is allowed to see at ``max_message``\n(their context grant resolved). The context assembler uses this to bound\nwhat reaches the agent's prompt — the enforcement half of the privacy seam.",
+        "operationId": "member_view_api_cowork__thread_id__view__member_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "title": "Thread Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "title": "Member Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "max_message",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "title": "Max Message",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Member View Api Cowork  Thread Id  View  Member Id  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Member View",
+        "tags": [
+          "cowork"
         ]
       }
     },

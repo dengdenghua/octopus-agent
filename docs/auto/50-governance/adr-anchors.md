@@ -11,57 +11,52 @@ tier: "standard"
 
 ## Per ADR
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/001-bionic-naming.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/001-bionic-naming.md) · *Accepted*
 
-- `docs/biomimetic/*`
 - `docs/invariants.md`
 - `docs/naming.md`
+- `docs/vision/biomimetic-architecture.md`
 - `runtime/core/cerebrum/`
 - `runtime/core/hearts/`
 - `runtime/execution/suckers/`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/002-mode-gated-scope.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/002-mode-gated-scope.md) · *Accepted*
 
 - `agents/<id>/workspace/<thread_id>/`
 - `tests/test_scope.py`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/003-session-object.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/003-session-object.md) · *Accepted*
 
 _未引用代码路径_
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/004-openapi-ts-codegen.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/004-openapi-ts-codegen.md) · *Accepted*
 
 - `docs/openapi-snapshot.json`
 - `frontend/src/core/api/openapi-types.ts`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/005-agent-capabilities.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/005-agent-capabilities.md) · *Accepted*
 
 - `docs/agent-capabilities.md`
 - `frontend/src/core/agents/types.ts`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/006-lifecycle-hooks.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/006-lifecycle-hooks.md) · *Accepted*
 
 - `runtime/safety/hooks/{events,registry,runner}.py`
 - `tests/test_safety_hooks.py`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/007-mcp-trust-store.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/007-mcp-trust-store.md) · *Accepted*
 
 - `runtime/adapters/mcp_client/bridge.py:require_trust`
 - `runtime/adapters/mcp_client/trust.py`
 - `tests/test_mcp_trust.py`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/008-constitution-profiles.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/008-constitution-profiles.md) · *Accepted*
 
 - `runtime/safety/constitution/gate.py`
 - `runtime/safety/constitution/profiles.py`
 - `tests/test_constitution_profiles.py`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/008-octopus-mobile.md) · *Accepted*
-
-- `runtime/execution/arms/presets.py`
-- `runtime/tentacle/`
-
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/009-okf-knowledge-substrate.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/009-okf-knowledge-substrate.md) · *Accepted*
 
 - `docs/architecture*`
 - `docs/auto`
@@ -72,10 +67,15 @@ _未引用代码路径_
 - `tests/test_repo_context.py`
 - `tests/test_wiki_qa.py`
 
-### [ADR-010 · Swarm Resource Contention（网状编排的争用模型）](../../adr/010-swarm-resource-contention.md) · *Accepted*
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/010-swarm-resource-contention.md) · *Accepted*
 
 - `runtime/execution/swarm/runtime.py`
 - `runtime/safety/chromatophores/boids.py`
+
+### [ADR-011 · Octopus Mobile（移动触手 / 跨端编排）](../../adr/011-octopus-mobile.md) · *Accepted*
+
+- `runtime/execution/arms/presets.py`
+- `runtime/tentacle/`
 
 ## Per file
 
@@ -84,17 +84,17 @@ _未引用代码路径_
 - `docs/architecture*` ← [009-okf-knowledge-substrate](../../adr/009-okf-knowledge-substrate.md)
 - `docs/auto` ← [009-okf-knowledge-substrate](../../adr/009-okf-knowledge-substrate.md)
 - `docs/auto/` ← [009-okf-knowledge-substrate](../../adr/009-okf-knowledge-substrate.md)
-- `docs/biomimetic/*` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
 - `docs/invariants.md` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
 - `docs/naming.md` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
 - `docs/openapi-snapshot.json` ← [004-openapi-ts-codegen](../../adr/004-openapi-ts-codegen.md)
+- `docs/vision/biomimetic-architecture.md` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
 - `frontend/src/core/agents/types.ts` ← [005-agent-capabilities](../../adr/005-agent-capabilities.md)
 - `frontend/src/core/api/openapi-types.ts` ← [004-openapi-ts-codegen](../../adr/004-openapi-ts-codegen.md)
 - `runtime/adapters/mcp_client/bridge.py:require_trust` ← [007-mcp-trust-store](../../adr/007-mcp-trust-store.md)
 - `runtime/adapters/mcp_client/trust.py` ← [007-mcp-trust-store](../../adr/007-mcp-trust-store.md)
 - `runtime/core/cerebrum/` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
 - `runtime/core/hearts/` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
-- `runtime/execution/arms/presets.py` ← [008-octopus-mobile](../../adr/008-octopus-mobile.md)
+- `runtime/execution/arms/presets.py` ← [011-octopus-mobile](../../adr/011-octopus-mobile.md)
 - `runtime/execution/suckers/` ← [001-bionic-naming](../../adr/001-bionic-naming.md)
 - `runtime/execution/swarm/runtime.py` ← [010-swarm-resource-contention](../../adr/010-swarm-resource-contention.md)
 - `runtime/safety/chromatophores/boids.py` ← [010-swarm-resource-contention](../../adr/010-swarm-resource-contention.md)
@@ -102,7 +102,7 @@ _未引用代码路径_
 - `runtime/safety/constitution/profiles.py` ← [008-constitution-profiles](../../adr/008-constitution-profiles.md)
 - `runtime/safety/hooks/{events,registry,runner}.py` ← [006-lifecycle-hooks](../../adr/006-lifecycle-hooks.md)
 - `runtime/safety/recovery/scheduler.py` ← [009-okf-knowledge-substrate](../../adr/009-okf-knowledge-substrate.md)
-- `runtime/tentacle/` ← [008-octopus-mobile](../../adr/008-octopus-mobile.md)
+- `runtime/tentacle/` ← [011-octopus-mobile](../../adr/011-octopus-mobile.md)
 - `scripts/gen_wiki.py` ← [009-okf-knowledge-substrate](../../adr/009-okf-knowledge-substrate.md)
 - `tests/test_auto_docs_fresh.py` ← [009-okf-knowledge-substrate](../../adr/009-okf-knowledge-substrate.md)
 - `tests/test_constitution_profiles.py` ← [008-constitution-profiles](../../adr/008-constitution-profiles.md)

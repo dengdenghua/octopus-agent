@@ -63,7 +63,7 @@ tier: "core"
 
 ## Who imports this
 
-**40** file(s) reference this package:
+**41** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/channels/manager.py`
@@ -98,13 +98,13 @@ tier: "core"
   - `runtime/safety/recovery/recipe_evaluator.py`
   - `runtime/safety/recovery/rule_extractor.py`
   - _… and 3 more_
-- **`runtime/sensing/`** · 14 file(s)
+- **`runtime/sensing/`** · 15 file(s)
   - `runtime/sensing/gateway/dag_debugger_router.py`
   - `runtime/sensing/gateway/evolution_ops/budget.py`
   - `runtime/sensing/gateway/evolution_ops/curriculum.py`
   - `runtime/sensing/gateway/evolution_ops/mcp_ops.py`
   - `runtime/sensing/gateway/evolution_ops/protocol_drift.py`
-  - _… and 9 more_
+  - _… and 10 more_
 - **`runtime/tour.py/`** · 1 file(s)
   - `runtime/tour.py`
 

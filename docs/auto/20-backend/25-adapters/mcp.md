@@ -37,6 +37,8 @@ tier: "standard"
 | --- | --- |
 | `bridge.py` | — |
 | `client.py` | — |
+| `oauth.py` | MCP OAuth 2.0 (PKCE) client — authorize-on-enable for remote MCP servers. |
+| `oauth_discovery.py` | OAuth metadata discovery + dynamic client registration for MCP (step 2). |
 | `persistent_client.py` | — |
 | `trust.py` | — |
 | `types.py` | — |

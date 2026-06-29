@@ -45,6 +45,7 @@ tier: "standard"
 | `completion_router.py` | Inline code completion endpoint — Tab-complete skeleton. |
 | `computer_router.py` | Computer automation API. |
 | `config_router.py` | Config router · identity-lock + providers + custom-models. |
+| `cowork_group_router.py` | Thread-group API: WeChat-style membership + mode + shared blackboard. |
 | `cron_router.py` | Cron settings compatibility router. |
 | `dag_debugger_router.py` | — |
 | `debug_router.py` | Debug diagnostics router · ``/api/debug/session-info``. |
@@ -68,6 +69,7 @@ tier: "standard"
 | `journal_router.py` | Journal query router · ``/api/journal/*``. |
 | `local_brain.py` | One-glance local-brain readiness for the work-mode setup wizard. |
 | `local_brain_router.py` | Local-brain setup router · ``/api/local-brain/*``. |
+| `loop_router.py` | — |
 | `lsp_router.py` | Thin HTTP wrapper around the registered LSP skills. |
 | `mcp_router.py` | MCP router · declare / enable / disable MCP servers at runtime. |
 | `memory_router.py` | Local memory compatibility API. |
@@ -77,6 +79,7 @@ tier: "standard"
 | `observability_router.py` | Observability router · journal / reflect / kg / progress / stream / run. |
 | `openai_formatting.py` | Pure-function formatters for the OpenAI-compat gateway. |
 | `openai_gateway/context_manager.py` | — |
+| `openai_gateway/mix.py` | Octopus Mix — a mixture-of-agents virtual model for the OpenAI gateway. |
 | `openai_gateway/request_parser.py` | — |
 | `openai_gateway/response_formatter.py` | — |
 | `openai_gateway/stream_handler.py` | — |
@@ -105,6 +108,7 @@ tier: "standard"
 | `remote_backends_router.py` | Remote backends router · ``/api/remote-backends/*``. |
 | `remote_transport.py` | Remote Transport · connect a desktop session to a remote octopus-agent runtime over SSH-tunneled HTTP. |
 | `retrieve_router.py` | Retrieval router · ``/api/retrieve/rank``. |
+| `searxng_supervisor.py` | One-click local SearXNG for the private web-search backend. |
 | `skill_market_router.py` | — |
 | `slash_command_expansion.py` | Slash-command expansion for realtime chat input. |
 | `storage_supervisor.py` | Optional co-launch of the octopus-storage sibling service. |
@@ -112,6 +116,7 @@ tier: "standard"
 | `stub_router.py` | — |
 | `subagents_router.py` | Subagent FastAPI router. |
 | `system_router.py` | System-level local maintenance endpoints. |
+| `task_runs_router.py` | — |
 | `teach_repeat_router.py` | Teach & Repeat API. |
 | `team_role_models_router.py` | Team role-model settings router · ``/api/team/role-models``. |
 | `team_rooms_router.py` | Persistent team rooms API. |
@@ -131,14 +136,16 @@ tier: "standard"
 
 ## Who imports this
 
-**5** file(s) reference this package:
+**7** file(s) reference this package:
 
 - **`runtime/cli.py/`** · 1 file(s)
   - `runtime/cli.py`
 - **`runtime/cli_serve.py/`** · 1 file(s)
   - `runtime/cli_serve.py`
-- **`runtime/platform/`** · 3 file(s)
+- **`runtime/platform/`** · 5 file(s)
   - `runtime/platform/ui/app.py`
+  - `runtime/platform/ui/health_router.py`
+  - `runtime/platform/ui/searxng_router.py`
   - `runtime/platform/ui/state.py`
   - `runtime/platform/ui/thread_routes.py`
 

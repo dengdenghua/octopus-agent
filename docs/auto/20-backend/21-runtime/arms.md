@@ -60,6 +60,7 @@ tier: "core"
 | Module | Summary |
 | --- | --- |
 | `base.py` | — |
+| `enterprise_cache.py` | Enterprise Arm 本地决策层(Ganglion). |
 | `extension_registry.py` | Dynamic extension registry — hot-pluggable skill registration. |
 | `lazy_loader.py` | Lazy loading patterns — on-demand resource initialization. |
 | `output_buffer.py` | Dual-layer output buffer for shell command output. |

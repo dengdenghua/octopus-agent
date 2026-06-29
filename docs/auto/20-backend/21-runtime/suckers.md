@@ -11,6 +11,10 @@ tier: "core"
 
 **Source**: `runtime/execution/suckers/`
 
+## Package summary
+
+Suckers = skill pool.
+
 ## Exports
 
 - `ATOMIC_SKILL_NAMES`
@@ -38,7 +42,7 @@ tier: "core"
 
 | Module | Summary |
 | --- | --- |
-| `agent_doc_skills.py` | Agent documentation skills loaded from ``all_skills``. |
+| `agent_doc_skills.py` | Agent documentation skills loaded from ``skills/public``. |
 | `agent_meta_skills.py` | — |
 | `ask_user_question.py` | ask_user_question · pause-and-ask skill. |
 | `blackboard_skills.py` | blackboard_skills · expose the turn-scoped shared dict as 3 skills. |
@@ -53,6 +57,7 @@ tier: "core"
 | `capability_skills.py` | — |
 | `code_edit_skills.py` | AST-aware code editing skills · tree-sitter powered. |
 | `code_intelligence_skills.py` | — |
+| `codex_plugin_skills.py` | — |
 | `computer_api_skills.py` | Agent-facing computer automation skills. |
 | `computer_skills.py` | — |
 | `computer_uia_skills.py` | — |
@@ -63,6 +68,8 @@ tier: "core"
 | `delegation_budget.py` | Smart per-turn delegation budget. |
 | `delegation_skills.py` | — |
 | `desktop_grounding.py` | Semantic grounding for the desktop vision loop. |
+| `echo_skills.py` | ECHO Universe Engine 叙事 Ganglion 接入. |
+| `enterprise_skills.py` | Octopus Enterprise 企业服务 Arm 接入. |
 | `ephemeral_agents.py` | Ephemeral sub-agent roles · lightweight personas for one-shot delegation tasks (``researcher`` / ``debugger`` / ``reviewer`` / …). |
 | `ephemeral_injection_gate.py` | Prompt-injection taint gate for ephemeral sub-agent tool calls. |
 | `ephemeral_runner.py` | LLM-backed runner for ephemeral sub-agent roles. |
@@ -92,7 +99,7 @@ tier: "core"
 
 ## Who imports this
 
-**42** file(s) reference this package:
+**46** file(s) reference this package:
 
 - **`runtime/adapters/`** · 1 file(s)
   - `runtime/adapters/mcp_client/bridge.py`
@@ -104,18 +111,21 @@ tier: "core"
   - `runtime/cli_reflect.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/core/`** · 4 file(s)
+- **`runtime/core/`** · 5 file(s)
   - `runtime/core/cerebrum/capability_router.py`
   - `runtime/core/cerebrum/llm_planner.py`
   - `runtime/core/cerebrum/react_context.py`
   - `runtime/core/cerebrum/react_execution.py`
-- **`runtime/execution/`** · 5 file(s)
+  - `runtime/core/cerebrum/react_loop.py`
+- **`runtime/execution/`** · 6 file(s)
   - `runtime/execution/all_skills/__init__.py`
   - `runtime/execution/arms/base.py`
+  - `runtime/execution/loops/verifiers.py`
   - `runtime/execution/misc/skill_policy.py`
   - `runtime/execution/subagents/bridge.py`
   - `runtime/execution/tool_engine/executor.py`
-- **`runtime/memory/`** · 2 file(s)
+- **`runtime/memory/`** · 3 file(s)
+  - `runtime/memory/cowork/runtime.py`
   - `runtime/memory/hemolymph/composer.py`
   - `runtime/memory/learning/deep_evolution.py`
 - **`runtime/platform/`** · 5 file(s)
@@ -127,8 +137,9 @@ tier: "core"
 - **`runtime/research/`** · 2 file(s)
   - `runtime/research/pipeline.py`
   - `runtime/research/prefetch.py`
-- **`runtime/safety/`** · 4 file(s)
+- **`runtime/safety/`** · 5 file(s)
   - `runtime/safety/evolution/auto_trigger.py`
+  - `runtime/safety/evolution/browser_desktop_quality.py`
   - `runtime/safety/hooks/tool_edge_hooks.py`
   - `runtime/safety/recovery/intel_collector.py`
   - `runtime/safety/recovery/skill_forge.py`

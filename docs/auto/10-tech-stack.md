@@ -11,7 +11,6 @@ tier: "standard"
 
 ## 后端（Python）
 
-- `bcrypt>=4.0`
 - `pydantic>=2.12.0`
 
 ## 前端（React / Vite）
@@ -41,5 +40,5 @@ tier: "standard"
 - `@radix-ui/react-toggle`
 - `@radix-ui/react-toggle-group`
 - `@radix-ui/react-tooltip`
-- … 共 67 个依赖
+- … 共 69 个依赖
 

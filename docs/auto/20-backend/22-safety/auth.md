@@ -20,6 +20,7 @@ tier: "core"
 - `Identity`
 - `IdentityStore`
 - `JWTError`
+- `MODEL_FORBIDDEN_ARGS`
 - `PathVerdict`
 - `ToolCallGuardrailController`
 - `ToolCallSignature`
@@ -35,6 +36,7 @@ tier: "core"
 - `is_safe_path`
 - `is_safe_url`
 - `is_safe_write`
+- `strip_model_controlled_overrides`
 - `verify_jwt_hs256`
 
 ## Modules
@@ -42,6 +44,7 @@ tier: "core"
 | Module | Summary |
 | --- | --- |
 | `adaptive_immunity.py` | Adaptive immunity — the immunity protocol's behavioural-anomaly tier. |
+| `arg_guard.py` | Strip model-controllable privilege-escalation kwargs before dispatch. |
 | `attack_memory.py` | Antibody memory — the immunity protocol's Memory tier. |
 | `file_safety.py` | — |
 | `identity.py` | — |
@@ -53,7 +56,7 @@ tier: "core"
 
 ## Who imports this
 
-**24** file(s) reference this package:
+**25** file(s) reference this package:
 
 - **`runtime/adapters/`** · 2 file(s)
   - `runtime/adapters/integrations/local_auth/router.py`
@@ -62,13 +65,13 @@ tier: "core"
   - `runtime/cli_core.py`
 - **`runtime/cli_run.py/`** · 1 file(s)
   - `runtime/cli_run.py`
-- **`runtime/execution/`** · 12 file(s)
+- **`runtime/execution/`** · 13 file(s)
   - `runtime/execution/subagents/bridge.py`
   - `runtime/execution/suckers/browser_skills.py`
   - `runtime/execution/suckers/builtins.py`
   - `runtime/execution/suckers/computer_skills.py`
   - `runtime/execution/suckers/crawler_skills.py`
-  - _… and 7 more_
+  - _… and 8 more_
 - **`runtime/platform/`** · 3 file(s)
   - `runtime/platform/config/builder.py`
   - `runtime/platform/ui/app.py`

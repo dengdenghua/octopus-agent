@@ -26,7 +26,7 @@ Octopus-Agent 是一个自托管的 agent runtime，用来规划、执行、观�
 
 ## 规模
 
-- Python 模块：**768** 个（runtime/）
-- TSX 组件：**447** 个（frontend/src）
-- 后端测试：**482** 个
+- Python 模块：**834** 个（runtime/）
+- TSX 组件：**460** 个（frontend/src）
+- 后端测试：**545** 个
 

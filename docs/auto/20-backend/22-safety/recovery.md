@@ -112,6 +112,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | --- | --- |
 | `evolution_constraints.py` | — |
 | `evolution_dataset.py` | Unified dataset builder for regeneration and prompt evolution. |
+| `evolution_router.py` | EvolutionRouter · route evolution candidates to the right forge. |
 | `external_importers.py` | — |
 | `forge_auto_tick.py` | RecipeForge auto-promote scheduler · the last-mile autonomy knob. |
 | `genome_registry.py` | Genome Registry — versioned JSON snapshot store for system configuration. |
@@ -131,6 +132,7 @@ Self-evolution subsystem — biomimetic alias: *Regeneration*.
 | `native_turn_replay.py` | — |
 | `optimizer_backends.py` | Pluggable prompt-optimizer backends for Octopus evolution. |
 | `recipe_evaluator.py` | — |
+| `reflex_forge.py` | ReflexForge · auto-generate reflex rules from successful turns. |
 | `rule_extractor.py` | — |
 | `scheduler.py` | — |
 | `skill_forge.py` | — |
