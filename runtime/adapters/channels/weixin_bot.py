@@ -121,6 +121,18 @@ class WeixinBotChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.sent_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         if self._bot_token is None:
             raise WeixinBotError("not logged in")
         to_user = msg.metadata.get("to_user_id") or msg.thread_id
@@ -134,7 +146,7 @@ class WeixinBotChannel(Channel):
                 "item_list": [
                     {
                         "type": ITEM_TYPE_TEXT,
-                        "text_item": {"text": msg.content},
+                        "text_item": {"text": content},
                     },
                 ],
             },

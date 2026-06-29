@@ -38,13 +38,29 @@ class ChannelManager:
         default_agent_id: str | None = None,
         budget_tokens: int = 50_000,
         budget_usd: float = 0.50,
+        strict_gate: bool = False,
     ) -> None:
+        """ChannelManager · registers routes inbound/outbound.
+
+        Parameters
+        ----------
+        strict_gate:
+            When True, ``register()`` raises ``RuntimeError`` if the
+            adapter's ``send()`` does not call ``self.safe_send()`` /
+            ``check_outbound()`` before any network call. Default
+            False (advisory warning) for backward compatibility —
+            production deployments should set True to enforce the
+            constitution gate chain (PRIV-2, PRIV-4). Source code
+            that cannot be introspected still only warns (not the
+            developer's fault).
+        """
         self._stack = stack
         self._agent_registry = agent_registry
         self._store = store or ThreadConversationStore()
         self._default_agent_id = default_agent_id
         self._budget_tokens = budget_tokens
         self._budget_usd = budget_usd
+        self._strict_gate = strict_gate
         self._channels: dict[str, Channel] = {}
         self._executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=8, thread_name_prefix="ch-send"
@@ -62,10 +78,11 @@ class ChannelManager:
         channel.bind_dispatcher(self.process_inbound)
 
         # Constitution-gate audit · does this adapter's send() call
-        # will migrate to safe_send gradually. Third-party adapters
-        # (users writing their own Discord bot wrapper etc.) get an
-        # early heads-up · see docs/constitution.md · PRIV-2.
-        _audit_channel_for_gate(channel)
+        # safe_send / check_outbound before any network call?
+        # Advisory by default (warning) · strict in production
+        # (raises RuntimeError, refuses registration). See
+        # docs/constitution.md · PRIV-2, PRIV-4.
+        _audit_channel_for_gate(channel, strict=self._strict_gate)
 
         self._channels[channel.channel_id] = channel
 
@@ -342,28 +359,31 @@ class ChannelManager:
 # ═══════════════════════════════════════════════════════════
 
 
-def _audit_channel_for_gate(channel: Channel) -> None:
-    """Scan a channel's ``send`` implementation · warn if it
-    appears to bypass the constitution gate.
+def _audit_channel_for_gate(channel: Channel, *, strict: bool = False) -> None:
+    """Scan a channel's ``send`` implementation · warn (or raise)
+    if it appears to bypass the constitution gate.
 
-    Rationale: community developers writing their own channel
-    adapter should know their outbound path is not automatically
-    PII-scrubbed or secret-blocked. This audit gives a loud
-    stderr warning at registration time · before any message
-    actually flows.
+    Parameters
+    ----------
+    strict:
+        When True, raise ``RuntimeError`` instead of logging a
+        warning when ``send()`` does not call ``safe_send`` /
+        ``check_outbound``. Source-not-inspectable still only
+        warns (can't verify, not the developer's fault).
 
     Detection is conservative:
 
     * Inspect ``send``'s source code
     * Look for a call to ``safe_send`` or ``check_outbound``
-    * Neither present → warn
+    * Neither present → warn (or raise if strict)
     * Either present → trust the author (they know what they're
       doing · maybe the check happens in a helper)
 
     False negatives are possible (someone could do the check in
     a differently-named wrapper); false positives are limited to
-    "you passed the audit but actually don't gate". The warning
-    is non-blocking · registration succeeds regardless.
+    "you passed the audit but actually don't gate". In advisory
+    mode the warning is non-blocking · registration succeeds
+    regardless. In strict mode registration is refused.
     """
     import inspect
     import logging as _logging
@@ -449,8 +469,8 @@ def _audit_channel_for_gate(channel: Channel) -> None:
     if any(marker in src_no_comments for marker in gate_markers):
         return
 
-    _logger.warning(
-        "Channel adapter %s.send does NOT appear to call "
+    msg = (
+        f"Channel adapter {type(channel).__name__}.send does NOT appear to call "
         "self.safe_send() or constitution.check_outbound() before "
         "sending. Outbound messages from this channel will NOT be "
         "PII-scrubbed or secret-blocked. See docs/constitution.md "
@@ -459,6 +479,14 @@ def _audit_channel_for_gate(channel: Channel) -> None:
         "        verdict = self.safe_send(msg)\n"
         "        if verdict.action == 'block':\n"
         "            return\n"
-        "        self._platform_api(verdict.sanitized)",
-        type(channel).__name__,
+        "        self._platform_api(verdict.sanitized)"
     )
+    _logger.warning("%s", type(channel).__name__)
+    _logger.warning("%s", msg)
+    if strict:
+        raise RuntimeError(
+            f"{type(channel).__name__}.send bypasses the constitution gate "
+            f"(no safe_send/check_outbound call found). "
+            f"Registration refused in strict_gate mode. "
+            f"See docs/constitution.md · PRIV-2, PRIV-4."
+        )

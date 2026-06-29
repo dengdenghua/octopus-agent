@@ -367,6 +367,24 @@ class Journal:
     def read_all(self) -> list[JournalEvent]:
         raise NotImplementedError
 
+    def subscribe(self, callback: "Callable[[JournalEvent], None]") -> "Callable[[], None]":
+        """Default no-op pub/sub. Returns an unsubscribe callable.
+
+        The base Journal is append-only and has no live subscribers —
+        callers that need real-time event fan-out must wrap it in
+        ``StreamingJournal`` (runtime/sensing/gateway/streaming_journal.py),
+        which overrides this method to broadcast ``write`` events to
+        registered callbacks.
+
+        Returning a no-op unsubscribe here (rather than raising
+        ``AttributeError``) lets consumers like ``TaskProgressTracker``
+        be constructed against any Journal subclass without coupling
+        to the streaming wrapper — they simply won't receive live
+        events until wrapped in ``StreamingJournal``.
+        """
+        del callback  # unused — base journal has no fan-out path
+        return lambda: None
+
     def read_by_task(self, task_id: TaskId) -> list[JournalEvent]:
         return [e for e in self.read_all() if e.task_id == task_id]
 

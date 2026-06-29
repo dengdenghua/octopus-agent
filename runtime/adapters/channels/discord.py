@@ -98,6 +98,18 @@ class DiscordChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         channel_id = msg.metadata.get("discord_channel_id") or msg.thread_id
         if not channel_id:
             raise DiscordError("missing discord channel_id for send")
@@ -105,7 +117,7 @@ class DiscordChannel(Channel):
         url = f"{self.api_base_url}/channels/{channel_id}/messages"
 
         if not msg.attachments:
-            body: dict[str, Any] = {"content": msg.content}
+            body: dict[str, Any] = {"content": content}
             reply_to = msg.metadata.get("message_reference_id")
             if reply_to:
                 body["message_reference"] = {"message_id": str(reply_to)}
@@ -121,7 +133,7 @@ class DiscordChannel(Channel):
                 )
             return
 
-        payload: dict[str, Any] = {"content": msg.content}
+        payload: dict[str, Any] = {"content": content}
         reply_to = msg.metadata.get("message_reference_id")
         if reply_to:
             payload["message_reference"] = {"message_id": str(reply_to)}

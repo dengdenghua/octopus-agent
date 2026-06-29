@@ -93,6 +93,18 @@ class WeComChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         access_token = self._get_access_token()
         user = msg.metadata.get("touser") or msg.thread_id.split(":")[0] if msg.thread_id else ""
         if not user:
@@ -105,7 +117,7 @@ class WeComChannel(Channel):
                 "touser": user,
                 "msgtype": "text",
                 "agentid": int(self._agent_id),
-                "text": {"content": msg.content},
+                "text": {"content": content},
             }
             resp = self._post_json(url, body=body, bearer=None)
             errcode = resp.get("errcode", 0)

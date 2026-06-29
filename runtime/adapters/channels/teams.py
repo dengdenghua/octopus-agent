@@ -109,6 +109,18 @@ class TeamsChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         service_url = msg.metadata.get("teams_service_url") or self._service_url
         if not service_url:
             raise TeamsError("missing service_url for send")
@@ -118,7 +130,7 @@ class TeamsChannel(Channel):
         reply_to_id = msg.metadata.get("teams_activity_id", "")
         service_url = service_url.rstrip("/")
         url = f"{service_url}/v3/conversations/{conversation_id}/activities/{reply_to_id}"
-        body: dict[str, Any] = {"type": "message", "text": msg.content}
+        body: dict[str, Any] = {"type": "message", "text": content}
         token = self._ensure_token()
         self._post_json(url, body=body, authorization=f"Bearer {token}")
 

@@ -70,9 +70,20 @@ class HomeAssistantChannel(Channel):
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
 
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         url = f"{self._ha_url}/api/services/notify/persistent_notification"
         body: dict[str, Any] = {
-            "message": msg.content,
+            "message": content,
             "title": "Octopus Agent",
         }
 

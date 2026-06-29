@@ -50,13 +50,25 @@ class SimpleXChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         contact_id, _ = self._split_thread_id(msg.thread_id)
         if "contact_id" in msg.metadata:
             contact_id = str(msg.metadata["contact_id"])
 
         body: dict[str, Any] = {
             "chat": {"type": "direct", "id": contact_id},
-            "content": {"type": "msg", "msg": {"type": "text", "text": msg.content}},
+            "content": {"type": "msg", "msg": {"type": "text", "text": content}},
         }
 
         url = f"{self.api_base_url}/v1/chat/item"

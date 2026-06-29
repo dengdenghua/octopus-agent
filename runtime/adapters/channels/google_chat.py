@@ -178,10 +178,21 @@ class GoogleChatChannel(Channel):
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
 
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         space_name, _ = self._split_thread_id(msg.thread_id)
         parent = space_name or msg.thread_id
         url = f"{self.api_base_url}/v1/{parent}/messages"
-        body: dict[str, Any] = {"text": msg.content}
+        body: dict[str, Any] = {"text": content}
         token = self._ensure_token()
         self._post_json(url, body=body, authorization=f"Bearer {token}")
 

@@ -56,11 +56,23 @@ class WebhooksChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         if not self._outbound_url:
             return
         now_iso = datetime.now(UTC).isoformat()
         body: dict[str, Any] = {
-            "text": msg.content,
+            "text": content,
             "source": "octopus-agent",
             "timestamp": now_iso,
         }

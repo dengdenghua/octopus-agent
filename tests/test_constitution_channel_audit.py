@@ -283,3 +283,73 @@ class TestAuditRobustness:
         assert any(
             "not inspectable" in m for m in warnings
         ), f"should warn about uninspectable adapter · got: {warnings}"
+
+
+# ═══════════════════════════════════════════════════════════
+# 5. Strict mode · refuses registration of ungated adapters
+# ═══════════════════════════════════════════════════════════
+
+
+@pytest.fixture
+def strict_manager() -> ChannelManager:
+    return ChannelManager(
+        stack=_FakeStack(),
+        agent_registry=_FakeAgentRegistry(),
+        default_agent_id="test-agent",
+        strict_gate=True,
+    )
+
+
+class TestStrictGate:
+    """strict_gate=True upgrades the advisory warning to a hard
+    RuntimeError at registration time — refuses ungated adapters
+    before any message can flow through them."""
+
+    def test_bypassing_adapter_refused(self, strict_manager: ChannelManager) -> None:
+        with pytest.raises(RuntimeError, match="constitution gate"):
+            strict_manager.register(_GateBypassingAdapter())
+        # Registration refused — channel not in registry
+        assert not strict_manager.has("test-bypass")
+
+    def test_gated_adapter_passes_strict(self, strict_manager: ChannelManager) -> None:
+        strict_manager.register(_GatedAdapter())
+        assert strict_manager.has("test-gated")
+
+    def test_check_outbound_adapter_passes_strict(
+        self, strict_manager: ChannelManager,
+    ) -> None:
+        strict_manager.register(_CheckOutboundAdapter())
+        assert strict_manager.has("test-direct")
+
+    def test_uninspectable_source_still_warns_not_raises(
+        self,
+        strict_manager: ChannelManager,
+        caplog: pytest.LogCaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """When source can't be introspected, strict mode still
+        only warns — can't verify the gate, but that's not the
+        developer's fault. Refusing would break C-extension /
+        dynamic adapters that are otherwise correct."""
+        import inspect
+        import sys as _sys
+
+        def _fail_getsource(obj: Any) -> str:
+            raise OSError("source not available")
+
+        monkeypatch.setattr(inspect, "getsource", _fail_getsource)
+        adapter_mod = _sys.modules.get(_GatedAdapter.__module__)
+        if adapter_mod is not None:
+            monkeypatch.setattr(adapter_mod, "__file__", "/nonexistent", raising=False)
+
+        # Should NOT raise — only warn
+        with caplog.at_level(logging.WARNING):
+            strict_manager.register(_GatedAdapter())
+        assert strict_manager.has("test-gated")
+        warnings = [
+            r.message for r in caplog.records
+            if r.levelno >= logging.WARNING
+        ]
+        assert any(
+            "not inspectable" in m for m in warnings
+        ), f"should warn (not raise) about uninspectable · got: {warnings}"

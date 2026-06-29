@@ -80,11 +80,23 @@ class YuanbaoChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         chat_id = msg.metadata.get("chat_id") or msg.thread_id.split(":")[0]
         url = f"{self.api_base_url}/api/bot/{self._bot_id}/message"
         body = {
             "chat_id": chat_id,
-            "content": {"type": "text", "text": msg.content},
+            "content": {"type": "text", "text": content},
             "msg_type": "text",
         }
         resp = self._post_json(url, body=body, bearer=self._bot_token)

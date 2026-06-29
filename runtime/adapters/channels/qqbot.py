@@ -92,6 +92,18 @@ class QQBotChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         channel_id = msg.metadata.get("qq_channel_id") or msg.thread_id
         if not channel_id:
             raise QQBotError("missing qq channel_id for send")
@@ -101,7 +113,7 @@ class QQBotChannel(Channel):
 
         if msg.content:
             body: dict[str, Any] = {
-                "content": msg.content,
+                "content": content,
                 "msg_type": 0,
                 "msg_id": msg_id,
             }

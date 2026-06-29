@@ -82,13 +82,25 @@ class LineChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         source_id, message_id = self._split_thread_id(msg.thread_id)
         reply_token = msg.metadata.get("replyToken") if msg.metadata else None
         to = msg.metadata.get("to") if msg.metadata else None
 
         messages: list[dict[str, Any]] = []
         if msg.content:
-            messages.append({"type": "text", "text": msg.content})
+            messages.append({"type": "text", "text": content})
 
         for att in msg.attachments:
             if att.content_type.startswith("image/"):

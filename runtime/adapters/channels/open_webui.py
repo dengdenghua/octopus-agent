@@ -69,10 +69,22 @@ class OpenWebUIChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         url = f"{self._base_url}/api/chat/completions"
         body: dict[str, Any] = {
             "model": "octopus-agent",
-            "messages": [{"role": "assistant", "content": msg.content}],
+            "messages": [{"role": "assistant", "content": content}],
             "stream": False,
         }
         self._post_json(url, body=body)

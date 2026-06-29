@@ -83,6 +83,18 @@ class WhatsAppChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         recipient, _ = self._split_thread_id(msg.thread_id)
         if "wa_id" in msg.metadata:
             recipient = str(msg.metadata["wa_id"])
@@ -94,7 +106,7 @@ class WhatsAppChannel(Channel):
                 "messaging_product": "whatsapp",
                 "to": recipient,
                 "type": "text",
-                "text": {"body": msg.content},
+                "text": {"body": content},
             }
             resp_data = self._post_json(url, body=body)
             if "error" in resp_data:

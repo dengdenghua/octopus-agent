@@ -65,6 +65,18 @@ class TelegramChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         chat_id, reply_to = self._split_thread_id(msg.thread_id)
         if "chat_id" in msg.metadata:
             chat_id = str(msg.metadata["chat_id"])
@@ -74,7 +86,7 @@ class TelegramChannel(Channel):
         if not msg.attachments:
             body: dict[str, Any] = {
                 "chat_id": chat_id,
-                "text": msg.content,
+                "text": content,
             }
             if reply_to:
                 body["reply_to_message_id"] = int(reply_to)
@@ -88,7 +100,7 @@ class TelegramChannel(Channel):
             return
 
         for i, attachment in enumerate(msg.attachments):
-            caption = msg.content if i == 0 else ""
+            caption = content if i == 0 else ""
             if attachment.content_type.startswith("image"):
                 api = "sendPhoto"
                 file_key = "photo"

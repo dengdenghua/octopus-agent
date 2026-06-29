@@ -54,6 +54,18 @@ class NtfyChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         url = f"{self._server_url}/{self._topic}"
         headers = {
             "Title": "Octopus Agent",
@@ -62,7 +74,7 @@ class NtfyChannel(Channel):
         if self._http is not None:
             for attempt in range(4):
                 try:
-                    resp = self._http.post(url, content=msg.content, headers=headers)
+                    resp = self._http.post(url, content=content, headers=headers)
                 except Exception as e:  # noqa: BLE001
                     raise NtfyError(
                         f"network: {type(e).__name__}: {e}",
@@ -93,7 +105,7 @@ class NtfyChannel(Channel):
                 self._bare_client = httpx.Client(timeout=15.0)
             for attempt in range(4):
                 try:
-                    resp = self._bare_client.post(url, content=msg.content, headers=headers)
+                    resp = self._bare_client.post(url, content=content, headers=headers)
                 except Exception as e:  # noqa: BLE001
                     raise NtfyError(
                         f"network: {type(e).__name__}: {e}",

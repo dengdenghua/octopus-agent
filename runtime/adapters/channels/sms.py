@@ -71,6 +71,18 @@ class SmsChannel(Channel):
 
     def send(self, msg: OutboundMessage) -> None:
         self.send_log.append(msg)
+
+        # Constitution gate · LINT-11 requires this before any network call.
+        verdict = self.safe_send(msg)
+        if verdict.action == "block":
+            logger.warning(
+                "channel.send.blocked",
+                extra={"channel": self.channel_id, "reason": verdict.reason},
+            )
+            return
+        # Use sanitized text if the gate rewrote PII · otherwise original.
+        content = verdict.sanitized if verdict.action == "rewrite" else msg.content
+
         to_number, _ = self._split_thread_id(msg.thread_id)
         if "to_number" in msg.metadata:
             to_number = str(msg.metadata["to_number"])
@@ -79,7 +91,7 @@ class SmsChannel(Channel):
         form_data: dict[str, str] = {
             "From": self._from_number,
             "To": to_number,
-            "Body": msg.content,
+            "Body": content,
         }
 
         if self._http is not None:
