@@ -1035,6 +1035,8 @@ export interface Translations {
     title: string;
     ready: string;
     degraded: string;
+    blocked: string;
+    notReported: string;
     refresh: string;
     refreshing: string;
     refreshAria: string;
@@ -1077,6 +1079,13 @@ export interface Translations {
     routeCount: string;
     requiredRoutesPresent: string;
     missingRoutes: string;
+    capabilitySurfaces: string;
+    surface: string;
+    capabilities: string;
+    missing: string;
+    orchestration: string;
+    runEvidence: string;
+    automation: string;
     backend: string;
     canonicalBaseUrl: string;
     requestOrigin: string;

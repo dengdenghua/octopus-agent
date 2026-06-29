@@ -70,6 +70,44 @@ const SAMPLE = {
     missing_required_profile_ids: [],
     required_profiles_present: true,
   },
+  orchestration: {
+    schema: "octopus.runtime_orchestration_self_check.v1",
+    ready: true,
+    route_count: 22,
+    missing_required_routes: [],
+    missing_route_methods: [],
+    capabilities: {
+      parallel_dispatch: true,
+      sse_event_replay: true,
+      review_queue: true,
+    },
+  },
+  run_evidence: {
+    schema: "octopus.runtime_run_evidence_self_check.v1",
+    ready: true,
+    route_count: 17,
+    missing_required_routes: [],
+    missing_route_methods: [],
+    missing_methods: [],
+    capabilities: {
+      task_run_replay_case: true,
+      replay_gate: true,
+      checkpoint_resume: true,
+    },
+  },
+  automation: {
+    schema: "octopus.runtime_automation_self_check.v1",
+    ready: true,
+    route_count: 31,
+    missing_required_routes: [],
+    missing_route_methods: [],
+    missing_methods: [],
+    capabilities: {
+      browser_replay_queue: true,
+      computer_preview_execute: true,
+      pixel_replay_gate: true,
+    },
+  },
   api_surface: {
     route_count: 180,
     required_routes_present: true,
@@ -182,6 +220,13 @@ describe("RuntimeSelfCheckPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("API surface")).toBeInTheDocument();
     expect(screen.getByText("180")).toBeInTheDocument();
+    expect(screen.getByText("Capability surfaces")).toBeInTheDocument();
+    expect(screen.getByText("Orchestration")).toBeInTheDocument();
+    expect(screen.getByText("Run evidence")).toBeInTheDocument();
+    expect(screen.getByText("Automation")).toBeInTheDocument();
+    expect(screen.getByText("parallel_dispatch")).toBeInTheDocument();
+    expect(screen.getByText("replay_gate")).toBeInTheDocument();
+    expect(screen.getByText("browser_replay_queue")).toBeInTheDocument();
     expect(screen.getByText("frontend_version")).toBeInTheDocument();
     expect(screen.getByText("webui_dist")).toBeInTheDocument();
     expect(screen.getByText("openai_compat_profiles")).toBeInTheDocument();

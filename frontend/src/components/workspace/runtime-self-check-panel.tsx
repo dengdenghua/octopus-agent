@@ -14,6 +14,22 @@ interface RuntimeCheckRow {
   severity?: "error" | "warn" | string;
 }
 
+interface RuntimeSurfaceSelfCheck {
+  schema?: string;
+  ready?: boolean;
+  route_count?: number;
+  missing_required_routes?: string[];
+  missing_route_methods?: Array<{
+    path?: string;
+    missing_methods?: string[];
+  }>;
+  missing_methods?: Array<{
+    method?: string;
+    reason?: string;
+  }>;
+  capabilities?: Record<string, boolean>;
+}
+
 interface RuntimeSelfCheckPayload {
   ready: boolean;
   status: string;
@@ -76,6 +92,9 @@ interface RuntimeSelfCheckPayload {
     missing_required_profile_ids?: string[];
     required_profiles_present?: boolean;
   };
+  orchestration?: RuntimeSurfaceSelfCheck;
+  run_evidence?: RuntimeSurfaceSelfCheck;
+  automation?: RuntimeSurfaceSelfCheck;
   api_surface?: {
     route_count?: number;
     required_routes_present?: boolean;
@@ -164,6 +183,34 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
   const frontend = data?.frontend ?? {};
   const webui = data?.webui ?? {};
   const modelCompat = data?.model_compat ?? {};
+  const runtimeSurfaces = useMemo(
+    () =>
+      [
+        {
+          id: "orchestration",
+          title: t.runtimeSelfCheckPanel.orchestration,
+          surface: data?.orchestration,
+        },
+        {
+          id: "run_evidence",
+          title: t.runtimeSelfCheckPanel.runEvidence,
+          surface: data?.run_evidence,
+        },
+        {
+          id: "automation",
+          title: t.runtimeSelfCheckPanel.automation,
+          surface: data?.automation,
+        },
+      ] as const,
+    [
+      data?.automation,
+      data?.orchestration,
+      data?.run_evidence,
+      t.runtimeSelfCheckPanel.automation,
+      t.runtimeSelfCheckPanel.orchestration,
+      t.runtimeSelfCheckPanel.runEvidence,
+    ],
+  );
   const apiSurface = data?.api_surface ?? {};
   const loopbackAliases = data?.loopback_aliases?.aliases ?? [];
   const checks = data?.checks ?? [];
@@ -394,6 +441,46 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
               </InfoBlock>
             </section>
 
+            <InfoBlock title={t.runtimeSelfCheckPanel.capabilitySurfaces}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[720px] text-sm">
+                  <thead className="text-muted-foreground border-b text-left text-xs">
+                    <tr>
+                      <th className="py-2 pr-3 font-medium">
+                        {t.runtimeSelfCheckPanel.surface}
+                      </th>
+                      <th className="py-2 pr-3 font-medium">
+                        {t.runtimeSelfCheckPanel.status}
+                      </th>
+                      <th className="py-2 pr-3 font-medium">
+                        {t.runtimeSelfCheckPanel.routeCount}
+                      </th>
+                      <th className="py-2 pr-3 font-medium">
+                        {t.runtimeSelfCheckPanel.capabilities}
+                      </th>
+                      <th className="py-2 font-medium">
+                        {t.runtimeSelfCheckPanel.missing}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-border divide-y">
+                    {runtimeSurfaces.map(({ id, title, surface }) => (
+                      <SurfaceRow
+                        key={id}
+                        title={title}
+                        surface={surface}
+                        labels={{
+                          ready: t.runtimeSelfCheckPanel.ready,
+                          blocked: t.runtimeSelfCheckPanel.blocked,
+                          notReported: t.runtimeSelfCheckPanel.notReported,
+                        }}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </InfoBlock>
+
             <InfoBlock title={t.runtimeSelfCheckPanel.loopbackAliases}>
               {loopbackAliases.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -502,6 +589,95 @@ function InfoBlock({
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       {children}
     </section>
+  );
+}
+
+function SurfaceRow({
+  title,
+  surface,
+  labels,
+}: {
+  title: string;
+  surface?: RuntimeSurfaceSelfCheck;
+  labels: {
+    ready: string;
+    blocked: string;
+    notReported: string;
+  };
+}) {
+  const reported = surface !== undefined;
+  const ready = surface?.ready === true;
+  const capabilities = Object.entries(surface?.capabilities ?? {});
+  const enabledCapabilities = capabilities.filter(([, enabled]) => enabled);
+  const missing = [
+    ...(surface?.missing_required_routes ?? []),
+    ...(surface?.missing_route_methods ?? []).map((row) => {
+      const methods = row.missing_methods?.join("|") || "?";
+      return `${row.path ?? "-"}:${methods}`;
+    }),
+    ...(surface?.missing_methods ?? []).map((row) => {
+      const reason = row.reason ? `:${row.reason}` : "";
+      return `${row.method ?? "-"}${reason}`;
+    }),
+  ];
+  return (
+    <tr>
+      <td className="py-2 pr-3 align-top">
+        <div className="font-medium">{title}</div>
+        {surface?.schema && (
+          <code className="text-muted-foreground text-[11px]">
+            {surface.schema}
+          </code>
+        )}
+      </td>
+      <td className="py-2 pr-3 align-top">
+        <Badge variant={!reported || ready ? "outline" : "destructive"}>
+          {!reported
+            ? labels.notReported
+            : ready
+              ? labels.ready
+              : labels.blocked}
+        </Badge>
+      </td>
+      <td className="py-2 pr-3 align-top">
+        {formatValue(surface?.route_count)}
+      </td>
+      <td className="py-2 pr-3 align-top">
+        <div className="flex max-w-[22rem] flex-wrap gap-1">
+          {enabledCapabilities.length > 0 ? (
+            enabledCapabilities.map(([name]) => (
+              <Badge
+                key={name}
+                variant="outline"
+                className="font-mono text-[11px]"
+              >
+                {name}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-muted-foreground text-xs">-</span>
+          )}
+        </div>
+      </td>
+      <td className="py-2 align-top">
+        {missing.length > 0 ? (
+          <div className="flex max-w-[24rem] flex-col gap-1">
+            {missing.slice(0, 5).map((item) => (
+              <code key={item} className="break-words text-[11px]">
+                {item}
+              </code>
+            ))}
+            {missing.length > 5 && (
+              <span className="text-muted-foreground text-xs">
+                +{missing.length - 5}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-xs">-</span>
+        )}
+      </td>
+    </tr>
   );
 }
 
