@@ -75,6 +75,7 @@ import {
   useRegenerateHandler,
   usePlanActionHandler,
 } from "@/components/workspace/use-thread-page";
+import { useAgents } from "@/core/agents/hooks";
 import { swallow } from "@/core/utils/log";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { useThreadSettings } from "@/core/settings";
@@ -421,6 +422,7 @@ export default function TeamPage() {
   const navigate = useNavigate();
   const { threadId, isNewThread, setIsNewThread } = useThreadChat();
   const [settings, setSettings] = useThreadSettings(threadId);
+  const { agents } = useAgents();
   const [mounted, setMounted] = useState(false);
   const [teamMode, setTeamMode] = useState<TeamMode>("chat");
   const [showCreateTeam, setShowCreateTeam] = useState(false);
@@ -496,17 +498,45 @@ export default function TeamPage() {
       null,
     [teamConfig?.members, teamConfig?.leaderId],
   );
-  const messageAgentRoster = useMemo(
-    () =>
+  const fallbackAgentId =
+    typeof settings.context.agent_name === "string" &&
+    settings.context.agent_name.trim()
+      ? settings.context.agent_name.trim()
+      : "general";
+  const fallbackAgent = useMemo(() => {
+    const agent =
+      agents.find((candidate) => candidate.name === fallbackAgentId) ??
+      agents.find((candidate) => candidate.name === "general");
+    const name = agent?.name ?? fallbackAgentId;
+    return {
+      name,
+      display_name: agent?.display_name ?? agent?.name ?? name,
+      avatar_url:
+        agent?.avatar_url ?? `/api/agents/${encodeURIComponent(name)}/avatar`,
+      icon: agent?.icon ?? null,
+    };
+  }, [agents, fallbackAgentId]);
+  const messageAgentRoster = useMemo(() => {
+    const teamMembers =
       teamConfig?.members.map((member) => ({
         name: member.name,
         display_name: member.display_name ?? member.name,
         avatar_url: member.avatar_url ?? undefined,
         icon: member.icon ?? undefined,
         role: member.name === teamConfig.leaderId ? "tl" : "member",
-      })) ?? [],
-    [teamConfig?.leaderId, teamConfig?.members],
-  );
+      })) ?? [];
+    if (teamMembers.length > 0) return teamMembers;
+    return [
+      {
+        name: fallbackAgent.name,
+        display_name: fallbackAgent.display_name ?? fallbackAgent.name,
+        avatar_url: fallbackAgent.avatar_url ?? undefined,
+        icon: fallbackAgent.icon ?? undefined,
+        role: "tl",
+      },
+    ];
+  }, [fallbackAgent, teamConfig?.leaderId, teamConfig?.members]);
+  const messageCurrentAgent = leaderAgent ?? fallbackAgent;
   const removalHandledRef = useRef(false);
 
   useEffect(() => {
@@ -1063,7 +1093,7 @@ export default function TeamPage() {
                     paddingBottom={MESSAGE_LIST_DEFAULT_PADDING_BOTTOM}
                     mode={isCoworkMode ? "team" : "chat"}
                     showSenderName={Boolean(teamId)}
-                    currentAgent={leaderAgent}
+                    currentAgent={messageCurrentAgent}
                     agentRoster={messageAgentRoster}
                     liveToolEvents={liveToolEvents}
                     lastTurnToolEvents={lastTurnToolEvents}
