@@ -31,7 +31,15 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from websockets.server import WebSocketServerProtocol, serve
+try:  # websockets >= 14
+    from websockets.asyncio.server import ServerConnection as _WebSocketConnection
+    from websockets.asyncio.server import serve
+    from websockets.protocol import State as _WebSocketState
+except ImportError:  # pragma: no cover - compatibility for older deployments
+    from websockets.server import WebSocketServerProtocol as _WebSocketConnection
+    from websockets.server import serve
+
+    _WebSocketState = None  # type: ignore[assignment]
 
 from ..base import Heartbeat, ToolCall, ToolResult, now_ms
 
@@ -44,6 +52,40 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost", ""})
 # are refused until the failures age out.
 _HELLO_MAX_FAILURES = 5
 _HELLO_WINDOW_SECONDS = 60.0
+
+WebSocketConnection = _WebSocketConnection
+
+
+def _ws_is_open(ws: WebSocketConnection) -> bool:
+    """Return whether a websockets connection can still send frames."""
+    if hasattr(ws, "closed"):
+        return not bool(ws.closed)
+    if _WebSocketState is not None and hasattr(ws, "state"):
+        return ws.state is _WebSocketState.OPEN
+    return True
+
+
+def _ws_remote_address(ws: WebSocketConnection) -> tuple[str, int | None]:
+    addr = getattr(ws, "remote_address", None)
+    if isinstance(addr, tuple) and addr:
+        host = str(addr[0])
+        port = addr[1] if len(addr) > 1 and isinstance(addr[1], int) else None
+        return host, port
+    return "unknown", None
+
+
+def _ws_remote_label(ws: WebSocketConnection) -> str:
+    host, port = _ws_remote_address(ws)
+    return f"{host}:{port}" if port is not None else host
+
+
+def _ws_request_path(ws: WebSocketConnection) -> str:
+    request = getattr(ws, "request", None)
+    path = getattr(request, "path", None)
+    if isinstance(path, str):
+        return path
+    path = getattr(ws, "path", None)
+    return path if isinstance(path, str) else ""
 
 # ── 消息类型常量 ──────────────────────────────────────────
 
@@ -132,16 +174,16 @@ class TentacleWebSocketServer:
         host: str = "0.0.0.0",
         port: int = 8765,
         *,
-        on_device_hello: Callable[[DeviceHello, WebSocketServerProtocol], Awaitable[None]]
+        on_device_hello: Callable[[DeviceHello, WebSocketConnection], Awaitable[None]]
         | None = None,
         on_device_disconnect: Callable[[str], Awaitable[None]] | None = None,
         on_tool_result: Callable[[ToolResult], Awaitable[None]] | None = None,
         on_heartbeat: Callable[[Heartbeat], Awaitable[None]] | None = None,
-        on_task_execute: Callable[[TaskExecuteRequest, WebSocketServerProtocol], Awaitable[None]]
+        on_task_execute: Callable[[TaskExecuteRequest, WebSocketConnection], Awaitable[None]]
         | None = None,
         on_screen_frame: Callable[[str, bytes], Awaitable[None]] | None = None,
         on_remote_input: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]] | None = None,
-        on_custom: Callable[[str | None, dict[str, Any], WebSocketServerProtocol], Awaitable[None]]
+        on_custom: Callable[[str | None, dict[str, Any], WebSocketConnection], Awaitable[None]]
         | None = None,
         auth_token: str | None = None,
     ) -> None:
@@ -169,7 +211,7 @@ class TentacleWebSocketServer:
         self.on_custom = on_custom  # 未识别方法的兜底钩子（webrtc 信令等自定义消息）
 
         # tentacle_id → WebSocket 连接映射
-        self._connections: dict[str, WebSocketServerProtocol] = {}
+        self._connections: dict[str, WebSocketConnection] = {}
         # 等待 tool/result 的 future：call_id → asyncio.Future
         self._pending_calls: dict[str, asyncio.Future[ToolResult]] = {}
 
@@ -254,7 +296,7 @@ class TentacleWebSocketServer:
     async def send_json(self, tentacle_id: str, obj: dict[str, Any]) -> bool:
         """向指定设备发送一条任意 JSON 消息（webrtc 信令等用）。"""
         ws = self._connections.get(tentacle_id)
-        if ws is None or ws.closed:
+        if ws is None or not _ws_is_open(ws):
             return False
         await ws.send(json.dumps(obj))
         return True
@@ -270,7 +312,7 @@ class TentacleWebSocketServer:
         这是 Runtime → Mobile 的核心通路.
         """
         ws = self._connections.get(tentacle_id)
-        if ws is None or ws.closed:
+        if ws is None or not _ws_is_open(ws):
             return ToolResult.fail(call.call_id, -32011, f"Device {tentacle_id} not connected", 0)
 
         # 创建 future 等待结果
@@ -310,7 +352,7 @@ class TentacleWebSocketServer:
         这是 Runtime → Mobile 的任务结果返回.
         """
         ws = self._connections.get(tentacle_id)
-        if ws is None or ws.closed:
+        if ws is None or not _ws_is_open(ws):
             return False
 
         msg = {
@@ -334,7 +376,7 @@ class TentacleWebSocketServer:
     async def send_ping(self, tentacle_id: str) -> bool:
         """向设备发送 ping，检测连接健康."""
         ws = self._connections.get(tentacle_id)
-        if ws is None or ws.closed:
+        if ws is None or not _ws_is_open(ws):
             return False
         try:
             await ws.send(
@@ -346,9 +388,10 @@ class TentacleWebSocketServer:
 
     # ── 连接处理 ────────────────────────────────────────────
 
-    async def _handle_connection(self, ws: WebSocketServerProtocol, path: str) -> None:
+    async def _handle_connection(self, ws: WebSocketConnection, path: str | None = None) -> None:
         """处理单个 WebSocket 连接."""
-        remote = f"{ws.remote_address[0]}:{ws.remote_address[1]}"
+        path = path if path is not None else _ws_request_path(ws)
+        remote = _ws_remote_label(ws)
         logger.info("ws connection from %s path=%s", remote, path)
         tentacle_id: str | None = None
         # Until a device authenticates (valid device/hello token), no
@@ -359,7 +402,7 @@ class TentacleWebSocketServer:
         # Pairing-token brute-force throttle · only bites when auth is actually
         # required. A loopback no-token dev bind is pre-authenticated and skips
         # this entirely.
-        client_ip = ws.remote_address[0]
+        client_ip, _client_port = _ws_remote_address(ws)
         if not authenticated and self._hello_rate_limited(client_ip):
             logger.warning("ws hello rate-limited for %s", client_ip)
             with contextlib.suppress(Exception):
@@ -448,7 +491,7 @@ class TentacleWebSocketServer:
 
     # ── 消息处理器 ──────────────────────────────────────────
 
-    async def _handle_hello(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> str | None:
+    async def _handle_hello(self, ws: WebSocketConnection, msg: dict[str, Any]) -> str | None:
         """处理 device/hello —— 设备注册."""
         params = msg.get("params", {})
         hello = DeviceHello(params)
@@ -476,7 +519,7 @@ class TentacleWebSocketServer:
         logger.info("device registered id=%s model=%s", hello.tentacle_id, hello.model)
         return hello.tentacle_id
 
-    async def _handle_heartbeat(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
+    async def _handle_heartbeat(self, ws: WebSocketConnection, msg: dict[str, Any]) -> None:
         """处理 device/heartbeat."""
         params = msg.get("params", {})
         hb = Heartbeat(
@@ -497,14 +540,14 @@ class TentacleWebSocketServer:
             except Exception as e:
                 logger.warning("on_heartbeat error: %s", e)
 
-    async def _handle_screen(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
+    async def _handle_screen(self, ws: WebSocketConnection, msg: dict[str, Any]) -> None:
         """处理 device/screen —— 屏幕变化事件."""
         params = msg.get("params", {})
         # 透发给订阅者（由 TentaclePool 处理）
         logger.debug("screen change from %s: %s", params.get("tentacle_id"), params.get("hash"))
 
     async def _handle_binary_frame(
-        self, ws: WebSocketServerProtocol, data: bytes, tentacle_id: str | None
+        self, ws: WebSocketConnection, data: bytes, tentacle_id: str | None
     ) -> None:
         """处理二进制帧 —— 设备推送 screen_frame.
 
@@ -522,13 +565,13 @@ class TentacleWebSocketServer:
 
             parsed_tid, frame_type, flags, _ = decode_frame_header(data)
         except (struct.error, ValueError, IndexError) as e:
-            logger.warning("invalid binary frame from %s: %s", ws.remote_address, e)
+            logger.warning("invalid binary frame from %s: %s", _ws_remote_label(ws), e)
             return
 
         # 使用帧头中的 tentacle_id（优先）或连接中的 ID
         effective_tid = parsed_tid or tentacle_id
         if effective_tid is None:
-            logger.warning("binary frame without tentacle_id from %s", ws.remote_address)
+            logger.warning("binary frame without tentacle_id from %s", _ws_remote_label(ws))
             return
 
         logger.debug(
@@ -546,7 +589,7 @@ class TentacleWebSocketServer:
             except Exception as e:
                 logger.warning("on_screen_frame error: %s", e)
 
-    async def _handle_task_execute(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
+    async def _handle_task_execute(self, ws: WebSocketConnection, msg: dict[str, Any]) -> None:
         """处理 task/execute —— 手机请求母体决策任务.
 
         这是 Mobile → Runtime 的任务请求通路.
@@ -600,7 +643,7 @@ class TentacleWebSocketServer:
                 )
             )
 
-    async def _handle_tool_result(self, ws: WebSocketServerProtocol, msg: dict[str, Any]) -> None:
+    async def _handle_tool_result(self, ws: WebSocketConnection, msg: dict[str, Any]) -> None:
         """处理 tool/result —— 工具执行结果."""
         params = msg.get("params", {})
         call_id = params.get("call_id", "")
@@ -628,7 +671,7 @@ class TentacleWebSocketServer:
                 logger.warning("on_tool_result error: %s", e)
 
     async def _handle_remote_input(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any], tentacle_id: str | None
+        self, ws: WebSocketConnection, msg: dict[str, Any], tentacle_id: str | None
     ) -> None:
         """处理 remote/input —— 手机端远程控制PC.
 
@@ -656,7 +699,7 @@ class TentacleWebSocketServer:
             await self._send_error(ws, msg_id, -32021, f"Remote input error: {e}")
 
     async def _handle_pc_screen_subscribe(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any], tentacle_id: str | None
+        self, ws: WebSocketConnection, msg: dict[str, Any], tentacle_id: str | None
     ) -> None:
         """处理 pc_screen/subscribe —— 手机端订阅PC屏幕流."""
         msg_id = msg.get("id")
@@ -674,7 +717,7 @@ class TentacleWebSocketServer:
         logger.info("PC screen subscribe from device=%s", tentacle_id)
 
     async def _handle_pc_screen_unsubscribe(
-        self, ws: WebSocketServerProtocol, msg: dict[str, Any], tentacle_id: str | None
+        self, ws: WebSocketConnection, msg: dict[str, Any], tentacle_id: str | None
     ) -> None:
         """处理 pc_screen/unsubscribe —— 手机端取消订阅PC屏幕流."""
         msg_id = msg.get("id")
@@ -700,12 +743,12 @@ class TentacleWebSocketServer:
         # 向所有已连接设备推送 PC 屏幕帧
         tasks = []
         for _tid, ws in self._connections.items():
-            if not ws.closed:
+            if _ws_is_open(ws):
                 tasks.append(self._safe_send(ws, frame_data))
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def _safe_send(self, ws: WebSocketServerProtocol, data: bytes) -> None:
+    async def _safe_send(self, ws: WebSocketConnection, data: bytes) -> None:
         """安全发送二进制数据."""
         with contextlib.suppress(Exception):  # best-effort; fail-open
             await ws.send(data)
@@ -714,7 +757,7 @@ class TentacleWebSocketServer:
 
     async def _send_error(
         self,
-        ws: WebSocketServerProtocol,
+        ws: WebSocketConnection,
         msg_id: Any,
         code: int,
         message: str,

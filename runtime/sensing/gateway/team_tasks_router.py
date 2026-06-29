@@ -248,14 +248,37 @@ def create_team_tasks_router(
             return
 
         def _create_broadcast_task() -> None:
-            task = asyncio.create_task(_broadcast_task_event(room_id, payload))
+            coro = _broadcast_task_event(room_id, payload)
+            try:
+                task = asyncio.create_task(coro)
+            except (
+                RuntimeError,
+                TimeoutError,
+                concurrent.futures.CancelledError,
+                concurrent.futures.TimeoutError,
+                OSError,
+            ):
+                coro.close()
+                _LOG.debug("team task broadcast failed", exc_info=True)
+                return
             task.add_done_callback(_log_broadcast_result)
 
         try:
             if loop is not None and loop.is_running() and not loop.is_closed():
                 loop.call_soon_threadsafe(_create_broadcast_task)
             else:
-                asyncio.run(_broadcast_task_event(room_id, payload))
+                coro = _broadcast_task_event(room_id, payload)
+                try:
+                    asyncio.run(coro)
+                except (
+                    RuntimeError,
+                    TimeoutError,
+                    concurrent.futures.CancelledError,
+                    concurrent.futures.TimeoutError,
+                    OSError,
+                ):
+                    coro.close()
+                    raise
         except (
             RuntimeError,
             TimeoutError,

@@ -8,7 +8,10 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import json
+import sys
+import warnings
 
 import pytest
 import pytest_asyncio
@@ -75,6 +78,21 @@ async def mock_mobile_client(coordinator):
 
 
 # ── 基础测试 ──────────────────────────────────────────────
+
+
+def test_ws_server_import_uses_non_deprecated_websockets_api():
+    sys.modules.pop("runtime.tentacle.transport.ws_server", None)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+
+        module = importlib.import_module("runtime.tentacle.transport.ws_server")
+
+    assert module.TentacleWebSocketServer is not None
+    messages = [str(item.message) for item in caught]
+    assert not any("websockets.server" in msg for msg in messages)
+    assert not any("websockets.legacy" in msg for msg in messages)
+
 
 @pytest.mark.asyncio
 async def test_device_registration(coordinator, mock_mobile_client):

@@ -35,8 +35,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .mobile.vlm import VlmConfig
 
-from websockets.server import WebSocketServerProtocol
-
 from .base import Heartbeat, ToolCall, ToolResult
 from .mobile.cerebrum_adapter import CerebrumDecisionAdapter
 from .mobile.device import MobileDevice
@@ -48,6 +46,7 @@ from .mobile.pc_screen_capture import (
 from .mobile.screen_relay import ScreenRelay
 from .pool import TentaclePool
 from .transport import DeviceHello, TaskExecuteRequest, TentacleWebSocketServer
+from .transport.ws_server import WebSocketConnection
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +165,7 @@ class TentacleCoordinator:
     # ── 回调：设备连接 ──────────────────────────────────────
 
     async def _on_device_hello(
-        self, hello: DeviceHello, ws: WebSocketServerProtocol
+        self, hello: DeviceHello, ws: WebSocketConnection
     ) -> None:
         """设备首次连接 —— 创建 MobileDevice 并注册到 Pool."""
         # 检查是否已存在
@@ -241,7 +240,7 @@ class TentacleCoordinator:
         return await self.remote_input_handler.handle_input(event)
 
     async def _on_task_execute(
-        self, request: TaskExecuteRequest, ws: WebSocketServerProtocol
+        self, request: TaskExecuteRequest, ws: WebSocketConnection
     ) -> None:
         """处理 task/execute —— 手机请求母体决策任务.
 

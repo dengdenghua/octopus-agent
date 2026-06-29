@@ -997,7 +997,6 @@ def create_app(
             app.state.tentacle_coordinator = _tentacle_coordinator
             set_active_coordinator(_tentacle_coordinator)
 
-            @app.on_event("startup")
             async def _start_tentacle_bridge() -> None:
                 try:
                     await _tentacle_coordinator.start()
@@ -1006,6 +1005,20 @@ def create_app(
                         "tentacle WS server failed to start; phones can't join the team",
                         exc_info=True,
                     )
+
+            async def _stop_tentacle_bridge() -> None:
+                try:
+                    await _tentacle_coordinator.stop()
+                except Exception:  # noqa: BLE001
+                    logging.getLogger(__name__).warning(
+                        "tentacle WS server failed to stop cleanly",
+                        exc_info=True,
+                    )
+                finally:
+                    set_active_coordinator(None)
+
+            app.router.add_event_handler("startup", _start_tentacle_bridge)
+            app.router.add_event_handler("shutdown", _stop_tentacle_bridge)
         except Exception:  # noqa: BLE001
             logging.getLogger(__name__).warning(
                 "tentacle bridge unavailable (missing deps?); phones can't join the team",

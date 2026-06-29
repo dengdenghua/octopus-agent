@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import pytest
@@ -83,6 +84,15 @@ def _check_by_id(data: dict, check_id: str) -> dict:
 
 
 class TestBasicRoutes:
+    def test_create_app_tentacle_startup_registration_has_no_on_event_warning(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", DeprecationWarning)
+
+            create_app(journal_path=None, tentacle_enabled=True)
+
+        messages = [str(item.message) for item in caught]
+        assert not any("on_event is deprecated" in msg for msg in messages)
+
     def test_index_html(self, client: TestClient):
         r = client.get("/")
         assert r.status_code == 200
