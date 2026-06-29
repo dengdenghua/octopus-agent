@@ -1250,20 +1250,51 @@ def stream_react_loop(
         #   2. Persist mention history for cross-thread autocomplete ranking.
         # Both are best-effort; failures don't block the turn.
         if _capability_activation is not None:
+            _codex_handled_plugins: set[str] = set()
             try:
                 if _capability_activation.pinned_plugins:
+                    try:
+                        from runtime.execution.suckers.codex_plugin_skills import (
+                            load_codex_plugin_skills,
+                        )
+
+                        codex_report = load_codex_plugin_skills(
+                            executor.registry,
+                            _capability_activation.pinned_plugins,
+                        )
+                        _codex_handled_plugins.update(
+                            plugin_id.lower()
+                            for plugin_id in codex_report.handled_plugin_ids
+                        )
+                        codex_obs = codex_report.render_observation()
+                        if codex_obs:
+                            volatile_parts.append(
+                                "<codex-plugin-injection>\n"
+                                f"{codex_obs}\n"
+                                "</codex-plugin-injection>",
+                            )
+                    except (ImportError, AttributeError, TypeError, ValueError):
+                        _logger.debug(
+                            "codex plugin skill injection failed",
+                            exc_info=True,
+                        )
+
                     from runtime.core.cerebrum.plugin_auto_load import (
                         auto_load_pinned_plugins,
                     )
 
-                    plugin_report = auto_load_pinned_plugins(
-                        _capability_activation.pinned_plugins,
+                    legacy_plugins = tuple(
+                        plugin_id
+                        for plugin_id in _capability_activation.pinned_plugins
+                        if plugin_id.lower() not in _codex_handled_plugins
                     )
-                    obs = plugin_report.render_observation()
-                    if obs:
-                        volatile_parts.append(
-                            f"<plugin-activation>\n{obs}\n</plugin-activation>",
-                        )
+                    if legacy_plugins:
+                        plugin_report = auto_load_pinned_plugins(legacy_plugins)
+                        obs = plugin_report.render_observation()
+                        if obs:
+                            volatile_parts.append(
+                                f"<plugin-activation>\n{obs}\n</plugin-activation>",
+                            )
             except (ImportError, AttributeError, TypeError):
                 _logger.debug(
                     "plugin auto-load failed",

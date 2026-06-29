@@ -86,7 +86,10 @@ class InputMentions:
             lines.append(
                 "User pinned these plugins via @plugin: "
                 + ", ".join(f"`{name}`" for name in self.plugins)
-                + ". Use `use_capability` / `query_capability` to invoke them.",
+                + ". Treat this as an explicit routing request: use "
+                "`query_capability` / `use_capability` for the pinned plugin "
+                "before lower-level tools unless it is unavailable or clearly "
+                "irrelevant.",
             )
         if self.agents:
             lines.append(
@@ -96,8 +99,8 @@ class InputMentions:
                 "agents via `call_agent` / `call_agent_parallel` first.",
             )
         lines.append(
-            "These pins are routing hints, not literal commands — "
-            "still confirm the action makes sense before acting.",
+            "These pins are strong routing preferences. If a pinned "
+            "capability cannot be used, say why before falling back.",
         )
         lines.append("</input-mentions>")
         return "\n".join(lines)

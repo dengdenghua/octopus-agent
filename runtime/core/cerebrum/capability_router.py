@@ -83,7 +83,10 @@ class CapabilityActivation:
                 pin_lines.append(
                     "User pinned these plugins via @plugin: "
                     + ", ".join(f"`{n}`" for n in self.pinned_plugins)
-                    + ". Use `use_capability` / `query_capability` to invoke them.",
+                    + ". Treat this as an explicit routing request: use "
+                    "`query_capability` / `use_capability` for the pinned plugin "
+                    "before lower-level tools unless it is unavailable or clearly "
+                    "irrelevant.",
                 )
             if self.pinned_agents:
                 pin_lines.append(
@@ -93,8 +96,8 @@ class CapabilityActivation:
                     "/ `call_agent_parallel` first.",
                 )
             pin_lines.append(
-                "These pins are routing hints, not literal commands — "
-                "still confirm the action makes sense before acting.",
+                "These pins are strong routing preferences. If a pinned "
+                "capability cannot be used, say why before falling back.",
             )
             pin_lines.append("</input-mentions>")
             sections.append("\n".join(pin_lines))
@@ -357,6 +360,20 @@ def order_skill_names(
         return list(original)
 
     available = set(original)
+    pinned_plugin_actions: list[str] = []
+    if activation.pinned_plugins and registry is not None:
+        wanted_sources = tuple(
+            f"plugin://{plugin_id}/"
+            for plugin_id in activation.pinned_plugins
+            if plugin_id
+        )
+        for name in original:
+            try:
+                source = str(getattr(registry.get(name), "trusted_source", "") or "")
+            except (AttributeError, KeyError, TypeError, ValueError):
+                continue
+            if source.startswith(wanted_sources):
+                pinned_plugin_actions.append(name)
     anchors = (
         "search_capabilities",
         "query_capability",
@@ -366,7 +383,7 @@ def order_skill_names(
         "query_skill",
     )
     front = [
-        name for name in (*anchors, *activation.priority_skills)
+        name for name in (*anchors, *pinned_plugin_actions, *activation.priority_skills)
         if name in available
     ]
     ordered_front = _dedupe(front)

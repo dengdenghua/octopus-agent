@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from runtime.execution.suckers.agent_meta_skills import (
     _todo_write,
     register_agent_meta_skills,
@@ -256,6 +258,102 @@ def test_use_capability_runs_registered_child_action() -> None:
     assert result["capability_id"] == "demo-plugin"
     assert result["action"] == "demo_plugin.list_items"
     assert result["result"] == {"ok": True, "kind": "task"}
+
+
+def test_codex_plugin_skill_injection_registers_runtime_actions(tmp_path) -> None:
+    plugin_dir = tmp_path / "demo-plugin"
+    (plugin_dir / ".codex-plugin").mkdir(parents=True)
+    (plugin_dir / ".codex-plugin" / "plugin.json").write_text(
+        json.dumps({
+            "name": "demo-plugin",
+            "version": "0.1.0",
+            "interface": {
+                "displayName": "Demo Plugin",
+                "capabilities": [{"name": "demo", "type": "codex"}],
+            },
+        }),
+        encoding="utf-8",
+    )
+    skill_dir = plugin_dir / "skills" / "hello"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: hello\n"
+        "description: Say hello from the plugin.\n"
+        "---\n"
+        "\n"
+        "# Hello\n"
+        "\n"
+        "Use this plugin instruction.\n",
+        encoding="utf-8",
+    )
+
+    from runtime.execution.suckers.codex_plugin_skills import (
+        load_codex_plugin_skills,
+    )
+
+    registry = SkillRegistry()
+    register_agent_meta_skills(registry)
+    report = load_codex_plugin_skills(
+        registry,
+        ("demo-plugin",),
+        roots=[tmp_path],
+    )
+
+    assert report.handled_plugin_ids == ("demo-plugin",)
+    assert registry.has("demo-plugin__hello")
+
+    query = registry.get("query_capability").handler(capability_id="demo-plugin")
+    assert query["ok"] is True
+    assert query["registered_actions"] == ["demo-plugin__hello"]
+    assert query["skills"][0]["registered"] is True
+    assert query["skills"][0]["registered_as"] == "demo-plugin__hello"
+
+    result = registry.get("use_capability").handler(
+        capability_id="demo-plugin",
+        action="hello",
+    )
+    assert result["ok"] is True
+    assert result["action"] == "demo-plugin__hello"
+    assert result["result"]["plugin"] == "demo-plugin"
+    assert result["result"]["plugin_skill"] == "hello"
+    assert "Use this plugin instruction." in result["result"]["instructions"]
+
+
+def test_pinned_plugin_actions_are_prioritized() -> None:
+    from runtime.core.cerebrum.capability_router import activate_capabilities, order_skill_names
+
+    registry = SkillRegistry()
+    registry.register(
+        Skill(
+            name="demo-plugin__hello",
+            summary="Demo plugin hello.",
+            description="Demo plugin hello.",
+            affinity=["plugin", "plugin:demo-plugin"],
+            trusted_source="plugin://demo-plugin/hello",
+            handler=lambda **_: {"ok": True},
+        )
+    )
+    registry.register(
+        Skill(
+            name="other_tool",
+            summary="Other.",
+            description="Other.",
+            affinity=[],
+            trusted_source="skill://public/other",
+            handler=lambda **_: {"ok": True},
+        )
+    )
+    register_agent_meta_skills(registry)
+
+    activation = activate_capabilities("@plugin:demo-plugin please", registry=registry)
+    ordered = order_skill_names(
+        ["other_tool", "demo-plugin__hello", "use_capability", "query_capability"],
+        activation=activation,
+        registry=registry,
+    )
+
+    assert ordered.index("demo-plugin__hello") < ordered.index("other_tool")
 
 
 def test_use_capability_blocks_risky_inner_action_under_taint() -> None:

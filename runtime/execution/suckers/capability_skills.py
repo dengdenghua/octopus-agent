@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from .codex_plugin_skills import action_tail, plugin_action_name
 from .registry import Skill, SkillRegistry
 
 CAPABILITY_SKILL_NAMES = [
@@ -138,6 +139,7 @@ def _registry_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any
             "name": name,
             "description": skill.effective_summary,
             "registered": True,
+            "registered_as": name,
         })
         entry["registered_actions"].append(name)
     return by_plugin
@@ -160,8 +162,16 @@ def _codex_plugin_entries(registry: SkillRegistry) -> dict[str, dict[str, Any]]:
         registered_actions: list[str] = []
         for item in skills:
             name = _as_text(item.get("name"))
-            if name in registered:
+            action_name = plugin_action_name(plugin_id, name)
+            if action_name in registered:
                 item["registered"] = True
+                item["registered_as"] = action_name
+                registered_actions.append(action_name)
+            elif name in registered:
+                # Backward compatibility for older runtime/plugin bridges that
+                # registered the plugin-local skill name directly.
+                item["registered"] = True
+                item["registered_as"] = name
                 registered_actions.append(name)
         out[plugin_id] = {
             "id": plugin_id,
@@ -447,7 +457,7 @@ def _resolve_action(registry: SkillRegistry, entry: dict[str, Any], action: str)
         if name.lower() == lowered and registry.has(name):
             return name
     for name in actions:
-        tail = name.rsplit(".", 1)[-1].rsplit("/", 1)[-1]
+        tail = action_tail(name)
         if tail.lower() == lowered and registry.has(name):
             return name
     return raw if registry.has(raw) else ""
