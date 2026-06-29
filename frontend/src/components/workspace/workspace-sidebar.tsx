@@ -1650,14 +1650,33 @@ function ThreadAvatar({
 }
 
 function ThreadRunStatusLight({
+  active,
   className,
+  idle = "hidden",
   status,
 }: {
+  active?: boolean;
   className?: string;
+  idle?: "hidden" | "queue";
   status?: ThreadRunStatus;
 }) {
   const { t } = useI18n();
-  if (!status) return null;
+  if (!status) {
+    if (idle === "hidden") return null;
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
+          active
+            ? "border border-muted-foreground/20 bg-muted-foreground/35"
+            : "border border-muted-foreground/40 bg-transparent",
+          className,
+        )}
+        data-thread-queue-indicator="idle"
+      />
+    );
+  }
   const label =
     status === "running"
       ? t.sidebar.taskStatusRunning
@@ -1691,7 +1710,6 @@ function ThreadRunStatusLight({
         className={cn(
           "relative inline-flex size-2 rounded-full shadow-sm",
           colorClass,
-          status !== "error" && pulseClass,
         )}
       />
     </span>
@@ -2378,6 +2396,8 @@ function ChatsSection({
                       )}
                     >
                       <ThreadRunStatusLight
+                        active={active}
+                        idle="queue"
                         status={runStatus}
                         className="ml-0.5"
                       />
