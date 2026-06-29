@@ -243,6 +243,100 @@ def _safe_journal_emit(event: dict) -> None:
         _emit_subagent_lifecycle_event(kind, event)
 
 
+def _clean_trace_value(value: Any, *, limit: int = 256) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    return text[:limit]
+
+
+def _trace_context_value(
+    context: dict[str, Any] | None,
+    metadata: dict[str, Any],
+    *keys: str,
+) -> str:
+    if isinstance(context, dict):
+        for key in keys:
+            value = _clean_trace_value(context.get(key))
+            if value:
+                return value
+    for key in keys:
+        value = _clean_trace_value(metadata.get(key))
+        if value:
+            return value
+    return ""
+
+
+def _subagent_trace_context(
+    context: dict[str, Any] | None,
+    session: Any,
+) -> dict[str, str]:
+    """Derive stable parent trace anchors for subagent observability."""
+    metadata = getattr(session, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    thread_id = (
+        _trace_context_value(
+            context,
+            metadata,
+            "thread_id",
+            "caller_thread_id",
+            "conversation_id",
+        )
+        or _clean_trace_value(getattr(session, "thread_id", None))
+        or _clean_trace_value(getattr(session, "conversation_id", None))
+    )
+    turn_id = (
+        _trace_context_value(context, metadata, "turn_id", "caller_turn_id")
+        or _clean_trace_value(getattr(session, "turn_id", None))
+    )
+    trace = {
+        "thread_id": thread_id,
+        "turn_id": turn_id,
+        "parent_task_id": _trace_context_value(
+            context,
+            metadata,
+            "parent_task_id",
+            "parent_run_id",
+            "parent_trace_id",
+        ),
+        "task_id": _trace_context_value(context, metadata, "task_id"),
+        "run_id": _trace_context_value(context, metadata, "run_id", "task_run_id"),
+        "trace_id": _trace_context_value(context, metadata, "trace_id"),
+        "source": _trace_context_value(context, metadata, "source"),
+        "parent_agent_id": (
+            _trace_context_value(context, metadata, "parent_agent_id", "caller_agent_id")
+            or _clean_trace_value(getattr(session, "agent_id", None))
+        ),
+    }
+    return {key: value for key, value in trace.items() if value}
+
+
+def _ensure_context_trace_fields(
+    context: dict[str, Any] | None,
+    trace: dict[str, str],
+) -> dict[str, Any] | None:
+    if not trace:
+        return context
+    if context is None:
+        context = {}
+    for key, value in trace.items():
+        context.setdefault(key, value)
+    return context
+
+
+def _attach_trace_fields(payload: dict[str, Any], trace: dict[str, str]) -> dict[str, Any]:
+    if not trace:
+        return payload
+    payload.setdefault("trace", dict(trace))
+    for key, value in trace.items():
+        payload.setdefault(key, value)
+    return payload
+
+
 def call_subagent(
     agent_id: str = "",
     prompt: str = "",
@@ -321,6 +415,9 @@ def call_subagent(
     # so this works on any model, not just ones with native structured output.
     if output_schema:
         prompt = prompt + schema_instruction(output_schema)
+
+    _trace_context = _subagent_trace_context(context, session)
+    context = _ensure_context_trace_fields(context, _trace_context)
 
     # Trusted callers (e.g. the worktree loop) confine this sub-agent's file
     # writes to ONE directory by passing ``workspace_path`` (or
@@ -416,6 +513,7 @@ def call_subagent(
         "use_cheap_model": bool(use_cheap_model),
         "started_at": _spawn_started_at,
     }
+    _attach_trace_fields(_spawn_event, _trace_context)
     _safe_emit(event_emitter, _spawn_event)
     # Mirror onto the genome journal so frontend timeline can render
     # a sub-agent tile from the spawn moment, independent of the
@@ -430,6 +528,7 @@ def call_subagent(
         # frontend timeline can group them under the same tile as the
         # spawn event.
         try:
+            _attach_trace_fields(event, _trace_context)
             if event.get("type") in {"sub_tool_start", "sub_tool_end"}:
                 event.setdefault("agent_id", agent_id)
                 event.setdefault("subagent_codename", _codename)
@@ -673,6 +772,7 @@ def call_subagent(
         """
         if not isinstance(result, dict):
             return result
+        _attach_trace_fields(result, _trace_context)
         result.setdefault("iteration_count", _rounds_state["max_round"])
         result.setdefault("files_touched", list(_files_touched))
         result.setdefault("codename", _codename)
@@ -743,6 +843,7 @@ def call_subagent(
             "error": result.get("error"),
             "status": result.get("status"),
         }
+        _attach_trace_fields(_finish_event, _trace_context)
         _safe_emit(event_emitter, _finish_event)
         _safe_journal_emit(_finish_event)
         return result
@@ -846,9 +947,10 @@ def call_subagent(
                 "error": f"subagent timed out after {timeout_seconds}s",
                 "status": "timeout",
             }
+            _attach_trace_fields(_timeout_event, _trace_context)
             _safe_emit(event_emitter, _timeout_event)
             _safe_journal_emit(_timeout_event)
-            return {
+            return _attach_trace_fields({
                 "status": "timeout",
                 "error": f"subagent timed out after {timeout_seconds}s",
                 "agent_id": agent_id,
@@ -860,7 +962,7 @@ def call_subagent(
                 "rounds_completed": rounds,
                 "iteration_count": rounds,
                 "files_touched": list(_files_touched),
-            }
+            }, _trace_context)
         finally:
             executor.shutdown(wait=False)
     finally:

@@ -37,6 +37,11 @@ class SubagentDispatchRequest(BaseModel):
     # first call's prompt + output rendered as a "Prior turns" prefix.
     # Leave empty for stateless calls (default).
     thread_id: str | None = None
+    turn_id: str | None = None
+    run_id: str | None = None
+    trace_id: str | None = None
+    parent_task_id: str | None = None
+    source: str | None = None
     # When True (default), inject prior subagent turns for this thread.
     # Set to False to force a fresh single-shot call without history.
     share_history: bool = True
@@ -59,6 +64,25 @@ def _bounded_dispatch_timeout(value: Any) -> int:
     except (TypeError, ValueError):
         timeout = 300
     return max(_MIN_DISPATCH_TIMEOUT_S, min(_MAX_DISPATCH_TIMEOUT_S, timeout))
+
+
+def _dispatch_context_from_body(body: SubagentDispatchRequest) -> dict[str, Any]:
+    ctx = dict(body.context or {})
+    for field_name in (
+        "thread_id",
+        "turn_id",
+        "run_id",
+        "trace_id",
+        "parent_task_id",
+        "source",
+    ):
+        value = getattr(body, field_name, None)
+        if isinstance(value, str) and value.strip():
+            ctx.setdefault(field_name, value.strip())
+    ctx.setdefault("share_history", body.share_history)
+    if body.extra_tools:
+        ctx.setdefault("extra_tools", body.extra_tools)
+    return ctx
 
 
 def create_subagents_router(
@@ -139,12 +163,7 @@ def create_subagents_router(
         if not body.prompt.strip():
             raise HTTPException(400, "prompt is required")
         from runtime.execution.subagents import call_subagent
-        ctx = dict(body.context or {})
-        if body.thread_id:
-            ctx.setdefault("thread_id", body.thread_id)
-        ctx.setdefault("share_history", body.share_history)
-        if body.extra_tools:
-            ctx.setdefault("extra_tools", body.extra_tools)
+        ctx = _dispatch_context_from_body(body)
         timeout_s = _bounded_dispatch_timeout(body.timeout_s)
         result = call_subagent(
             target,
@@ -204,12 +223,7 @@ def create_subagents_router(
 
         def _runner() -> None:
             try:
-                stream_ctx = dict(body.context or {})
-                if body.thread_id:
-                    stream_ctx.setdefault("thread_id", body.thread_id)
-                stream_ctx.setdefault("share_history", body.share_history)
-                if body.extra_tools:
-                    stream_ctx.setdefault("extra_tools", body.extra_tools)
+                stream_ctx = _dispatch_context_from_body(body)
                 timeout_s = _bounded_dispatch_timeout(body.timeout_s)
                 result = call_subagent(
                     target,

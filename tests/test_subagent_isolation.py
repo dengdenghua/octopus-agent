@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from runtime.execution.subagents import bridge
+from runtime.platform.process.session import Session
 
 
 def _restore_runner(orig):
@@ -163,6 +164,88 @@ def test_external_emitter_still_called(monkeypatch) -> None:
         assert tool_evt.get("subagent_avatar")
     finally:
         _restore_runner(orig)
+
+
+def test_trace_context_is_attached_to_result_and_events(monkeypatch) -> None:
+    received: list[dict[str, Any]] = []
+
+    def _runner(prompt, *, subagent_name, context):
+        assert context["thread_id"] == "thread-1"
+        assert context["turn_id"] == "turn-1"
+        assert context["parent_task_id"] == "task-parent"
+        emitter = context.get("event_emitter")
+        emitter({
+            "type": "sub_tool_end",
+            "skill": "read_file",
+            "args": {"path": "x"},
+            "status": "success",
+            "round": 1,
+        })
+        return "ok"
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        result = bridge.call_subagent(
+            agent_id="x",
+            prompt="p",
+            context={
+                "thread_id": "thread-1",
+                "turn_id": "turn-1",
+                "parent_task_id": "task-parent",
+                "run_id": "run-1",
+                "trace_id": "trace-1",
+                "source": "unit-test",
+            },
+            event_emitter=received.append,
+        )
+    finally:
+        _restore_runner(orig)
+
+    assert result["trace"] == {
+        "thread_id": "thread-1",
+        "turn_id": "turn-1",
+        "parent_task_id": "task-parent",
+        "run_id": "run-1",
+        "trace_id": "trace-1",
+        "source": "unit-test",
+    }
+    assert result["thread_id"] == "thread-1"
+    assert result["turn_id"] == "turn-1"
+    assert [event["type"] for event in received] == [
+        "subagent_spawned",
+        "sub_tool_end",
+        "subagent_finished",
+    ]
+    assert all(event["trace"]["thread_id"] == "thread-1" for event in received)
+    assert all(event["trace"]["turn_id"] == "turn-1" for event in received)
+    assert received[1]["parent_task_id"] == "task-parent"
+
+
+def test_trace_context_falls_back_to_session(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+
+    def _runner(prompt, *, subagent_name, context):
+        captured["context"] = context
+        return "ok"
+
+    orig = bridge._RUNNER
+    bridge._RUNNER = _runner
+    try:
+        result = bridge.call_subagent(
+            agent_id="x",
+            prompt="p",
+            session=Session(thread_id="thread-session", turn_id="turn-session"),
+        )
+    finally:
+        _restore_runner(orig)
+
+    assert captured["context"]["thread_id"] == "thread-session"
+    assert captured["context"]["turn_id"] == "turn-session"
+    assert result["trace"] == {
+        "thread_id": "thread-session",
+        "turn_id": "turn-session",
+    }
 
 
 def test_parent_message_count_unchanged(monkeypatch) -> None:
