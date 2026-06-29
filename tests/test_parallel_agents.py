@@ -282,6 +282,13 @@ class TestDispatch:
         with pytest.raises(ValueError):
             orch.dispatch([])
 
+    def test_dispatch_duplicate_task_id_rejected(self, orch):
+        with pytest.raises(ValueError, match="duplicate task_id"):
+            orch.dispatch([
+                DispatchTaskInput(task_id="same", description="first"),
+                DispatchTaskInput(task_id="same", description="second"),
+            ])
+
     def test_dispatch_accepts_dict_input(self, orch):
         """Implementation note."""
         batch = orch.dispatch([
@@ -775,6 +782,19 @@ class TestRouter:
             json={"tasks": []},
         )
         assert r.status_code == 400
+
+    def test_dispatch_duplicate_task_id_400(self, app_client):
+        r = app_client.post(
+            "/api/agents/parallel/dispatch",
+            json={
+                "tasks": [
+                    {"task_id": "same", "description": "first"},
+                    {"task_id": "same", "description": "second"},
+                ],
+            },
+        )
+        assert r.status_code == 400
+        assert "duplicate task_id" in r.json()["detail"]
 
     def test_cancel_unknown_task_404(self, app_client):
         r = app_client.post("/api/agents/parallel/cancel/nope")

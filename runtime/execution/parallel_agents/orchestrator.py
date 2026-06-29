@@ -320,6 +320,8 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         entries: dict[str, _TaskEntry] = {}
         for t in raw:
             tid = t.task_id or f"task_{uuid.uuid4().hex[:10]}"
+            if tid in entries:
+                raise ValueError(f"dispatch: duplicate task_id {tid!r}")
             entries[tid] = _TaskEntry(
                 task_id=tid,
                 batch_id=batch_id,
