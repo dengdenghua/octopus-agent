@@ -39,14 +39,26 @@ MAX_TASK_ATTEMPTS = 2
 
 
 def stub_generate_milestones(goal: str) -> list[Milestone]:
-    """No-LLM fallback: a single deliverable milestone. Lets the API/engine run
-    deterministically without a model router (production injects LLM hooks)."""
-    return [Milestone(id="MS1", name="deliver", goal=goal, success_criteria=["goal met"])]
+    """No-LLM fallback: a generic Plan → Build → Verify phasing that fits almost
+    any project, so the engine/CLI runs deterministically without a model router
+    (production injects LLM hooks for goal-specific milestones)."""
+    return [
+        Milestone(id="MS1", name="plan", goal=f"Scope and plan: {goal}",
+                  success_criteria=["plan approved"]),
+        Milestone(id="MS2", name="build", goal=f"Build: {goal}",
+                  success_criteria=["implementation complete"], dependencies=["MS1"]),
+        Milestone(id="MS3", name="verify", goal=f"Verify and deliver: {goal}",
+                  success_criteria=["verified against goal"], dependencies=["MS2"]),
+    ]
 
 
 def stub_decompose_tasks(ms: Milestone) -> list[Task]:
-    """No-LLM fallback: one task carrying the milestone goal."""
-    return [Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="code", goal=ms.goal)]
+    """No-LLM fallback: a research → execution pair (a 2-node DAG)."""
+    return [
+        Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="research", goal=f"{ms.goal} — assess"),
+        Task(id=f"{ms.id}-T2", milestone_id=ms.id, type="code", goal=f"{ms.goal} — do",
+             depends_on=[f"{ms.id}-T1"]),
+    ]
 
 
 def _default_execute(task: Task, context: dict[str, Any]) -> str:

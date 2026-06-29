@@ -368,6 +368,7 @@ _CLI_COMMANDS = frozenset({
     "serve",
     "loop",
     "kg",
+    "project",
     "backup",
     "restore",
     "export",
@@ -793,6 +794,22 @@ def main(argv: list[str] | None = None) -> int:
     kgp.add_argument("--from-journal", type=Path, required=True,
                      help="JSONL journal to load events from")
 
+    projectp = sub.add_parser(
+        "project", help="Run milestone-driven projects (Project OS)."
+    )
+    project_sub = projectp.add_subparsers(dest="project_op", required=True)
+    _pp_plan = project_sub.add_parser("plan", help="Plan a project from a goal.")
+    _pp_plan.add_argument("--goal", required=True, help="one-line project goal")
+    _pp_plan.add_argument("--name", default="", help="project name (default: from goal)")
+    _pp_run = project_sub.add_parser("run", help="Run a project to completion.")
+    _pp_run.add_argument("--id", default=None, help="existing project id")
+    _pp_run.add_argument("--goal", default=None, help="goal to plan+run if no --id")
+    _pp_run.add_argument("--name", default="", help="project name when planning")
+    _pp_run.add_argument("--max-ticks", type=int, default=50, dest="max_ticks")
+    _pp_report = project_sub.add_parser("report", help="Show a project's milestone report.")
+    _pp_report.add_argument("--id", required=True, help="project id")
+    project_sub.add_parser("list", help="List all projects.")
+
     backupp = sub.add_parser(
         "backup", help="Create a tar.gz backup of all Octopus data."
     )
@@ -1056,6 +1073,10 @@ def main(argv: list[str] | None = None) -> int:
             journal_file=args.journal_file,
             color=color,
         )
+
+    if args.command == "project":
+        from runtime.cli_project import run_project_command
+        return run_project_command(args, color=color)
 
     if args.command == "kg":
         return run_kg(
