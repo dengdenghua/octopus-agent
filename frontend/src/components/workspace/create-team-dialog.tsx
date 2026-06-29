@@ -131,7 +131,7 @@ export function CreateTeamDialog({
           </div>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 md:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
+        <div className="grid min-h-[360px] min-w-0 flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
           <section className="flex min-h-0 flex-col border-r">
             <div className="space-y-3 border-b px-4 py-3">
               <div className="flex items-center justify-between gap-3">
@@ -355,7 +355,7 @@ export function CreateTeamDialog({
         </div>
 
         {/* Team config · per-role model tiering (cheap vs primary, cost control) */}
-        <div className="border-t bg-background px-5 py-2.5">
+        <div className="relative z-20 border-t bg-background px-5 py-2.5">
           <TeamRoleModelsPanel />
         </div>
 
