@@ -678,6 +678,38 @@ describe("useThreadStreamRealtime permissions", () => {
     dispatchSpy.mockRestore();
   });
 
+  it("restores the original Codex marker text when a send fails", async () => {
+    const startTurn = vi.fn().mockRejectedValue(new Error("socket dropped"));
+    mockRealtime(startTurn);
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", {
+        text: "/codex goal\nFinish the hardening pass",
+        files: [],
+      });
+    });
+
+    await waitFor(() =>
+      expect(dispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "octopus:send-failed",
+          detail: expect.objectContaining({
+            threadId: "th-test",
+            text: "/codex goal\nFinish the hardening pass",
+          }),
+        }),
+      ),
+    );
+    dispatchSpy.mockRestore();
+  });
+
   it("marks first-screen realtime turns as coding-agent turns", async () => {
     const startTurn = mockRealtime();
     const { result } = renderHook(() =>
@@ -849,6 +881,74 @@ describe("useThreadStreamRealtime permissions", () => {
         },
       }),
     );
+  });
+
+  it("turns composer Codex Plan marker into runtime metadata", async () => {
+    const startTurn = mockRealtime();
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", {
+        text: "/codex plan\nRefactor the router",
+        files: [],
+      });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    expect(startTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: "Refactor the router",
+        planningMode: true,
+        metadata: {
+          context: expect.objectContaining({
+            codex_mode: "plan",
+            completion_policy: "plan",
+            mode_preset: "codex.plan",
+            workflow_preset: "codex.plan",
+          }),
+        },
+      }),
+    );
+  });
+
+  it("turns composer Codex Goal marker into bounded goal metadata", async () => {
+    const startTurn = mockRealtime();
+    const { result } = renderHook(() =>
+      useThreadStreamRealtime({
+        threadId: "th-test",
+        context: { permission_mode: "default" },
+      }),
+    );
+
+    act(() => {
+      result.current[1]("th-test", {
+        text: "/codex goal\nFinish the hardening pass",
+        files: [],
+      });
+    });
+
+    await waitFor(() => expect(startTurn).toHaveBeenCalled());
+    const payload = startTurn.mock.calls[0]?.[0];
+    const context = (payload?.metadata as { context?: Record<string, unknown> })
+      ?.context;
+    expect(payload).toEqual(
+      expect.objectContaining({
+        input: "Finish the hardening pass",
+      }),
+    );
+    expect(payload).not.toHaveProperty("planningMode");
+    expect(context).toMatchObject({
+      codex_mode: "goal",
+      completion_policy: "goal",
+      goal_mode: true,
+      mode_preset: "codex.goal",
+      workflow_preset: "codex.goal",
+    });
   });
 
   it("sends selected reasoning effort as top-level turn effort", async () => {

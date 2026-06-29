@@ -80,10 +80,14 @@ describe("<ChatInputBox /> cowork materials", () => {
     await openToolsMenu();
 
     expect(screen.getByText("Research settings")).toBeInTheDocument();
+    expect(screen.getByText("Plan")).toBeInTheDocument();
+    expect(screen.getByText("Spec")).toBeInTheDocument();
+    expect(screen.getByText("Goal")).toBeInTheDocument();
     expect(screen.getByText("Add material")).toBeInTheDocument();
     expect(
       screen.getByText("Add image (paste / drag / select)"),
     ).toBeInTheDocument();
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
     expect(screen.queryByText("Web search")).not.toBeInTheDocument();
     expect(screen.queryByText("Create PPT")).not.toBeInTheDocument();
     expect(screen.queryByText("Create page")).not.toBeInTheDocument();
@@ -93,6 +97,53 @@ describe("<ChatInputBox /> cowork materials", () => {
     expect(screen.queryByText("Project Files")).not.toBeInTheDocument();
     expect(screen.queryByText("Research context")).not.toBeInTheDocument();
     expect(screen.queryByText("Web Search Research")).not.toBeInTheDocument();
+  });
+
+  it("inserts Codex mode markers into the draft without switching mode", async () => {
+    const onModeChange = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        allowAgentModes
+        onModeChange={onModeChange}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    await openToolsMenu();
+    fireEvent.click(screen.getByText("Plan"));
+
+    expect(textarea().value).toBe("/codex plan\n");
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    fireEvent.change(textarea(), {
+      target: { value: "/codex plan\nAudit this repo" },
+    });
+    await openToolsMenu();
+    fireEvent.click(screen.getByText("Goal"));
+
+    expect(textarea().value).toBe("/codex goal\nAudit this repo");
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
+
+  it("keeps marker-only Codex drafts unsent until the task is written", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(
+      <ChatInputBox
+        mode="react"
+        threadId="thread-1"
+        onSubmit={onSubmit}
+        onDeepResearch={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(textarea(), { target: { value: "/codex plan\n" } });
+
+    expect(screen.getByTitle("Send")).toBeDisabled();
+    fireEvent.click(screen.getByTitle("Send"));
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(textarea().value).toBe("/codex plan\n");
   });
 
   it("sends default execution mode through the normal message path", async () => {

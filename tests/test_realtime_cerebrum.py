@@ -1275,6 +1275,29 @@ Resume this agent run from the selected durable checkpoint.
     assert "message body" not in str(resume_intent)
 
 
+def test_codex_composer_marker_is_stripped_into_intent_metadata() -> None:
+    from runtime.protocol import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    text = "/codex goal\nFinish the hardening pass"
+    intent = _build_intent(
+        text,
+        TurnParams(
+            threadId="th-codex-goal",
+            input=[{"type": "text", "text": text}],
+            approvalPolicy="on-request",
+        ),
+    )
+
+    assert intent.raw == "Finish the hardening pass"
+    assert intent.normalized_goal == "Finish the hardening pass"
+    assert intent.user_context["codex_mode"] == "goal"
+    assert intent.user_context["completion_policy"] == "goal"
+    assert intent.user_context["goal_mode"] is True
+    assert intent.user_context["mode_preset"] == "codex.goal"
+    assert intent.user_context["workflow_preset"] == "codex.goal"
+
+
 def test_resume_proposal_block_preserves_sanitized_tool_context() -> None:
     from runtime.protocol import TurnParams
     from runtime.sensing.gateway.realtime_cerebrum import _build_intent

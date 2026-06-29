@@ -51,6 +51,10 @@ import {
   commandExecutionInput,
   commandExecutionToolName,
 } from "./realtime-tool-compat";
+import {
+  applyCodexComposerModeContext,
+  parseCodexComposerModeMarker,
+} from "./codex-composer-mode";
 
 /** File payload accepted by `sendMessage`. */
 export interface FileInMessage {
@@ -818,7 +822,9 @@ export function useThreadStreamRealtime(
 
   const sendMessage = useCallback<SendMessageFn>(
     (_threadId, message) => {
-      const text = (message?.text ?? "").trim();
+      const rawText = (message?.text ?? "").trim();
+      const parsedComposerMode = parseCodexComposerModeMarker(rawText);
+      const text = parsedComposerMode.text.trim();
       const files = message.files ?? [];
       if (!text && files.length === 0) return;
       const effectiveThreadId =
@@ -843,19 +849,22 @@ export function useThreadStreamRealtime(
           const explicitCodeMode = stringValue(rawContext.code_mode);
           const shouldDefaultCodeCapability =
             !explicitMode || selectedMode === "code";
-          const runtimeContext = stripUndefinedValues({
-            ...rawContext,
-            mode: selectedMode,
-            capability_mode:
-              explicitCapabilityMode ??
-              (shouldDefaultCodeCapability ? "code" : undefined),
-            code_mode:
-              explicitCodeMode ??
-              (shouldDefaultCodeCapability ? "solo" : undefined),
-            permission_mode: permissionRuntime.mode,
-            sandbox_mode: permissionRuntime.sandbox_mode,
-            execution_environment: permissionRuntime.execution_environment,
-          });
+          const runtimeContext = applyCodexComposerModeContext(
+            stripUndefinedValues({
+              ...rawContext,
+              mode: selectedMode,
+              capability_mode:
+                explicitCapabilityMode ??
+                (shouldDefaultCodeCapability ? "code" : undefined),
+              code_mode:
+                explicitCodeMode ??
+                (shouldDefaultCodeCapability ? "solo" : undefined),
+              permission_mode: permissionRuntime.mode,
+              sandbox_mode: permissionRuntime.sandbox_mode,
+              execution_environment: permissionRuntime.execution_environment,
+            }),
+            parsedComposerMode.mode,
+          );
           const reasoningEffort = reasoningEffortValue(
             rawContext["reasoning_effort"],
           );
@@ -870,6 +879,10 @@ export function useThreadStreamRealtime(
             approvalPolicy: effectiveApprovalPolicy,
             sandboxPolicy: effectiveSandboxPolicy,
             ...(permissionRuntime.planningMode ? { planningMode: true } : {}),
+            ...(parsedComposerMode.mode === "plan" ||
+            parsedComposerMode.mode === "spec"
+              ? { planningMode: true }
+              : {}),
             ...(model ? { model } : {}),
             ...(reasoningEffort ? { effort: reasoningEffort } : {}),
             ...(topologyId ? { topologyId } : {}),
@@ -894,7 +907,7 @@ export function useThreadStreamRealtime(
             .then((images) => {
               window.dispatchEvent(
                 new CustomEvent("octopus:send-failed", {
-                  detail: { threadId: effectiveThreadId, text, images },
+                  detail: { threadId: effectiveThreadId, text: rawText, images },
                 }),
               );
             });

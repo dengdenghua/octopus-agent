@@ -278,6 +278,9 @@ export interface Translations {
     collaboratorsSearchPlaceholder: string;
     collaboratorsTaskFallback: string;
     addResearchMaterial: string;
+    codexPlan: string;
+    codexSpec: string;
+    codexGoal: string;
     workflow: string;
     deepResearchConfig: string;
     roles: string;

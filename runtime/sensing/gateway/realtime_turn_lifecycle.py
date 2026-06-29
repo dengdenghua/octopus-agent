@@ -36,6 +36,7 @@ from runtime.sensing.gateway.realtime_thread_history import (
 )
 from runtime.sensing.gateway.realtime_turn_input import (
     _build_intent,
+    _extract_codex_composer_mode,
     _execution_resume_intent,
     _input_attachments,
     _input_metadata,
@@ -124,6 +125,44 @@ async def _start_turn(
     validated = TurnParams.model_validate(params)
     thread_id = runtime._require_thread_id(validated.thread_id)
     text = _join_text(validated.input)
+    stripped_text, marker_mode = _extract_codex_composer_mode(text)
+    if marker_mode is not None:
+        text = stripped_text
+        patched_input: list[dict[str, Any]] = []
+        marker_applied = False
+        for block in validated.input:
+            if (
+                not marker_applied
+                and isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            ):
+                next_block = dict(block)
+                next_block["text"] = stripped_text
+                metadata = dict(next_block.get("metadata") or {})
+                context = dict(metadata.get("context") or {})
+                context.setdefault("codex_mode", marker_mode)
+                context.setdefault("completion_policy", marker_mode)
+                context.setdefault("mode_preset", f"codex.{marker_mode}")
+                context.setdefault("workflow_preset", f"codex.{marker_mode}")
+                if marker_mode == "goal":
+                    context.setdefault("goal_mode", True)
+                metadata["context"] = context
+                next_block["metadata"] = metadata
+                patched_input.append(next_block)
+                marker_applied = True
+                continue
+            patched_input.append(block)
+        validated = validated.model_copy(
+            update={
+                "input": patched_input,
+                **(
+                    {"planning_mode": True}
+                    if marker_mode in {"plan", "spec"}
+                    else {}
+                ),
+            },
+        )
     if text:
         from runtime.sensing.gateway.slash_command_expansion import (
             maybe_expand_slash_command,

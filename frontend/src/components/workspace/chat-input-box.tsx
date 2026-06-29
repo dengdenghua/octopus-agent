@@ -7,9 +7,12 @@ import {
   LightbulbIcon,
   Loader2Icon,
   ZapIcon,
+  MapIcon,
   PaperclipIcon,
   PlusIcon,
   SearchIcon,
+  TargetIcon,
+  ClipboardCheckIcon,
   SlidersHorizontalIcon,
   SquareIcon,
   Trash2Icon,
@@ -61,6 +64,11 @@ import type {
   ResearchSourceKind,
 } from "@/core/research/api";
 import type { ReasoningEffort } from "@/core/threads";
+import {
+  codexComposerModeMarker,
+  parseCodexComposerModeMarker,
+  type CodexComposerMode,
+} from "@/core/threads/codex-composer-mode";
 import { WorkDirSelector } from "./workdir-selector";
 import {
   type DetectResponse,
@@ -398,6 +406,7 @@ export function ChatInputBox({
     (showModeSegment ? 1 : 0) +
     (showPersonalModeSegment ? 1 : 0);
   const showStatusStrip = statusSegmentCount > 0;
+  const sendableDraftText = parseCodexComposerModeMarker(draft).text.trim();
 
   useEffect(() => {
     if (!canUseDeepResearch) setResearchConfigOpen(false);
@@ -472,8 +481,11 @@ export function ChatInputBox({
 
   const handleSubmit = useCallback(async () => {
     const text = draft.trim();
+    const sendableText = parseCodexComposerModeMarker(text).text.trim();
     const hasImages = pendingImages.length > 0;
-    if ((!text && !hasImages) || isBusy || status === "streaming") return;
+    if ((!sendableText && !hasImages) || isBusy || status === "streaming") {
+      return;
+    }
     // Fast path: client-side slash commands (mode/model/permission/
     // compact/settings) resolve locally with no LLM round-trip.
     // Falls through for anything not handled here.
@@ -617,6 +629,17 @@ export function ChatInputBox({
 
   const removeMaterial = useCallback((id: string) => {
     setResearchMaterials((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  const insertCodexModeMarker = useCallback((mode: CodexComposerMode) => {
+    const marker = codexComposerModeMarker(mode);
+    setDraft((current) => {
+      const body = current
+        .replace(/^\/codex\s+(?:plan|spec|goal)(?:\s+|$)/i, "")
+        .trimStart();
+      return body ? `${marker}\n${body}` : `${marker}\n`;
+    });
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
   const toggleResearchSource = useCallback((kind: ResearchSourceKind) => {
@@ -1131,6 +1154,28 @@ export function ChatInputBox({
                 <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
                   {t.chatInputBox.quickCapabilities}
                 </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={() => insertCodexModeMarker("plan")}
+                  className="gap-2 rounded-md text-[13px]"
+                >
+                  <MapIcon className="size-4" />
+                  {t.chatInputBox.codexPlan}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => insertCodexModeMarker("spec")}
+                  className="gap-2 rounded-md text-[13px]"
+                >
+                  <ClipboardCheckIcon className="size-4" />
+                  {t.chatInputBox.codexSpec}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => insertCodexModeMarker("goal")}
+                  className="gap-2 rounded-md text-[13px]"
+                >
+                  <TargetIcon className="size-4" />
+                  {t.chatInputBox.codexGoal}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 {canUseDeepResearch && (
                   <>
                     <DropdownMenuItem
@@ -1248,7 +1293,7 @@ export function ChatInputBox({
                 onClick={handleSubmit}
                 data-testid="chat-send-button"
                 disabled={
-                  (!draft.trim() && pendingImages.length === 0) || isBusy
+                  (!sendableDraftText && pendingImages.length === 0) || isBusy
                 }
                 className={cn(
                   "flex size-7 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",

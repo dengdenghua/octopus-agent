@@ -24,6 +24,25 @@ _RESUME_CONFIRM_RE = re.compile(
     r"(?:确认|同意|开始|继续)\s*恢复\s*checkpoint\s*#?\s*(\d+)",
     re.IGNORECASE,
 )
+_CODEX_COMPOSER_MODE_RE = re.compile(
+    r"^\s*/codex\s+(plan|spec|goal)(?:\s+|$)",
+    re.IGNORECASE,
+)
+
+
+def _extract_codex_composer_mode(text: str) -> tuple[str, str | None]:
+    """Strip a visible composer marker and return its Codex mode.
+
+    The frontend inserts markers like ``/codex plan`` into the text box so
+    users can see what will be applied. Realtime clients should normally turn
+    that into metadata before sending, but the backend keeps this parser as a
+    safety net for non-React clients and stale bundles.
+    """
+    match = _CODEX_COMPOSER_MODE_RE.match(text or "")
+    if match is None:
+        return text, None
+    mode = match.group(1).lower()
+    return (text or "")[match.end():].lstrip(), mode
 
 
 def _resume_task_id_from_intent(intent: ParsedIntent) -> TaskId | None:
@@ -525,6 +544,7 @@ def _build_intent(
     cwd = params.cwd
     if workspaces is not None:
         cwd = workspaces.resolve_cwd(params.thread_id, params.cwd)
+    text, marker_mode = _extract_codex_composer_mode(text)
     metadata = _input_metadata(params)
     context = metadata.get("context")
     context_payload = context if isinstance(context, dict) else {}
@@ -537,6 +557,13 @@ def _build_intent(
             store=thread_store,
         )
     context_payload = dict(context_payload)
+    if marker_mode:
+        context_payload.setdefault("codex_mode", marker_mode)
+        context_payload.setdefault("completion_policy", marker_mode)
+        context_payload.setdefault("mode_preset", f"codex.{marker_mode}")
+        context_payload.setdefault("workflow_preset", f"codex.{marker_mode}")
+        if marker_mode == "goal":
+            context_payload.setdefault("goal_mode", True)
     actor_id = metadata.get("actor_id") or metadata.get("actorId")
     if isinstance(actor_id, str) and actor_id.strip():
         context_payload.setdefault("owner_actor_id", actor_id.strip())
