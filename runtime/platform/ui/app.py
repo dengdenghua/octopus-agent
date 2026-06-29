@@ -1284,6 +1284,21 @@ def create_app(
         )
     )
 
+    # ─── Cowork thread-group · WeChat-style membership + mode + blackboard ──
+    # GET /api/cowork/{thread} (public) + POST/DELETE members/mode/blackboard
+    # (auth-gated). A thread IS the group; 1:1 is the N=2 case.
+    from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
+
+    app.include_router(
+        create_cowork_group_router(
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
+
     # ─── FS router · extracted to fs_router.py ─────────
     # The 3 endpoints + 2 helpers that used to live here inline now
     # sit in runtime/sensing/siphon/fs_router.py. Same contract ·
