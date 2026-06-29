@@ -328,6 +328,8 @@ interface CompatDiagnostic {
   reason?: string | null;
   has_api_key?: boolean;
   default_header_names?: string[];
+  built_in?: boolean;
+  sample_base_url?: string;
   upstreams?: CompatDiagnosticUpstream[];
 }
 
@@ -335,6 +337,11 @@ type CompatDiagnosticState =
   | { status: "idle" | "loading"; byId: Record<string, CompatDiagnostic> }
   | { status: "ready"; byId: Record<string, CompatDiagnostic> }
   | { status: "error"; byId: Record<string, CompatDiagnostic>; error: string };
+
+type CompatProfileCatalogState =
+  | { status: "idle" | "loading"; items: CompatDiagnostic[] }
+  | { status: "ready"; items: CompatDiagnostic[] }
+  | { status: "error"; items: CompatDiagnostic[]; error: string };
 
 // Parse `Header-Name: value` lines into a dict. Blank lines and lines
 // lacking a colon are ignored so users can leave helper comments.
@@ -479,6 +486,11 @@ export default function ModelSettingsPage() {
       status: "idle",
       byId: {},
     });
+  const [compatProfileCatalog, setCompatProfileCatalog] =
+    useState<CompatProfileCatalogState>({
+      status: "idle",
+      items: [],
+    });
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [editingModel, setEditingModel] = useState<string | null>(null);
@@ -534,6 +546,39 @@ export default function ModelSettingsPage() {
     }
   }, [t.settings.model.compatDiagnostics.loadFailed]);
 
+  const fetchCompatProfileCatalog = useCallback(async () => {
+    setCompatProfileCatalog((prev) => ({
+      status: "loading",
+      items: prev.items,
+    }));
+    try {
+      const res = await fetch(
+        `${getBackendBaseURL()}/api/config/openai-compat-profiles`,
+        {
+          headers: authHeaders(),
+        },
+      );
+      if (!res.ok) {
+        throw new Error(`Failed to fetch profile catalog: ${res.status}`);
+      }
+      const data = await res.json();
+      const items = Array.isArray(data?.diagnostics)
+        ? (data.diagnostics as CompatDiagnostic[])
+        : [];
+      setCompatProfileCatalog({ status: "ready", items });
+    } catch (error) {
+      swallow(error);
+      setCompatProfileCatalog((prev) => ({
+        status: "error",
+        items: prev.items,
+        error:
+          error instanceof Error
+            ? error.message
+            : t.settings.model.compatDiagnostics.loadFailed,
+      }));
+    }
+  }, [t.settings.model.compatDiagnostics.loadFailed]);
+
   const fetchModels = useCallback(async () => {
     try {
       const res = await fetch(
@@ -549,13 +594,18 @@ export default function ModelSettingsPage() {
       const list = data.models || [];
       setModels(list);
       void fetchCompatDiagnostics();
+      void fetchCompatProfileCatalog();
     } catch (error) {
       console.error(error);
       toast.error(t.settings.model.loadFailed);
     } finally {
       setLoading(false);
     }
-  }, [fetchCompatDiagnostics, t.settings.model.loadFailed]);
+  }, [
+    fetchCompatDiagnostics,
+    fetchCompatProfileCatalog,
+    t.settings.model.loadFailed,
+  ]);
 
   const checkGateway = useCallback(async () => {
     setGatewayStatus("checking");
@@ -689,6 +739,13 @@ export default function ModelSettingsPage() {
             supports_vision: model.supports_vision,
             isDefault: model.name === defaultModelName,
             compat_diagnostic: compatDiagnostics.byId[model.name] ?? null,
+          })),
+          builtInCompatProfiles: compatProfileCatalog.items.map((item) => ({
+            id: item.id,
+            profile: item.upstreams?.[0]?.profile,
+            score: item.upstreams?.[0]?.compat_score,
+            model: item.upstreams?.[0]?.model,
+            fallbackCount: countCompatRetries(item),
           })),
         }),
       }),
@@ -827,6 +884,7 @@ export default function ModelSettingsPage() {
   }, [
     checkGateway,
     compatDiagnostics.byId,
+    compatProfileCatalog.items,
     defaultModelName,
     fetchModels,
     gatewayStatus,
@@ -843,6 +901,8 @@ export default function ModelSettingsPage() {
 
       {/* Official models */}
       {!isGuest && <OfficialModelsSection />}
+
+      <BuiltInCompatProfilesCard catalog={compatProfileCatalog} />
 
       {/* ── Models Section ── */}
       <SettingsSection
@@ -1119,6 +1179,116 @@ export default function ModelSettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function BuiltInCompatProfilesCard({
+  catalog,
+}: {
+  catalog: CompatProfileCatalogState;
+}) {
+  const visible = catalog.items.slice(0, 8);
+  const remaining = Math.max(0, catalog.items.length - visible.length);
+  const loaded = catalog.status === "ready" || catalog.items.length > 0;
+
+  return (
+    <SettingsSection
+      title={
+        <div className="flex w-full items-center justify-between gap-3">
+          <span>OpenAI-compatible profile matrix</span>
+          <span className="text-xs font-normal text-muted-foreground">
+            {loaded ? `${catalog.items.length} profiles` : "loading"}
+          </span>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <div className="text-sm leading-6 text-muted-foreground">
+          Built-in dry-run matrix for domestic and proxy OpenAI-compatible
+          providers. It shows request normalization and fallback retries before
+          an API key is configured.
+        </div>
+        {catalog.status === "loading" && catalog.items.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2Icon className="size-4 animate-spin" />
+            Loading compatibility profiles
+          </div>
+        ) : catalog.status === "error" && catalog.items.length === 0 ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <AlertTriangleIcon className="size-4 text-amber-500" />
+            Compatibility profile catalog unavailable
+          </div>
+        ) : (
+          <div className="grid gap-2 xl:grid-cols-2">
+            {visible.map((item) => {
+              const upstream = item.upstreams?.[0];
+              const score = summarizeCompatScoreRange(item);
+              const removed = collectCompatFields(item, "removed_fields");
+              const retryReasons = summarizeCompatRetryReasons(item);
+              const hints = collectCompatProfileText(
+                item,
+                "normalization_hints",
+              );
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-border/70 bg-background/50 px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="truncate text-sm font-medium">
+                          {upstream?.profile_display_name || item.id}
+                        </span>
+                        {score && (
+                          <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            compat{" "}
+                            {score.min === score.max
+                              ? score.min
+                              : `${score.min}-${score.max}`}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+                        {upstream?.model || item.id}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      {countCompatRetries(item)} fallback
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                    {hints.length > 0 && (
+                      <div title={hints.join(", ")}>
+                        normalize {hints.slice(0, 4).join(", ")}
+                        {hints.length > 4 ? "..." : ""}
+                      </div>
+                    )}
+                    {removed.length > 0 && (
+                      <div title={removed.join(", ")}>
+                        drops {removed.slice(0, 5).join(", ")}
+                        {removed.length > 5 ? "..." : ""}
+                      </div>
+                    )}
+                    {retryReasons.length > 0 && (
+                      <div title={retryReasons.join(", ")}>
+                        retries {retryReasons.slice(0, 4).join(", ")}
+                        {retryReasons.length > 4 ? "..." : ""}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {remaining > 0 && (
+          <div className="text-xs text-muted-foreground">
+            +{remaining} more profiles in the backend catalog.
+          </div>
+        )}
+      </div>
+    </SettingsSection>
   );
 }
 

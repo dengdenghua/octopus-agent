@@ -56,6 +56,12 @@ beforeEach(() => {
         diagnostics: [],
       });
     }
+    if (url.includes("/api/config/openai-compat-profiles")) {
+      return jsonOk({
+        schema: "octopus.openai_compat_profile_catalog.v1",
+        diagnostics: [],
+      });
+    }
     return jsonOk({ default: "", models: [] });
   });
 });
@@ -76,9 +82,11 @@ function jsonOk(body: unknown) {
 function mockModelSettingsFetch({
   models,
   diagnostics = [],
+  profileCatalog = [],
 }: {
   models: unknown[];
   diagnostics?: unknown[];
+  profileCatalog?: unknown[];
 }) {
   fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
@@ -86,6 +94,12 @@ function mockModelSettingsFetch({
       return jsonOk({
         schema: "octopus.openai_compat_diagnostics.v1",
         diagnostics,
+      });
+    }
+    if (url.includes("/api/config/openai-compat-profiles")) {
+      return jsonOk({
+        schema: "octopus.openai_compat_profile_catalog.v1",
+        diagnostics: profileCatalog,
       });
     }
     if (url.includes("/api/config/custom-models")) {
@@ -205,6 +219,78 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     expect(
       screen.getByText(/combined_compatibility_fallback/),
     ).toBeInTheDocument();
+  });
+
+  it("renders the built-in OpenAI-compatible provider matrix", async () => {
+    mockModelSettingsFetch({
+      models: [],
+      profileCatalog: [
+        {
+          id: "kimi_coding",
+          provider: "openai",
+          applicable: true,
+          built_in: true,
+          has_api_key: false,
+          sample_base_url: "https://api.kimi.com/coding/v1",
+          upstreams: [
+            {
+              model: "kimi-k2.7-code",
+              profile: "kimi_coding",
+              profile_display_name: "Kimi Coding",
+              compat_score: 82,
+              normalization_hints: [
+                "drop_sampling_parameters",
+                "retry_without_tool_choice",
+              ],
+              normalization: {
+                removed_fields: ["temperature", "thinking"],
+              },
+              fallback_retries: [
+                { reason: "rename_max_tokens" },
+                { reason: "combined_compatibility_fallback" },
+              ],
+            },
+          ],
+        },
+        {
+          id: "qwen",
+          provider: "openai",
+          applicable: true,
+          built_in: true,
+          has_api_key: false,
+          upstreams: [
+            {
+              model: "qwen-plus",
+              profile: "qwen",
+              profile_display_name: "Alibaba Cloud Qwen / DashScope",
+              compat_score: 90,
+              normalization_hints: ["retry_max_tokens_as_completion_tokens"],
+              normalization: { removed_fields: [] },
+              fallback_retries: [{ reason: "rename_max_tokens" }],
+            },
+          ],
+        },
+      ],
+    });
+
+    renderWithProviders(<ModelSettingsPage />, { locale: "zh-CN" });
+
+    expect(
+      await screen.findByText("OpenAI-compatible profile matrix"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("2 profiles")).toBeInTheDocument();
+    expect(await screen.findByText("Kimi Coding")).toBeInTheDocument();
+    expect(await screen.findByText("kimi-k2.7-code")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/drop_sampling_parameters/),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Alibaba Cloud Qwen / DashScope"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("qwen-plus")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/rename_max_tokens/)).length,
+    ).toBeGreaterThan(0);
   });
 
   it("renders a single-model entry without a trailing junk chip", async () => {
