@@ -133,3 +133,25 @@ def test_iter_openai_sse_preserves_finish_reason():
 
     assert events[-1].final is not None
     assert events[-1].final.finish_reason == "length"
+
+
+def test_iter_openai_sse_handles_multiline_data_events():
+    response = _FakeSSE([
+        "data: {",
+        'data: "choices":[{"delta":{"content":"multi"}}]',
+        "data: }",
+        "",
+        "data:{\"choices\":[{\"delta\":{\"content\":\" line\"}}]}",
+        "",
+        ": keepalive",
+        "data: [DONE]",
+        "",
+    ])
+
+    events = list(iter_openai_sse(response, model="qwen-plus"))
+
+    assert [event.type for event in events] == ["text_delta", "text_delta", "done"]
+    assert events[0].delta == "multi"
+    assert events[1].delta == " line"
+    assert events[-1].final is not None
+    assert events[-1].final.text == "multi line"

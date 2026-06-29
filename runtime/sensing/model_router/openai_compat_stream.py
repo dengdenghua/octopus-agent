@@ -84,35 +84,19 @@ def iter_openai_sse(
     except Exception:  # noqa: BLE001
         line_iter = iter(())
 
-    while True:
+    event_data_lines: list[str] = []
+
+    def dispatch_payload(payload: str):
+        nonlocal input_tokens, output_tokens, finish_reason
+        payload = payload.strip()
+        if not payload:
+            return False
+        if payload == "[DONE]":
+            return True
         try:
-            line = next(line_iter)
-        except StopIteration:
-            break
-        except Exception as exc:  # noqa: BLE001
-            # httpx.ReadTimeout, httpx.RemoteProtocolError, transport
-            # errors all land here. Don't propagate — the caller (ReAct
-            # loop) treats an empty "done" as a finished step and can
-            # decide to re-prompt or finalise.
-            import logging as _logging
-            _logging.getLogger(__name__).warning(
-                "openai-compat stream cut short (%s) — finalising on accumulated text",
-                exc.__class__.__name__,
-            )
-            break
-        if isinstance(line, bytes):
-            line = line.decode("utf-8", errors="ignore")
-        line = line.strip()
-        if not line:
-            continue
-        if line == "data: [DONE]":
-            break
-        if line.startswith("data: "):
-            line = line[6:]
-        try:
-            chunk = json.loads(line)
+            chunk = json.loads(payload)
         except json.JSONDecodeError:
-            continue
+            return False
 
         # Usage block · some providers (OpenAI, DeepSeek) include
         # ``usage`` on the final chunk even in streaming mode.
@@ -123,7 +107,7 @@ def iter_openai_sse(
 
         choices = chunk.get("choices") or []
         if not choices:
-            continue
+            return False
         # Capture finish_reason whenever it's present. OpenAI-compat
         # providers send it on the FINAL chunk for the active choice;
         # we keep the latest non-null value seen so the ReAct loop can
@@ -183,6 +167,65 @@ def iter_openai_sse(
                 )
             elif args_piece:
                 slot["arguments"] += str(args_piece)
+        return False
+
+    def dispatch_or_buffer(value: str):
+        nonlocal event_data_lines
+        if value == "[DONE]":
+            return (yield from dispatch_payload(value))
+        try:
+            json.loads(value.strip())
+        except json.JSONDecodeError:
+            event_data_lines.append(value)
+            return False
+        return (yield from dispatch_payload(value))
+
+    def flush_event() -> bool:
+        if not event_data_lines:
+            return False
+        payload = "\n".join(event_data_lines)
+        event_data_lines.clear()
+        return (yield from dispatch_payload(payload))
+
+    while True:
+        try:
+            line = next(line_iter)
+        except StopIteration:
+            break
+        except Exception as exc:  # noqa: BLE001
+            # httpx.ReadTimeout, httpx.RemoteProtocolError, transport
+            # errors all land here. Don't propagate — the caller (ReAct
+            # loop) treats an empty "done" as a finished step and can
+            # decide to re-prompt or finalise.
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "openai-compat stream cut short (%s) — finalising on accumulated text",
+                exc.__class__.__name__,
+            )
+            break
+        if isinstance(line, bytes):
+            line = line.decode("utf-8", errors="ignore")
+        line = line.rstrip("\r")
+        if not line:
+            if (yield from flush_event()):
+                break
+            continue
+        if line.startswith(":"):
+            continue
+        if line.startswith("data:"):
+            value = line[5:]
+            value = value[1:] if value.startswith(" ") else value
+            if event_data_lines:
+                event_data_lines.append(value)
+            else:
+                if (yield from dispatch_or_buffer(value)):
+                    break
+            continue
+        if not event_data_lines and (yield from dispatch_payload(line)):
+            break
+
+    if event_data_lines:
+        yield from flush_event()
 
     tool_calls: list[Any] = []
     if tool_state:
