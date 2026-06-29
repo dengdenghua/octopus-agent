@@ -18,7 +18,6 @@ import {
   PanelLeftOpenIcon,
   PlusIcon,
   Trash2Icon,
-  UsersRoundIcon,
   type LucideIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -209,18 +208,38 @@ function isGeneratedTeamProjectName(project: string): boolean {
 
 function threadMetadataMode(thread: {
   metadata?: Record<string, unknown>;
+  values?: Record<string, unknown>;
 }): string {
-  const mode = thread.metadata?.["mode"];
+  const mode = thread.metadata?.["mode"] ?? thread.values?.["mode"];
   return typeof mode === "string" ? mode : "";
 }
 
 function isGeneratedTeamThreadTitle(
-  thread: { metadata?: Record<string, unknown> },
+  thread: {
+    metadata?: Record<string, unknown>;
+    values?: Record<string, unknown>;
+  },
   title: string,
 ): boolean {
   return (
-    threadMetadataMode(thread) === "team" && isGeneratedTeamProjectName(title)
+    isGeneratedTeamProjectName(title) &&
+    (threadMetadataMode(thread) === "team" ||
+      isGeneratedTeamProjectName(cleanDisplayText(thread.metadata?.["project"])))
   );
+}
+
+function withThreadSidebarMode(
+  thread: AgentThread,
+  mode: "code" | "team",
+): AgentThread {
+  if (thread.metadata?.["mode"] === mode) return thread;
+  return {
+    ...thread,
+    metadata: {
+      ...(thread.metadata ?? {}),
+      mode,
+    },
+  };
 }
 
 function buildThreadRunStatusByHref({
@@ -722,7 +741,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     const m = new Map<string, AgentThread>();
     for (const t of rawConversationThreads ?? []) m.set(t.thread_id, t);
     for (const t of rawTeamThreads ?? []) {
-      if (!m.has(t.thread_id)) m.set(t.thread_id, t);
+      m.set(t.thread_id, withThreadSidebarMode(t, "team"));
     }
     return Array.from(m.values()).sort((a, b) =>
       (b.updated_at || "").localeCompare(a.updated_at || ""),
@@ -731,9 +750,11 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   const mergedProjectRaw = (() => {
     const m = new Map<string, AgentThread>();
-    for (const t of rawProjectThreads ?? []) m.set(t.thread_id, t);
+    for (const t of rawProjectThreads ?? []) {
+      m.set(t.thread_id, withThreadSidebarMode(t, "code"));
+    }
     for (const t of rawTeamThreads ?? []) {
-      if (!m.has(t.thread_id)) m.set(t.thread_id, t);
+      m.set(t.thread_id, withThreadSidebarMode(t, "team"));
     }
     return Array.from(m.values()).sort((a, b) =>
       (b.updated_at || "").localeCompare(a.updated_at || ""),
@@ -1408,6 +1429,7 @@ export const __testing = {
   mergeThreadRunStatus,
   projectNameForThread,
   summarizeThreadForSidebar,
+  withThreadSidebarMode,
 };
 
 type WorkspaceSurfaceMode = "agent" | "browser";
@@ -1729,14 +1751,11 @@ function AvatarCell({
 }
 
 function ProjectGroupIcon({ project }: { project: string }) {
-  const isTeamProject = isGeneratedTeamProjectName(project);
   const isCodeProject = project === "Code";
 
-  if (!isTeamProject && !isCodeProject) {
+  if (!isCodeProject) {
     return <FolderIcon className="size-[18px] shrink-0 opacity-70" />;
   }
-
-  const AccentIcon = isTeamProject ? UsersRoundIcon : Code2Icon;
 
   return (
     <span className="relative grid size-5 shrink-0 place-items-center text-muted-foreground/75">
@@ -1744,12 +1763,10 @@ function ProjectGroupIcon({ project }: { project: string }) {
       <span
         className={cn(
           "absolute -bottom-0.5 -right-0.5 grid size-3.5 place-items-center rounded-[4px] border border-sidebar-border bg-sidebar",
-          isTeamProject
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-sky-600 dark:text-sky-400",
+          "text-sky-600 dark:text-sky-400",
         )}
       >
-        <AccentIcon className="size-[9px]" strokeWidth={2.6} />
+        <Code2Icon className="size-[9px]" strokeWidth={2.6} />
       </span>
     </span>
   );
