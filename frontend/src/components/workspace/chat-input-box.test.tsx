@@ -67,7 +67,7 @@ async function openToolsMenu() {
 }
 
 describe("<ChatInputBox /> cowork materials", () => {
-  it("uses concise labels in the quick tools menu", async () => {
+  it("keeps prompt-only shortcuts out of the quick tools menu", async () => {
     renderWithProviders(
       <ChatInputBox
         mode="deep"
@@ -81,7 +81,16 @@ describe("<ChatInputBox /> cowork materials", () => {
 
     expect(screen.getByText("Research settings")).toBeInTheDocument();
     expect(screen.getByText("Add material")).toBeInTheDocument();
-    expect(screen.getByText("Web search")).toBeInTheDocument();
+    expect(
+      screen.getByText("Add image (paste / drag / select)"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Web search")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create PPT")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create page")).not.toBeInTheDocument();
+    expect(screen.queryByText("Format table")).not.toBeInTheDocument();
+    expect(screen.queryByText("Generate image")).not.toBeInTheDocument();
+    expect(screen.queryByText("Scheduled Task")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project Files")).not.toBeInTheDocument();
     expect(screen.queryByText("Research context")).not.toBeInTheDocument();
     expect(screen.queryByText("Web Search Research")).not.toBeInTheDocument();
   });

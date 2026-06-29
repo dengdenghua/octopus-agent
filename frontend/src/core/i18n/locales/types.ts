@@ -272,14 +272,7 @@ export interface Translations {
   chatInputBox: {
     quickCapabilities: string;
     addResearchMaterial: string;
-    webSearch: string;
-    createPpt: string;
-    createHtml: string;
-    renderTable: string;
-    createImage: string;
-    scheduledTask: string;
     workflow: string;
-    projectFiles: string;
     deepResearchConfig: string;
     roles: string;
     materials: string;
@@ -311,14 +304,7 @@ export interface Translations {
     permissionModeBypassDesc: string;
     permissionModePlan: string;
     permissionModePlanDesc: string;
-    seedWebSearch: string;
-    seedCreatePpt: string;
-    seedCreateHtml: string;
-    seedRenderTable: string;
-    seedCreateImage: string;
-    seedScheduledTask: string;
     seedWorkflow: string;
-    seedProjectFiles: string;
     send: string;
     stop: string;
     projectModeLabel: string;

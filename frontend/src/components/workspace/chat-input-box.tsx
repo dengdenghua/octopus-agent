@@ -1,9 +1,7 @@
 import type { ChatStatus } from "ai";
 import {
   ArrowUpIcon,
-  CalendarClockIcon,
   FileTextIcon,
-  FolderOpenIcon,
   ImageIcon,
   LinkIcon,
   LightbulbIcon,
@@ -11,11 +9,9 @@ import {
   ZapIcon,
   PaperclipIcon,
   PlusIcon,
-  PresentationIcon,
   SearchIcon,
   SlidersHorizontalIcon,
   SquareIcon,
-  TableIcon,
   Trash2Icon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -92,7 +88,10 @@ export interface ChatInputBoxProps {
   mode?: ReasoningMode;
   threadId?: string;
   workDir?: string;
-  displayAgent?: Pick<Agent, "name" | "display_name" | "avatar_url" | "icon"> | null;
+  displayAgent?: Pick<
+    Agent,
+    "name" | "display_name" | "avatar_url" | "icon"
+  > | null;
   /** Show the workdir selector pill in the footer. Default false (chat
    * doesn't need a folder); pass true for code-flavored conversations
    * that read/edit local files. */
@@ -367,9 +366,7 @@ export function ChatInputBox({
     return withAgentAvatarVersion(`${getBackendBaseURL()}${url}`);
   }, [displayAgent?.avatar_url]);
   const displayAgentLabel =
-    displayAgent?.display_name?.trim() ||
-    displayAgent?.name?.trim() ||
-    "Agent";
+    displayAgent?.display_name?.trim() || displayAgent?.name?.trim() || "Agent";
   const displayAgentInitial =
     displayAgentLabel.trim().charAt(0).toUpperCase() || "A";
   const displayAgentIcon = displayAgent?.icon?.trim() || "";
@@ -405,19 +402,6 @@ export function ChatInputBox({
   useEffect(() => {
     if (!canUseDeepResearch) setResearchConfigOpen(false);
   }, [canUseDeepResearch]);
-
-  const focusComposer = useCallback(() => {
-    window.setTimeout(() => textareaRef.current?.focus(), 0);
-  }, []);
-
-  const seedDraft = useCallback(
-    (template: string, nextMode?: ReasoningMode) => {
-      setDraft((current) => (current.trim() ? current : template));
-      if (nextMode) onModeChange?.(nextMode);
-      focusComposer();
-    },
-    [focusComposer, onModeChange],
-  );
 
   const openResearchFilePicker = useCallback(() => {
     if (!allowAgentModes) return;
@@ -663,9 +647,7 @@ export function ChatInputBox({
       if (arr.length === 0) return;
       const sourceLabel = options?.sourceLabel?.trim() || "图片";
       setPendingImages((current) => {
-        const known = new Set(
-          current.map((file) => imageFileKey(file)),
-        );
+        const known = new Set(current.map((file) => imageFileKey(file)));
         const next = [...current];
         for (const file of arr) {
           const key = imageFileKey(file);
@@ -1177,62 +1159,6 @@ export function ChatInputBox({
                   <ImageIcon className="size-4" />
                   {t.chatInputBox.addImage}
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => seedDraft(t.chatInputBox.seedWebSearch)}
-                  className="gap-2 rounded-lg text-[13px]"
-                >
-                  <SearchIcon className="size-4" />
-                  {t.chatInputBox.webSearch}
-                </DropdownMenuItem>
-                {allowAgentModes && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => seedDraft(t.chatInputBox.seedCreatePpt)}
-                      className="gap-2 rounded-lg text-[13px]"
-                    >
-                      <PresentationIcon className="size-4" />
-                      {t.chatInputBox.createPpt}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => seedDraft(t.chatInputBox.seedCreateHtml)}
-                      className="gap-2 rounded-lg text-[13px]"
-                    >
-                      <FileTextIcon className="size-4" />
-                      {t.chatInputBox.createHtml}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => seedDraft(t.chatInputBox.seedRenderTable)}
-                      className="gap-2 rounded-lg text-[13px]"
-                    >
-                      <TableIcon className="size-4" />
-                      {t.chatInputBox.renderTable}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => seedDraft(t.chatInputBox.seedCreateImage)}
-                      className="gap-2 rounded-lg text-[13px]"
-                    >
-                      <ImageIcon className="size-4" />
-                      {t.chatInputBox.createImage}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        seedDraft(t.chatInputBox.seedScheduledTask)
-                      }
-                      className="gap-2 rounded-lg text-[13px]"
-                    >
-                      <CalendarClockIcon className="size-4" />
-                      {t.chatInputBox.scheduledTask}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => seedDraft(t.chatInputBox.seedProjectFiles)}
-                      className="gap-2 rounded-lg text-[13px]"
-                    >
-                      <FolderOpenIcon className="size-4" />
-                      {t.chatInputBox.projectFiles}
-                    </DropdownMenuItem>
-                  </>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
             <PreviewRefreshIndicator />
@@ -1320,7 +1246,9 @@ export function ChatInputBox({
                 type="button"
                 onClick={handleSubmit}
                 data-testid="chat-send-button"
-                disabled={(!draft.trim() && pendingImages.length === 0) || isBusy}
+                disabled={
+                  (!draft.trim() && pendingImages.length === 0) || isBusy
+                }
                 className={cn(
                   "flex size-7 items-center justify-center rounded-lg transition-[background-color,transform] duration-150",
                   isDeepResearchMode
