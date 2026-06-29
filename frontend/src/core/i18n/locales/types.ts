@@ -481,7 +481,7 @@ export interface Translations {
     thinkThoughts: string[];
   };
 
-  // Collaboration picker (CreateTeamDialog component)
+  // Collaboration picker strings
   createTeamDialog: {
     title: string;
     description: string;
