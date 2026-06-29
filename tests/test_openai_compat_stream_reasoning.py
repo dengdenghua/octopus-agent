@@ -99,6 +99,30 @@ def test_iter_openai_sse_accepts_python_repr_tool_arguments():
     assert events[0].tool_call.input == {"path": "README.md"}
 
 
+def test_iter_openai_sse_accepts_legacy_function_call_delta():
+    response = _FakeSSE([
+        (
+            'data: {"choices":[{"delta":{"function_call":'
+            '{"name":"read_file","arguments":"{\\"path\\""}}}]}'
+        ),
+        (
+            'data: {"choices":[{"delta":{"function_call":'
+            '{"arguments":":\\"README.md\\"}"}}}]}'
+        ),
+        "data: [DONE]",
+    ])
+
+    events = list(iter_openai_sse(response, model="glm-4.6"))
+
+    assert [event.type for event in events] == ["tool_use", "done"]
+    assert events[0].tool_call is not None
+    assert events[0].tool_call.id == "function_call_0"
+    assert events[0].tool_call.name == "read_file"
+    assert events[0].tool_call.input == {"path": "README.md"}
+    assert events[-1].final is not None
+    assert events[-1].final.tool_calls == [events[0].tool_call]
+
+
 def test_iter_openai_sse_preserves_finish_reason():
     response = _FakeSSE([
         'data: {"choices":[{"delta":{"content":"part one"},"finish_reason":"length"}]}',

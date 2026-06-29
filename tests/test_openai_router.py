@@ -627,6 +627,29 @@ class TestResponseParsing:
         assert resp.tool_calls[0].name == "read_file"
         assert resp.tool_calls[0].input == {"path": "README.md"}
 
+    def test_legacy_function_call_is_parsed_as_tool_call(self):
+        payload = _openai_response(text="")
+        payload["choices"][0]["finish_reason"] = "function_call"
+        payload["choices"][0]["message"]["content"] = None
+        payload["choices"][0]["message"]["function_call"] = {
+            "name": "read_file",
+            "arguments": '{"path":"README.md"}',
+        }
+        fake = _FakeClient(response=_FakeResponse(200, payload))
+        r = OpenAIModelRouter(
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            client=fake,
+        )
+
+        resp = r.call(_req(model="glm-4.6"))
+
+        assert resp.text == ""
+        assert resp.finish_reason == "function_call"
+        assert len(resp.tool_calls) == 1
+        assert resp.tool_calls[0].id == "function_call_0"
+        assert resp.tool_calls[0].name == "read_file"
+        assert resp.tool_calls[0].input == {"path": "README.md"}
+
     def test_reasoning_aliases_and_usage_aliases_are_parsed(self):
         payload = _openai_response(text="answer")
         payload["choices"][0]["message"]["reasoning"] = "plan"

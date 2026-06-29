@@ -168,6 +168,22 @@ def iter_openai_sse(
                     elif args_piece:
                         slot["arguments"] += str(args_piece)
 
+        legacy_function_call = delta.get("function_call")
+        if isinstance(legacy_function_call, dict):
+            slot = tool_state.setdefault(
+                0,
+                {"id": "function_call_0", "name": "", "arguments": ""},
+            )
+            if legacy_function_call.get("name"):
+                slot["name"] = str(legacy_function_call["name"])
+            args_piece = legacy_function_call.get("arguments")
+            if isinstance(args_piece, dict):
+                slot["arguments"] = json.dumps(
+                    args_piece, ensure_ascii=False,
+                )
+            elif args_piece:
+                slot["arguments"] += str(args_piece)
+
     tool_calls: list[Any] = []
     if tool_state:
         from .models import ToolCall

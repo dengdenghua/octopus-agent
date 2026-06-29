@@ -533,6 +533,16 @@ class OpenAIModelRouter(Provider, ModelRouter):
                 name=str(name),
                 input=args if isinstance(args, dict) else {},
             ))
+        legacy_call = msg.get("function_call")
+        if isinstance(legacy_call, dict):
+            name = legacy_call.get("name") or ""
+            args_raw = legacy_call.get("arguments") or ""
+            args = parse_tool_call_arguments(args_raw)
+            out.append(ToolCall(
+                id=str(legacy_call.get("id") or "function_call_0"),
+                name=str(name),
+                input=args if isinstance(args, dict) else {},
+            ))
         return out
 
     def _estimate_cost(
