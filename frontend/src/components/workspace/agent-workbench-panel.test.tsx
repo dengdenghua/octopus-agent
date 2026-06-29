@@ -130,9 +130,15 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.getByRole("button", { name: "查看主 Agent 工位" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Codex CLI")).toBeInTheDocument();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
-    expect(screen.getAllByText("协作")).toHaveLength(2);
+    expect(
+      screen.getByRole("img", { name: "Codex CLI · 协作 · 在场" }),
+    ).toHaveAttribute("title", "Codex CLI · 协作 · 在场");
+    expect(
+      screen.getByRole("img", { name: "Claude Code · 协作 · 在场" }),
+    ).toHaveAttribute("title", "Claude Code · 协作 · 在场");
+    expect(screen.queryByText("Codex CLI")).not.toBeInTheDocument();
+    expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
+    expect(screen.queryByText("协作")).not.toBeInTheDocument();
   });
 
   test("renders dispatched subagent seats before lifecycle events arrive", () => {

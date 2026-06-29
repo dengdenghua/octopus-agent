@@ -32,6 +32,8 @@ export interface WorkstationSeatProps {
   onClick?: () => void;
   /** Constrain the name width (used in the horizontal dock). */
   compactName?: boolean;
+  /** Avatar-only presentation for dense horizontal docks. */
+  iconOnly?: boolean;
   className?: string;
   /** aria-label override for the button form. */
   ariaLabel?: string;
@@ -59,35 +61,71 @@ export function WorkstationSeat({
   selected,
   onClick,
   compactName,
+  iconOnly,
   className,
   ariaLabel,
 }: WorkstationSeatProps) {
-  const base =
-    "group/seat inline-flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-colors";
+  const base = iconOnly
+    ? "group/seat relative inline-grid size-9 shrink-0 place-items-center rounded-xl border text-left transition-colors"
+    : "group/seat inline-flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-colors";
   const tone = selected
     ? "border-foreground/30 bg-muted/50 text-foreground"
     : "border-border/60 bg-background/85 text-foreground hover:bg-muted/40";
+  const statusText = dotLabel ? `${name} · ${dotLabel}` : name;
+  const accessibleLabel = ariaLabel ?? statusText;
 
-  const inner = (
+  const avatarElement = (
+    <span className="relative grid size-7 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-[14px] leading-none">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={iconOnly ? "" : name}
+          className="size-full object-cover"
+        />
+      ) : avatar?.trim() ? (
+        <span aria-hidden="true">{avatar}</span>
+      ) : avatarNode ? (
+        avatarNode
+      ) : (
+        <span className="text-[11px] font-semibold text-muted-foreground">
+          {(fallbackInitial ?? name.charAt(0)).toUpperCase()}
+        </span>
+      )}
+      {showBotBadge && (
+        <span className="absolute -bottom-0.5 -right-0.5 grid size-3 place-items-center rounded-full bg-background">
+          <BotIcon className="size-2 text-muted-foreground" aria-hidden="true" />
+        </span>
+      )}
+    </span>
+  );
+
+  const iconStatusDot = dotClassName ? (
+    <span
+      className={cn(
+        "absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-background",
+        dotClassName,
+      )}
+      aria-label={dotLabel}
+      title={dotLabel}
+    />
+  ) : null;
+
+  const inlineStatusDot = dotClassName ? (
+    <span
+      className={cn("size-1.5 shrink-0 rounded-full", dotClassName)}
+      aria-label={dotLabel}
+      title={dotLabel}
+    />
+  ) : null;
+
+  const inner = iconOnly ? (
     <>
-      <span className="relative grid size-7 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-[14px] leading-none">
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={name} className="size-full object-cover" />
-        ) : avatar?.trim() ? (
-          <span aria-hidden="true">{avatar}</span>
-        ) : avatarNode ? (
-          avatarNode
-        ) : (
-          <span className="text-[11px] font-semibold text-muted-foreground">
-            {(fallbackInitial ?? name.charAt(0)).toUpperCase()}
-          </span>
-        )}
-        {showBotBadge && (
-          <span className="absolute -bottom-0.5 -right-0.5 grid size-3 place-items-center rounded-full bg-background">
-            <BotIcon className="size-2 text-muted-foreground" aria-hidden="true" />
-          </span>
-        )}
-      </span>
+      {avatarElement}
+      {iconStatusDot}
+    </>
+  ) : (
+    <>
+      {avatarElement}
       <span
         className={cn(
           "truncate text-[13px] font-medium",
@@ -97,13 +135,7 @@ export function WorkstationSeat({
         {name}
       </span>
       {badge}
-      {dotClassName && (
-        <span
-          className={cn("size-1.5 shrink-0 rounded-full", dotClassName)}
-          aria-label={dotLabel}
-          title={dotLabel}
-        />
-      )}
+      {inlineStatusDot}
       {trailing}
     </>
   );
@@ -114,7 +146,7 @@ export function WorkstationSeat({
         type="button"
         onClick={onClick}
         title={title}
-        aria-label={ariaLabel ?? name}
+        aria-label={accessibleLabel}
         className={cn(base, tone, className)}
       >
         {inner}
@@ -122,7 +154,12 @@ export function WorkstationSeat({
     );
   }
   return (
-    <div title={title} className={cn(base, tone, className)}>
+    <div
+      title={title}
+      aria-label={accessibleLabel}
+      role={iconOnly ? "img" : undefined}
+      className={cn(base, tone, className)}
+    >
       {inner}
     </div>
   );

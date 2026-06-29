@@ -1551,12 +1551,12 @@ function SubagentDock({
 }) {
   const { t } = useI18n();
   return (
-    <div className="shrink-0 border-t border-border/25 bg-background/60 px-5 py-1.5">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="shrink-0 border-t border-border/25 bg-background/60 px-4 py-1.5">
+      <div className="flex min-w-0 items-center gap-2">
         <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
           {t.agentWorkbenchPanel.workbenchSlots}
         </span>
-        <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <WorkstationSeat
             name={t.agentWorkbenchPanel.mainController}
             avatarNode={
@@ -1570,7 +1570,7 @@ function SubagentDock({
             dotClassName={agentRunDotClass(mainRunState)}
             ariaLabel={t.agentWorkbenchPanel.viewMainAgentSlot}
             title={t.agentWorkbenchPanel.mainAgentProcessTitle}
-            compactName
+            iconOnly
             className="shrink-0"
           />
           {agents.map((agent) => {
@@ -1592,7 +1592,7 @@ function SubagentDock({
                 dotLabel={dockAgentStatusLabel(agent.status, t)}
                 ariaLabel={t.agentWorkbenchPanel.viewAgentProcess(label)}
                 title={`${label}: ${agent.task}`}
-                compactName
+                iconOnly
                 className="shrink-0"
               />
             );
@@ -1607,17 +1607,9 @@ function SubagentDock({
               fallbackInitial={seat.name.charAt(0)}
               dotClassName="bg-emerald-500"
               dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
-              badge={
-                seat.role ? (
-                  <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                    {seat.role === "tl"
-                      ? t.agentWorkbenchPanel.mainController
-                      : t.agentWorkbenchPanel.collaboratorSeat}
-                  </span>
-                ) : null
-              }
-              title={`${seat.name} · ${t.agentWorkbenchPanel.collaboratorSeat}`}
-              compactName
+              title={`${seat.name} · ${t.agentWorkbenchPanel.collaboratorSeat} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+              ariaLabel={`${seat.name} · ${t.agentWorkbenchPanel.collaboratorSeat} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+              iconOnly
               className="shrink-0"
             />
           ))}
