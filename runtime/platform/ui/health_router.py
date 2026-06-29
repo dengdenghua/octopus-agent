@@ -187,6 +187,7 @@ def build_runtime_self_check(
     model_compat = _model_compat_info()
     orchestration = _orchestration_surface_info(request)
     run_evidence = _run_evidence_surface_info(request)
+    automation = _automation_surface_info(request)
     checks = [
         {
             "id": "runtime_version",
@@ -289,6 +290,16 @@ def build_runtime_self_check(
                 f"contracts={len(run_evidence['method_contracts'])}"
             ),
         },
+        {
+            "id": "automation_surface",
+            "severity": "error",
+            "passed": bool(automation["ready"]),
+            "detail": (
+                f"routes={automation['route_count']} "
+                f"missing={','.join(automation['missing_required_routes']) or 'none'} "
+                f"contracts={len(automation['method_contracts'])}"
+            ),
+        },
     ]
     ready = all(
         bool(row["passed"]) or row.get("severity") == "warn" for row in checks
@@ -322,6 +333,7 @@ def build_runtime_self_check(
         "model_compat": model_compat,
         "orchestration": orchestration,
         "run_evidence": run_evidence,
+        "automation": automation,
         "api_surface": api_surface,
         "loopback_aliases": aliases,
         "paths": {
@@ -859,6 +871,207 @@ def _run_evidence_method_contracts() -> list[dict[str, Any]]:
         )
     )
     return checks
+
+
+def _automation_surface_info(request: Request | None) -> dict[str, Any]:
+    required_routes = {
+        "/api/browser/system-info": ["GET"],
+        "/api/browser/session/status": ["GET"],
+        "/api/browser/session/health": ["GET"],
+        "/api/browser/session/ensure": ["POST"],
+        "/api/browser/session/viewport": ["POST"],
+        "/api/browser/session/reset": ["POST"],
+        "/api/browser/navigate": ["POST"],
+        "/api/browser/action": ["POST"],
+        "/api/browser/screenshot/base64": ["GET"],
+        "/api/browser/page-info": ["GET"],
+        "/api/browser/action-log": ["GET"],
+        "/api/browser/session/replay-case": ["GET"],
+        "/api/browser/session/replay-case/queue": ["POST"],
+        "/api/browser/relay/status": ["GET"],
+        "/api/browser/relay/command": ["POST"],
+        "/api/browser/relay/result": ["POST"],
+        "/api/browser-artifacts/{filename}": ["GET"],
+        "/api/computer/status": ["GET"],
+        "/api/computer/activity": ["GET"],
+        "/api/computer/activity/replay-case": ["GET"],
+        "/api/computer/activity/replay-case/queue": ["POST"],
+        "/api/computer/screenshot": ["POST"],
+        "/api/computer/actions/preview": ["POST"],
+        "/api/computer/actions/plan": ["POST"],
+        "/api/computer/actions/ground": ["POST"],
+        "/api/computer/actions/vision": ["POST"],
+        "/api/computer/actions/execute": ["POST"],
+        "/api/computer/lease/release": ["POST"],
+        "/api/computer/uia/status": ["GET"],
+        "/api/computer/uia/tree": ["GET"],
+        "/api/computer/uia/find": ["GET"],
+    }
+    route_surface = _route_surface_info(request, required_routes)
+    method_contracts = _automation_method_contracts()
+    missing_methods = [
+        {
+            "method": row["method"],
+            "reason": row["reason"],
+        }
+        for row in method_contracts
+        if not row["present"]
+    ]
+    ready = (
+        route_surface["required_routes_present"]
+        and not missing_methods
+    )
+    return {
+        "schema": "octopus.automation_surface_self_check.v1",
+        "ready": ready,
+        "route_count": route_surface["route_count"],
+        "required_routes": list(required_routes),
+        "missing_required_routes": route_surface["missing_required_routes"],
+        "route_methods": route_surface["route_methods"],
+        "missing_route_methods": route_surface["missing_route_methods"],
+        "method_contracts": method_contracts,
+        "missing_methods": missing_methods,
+        "capabilities": {
+            "browser_session_lifecycle": (
+                route_surface["has_required_route"]["/api/browser/session/status"]
+                and route_surface["has_required_route"]["/api/browser/session/ensure"]
+                and route_surface["has_required_route"]["/api/browser/session/reset"]
+            ),
+            "browser_health": route_surface["has_required_route"][
+                "/api/browser/session/health"
+            ],
+            "browser_navigation": (
+                route_surface["has_required_route"]["/api/browser/navigate"]
+                and route_surface["has_required_route"]["/api/browser/action"]
+            ),
+            "browser_screenshot_evidence": (
+                route_surface["has_required_route"]["/api/browser/screenshot/base64"]
+                and route_surface["has_required_route"][
+                    "/api/browser-artifacts/{filename}"
+                ]
+            ),
+            "browser_replay_queue": (
+                route_surface["has_required_route"][
+                    "/api/browser/session/replay-case"
+                ]
+                and route_surface["has_required_route"][
+                    "/api/browser/session/replay-case/queue"
+                ]
+            ),
+            "browser_relay": (
+                route_surface["has_required_route"]["/api/browser/relay/status"]
+                and route_surface["has_required_route"]["/api/browser/relay/command"]
+                and route_surface["has_required_route"]["/api/browser/relay/result"]
+            ),
+            "computer_preview_execute": (
+                route_surface["has_required_route"]["/api/computer/actions/preview"]
+                and route_surface["has_required_route"]["/api/computer/actions/execute"]
+            ),
+            "computer_grounding": (
+                route_surface["has_required_route"]["/api/computer/actions/plan"]
+                and route_surface["has_required_route"]["/api/computer/actions/ground"]
+                and route_surface["has_required_route"]["/api/computer/actions/vision"]
+            ),
+            "computer_activity_replay": (
+                route_surface["has_required_route"][
+                    "/api/computer/activity/replay-case"
+                ]
+                and route_surface["has_required_route"][
+                    "/api/computer/activity/replay-case/queue"
+                ]
+            ),
+            "computer_uia": (
+                route_surface["has_required_route"]["/api/computer/uia/status"]
+                and route_surface["has_required_route"]["/api/computer/uia/tree"]
+                and route_surface["has_required_route"]["/api/computer/uia/find"]
+            ),
+            "computer_lease": route_surface["has_required_route"][
+                "/api/computer/lease/release"
+            ],
+            "pixel_replay_gate": _contract_present(
+                method_contracts,
+                "browser_pixel.browser_pixel_replay_gate_case",
+            ),
+        },
+        "error": "",
+    }
+
+
+def _automation_method_contracts() -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    checks.extend(
+        _class_method_contracts(
+            "BrowserSessionCenter",
+            "runtime.platform.runtime_policy.browser_sessions",
+            "BrowserSessionCenter",
+            [
+                "ensure",
+                "get",
+                "record_action",
+                "health_report",
+                "snapshot",
+                "list_snapshots",
+            ],
+        )
+    )
+    checks.extend(
+        _module_function_contracts(
+            "browser_replay",
+            "runtime.safety.replay.browser_desktop_replay",
+            [
+                "browser_session_replay_identity",
+                "computer_activity_replay_identity",
+            ],
+        )
+    )
+    checks.extend(
+        _module_function_contracts(
+            "browser_pixel",
+            "runtime.safety.replay.browser_pixel_assertions",
+            [
+                "assert_screenshot_pixels",
+                "compare_screenshot_pixels",
+                "browser_pixel_replay_gate_case",
+            ],
+        )
+    )
+    checks.extend(
+        _module_function_contracts(
+            "computer_skills",
+            "runtime.execution.suckers.computer_skills",
+            [
+                "_screen_capture",
+                "_screen_info",
+                "_mouse_click",
+                "_mouse_move",
+                "_keyboard_type",
+                "_keyboard_press",
+                "register_computer_skills",
+            ],
+        )
+    )
+    checks.extend(
+        _module_function_contracts(
+            "computer_uia",
+            "runtime.execution.suckers.computer_uia_skills",
+            [
+                "_check_uia",
+                "uia_replay_assertion_for_action",
+                "register_computer_uia_skills",
+            ],
+        )
+    )
+    return checks
+
+
+def _contract_present(
+    contracts: list[dict[str, Any]],
+    method: str,
+) -> bool:
+    for row in contracts:
+        if row.get("method") == method:
+            return bool(row.get("present"))
+    return False
 
 
 def _class_method_contracts(

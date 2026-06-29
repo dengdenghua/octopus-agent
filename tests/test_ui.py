@@ -255,10 +255,58 @@ class TestBasicRoutes:
             "present"
         ] is True
         assert _check_by_id(data, "run_evidence_surface")["passed"] is True
+        assert data["automation"]["schema"] == "octopus.automation_surface_self_check.v1"
+        assert data["automation"]["ready"] is True
+        assert data["automation"]["missing_required_routes"] == []
+        assert data["automation"]["missing_route_methods"] == []
+        assert data["automation"]["missing_methods"] == []
+        assert data["automation"]["capabilities"] == {
+            "browser_session_lifecycle": True,
+            "browser_health": True,
+            "browser_navigation": True,
+            "browser_screenshot_evidence": True,
+            "browser_replay_queue": True,
+            "browser_relay": True,
+            "computer_preview_execute": True,
+            "computer_grounding": True,
+            "computer_activity_replay": True,
+            "computer_uia": True,
+            "computer_lease": True,
+            "pixel_replay_gate": True,
+        }
+        assert data["automation"]["route_methods"][
+            "/api/browser/session/replay-case/queue"
+        ] == ["POST"]
+        assert data["automation"]["route_methods"][
+            "/api/computer/actions/execute"
+        ] == ["POST"]
+        assert data["automation"]["route_methods"][
+            "/api/computer/uia/tree"
+        ] == ["GET"]
+        automation_methods = {
+            item["method"]: item
+            for item in data["automation"]["method_contracts"]
+        }
+        assert automation_methods["BrowserSessionCenter.health_report"][
+            "present"
+        ] is True
+        assert automation_methods["browser_replay.browser_session_replay_identity"][
+            "present"
+        ] is True
+        assert automation_methods["browser_pixel.browser_pixel_replay_gate_case"][
+            "present"
+        ] is True
+        assert automation_methods["computer_skills._screen_capture"][
+            "present"
+        ] is True
+        assert automation_methods["computer_uia.uia_replay_assertion_for_action"][
+            "present"
+        ] is True
+        assert _check_by_id(data, "automation_surface")["passed"] is True
         assert _check_by_id(data, "frontend_origin")["passed"] is True
         assert _check_by_id(data, "vite_proxy_target")["passed"] is True
 
-    def test_runtime_self_check_flags_missing_run_evidence_routes(self):
+    def test_runtime_self_check_flags_missing_run_evidence_and_automation_routes(self):
         app = FastAPI()
         source = create_app(journal_path=None)
         state = source.state.octopus_state
@@ -285,6 +333,14 @@ class TestBasicRoutes:
             "missing_required_routes"
         ]
         assert _check_by_id(data, "run_evidence_surface")["passed"] is False
+        assert data["automation"]["ready"] is False
+        assert "/api/browser/session/replay-case" in data["automation"][
+            "missing_required_routes"
+        ]
+        assert "/api/computer/actions/execute" in data["automation"][
+            "missing_required_routes"
+        ]
+        assert _check_by_id(data, "automation_surface")["passed"] is False
 
     def test_runtime_self_check_flags_noncanonical_frontend_origin(self):
         app = create_app(

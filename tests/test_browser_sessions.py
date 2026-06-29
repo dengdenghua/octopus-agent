@@ -43,6 +43,8 @@ def test_browser_session_center_snapshots_without_runtime_objects() -> None:
         "browser_regression_mode": "off",
         "browser_regression_preview_url": "",
         "browser_regression_requires_visible_cursor": False,
+        "recovered_from_crash": False,
+        "recovery_revalidated_at": 0,
     }
 
 
