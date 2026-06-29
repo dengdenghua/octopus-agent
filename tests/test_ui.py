@@ -8,10 +8,12 @@ from pathlib import Path
 import pytest
 
 fastapi = pytest.importorskip("fastapi")
+from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from runtime import __version__  # noqa: E402
 from runtime.platform.ui import create_app  # noqa: E402
+from runtime.platform.ui.health_router import create_health_router  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════
 # factory
@@ -201,8 +203,88 @@ class TestBasicRoutes:
         assert data["orchestration"]["missing_model_fields"] == []
         assert data["orchestration"]["missing_methods"] == []
         assert _check_by_id(data, "orchestration_surface")["passed"] is True
+        assert data["run_evidence"]["schema"] == (
+            "octopus.run_evidence_surface_self_check.v1"
+        )
+        assert data["run_evidence"]["ready"] is True
+        assert data["run_evidence"]["missing_required_routes"] == []
+        assert data["run_evidence"]["missing_route_methods"] == []
+        assert data["run_evidence"]["missing_methods"] == []
+        assert data["run_evidence"]["capabilities"] == {
+            "trace_stats": True,
+            "task_run_review": True,
+            "task_run_replay_case": True,
+            "task_run_replay_evaluation": True,
+            "replay_gate": True,
+            "process_timeline": True,
+            "experience_ledger": True,
+            "review_queue": True,
+            "promotion_gate": True,
+            "checkpoint_resume": True,
+            "loop_review": True,
+            "loop_replay": True,
+            "loop_resume": True,
+        }
+        assert data["run_evidence"]["route_methods"][
+            "/api/agent-trace/task-runs/{task_id}/process-timeline"
+        ] == ["GET"]
+        assert data["run_evidence"]["route_methods"][
+            "/api/agent-trace/review-queue/promotions/apply"
+        ] == ["POST"]
+        assert data["run_evidence"]["route_methods"][
+            "/api/loops/{run_id}/replay-case"
+        ] == ["GET"]
+        evidence_methods = {
+            item["method"]: item
+            for item in data["run_evidence"]["method_contracts"]
+        }
+        assert evidence_methods["AgentTraceStore.task_run_review"]["present"] is True
+        assert evidence_methods["AgentTraceStore.replay_gate"]["present"] is True
+        assert evidence_methods["ExperienceLedger.add_from_task_run_review"][
+            "present"
+        ] is True
+        assert evidence_methods["ReviewQueue.add_from_task_run_review"]["present"] is True
+        assert evidence_methods["PromotionApplier.apply"]["present"] is True
+        assert evidence_methods[
+            "process_timeline.build_task_run_process_timeline"
+        ]["present"] is True
+        assert evidence_methods["loop_replay.build_loop_run_replay_case"][
+            "present"
+        ] is True
+        assert evidence_methods["loop_recovery.build_loop_run_resume_proposal"][
+            "present"
+        ] is True
+        assert _check_by_id(data, "run_evidence_surface")["passed"] is True
         assert _check_by_id(data, "frontend_origin")["passed"] is True
         assert _check_by_id(data, "vite_proxy_target")["passed"] is True
+
+    def test_runtime_self_check_flags_missing_run_evidence_routes(self):
+        app = FastAPI()
+        source = create_app(journal_path=None)
+        state = source.state.octopus_state
+        app.include_router(
+            create_health_router(
+                state=state,
+                server_host="localhost",
+                server_port=8000,
+            )
+        )
+        client = TestClient(app, base_url="http://localhost:8000")
+
+        data = client.get(
+            "/api/runtime/self-check",
+            headers={"Origin": "http://localhost:3000"},
+        ).json()
+
+        assert data["ready"] is False
+        assert data["run_evidence"]["ready"] is False
+        assert "/api/agent-trace/stats" in data["run_evidence"][
+            "missing_required_routes"
+        ]
+        assert "/api/loops/{run_id}/replay-case" in data["run_evidence"][
+            "missing_required_routes"
+        ]
+        assert _check_by_id(data, "run_evidence_surface")["passed"] is False
 
     def test_runtime_self_check_flags_noncanonical_frontend_origin(self):
         app = create_app(

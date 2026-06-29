@@ -186,6 +186,7 @@ def build_runtime_self_check(
     webui = _webui_static_info(root)
     model_compat = _model_compat_info()
     orchestration = _orchestration_surface_info(request)
+    run_evidence = _run_evidence_surface_info(request)
     checks = [
         {
             "id": "runtime_version",
@@ -278,6 +279,16 @@ def build_runtime_self_check(
                 f"models={len(orchestration['model_contracts'])}"
             ),
         },
+        {
+            "id": "run_evidence_surface",
+            "severity": "error",
+            "passed": bool(run_evidence["ready"]),
+            "detail": (
+                f"routes={run_evidence['route_count']} "
+                f"missing={','.join(run_evidence['missing_required_routes']) or 'none'} "
+                f"contracts={len(run_evidence['method_contracts'])}"
+            ),
+        },
     ]
     ready = all(
         bool(row["passed"]) or row.get("severity") == "warn" for row in checks
@@ -310,6 +321,7 @@ def build_runtime_self_check(
         "webui": webui,
         "model_compat": model_compat,
         "orchestration": orchestration,
+        "run_evidence": run_evidence,
         "api_surface": api_surface,
         "loopback_aliases": aliases,
         "paths": {
@@ -643,6 +655,264 @@ def _orchestration_surface_info(request: Request | None) -> dict[str, Any]:
         },
         "error": "",
     }
+
+
+def _run_evidence_surface_info(request: Request | None) -> dict[str, Any]:
+    required_routes = {
+        "/api/agent-trace/stats": ["GET"],
+        "/api/agent-trace/events": ["GET"],
+        "/api/agent-trace/task-runs": ["GET"],
+        "/api/agent-trace/task-runs/{task_id}": ["GET"],
+        "/api/agent-trace/task-runs/{task_id}/review": ["GET"],
+        "/api/agent-trace/task-runs/{task_id}/replay-case": ["GET"],
+        "/api/agent-trace/task-runs/{task_id}/replay-evaluation": ["GET"],
+        "/api/agent-trace/task-runs/{task_id}/process-timeline": ["GET"],
+        "/api/agent-trace/task-runs/{task_id}/review/commit": ["POST"],
+        "/api/agent-trace/task-runs/{task_id}/review/queue": ["POST"],
+        "/api/agent-trace/replay-cases": ["GET"],
+        "/api/agent-trace/replay-evaluations": ["GET"],
+        "/api/agent-trace/replay-gate": ["GET"],
+        "/api/agent-trace/experience-ledger": ["GET"],
+        "/api/agent-trace/experience-ledger/weekly-summary": ["GET"],
+        "/api/agent-trace/experience-ledger/quality-summary": ["GET"],
+        "/api/agent-trace/review-queue": ["GET"],
+        "/api/agent-trace/review-queue/summary": ["GET"],
+        "/api/agent-trace/review-queue/{item_id}/decision": ["POST"],
+        "/api/agent-trace/review-queue/promotions/plan": ["POST"],
+        "/api/agent-trace/review-queue/promotions/apply": ["POST"],
+        "/api/agent-trace/review-queue/promotions/audit": ["GET"],
+        "/api/agent-trace/review-queue/promotions/audit/summary": ["GET"],
+        "/api/agent-trace/checkpoints": ["GET"],
+        "/api/agent-trace/checkpoints/latest": ["GET"],
+        "/api/agent-trace/checkpoints/{checkpoint_id}/resume-proposal": ["GET"],
+        "/api/agent-trace/resume-proposals": ["GET"],
+        "/api/agent-trace/resume-requests": ["GET"],
+        "/api/loops/{run_id}/review": ["GET"],
+        "/api/loops/{run_id}/resume-proposal": ["GET"],
+        "/api/loops/{run_id}/replay-case": ["GET"],
+        "/api/loops/{run_id}/replay-evaluation": ["GET"],
+    }
+    route_surface = _route_surface_info(request, required_routes)
+    method_contracts = _run_evidence_method_contracts()
+    missing_methods = [
+        {
+            "method": row["method"],
+            "reason": row["reason"],
+        }
+        for row in method_contracts
+        if not row["present"]
+    ]
+    ready = (
+        route_surface["required_routes_present"]
+        and not missing_methods
+    )
+    return {
+        "schema": "octopus.run_evidence_surface_self_check.v1",
+        "ready": ready,
+        "route_count": route_surface["route_count"],
+        "required_routes": list(required_routes),
+        "missing_required_routes": route_surface["missing_required_routes"],
+        "route_methods": route_surface["route_methods"],
+        "missing_route_methods": route_surface["missing_route_methods"],
+        "method_contracts": method_contracts,
+        "missing_methods": missing_methods,
+        "capabilities": {
+            "trace_stats": route_surface["has_required_route"]["/api/agent-trace/stats"],
+            "task_run_review": route_surface["has_required_route"][
+                "/api/agent-trace/task-runs/{task_id}/review"
+            ],
+            "task_run_replay_case": route_surface["has_required_route"][
+                "/api/agent-trace/task-runs/{task_id}/replay-case"
+            ],
+            "task_run_replay_evaluation": route_surface["has_required_route"][
+                "/api/agent-trace/task-runs/{task_id}/replay-evaluation"
+            ],
+            "replay_gate": route_surface["has_required_route"][
+                "/api/agent-trace/replay-gate"
+            ],
+            "process_timeline": route_surface["has_required_route"][
+                "/api/agent-trace/task-runs/{task_id}/process-timeline"
+            ],
+            "experience_ledger": route_surface["has_required_route"][
+                "/api/agent-trace/experience-ledger"
+            ],
+            "review_queue": route_surface["has_required_route"][
+                "/api/agent-trace/review-queue"
+            ],
+            "promotion_gate": route_surface["has_required_route"][
+                "/api/agent-trace/review-queue/promotions/apply"
+            ],
+            "checkpoint_resume": (
+                route_surface["has_required_route"]["/api/agent-trace/checkpoints"]
+                and route_surface["has_required_route"][
+                    "/api/agent-trace/resume-proposals"
+                ]
+            ),
+            "loop_review": route_surface["has_required_route"][
+                "/api/loops/{run_id}/review"
+            ],
+            "loop_replay": (
+                route_surface["has_required_route"]["/api/loops/{run_id}/replay-case"]
+                and route_surface["has_required_route"][
+                    "/api/loops/{run_id}/replay-evaluation"
+                ]
+            ),
+            "loop_resume": route_surface["has_required_route"][
+                "/api/loops/{run_id}/resume-proposal"
+            ],
+        },
+        "error": "",
+    }
+
+
+def _run_evidence_method_contracts() -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    checks.extend(
+        _class_method_contracts(
+            "AgentTraceStore",
+            "runtime.memory.diagnostics.trace_store",
+            "AgentTraceStore",
+            [
+                "stats",
+                "events",
+                "task_runs",
+                "task_run",
+                "task_run_review",
+                "task_run_replay_case",
+                "evaluate_task_run_replay_case",
+                "task_run_replay_cases",
+                "evaluate_task_run_replay_cases",
+                "replay_gate",
+                "replay_gate_for_task_ids",
+                "approvals",
+                "checkpoints",
+                "latest_checkpoint",
+                "resume_proposal",
+                "resume_proposals",
+                "resume_requests",
+            ],
+        )
+    )
+    checks.extend(
+        _class_method_contracts(
+            "ExperienceLedger",
+            "runtime.memory.learning.experience_ledger",
+            "ExperienceLedger",
+            [
+                "add_from_task_run_review",
+                "records",
+                "records_for_task",
+                "weekly_summary",
+                "quality_summary",
+            ],
+        )
+    )
+    checks.extend(
+        _class_method_contracts(
+            "ReviewQueue",
+            "runtime.memory.learning.review_queue",
+            "ReviewQueue",
+            [
+                "add_from_task_run_review",
+                "items",
+                "summary",
+                "decide",
+            ],
+        )
+    )
+    checks.extend(
+        _class_method_contracts(
+            "PromotionApplier",
+            "runtime.memory.learning.promotion_applier",
+            "PromotionApplier",
+            [
+                "plan",
+                "apply",
+                "audit",
+                "audit_summary",
+            ],
+        )
+    )
+    checks.extend(
+        _module_function_contracts(
+            "process_timeline",
+            "runtime.memory.runtime_state.process_timeline",
+            ["build_task_run_process_timeline"],
+        )
+    )
+    checks.extend(
+        _module_function_contracts(
+            "loop_replay",
+            "runtime.execution.loops.replay",
+            [
+                "build_loop_run_replay",
+                "build_loop_run_replay_case",
+                "evaluate_loop_run_replay_case",
+            ],
+        )
+    )
+    checks.extend(
+        _module_function_contracts(
+            "loop_recovery",
+            "runtime.execution.loops.recovery",
+            ["build_loop_run_resume_proposal"],
+        )
+    )
+    return checks
+
+
+def _class_method_contracts(
+    label: str,
+    module_name: str,
+    class_name: str,
+    method_names: list[str],
+) -> list[dict[str, Any]]:
+    try:
+        module = __import__(module_name, fromlist=[class_name])
+        cls = getattr(module, class_name)
+    except Exception as exc:  # noqa: BLE001
+        return [
+            {
+                "method": f"{label}.{method}",
+                "present": False,
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+            for method in method_names
+        ]
+    return [
+        {
+            "method": f"{label}.{method}",
+            "present": callable(getattr(cls, method, None)),
+            "reason": "" if callable(getattr(cls, method, None)) else "missing",
+        }
+        for method in method_names
+    ]
+
+
+def _module_function_contracts(
+    label: str,
+    module_name: str,
+    function_names: list[str],
+) -> list[dict[str, Any]]:
+    try:
+        module = __import__(module_name, fromlist=function_names)
+    except Exception as exc:  # noqa: BLE001
+        return [
+            {
+                "method": f"{label}.{function}",
+                "present": False,
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+            for function in function_names
+        ]
+    return [
+        {
+            "method": f"{label}.{function}",
+            "present": callable(getattr(module, function, None)),
+            "reason": "" if callable(getattr(module, function, None)) else "missing",
+        }
+        for function in function_names
+    ]
 
 
 def _route_surface_info(
