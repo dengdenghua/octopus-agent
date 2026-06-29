@@ -89,7 +89,7 @@ import { cn } from "@/lib/utils";
 
 // Surface modes in the left sidebar. Chat and Company are handled by a
 // dedicated two-panel switch so they feel like peer work surfaces instead
-// of ordinary navigation rows. Team also lives under the Company surface.
+// of ordinary navigation rows.
 // NOTE: label bags are now built inside the component through useI18n
 // so translations respect the selected locale. Module-level constants
 // capture just the route + icon.
@@ -100,9 +100,6 @@ type NavRoute = {
   label?: string;
 };
 const PRIMARY_WORKSPACE_ROUTE = "/workspace/realtime/new";
-// 「工作」surface 的落地页。公司 PM(/workspace/company)已删(交企业版),
-// 工作 surface 改以团队/多人协作为主,落地到团队页。
-const COMPANY_WORKSPACE_ROUTE = "/workspace/team";
 
 const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
   {
@@ -120,12 +117,6 @@ const CHAT_CAPABILITY_ROUTES: NavRoute[] = [
     labelKey: "navEvolution",
     icon: DnaIcon,
   },
-];
-
-// 工作 surface 的组织导航。公司 PM(工作台/项目/任务/里程碑/AI 助手)已移除
-// (交企业版);保留团队/多人协作。Agent 管理统一收敛到左下角角色切换。
-const COMPANY_ORG_ROUTES: NavRoute[] = [
-  { to: "/workspace/team/new", labelKey: "navTeam", icon: UsersRoundIcon },
 ];
 
 const STORAGE_LIBRARY_ROUTES: NavRoute[] = [
@@ -591,10 +582,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
       })),
     [resolveLabel],
   );
-  const companyOrgItems = useMemo(
-    () => resolveRoutes(COMPANY_ORG_ROUTES),
-    [resolveRoutes],
-  );
   const chatCapabilityItems = useMemo(
     () => resolveRoutes(CHAT_CAPABILITY_ROUTES),
     [resolveRoutes],
@@ -1034,7 +1021,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
         {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
         <NavSection items={chatCapabilityItems} pathname={pathname} />
-        <NavSection items={companyOrgItems} pathname={pathname} />
         <LocalDatabaseSection
           title={resolveLabel("navDatabase")}
           items={nasLibraryItems}
@@ -1299,9 +1285,6 @@ function isNavRouteActive(pathname: string, to: string) {
   const path = routePath(to);
   if (path === PRIMARY_WORKSPACE_ROUTE) {
     return isChatSurfaceRoute(pathname);
-  }
-  if (path === COMPANY_WORKSPACE_ROUTE) {
-    return pathname === COMPANY_WORKSPACE_ROUTE;
   }
   if (path === "/workspace/team/new") {
     return (
