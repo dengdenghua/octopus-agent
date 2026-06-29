@@ -119,7 +119,8 @@ if FASTAPI_AVAILABLE:
         strict_tool_schema: bool | None = None
         max_temperature: float | None = None
         unsupported_request_fields: list[str] | None = None
-        default_headers: dict[str, str] | None = None
+        default_header_names: list[str] = Field(default_factory=list)
+        has_default_headers: bool = False
 
     class CustomModelsList(BaseModel):
         models: list[CustomModelEntry]
@@ -646,6 +647,31 @@ def create_config_router(
             "upstreams": rows,
         }
 
+    def _default_header_names(entry: dict[str, Any]) -> list[str]:
+        headers = entry.get("default_headers") or {}
+        if not isinstance(headers, dict):
+            return []
+        return sorted(str(name) for name in headers if str(name).strip())
+
+    def _custom_model_wire_entry(entry: dict[str, Any]) -> dict[str, Any]:
+        """Return a custom-model row safe for browser/API responses.
+
+        ``api_key`` and ``default_headers`` both contain secrets. The
+        browser only needs presence + header names so users can see what is
+        configured without receiving bearer tokens or route keys back over the
+        wire.
+        """
+        header_names = _default_header_names(entry)
+        safe = {
+            k: v
+            for k, v in entry.items()
+            if k not in {"api_key", "default_headers"}
+        }
+        safe["has_api_key"] = bool(entry.get("api_key"))
+        safe["default_header_names"] = header_names
+        safe["has_default_headers"] = bool(header_names)
+        return safe
+
     def _sample_openai_compat_payload(model: str) -> dict[str, Any]:
         return {
             "model": model,
@@ -1085,10 +1111,7 @@ def create_config_router(
         presence reported as ``has_api_key`` boolean only."""
         return {
             "models": [
-                {
-                    **{k: v for k, v in entry.items() if k != "api_key"},
-                    "has_api_key": bool(entry.get("api_key")),
-                }
+                _custom_model_wire_entry(entry)
                 for entry in custom_models_state.values()
             ],
         }
@@ -1249,9 +1272,7 @@ def create_config_router(
         custom_models_state[model_id] = entry
         _save()
         status = _register(entry)
-        safe_entry = {k: v for k, v in entry.items() if k != "api_key"}
-        safe_entry["has_api_key"] = bool(entry.get("api_key"))
-        return {"model": safe_entry, "_status": status}
+        return {"model": _custom_model_wire_entry(entry), "_status": status}
 
     @router.delete(
         "/api/config/custom-models/{model_id}",
@@ -1506,7 +1527,7 @@ def create_config_router(
         return {
             "ok": True,
             "model_id": model_id,
-            "entry": {k: v for k, v in entry.items() if k != "api_key"},
+            "entry": _custom_model_wire_entry(entry),
             "_status": status,
         }
 

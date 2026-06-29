@@ -275,8 +275,11 @@ class TestCustomModelsUpsert:
         body = r.json()
         # api_key MUST NOT be echoed back — privacy invariant.
         assert "api_key" not in body["model"]
+        assert "default_headers" not in body["model"]
         # But the presence flag should be true so the UI shows "set".
         assert body["model"]["has_api_key"] is True
+        assert body["model"]["has_default_headers"] is True
+        assert body["model"]["default_header_names"] == ["X-Test"]
         # Persisted file exists at the documented location.
         persisted = isolated_cwd / "data" / "custom_models.json"
         assert persisted.exists()
@@ -354,7 +357,42 @@ class TestCustomModelsUpsert:
         entry = next(m for m in listing["models"] if m["id"] == "mid2")
         assert entry["supports_thinking"] is False
         assert entry["supports_vision"] is False
-        assert entry["default_headers"] == {}
+        assert "default_headers" not in entry
+        assert entry["default_header_names"] == []
+        assert entry["has_default_headers"] is False
+
+    def test_custom_model_list_never_echoes_header_secret_values(
+        self, client: TestClient,
+    ) -> None:
+        client.put(
+            "/api/config/custom-models/secret-headers",
+            json={
+                "name": "secret-headers",
+                "provider": "openai",
+                "base_url": "https://x.test",
+                "api_key": "sk-model-secret",
+                "model": "gpt-4",
+                "default_headers": {
+                    "Authorization": "Bearer header-secret",
+                    "X-Route-Token": "route-secret",
+                },
+            },
+        )
+
+        data = client.get("/api/config/custom-models").json()
+        blob = repr(data)
+        entry = next(m for m in data["models"] if m["id"] == "secret-headers")
+        assert "api_key" not in entry
+        assert "default_headers" not in entry
+        assert entry["has_api_key"] is True
+        assert entry["has_default_headers"] is True
+        assert entry["default_header_names"] == [
+            "Authorization",
+            "X-Route-Token",
+        ]
+        assert "sk-model-secret" not in blob
+        assert "header-secret" not in blob
+        assert "route-secret" not in blob
 
     def test_registers_entry_id_and_concrete_model_ids(
         self,

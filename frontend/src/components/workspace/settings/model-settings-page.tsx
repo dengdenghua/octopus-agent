@@ -290,6 +290,8 @@ interface ModelConfig {
   supports_vision?: boolean;
   base_url?: string;
   has_api_key?: boolean;
+  default_header_names?: string[];
+  has_default_headers?: boolean;
   max_tokens?: number | null;
 }
 
