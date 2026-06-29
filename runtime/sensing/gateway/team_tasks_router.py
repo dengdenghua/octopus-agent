@@ -239,6 +239,9 @@ def create_team_tasks_router(
         if result is not None:
             await result
 
+    async def _run_broadcast_coro(room_id: str, payload: dict[str, Any]) -> None:
+        await _broadcast_task_event(room_id, payload)
+
     def _broadcast_from_worker(
         loop: asyncio.AbstractEventLoop | None,
         room_id: str,
@@ -249,19 +252,34 @@ def create_team_tasks_router(
 
         try:
             if loop is not None and loop.is_running() and not loop.is_closed():
-                coro = _broadcast_task_event(room_id, payload)
-                try:
-                    future = asyncio.run_coroutine_threadsafe(coro, loop)
-                except (
-                    RuntimeError,
-                    TimeoutError,
-                    concurrent.futures.CancelledError,
-                    concurrent.futures.TimeoutError,
-                    OSError,
-                ):
-                    coro.close()
-                    raise
-                future.add_done_callback(_log_broadcast_result)
+                done = threading.Event()
+
+                def _create_broadcast_task() -> None:
+                    try:
+                        task = loop.create_task(
+                            _run_broadcast_coro(room_id, payload),
+                        )
+                    except (
+                        RuntimeError,
+                        TimeoutError,
+                        concurrent.futures.CancelledError,
+                        concurrent.futures.TimeoutError,
+                        OSError,
+                    ):
+                        done.set()
+                        _LOG.debug("team task broadcast failed", exc_info=True)
+                        return
+
+                    def _finish(
+                        future: asyncio.Future[Any],
+                    ) -> None:
+                        _log_broadcast_result(future)
+                        done.set()
+
+                    task.add_done_callback(_finish)
+
+                loop.call_soon_threadsafe(_create_broadcast_task)
+                done.wait(timeout=1.0)
             else:
                 coro = _broadcast_task_event(room_id, payload)
                 try:
