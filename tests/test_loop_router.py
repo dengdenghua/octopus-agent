@@ -553,6 +553,14 @@ def test_loop_router_can_resume_failed_run_in_background(tmp_path) -> None:
     assert status.json()["parent_run_id"] == source.run_id
     assert status.json()["origin_run_id"] == "root-run"
     assert status.json()["resume_checkpoint_id"] == child["resume_checkpoint_id"]
+    recovery_audit = status.json()["recovery_audit"]
+    assert recovery_audit["resumed_from"] == {
+        "available": True,
+        "parent_run_id": source.run_id,
+        "origin_run_id": "root-run",
+        "checkpoint_id": child["resume_checkpoint_id"],
+    }
+    assert recovery_audit["safety"]["raw_checkpoint_state_included"] is False
 
 
 def test_loop_router_exposes_resume_proposal_for_failed_run(tmp_path) -> None:

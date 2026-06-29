@@ -101,6 +101,7 @@ def create_loop_router(
             )
             resume_available = bool(resume.get("available")) or resume_available
             resume_checkpoint_id = latest.get("id") or resume_checkpoint_id
+        resumed_from_available = bool(run.parent_run_id or run.resume_checkpoint_id)
         return {
             "schema": "octopus.loop_recovery_audit.v1",
             "checkpoint": checkpoint,
@@ -116,6 +117,14 @@ def create_loop_router(
                 "finding_count": len(review.get("findings") or [])
                 if isinstance(review.get("findings"), list)
                 else 0,
+            },
+            "resumed_from": {
+                "available": resumed_from_available,
+                "parent_run_id": run.parent_run_id if resumed_from_available else None,
+                "origin_run_id": run.origin_run_id if resumed_from_available else None,
+                "checkpoint_id": (
+                    run.resume_checkpoint_id if resumed_from_available else None
+                ),
             },
             "replay": {
                 **replay,
