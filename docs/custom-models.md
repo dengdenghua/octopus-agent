@@ -36,7 +36,7 @@ UI 路径：`设置 → 模型 → 自定义模型 → 添加`
 - strict coding endpoint 去掉 `temperature/top_p/reasoning_effort/thinking`
 - MiniMax thinking 改成 `{"thinking":{"type":"adaptive"}}`
 - Kimi 温度上限收敛到 `1.0`
-- 400/422 后按需降级：去掉 thinking 字段、去掉 `tool_choice`、把 `max_tokens` 改成 `max_completion_tokens`、收紧 tool schema
+- 400/422 后按需降级：去掉 thinking 字段、去掉 `tool_choice`、按错误体点名移除 `parallel_tool_calls` / `response_format` / `stream_options` 等可选字段、把 `max_tokens` 改成 `max_completion_tokens`、收紧 tool schema；若网关明确不支持工具调用，则退到文本请求避免整轮失败
 - 兼容多家 `usage` / `reasoning` / tool arguments 的非标准返回字段
 
 如果某个代理地址或私有网关无法靠 URL 猜准，可以在 `custom_models.json` 或配置 API 里显式写：
@@ -371,7 +371,9 @@ StepFun、SiliconFlow、Baidu Qianfan。识别后会做三类兼容：
   `temperature` 限制到兼容范围；MiniMax 思考模型用 adaptive thinking；其他
   国产兼容接口默认不发送 OpenAI-only `reasoning_effort/thinking`。
 - **400/422 降级重试**：上游报不支持 `tool_choice`、采样参数、`max_tokens` /
-  `max_completion_tokens` 或 schema `additionalProperties` 时，会用最小变更重试一次或多次。
+  `max_completion_tokens`、`parallel_tool_calls`、`response_format`、`stream_options`
+  或 schema `additionalProperties` 时，会用最小变更重试一次或多次；如果网关明确
+  不支持 `tools` / function calling，会退到文本请求而不是让整轮直接失败。
 - **响应归一化**：`reasoning_content`、`reasoning`、`thinking`、`reasoning_details`
   都会进入 Octopus 的 thinking channel；GLM 等偶发的 python-repr 工具参数会容错解析。
 

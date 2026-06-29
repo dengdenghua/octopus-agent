@@ -311,6 +311,72 @@ def test_retry_plan_drops_sampling_on_generic_strict_validation_error() -> None:
     assert plan[0].removed_fields == ("temperature", "top_p")
 
 
+def test_retry_plan_drops_named_optional_fields_on_generic_proxy() -> None:
+    profile = resolve_openai_compat_profile("https://plain-proxy.example/v1")
+    plan = plan_openai_compat_retries(
+        {
+            "model": "proxy-model",
+            "messages": [],
+            "parallel_tool_calls": True,
+            "response_format": {"type": "json_object"},
+            "stream_options": {"include_usage": True},
+            "temperature": 0.2,
+        },
+        status_code=400,
+        body=(
+            "unsupported parameter: parallel_tool_calls; "
+            "unknown field response_format and stream_options"
+        ),
+        profile=profile,
+    )
+
+    assert plan[0].reason == (
+        "drop_unsupported_fields:"
+        "parallel_tool_calls,response_format,stream_options"
+    )
+    assert plan[0].removed_fields == (
+        "parallel_tool_calls",
+        "response_format",
+        "stream_options",
+    )
+    assert "temperature" in plan[0].payload
+
+
+def test_retry_plan_drops_tool_payload_when_provider_rejects_tool_calling() -> None:
+    profile = resolve_openai_compat_profile("https://plain-proxy.example/v1")
+    plan = plan_openai_compat_retries(
+        {
+            "model": "proxy-model",
+            "messages": [],
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read",
+                        "parameters": {"type": "object"},
+                    },
+                },
+            ],
+            "tool_choice": "auto",
+            "parallel_tool_calls": True,
+        },
+        status_code=400,
+        body="tools are not supported by this model",
+        profile=profile,
+    )
+
+    drop_tools = next(item for item in plan if item.reason == "drop_tools")
+    assert drop_tools.removed_fields == (
+        "parallel_tool_calls",
+        "tool_choice",
+        "tools",
+    )
+    assert drop_tools.payload == {
+        "model": "proxy-model",
+        "messages": [],
+    }
+
+
 def test_retry_plan_adds_combined_fallback_for_multi_field_rejections() -> None:
     profile = resolve_openai_compat_profile("https://api.kimi.com/coding/v1")
     plan = plan_openai_compat_retries(

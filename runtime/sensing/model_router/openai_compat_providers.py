@@ -51,6 +51,16 @@ GENERIC_OPENAI_PROFILE = OpenAICompatProviderProfile(
     thinking_request_style="openai",
 )
 
+_OPTIONAL_REQUEST_FIELD_FALLBACKS = (
+    "parallel_tool_calls",
+    "response_format",
+    "stream_options",
+    "logprobs",
+    "top_logprobs",
+)
+
+_TOOL_REQUEST_FIELDS = ("tools", "tool_choice", "parallel_tool_calls")
+
 
 _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
     OpenAICompatProviderProfile(
@@ -417,6 +427,19 @@ def plan_openai_compat_retries(
         cascade.pop("thinking", None)
         cascade_reasons.append("drop_thinking_fields")
 
+    optional_fields = _mentioned_payload_fields(
+        lower,
+        payload,
+        _OPTIONAL_REQUEST_FIELD_FALLBACKS,
+    )
+    if optional_fields:
+        candidate = dict(payload)
+        for field_name in optional_fields:
+            candidate.pop(field_name, None)
+            cascade.pop(field_name, None)
+        add(f"drop_unsupported_fields:{','.join(optional_fields)}", candidate)
+        cascade_reasons.append("drop_unsupported_fields")
+
     if profile.retry_without_tool_choice and "tool_choice" in payload:
         candidate = dict(payload)
         candidate.pop("tool_choice", None)
@@ -461,6 +484,14 @@ def plan_openai_compat_retries(
         add("strict_tool_schema", candidate)
         cascade["tools"] = _strict_tools(cascade.get("tools"))
         cascade_reasons.append("strict_tool_schema")
+
+    if "tools" in payload and _mentions_tool_use_unsupported(lower):
+        candidate = dict(payload)
+        for field_name in _TOOL_REQUEST_FIELDS:
+            candidate.pop(field_name, None)
+            cascade.pop(field_name, None)
+        add("drop_tools", candidate)
+        cascade_reasons.append("drop_tools")
 
     if len(cascade_reasons) > 1:
         add("combined_compatibility_fallback", cascade)
@@ -683,6 +714,41 @@ def _has_explicit_compat_override(entry: dict[str, Any]) -> bool:
 
 def _mentions_any(haystack: str, needles: tuple[str, ...]) -> bool:
     return any(needle in haystack for needle in needles)
+
+
+def _mentioned_payload_fields(
+    haystack: str,
+    payload: dict[str, Any],
+    field_names: tuple[str, ...],
+) -> tuple[str, ...]:
+    return tuple(
+        field_name
+        for field_name in field_names
+        if field_name in payload and _mentions_field(haystack, field_name)
+    )
+
+
+def _mentions_field(haystack: str, field_name: str) -> bool:
+    needle = re.escape(field_name)
+    return re.search(rf"(^|[^a-z0-9_]){needle}([^a-z0-9_]|$)", haystack) is not None
+
+
+def _mentions_tool_use_unsupported(haystack: str) -> bool:
+    return _mentions_any(
+        haystack,
+        (
+            "tools is not supported",
+            "tools are not supported",
+            "tool calls are not supported",
+            "tool calling is not supported",
+            "function calling is not supported",
+            "function calls are not supported",
+            "unsupported parameter: tools",
+            "unsupported field: tools",
+            "unknown field: tools",
+            "unrecognized field: tools",
+        ),
+    )
 
 
 def _strict_tools(value: Any) -> Any:
