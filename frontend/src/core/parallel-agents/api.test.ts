@@ -193,3 +193,83 @@ describe("SSE streamBatch: retry logic", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("SSE streamBatch: production parser edges", () => {
+  test("dispatches CRLF-delimited events from the real stream parser", async () => {
+    vi.stubGlobal("fetch", () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              'event: batch_complete\r\ndata: {"type":"batch_complete","batch_id":"b1","sequence":1,"status":"failed"}\r\n\r\n',
+            ),
+          );
+          controller.close();
+        },
+      });
+      return Promise.resolve(new Response(stream, { status: 200 }));
+    });
+
+    const events: string[] = [];
+    streamBatch(
+      "b1",
+      {
+        onBatchComplete: (event) => {
+          events.push(`${event.sequence}:${event.status}`);
+        },
+      },
+      { maxRetries: 0, baseDelay: 1 },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(events).toEqual(["1:failed"]);
+    vi.unstubAllGlobals();
+  });
+
+  test("accumulates multiple data lines in the real stream parser", async () => {
+    vi.stubGlobal("fetch", () => {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(
+            new TextEncoder().encode(
+              [
+                "event: task_update\n",
+                'data: {"type":"task_update","batch_id":"b1",\n',
+                'data: "task_id":"t1","sequence":2,\n',
+                'data: "status":"running"}\n',
+                "\n",
+                "event: batch_complete\n",
+                'data: {"type":"batch_complete","batch_id":"b1","sequence":3}\n',
+                "\n",
+              ].join(""),
+            ),
+          );
+          controller.close();
+        },
+      });
+      return Promise.resolve(new Response(stream, { status: 200 }));
+    });
+
+    const updates: string[] = [];
+    const completions: number[] = [];
+    streamBatch(
+      "b1",
+      {
+        onTaskUpdate: (event) => {
+          updates.push(`${event.sequence}:${event.task_id}:${event.status}`);
+        },
+        onBatchComplete: (event) => {
+          completions.push(event.sequence ?? 0);
+        },
+      },
+      { maxRetries: 0, baseDelay: 1 },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(updates).toEqual(["2:t1:running"]);
+    expect(completions).toEqual([3]);
+    vi.unstubAllGlobals();
+  });
+});

@@ -334,53 +334,88 @@ export function streamBatch(
         const decoder = new TextDecoder();
         let buffer = "";
         let eventType = "";
-        let eventData = "";
+        let eventDataLines: string[] = [];
+
+        const resetEvent = () => {
+          eventType = "";
+          eventDataLines = [];
+        };
+
+        const dispatchEvent = (): boolean => {
+          if (!eventType || eventDataLines.length === 0) {
+            resetEvent();
+            return false;
+          }
+          try {
+            const eventData = eventDataLines.join("\n");
+            const data = JSON.parse(eventData) as BatchStreamEvent;
+            if (
+              typeof data.sequence === "number" &&
+              data.sequence <= lastSequence
+            ) {
+              resetEvent();
+              return false;
+            }
+            if (typeof data.sequence === "number") {
+              lastSequence = data.sequence;
+            }
+            if (eventType === "stage_change") {
+              callbacks.onStageChange?.(data);
+            } else if (eventType === "task_update") {
+              callbacks.onTaskUpdate?.(data);
+            } else if (eventType === "tool_call") {
+              callbacks.onTaskUpdate?.(data);
+            } else if (eventType === "batch_complete") {
+              callbacks.onBatchComplete?.(data);
+              return true;
+            }
+          } catch (e) {
+            swallow(e);
+          } finally {
+            resetEvent();
+          }
+          return false;
+        };
+
+        const processLine = (rawLine: string): boolean => {
+          const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+          if (line.startsWith(":")) return false;
+          if (line.startsWith("event:")) {
+            eventType = line.slice(6).trim();
+          } else if (line.startsWith("data:")) {
+            const value = line.slice(5);
+            eventDataLines.push(value.startsWith(" ") ? value.slice(1) : value);
+          } else if (line === "") {
+            return dispatchEvent();
+          }
+          return false;
+        };
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done || aborted) break;
+          if (done || aborted) {
+            if (!aborted) {
+              buffer += decoder.decode();
+              if (buffer) {
+                const lines = buffer.split("\n");
+                buffer = "";
+                for (const line of lines) {
+                  if (processLine(line)) return;
+                }
+              }
+              if (eventType || eventDataLines.length > 0) {
+                if (dispatchEvent()) return;
+              }
+            }
+            break;
+          }
 
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            if (line.startsWith("event:")) {
-              eventType = line.slice(6).trim();
-            } else if (line.startsWith("data:")) {
-              eventData = line.slice(5).trim();
-            } else if (line === "") {
-              if (eventType && eventData) {
-                try {
-                  const data = JSON.parse(eventData) as BatchStreamEvent;
-                  if (
-                    typeof data.sequence === "number" &&
-                    data.sequence <= lastSequence
-                  ) {
-                    eventType = "";
-                    eventData = "";
-                    continue;
-                  }
-                  if (typeof data.sequence === "number") {
-                    lastSequence = data.sequence;
-                  }
-                  if (eventType === "stage_change") {
-                    callbacks.onStageChange?.(data);
-                  } else if (eventType === "task_update") {
-                    callbacks.onTaskUpdate?.(data);
-                  } else if (eventType === "tool_call") {
-                    callbacks.onTaskUpdate?.(data);
-                  } else if (eventType === "batch_complete") {
-                    callbacks.onBatchComplete?.(data);
-                    return;
-                  }
-                } catch (e) {
-                  swallow(e);
-                }
-              }
-              eventType = "";
-              eventData = "";
-            }
+            if (processLine(line)) return;
           }
         }
 
