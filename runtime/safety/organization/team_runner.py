@@ -167,6 +167,13 @@ def _parse_evaluator_score(text: str) -> float | None:
     return max(0.0, min(1.0, raw))
 
 
+def _first_role_error(outputs: list[RoleOutput]) -> str | None:
+    for output in outputs:
+        if output.error:
+            return f"{output.role}({output.agent_id}): {output.error}"
+    return None
+
+
 # ── Runner ────────────────────────────────────────────────────
 
 
@@ -235,6 +242,8 @@ class TeamRunner:
                 and not any(o.error for o in result.role_outputs)
             ):
                 result.success = True
+            elif result.error is None:
+                result.error = _first_role_error(result.role_outputs)
         except Exception as exc:  # noqa: BLE001
             _logger.exception("team_runner: topology %s crashed", topology.name)
             result.error = f"{type(exc).__name__}: {exc}"

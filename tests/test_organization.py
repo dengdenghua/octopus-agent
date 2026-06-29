@@ -190,6 +190,7 @@ def test_team_runner_sequential_bails_on_role_error() -> None:
     result = runner.run(topology, "x")
     assert result.success is False
     assert len(result.role_outputs) == 1
+    assert result.error == "planner(p): boom"
 
 
 def test_team_runner_blocks_retired_subagent_for_high_risk_task(tmp_path: Path) -> None:
@@ -225,6 +226,8 @@ def test_team_runner_blocks_retired_subagent_for_high_risk_task(tmp_path: Path) 
 
     assert called["hit"] is False
     assert result.success is False
+    assert result.error is not None
+    assert result.error.startswith("planner(weak_delegate):")
     assert result.role_outputs[0].error
     assert result.role_outputs[0].metadata["subagent_route_decision"]["action"] == "block"
     assert events[0]["type"] == "team_role_blocked"
