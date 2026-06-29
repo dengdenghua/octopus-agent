@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import json
 import os
 import sys
@@ -184,6 +185,7 @@ def build_runtime_self_check(
     api_surface = _api_surface_info(request)
     webui = _webui_static_info(root)
     model_compat = _model_compat_info()
+    orchestration = _orchestration_surface_info(request)
     checks = [
         {
             "id": "runtime_version",
@@ -266,6 +268,16 @@ def build_runtime_self_check(
                 f"missing={','.join(model_compat['missing_required_profile_ids']) or 'none'}"
             ),
         },
+        {
+            "id": "orchestration_surface",
+            "severity": "error",
+            "passed": bool(orchestration["ready"]),
+            "detail": (
+                f"routes={orchestration['route_count']} "
+                f"missing={','.join(orchestration['missing_required_routes']) or 'none'} "
+                f"models={len(orchestration['model_contracts'])}"
+            ),
+        },
     ]
     ready = all(
         bool(row["passed"]) or row.get("severity") == "warn" for row in checks
@@ -297,6 +309,7 @@ def build_runtime_self_check(
         "frontend": frontend,
         "webui": webui,
         "model_compat": model_compat,
+        "orchestration": orchestration,
         "api_surface": api_surface,
         "loopback_aliases": aliases,
         "paths": {
@@ -527,6 +540,345 @@ def _model_compat_info() -> dict[str, Any]:
             "domestic_profiles": [],
             "error": f"{type(exc).__name__}: {exc}",
         }
+
+
+def _orchestration_surface_info(request: Request | None) -> dict[str, Any]:
+    required_routes = {
+        "/api/agents/parallel/status": ["GET"],
+        "/api/agents/parallel/batch/{batch_id}": ["GET"],
+        "/api/agents/parallel/batch/{batch_id}/recovery-snapshot": ["GET"],
+        "/api/agents/parallel/dispatch": ["POST"],
+        "/api/agents/parallel/split": ["POST"],
+        "/api/agents/parallel/cancel/{task_id}": ["POST"],
+        "/api/agents/parallel/cancel-all": ["POST"],
+        "/api/agents/parallel/stream/{batch_id}": ["GET"],
+    }
+    route_surface = _route_surface_info(request, required_routes)
+    model_contracts = _orchestration_model_contracts()
+    method_contracts = _orchestrator_method_contracts()
+    missing_model_fields = [
+        {
+            "model": row["model"],
+            "missing_fields": row["missing_fields"],
+        }
+        for row in model_contracts
+        if row["missing_fields"]
+    ]
+    missing_methods = [
+        {
+            "method": row["method"],
+            "reason": row["reason"],
+        }
+        for row in method_contracts
+        if not row["present"]
+    ]
+    replay_contract = next(
+        (
+            row
+            for row in method_contracts
+            if row["method"] == "subscribe.after_sequence"
+        ),
+        {"present": False},
+    )
+    ready = (
+        route_surface["required_routes_present"]
+        and not missing_model_fields
+        and not missing_methods
+    )
+    return {
+        "schema": "octopus.orchestration_surface_self_check.v1",
+        "ready": ready,
+        "route_count": route_surface["route_count"],
+        "required_routes": list(required_routes),
+        "missing_required_routes": route_surface["missing_required_routes"],
+        "route_methods": route_surface["route_methods"],
+        "missing_route_methods": route_surface["missing_route_methods"],
+        "model_contracts": model_contracts,
+        "missing_model_fields": missing_model_fields,
+        "method_contracts": method_contracts,
+        "missing_methods": missing_methods,
+        "capabilities": {
+            "parallel_dispatch": route_surface["has_required_route"][
+                "/api/agents/parallel/dispatch"
+            ],
+            "split_planning": route_surface["has_required_route"][
+                "/api/agents/parallel/split"
+            ],
+            "recovery_snapshot": route_surface["has_required_route"][
+                "/api/agents/parallel/batch/{batch_id}/recovery-snapshot"
+            ],
+            "sse_event_replay": bool(replay_contract.get("present")),
+            "completion_receipt": _contract_has_field(
+                model_contracts,
+                "BatchResult",
+                "completion_receipt",
+            ),
+            "file_write_observability": _contract_has_field(
+                model_contracts,
+                "BatchResult",
+                "file_write_observability",
+            ),
+            "work_contracts": _contract_has_field(
+                model_contracts,
+                "BatchPlan",
+                "contracts",
+            ),
+            "owner_scoping": all(
+                row["present"]
+                for row in method_contracts
+                if row["method"] in {
+                    "get_batch_owner",
+                    "get_task_owner",
+                    "cancel_all_for_owner",
+                }
+            ),
+        },
+        "error": "",
+    }
+
+
+def _route_surface_info(
+    request: Request | None,
+    required_routes: dict[str, list[str]],
+) -> dict[str, Any]:
+    app = getattr(request, "app", None) if request is not None else None
+    routes = list(getattr(app, "routes", []) or [])
+    route_methods: dict[str, list[str]] = {}
+    for route in routes:
+        path = str(getattr(route, "path", "") or "")
+        if not path:
+            continue
+        methods = sorted(
+            str(method)
+            for method in (getattr(route, "methods", None) or [])
+            if str(method) not in {"HEAD", "OPTIONS"}
+        )
+        route_methods[path] = methods
+    missing_routes = [
+        path for path in required_routes if path not in route_methods
+    ]
+    missing_route_methods = [
+        {
+            "path": path,
+            "missing_methods": [
+                method
+                for method in methods
+                if method not in route_methods.get(path, [])
+            ],
+        }
+        for path, methods in required_routes.items()
+        if path in route_methods
+        and any(method not in route_methods.get(path, []) for method in methods)
+    ]
+    return {
+        "route_count": len(route_methods),
+        "route_methods": {
+            path: route_methods.get(path, [])
+            for path in required_routes
+            if path in route_methods
+        },
+        "missing_required_routes": missing_routes,
+        "missing_route_methods": missing_route_methods,
+        "required_routes_present": not missing_routes and not missing_route_methods,
+        "has_required_route": {
+            path: path in route_methods and not any(
+                row["path"] == path for row in missing_route_methods
+            )
+            for path in required_routes
+        },
+    }
+
+
+def _orchestration_model_contracts() -> list[dict[str, Any]]:
+    try:
+        from runtime.execution.parallel_agents.models import (
+            BatchPlan,
+            BatchRecoverySnapshot,
+            BatchResult,
+            BatchStreamEvent,
+            OrchestratorStatus,
+            WorkContract,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return [
+            {
+                "model": "parallel_agents.models",
+                "required_fields": [],
+                "present_fields": [],
+                "missing_fields": ["import"],
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        ]
+
+    contracts = [
+        (
+            "BatchResult",
+            BatchResult,
+            [
+                "plan",
+                "event_log",
+                "completion_receipt",
+                "file_write_observability",
+            ],
+        ),
+        (
+            "BatchRecoverySnapshot",
+            BatchRecoverySnapshot,
+            [
+                "schema",
+                "dag",
+                "plan",
+                "event_sequence",
+                "recovery_hints",
+                "completion_receipt",
+                "file_write_observability",
+                "safety",
+            ],
+        ),
+        (
+            "BatchStreamEvent",
+            BatchStreamEvent,
+            [
+                "type",
+                "batch_id",
+                "sequence",
+                "created_at",
+                "payload",
+                "artifact_paths",
+            ],
+        ),
+        (
+            "BatchPlan",
+            BatchPlan,
+            [
+                "phases",
+                "contracts",
+                "validation_issues",
+                "validation_warnings",
+            ],
+        ),
+        (
+            "WorkContract",
+            WorkContract,
+            [
+                "owned_scope",
+                "forbidden_scope",
+                "write_paths",
+                "success_criteria",
+            ],
+        ),
+        (
+            "OrchestratorStatus",
+            OrchestratorStatus,
+            [
+                "active_count",
+                "pending_count",
+                "completed_count",
+                "failed_count",
+                "cancelled_count",
+                "max_concurrency",
+                "batches",
+            ],
+        ),
+    ]
+    return [
+        _model_contract_summary(name, model, required_fields)
+        for name, model, required_fields in contracts
+    ]
+
+
+def _model_contract_summary(
+    name: str,
+    model: Any,
+    required_fields: list[str],
+) -> dict[str, Any]:
+    raw_fields = getattr(model, "model_fields", None)
+    if raw_fields is None:
+        raw_fields = getattr(model, "__fields__", {})
+    present_fields = set(str(key) for key in raw_fields)
+    aliases = {
+        str(getattr(field, "alias", "") or "")
+        for field in raw_fields.values()
+        if getattr(field, "alias", None)
+    }
+    all_fields = present_fields | aliases
+    missing = [field for field in required_fields if field not in all_fields]
+    return {
+        "model": name,
+        "required_fields": required_fields,
+        "present_fields": sorted(all_fields),
+        "missing_fields": missing,
+        "error": "",
+    }
+
+
+def _orchestrator_method_contracts() -> list[dict[str, Any]]:
+    try:
+        from runtime.execution.parallel_agents import ParallelAgentOrchestrator
+    except Exception as exc:  # noqa: BLE001
+        return [
+            {
+                "method": "ParallelAgentOrchestrator",
+                "present": False,
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+        ]
+
+    required = [
+        "dispatch",
+        "split",
+        "status",
+        "get_batch",
+        "recovery_snapshot",
+        "subscribe",
+        "cancel_task",
+        "cancel_all",
+        "get_batch_owner",
+        "get_task_owner",
+        "cancel_all_for_owner",
+    ]
+    out = [
+        {
+            "method": method,
+            "present": callable(getattr(ParallelAgentOrchestrator, method, None)),
+            "reason": (
+                ""
+                if callable(getattr(ParallelAgentOrchestrator, method, None))
+                else "missing"
+            ),
+        }
+        for method in required
+    ]
+    subscribe = getattr(ParallelAgentOrchestrator, "subscribe", None)
+    has_after_sequence = False
+    if callable(subscribe):
+        with contextlib.suppress(TypeError, ValueError):
+            has_after_sequence = "after_sequence" in inspect.signature(
+                subscribe
+            ).parameters
+    out.append(
+        {
+            "method": "subscribe.after_sequence",
+            "present": has_after_sequence,
+            "reason": "" if has_after_sequence else "missing parameter",
+        }
+    )
+    return out
+
+
+def _contract_has_field(
+    contracts: list[dict[str, Any]],
+    model: str,
+    field: str,
+) -> bool:
+    for row in contracts:
+        if row.get("model") != model:
+            continue
+        return field in row.get("present_fields", []) and field not in row.get(
+            "missing_fields",
+            [],
+        )
+    return False
 
 
 def _journal_source_usable(state: Any) -> bool:

@@ -166,6 +166,29 @@ class TestBasicRoutes:
         assert probes["kimi_coding"]["base_url_resolves_to"] == "kimi_coding"
         assert probes["kimi_coding"]["model_resolves_to"] == "kimi_coding"
         assert _check_by_id(data, "openai_compat_profiles")["passed"] is True
+        assert data["orchestration"]["schema"] == "octopus.orchestration_surface_self_check.v1"
+        assert data["orchestration"]["ready"] is True
+        assert data["orchestration"]["missing_required_routes"] == []
+        assert data["orchestration"]["missing_route_methods"] == []
+        assert data["orchestration"]["capabilities"] == {
+            "parallel_dispatch": True,
+            "split_planning": True,
+            "recovery_snapshot": True,
+            "sse_event_replay": True,
+            "completion_receipt": True,
+            "file_write_observability": True,
+            "work_contracts": True,
+            "owner_scoping": True,
+        }
+        assert data["orchestration"]["route_methods"][
+            "/api/agents/parallel/batch/{batch_id}/recovery-snapshot"
+        ] == ["GET"]
+        assert data["orchestration"]["route_methods"][
+            "/api/agents/parallel/stream/{batch_id}"
+        ] == ["GET"]
+        assert data["orchestration"]["missing_model_fields"] == []
+        assert data["orchestration"]["missing_methods"] == []
+        assert _check_by_id(data, "orchestration_surface")["passed"] is True
         assert _check_by_id(data, "frontend_origin")["passed"] is True
         assert _check_by_id(data, "vite_proxy_target")["passed"] is True
 
