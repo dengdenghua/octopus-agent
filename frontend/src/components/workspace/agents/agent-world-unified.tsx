@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +35,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EnterpriseAssetsTab } from "@/components/workspace/agents/enterprise-assets-tab";
 import { ACTIVE_AGENT_KEY } from "@/core/agents/active";
@@ -290,7 +297,7 @@ function AgentPackImportPanel({ onImported }: { onImported: () => void }) {
       )}
 
       {result && (
-        <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/8 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+        <div className="rounded-lg border border-border bg-primary/10 px-3 py-2 text-xs text-primary">
           {t.agentWorld.importedAgent(result.agent_name, result.agent_path)}
         </div>
       )}
@@ -394,9 +401,9 @@ function AgentsTab({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-1 rounded-lg border border-border/60 bg-muted/12 px-3 py-2 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-1 rounded-lg border border-border bg-background px-3 py-2 md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2">
-          <BotIcon className="h-4 w-4 shrink-0 text-primary/75" />
+          <BotIcon className="h-4 w-4 shrink-0 text-primary" />
           <div className="text-sm font-semibold">
             {t.agentWorldUnified.roleLibrary}
           </div>
@@ -435,7 +442,7 @@ function AgentsTab({
                 >
                   <CategoryIcon className="mr-1.5 h-3.5 w-3.5" />
                   {label}
-                  <span className="ml-1 text-[10px] text-muted-foreground">
+                  <span className="ml-1 text-xs text-muted-foreground">
                     {count}
                   </span>
                 </Button>
@@ -445,7 +452,7 @@ function AgentsTab({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground md:justify-end">
-          <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
+          <span className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5">
             <span className="text-muted-foreground/80">
               {t.agentWorldUnified.installedLabel}
             </span>
@@ -453,7 +460,7 @@ function AgentsTab({
               {installedCount}
             </span>
           </span>
-          <span className="inline-flex h-8 items-center rounded-lg border border-border/50 bg-background/65 px-2.5">
+          <span className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-2.5">
             <span className="text-muted-foreground/80">
               {t.agentWorldUnified.installableLabel}
             </span>
@@ -465,7 +472,7 @@ function AgentsTab({
             type="button"
             size="sm"
             variant="ghost"
-            className="h-8 rounded-lg border border-border/50 bg-background/65 px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
+            className="h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium text-muted-foreground shadow-none hover:bg-muted/45 hover:text-foreground"
             disabled={installingAll || installableAgents.length === 0}
             onClick={() => void handleInstallAll()}
             title={
@@ -721,10 +728,10 @@ function PluginListItem({
   const surfaceBadges = pluginSurfaceBadges(entry);
 
   return (
-    <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border/45 bg-card/55 px-3 py-3 shadow-sm transition-colors hover:border-primary/20 hover:bg-card">
+    <Card className="group flex flex-row items-center gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30">
       <div
         className={cn(
-          "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm",
+          "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background",
           !plugin.enabled && "bg-muted/40",
         )}
       >
@@ -744,48 +751,51 @@ function PluginListItem({
           />
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <CardContent className="min-w-0 flex-1 p-0">
         <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-[15px] font-semibold leading-5">
+          <h3 className="truncate text-sm font-semibold leading-5">
             {plugin.name}
           </h3>
         </div>
-        <p className="mt-1 line-clamp-1 text-sm leading-5 text-muted-foreground">
+        <p className="mt-0.5 line-clamp-1 text-sm leading-5 text-muted-foreground">
           {plugin.description}
         </p>
         {surfaceBadges.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {surfaceBadges.map((badge) => (
-              <span
+              <Badge
                 key={badge}
-                className="rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground"
+                variant="outline"
+                className="text-xs font-normal"
               >
                 {badge}
-              </span>
+              </Badge>
             ))}
           </div>
         )}
-      </div>
+      </CardContent>
       <div className="flex shrink-0 items-center gap-1.5">
         {hasConfig && hubPlugin && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             aria-label={`配置 ${plugin.name}`}
+            className="size-8"
             onClick={() => onConfigure(hubPlugin)}
-            className="flex size-8 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Settings2Icon className="size-4" />
-          </button>
+          </Button>
         )}
         <span
           title={statusTitle}
           className={cn(
-            "flex size-8 items-center justify-center rounded-lg bg-muted/55 transition-colors",
+            "flex size-8 items-center justify-center rounded-lg transition-colors",
             plugin.error
-              ? "text-rose-500"
+              ? "bg-destructive/10 text-destructive"
               : plugin.enabled
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-                : "text-foreground hover:bg-muted",
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted",
           )}
         >
           {plugin.error ? (
@@ -797,7 +807,7 @@ function PluginListItem({
           )}
         </span>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -808,7 +818,6 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
   const [hubPlugins, setHubPlugins] = useState<HubPluginInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [configTarget, setConfigTarget] = useState<HubPluginInfo | null>(null);
-  const [pluginQuery, setPluginQuery] = useState("");
   const [pluginAuthorFilter, setPluginAuthorFilter] = useState("all");
   const [pluginStatusFilter, setPluginStatusFilter] =
     useState<PluginStatusFilter>("all");
@@ -833,11 +842,6 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
     loadData();
   }, [loadData]);
 
-  // Sync external search (from Hub header) into plugin query
-  useEffect(() => {
-    if (searchQuery) setPluginQuery(searchQuery);
-  }, [searchQuery]);
-
   const pluginEntries = useMemo<PluginEntry[]>(() => {
     const hubEntries = hubPlugins
       .filter((plugin) => plugin.id !== "openproject-pm")
@@ -858,7 +862,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
   }, [pluginEntries]);
 
   const filteredPluginEntries = useMemo(() => {
-    const needle = pluginQuery.trim().toLowerCase();
+    const needle = searchQuery.trim().toLowerCase();
     return pluginEntries.filter(({ plugin }) => {
       if (
         pluginAuthorFilter !== "all" &&
@@ -880,12 +884,12 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
         .toLowerCase()
         .includes(needle);
     });
-  }, [pluginAuthorFilter, pluginEntries, pluginQuery, pluginStatusFilter]);
+  }, [pluginAuthorFilter, pluginEntries, searchQuery, pluginStatusFilter]);
 
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
-        <PuzzleIcon className="size-8 animate-pulse text-purple-500" />
+        <PuzzleIcon className="size-8 animate-pulse text-primary" />
       </div>
     );
   }
@@ -893,53 +897,57 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative w-full lg:max-w-[320px]">
-          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <UiInput
-            aria-label="搜索插件"
-            className="h-9 rounded-lg border-border/60 bg-background pl-9 text-xs"
-            placeholder="搜索插件"
-            value={pluginQuery}
-            onChange={(event) => setPluginQuery(event.target.value)}
-          />
-        </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            aria-label="按作者筛选插件"
-            className="h-9 shrink-0 rounded-lg border border-transparent bg-muted/60 px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+          <Select
             value={pluginAuthorFilter}
-            onChange={(event) => setPluginAuthorFilter(event.target.value)}
+            onValueChange={setPluginAuthorFilter}
           >
-            <option value="all">全部作者</option>
-            {pluginAuthors.map((author) => (
-              <option key={author} value={author}>
-                Built by {author}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="按状态筛选插件"
-            className="h-9 shrink-0 rounded-lg border border-transparent bg-muted/60 px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+            <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
+              <SelectValue>
+                {pluginAuthorFilter === "all"
+                  ? "全部作者"
+                  : `Built by ${pluginAuthorFilter}`}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部作者</SelectItem>
+              {pluginAuthors.map((author) => (
+                <SelectItem key={author} value={author}>
+                  Built by {author}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
             value={pluginStatusFilter}
-            onChange={(event) =>
-              setPluginStatusFilter(event.target.value as PluginStatusFilter)
+            onValueChange={(value) =>
+              setPluginStatusFilter(value as PluginStatusFilter)
             }
           >
-            <option value="all">全部</option>
-            <option value="enabled">已启用</option>
-            <option value="disabled">未启用</option>
-          </select>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 rounded-lg px-3 text-xs"
-            onClick={openCreatePluginChat}
-          >
-            <PlusIcon className="mr-1.5 size-3.5" />
-            创建
-          </Button>
+            <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
+              <SelectValue>
+                {pluginStatusFilter === "all" && "全部"}
+                {pluginStatusFilter === "enabled" && "已启用"}
+                {pluginStatusFilter === "disabled" && "未启用"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="enabled">已启用</SelectItem>
+              <SelectItem value="disabled">未启用</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 rounded-lg px-3 text-xs"
+          onClick={openCreatePluginChat}
+        >
+          <PlusIcon className="mr-1.5 size-3.5" />
+          {t.common.create}
+        </Button>
       </div>
 
       {filteredPluginEntries.length > 0 ? (
@@ -953,7 +961,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 py-12 text-center">
+        <div className="rounded-lg border border-dashed border-border bg-muted/10 px-6 py-12 text-center">
           <PuzzleIcon className="mx-auto mb-3 size-10 text-muted-foreground/30" />
           <p className="text-sm text-muted-foreground">
             {pluginEntries.length === 0
@@ -1136,7 +1144,7 @@ export function AgentWorldUnified() {
   return (
     <div className="relative flex size-full flex-col gap-2 px-2 pb-2 pt-2 md:px-3">
       {!hudOnly && (
-        <div className="relative flex flex-col gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <h1 className="truncate text-sm font-semibold">
               {t.agentWorld.title}
@@ -1151,7 +1159,7 @@ export function AgentWorldUnified() {
                 placeholder={t.agentWorld.searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 rounded-lg border-border/60 bg-background/70 pl-8 text-xs"
+                className="h-8 rounded-lg border-border bg-background pl-8 text-xs shadow-none"
               />
             </div>
             <DropdownMenu>
@@ -1185,36 +1193,27 @@ export function AgentWorldUnified() {
 
       {/* Main Content */}
       {!hudOnly && (
-        <div className="workspace-panel relative flex-1 overflow-y-auto rounded-lg border border-border/60 bg-background/58 px-3 py-3 shadow-sm shadow-black/[0.02]">
+        <div className="relative flex-1 overflow-y-auto rounded-lg border border-border bg-background px-3 py-3">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="relative mb-3 h-auto gap-1.5 rounded-none bg-transparent p-0">
+            <TabsList variant="line" className="mb-3">
               {SHOW_LOCAL_AGENT_LIBRARY && (
-                <TabsTrigger
-                  value="agents"
-                  className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-                >
+                <TabsTrigger value="agents" className="h-8 gap-1.5 px-3 text-xs">
                   <BotIcon className="h-3.5 w-3.5" />
                   {t.agentWorldUnified.roleLibrary}
                 </TabsTrigger>
               )}
-              <TabsTrigger
-                value="plugins"
-                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-              >
+              <TabsTrigger value="plugins" className="h-8 gap-1.5 px-3 text-xs">
                 <PuzzleIcon className="h-3.5 w-3.5" />
                 {t.plugins.pageTitle}
               </TabsTrigger>
-              <TabsTrigger
-                value="skills"
-                className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
-              >
+              <TabsTrigger value="skills" className="h-8 gap-1.5 px-3 text-xs">
                 <BoxesIcon className="h-3.5 w-3.5" />
                 {t.plugins.tabSkillMarket}
               </TabsTrigger>
               {SHOW_ENTERPRISE_ASSETS && (
                 <TabsTrigger
                   value="enterprise"
-                  className="h-8 flex-none rounded-lg border border-border/50 bg-muted/20 px-3 text-xs data-[state=active]:border-primary/30 data-[state=active]:bg-muted/45"
+                  className="h-8 gap-1.5 px-3 text-xs"
                 >
                   <Building2Icon className="h-3.5 w-3.5" />
                   {t.agentWorldUnified.enterprise}
@@ -1241,6 +1240,7 @@ export function AgentWorldUnified() {
 
             <TabsContent value="skills" className="mt-0">
               <LocalSkillDirectoryPanel
+                searchQuery={searchQuery}
                 allButtonPosition="end"
                 onDirectorySelect={() => setSkillView("directory")}
                 onSkillPacksSelect={() => setSkillView("packs")}

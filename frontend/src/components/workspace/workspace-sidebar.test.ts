@@ -235,6 +235,22 @@ describe("workspace sidebar project grouping", () => {
     expect(summary.title).toBe("thread/legacy");
   });
 
+  test("hides bare legacy team labels even when mode metadata was lost", () => {
+    const [summary] = __testing.buildConversationThreadSummaries([
+      {
+        thread_id: "bare-team-label",
+        title: "bare-team-label",
+        updated_at: "2026-06-29T00:00:00Z",
+        metadata: {
+          title: "团队",
+        },
+        values: {},
+      } as never,
+    ]);
+
+    expect(summary?.title).toBe("thread/bare-t");
+  });
+
   test("keeps explicit project labels for code threads", () => {
     expect(
       __testing.projectNameForThread(

@@ -63,6 +63,51 @@ def test_invite_requires_target(tmp_path) -> None:
     assert c.post("/api/cowork/t/members", json={"kind": "agent"}).status_code == 422
 
 
+def test_advanced_cowork_endpoints(tmp_path) -> None:
+    c = _client(tmp_path)
+    t = "thread-advanced"
+
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "db-agent"})
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "ui-agent"})
+
+    nominated = c.get(
+        f"/api/cowork/{t}/nominate",
+        params={"text": "database indexing latency"},
+    ).json()
+    assert nominated["nominated"][0] == "db-agent"
+
+    task = c.post(
+        f"/api/cowork/{t}/tasks",
+        json={"assignee": "db-agent", "prompt": "check indexes"},
+    ).json()["task"]
+    done = c.post(
+        f"/api/cowork/{t}/tasks/{task['task_id']}/complete",
+        json={"result": "indexes checked", "blackboard_key": "indexes"},
+    ).json()
+    assert done["blackboard"]["indexes"] == "indexes checked"
+    assert c.get(f"/api/cowork/{t}/tasks").json()["tasks"][0]["status"] == "done"
+
+    forked = c.post(
+        f"/api/cowork/{t}/breakout",
+        json={
+            "child_thread": "child-advanced",
+            "members": [{"id": "db-agent"}],
+            "grant": {"scope": "summary"},
+        },
+    ).json()
+    assert forked["members"] == ["db-agent"]
+
+    merged = c.post(
+        f"/api/cowork/{t}/breakout/child-advanced/merge",
+        json={"summary": "side thread result"},
+    ).json()
+    assert merged["blackboard"]["breakout:child-advanced"]["status"] == "merged"
+
+    catchup = c.get(f"/api/cowork/child-advanced/catchup/db-agent").json()
+    assert catchup["member_id"] == "db-agent"
+    assert catchup["summary_only"] is True
+
+
 def test_mutations_require_auth_when_enabled(tmp_path) -> None:
     store = IdentityStore()
     store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")

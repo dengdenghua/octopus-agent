@@ -15,7 +15,7 @@ usage() {
 Usage: scripts/verify_local.sh [--full-stack-only]
 
 Runs the local stability gate:
-  - targeted backend regressions for model compatibility, team tasks, and org runs
+  - targeted backend regressions for model compatibility, team/cowork tasks, and org runs
   - frontend typecheck, lint, and build
   - full-stack Playwright smoke for FastAPI + Vite across localhost/127.0.0.1
 
@@ -78,6 +78,11 @@ backend_tests=(
   tests/test_app_config_endpoints.py::TestCustomModelCompatDiagnostics
   tests/test_organization.py
   tests/test_team_tasks_router.py
+  tests/test_cowork_group.py
+  tests/test_cowork_group_store.py
+  tests/test_cowork_group_router.py
+  tests/test_cowork_turn_plan.py
+  tests/test_cowork_advanced.py
 )
 
 if [[ "${OCTOPUS_LIVE_MODEL_SMOKE:-0}" == "1" ]]; then

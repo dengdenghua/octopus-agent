@@ -206,6 +206,11 @@ function isGeneratedTeamProjectName(project: string): boolean {
   );
 }
 
+function isBareGeneratedTeamLabel(value: string): boolean {
+  const text = value.trim();
+  return text === "Team" || text === "团队";
+}
+
 function threadMetadataMode(thread: {
   metadata?: Record<string, unknown>;
   values?: Record<string, unknown>;
@@ -221,10 +226,11 @@ function isGeneratedTeamThreadTitle(
   },
   title: string,
 ): boolean {
+  if (!isGeneratedTeamProjectName(title)) return false;
   return (
-    isGeneratedTeamProjectName(title) &&
-    (threadMetadataMode(thread) === "team" ||
-      isGeneratedTeamProjectName(cleanDisplayText(thread.metadata?.["project"])))
+    isBareGeneratedTeamLabel(title) ||
+    threadMetadataMode(thread) === "team" ||
+    isGeneratedTeamProjectName(cleanDisplayText(thread.metadata?.["project"]))
   );
 }
 

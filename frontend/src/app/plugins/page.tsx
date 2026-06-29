@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   BoxesIcon,
   CheckCircle,
+  ChevronLeft,
   Plus,
   Puzzle,
   Search,
@@ -442,17 +444,30 @@ export default function PluginsPage() {
       className="flex w-full flex-col gap-5 px-4 py-4"
     >
       {/* ── Tab bar ── */}
-      <section className="mx-auto flex w-full max-w-6xl items-center justify-between">
-        <TabsList variant="line">
-          <TabsTrigger value="plugins">
-            <Puzzle className="size-3.5" />
-            {t.plugins.pageTitle}
-          </TabsTrigger>
-          <TabsTrigger value="skills">
-            <BoxesIcon className="size-3.5" />
-            {t.plugins.tabSkillMarket}
-          </TabsTrigger>
-        </TabsList>
+      <section className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="h-9 gap-1 pl-2 pr-3 text-muted-foreground hover:text-foreground"
+          >
+            <Link to="/workspace">
+              <ChevronLeft className="size-4" />
+              返回工作区
+            </Link>
+          </Button>
+          <TabsList variant="line">
+            <TabsTrigger value="plugins">
+              <Puzzle className="size-3.5" />
+              {t.plugins.pageTitle}
+            </TabsTrigger>
+            <TabsTrigger value="skills">
+              <BoxesIcon className="size-3.5" />
+              {t.plugins.tabSkillMarket}
+            </TabsTrigger>
+          </TabsList>
+        </div>
         {activeTab === "plugins" && (
           <div className="hidden items-center gap-2 sm:flex">
             <Button

@@ -136,6 +136,14 @@ class AsyncWorkStore:
     def pending(self, thread_id: str) -> list[AsyncTask]:
         return self._by_status(thread_id, "pending")
 
+    def threads_with_pending(self) -> list[str]:
+        """Distinct threads that have at least one pending task (for a runner)."""
+        with self._lock, sqlite3.connect(str(self._db)) as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT thread_id FROM async_tasks WHERE status='pending'"
+            ).fetchall()
+        return [r[0] for r in rows]
+
     def list(self, thread_id: str) -> list[AsyncTask]:
         with self._lock, sqlite3.connect(str(self._db)) as conn:
             rows = conn.execute(

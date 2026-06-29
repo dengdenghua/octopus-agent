@@ -1,4 +1,4 @@
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -120,6 +120,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useI18n } from "@/core/i18n/hooks";
@@ -167,69 +168,6 @@ const CATEGORY_ICON_POOL: Record<string, LucideIcon[]> = {
   other: [Wrench, Cog, Settings2, Puzzle, Sparkles],
 };
 
-const CATEGORY_TONE_MAP: Record<string, string> = {
-  "browser-search":
-    "border-sky-500/30 bg-gradient-to-br from-sky-500/20 to-blue-400/10 text-sky-600 dark:text-sky-300 shadow-sm shadow-sky-500/15",
-  "agent-tools":
-    "border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-teal-400/10 text-emerald-600 dark:text-emerald-300 shadow-sm shadow-emerald-500/15",
-  "webapp-frontend":
-    "border-violet-500/30 bg-gradient-to-br from-violet-500/20 to-purple-400/10 text-violet-600 dark:text-violet-300 shadow-sm shadow-violet-500/15",
-  "backend-api":
-    "border-indigo-500/30 bg-gradient-to-br from-indigo-500/20 to-blue-500/10 text-indigo-600 dark:text-indigo-300 shadow-sm shadow-indigo-500/15",
-  "code-quality":
-    "border-blue-500/30 bg-gradient-to-br from-blue-500/20 to-cyan-400/10 text-blue-600 dark:text-blue-300 shadow-sm shadow-blue-500/15",
-  "devops-cloud":
-    "border-orange-500/30 bg-gradient-to-br from-orange-500/20 to-amber-400/10 text-orange-600 dark:text-orange-300 shadow-sm shadow-orange-500/15",
-  "office-docs":
-    "border-rose-500/30 bg-gradient-to-br from-rose-500/20 to-pink-400/10 text-rose-600 dark:text-rose-300 shadow-sm shadow-rose-500/15",
-  "slides-report":
-    "border-fuchsia-500/30 bg-gradient-to-br from-fuchsia-500/20 to-pink-400/10 text-fuchsia-600 dark:text-fuchsia-300 shadow-sm shadow-fuchsia-500/15",
-  "chart-viz":
-    "border-cyan-500/30 bg-gradient-to-br from-cyan-500/20 to-sky-400/10 text-cyan-600 dark:text-cyan-300 shadow-sm shadow-cyan-500/15",
-  "writing-editing":
-    "border-teal-500/30 bg-gradient-to-br from-teal-500/20 to-cyan-400/10 text-teal-600 dark:text-teal-300 shadow-sm shadow-teal-500/15",
-  "marketing-copy":
-    "border-pink-500/30 bg-gradient-to-br from-pink-500/20 to-rose-400/10 text-pink-600 dark:text-pink-300 shadow-sm shadow-pink-500/15",
-  "seo-growth":
-    "border-green-500/30 bg-gradient-to-br from-green-500/20 to-emerald-400/10 text-green-600 dark:text-green-300 shadow-sm shadow-green-500/15",
-  ecommerce:
-    "border-amber-500/30 bg-gradient-to-br from-amber-500/20 to-yellow-400/10 text-amber-600 dark:text-amber-300 shadow-sm shadow-amber-500/15",
-  "market-product":
-    "border-yellow-500/30 bg-gradient-to-br from-yellow-500/20 to-orange-300/10 text-yellow-600 dark:text-yellow-300 shadow-sm shadow-yellow-500/15",
-  "project-goal":
-    "border-green-500/30 bg-gradient-to-br from-green-500/20 to-teal-400/10 text-green-600 dark:text-green-300 shadow-sm shadow-green-500/15",
-  "finance-stock":
-    "border-emerald-500/30 bg-gradient-to-br from-emerald-500/20 to-green-400/10 text-emerald-600 dark:text-emerald-300 shadow-sm shadow-emerald-500/15",
-  "finance-model":
-    "border-lime-500/30 bg-gradient-to-br from-lime-500/20 to-green-400/10 text-lime-600 dark:text-lime-300 shadow-sm shadow-lime-500/15",
-  "data-stats":
-    "border-indigo-500/30 bg-gradient-to-br from-indigo-500/20 to-violet-400/10 text-indigo-600 dark:text-indigo-300 shadow-sm shadow-indigo-500/15",
-  "data-insight":
-    "border-purple-500/30 bg-gradient-to-br from-purple-500/20 to-violet-400/10 text-purple-600 dark:text-purple-300 shadow-sm shadow-purple-500/15",
-  "academic-paper":
-    "border-blue-500/30 bg-gradient-to-br from-blue-500/20 to-indigo-400/10 text-blue-600 dark:text-blue-300 shadow-sm shadow-blue-500/15",
-  "deep-research":
-    "border-cyan-500/30 bg-gradient-to-br from-cyan-500/20 to-blue-400/10 text-cyan-600 dark:text-cyan-300 shadow-sm shadow-cyan-500/15",
-  "education-coach":
-    "border-violet-500/30 bg-gradient-to-br from-violet-500/20 to-indigo-400/10 text-violet-600 dark:text-violet-300 shadow-sm shadow-violet-500/15",
-  "hr-career":
-    "border-orange-500/30 bg-gradient-to-br from-orange-500/20 to-red-300/10 text-orange-600 dark:text-orange-300 shadow-sm shadow-orange-500/15",
-  "email-comms":
-    "border-sky-500/30 bg-gradient-to-br from-sky-500/20 to-cyan-400/10 text-sky-600 dark:text-sky-300 shadow-sm shadow-sky-500/15",
-  "legal-compliance":
-    "border-stone-500/30 bg-gradient-to-br from-stone-500/20 to-zinc-400/10 text-stone-600 dark:text-stone-300 shadow-sm shadow-stone-500/15",
-  "security-audit":
-    "border-red-500/30 bg-gradient-to-br from-red-500/20 to-rose-400/10 text-red-600 dark:text-red-300 shadow-sm shadow-red-500/15",
-  "design-creative":
-    "border-pink-500/30 bg-gradient-to-br from-pink-500/20 to-fuchsia-400/10 text-pink-600 dark:text-pink-300 shadow-sm shadow-pink-500/15",
-  "media-audio-video":
-    "border-purple-500/30 bg-gradient-to-br from-purple-500/20 to-fuchsia-400/10 text-purple-600 dark:text-purple-300 shadow-sm shadow-purple-500/15",
-  "personal-productivity":
-    "border-teal-500/30 bg-gradient-to-br from-teal-500/20 to-green-400/10 text-teal-600 dark:text-teal-300 shadow-sm shadow-teal-500/15",
-  other:
-    "border-slate-500/30 bg-gradient-to-br from-slate-500/20 to-gray-400/10 text-slate-600 dark:text-slate-300 shadow-sm shadow-slate-500/15",
-};
-
 function hashString(str: string): number {
   let h = 0;
   for (let i = 0; i < str.length; i++) {
@@ -244,14 +182,8 @@ function getSkillIcon(category: string, skillName: string): LucideIcon {
   return pool[hashString(skillName) % pool.length] ?? pool[0] ?? Wrench;
 }
 
-function skillTone(category: string): string {
-  return (
-    CATEGORY_TONE_MAP[category] ??
-    "border-slate-500/30 bg-gradient-to-br from-slate-500/20 to-gray-400/10 text-slate-600 dark:text-slate-300 shadow-sm shadow-slate-500/15"
-  );
-}
-
 type LocalSkillDirectoryPanelProps = {
+  searchQuery?: string;
   allButtonPosition?: "start" | "end";
   onDirectorySelect?: () => void;
   onSkillPacksSelect?: () => void;
@@ -260,6 +192,7 @@ type LocalSkillDirectoryPanelProps = {
 };
 
 export function LocalSkillDirectoryPanel({
+  searchQuery: externalSearchQuery,
   allButtonPosition = "start",
   onDirectorySelect,
   onSkillPacksSelect,
@@ -270,9 +203,14 @@ export function LocalSkillDirectoryPanel({
   const categoryLabel = useLocalSkillCategoryLabel();
   const { skills, isLoading, isFetching, error, refetch } = useSkills();
   const { mutate: setSkillEnabled, isPending } = useEnableSkill();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(externalSearchQuery ?? "");
   const [category, setCategory] = useState("all");
+  const showInternalSearch = externalSearchQuery === undefined;
   const [showInternalSkills, setShowInternalSkills] = useState(false);
+
+  useEffect(() => {
+    if (externalSearchQuery !== undefined) setQuery(externalSearchQuery);
+  }, [externalSearchQuery]);
 
   const allDomainSkills = useMemo(() => {
     return (skills as LocalSkill[])
@@ -329,7 +267,7 @@ export function LocalSkillDirectoryPanel({
     <Button
       size="sm"
       variant={!showSkillPacks && category === "all" ? "secondary" : "ghost"}
-      className="h-8 shrink-0 rounded-full px-3 text-xs"
+      className="h-8 shrink-0 rounded-lg px-3 text-xs"
       onClick={() => handleCategorySelect("all")}
     >
       {t.unifiedStore.skills.catalogCount(localSkills.length)}
@@ -359,14 +297,14 @@ export function LocalSkillDirectoryPanel({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-      {!showSkillPacks && (
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
+      {showInternalSearch && !showSkillPacks && (
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-center">
           <div className="relative w-full lg:max-w-[560px]">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               aria-label={t.unifiedStore.skills.searchAria}
-              className="h-11 rounded-2xl border-border/60 bg-background pl-10 text-base shadow-sm"
+              className="h-9 rounded-lg border-border bg-background pl-10 text-sm shadow-none"
               placeholder={t.unifiedStore.skills.searchPlaceholder}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -380,7 +318,7 @@ export function LocalSkillDirectoryPanel({
           <Button
             size="sm"
             variant={showSkillPacks ? "secondary" : "ghost"}
-            className="h-8 shrink-0 rounded-full px-3 text-xs"
+            className="h-8 shrink-0 rounded-lg px-3 text-xs"
             onClick={onSkillPacksSelect}
           >
             <Boxes className="mr-1.5 size-3.5" />
@@ -398,7 +336,7 @@ export function LocalSkillDirectoryPanel({
               variant={
                 !showSkillPacks && category === item.key ? "secondary" : "ghost"
               }
-              className="h-8 shrink-0 rounded-full px-3 text-xs"
+              className="h-8 shrink-0 rounded-lg px-3 text-xs"
               onClick={() => handleCategorySelect(item.key)}
             >
               {categoryLabel(item.key)}
@@ -412,7 +350,7 @@ export function LocalSkillDirectoryPanel({
             variant={
               !showSkillPacks && category === "other" ? "secondary" : "ghost"
             }
-            className="h-8 shrink-0 rounded-full px-3 text-xs"
+            className="h-8 shrink-0 rounded-lg px-3 text-xs"
             onClick={() => handleCategorySelect("other")}
           >
             {t.unifiedStore.skills.other}
@@ -440,7 +378,7 @@ export function LocalSkillDirectoryPanel({
               {hiddenSkillCount > 0 && (
                 <button
                   type="button"
-                  className="rounded-full px-2 py-1 transition-colors hover:bg-muted hover:text-foreground"
+                  className="rounded-lg px-2 py-1 transition-colors hover:bg-muted hover:text-foreground"
                   onClick={() => setShowInternalSkills((value) => !value)}
                 >
                   {showInternalSkills
@@ -454,7 +392,7 @@ export function LocalSkillDirectoryPanel({
           </div>
 
           {visibleSkills.length ? (
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
               {visibleSkills.map((skill) => {
                 const SkillIcon = getSkillIcon(
                   skill.localCategory,
@@ -464,47 +402,48 @@ export function LocalSkillDirectoryPanel({
                   <article
                     key={skill.name}
                     className={cn(
-                      "group flex min-w-0 flex-col rounded-lg border border-border/60 bg-card/70 p-3.5 shadow-sm transition-colors hover:border-primary/25 hover:bg-card",
+                      "group flex min-w-0 flex-col rounded-lg border border-border bg-card p-3.5 shadow-none transition-colors hover:bg-accent/30",
                       !skill.enabled && "bg-muted/15 text-muted-foreground",
                     )}
                   >
                     <div className="flex min-w-0 items-start gap-3">
                       <div
                         className={cn(
-                          "flex size-12 shrink-0 items-center justify-center rounded-xl border shadow-sm",
+                          "flex size-12 shrink-0 items-center justify-center rounded-lg border shadow-none",
                           skill.enabled
-                            ? skillTone(skill.localCategory)
-                            : "border-border/50 bg-muted/35 text-muted-foreground",
+                            ? "border-border bg-primary/10 text-primary"
+                            : "border-border bg-muted text-muted-foreground",
                         )}
                       >
                         <SkillIcon className="size-5" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex min-w-0 items-center gap-2">
-                          <h3 className="truncate text-[15px] font-semibold leading-5 text-foreground">
+                          <h3 className="truncate text-sm font-semibold leading-5 text-foreground">
                             {skill.name}
                           </h3>
                         </div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
-                          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          <Badge variant="outline" className="text-xs font-normal">
                             {categoryLabel(skill.localCategory)}
-                          </span>
+                          </Badge>
                           {skill.has_tests && (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-300">
+                            <Badge variant="outline" className="gap-1 text-xs font-normal">
                               <ShieldCheck className="size-3" />
                               {t.localSkillDirectory.verified}
-                            </span>
+                            </Badge>
                           )}
                           {(skill.market_visibility ?? "market") !==
                             "market" && (
-                            <span
+                            <Badge
+                              variant="secondary"
+                              className="text-xs font-normal"
                               title={
                                 skill.canonical_skill
                                   ? `${skill.market_reason ?? t.localSkillDirectory.marketReasonMerged}：${skill.canonical_skill}`
                                   : (skill.market_reason ??
                                     t.localSkillDirectory.internalSkill)
                               }
-                              className="rounded-full bg-muted-foreground/10 px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
                             >
                               {skill.market_visibility === "duplicate"
                                 ? t.localSkillDirectory.visibilityDuplicate
@@ -515,7 +454,7 @@ export function LocalSkillDirectoryPanel({
                                     : skill.market_visibility === "deprecated"
                                       ? t.localSkillDirectory.visibilityDeprecated
                                       : t.localSkillDirectory.visibilityInternal}
-                            </span>
+                            </Badge>
                           )}
                         </div>
                       </div>
@@ -523,17 +462,18 @@ export function LocalSkillDirectoryPanel({
                     <p className="mt-3 line-clamp-2 flex-1 text-sm leading-5 text-muted-foreground">
                       {skill.description || t.unifiedStore.skills.noDescription}
                     </p>
-                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/40 pt-2.5">
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-2.5">
                       <span
                         title={skill.trusted_source ?? undefined}
-                        className="truncate text-[11px] text-muted-foreground"
+                        className="truncate text-xs text-muted-foreground"
                       >
                         {skill.has_tests
                           ? t.localSkillDirectory.verified
                           : t.localSkillDirectory.localCapability}
                       </span>
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
                         aria-label={t.unifiedStore.skills.toggleSkillAria(
                           skill.enabled,
                           skill.name,
@@ -545,11 +485,12 @@ export function LocalSkillDirectoryPanel({
                             enabled: !skill.enabled,
                           })
                         }
+                        variant="outline"
                         className={cn(
-                          "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors disabled:opacity-60",
+                          "h-7 gap-1.5 px-2.5 text-xs font-medium shadow-none transition-colors disabled:opacity-60",
                           skill.enabled
-                            ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300"
-                            : "bg-primary text-primary-foreground hover:bg-primary/90",
+                            ? "text-primary hover:bg-primary/10"
+                            : "text-foreground hover:bg-accent",
                         )}
                       >
                         {skill.enabled ? (
@@ -563,14 +504,14 @@ export function LocalSkillDirectoryPanel({
                             {t.localSkillDirectory.enable}
                           </>
                         )}
-                      </button>
+                      </Button>
                     </div>
                   </article>
                 );
               })}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-border/70 bg-muted/10 p-8 text-center text-sm text-muted-foreground">
+            <div className="rounded-lg border border-dashed border-border bg-muted/10 p-8 text-center text-sm text-muted-foreground">
               {t.unifiedStore.skills.noMatch(query || activeLabel)}
             </div>
           )}

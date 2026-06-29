@@ -128,6 +128,14 @@ import {
   type TaskCollaboratorPreset,
 } from "@/core/collaboration/task-collaborator-preset";
 import { collaborationRosterFromThread } from "@/core/collaboration/thread-collaboration";
+import {
+  buildCoworkSelectionSyncPlan,
+  coworkGroupToCollaborationRoster,
+  useCoworkGroup,
+  useInviteCoworkMember,
+  useRemoveCoworkMember,
+  useSetCoworkMode,
+} from "@/core/cowork";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, type Message } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -730,10 +738,7 @@ function TaskCollaboratorControl({
             </div>
             <button
               type="button"
-              onClick={() => {
-                onSelectedAgentIdsChange([]);
-                onTeamModeChange("cluster");
-              }}
+              onClick={() => onSelectedAgentIdsChange([])}
               className="rounded-sm px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
             >
               {t.chatInputBox.collaboratorsSingle}
@@ -1001,6 +1006,10 @@ function ChatsPageContent({
     refetchOnWindowFocus: false,
     retry: false,
   });
+  const coworkGroupQuery = useCoworkGroup(isNewThread ? null : threadId);
+  const inviteCoworkMemberMutation = useInviteCoworkMember();
+  const removeCoworkMemberMutation = useRemoveCoworkMember();
+  const setCoworkModeMutation = useSetCoworkMode();
   const persistedThreadWorkspacePath = threadWorkspaceQuery.data ?? "";
 
   useEffect(() => {
@@ -1057,10 +1066,17 @@ function ChatsPageContent({
   >([]);
   const [teamModeIntent, setTeamModeIntent] = useState<TeamMode>("cluster");
   const [collaboratorPickerOpen, setCollaboratorPickerOpen] = useState(false);
+  const collaboratorSelectionTouchedRef = useRef(false);
+  const lastCoworkSyncSignatureRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    collaboratorSelectionTouchedRef.current = false;
+    lastCoworkSyncSignatureRef.current = null;
+  }, [threadId]);
 
   useEffect(() => {
     setFocusedWorkbenchAgentId(null);
@@ -1154,17 +1170,39 @@ function ChatsPageContent({
       threadIdentityQuery.data?.values,
     ],
   );
+  const coworkCollaborationProfiles = useMemo(
+    () => [composerDisplayAgent, ...allTaskCollaboratorAgents],
+    [allTaskCollaboratorAgents, composerDisplayAgent],
+  );
+  const coworkCollaborationRoster = useMemo(
+    () =>
+      coworkGroupToCollaborationRoster(
+        coworkGroupQuery.data,
+        currentTaskAgentName,
+        coworkCollaborationProfiles,
+      ),
+    [
+      coworkCollaborationProfiles,
+      coworkGroupQuery.data,
+      currentTaskAgentName,
+    ],
+  );
+  const savedCollaborationRoster =
+    coworkCollaborationRoster.length > 0
+      ? coworkCollaborationRoster
+      : persistedCollaborationRoster;
   const persistedCollaboratorIds = useMemo(
     () =>
-      persistedCollaborationRoster
+      savedCollaborationRoster
         .filter(
           (agent) =>
             agent.role !== "tl" && agent.agent_id !== currentTaskAgentName,
         )
         .map((agent) => agent.agent_id),
-    [currentTaskAgentName, persistedCollaborationRoster],
+    [currentTaskAgentName, savedCollaborationRoster],
   );
   const persistedCollaboratorKey = persistedCollaboratorIds.join("\u0000");
+  const savedCollaborationMode = coworkGroupQuery.data?.state.mode;
   const applyTaskCollaboratorPreset = useCallback(
     (preset: TaskCollaboratorPreset) => {
       const nextIds = Array.from(
@@ -1174,6 +1212,7 @@ function ChatsPageContent({
             .filter((id) => id && id !== currentTaskAgentName),
         ),
       );
+      collaboratorSelectionTouchedRef.current = true;
       setSelectedCollaboratorIds(nextIds);
       setTeamModeIntent(
         nextIds.length > 0 ? (preset.mode ?? "cluster") : "cluster",
@@ -1213,15 +1252,108 @@ function ChatsPageContent({
         : persistedCollaboratorIds,
     );
     if (persistedCollaboratorIds.length > 0) {
-      setTeamModeIntent("cluster");
+      setTeamModeIntent(savedCollaborationMode ?? "cluster");
     }
   }, [
     isNewThread,
     persistedCollaboratorKey,
     persistedCollaboratorIds,
+    savedCollaborationMode,
     threadId,
     threadIdentityQuery.isPending,
   ]);
+  const selectedCollaboratorKey = selectedCollaboratorIds.join("\u0000");
+  useEffect(() => {
+    if (isNewThread || !threadId || threadId === "new") return;
+
+    const startedLocally = localStartedThreadIdRef.current === threadId;
+    const userTouched = collaboratorSelectionTouchedRef.current;
+    const matchesSavedRoster =
+      selectedCollaboratorKey === persistedCollaboratorKey;
+    if (!startedLocally && !userTouched && !matchesSavedRoster) return;
+    if (coworkGroupQuery.isPending && coworkGroupQuery.data === undefined) {
+      return;
+    }
+
+    const plan = buildCoworkSelectionSyncPlan({
+      leaderId: currentTaskAgentName,
+      collaboratorIds: selectedCollaboratorIds,
+      mode: teamModeIntent,
+      current: coworkGroupQuery.data?.state ?? null,
+    });
+    if (!plan.hasWork) return;
+
+    const signature = `${threadId}|${plan.signature}`;
+    if (lastCoworkSyncSignatureRef.current === signature) return;
+    lastCoworkSyncSignatureRef.current = signature;
+    const resetOnError = () => {
+      if (lastCoworkSyncSignatureRef.current === signature) {
+        lastCoworkSyncSignatureRef.current = null;
+      }
+    };
+
+    for (const id of plan.inviteAgentIds) {
+      inviteCoworkMemberMutation.mutate(
+        {
+          threadId,
+          input: {
+            target_id: id,
+            kind: "agent",
+            role: "participant",
+            grant: { scope: "all" },
+          },
+        },
+        { onError: resetOnError },
+      );
+    }
+    for (const id of plan.removeAgentIds) {
+      removeCoworkMemberMutation.mutate(
+        { threadId, memberId: id },
+        { onError: resetOnError },
+      );
+    }
+    if (plan.shouldSetMode) {
+      setCoworkModeMutation.mutate(
+        { threadId, mode: plan.mode },
+        { onError: resetOnError },
+      );
+    }
+  }, [
+    coworkGroupQuery.data?.state,
+    coworkGroupQuery.data,
+    coworkGroupQuery.isPending,
+    currentTaskAgentName,
+    inviteCoworkMemberMutation,
+    isNewThread,
+    persistedCollaboratorKey,
+    removeCoworkMemberMutation,
+    selectedCollaboratorIds,
+    selectedCollaboratorKey,
+    setCoworkModeMutation,
+    teamModeIntent,
+    threadId,
+  ]);
+  const handleSelectedCollaboratorIdsChange = useCallback(
+    (ids: string[]) => {
+      const leader = currentTaskAgentName.trim();
+      const nextIds = Array.from(
+        new Set(ids.map((id) => id.trim()).filter((id) => id && id !== leader)),
+      );
+      collaboratorSelectionTouchedRef.current = true;
+      setSelectedCollaboratorIds(nextIds);
+      if (nextIds.length === 0) {
+        setTeamModeIntent("chat");
+      }
+    },
+    [currentTaskAgentName],
+  );
+  const handleTeamModeIntentChange = useCallback(
+    (mode: TeamMode) => {
+      collaboratorSelectionTouchedRef.current = true;
+      setTeamModeIntent(mode);
+    },
+    [],
+  );
   const collaborationRoster = useMemo<ChatCollaborationRosterEntry[]>(() => {
     const leaderName = composerDisplayAgent.name?.trim() || effectiveAgentId;
     const roster: ChatCollaborationRosterEntry[] = [
@@ -1252,9 +1384,9 @@ function ChatsPageContent({
   }, [composerDisplayAgent, effectiveAgentId, selectedCollaborators]);
   const collaborationEnabled = selectedCollaborators.length > 0;
   const visibleCollaborationRoster =
-    collaborationEnabled || persistedCollaborationRoster.length === 0
+    collaborationEnabled || savedCollaborationRoster.length === 0
       ? collaborationRoster
-      : persistedCollaborationRoster;
+      : savedCollaborationRoster;
   const visibleCollaborationEnabled = visibleCollaborationRoster.length > 1;
   const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(
     () =>
@@ -2294,8 +2426,10 @@ function ChatsPageContent({
                     teamMode={teamModeIntent}
                     open={collaboratorPickerOpen}
                     onOpenChange={setCollaboratorPickerOpen}
-                    onSelectedAgentIdsChange={setSelectedCollaboratorIds}
-                    onTeamModeChange={setTeamModeIntent}
+                    onSelectedAgentIdsChange={
+                      handleSelectedCollaboratorIdsChange
+                    }
+                    onTeamModeChange={handleTeamModeIntentChange}
                     roster={visibleCollaborationRoster}
                     threadId={threadId}
                     isNewThread={isNewThread}
