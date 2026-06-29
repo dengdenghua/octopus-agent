@@ -181,12 +181,25 @@ describe("<AgentOperatorPanel />", () => {
           has_checkpoint: true,
           latest_checkpoint_id: "checkpoint-expired-loop",
           resume_checkpoint_id: null,
+          checkpoint_id: "checkpoint-expired-loop",
+          operation: "takeover_then_resume",
+          steps: ["takeover_task", "resume_from_checkpoint"],
+          recovery_plan: {
+            checkpoint_id: "checkpoint-expired-loop",
+            operation: "takeover_then_resume",
+            steps: ["takeover_task", "resume_from_checkpoint"],
+          },
           lease_health: {
             state: "expired",
             holder_id: "worker-a",
             recommended_action: "takeover_and_resume",
             can_takeover: true,
             can_resume: true,
+            recovery: {
+              checkpoint_id: "checkpoint-expired-loop",
+              operation: "takeover_then_resume",
+              steps: ["takeover_task", "resume_from_checkpoint"],
+            },
           },
           updated_at: "2026-06-26T00:00:00Z",
           created_at: "2026-06-25T00:00:00Z",
@@ -206,11 +219,24 @@ describe("<AgentOperatorPanel />", () => {
           has_checkpoint: true,
           latest_checkpoint_id: "checkpoint-failed-loop",
           resume_checkpoint_id: "resume-failed-loop",
+          checkpoint_id: "resume-failed-loop",
+          operation: "resume_from_checkpoint",
+          steps: ["resume_from_checkpoint"],
+          recovery_plan: {
+            checkpoint_id: "resume-failed-loop",
+            operation: "resume_from_checkpoint",
+            steps: ["resume_from_checkpoint"],
+          },
           lease_health: {
             state: "terminal",
             recommended_action: "resume_from_checkpoint",
             can_takeover: false,
             can_resume: true,
+            recovery: {
+              checkpoint_id: "resume-failed-loop",
+              operation: "resume_from_checkpoint",
+              steps: ["resume_from_checkpoint"],
+            },
           },
           updated_at: "2026-06-26T00:00:00Z",
           created_at: "2026-06-25T00:00:00Z",
@@ -1114,7 +1140,13 @@ describe("<AgentOperatorPanel />", () => {
     expect(await screen.findByText("Task recovery queue")).toBeInTheDocument();
     expect(await screen.findByText("Expired loop task")).toBeInTheDocument();
     expect(await screen.findByText("take over + resume")).toBeInTheDocument();
+    expect(
+      await screen.findByText("takeover_task -> resume_from_checkpoint"),
+    ).toBeInTheDocument();
     expect(await screen.findByText("resume checkpoint")).toBeInTheDocument();
+    expect(
+      await screen.findByText("resume_from_checkpoint"),
+    ).toBeInTheDocument();
     expect(await screen.findByText("lease expired")).toBeInTheDocument();
     expect(await screen.findByText("Competitor scorecard")).toBeInTheDocument();
     expect(

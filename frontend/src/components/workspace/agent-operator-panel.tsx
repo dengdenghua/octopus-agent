@@ -1247,6 +1247,12 @@ function TaskRecoveryQueueCard({
         <div className="mt-2 grid gap-2 lg:grid-cols-2">
           {queue.items.slice(0, 4).map((item) => {
             const busy = busyId === `takeover-task:${item.task_id}`;
+            const steps = taskRecoverySteps(item);
+            const checkpointId =
+              item.checkpoint_id ||
+              item.resume_checkpoint_id ||
+              item.latest_checkpoint_id ||
+              "available";
             return (
               <div
                 key={item.task_id}
@@ -1283,12 +1289,7 @@ function TaskRecoveryQueueCard({
                   </Badge>
                   {item.has_checkpoint && (
                     <Badge variant="outline" className="text-[10px]">
-                      checkpoint{" "}
-                      {shortId(
-                        item.resume_checkpoint_id ||
-                          item.latest_checkpoint_id ||
-                          "available",
-                      )}
+                      checkpoint {shortId(checkpointId)}
                     </Badge>
                   )}
                   {item.thread_id && (
@@ -1298,12 +1299,19 @@ function TaskRecoveryQueueCard({
                   )}
                 </div>
                 <div className="mt-2 flex items-center justify-between gap-2">
-                  <div className="text-[10px] text-muted-foreground">
-                    {item.can_resume
-                      ? "Resume-safe state is available"
-                      : item.can_takeover
-                        ? "Lease can be reclaimed"
-                        : taskRecoveryHint(item.recommended_action)}
+                  <div className="min-w-0 text-[10px] text-muted-foreground">
+                    <div>
+                      {item.can_resume
+                        ? "Resume-safe state is available"
+                        : item.can_takeover
+                          ? "Lease can be reclaimed"
+                          : taskRecoveryHint(item.recommended_action)}
+                    </div>
+                    {steps.length > 0 && (
+                      <div className="mt-0.5 truncate font-mono">
+                        {steps.join(" -> ")}
+                      </div>
+                    )}
                   </div>
                   {item.can_takeover && (
                     <Button
@@ -2923,13 +2931,20 @@ function EmptyPanel({ title }: { title: string }) {
   );
 }
 
-function shortId(id: string) {
-  return id.length > 16 ? `${id.slice(0, 16)}...` : id;
+function shortId(id: string | number) {
+  const text = String(id);
+  return text.length > 16 ? `${text.slice(0, 16)}...` : text;
 }
 
 function countRecovery(queue: AgentTraceTaskRecoveryQueue, needle: string) {
   return queue.items.filter((item) => item.recommended_action.includes(needle))
     .length;
+}
+
+function taskRecoverySteps(item: AgentTraceTaskRecoveryQueue["items"][number]) {
+  const raw = item.steps?.length ? item.steps : item.recovery_plan?.steps;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((step) => step.trim()).filter(Boolean);
 }
 
 function taskRecoveryActionLabel(action: string) {

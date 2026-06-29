@@ -169,7 +169,21 @@ export interface AgentTraceTaskLeaseHealth {
   recommended_action?: string;
   can_takeover?: boolean;
   can_resume?: boolean;
-  recovery?: Record<string, unknown>;
+  recovery?: AgentTraceTaskRecoveryPlan;
+  [key: string]: unknown;
+}
+
+export interface AgentTraceTaskRecoveryPlan {
+  can_takeover?: boolean;
+  can_resume?: boolean;
+  has_checkpoint?: boolean;
+  recommended_action?: string;
+  operation?: string | null;
+  steps?: string[];
+  reason?: string;
+  latest_checkpoint_id?: string | number | null;
+  resume_checkpoint_id?: string | number | null;
+  checkpoint_id?: string | number | null;
   [key: string]: unknown;
 }
 
@@ -186,8 +200,12 @@ export interface AgentTraceTaskRecoveryQueueItem {
   can_takeover: boolean;
   can_resume: boolean;
   has_checkpoint: boolean;
-  latest_checkpoint_id?: string | null;
-  resume_checkpoint_id?: string | null;
+  latest_checkpoint_id?: string | number | null;
+  resume_checkpoint_id?: string | number | null;
+  checkpoint_id?: string | number | null;
+  operation?: string | null;
+  steps?: string[];
+  recovery_plan?: AgentTraceTaskRecoveryPlan;
   lease_health?: AgentTraceTaskLeaseHealth;
   updated_at?: string | null;
   created_at?: string | null;
