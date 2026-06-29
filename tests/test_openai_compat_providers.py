@@ -311,6 +311,25 @@ def test_retry_plan_drops_sampling_on_generic_strict_validation_error() -> None:
     assert plan[0].removed_fields == ("temperature", "top_p")
 
 
+def test_retry_plan_renames_completion_tokens_back_to_max_tokens() -> None:
+    profile = resolve_openai_compat_profile("https://plain-proxy.example/v1")
+    plan = plan_openai_compat_retries(
+        {
+            "model": "proxy-model",
+            "messages": [],
+            "max_completion_tokens": 16,
+        },
+        status_code=400,
+        body="unsupported parameter: max_completion_tokens; use max_tokens",
+        profile=profile,
+    )
+
+    assert plan[0].reason == "rename_max_completion_tokens"
+    assert plan[0].removed_fields == ("max_completion_tokens",)
+    assert plan[0].added_fields == ("max_tokens",)
+    assert plan[0].payload["max_tokens"] == 16
+
+
 def test_retry_plan_drops_named_optional_fields_on_generic_proxy() -> None:
     profile = resolve_openai_compat_profile("https://plain-proxy.example/v1")
     plan = plan_openai_compat_retries(

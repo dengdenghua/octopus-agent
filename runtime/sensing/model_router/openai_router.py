@@ -41,6 +41,7 @@ except ImportError:  # pragma: no cover
 _DEFAULT_INPUT_USD_PER_TOKEN = 1e-7
 _DEFAULT_OUTPUT_USD_PER_TOKEN = 3e-7
 _MIN_THINKING_OUTPUT_TOKENS = 128
+_MAX_COMPAT_RETRY_ATTEMPTS = 6
 
 # OpenAI's reasoning_effort only accepts minimal/low/medium/high. Octopus's
 # xhigh tier (and the ultra/extra_high aliases that normalize to it) has no
@@ -61,6 +62,10 @@ _OPENAI_REASONING_EFFORT: dict[str, str] = {
 def _openai_reasoning_effort(value: Any) -> str:
     """Map an octopus reasoning-effort tier onto a value native OpenAI accepts."""
     return _OPENAI_REASONING_EFFORT.get(normalize_reasoning_effort(value) or "high", "high")
+
+
+def _compat_payload_fingerprint(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
 
 
 class OpenAIRouterError(LLMResponseFormatError):
@@ -133,9 +138,22 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     json=payload,
                     headers=self._build_headers(),
                 )
-                for attempt, retry in enumerate(self._retry_payloads(
-                    resp.status_code, resp.text, payload, model,
-                ), start=1):
+                seen_payloads = {_compat_payload_fingerprint(payload)}
+                retry_queue = self._retry_payloads(
+                    resp.status_code,
+                    resp.text,
+                    payload,
+                    model,
+                    seen_payloads=seen_payloads,
+                )
+                attempt = 0
+                while (
+                    resp.status_code >= 400
+                    and retry_queue
+                    and attempt < _MAX_COMPAT_RETRY_ATTEMPTS
+                ):
+                    retry = retry_queue.pop(0)
+                    attempt += 1
                     self._record_compat_retry(span, model, profile, attempt, retry)
                     resp = client.post(
                         f"{self.base_url}/chat/completions",
@@ -144,6 +162,15 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     )
                     if resp.status_code < 400:
                         break
+                    retry_queue.extend(
+                        self._retry_payloads(
+                            resp.status_code,
+                            resp.text,
+                            retry.payload,
+                            model,
+                            seen_payloads=seen_payloads,
+                        ),
+                    )
             except Exception as e:  # noqa: BLE001
                 raise OpenAIRouterError(
                     f"http_error: {type(e).__name__}: {e}"
@@ -249,9 +276,18 @@ class OpenAIModelRouter(Provider, ModelRouter):
                     first_status = r.status_code
                     first_text = r.text
 
-                for attempt, retry in enumerate(self._retry_payloads(
-                    first_status, first_text, payload, model,
-                ), start=1):
+                seen_payloads = {_compat_payload_fingerprint(payload)}
+                retry_queue = self._retry_payloads(
+                    first_status,
+                    first_text,
+                    payload,
+                    model,
+                    seen_payloads=seen_payloads,
+                )
+                attempt = 0
+                while retry_queue and attempt < _MAX_COMPAT_RETRY_ATTEMPTS:
+                    retry = retry_queue.pop(0)
+                    attempt += 1
                     self._record_compat_retry(span, model, profile, attempt, retry)
                     with client.stream(
                         "POST", url,
@@ -266,6 +302,15 @@ class OpenAIModelRouter(Provider, ModelRouter):
                         r.read()
                         first_status = r.status_code
                         first_text = r.text
+                    retry_queue.extend(
+                        self._retry_payloads(
+                            first_status,
+                            first_text,
+                            retry.payload,
+                            model,
+                            seen_payloads=seen_payloads,
+                        ),
+                    )
 
                 raise OpenAIRouterError(
                     _format_openai_http_error(first_status, first_text)
@@ -357,13 +402,25 @@ class OpenAIModelRouter(Provider, ModelRouter):
         body: str,
         payload: dict[str, Any],
         model: str,
+        *,
+        seen_payloads: set[str] | None = None,
     ) -> list[OpenAICompatRetryPayload]:
-        return plan_openai_compat_retries(
+        plan = plan_openai_compat_retries(
             payload,
             status_code=status_code,
             body=body,
             profile=self._profile_for_model(model),
         )
+        if seen_payloads is None:
+            return plan
+        out: list[OpenAICompatRetryPayload] = []
+        for retry in plan:
+            fingerprint = _compat_payload_fingerprint(retry.payload)
+            if fingerprint in seen_payloads:
+                continue
+            seen_payloads.add(fingerprint)
+            out.append(retry)
+        return out
 
     def _record_compat_retry(
         self,

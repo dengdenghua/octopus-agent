@@ -36,7 +36,7 @@ UI 路径：`设置 → 模型 → 自定义模型 → 添加`
 - strict coding endpoint 去掉 `temperature/top_p/reasoning_effort/thinking`
 - MiniMax thinking 改成 `{"thinking":{"type":"adaptive"}}`
 - Kimi 温度上限收敛到 `1.0`
-- 400/422 后按需降级：去掉 thinking 字段、去掉 `tool_choice`、按错误体点名移除 `parallel_tool_calls` / `response_format` / `stream_options` 等可选字段、把 `max_tokens` 改成 `max_completion_tokens`、收紧 tool schema；若网关明确不支持工具调用，则退到文本请求避免整轮失败
+- 400/422 后按需降级：去掉 thinking 字段、去掉 `tool_choice`、按错误体点名移除 `parallel_tool_calls` / `response_format` / `stream_options` 等可选字段、在 `max_tokens` 与 `max_completion_tokens` 之间按需互换、收紧 tool schema；若后续重试暴露新的不兼容字段，会继续生成去重后的下一跳候选；若网关明确不支持工具调用，则退到文本请求避免整轮失败
 - 兼容多家 `usage` / `reasoning` / tool arguments 的非标准返回字段
 
 如果某个代理地址或私有网关无法靠 URL 猜准，可以在 `custom_models.json` 或配置 API 里显式写：

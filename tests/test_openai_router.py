@@ -446,6 +446,46 @@ class TestRequestShape:
             },
         ]
 
+    def test_openai_compat_retries_can_chain_new_error_fields(self):
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {
+                "error": {
+                    "message": "max_completion_tokens is expected instead of max_tokens",
+                },
+            }),
+            _FakeResponse(400, {
+                "error": {
+                    "message": "unsupported parameter: response_format",
+                },
+            }),
+            _FakeResponse(200, _openai_response("compat ok")),
+        ])
+        r = OpenAIModelRouter(
+            base_url="https://plain-proxy.example/v1",
+            client=fake,
+        )
+        r._build_payload = lambda _request, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 128,
+            "response_format": {"type": "json_object"},
+        }
+
+        resp = r.call(_req(model="proxy-model"))
+
+        assert resp.text == "compat ok"
+        assert len(fake.calls) == 3
+        assert fake.calls[0]["json"]["max_tokens"] == 128
+        assert "response_format" in fake.calls[0]["json"]
+        assert fake.calls[1]["json"]["max_completion_tokens"] == 128
+        assert "response_format" in fake.calls[1]["json"]
+        assert fake.calls[2]["json"]["max_completion_tokens"] == 128
+        assert "response_format" not in fake.calls[2]["json"]
+        assert [event["reason"] for event in r.last_compatibility_events] == [
+            "rename_max_tokens",
+            "drop_unsupported_fields:response_format",
+        ]
+
     def test_qwen_initial_payload_strips_strict_tool_schema_edges(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(
@@ -585,6 +625,60 @@ class TestRequestShape:
         assert "thinking" in fake.calls[0]["json"]
         assert "thinking" not in fake.calls[1]["json"]
         assert "reasoning_effort" not in fake.calls[1]["json"]
+
+    def test_stream_openai_compat_retries_can_chain_new_error_fields(self):
+        import json as _json
+
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {
+                "error": {
+                    "message": "max_completion_tokens is expected instead of max_tokens",
+                },
+            }),
+            _FakeResponse(400, {
+                "error": {
+                    "message": "unsupported parameter: response_format",
+                },
+            }),
+            _FakeResponse(
+                200,
+                lines=[
+                    "data: "
+                    + _json.dumps({
+                        "choices": [{
+                            "delta": {"content": "stream compat ok"},
+                            "finish_reason": None,
+                        }],
+                    }),
+                    "data: [DONE]",
+                ],
+            ),
+        ])
+        r = OpenAIModelRouter(
+            base_url="https://plain-proxy.example/v1",
+            client=fake,
+        )
+        r._build_payload = lambda _request, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 128,
+            "response_format": {"type": "json_object"},
+        }
+
+        events = list(r.call_stream(_req(model="proxy-model")))
+
+        assert [event.type for event in events] == ["text_delta", "done"]
+        assert events[-1].final.text == "stream compat ok"
+        assert len(fake.calls) == 3
+        assert fake.calls[0]["json"]["stream"] is True
+        assert fake.calls[1]["json"]["max_completion_tokens"] == 128
+        assert "response_format" in fake.calls[1]["json"]
+        assert fake.calls[2]["json"]["max_completion_tokens"] == 128
+        assert "response_format" not in fake.calls[2]["json"]
+        assert [event["reason"] for event in r.last_compatibility_events] == [
+            "rename_max_tokens",
+            "drop_unsupported_fields:response_format",
+        ]
 
     def test_reasoning_effort_mapping_to_native_openai(self):
         from runtime.sensing.model_router.openai_router import (

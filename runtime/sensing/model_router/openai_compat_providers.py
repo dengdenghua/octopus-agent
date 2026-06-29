@@ -475,6 +475,19 @@ def plan_openai_compat_retries(
             cascade["max_completion_tokens"] = cascade.pop("max_tokens")
         cascade_reasons.append("rename_max_tokens")
 
+    if (
+        profile.retry_max_tokens_as_completion_tokens
+        and "max_completion_tokens" in payload
+        and "max_tokens" not in payload
+        and _mentions_any(lower, ("max_completion_tokens", "max_tokens", "max token"))
+    ):
+        candidate = dict(payload)
+        candidate["max_tokens"] = candidate.pop("max_completion_tokens")
+        add("rename_max_completion_tokens", candidate)
+        if "max_completion_tokens" in cascade and "max_tokens" not in cascade:
+            cascade["max_tokens"] = cascade.pop("max_completion_tokens")
+        cascade_reasons.append("rename_max_completion_tokens")
+
     if "tools" in payload and _mentions_any(
         lower,
         ("additionalproperties", "additional properties", "tool schema", "parameters"),
