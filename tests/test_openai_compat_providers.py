@@ -10,6 +10,7 @@ from runtime.sensing.model_router.openai_compat_providers import (
     normalize_openai_compat_payload,
     parse_tool_call_arguments,
     plan_openai_compat_retries,
+    probe_openai_compat_request_contract,
     resolve_openai_compat_profile,
     retry_payloads_after_openai_compat_error,
     sample_openai_compat_profile_probe,
@@ -94,6 +95,9 @@ def test_profile_catalog_audit_verifies_smoke_and_resolver_probes() -> None:
             "reason": "model_id_looks_like_upstream_model_on_aggregator",
         }
     ]
+    assert audit["request_contract_mismatches"] == []
+    assert len(audit["request_contract_probes"]) == len(known_openai_compat_profiles())
+    assert all(item["contract_ready"] for item in audit["request_contract_probes"])
     assert len(audit["sample_probes"]) == len(known_openai_compat_profiles())
 
 
@@ -293,6 +297,42 @@ def test_minimax_thinking_uses_adaptive_payload() -> None:
 
     assert "reasoning_effort" not in payload
     assert payload["thinking"] == {"type": "adaptive"}
+
+
+def test_request_contract_probe_exposes_provider_specific_degradations() -> None:
+    kimi = resolve_openai_compat_profile("https://api.kimi.com/coding/v1")
+    kimi_contract = probe_openai_compat_request_contract(kimi, "K2.7-Code")
+
+    assert kimi_contract["schema"] == "octopus.openai_compat_request_contract_probe.v1"
+    assert kimi_contract["contract_ready"] is True
+    assert kimi_contract["risk_level"] == "high"
+    assert {
+        "temperature",
+        "top_p",
+        "presence_penalty",
+        "frequency_penalty",
+        "reasoning_effort",
+        "thinking",
+        "parallel_tool_calls",
+    }.issubset(set(kimi_contract["removed_fields"]))
+    assert "sampling_parameters_removed" in kimi_contract["risk_reasons"]
+    assert "parallel_tool_calls_removed" in kimi_contract["risk_reasons"]
+    capability_status = {
+        item["capability"]: item["status"]
+        for item in kimi_contract["capability_matrix"]
+    }
+    assert capability_status["chat_completion"] == "pass"
+    assert capability_status["tool_calling"] == "warn"
+    assert capability_status["fallback_retries"] == "pass"
+
+    qwen = resolve_openai_compat_profile(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    qwen_contract = probe_openai_compat_request_contract(qwen, "qwen-plus")
+    assert qwen_contract["contract_ready"] is True
+    assert "tools" in qwen_contract["changed_fields"]
+    assert "tool_schema_normalized" in qwen_contract["risk_reasons"]
+    assert "parallel_tool_calls" in qwen_contract["removed_fields"]
 
 
 def test_retry_payloads_drop_incompatible_fields_incrementally() -> None:

@@ -498,6 +498,13 @@ class TestCustomModelCompatDiagnostics:
         assert "sampling_parameters_removed" in kimi_coding["upstreams"][0][
             "risk_reasons"
         ]
+        assert kimi_coding["upstreams"][0]["request_contract"]["schema"] == (
+            "octopus.openai_compat_request_contract_probe.v1"
+        )
+        assert kimi_coding["upstreams"][0]["request_contract"]["contract_ready"] is True
+        assert "parallel_tool_calls" in kimi_coding["upstreams"][0][
+            "request_contract"
+        ]["removed_fields"]
         assert "strict_provider_may_drop_optional_features" in kimi_coding[
             "upstreams"
         ][0]["risk_reasons"]
@@ -596,6 +603,14 @@ class TestCustomModelCompatDiagnostics:
         assert upstream["risk_level"] == "high"
         assert "tool_schema_normalized" in upstream["risk_reasons"]
         assert "tool_calling_control_removed" in upstream["risk_reasons"]
+        assert upstream["request_contract"]["profile_id"] == "kimi_coding"
+        assert upstream["request_contract"]["contract_ready"] is True
+        assert upstream["request_contract"]["normalized_payload"] == upstream[
+            "normalization"
+        ]["payload"]
+        assert upstream["request_contract"]["fallback_retries"] == upstream[
+            "fallback_retries"
+        ]
         capability_matrix = {
             item["capability"]: item for item in upstream["capability_matrix"]
         }

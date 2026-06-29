@@ -153,6 +153,9 @@ class TestBasicRoutes:
                 "reason": "model_id_looks_like_upstream_model_on_aggregator",
             }
         ]
+        assert data["model_compat"]["request_contract_mismatches"] == []
+        assert data["model_compat"]["request_contract_ready"] is True
+        assert data["model_compat"]["request_contract_count"] >= 13
         assert data["model_compat"]["domestic_profile_count"] >= 13
         assert len(data["model_compat"]["sample_probes"]) >= 13
         assert "kimi_coding" in data["model_compat"]["profile_ids"]
@@ -165,6 +168,15 @@ class TestBasicRoutes:
         assert probes["kimi_coding"]["smoke_provider_configured"] is True
         assert probes["kimi_coding"]["base_url_resolves_to"] == "kimi_coding"
         assert probes["kimi_coding"]["model_resolves_to"] == "kimi_coding"
+        contracts = {
+            item["profile_id"]: item
+            for item in data["model_compat"]["request_contract_probes"]
+        }
+        assert contracts["kimi_coding"]["contract_ready"] is True
+        assert "sampling_parameters_removed" in contracts["kimi_coding"][
+            "risk_reasons"
+        ]
+        assert "tool_schema_normalized" in contracts["qwen"]["risk_reasons"]
         assert _check_by_id(data, "openai_compat_profiles")["passed"] is True
         assert data["orchestration"]["schema"] == "octopus.orchestration_surface_self_check.v1"
         assert data["orchestration"]["ready"] is True

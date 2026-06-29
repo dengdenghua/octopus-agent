@@ -498,6 +498,10 @@ def _model_compat_info() -> dict[str, Any]:
             "orphan_smoke_provider_ids": audit["orphan_smoke_provider_ids"],
             "resolver_mismatches": audit["resolver_mismatches"],
             "model_alias_mismatches": audit["model_alias_mismatches"],
+            "request_contract_mismatches": audit["request_contract_mismatches"],
+            "request_contract_count": len(audit["request_contract_probes"]),
+            "request_contract_ready": not audit["request_contract_mismatches"],
+            "request_contract_probes": audit["request_contract_probes"],
             "sample_probes": audit["sample_probes"],
             "domestic_profiles": [
                 {
@@ -536,6 +540,10 @@ def _model_compat_info() -> dict[str, Any]:
             "orphan_smoke_provider_ids": [],
             "resolver_mismatches": [],
             "model_alias_mismatches": [],
+            "request_contract_mismatches": [],
+            "request_contract_count": 0,
+            "request_contract_ready": False,
+            "request_contract_probes": [],
             "sample_probes": [],
             "domestic_profiles": [],
             "error": f"{type(exc).__name__}: {exc}",
