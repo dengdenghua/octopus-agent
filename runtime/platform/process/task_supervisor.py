@@ -912,14 +912,19 @@ class TaskSupervisor:
                 if isinstance(metadata_patch, dict):
                     metadata.update(metadata_patch)
                 terminal_events = list(metadata.get("terminal_transition_events") or [])
+                checkpoint_recorded_to_latest = (
+                    checkpoint_id is not None and current.latest_checkpoint_id is None
+                )
                 terminal_events.append(
                     {
                         "ignored_status": next_status.value,
                         "reason": str(reason or ""),
                         "checkpoint_id": checkpoint_id,
+                        "checkpoint_recorded_to_latest": checkpoint_recorded_to_latest,
                         "previous_status": current.status.value,
                         "previous_terminal_reason": current.terminal_reason,
                         "previous_completed_at": current.completed_at,
+                        "previous_checkpoint_id": current.latest_checkpoint_id,
                         "recorded_at": now,
                         "holder_id": self.holder_id,
                     }
@@ -928,7 +933,7 @@ class TaskSupervisor:
                 return current.model_copy(
                     update={
                         "latest_checkpoint_id": checkpoint_id
-                        if checkpoint_id is not None
+                        if checkpoint_recorded_to_latest
                         else current.latest_checkpoint_id,
                         "metadata": metadata,
                         "heartbeat_at": current.heartbeat_at or now,

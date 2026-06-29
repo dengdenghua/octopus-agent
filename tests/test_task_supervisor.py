@@ -86,12 +86,14 @@ def test_task_supervisor_terminal_transition_is_idempotent_and_non_downgrading(t
     assert stale_failed.status == TaskRunStatus.COMPLETED
     assert stale_failed.completed_at == completed.completed_at
     assert stale_failed.terminal_reason == "verified"
-    assert stale_failed.latest_checkpoint_id == 43
+    assert stale_failed.latest_checkpoint_id == 42
     assert stale_failed.metadata["late_callback"] is True
     terminal_events = stale_failed.metadata["terminal_transition_events"]
     assert terminal_events[-1]["ignored_status"] == "failed"
     assert terminal_events[-1]["reason"] == "stale failure callback"
     assert terminal_events[-1]["checkpoint_id"] == 43
+    assert terminal_events[-1]["checkpoint_recorded_to_latest"] is False
+    assert terminal_events[-1]["previous_checkpoint_id"] == 42
     assert terminal_events[-1]["previous_status"] == "completed"
     assert terminal_events[-1]["previous_terminal_reason"] == "verified"
     assert terminal_events[-1]["previous_completed_at"] == completed.completed_at
@@ -102,8 +104,37 @@ def test_task_supervisor_terminal_transition_is_idempotent_and_non_downgrading(t
     assert reloaded is not None
     assert reloaded.status == TaskRunStatus.COMPLETED
     assert reloaded.terminal_reason == "verified"
-    assert reloaded.latest_checkpoint_id == 43
+    assert reloaded.latest_checkpoint_id == 42
     assert reloaded.metadata["terminal_transition_events"][-1]["ignored_status"] == "failed"
+
+
+def test_task_supervisor_terminal_transition_backfills_missing_checkpoint(tmp_path):
+    supervisor = TaskSupervisor.from_path(
+        tmp_path / "task_runs.json",
+        holder_id="worker-a",
+        lease_ttl_seconds=30,
+    )
+    supervisor.start_task(task_id="task-terminal", kind="loop")
+    completed = supervisor.transition(
+        "task-terminal",
+        TaskRunStatus.COMPLETED,
+        reason="verified before trace write",
+    )
+    assert completed.latest_checkpoint_id is None
+
+    backfilled = supervisor.transition(
+        "task-terminal",
+        TaskRunStatus.COMPLETED,
+        reason="terminal trace backfill after crash",
+        checkpoint_id="ckpt-terminal",
+    )
+
+    assert backfilled.status == TaskRunStatus.COMPLETED
+    assert backfilled.latest_checkpoint_id == "ckpt-terminal"
+    terminal_events = backfilled.metadata["terminal_transition_events"]
+    assert terminal_events[-1]["ignored_status"] == "completed"
+    assert terminal_events[-1]["checkpoint_recorded_to_latest"] is True
+    assert terminal_events[-1]["previous_checkpoint_id"] is None
 
 
 def test_task_supervisor_rejects_foreign_lease_until_expired(tmp_path):
