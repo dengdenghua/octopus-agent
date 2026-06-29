@@ -478,6 +478,16 @@ export interface Translations {
     description: string;
     allAgents: (n: number) => string;
     selected: (n: number, max: number) => string;
+    memberCounter: (n: number, max: number) => string;
+    selectMembersTitle: string;
+    memberLimitReached: string;
+    searchAgentsPlaceholder: string;
+    selectedBadge: string;
+    noMatches: string;
+    clearSelected: string;
+    membersLabel: string;
+    leaderLabel: string;
+    leaderUnset: string;
     emptyHintL1: string;
     emptyHintL2: string;
     currentTl: string;
@@ -486,6 +496,27 @@ export interface Translations {
     teamNamePlaceholder: string;
     create: string;
     cancel: string;
+    roleModels: {
+      title: string;
+      description: string;
+      customCount: (n: number) => string;
+      defaultPrefix: string;
+      help: string;
+      tiers: Record<"default" | "cheap" | "primary", string>;
+      roles: Record<
+        | "planner"
+        | "generator"
+        | "synthesizer"
+        | "researcher"
+        | "critic"
+        | "evaluator"
+        | "reviewer"
+        | "fact_checker"
+        | "verifier"
+        | "arbiter",
+        string
+      >;
+    };
   };
 
   // Code Mode
