@@ -911,6 +911,20 @@ export default function TeamPage() {
     }
   }, [canInvite, teamId, threadId, t.collab.copyFailed, t.collab.linkCopied]);
 
+  const handleInviteMembers = useCallback(() => {
+    if (canInvite) {
+      setShowInvite(true);
+      return;
+    }
+
+    if (teamId) {
+      toast.warning("当前身份不能邀请成员");
+      return;
+    }
+
+    setShowCreateTeam(true);
+  }, [canInvite, teamId]);
+
   const planSteps = useMemo(
     () =>
       computePlanSteps(thread.messages, thread.values.todos, {
@@ -975,17 +989,21 @@ export default function TeamPage() {
                           <PresenceAvatars agents={messageAgentRoster} />
                         </div>
                       ) : null}
-                      {canInvite && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
-                          onClick={() => setShowInvite(true)}
-                          title={t.collab.inviteCollaborators}
-                        >
-                          <UserPlusIcon className="size-4" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
+                        onClick={handleInviteMembers}
+                        title={
+                          canInvite
+                            ? t.collab.inviteCollaborators
+                            : teamId
+                              ? "当前身份不能邀请成员"
+                              : "先创建或选择 Team 后加人"
+                        }
+                      >
+                        <UserPlusIcon className="size-4" />
+                      </Button>
                       {canInvite && (
                         <Button
                           variant="ghost"
