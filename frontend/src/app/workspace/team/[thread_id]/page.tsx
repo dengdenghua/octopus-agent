@@ -64,11 +64,13 @@ import {
   usePlanActionHandler,
 } from "@/components/workspace/use-thread-page";
 import { useAgents } from "@/core/agents/hooks";
+import { copyTextToClipboard } from "@/core/clipboard";
 import { swallow } from "@/core/utils/log";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { useThreadSettings } from "@/core/settings";
 import {
   createTeam,
+  createTeamInvite,
   dispatchTeamUpdated,
   fetchTeams,
   migrateLegacyTeamsIfNeeded,
@@ -141,6 +143,14 @@ function readInitialTeamWorkDir(threadId?: string | null) {
     swallow(e, "storage");
   }
   return "";
+}
+
+function appendInviteThread(path: string, threadId?: string | null) {
+  const normalizedThreadId = threadId?.trim();
+  if (!normalizedThreadId || normalizedThreadId === "new") return path;
+
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}thread=${encodeURIComponent(normalizedThreadId)}`;
 }
 
 function TeamRoomMessageStrip() {
@@ -428,6 +438,7 @@ export default function TeamPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [sharingInvite, setSharingInvite] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   const [selectedTaskAgentIds, setSelectedTaskAgentIds] = useState<string[]>(
     [],
@@ -881,6 +892,25 @@ export default function TeamPage() {
     [applyTeam, isNewThread, navigate],
   );
 
+  const handleShareTeamLink = useCallback(async () => {
+    if (!teamId || !canInvite) return;
+
+    setSharingInvite(true);
+    try {
+      const invite = await createTeamInvite(teamId, { role: "member" });
+      const path = appendInviteThread(
+        invite.invite_hash_path || invite.invite_path,
+        threadId,
+      );
+      await copyTextToClipboard(`${window.location.origin}${path}`);
+      toast.success(t.collab.linkCopied);
+    } catch {
+      toast.error(t.collab.copyFailed);
+    } finally {
+      setSharingInvite(false);
+    }
+  }, [canInvite, teamId, threadId, t.collab.copyFailed, t.collab.linkCopied]);
+
   const planSteps = useMemo(
     () =>
       computePlanSteps(thread.messages, thread.values.todos, {
@@ -928,50 +958,50 @@ export default function TeamPage() {
                       />
                     </div>
                     <div className="ml-auto flex items-center gap-2">
-                      {(teamId || messageAgentRoster.length > 0) && (
+                      {teamId ? (
                         <button
                           type="button"
                           className="hidden shrink-0 rounded-lg border border-transparent px-1 transition-colors hover:border-border/50 hover:bg-muted/50 md:flex"
-                          onClick={() =>
-                            teamId
-                              ? setShowMembers(true)
-                              : setShowCreateTeam(true)
-                          }
-                          title={
-                            teamId ? t.teamMembers.title : "先选择或新建 Team"
-                          }
+                          onClick={() => setShowMembers(true)}
+                          title={t.teamMembers.title}
                         >
                           <PresenceAvatars agents={messageAgentRoster} />
                         </button>
+                      ) : messageAgentRoster.length > 0 ? (
+                        <div
+                          className="hidden shrink-0 rounded-lg border border-transparent px-1 md:flex"
+                          title="当前对话在线状态"
+                        >
+                          <PresenceAvatars agents={messageAgentRoster} />
+                        </div>
+                      ) : null}
+                      {canInvite && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
+                          onClick={() => setShowInvite(true)}
+                          title={t.collab.inviteCollaborators}
+                        >
+                          <UserPlusIcon className="size-4" />
+                        </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
-                        onClick={() =>
-                          teamId ? setShowInvite(true) : setShowCreateTeam(true)
-                        }
-                        title={
-                          teamId
-                            ? t.collab.inviteCollaborators
-                            : "先选择或新建 Team 后邀请成员"
-                        }
-                      >
-                        <UserPlusIcon className="size-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
-                        onClick={() =>
-                          teamId ? setShowInvite(true) : setShowCreateTeam(true)
-                        }
-                        title={
-                          teamId ? "分享群链接" : "先选择或新建 Team 后分享链接"
-                        }
-                      >
-                        <LinkIcon className="size-4" />
-                      </Button>
+                      {canInvite && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
+                          onClick={() => void handleShareTeamLink()}
+                          disabled={sharingInvite}
+                          title="复制群链接"
+                        >
+                          {sharingInvite ? (
+                            <Loader2Icon className="size-4 animate-spin" />
+                          ) : (
+                            <LinkIcon className="size-4" />
+                          )}
+                        </Button>
+                      )}
                       {canManageMembers && (
                         <Button
                           variant="ghost"
