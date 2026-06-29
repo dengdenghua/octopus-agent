@@ -101,6 +101,27 @@ describe("workspace sidebar project grouping", () => {
     );
   });
 
+  test("coerces dedicated team query results before building sidebar history", () => {
+    const rawTeamThread = {
+      thread_id: "team-legacy",
+      title: "team-legacy",
+      updated_at: "2026-06-29T00:00:00Z",
+      metadata: {
+        project: "团队",
+        title: "团队",
+      },
+      values: {},
+    } as never;
+    const coerced = __testing.withThreadSidebarMode(rawTeamThread, "team");
+
+    expect(coerced.metadata.mode).toBe("team");
+    expect(__testing.buildConversationThreadSummaries([coerced])).toEqual([]);
+
+    const [projectThread] = __testing.buildProjectThreadSummaries([coerced]);
+    expect(projectThread?.href).toBe("/workspace/realtime/team-legacy");
+    expect(projectThread?.title).toBe("task/team-l");
+  });
+
   test("routes agent chat history into the unified realtime workspace", () => {
     const threads = [
       makeThread("agent-1", "agent", {
@@ -197,6 +218,21 @@ describe("workspace sidebar project grouping", () => {
 
     expect(withPrompt?.title).toBe("帮我做一个产品调研");
     expect(withoutPrompt?.title).toBe("task/team-e");
+  });
+
+  test("hides generated team labels when old records only carry a team project", () => {
+    const summary = __testing.summarizeThreadForSidebar({
+      thread_id: "legacy-team-title",
+      title: "legacy-team-title",
+      updated_at: "2026-06-29T00:00:00Z",
+      metadata: {
+        project: "团队",
+        title: "团队",
+      },
+      values: {},
+    } as never);
+
+    expect(summary.title).toBe("thread/legacy");
   });
 
   test("keeps explicit project labels for code threads", () => {
