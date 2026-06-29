@@ -7257,6 +7257,8 @@ export const zhCN: Translations = {
     error: "异常",
     completed: "已完成",
     agentCollaboration: "个 Agent 协作",
+    viewMachine: "查看机器",
+    viewResult: "查看结果",
     readyToReadEditVerify: "准备读取、编辑并验证代码",
     readyToBreakdownAndGather: "准备拆解问题并收集证据",
     readyToExecuteTask: "准备执行任务",

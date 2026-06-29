@@ -50,7 +50,7 @@ import type { PersonalMode } from "@/components/workspace/personal-mode-selector
 import { RecRecorderOverlay } from "@/components/workspace/rec-recorder-overlay";
 import type { PromptInputFilePart } from "@/core/uploads";
 import { ChatPageLayout } from "@/components/workspace/chat-page-layout";
-import { ChatStreamingFooter } from "@/components/workspace/chat-streaming-footer";
+import { PersistentRunFooter } from "@/components/workspace/chat-streaming-footer";
 import { AgentWelcome } from "@/components/workspace/agent-welcome";
 import { RealtimeApprovalToasts } from "@/components/workspace/realtime-approval-toasts";
 import { DeepResearchHistoryPanel } from "@/components/workspace/deep-research-history-panel";
@@ -2080,6 +2080,28 @@ function ChatsPageContent({
     },
     [openAgentPlanPanel, openArtifactsPanel, setArtifactsOpen],
   );
+  const hasRunResult =
+    hasFinalArtifact || Boolean(previewBlocks) || artifactCount > 0;
+  const openRunResultPanel = useCallback(() => {
+    if (hasFinalArtifact) {
+      openFinalArtifactPanel();
+      return;
+    }
+    if (previewBlocks) {
+      openPreviewPanel();
+      return;
+    }
+    if (artifactCount > 0) {
+      openArtifactsPanel();
+    }
+  }, [
+    artifactCount,
+    hasFinalArtifact,
+    openArtifactsPanel,
+    openFinalArtifactPanel,
+    openPreviewPanel,
+    previewBlocks,
+  ]);
 
   return (
     <SubtasksProvider>
@@ -2188,23 +2210,32 @@ function ChatsPageContent({
                   collaborationEnabled ? collaborationRoster : undefined
                 }
                 footer={
-                  <>
-                    <ChatStreamingFooter
-                      thread={thread}
-                      liveToolEvents={lastTurnToolEvents}
-                      threadId={threadId}
-                      mode={effectiveMode}
+                  hasCompletedAgentOutput &&
+                  hasFinalArtifact &&
+                  !hasReportArtifact ? (
+                    <FinalArtifactCompletionNotice
+                      entries={finalArtifactEntries}
+                      onOpen={openFinalArtifactPanel}
                     />
-                    {hasCompletedAgentOutput &&
-                      hasFinalArtifact &&
-                      !hasReportArtifact && (
-                        <FinalArtifactCompletionNotice
-                          entries={finalArtifactEntries}
-                          onOpen={openFinalArtifactPanel}
-                        />
-                      )}
-                  </>
+                  ) : null
                 }
+              />
+            }
+            bottomBar={
+              <PersistentRunFooter
+                thread={thread}
+                liveToolEvents={agentDisplayEvents}
+                threadId={threadId}
+                mode={effectiveMode}
+                hasResult={hasRunResult}
+                onOpenWorkbench={
+                  canOpenAgentWorkbench ? openAgentPanel : undefined
+                }
+                onOpenResult={hasRunResult ? openRunResultPanel : undefined}
+                onExportReplay={
+                  replayBlocks.length > 0 ? handleExportReplay : undefined
+                }
+                onStop={thread.isLoading ? handleStop : undefined}
               />
             }
             inputArea={

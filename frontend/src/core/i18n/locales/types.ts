@@ -6668,6 +6668,8 @@ export interface Translations {
     error: string;
     completed: string;
     agentCollaboration: string;
+    viewMachine: string;
+    viewResult: string;
     readyToReadEditVerify: string;
     readyToBreakdownAndGather: string;
     readyToExecuteTask: string;

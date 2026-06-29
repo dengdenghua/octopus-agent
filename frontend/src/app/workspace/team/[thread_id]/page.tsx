@@ -48,7 +48,7 @@ import {
   MessageList,
   MESSAGE_LIST_DEFAULT_PADDING_BOTTOM,
 } from "@/components/workspace/messages";
-import { ChatStreamingFooter } from "@/components/workspace/chat-streaming-footer";
+import { PersistentRunFooter } from "@/components/workspace/chat-streaming-footer";
 import { ThreadProviders } from "@/components/workspace/messages/context";
 import {
   PlanButton,
@@ -860,6 +860,10 @@ export default function TeamPage() {
     }
     return null;
   }, [thread.messages]);
+  const teamRunEvents = useMemo(
+    () => (liveToolEvents.length > 0 ? liveToolEvents : lastTurnToolEvents),
+    [lastTurnToolEvents, liveToolEvents],
+  );
 
   useEffect(() => {
     if (previewBlocks && !showPreview) setShowPreview(true);
@@ -891,6 +895,15 @@ export default function TeamPage() {
   const handleStop = useCallback(async () => {
     await thread.stop();
   }, [thread]);
+  const openRunWorkbench = useCallback(() => {
+    setShowTeamWorkbench(true);
+    setShowPreview(false);
+  }, []);
+  const openRunResult = useCallback(() => {
+    if (!previewBlocks) return;
+    setShowPreview(true);
+    setShowTeamWorkbench(false);
+  }, [previewBlocks]);
 
   const handleCreateTeam = useCallback(
     async (config: TeamConfig) => {
@@ -1114,21 +1127,25 @@ export default function TeamPage() {
                     liveToolEvents={liveToolEvents}
                     lastTurnToolEvents={lastTurnToolEvents}
                     footer={
-                      <>
-                        <TeamTaskProgressFeed
-                          onOpenTasks={() => {
-                            setShowTeamWorkbench(true);
-                            setTeamWorkbenchTab("tasks");
-                          }}
-                        />
-                        <ChatStreamingFooter
-                          thread={thread}
-                          liveToolEvents={liveToolEvents}
-                          threadId={threadId}
-                          mode={isCoworkMode ? "team" : "chat"}
-                        />
-                      </>
+                      <TeamTaskProgressFeed
+                        onOpenTasks={() => {
+                          setShowTeamWorkbench(true);
+                          setTeamWorkbenchTab("tasks");
+                        }}
+                      />
                     }
+                  />
+                }
+                bottomBar={
+                  <PersistentRunFooter
+                    thread={thread}
+                    liveToolEvents={teamRunEvents}
+                    threadId={threadId}
+                    mode={isCoworkMode ? "team" : "chat"}
+                    hasResult={Boolean(previewBlocks)}
+                    onOpenWorkbench={openRunWorkbench}
+                    onOpenResult={previewBlocks ? openRunResult : undefined}
+                    onStop={thread.isLoading ? handleStop : undefined}
                   />
                 }
                 inputArea={

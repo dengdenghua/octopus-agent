@@ -1,11 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { AllProviders } from "@/test/harness";
 import type { BaseStream } from "@/core/api/use-stream";
 import type { AgentThreadState } from "@/core/threads";
 
-import { ChatStreamingFooter } from "./chat-streaming-footer";
+import {
+  ChatStreamingFooter,
+  PersistentRunFooter,
+} from "./chat-streaming-footer";
 import type { LiveToolEvent } from "./live-tool-timeline";
 
 function mockThread(
@@ -31,6 +34,72 @@ function renderFooter(events: LiveToolEvent[]) {
 }
 
 describe("ChatStreamingFooter", () => {
+  test("persistent run footer exposes the current machine while work is running", () => {
+    const onOpenWorkbench = vi.fn();
+
+    render(
+      <AllProviders>
+        <PersistentRunFooter
+          thread={mockThread()}
+          mode="code"
+          liveToolEvents={[
+            {
+              id: "read-1",
+              name: "read_file",
+              status: "running",
+              startedAt: 1000,
+              iteration: 1,
+              input: { path: "frontend/src/app.tsx" },
+            },
+          ]}
+          onOpenWorkbench={onOpenWorkbench}
+        />
+      </AllProviders>,
+    );
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.getByText("Reading context")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /View machine/i }));
+    expect(onOpenWorkbench).toHaveBeenCalledTimes(1);
+  });
+
+  test("persistent run footer keeps result and replay actions after completion", () => {
+    const onOpenResult = vi.fn();
+    const onExportReplay = vi.fn();
+
+    render(
+      <AllProviders>
+        <PersistentRunFooter
+          thread={mockThread({ isLoading: false })}
+          mode="code"
+          liveToolEvents={[
+            {
+              id: "verify-1",
+              name: "shell_exec",
+              status: "done",
+              startedAt: 1000,
+              finishedAt: 1500,
+              iteration: 1,
+              input: { command: "pnpm test" },
+            },
+          ]}
+          hasResult
+          onOpenResult={onOpenResult}
+          onExportReplay={onExportReplay}
+        />
+      </AllProviders>,
+    );
+
+    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
+    expect(screen.getByText("Verification done")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /View result/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Export replayable HTML/i }),
+    );
+    expect(onOpenResult).toHaveBeenCalledTimes(1);
+    expect(onExportReplay).toHaveBeenCalledTimes(1);
+  });
+
   test("deep mode shows a compact phase summary and lightweight timeline details", () => {
     renderFooter([
       {

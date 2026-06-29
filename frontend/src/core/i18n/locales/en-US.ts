@@ -7586,6 +7586,8 @@ Strategy:
     error: "Error",
     completed: "Completed",
     agentCollaboration: "Agent(s) collaborating",
+    viewMachine: "View machine",
+    viewResult: "View result",
     readyToReadEditVerify: "Ready to read, edit, and verify code",
     readyToBreakdownAndGather:
       "Ready to break down problems and gather evidence",

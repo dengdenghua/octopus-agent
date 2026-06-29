@@ -1,13 +1,16 @@
 import {
   ChevronDownIcon,
   CircleIcon,
+  DownloadIcon,
+  FileTextIcon,
   Loader2Icon,
   MessageCircleIcon,
   MonitorIcon,
   SquareActivityIcon,
+  SquareIcon,
   UsersIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type { BaseStream } from "@/core/api/use-stream-types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -28,6 +31,15 @@ export interface ChatStreamingFooterProps {
   liveToolEvents?: LiveToolEvent[];
   threadId?: string | null;
   mode?: ReasoningMode | "code" | "team";
+}
+
+export interface PersistentRunFooterProps extends ChatStreamingFooterProps {
+  hasResult?: boolean;
+  onOpenWorkbench?: () => void;
+  onOpenResult?: () => void;
+  onExportReplay?: () => void;
+  onStop?: () => void;
+  className?: string;
 }
 
 export function ChatStreamingFooter({
@@ -173,6 +185,218 @@ export function ChatStreamingFooter({
         </div>
       )}
     </div>
+  );
+}
+
+export function PersistentRunFooter({
+  thread,
+  liveToolEvents,
+  mode = "chat",
+  hasResult = false,
+  onOpenWorkbench,
+  onOpenResult,
+  onExportReplay,
+  onStop,
+  className,
+}: PersistentRunFooterProps) {
+  const { t } = useI18n();
+  const normalizedMode =
+    mode === "thinking" || mode === "flash" ? "chat" : mode;
+  const displayEvents = useMemo(() => liveToolEvents ?? [], [liveToolEvents]);
+  const semanticWorkEvents = useMemo(
+    () => getProcessTraceEvents(displayEvents),
+    [displayEvents],
+  );
+  const visibleEvents = semanticHeaderEvents(semanticWorkEvents);
+  const running = visibleEvents.filter(
+    (event) => event.status === "running",
+  ).length;
+  const waiting = visibleEvents.filter(
+    (event) => event.status === "waiting_approval",
+  ).length;
+  const done = visibleEvents.filter((event) => event.status === "done").length;
+  const error = visibleEvents.filter(
+    (event) => event.status === "error",
+  ).length;
+  const total = visibleEvents.length;
+  const participants = realAgentParticipants(visibleEvents);
+  const isActive = thread.isLoading || running > 0 || waiting > 0;
+  const shouldShow = isActive || total > 0 || hasResult;
+  const [isMounted, setIsMounted] = useState(shouldShow);
+
+  useEffect(() => {
+    if (shouldShow) {
+      setIsMounted(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setIsMounted(false), 180);
+    return () => window.clearTimeout(timer);
+  }, [shouldShow]);
+
+  if (!isMounted) return null;
+
+  const runState: AgentRunState =
+    thread.error || error > 0
+      ? "error"
+      : waiting > 0
+        ? "waiting"
+        : isActive
+          ? "running"
+          : total > 0 || hasResult
+            ? "done"
+            : "pending";
+  const phase =
+    total > 0
+      ? currentPhase(visibleEvents, normalizedMode, t)
+      : {
+          title: thread.isLoading
+            ? t.chatStreamingFooter.thinking
+            : hasResult
+              ? t.chatStreamingFooter.completed
+              : t.chatStreamingFooter.readyToExecute,
+          subtitle:
+            normalizedMode === "team"
+              ? t.chatStreamingFooter.readyForAgentCollaboration
+              : normalizedMode === "code"
+                ? t.chatStreamingFooter.readyToHandleCodeTask
+                : t.chatStreamingFooter.readyToExecuteTask,
+        };
+  const statusLabel =
+    runState === "error"
+      ? t.chatStreamingFooter.error
+      : runState === "waiting"
+        ? t.chatStreamingFooter.awaitingConfirmation
+        : runState === "done"
+          ? t.chatStreamingFooter.completed
+          : runState === "running"
+            ? t.chatStreamingFooter.running
+            : t.chatStreamingFooter.processing;
+  const completedCount = Math.min(total, done + error);
+
+  return (
+    <div
+      className={cn(
+        "shrink-0 border-t border-border/60 bg-background/92 px-2 py-2 shadow-[0_-12px_28px_-24px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-200",
+        shouldShow ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0",
+        className,
+      )}
+    >
+      <div className="mx-auto flex min-h-12 w-full max-w-[min(1040px,calc(100vw-1rem))] items-center gap-2">
+        <div
+          className={cn(
+            "flex size-8 shrink-0 items-center justify-center rounded-lg border",
+            agentRunPanelClass(runState),
+          )}
+        >
+          {runState === "running" ? (
+            <Loader2Icon className="size-4 animate-spin" />
+          ) : runState === "waiting" ? (
+            <CircleIcon className="size-4" />
+          ) : runState === "done" ? (
+            <SquareActivityIcon className="size-4" />
+          ) : runState === "error" ? (
+            <SquareIcon className="size-4" />
+          ) : (
+            <MonitorIcon className="size-4" />
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="shrink-0 text-xs font-semibold text-foreground">
+              {statusLabel}
+            </span>
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
+              {phase.title}
+            </span>
+          </div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+            <span className="min-w-0 truncate">{phase.subtitle}</span>
+            {total > 0 && (
+              <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+                {completedCount}/{total}
+              </span>
+            )}
+            {participants.length > 0 && (
+              <span className="hidden shrink-0 rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[10px] text-violet-700 sm:inline dark:text-violet-300">
+                {participants.length} {t.chatStreamingFooter.agentCollaboration}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1">
+          {onOpenWorkbench && (
+            <FooterActionButton
+              label={t.chatStreamingFooter.viewMachine}
+              onClick={onOpenWorkbench}
+            >
+              <MonitorIcon className="size-3.5" />
+              <span className="hidden sm:inline">
+                {t.chatStreamingFooter.viewMachine}
+              </span>
+            </FooterActionButton>
+          )}
+          {hasResult && onOpenResult && (
+            <FooterActionButton
+              label={t.chatStreamingFooter.viewResult}
+              onClick={onOpenResult}
+            >
+              <FileTextIcon className="size-3.5" />
+              <span className="hidden sm:inline">
+                {t.chatStreamingFooter.viewResult}
+              </span>
+            </FooterActionButton>
+          )}
+          {onExportReplay && (
+            <FooterActionButton
+              label={t.share.exportReplay}
+              onClick={onExportReplay}
+            >
+              <DownloadIcon className="size-3.5" />
+              <span className="hidden md:inline">{t.share.exportReplay}</span>
+            </FooterActionButton>
+          )}
+          {isActive && onStop && (
+            <FooterActionButton
+              label={t.common.stop}
+              onClick={onStop}
+              className="text-destructive hover:border-destructive/30 hover:bg-destructive/10"
+            >
+              <SquareIcon className="size-3.5" />
+              <span className="hidden sm:inline">{t.common.stop}</span>
+            </FooterActionButton>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FooterActionButton({
+  children,
+  label,
+  onClick,
+  className,
+}: {
+  children: ReactNode;
+  label: string;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      title={label}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border/55 bg-background/70 px-2.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:border-primary/25 hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+        className,
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
