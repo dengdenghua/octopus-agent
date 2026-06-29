@@ -89,6 +89,22 @@ function isTerminalStatus(status: AgentStatus): boolean {
   );
 }
 
+function isTerminalBatchStatus(status: string | undefined): boolean {
+  return (
+    status === "completed" ||
+    status === "failed" ||
+    status === "cancelled" ||
+    status === "timed_out" ||
+    status === "partial"
+  );
+}
+
+function sessionStatusFromBatchStatus(
+  status: string | undefined,
+): SwarmSession["status"] {
+  return isTerminalBatchStatus(status) ? "done" : "running";
+}
+
 function taskPhaseIndex(session: SwarmSession, taskId: string): number {
   const phase = session.plan?.phases.find((candidate) =>
     candidate.taskIds.includes(taskId),
@@ -136,6 +152,41 @@ function workflowFromStageEvent(
       payloadNumber(event.payload, "cancelled_tasks") ??
       previous?.cancelledTasks ??
       0,
+    updatedAt: Date.now(),
+  };
+}
+
+function workflowFromBatchCompleteEvent(
+  session: SwarmSession,
+  event: BatchStreamEvent,
+): SwarmWorkflowSnapshot {
+  const previous = session.workflow;
+  const totalTasks =
+    payloadNumber(event.payload, "total_tasks") ??
+    previous?.totalTasks ??
+    session.agents.length;
+  const completedTasks =
+    payloadNumber(event.payload, "completed_tasks") ??
+    previous?.completedTasks ??
+    0;
+  const failedTasks =
+    payloadNumber(event.payload, "failed_tasks") ?? previous?.failedTasks ?? 0;
+  const cancelledTasks =
+    payloadNumber(event.payload, "cancelled_tasks") ??
+    previous?.cancelledTasks ??
+    0;
+  return {
+    stage: "final_report",
+    status:
+      event.status ?? String(event.payload?.status ?? previous?.status ?? ""),
+    progress:
+      totalTasks > 0
+        ? (completedTasks + failedTasks + cancelledTasks) / totalTasks
+        : (previous?.progress ?? 1),
+    totalTasks,
+    completedTasks,
+    failedTasks,
+    cancelledTasks,
     updatedAt: Date.now(),
   };
 }
@@ -413,7 +464,7 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
             };
             return {
               ...prev,
-              status: event.status === "completed" ? "done" : "running",
+              status: sessionStatusFromBatchStatus(event.status),
               workflow: workflowFromStageEvent(prev, event),
               trace: [...prev.trace, traceEntry].slice(-200),
             };
@@ -521,11 +572,16 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
             };
           });
         },
-        onBatchComplete: () => {
+        onBatchComplete: (event) => {
           // SSE only carries status pings — the actual LLM output lives in
           // the batch's TaskResult.result on the server. Fetch it so the
           // workbench shows real content + deliverables instead of a bare
           // "completed" pill.
+          setSession((prev) => ({
+            ...prev,
+            status: "done",
+            workflow: workflowFromBatchCompleteEvent(prev, event),
+          }));
           void (async () => {
             const fresh = await fetchBatch(batchId);
             if (fresh) {
@@ -536,7 +592,11 @@ export function SwarmProvider({ children }: { children: React.ReactNode }) {
                 trace: prev.trace,
               }));
             } else {
-              setSession((prev) => ({ ...prev, status: "done" }));
+              setSession((prev) => ({
+                ...prev,
+                status: "done",
+                workflow: workflowFromBatchCompleteEvent(prev, event),
+              }));
             }
           })();
           setConnectedBatchId(null);

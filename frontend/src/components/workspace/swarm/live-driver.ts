@@ -24,11 +24,13 @@ import type {
 function mapStatus(raw: string): AgentStatus {
   switch (raw) {
     case "completed":
-    case "partial":
+      return "done";
     case "failed":
+      return "failed";
     case "cancelled":
+      return "cancelled";
     case "timed_out":
-      return "done"; // terminal states collapse to "done" for UI purposes
+      return "timed_out";
     case "pending":
       return "pending";
     case "running":
@@ -150,7 +152,9 @@ function mapPhaseReports(batch: BatchResult): SwarmPhaseReport[] {
     const succeeded = phaseTasks.filter(
       (task) => task.status === "completed",
     ).length;
-    const failed = phaseTasks.filter((task) => task.status === "failed").length;
+    const failed = phaseTasks.filter((task) =>
+      ["failed", "cancelled", "timed_out"].includes(task.status),
+    ).length;
     const status =
       phaseTasks.length === 0
         ? "empty"
