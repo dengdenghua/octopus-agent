@@ -49,6 +49,18 @@ class SubagentDispatchRequest(BaseModel):
     extra_tools: list[str] | None = None
 
 
+_MIN_DISPATCH_TIMEOUT_S = 1
+_MAX_DISPATCH_TIMEOUT_S = 900
+
+
+def _bounded_dispatch_timeout(value: Any) -> int:
+    try:
+        timeout = int(value)
+    except (TypeError, ValueError):
+        timeout = 300
+    return max(_MIN_DISPATCH_TIMEOUT_S, min(_MAX_DISPATCH_TIMEOUT_S, timeout))
+
+
 def create_subagents_router(
     *,
     registry: Any = None,
@@ -120,7 +132,7 @@ def create_subagents_router(
 
     @router.post("/api/subagents/dispatch")
     def dispatch_subagent(request: Request, body: SubagentDispatchRequest) -> dict[str, Any]:
-        _auth(request)  # AUTH-OK: actor-agnostic — subagents are global; future: cap timeout_s + audit log
+        _auth(request)  # AUTH-OK: actor-agnostic — subagents are global; timeout is bounded below
         target = (body.subagent_type or body.name or "").strip()
         if not target:
             raise HTTPException(400, "subagent_type is required")
@@ -133,11 +145,13 @@ def create_subagents_router(
         ctx.setdefault("share_history", body.share_history)
         if body.extra_tools:
             ctx.setdefault("extra_tools", body.extra_tools)
+        timeout_s = _bounded_dispatch_timeout(body.timeout_s)
         result = call_subagent(
             target,
             body.prompt,
             context=ctx,
-            timeout_s=body.timeout_s,
+            timeout_s=timeout_s,
+            timeout_seconds=float(timeout_s),
         )
         if not result.get("success"):
             raise HTTPException(400, result.get("error") or "subagent failed")
@@ -196,11 +210,13 @@ def create_subagents_router(
                 stream_ctx.setdefault("share_history", body.share_history)
                 if body.extra_tools:
                     stream_ctx.setdefault("extra_tools", body.extra_tools)
+                timeout_s = _bounded_dispatch_timeout(body.timeout_s)
                 result = call_subagent(
                     target,
                     body.prompt,
                     context=stream_ctx,
-                    timeout_s=body.timeout_s,
+                    timeout_s=timeout_s,
+                    timeout_seconds=float(timeout_s),
                     event_emitter=_emitter,
                 )
                 event_queue.put({"type": "result", **result})
