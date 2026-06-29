@@ -71,6 +71,8 @@ class MergeBody(BaseModel):
 def create_cowork_group_router(
     *,
     store: GroupStore | None = None,
+    async_store: Any = None,
+    runtime: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
     jwt_secret: str | None = None,
@@ -81,6 +83,8 @@ def create_cowork_group_router(
     group_store = store or GroupStore()
 
     def _async_store():
+        if async_store is not None:
+            return async_store
         from runtime.memory.cowork.async_work import AsyncWorkStore
 
         return AsyncWorkStore(base_dir=group_store.base_dir, group_store=group_store)
@@ -148,6 +152,20 @@ def create_cowork_group_router(
     def list_tasks(thread_id: str) -> dict[str, Any]:
         """Background tasks in this thread (async coworkers)."""
         return {"tasks": [t.to_dict() for t in _async_store().list(thread_id)]}
+
+    @router.get("/api/cowork/{thread_id}/tasks/summary")
+    def tasks_summary(thread_id: str) -> dict[str, Any]:
+        """Small operational summary for async cowork task badges/health."""
+        store = _async_store()
+        if runtime is not None and hasattr(runtime, "status"):
+            status = runtime.status(thread_id)
+        else:
+            status = {
+                "runner_enabled": False,
+                "runner_reason": "runtime not attached",
+                "task_counts": store.counts(thread_id),
+            }
+        return {"thread_id": thread_id, **status}
 
     @router.post("/api/cowork/{thread_id}/tasks", dependencies=[Depends(_auth_dep)])
     def assign_task(thread_id: str, body: AssignBody, request: Request) -> dict[str, Any]:

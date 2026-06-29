@@ -299,6 +299,7 @@ def create_app(
     thread_store = None
     thread_upload_root: Path | None = None
     thread_workspace_root: Path | None = None
+    cowork_runtime = None
     # mcp_config_state is owned by the mcp_router (created below).
     # Keep a placeholder binding here · it's reassigned to the live
     # router state after ``create_mcp_router`` runs. Any reference
@@ -610,6 +611,49 @@ def create_app(
         set_subagent_registry(subagent_registry)
     except (ImportError, AttributeError, TypeError):
         pass
+
+    try:
+        from runtime.memory.cowork.runtime import create_cowork_runtime
+
+        cowork_runtime = create_cowork_runtime(
+            thread_store=thread_store,
+            enable_runner=stack is not None,
+        )
+        app.state.cowork_runtime = cowork_runtime
+        app.state.cowork_group_store = cowork_runtime.group_store
+        app.state.cowork_async_store = cowork_runtime.async_store
+        if (
+            stack is not None
+            and cowork_runtime.runner_enabled
+            and cowork_runtime.runner is not None
+        ):
+
+            def _start_cowork_runner() -> None:
+                try:
+                    recovered = cowork_runtime.async_store.recover_stale_working()
+                    if recovered.get("requeued") or recovered.get("failed"):
+                        logging.getLogger(__name__).info(
+                            "cowork async recovered stale tasks: %s",
+                            recovered,
+                        )
+                    cowork_runtime.start()
+                except Exception as exc:  # noqa: BLE001
+                    logging.getLogger(__name__).warning(
+                        "cowork async runner failed to start: %s",
+                        exc,
+                    )
+
+            def _stop_cowork_runner() -> None:
+                with contextlib.suppress(Exception):
+                    cowork_runtime.stop()
+
+            app.router.add_event_handler("startup", _start_cowork_runner)
+            app.router.add_event_handler("shutdown", _stop_cowork_runner)
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning(
+            "cowork runtime failed to initialize: %s",
+            exc,
+        )
 
     # Health and capability probes.
     from runtime.platform.ui.health_router import create_health_router
@@ -1327,6 +1371,17 @@ def create_app(
 
     app.include_router(
         create_cowork_group_router(
+            store=(
+                getattr(cowork_runtime, "group_store", None)
+                if cowork_runtime is not None
+                else None
+            ),
+            async_store=(
+                getattr(cowork_runtime, "async_store", None)
+                if cowork_runtime is not None
+                else None
+            ),
+            runtime=cowork_runtime,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,
             jwt_secret=cocoloop_jwt_secret,
@@ -2020,6 +2075,11 @@ def create_app(
                 reflex_router=_reflex_router,
                 trace_store=getattr(state, "trace_store", None),
                 allow_client_auto_approve=_allow_approval_bypass,
+                cowork_group_store=(
+                    getattr(cowork_runtime, "group_store", None)
+                    if cowork_runtime is not None
+                    else None
+                ),
             )
         else:
             from runtime.sensing.gateway.realtime_echo import EchoRuntime

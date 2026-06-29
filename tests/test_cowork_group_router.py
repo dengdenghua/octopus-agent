@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.memory.cowork.group_store import GroupStore
+from runtime.platform.ui.app import create_app
 from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
 
@@ -103,7 +104,7 @@ def test_advanced_cowork_endpoints(tmp_path) -> None:
     ).json()
     assert merged["blackboard"]["breakout:child-advanced"]["status"] == "merged"
 
-    catchup = c.get(f"/api/cowork/child-advanced/catchup/db-agent").json()
+    catchup = c.get("/api/cowork/child-advanced/catchup/db-agent").json()
     assert catchup["member_id"] == "db-agent"
     assert catchup["summary_only"] is True
 
@@ -135,3 +136,25 @@ def test_mutations_require_auth_when_enabled(tmp_path) -> None:
     assert ok.status_code == 200
     body = client.get("/api/cowork/thread-auth").json()
     assert body["events"][0]["actor"] == "alice"
+
+
+def test_app_cowork_router_uses_shared_runtime_store(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+    app = create_app(journal_path=tmp_path / "data" / "events.jsonl")
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/cowork/thread-shared/tasks",
+        json={"assignee": "worker", "prompt": "background check"},
+    )
+
+    assert response.status_code == 200
+    task = response.json()["task"]
+    stored = app.state.cowork_async_store.get(task["task_id"])
+    assert stored is not None
+    assert stored.prompt == "background check"
+    assert app.state.cowork_runtime.async_store is app.state.cowork_async_store
+
+    summary = client.get("/api/cowork/thread-shared/tasks/summary").json()
+    assert summary["task_counts"]["pending"] == 1
+    assert summary["runner_enabled"] is False

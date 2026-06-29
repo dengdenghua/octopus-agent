@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from runtime.memory.cowork.group import ContextGrant, GroupState, Member
+from runtime.memory.cowork.group_store import GroupStore
+from runtime.memory.cowork.service import invite_member, set_mode
 from runtime.memory.cowork.turn_plan import plan_turn
+from runtime.platform.models import ParsedIntent
+from runtime.sensing.gateway.realtime_turn_lifecycle import _inject_cowork_turn_plan
 
 
 def _agents(*ids, role="participant", muted=False):
@@ -54,3 +58,29 @@ def test_mention_overrides_mode() -> None:
     state = GroupState(roster=_agents("alice", "bob"), mode="swarm")
     plan = plan_turn(state, "@agent:alice just you")
     assert plan.responders == ["alice"]
+
+
+def test_realtime_intent_gets_cowork_turn_plan(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    invite_member(store, "thread-1", actor="u", target_id="db-agent", kind="agent")
+    invite_member(store, "thread-1", actor="u", target_id="ui-agent", kind="agent")
+    set_mode(store, "thread-1", actor="u", mode="swarm")
+    runtime = type("Runtime", (), {"_cowork_group_store": store})()
+    intent = ParsedIntent(
+        raw="check it",
+        intent_type="task",
+        normalized_goal="check it",
+        user_context={},
+    )
+
+    _inject_cowork_turn_plan(
+        runtime,
+        thread_id="thread-1",
+        text="check it",
+        intent=intent,
+    )
+
+    assert intent.user_context["cowork_mode"] == "swarm"
+    assert intent.user_context["cowork_is_multi"] is True
+    assert intent.user_context["cowork_responders"] == ["db-agent", "ui-agent"]
+    assert intent.user_context["cowork_plan"]["reason"].startswith("swarm")

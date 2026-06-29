@@ -36,8 +36,8 @@ from runtime.sensing.gateway.realtime_thread_history import (
 )
 from runtime.sensing.gateway.realtime_turn_input import (
     _build_intent,
-    _extract_codex_composer_mode,
     _execution_resume_intent,
+    _extract_codex_composer_mode,
     _input_attachments,
     _input_metadata,
     _join_text,
@@ -99,6 +99,53 @@ def _turn_has_observable_output(turn: Turn) -> bool:
             continue
         return True
     return False
+
+
+def _inject_cowork_turn_plan(
+    runtime: Any,
+    *,
+    thread_id: str,
+    text: str,
+    intent: Any,
+) -> None:
+    """Attach cowork turn-planning diagnostics to the realtime intent.
+
+    This is deliberately advisory: realtime still follows the existing stable
+    dispatch path, but every downstream driver can now see which cowork members
+    were addressed, whether the group mode wants multiple responders, and why.
+    """
+    store = getattr(runtime, "_cowork_group_store", None)
+    if store is None:
+        store = getattr(getattr(runtime, "_app_state", None), "cowork_group_store", None)
+    if store is None:
+        return
+    try:
+        from runtime.memory.cowork.turn_plan import plan_turn_for_thread
+
+        plan = plan_turn_for_thread(store, thread_id, text).to_dict()
+    except Exception as exc:  # noqa: BLE001
+        _logger.debug("cowork turn plan skipped: %s", exc, exc_info=True)
+        return
+    context = getattr(intent, "user_context", None)
+    if not isinstance(context, dict):
+        return
+    context.setdefault("cowork_plan", plan)
+    context.setdefault("cowork_mode", plan.get("mode"))
+    context.setdefault("cowork_responders", plan.get("responders") or [])
+    context.setdefault("cowork_is_multi", bool(plan.get("is_multi")))
+    responders = [
+        str(agent_id)
+        for agent_id in (plan.get("responders") or [])
+        if str(agent_id or "").strip()
+    ]
+    if plan.get("is_multi") and len(responders) > 1:
+        context.setdefault(
+            "agent_roster",
+            [
+                {"agent_id": agent_id, "display_name": agent_id}
+                for agent_id in responders
+            ],
+        )
 
 
 async def _start_turn(
@@ -364,6 +411,12 @@ async def _start_turn(
             allow_client_auto_approve=runtime._allow_client_auto_approve,
             conversation_messages=conversation_messages,
         )
+        _inject_cowork_turn_plan(
+            runtime,
+            thread_id=thread_id,
+            text=text,
+            intent=intent,
+        )
         confirmed_resume_intent = await runtime._consume_confirmed_resume_intent(thread_id, text)
         if confirmed_resume_intent is not None:
             intent.user_context["resume_intent"] = confirmed_resume_intent
@@ -464,6 +517,10 @@ async def _start_turn(
             elif (
                 str((intent.user_context or {}).get("serve_mesh") or "").strip()
                 == "1"
+                or (
+                    bool((intent.user_context or {}).get("cowork_is_multi"))
+                    and len((intent.user_context or {}).get("cowork_responders") or []) > 1
+                )
             ):
                 # 蜂群 / 冒泡: the user picked the leaderless group mode. Fan the
                 # message out to every member agent in parallel — each chimes in

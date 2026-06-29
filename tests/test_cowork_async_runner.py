@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from runtime.memory.cowork import service
 from runtime.memory.cowork.async_runner import AsyncWorkRunner
 from runtime.memory.cowork.async_work import AsyncWorkStore
-from runtime.memory.cowork.group import ContextGrant
+from runtime.memory.cowork.group import ContextGrant, MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.nominate import CompetenceStore
+from runtime.memory.cowork.runtime import create_cowork_runtime
 
 
 def _setup(tmp_path):
@@ -79,3 +82,75 @@ def test_drain_all_across_threads(tmp_path) -> None:
     assert set(aw.threads_with_pending()) == {"t1", "t2"}
     assert runner.drain_all() == 2
     assert aw.threads_with_pending() == []
+
+
+def test_stale_working_tasks_are_recovered_or_failed(tmp_path) -> None:
+    gs, aw = _setup(tmp_path)
+    retry = aw.assign("t", "worker", "retry me", actor="u")
+    fail = aw.assign("t", "worker", "give up", actor="u")
+    assert aw.claim(retry.task_id) is True
+    assert aw.claim(fail.task_id) is True
+
+    with aw._lock, sqlite3.connect(str(aw._db)) as conn:  # noqa: SLF001
+        conn.execute(
+            "UPDATE async_tasks SET updated_at='2000-01-01T00:00:00+00:00' "
+            "WHERE task_id=?",
+            (retry.task_id,),
+        )
+        conn.execute(
+            "UPDATE async_tasks SET updated_at='2000-01-01T00:00:00+00:00', attempts=3 "
+            "WHERE task_id=?",
+            (fail.task_id,),
+        )
+
+    recovered = aw.recover_stale_working(max_age_seconds=1, max_attempts=3)
+
+    assert recovered == {"requeued": 1, "failed": 1}
+    assert aw.get(retry.task_id).status == "pending"
+    assert aw.get(fail.task_id).status == "failed"
+
+
+def test_runtime_dispatches_through_subagent_bridge(tmp_path, monkeypatch) -> None:
+    from runtime.execution.subagents import get_sub_agent_runner, set_sub_agent_runner
+
+    seen = {}
+
+    def fake_call_subagent(agent_id, prompt, **kwargs):
+        seen["agent_id"] = agent_id
+        seen["prompt"] = prompt
+        seen["context"] = kwargs["context"]
+        return {"success": True, "output": "worker result"}
+
+    previous_runner = get_sub_agent_runner()
+    monkeypatch.setattr("runtime.execution.subagents.call_subagent", fake_call_subagent)
+    set_sub_agent_runner(lambda **_kwargs: "available")
+    try:
+        runtime = create_cowork_runtime(base_dir=tmp_path, enable_runner=True)
+        runtime.group_store.append(
+            "t",
+            MemberEvent(action="invite", actor="u", target_id="worker"),
+        )
+        task = runtime.async_store.assign("t", "worker", "do background work", actor="u")
+
+        assert runtime.runner.drain("t") == 1
+        assert runtime.async_store.get(task.task_id).status == "done"
+        assert seen["agent_id"] == "worker"
+        assert seen["prompt"] == "do background work"
+        assert seen["context"]["source"] == "cowork_async_task"
+        assert runtime.group_store.blackboard_snapshot("t")
+    finally:
+        set_sub_agent_runner(previous_runner)
+
+
+def test_runtime_does_not_enable_runner_without_subagent_executor(tmp_path) -> None:
+    runtime = create_cowork_runtime(base_dir=tmp_path, enable_runner=True)
+
+    assert runtime.runner is None
+    assert runtime.runner_enabled is False
+    assert "not configured" in runtime.runner_reason
+    assert runtime.status("t")["task_counts"] == {
+        "pending": 0,
+        "working": 0,
+        "done": 0,
+        "failed": 0,
+    }
