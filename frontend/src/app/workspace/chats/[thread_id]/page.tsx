@@ -563,6 +563,9 @@ function TaskCollaboratorControl({
   onOpenChange,
   onSelectedAgentIdsChange,
   onTeamModeChange,
+  roster,
+  threadId,
+  isNewThread,
 }: {
   agents: Agent[];
   selectedAgents: Agent[];
@@ -573,6 +576,9 @@ function TaskCollaboratorControl({
   onOpenChange?: (open: boolean) => void;
   onSelectedAgentIdsChange: (ids: string[]) => void;
   onTeamModeChange: (mode: TeamMode) => void;
+  roster: ChatCollaborationRosterEntry[];
+  threadId: string;
+  isNewThread: boolean;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -586,8 +592,10 @@ function TaskCollaboratorControl({
     : 1;
   const activeMeta = isTeamDraft ? TEAM_MODE_META[teamMode] : null;
   const ActiveIcon = activeMeta?.icon ?? UserPlusIcon;
+  const displayRoster = roster.slice(0, 5);
+  const extraRosterCount = Math.max(0, roster.length - displayRoster.length);
   const countLabel = formatCollaboratorCount(
-    teamSize,
+    Math.max(teamSize, roster.length || 1),
     t.chatInputBox.collaboratorsCountUnit,
   );
   const q = query.trim().toLowerCase();
@@ -627,6 +635,25 @@ function TaskCollaboratorControl({
       teamMode,
     ],
   );
+  const handleCopyLink = async () => {
+    try {
+      await copyTextToClipboard(
+        threadCollaborationLink({
+          threadId,
+          isNewThread,
+          origin:
+            typeof window === "undefined" ? undefined : window.location.origin,
+          pathname:
+            typeof window === "undefined"
+              ? undefined
+              : window.location.pathname,
+        }),
+      );
+      toast.success(t.collab.linkCopied);
+    } catch {
+      toast.error(t.collab.copyFailed);
+    }
+  };
 
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -642,7 +669,38 @@ function TaskCollaboratorControl({
           )}
           title={t.chatInputBox.collaborators}
         >
-          <ActiveIcon className="size-4 shrink-0" />
+          {displayRoster.length > 0 ? (
+            <span className="grid grid-flow-col auto-cols-[1.25rem] gap-0.5">
+              {displayRoster.map((agent) => (
+                <span
+                  key={agent.agent_id}
+                  className="grid size-5 place-items-center overflow-hidden rounded-sm border border-border/60 bg-muted text-[10px] font-semibold text-muted-foreground"
+                  title={agent.display_name}
+                >
+                  {agent.avatar_url ? (
+                    <img
+                      src={agent.avatar_url}
+                      alt={agent.display_name}
+                      className="size-full object-cover"
+                    />
+                  ) : agent.icon?.trim() ? (
+                    <span className="text-[12px] leading-none">
+                      {agent.icon}
+                    </span>
+                  ) : (
+                    agent.display_name.charAt(0).toUpperCase()
+                  )}
+                </span>
+              ))}
+              {extraRosterCount > 0 && (
+                <span className="grid size-5 place-items-center rounded-sm border border-border/60 bg-muted text-[9px] font-semibold text-muted-foreground">
+                  +{extraRosterCount}
+                </span>
+              )}
+            </span>
+          ) : (
+            <ActiveIcon className="size-4 shrink-0" />
+          )}
           <span className="hidden min-w-0 truncate sm:inline">
             {activeMeta?.label ?? t.chatInputBox.collaboratorsSingle}
           </span>
@@ -708,6 +766,40 @@ function TaskCollaboratorControl({
               );
             })}
           </div>
+          {roster.length > 0 && (
+            <div className="mt-2 grid grid-cols-1 gap-1">
+              {roster.slice(0, 4).map((agent) => (
+                <div
+                  key={agent.agent_id}
+                  className="flex min-w-0 items-center gap-2 rounded-sm bg-muted/35 px-2 py-1.5"
+                >
+                  <span className="grid size-6 shrink-0 place-items-center overflow-hidden rounded-sm bg-background text-[10px] font-semibold text-muted-foreground">
+                    {agent.avatar_url ? (
+                      <img
+                        src={agent.avatar_url}
+                        alt={agent.display_name}
+                        className="size-full object-cover"
+                      />
+                    ) : agent.icon?.trim() ? (
+                      <span className="text-[13px] leading-none">
+                        {agent.icon}
+                      </span>
+                    ) : (
+                      agent.display_name.charAt(0).toUpperCase()
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
+                    {agent.display_name}
+                  </span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {agent.role === "tl"
+                      ? t.agentWorkbenchPanel.mainController
+                      : t.agentWorkbenchPanel.subComputer}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="p-3">
           <label className="flex h-8 items-center gap-2 rounded-sm border border-border/50 bg-background/45 px-2">
@@ -783,156 +875,11 @@ function TaskCollaboratorControl({
             </div>
           </div>
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function TaskPresenceControl({
-  roster,
-  threadId,
-  isNewThread,
-  onOpenCollaborators,
-}: {
-  roster: ChatCollaborationRosterEntry[];
-  threadId: string;
-  isNewThread: boolean;
-  onOpenCollaborators: () => void;
-}) {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const displayRoster = roster.slice(0, 5);
-  const extraCount = Math.max(0, roster.length - displayRoster.length);
-  const memberCount = Math.max(1, roster.length);
-  const handleOpenCollaborators = () => {
-    setOpen(false);
-    onOpenCollaborators();
-  };
-  const handleCopyLink = async () => {
-    try {
-      await copyTextToClipboard(
-        threadCollaborationLink({
-          threadId,
-          isNewThread,
-          origin:
-            typeof window === "undefined" ? undefined : window.location.origin,
-          pathname:
-            typeof window === "undefined"
-              ? undefined
-              : window.location.pathname,
-        }),
-      );
-      toast.success(t.collab.linkCopied);
-    } catch {
-      toast.error(t.collab.copyFailed);
-    }
-  };
-
-  return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-sm border border-transparent bg-transparent px-1.5 text-[12px] font-medium text-muted-foreground transition-colors",
-            "hover:border-border/50 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
-          )}
-          title={t.collab.collaborateTitle}
-        >
-          <span className="grid grid-flow-col auto-cols-[1.25rem] gap-0.5">
-            {displayRoster.map((agent) => (
-              <span
-                key={agent.agent_id}
-                className="grid size-5 place-items-center overflow-hidden rounded-sm border border-border/60 bg-muted text-[10px] font-semibold text-muted-foreground"
-                title={agent.display_name}
-              >
-                {agent.avatar_url ? (
-                  <img
-                    src={agent.avatar_url}
-                    alt={agent.display_name}
-                    className="size-full object-cover"
-                  />
-                ) : agent.icon?.trim() ? (
-                  <span className="text-[12px] leading-none">{agent.icon}</span>
-                ) : (
-                  agent.display_name.charAt(0).toUpperCase()
-                )}
-              </span>
-            ))}
-            {extraCount > 0 && (
-              <span className="grid size-5 place-items-center rounded-sm border border-border/60 bg-muted text-[9px] font-semibold text-muted-foreground">
-                +{extraCount}
-              </span>
-            )}
-          </span>
-          <span className="hidden min-w-0 truncate sm:inline">
-            {formatCollaboratorCount(
-              memberCount,
-              t.chatInputBox.collaboratorsCountUnit,
-            )}
-          </span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        side="bottom"
-        sideOffset={8}
-        className="w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-md border-border/70 p-0 shadow-sm"
-      >
-        <div className="border-b border-border/45 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[12px] font-medium">
-            <UsersRoundIcon className="size-4 text-primary" />
-            <span>{t.collab.collaborateTitle}</span>
-          </div>
-          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
-            {t.collab.collaborateDesc}
-          </p>
-        </div>
-        <div className="space-y-1 p-2">
-          {roster.map((agent) => (
-            <div
-              key={agent.agent_id}
-              className="flex min-w-0 items-center gap-2 rounded-sm px-2 py-1.5"
-            >
-              <span className="grid size-7 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-[11px] font-semibold text-muted-foreground">
-                {agent.avatar_url ? (
-                  <img
-                    src={agent.avatar_url}
-                    alt={agent.display_name}
-                    className="size-full object-cover"
-                  />
-                ) : agent.icon?.trim() ? (
-                  <span className="text-[15px] leading-none">{agent.icon}</span>
-                ) : (
-                  agent.display_name.charAt(0).toUpperCase()
-                )}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] font-medium">
-                  {agent.display_name}
-                </span>
-                <span className="block truncate text-[11px] text-muted-foreground">
-                  {agent.role === "tl"
-                    ? t.agentWorkbenchPanel.mainController
-                    : t.agentWorkbenchPanel.subComputer}
-                </span>
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-1 border-t border-border/45 p-2">
-          <button
-            type="button"
-            onClick={handleOpenCollaborators}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-          >
-            <UserPlusIcon className="size-3.5" />
-            {t.collab.inviteCollaborators}
-          </button>
+        <div className="flex items-center justify-end border-t border-border/45 p-2">
           <button
             type="button"
             onClick={() => void handleCopyLink()}
-            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm px-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
           >
             <CopyIcon className="size-3.5" />
             {t.collab.copyLink}
@@ -2349,12 +2296,9 @@ function ChatsPageContent({
                     onOpenChange={setCollaboratorPickerOpen}
                     onSelectedAgentIdsChange={setSelectedCollaboratorIds}
                     onTeamModeChange={setTeamModeIntent}
-                  />
-                  <TaskPresenceControl
                     roster={visibleCollaborationRoster}
                     threadId={threadId}
                     isNewThread={isNewThread}
-                    onOpenCollaborators={() => setCollaboratorPickerOpen(true)}
                   />
                   <ChatHeaderRecButton
                     threadId={threadId}

@@ -32,24 +32,14 @@ async function expectNoHorizontalOverflow(
 test.describe("Mobile workspace smoke", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("Team composer and workbench tabs fit mobile width", async ({
-    page,
-  }) => {
-    await page.goto("/#/workspace/team/new");
+  test("Realtime composer fits mobile width", async ({ page }) => {
+    await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
-    await page.waitForURL(/#\/workspace\/team\/[^/]+$/, {
-      timeout: 15_000,
-    });
 
-    const composer = page.getByTestId("team-composer");
+    const composer = page.getByTestId("chat-composer");
     await expect(composer).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("team-composer-input")).toBeVisible();
-    await expectNoHorizontalOverflow(page, composer, "team composer");
-
-    await page.getByTestId("team-workbench-toggle").click();
-    const workbench = page.getByTestId("team-workbench-panel");
-    await expect(workbench).toBeVisible();
-    await expectNoHorizontalOverflow(page, workbench, "team workbench drawer");
+    await expect(page.getByTestId("chat-composer-input")).toBeVisible();
+    await expectNoHorizontalOverflow(page, composer, "realtime composer");
   });
 
   test("Agents category chips scroll within the viewport", async ({ page }) => {

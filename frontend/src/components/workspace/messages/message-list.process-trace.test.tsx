@@ -150,7 +150,7 @@ function renderMessageList(args: {
 }) {
   return renderWithProviders(messageListTree(args), {
     locale: args.locale ?? "en-US",
-    initialRoute: "/workspace/chats/thread-1",
+    initialRoute: "/workspace/realtime/thread-1",
   });
 }
 

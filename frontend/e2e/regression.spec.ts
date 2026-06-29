@@ -79,7 +79,7 @@ async function deleteSubscriptionsByTopic(
 }
 
 async function sendChatMessage(page: Page, text: string): Promise<void> {
-  await page.goto("/#/workspace/chats/new");
+  await page.goto("/#/workspace/realtime/new");
   await page.waitForLoadState("domcontentloaded");
 
   await reactFill(page, "textarea", text);
@@ -91,9 +91,9 @@ async function sendChatMessage(page: Page, text: string): Promise<void> {
   await sendBtn.click();
 
   // Wait for URL to change to a real thread id · the router navigates
-  // to /workspace/chats/<generated-id> as soon as the first user
+  // to /workspace/realtime/<generated-id> as soon as the first user
   // message gets posted · robust signal that the send went through.
-  await page.waitForURL(/#\/workspace\/chats\/[^/]+$/, { timeout: 20_000 });
+  await page.waitForURL(/#\/workspace\/realtime\/[^/]+$/, { timeout: 20_000 });
   // Then give the SSE reply ~20s to commit into journal · this is
   // the actual signal the Bug#2 assertion is watching for.
   await page.waitForTimeout(20_000);

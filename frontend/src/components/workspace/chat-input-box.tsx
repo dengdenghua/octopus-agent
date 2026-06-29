@@ -82,7 +82,7 @@ import {
 } from "./personal-mode-selector";
 
 /**
- * Simplified chat composer for the /workspace/chats route. Same visual
+ * Simplified chat composer for the /workspace/realtime route. Same visual
  * language as TeamInputBox (flat card, AccessPill on left,
  * ModelPicker + send on right) but without team-mode pills or workdir
  * selector, since plain chat doesn't need them.

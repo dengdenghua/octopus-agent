@@ -117,17 +117,15 @@ export function RecentChatList() {
   const { pathname } = useLocation();
   const params = useParams();
   const threadIdFromPath = params.threadId ?? params.thread_id;
-  const currentMode = pathname.startsWith("/workspace/team")
-    ? ("team" as const)
-    : pathname.startsWith("/workspace/realtime")
-      ? ("code" as const)
-      : undefined; // chat shows this agent's chat/react/deep history
+  const currentMode = pathname.startsWith("/workspace/realtime")
+    ? ("code" as const)
+    : undefined; // non-task chat surfaces show this agent's chat/react/deep history
 
-  // Scope personal chat/code history by active agent; team remains a shared
-  // surface. Without this, switching a historical conversation can show the
-  // wrong persona avatar/header while the list still contains another agent.
+  // Scope personal chat/code history by active agent. Without this, switching
+  // a historical conversation can show the wrong persona avatar/header while
+  // the list still contains another agent.
   const activeAgentId = useActiveAgentId();
-  const agentFilter = currentMode === "team" ? null : activeAgentId;
+  const agentFilter = activeAgentId;
   const { data: threads = [] } = useThreads(
     undefined,
     currentMode,

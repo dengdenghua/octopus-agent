@@ -113,7 +113,7 @@ describe("MessageList scroll-to-latest affordance", () => {
           />
         </ThreadProviders>
       </SubtasksProvider>,
-      { initialRoute: "/workspace/chats/thread-1" },
+      { initialRoute: "/workspace/realtime/thread-1" },
     );
 
     const button = screen.getByTestId("scroll-to-latest");
@@ -137,7 +137,7 @@ describe("MessageList scroll-to-latest affordance", () => {
           <MessageList threadId="thread-1" thread={thread} paddingBottom={0} />
         </ThreadProviders>
       </SubtasksProvider>,
-      { initialRoute: "/workspace/chats/thread-1" },
+      { initialRoute: "/workspace/realtime/thread-1" },
     );
 
     const rail = screen.getByRole("navigation", {
@@ -189,7 +189,7 @@ describe("MessageList scroll-to-latest affordance", () => {
           <MessageList threadId="thread-1" thread={thread} paddingBottom={0} />
         </ThreadProviders>
       </SubtasksProvider>,
-      { initialRoute: "/workspace/chats/thread-1" },
+      { initialRoute: "/workspace/realtime/thread-1" },
     );
 
     const rail = screen.getByRole("navigation", {
@@ -246,7 +246,7 @@ describe("MessageList scroll-to-latest affordance", () => {
           />
         </ThreadProviders>
       </SubtasksProvider>,
-      { initialRoute: "/workspace/chats/thread-1" },
+      { initialRoute: "/workspace/realtime/thread-1" },
     );
 
     const rail = screen.getByRole("navigation", {
