@@ -1,0 +1,120 @@
+"""Project OS: model DAG, store round-trips, and the milestone-driven engine."""
+
+from __future__ import annotations
+
+from runtime.projectos.engine import ProjectEngine
+from runtime.projectos.model import Milestone, Project, Task, ready_tasks
+from runtime.projectos.store import ProjectStore
+
+
+# ── model ────────────────────────────────────────────────────────────────────
+def test_ready_tasks_respects_dag() -> None:
+    t1 = Task(id="T1", milestone_id="M", type="design", goal="a")
+    t2 = Task(id="T2", milestone_id="M", type="code", goal="b", depends_on=["T1"])
+    # T2 blocked until T1 done
+    assert [t.id for t in ready_tasks([t1, t2])] == ["T1"]
+    t1.status = "done"
+    assert [t.id for t in ready_tasks([t1, t2])] == ["T2"]
+
+
+def test_roundtrips() -> None:
+    p = Project(id="P1", name="x", goal="g", milestone_ids=["M1"])
+    assert Project.from_dict(p.to_dict()).milestone_ids == ["M1"]
+    m = Milestone(id="M1", name="n", goal="g", spec={"power": "<5W"},
+                  success_criteria=["works"], dependencies=["M0"])
+    assert Milestone.from_dict(m.to_dict()).spec == {"power": "<5W"}
+    t = Task(id="T1", milestone_id="M1", type="research", goal="g", depends_on=["T0"])
+    assert Task.from_dict(t.to_dict()).depends_on == ["T0"]
+
+
+# ── store ────────────────────────────────────────────────────────────────────
+def test_store_roundtrip(tmp_path) -> None:
+    s = ProjectStore(base_dir=tmp_path)
+    s.save_project(Project(id="P1", name="x", goal="g"))
+    s.save_milestone("P1", Milestone(id="M1", name="m", goal="g"))
+    s.save_task(Task(id="T1", milestone_id="M1", type="code", goal="g"))
+    assert s.get_project("P1").goal == "g"
+    assert [m.id for m in s.milestones_for("P1")] == ["M1"]
+    assert [t.id for t in s.tasks_for_milestone("M1")] == ["T1"]
+
+
+# ── engine ───────────────────────────────────────────────────────────────────
+def _stub_milestones(goal: str) -> list[Milestone]:
+    return [
+        Milestone(id="MS1", name="research", goal="scope it"),
+        Milestone(id="MS2", name="build", goal="build it", dependencies=["MS1"]),
+        Milestone(id="MS3", name="verify", goal="verify it", dependencies=["MS2"]),
+    ]
+
+
+def _stub_decompose(ms: Milestone) -> list[Task]:
+    # two tasks with a dependency, to exercise the DAG within a milestone
+    return [
+        Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="research", goal=f"{ms.goal} part1"),
+        Task(id=f"{ms.id}-T2", milestone_id=ms.id, type="code", goal=f"{ms.goal} part2",
+             depends_on=[f"{ms.id}-T1"]),
+    ]
+
+
+def _engine(tmp_path, **hooks) -> ProjectEngine:
+    return ProjectEngine(
+        ProjectStore(base_dir=tmp_path),
+        generate_milestones=_stub_milestones,
+        decompose_tasks=_stub_decompose,
+        **hooks,
+    )
+
+
+def test_plan_generates_milestones(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("sleep sys", "make a smart sleep system")
+    assert p.status == "running"
+    assert [m.id for m in eng.store.milestones_for(p.id)] == ["MS1", "MS2", "MS3"]
+
+
+def test_full_run_drives_project_to_done(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("sleep sys", "make a smart sleep system")
+    result = eng.run(p.id, max_ticks=50)
+    assert result["final_status"] == "done"
+    # every milestone reached done, in dependency order
+    mss = {m.id: m.status for m in eng.store.milestones_for(p.id)}
+    assert mss == {"MS1": "done", "MS2": "done", "MS3": "done"}
+    # all tasks done
+    for ms_id in ("MS1", "MS2", "MS3"):
+        assert all(t.status == "done" for t in eng.store.tasks_for_milestone(ms_id))
+
+
+def test_dependent_milestone_waits(tmp_path) -> None:
+    # MS2 must not start before MS1 is done — one tick only activates MS1.
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    eng.tick(p.id)  # activates MS1 + creates its tasks
+    assert eng.store.get_milestone("MS1").status == "in_progress"
+    assert eng.store.get_milestone("MS2").status == "pending"  # still waiting on MS1
+    assert eng.store.tasks_for_milestone("MS2") == []
+
+
+def test_qa_rejection_retries_then_passes(tmp_path) -> None:
+    calls = {"n": 0}
+
+    def flaky_qa(task: Task, ms: Milestone) -> dict:
+        # reject the very first QA, approve everything after
+        calls["n"] += 1
+        return {"approved": calls["n"] > 1, "reason": "flaky"}
+
+    eng = _engine(tmp_path, qa_task=flaky_qa)
+    p = eng.plan("x", "g")
+    result = eng.run(p.id, max_ticks=50)
+    assert result["final_status"] == "done"  # retry recovered the rejected task
+
+
+def test_milestone_gate_blocks_when_criteria_unmet(tmp_path) -> None:
+    def strict_gate(ms: Milestone, tasks: list[Task]) -> dict:
+        return {"met": ms.id != "MS1", "reason": "MS1 forced-fail"}
+
+    eng = _engine(tmp_path, gate_milestone=strict_gate)
+    p = eng.plan("x", "g")
+    result = eng.run(p.id, max_ticks=20)
+    assert result["final_status"] != "done"  # blocked at MS1's gate
+    assert eng.store.get_milestone("MS1").status == "blocked"
