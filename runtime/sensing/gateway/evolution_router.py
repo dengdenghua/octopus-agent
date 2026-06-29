@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
+from urllib.parse import urlparse
 
 try:
     from fastapi import APIRouter, HTTPException, Query, Request
@@ -55,13 +57,13 @@ if FASTAPI_AVAILABLE:
 
     class BrowserDesktopRepairRecipeRerunBody(BaseModel):
         item_id: str
-        api_base_url: str = "http://127.0.0.1:8000"
+        api_base_url: str = ""
         promote_source_cases: bool = False
         actor: str = "operator_panel"
 
 
     class BrowserDesktopRepairRecipeRerunBatchBody(BaseModel):
-        api_base_url: str = "http://127.0.0.1:8000"
+        api_base_url: str = ""
         promote_source_cases: bool = False
         actor: str = "operator_panel"
         limit: int = Field(default=20, ge=1, le=100)
@@ -450,17 +452,22 @@ def create_evolution_router() -> Any:
     @router.post("/browser-desktop-repair-recipes/verifications/rerun")
     def rerun_browser_desktop_repair_recipe_evidence(
         body: BrowserDesktopRepairRecipeRerunBody,
+        request: Request,
     ) -> dict[str, Any]:
         try:
             from runtime.safety.evolution.browser_desktop_repair_recipes import (
                 rerun_browser_desktop_repair_recipe_evidence,
             )
 
+            api_base_url = _resolve_api_base_url(
+                body.api_base_url,
+                request=request,
+            )
             return {
                 "ok": True,
                 **rerun_browser_desktop_repair_recipe_evidence(
                     item_id=body.item_id,
-                    api_base_url=body.api_base_url,
+                    api_base_url=api_base_url,
                     promote_source_cases=body.promote_source_cases,
                     actor=body.actor,
                 ),
@@ -472,6 +479,7 @@ def create_evolution_router() -> Any:
 
     @router.post("/browser-desktop-repair-recipes/verifications/rerun-batch")
     def rerun_browser_desktop_repair_recipe_batch(
+        request: Request,
         body: BrowserDesktopRepairRecipeRerunBatchBody | None = None,
     ) -> dict[str, Any]:
         try:
@@ -480,10 +488,14 @@ def create_evolution_router() -> Any:
             )
 
             body = body or BrowserDesktopRepairRecipeRerunBatchBody()
+            api_base_url = _resolve_api_base_url(
+                body.api_base_url,
+                request=request,
+            )
             return {
                 "ok": True,
                 **rerun_browser_desktop_repair_recipe_batch(
-                    api_base_url=body.api_base_url,
+                    api_base_url=api_base_url,
                     promote_source_cases=body.promote_source_cases,
                     actor=body.actor,
                     limit=body.limit,
@@ -829,6 +841,35 @@ def _scorecard_gap_priority(gap: int) -> str:
 
 def _actor_from_request(request: Any) -> str:
     return str(getattr(getattr(request, "state", None), "actor_id", "") or "local_operator")
+
+
+def _resolve_api_base_url(value: str | None, *, request: Request | None) -> str:
+    explicit = _normalize_api_base_url(value)
+    if explicit:
+        return explicit
+    for env_name in (
+        "OCTOPUS_INTERNAL_GATEWAY_BASE_URL",
+        "OCTOPUS_BACKEND_BASE_URL",
+        "VITE_BACKEND_BASE_URL",
+    ):
+        from_env = _normalize_api_base_url(os.environ.get(env_name))
+        if from_env:
+            return from_env
+    if request is not None:
+        from_request = _normalize_api_base_url(str(request.base_url))
+        if from_request:
+            return from_request
+    return "http://127.0.0.1:8000"
+
+
+def _normalize_api_base_url(value: str | None) -> str:
+    text = str(value or "").strip().rstrip("/")
+    if not text:
+        return ""
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return text
 
 
 def _scorecard_gap_text(row: dict[str, Any], *, reason: str) -> str:

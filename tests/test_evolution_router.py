@@ -494,6 +494,44 @@ def test_browser_desktop_repair_recipe_rerun_endpoint(monkeypatch) -> None:
     assert data["attachment"]["evidence"]["actor"] == "operator_test"
 
 
+def test_browser_desktop_repair_recipe_rerun_defaults_to_request_base_url(
+    monkeypatch,
+) -> None:
+    def fake_rerun(
+        *,
+        item_id: str,
+        api_base_url: str,
+        promote_source_cases: bool,
+        actor: str,
+    ):
+        return {
+            "schema": "octopus.browser_desktop_repair_recipe_rerun.v1",
+            "item_id": item_id,
+            "passed": True,
+            "artifacts": [{"url": api_base_url}],
+            "promote_source_cases": promote_source_cases,
+            "actor": actor,
+        }
+
+    monkeypatch.setattr(
+        "runtime.safety.evolution.browser_desktop_repair_recipes.rerun_browser_desktop_repair_recipe_evidence",
+        fake_rerun,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app, base_url="http://localhost:8123")
+
+    response = client.post(
+        "/api/evolution/browser-desktop-repair-recipes/verifications/rerun",
+        json={"item_id": "rq_recipe"},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["artifacts"][0]["url"] == "http://localhost:8123"
+
+
 def test_browser_desktop_repair_recipe_rerun_batch_endpoint(monkeypatch) -> None:
     def fake_batch(
         *,
@@ -542,3 +580,50 @@ def test_browser_desktop_repair_recipe_rerun_batch_endpoint(monkeypatch) -> None
     assert data["attempted"] == 3
     assert data["passed"] == 1
     assert data["failed"] == 2
+
+
+def test_browser_desktop_repair_recipe_rerun_batch_uses_gateway_env(
+    monkeypatch,
+) -> None:
+    def fake_batch(
+        *,
+        api_base_url: str,
+        promote_source_cases: bool,
+        actor: str,
+        limit: int,
+    ):
+        return {
+            "schema": "octopus.browser_desktop_repair_recipe_rerun_batch.v1",
+            "attempted": limit,
+            "passed": 1,
+            "failed": 0,
+            "results": [
+                {
+                    "api_base_url": api_base_url,
+                    "promoted_source_cases": promote_source_cases,
+                    "actor": actor,
+                }
+            ],
+        }
+
+    monkeypatch.setenv(
+        "OCTOPUS_INTERNAL_GATEWAY_BASE_URL",
+        "http://127.0.0.1:8777/",
+    )
+    monkeypatch.setattr(
+        "runtime.safety.evolution.browser_desktop_repair_recipes.rerun_browser_desktop_repair_recipe_batch",
+        fake_batch,
+    )
+    app = FastAPI()
+    app.include_router(create_evolution_router())
+    client = TestClient(app, base_url="http://localhost:8123")
+
+    response = client.post(
+        "/api/evolution/browser-desktop-repair-recipes/verifications/rerun-batch",
+        json={"limit": 2},
+    )
+    data = response.json()
+
+    assert response.status_code == 200
+    assert data["ok"] is True
+    assert data["results"][0]["api_base_url"] == "http://127.0.0.1:8777"
