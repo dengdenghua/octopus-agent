@@ -57,6 +57,8 @@ _log = logging.getLogger(__name__)
 
 
 TaskRunner = Callable[..., str]
+_TERMINAL_TASK_STATUSES = {"completed", "failed", "cancelled", "timed_out"}
+_UNRUNNABLE_PLAN_ISSUE_PREFIXES = ("dependency_cycle:", "unknown_dependency:")
 
 
 def _iso(dt: datetime | None) -> str | None:
@@ -181,6 +183,34 @@ class _BatchEntry:
     def derived_status(self) -> str:
         return converge_run_state([t.status for t in self.tasks.values()]).state
 
+    def validation_issues(self) -> list[str]:
+        return (
+            list(self.plan.validation_issues)
+            if self.plan is not None else []
+        )
+
+    def validation_warnings(self) -> list[str]:
+        return (
+            list(self.plan.validation_warnings)
+            if self.plan is not None else []
+        )
+
+    def artifact_count(self) -> int:
+        return sum(
+            len(event.artifact_paths)
+            for event in self.event_log
+            if getattr(event, "artifact_paths", None)
+        )
+
+    def completion_receipt(self) -> dict[str, object]:
+        return build_completion_receipt(
+            [t.status for t in self.tasks.values()],
+            contract_issues=self.validation_issues(),
+            contract_warnings=self.validation_warnings(),
+            artifact_count=self.artifact_count(),
+            output_present=bool(self.aggregated_content),
+        ).to_dict()
+
     def counts(self) -> tuple[int, int, int, int]:
         """(total, completed, failed, cancelled)."""
         total = len(self.tasks)
@@ -196,19 +226,6 @@ class _BatchEntry:
 
     def to_wire(self) -> BatchResult:
         total, completed, failed, cancelled = self.counts()
-        validation_issues = (
-            list(self.plan.validation_issues)
-            if self.plan is not None else []
-        )
-        validation_warnings = (
-            list(self.plan.validation_warnings)
-            if self.plan is not None else []
-        )
-        artifact_count = sum(
-            len(event.artifact_paths)
-            for event in self.event_log
-            if getattr(event, "artifact_paths", None)
-        )
         return BatchResult(
             batch_id=self.batch_id,
             status=self.derived_status(),
@@ -224,13 +241,7 @@ class _BatchEntry:
             conflicts=list(self.conflicts),
             plan=self.plan,
             event_log=list(self.event_log),
-            completion_receipt=build_completion_receipt(
-                [t.status for t in self.tasks.values()],
-                contract_issues=validation_issues,
-                contract_warnings=validation_warnings,
-                artifact_count=artifact_count,
-                output_present=bool(self.aggregated_content),
-            ).to_dict(),
+            completion_receipt=self.completion_receipt(),
             file_write_observability=file_write_lease_snapshot(
                 self.runtime_session_metadata,
             ),
@@ -360,6 +371,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         except Exception:  # noqa: BLE001 - taint propagation is best-effort
             pass
 
+        should_start_scheduler = True
         with self._lock:
             self._batches[batch_id] = batch
             for tid in entries:
@@ -403,13 +415,16 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     progress=0.36,
                     message="Work contracts validated",
                 )
+            if self._fail_unrunnable_plan_locked(batch):
+                should_start_scheduler = False
 
-        threading.Thread(
-            target=self._schedule_batch,
-            args=(batch.batch_id, run_context),
-            name=f"parallel-agent-scheduler-{batch.batch_id}",
-            daemon=True,
-        ).start()
+        if should_start_scheduler:
+            threading.Thread(
+                target=self._schedule_batch,
+                args=(batch.batch_id, run_context),
+                name=f"parallel-agent-scheduler-{batch.batch_id}",
+                daemon=True,
+            ).start()
 
         return batch.to_wire()
 
@@ -429,7 +444,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             entry = batch.tasks.get(task_id)
             if entry is None:
                 return False
-            if entry.status in ("completed", "failed", "cancelled", "timed_out"):
+            if entry.status in _TERMINAL_TASK_STATUSES:
                 return False
             entry.cancel_event.set()
             if entry.status == "pending":
@@ -448,7 +463,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         with self._lock:
             for batch in self._batches.values():
                 for entry in batch.tasks.values():
-                    if entry.status in ("completed", "failed", "cancelled", "timed_out"):
+                    if entry.status in _TERMINAL_TASK_STATUSES:
                         continue
                     entry.cancel_event.set()
                     if entry.status == "pending":
@@ -720,6 +735,8 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                     )
                 if blocked_failed:
                     self._maybe_close_batch_locked(batch)
+                if not ready and not blocked_failed:
+                    self._fail_stalled_pending_tasks_locked(batch)
                 if ready:
                     ready.sort(key=lambda e: (-e.priority, e.task_id))
                     for entry in ready:
@@ -742,10 +759,12 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             return
         batch.completed_at = _now()
         batch.aggregated_content = self._aggregate_locked(batch)
+        total, completed, failed, cancelled = batch.counts()
+        status = batch.derived_status()
         self._publish_stage_change_locked(
             batch,
             stage="final_report",
-            status=batch.derived_status(),
+            status=status,
             progress=1.0,
             message="Agent results integrated",
         )
@@ -753,13 +772,81 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             type="batch_complete",
             batch_id=batch.batch_id,
             lane="timeline",
-            status=batch.derived_status(),
+            status=status,
             payload={
-                "total_tasks": len(batch.tasks),
-                "completed_tasks": batch.counts()[1],
+                "status": status,
+                "total_tasks": total,
+                "completed_tasks": completed,
+                "failed_tasks": failed,
+                "cancelled_tasks": cancelled,
+                "completion_receipt": batch.completion_receipt(),
             },
         )
         self._broadcast_locked(batch, ev)
+
+    def _unrunnable_plan_issues(self, batch: _BatchEntry) -> list[str]:
+        return [
+            issue for issue in batch.validation_issues()
+            if issue.startswith(_UNRUNNABLE_PLAN_ISSUE_PREFIXES)
+        ]
+
+    def _fail_unrunnable_plan_locked(self, batch: _BatchEntry) -> bool:
+        issues = self._unrunnable_plan_issues(batch)
+        if not issues:
+            return False
+        error = "invalid_work_plan:" + ";".join(issues)
+        now = _now()
+        for entry in batch.tasks.values():
+            if entry.status in _TERMINAL_TASK_STATUSES:
+                continue
+            entry.cancel_event.set()
+            entry.status = "failed"
+            entry.error = error
+            entry.started_at = entry.started_at or now
+            entry.completed_at = now
+            self._publish_task_update_locked(
+                batch,
+                entry,
+                phase="invalid_work_plan",
+                message=f"{entry.subagent_name} blocked by invalid work plan",
+            )
+        self._maybe_close_batch_locked(batch)
+        return True
+
+    def _fail_stalled_pending_tasks_locked(self, batch: _BatchEntry) -> bool:
+        if batch.completed_at is not None:
+            return False
+        active = any(
+            entry.status == "running"
+            or (entry.future is not None and not entry.future.done())
+            for entry in batch.tasks.values()
+        )
+        stalled = [
+            entry for entry in batch.tasks.values()
+            if entry.status == "pending" and entry.future is None
+        ]
+        if active or not stalled:
+            return False
+
+        issues = self._unrunnable_plan_issues(batch)
+        error = (
+            "invalid_work_plan:" + ";".join(issues)
+            if issues else "dependency_unresolvable"
+        )
+        now = _now()
+        for entry in stalled:
+            entry.status = "failed"
+            entry.error = error
+            entry.started_at = entry.started_at or now
+            entry.completed_at = now
+            self._publish_task_update_locked(
+                batch,
+                entry,
+                phase="dependency_unresolvable",
+                message=f"{entry.subagent_name} dependency graph stalled",
+            )
+        self._maybe_close_batch_locked(batch)
+        return True
 
     def _aggregate_locked(self, batch: _BatchEntry) -> str | None:
         strategy = batch.aggregation_strategy or "concat"

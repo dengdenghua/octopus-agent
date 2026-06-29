@@ -468,6 +468,83 @@ class TestRunnerError:
         st = orch.status()
         assert st.failed_count == 1
 
+    def test_invalid_dependency_cycle_fails_batch_without_hanging(self):
+        calls: list[str] = []
+
+        def runner(description, *, subagent_name, context=None, cancel_event=None):
+            calls.append(description)
+            return "should-not-run"
+
+        o = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
+        try:
+            batch = o.dispatch([
+                DispatchTaskInput(task_id="a", description="first", depends_on=["b"]),
+                DispatchTaskInput(task_id="b", description="second", depends_on=["a"]),
+            ])
+
+            snap = o.get_batch(batch.batch_id)
+            assert snap is not None
+            assert snap.status == "failed"
+            assert snap.failed_tasks == 2
+            assert snap.completed_at is not None
+            assert calls == []
+            assert snap.plan is not None
+            assert any(
+                issue.startswith("dependency_cycle:")
+                for issue in snap.plan.validation_issues
+            )
+            assert snap.completion_receipt["ready"] is False
+            assert "failed_work_items" in snap.completion_receipt["issues"]
+            assert any(
+                issue.startswith("dependency_cycle:")
+                for issue in snap.completion_receipt["issues"]
+            )
+            assert [r.status for r in snap.results] == ["failed", "failed"]
+            assert all(
+                (r.error or "").startswith("invalid_work_plan:")
+                for r in snap.results
+            )
+            assert snap.event_log[-1].type == "batch_complete"
+            assert snap.event_log[-1].status == "failed"
+            assert snap.event_log[-1].payload["failed_tasks"] == 2
+            assert snap.event_log[-1].payload["cancelled_tasks"] == 0
+            assert snap.event_log[-1].payload["completion_receipt"]["ready"] is False
+        finally:
+            o.shutdown(wait=False)
+
+    def test_batch_complete_event_carries_terminal_counts_and_receipt(self, orch):
+        batch = orch.dispatch([DispatchTaskInput(task_id="slow", description="x")])
+        for _ in range(100):
+            snap = orch.get_batch(batch.batch_id)
+            assert snap is not None
+            if snap.status == "completed":
+                break
+            time.sleep(0.02)
+
+        with orch._lock:
+            internal = orch._batches[batch.batch_id]
+            entry = internal.tasks["slow"]
+            entry.status = "timed_out"
+            entry.error = "runner_timeout"
+            internal.completed_at = None
+            internal.aggregated_content = None
+            orch._maybe_close_batch_locked(internal)
+
+        snap = orch.get_batch(batch.batch_id)
+        assert snap is not None
+        final_event = snap.event_log[-1]
+        assert final_event.type == "batch_complete"
+        assert final_event.status == "failed"
+        assert final_event.payload["status"] == "failed"
+        assert final_event.payload["total_tasks"] == 1
+        assert final_event.payload["completed_tasks"] == 0
+        assert final_event.payload["failed_tasks"] == 1
+        assert final_event.payload["cancelled_tasks"] == 0
+        receipt = final_event.payload["completion_receipt"]
+        assert receipt["ready"] is False
+        assert receipt["state"]["failed"] == 1
+        assert "failed_work_items" in receipt["issues"]
+
 
 # ═══════════════════════════════════════════════════════════════
 # FastAPI router
