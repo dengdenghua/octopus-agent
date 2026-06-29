@@ -2,6 +2,7 @@ import {
   CheckIcon,
   CircleDotIcon,
   Code2Icon,
+  CopyIcon,
   FileTextIcon,
   ListChecksIcon,
   PanelRightIcon,
@@ -97,6 +98,7 @@ import {
 import { swallow } from "@/core/utils/log";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { getAPIClient } from "@/core/api";
+import { copyTextToClipboard } from "@/core/clipboard";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
 import type { ReasoningEffort } from "@/core/threads";
@@ -786,6 +788,155 @@ function TaskCollaboratorControl({
               })}
             </div>
           </div>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function taskCollaborationLink(threadId: string, isNewThread: boolean) {
+  const route = isNewThread
+    ? "/workspace/realtime/new"
+    : `/workspace/realtime/${encodeURIComponent(threadId)}`;
+  if (typeof window === "undefined") return route;
+  return `${window.location.origin}${window.location.pathname}#${route}`;
+}
+
+function TaskPresenceControl({
+  roster,
+  threadId,
+  isNewThread,
+  onOpenCollaborators,
+}: {
+  roster: ChatCollaborationRosterEntry[];
+  threadId: string;
+  isNewThread: boolean;
+  onOpenCollaborators: () => void;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const displayRoster = roster.slice(0, 5);
+  const extraCount = Math.max(0, roster.length - displayRoster.length);
+  const handleOpenCollaborators = () => {
+    setOpen(false);
+    onOpenCollaborators();
+  };
+  const handleCopyLink = async () => {
+    try {
+      await copyTextToClipboard(taskCollaborationLink(threadId, isNewThread));
+      toast.success(t.collab.linkCopied);
+    } catch {
+      toast.error(t.collab.copyFailed);
+    }
+  };
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-medium text-muted-foreground transition-colors",
+            "hover:border-border/50 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
+          )}
+          title={t.collab.collaborateTitle}
+        >
+          <span className="flex -space-x-1">
+            {displayRoster.map((agent) => (
+              <span
+                key={agent.agent_id}
+                className="grid size-5 place-items-center overflow-hidden rounded-full border border-background bg-muted text-[10px] font-semibold text-muted-foreground"
+                title={agent.display_name}
+              >
+                {agent.avatar_url ? (
+                  <img
+                    src={agent.avatar_url}
+                    alt={agent.display_name}
+                    className="size-full object-cover"
+                  />
+                ) : agent.icon?.trim() ? (
+                  <span className="text-[12px] leading-none">{agent.icon}</span>
+                ) : (
+                  agent.display_name.charAt(0).toUpperCase()
+                )}
+              </span>
+            ))}
+            {extraCount > 0 && (
+              <span className="grid size-5 place-items-center rounded-full border border-background bg-muted text-[9px] font-semibold text-muted-foreground">
+                +{extraCount}
+              </span>
+            )}
+          </span>
+          <span className="hidden min-w-0 truncate sm:inline">
+            {formatCollaboratorCount(
+              Math.max(1, roster.length),
+              t.chatInputBox.collaboratorsCountUnit,
+            )}
+          </span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        side="bottom"
+        sideOffset={8}
+        className="w-[min(20rem,calc(100vw-1rem))] overflow-hidden rounded-md border-border/70 p-0 shadow-sm"
+      >
+        <div className="border-b border-border/45 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[12px] font-medium">
+            <UsersRoundIcon className="size-4 text-primary" />
+            <span>{t.collab.collaborateTitle}</span>
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+            {t.collab.collaborateDesc}
+          </p>
+        </div>
+        <div className="space-y-1 p-2">
+          {roster.map((agent) => (
+            <div
+              key={agent.agent_id}
+              className="flex min-w-0 items-center gap-2 rounded-sm px-2 py-1.5"
+            >
+              <span className="grid size-7 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-[11px] font-semibold text-muted-foreground">
+                {agent.avatar_url ? (
+                  <img
+                    src={agent.avatar_url}
+                    alt={agent.display_name}
+                    className="size-full object-cover"
+                  />
+                ) : agent.icon?.trim() ? (
+                  <span className="text-[15px] leading-none">{agent.icon}</span>
+                ) : (
+                  agent.display_name.charAt(0).toUpperCase()
+                )}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[12px] font-medium">
+                  {agent.display_name}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {agent.role === "tl" ? "主控" : "子电脑"}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-1 border-t border-border/45 p-2">
+          <button
+            type="button"
+            onClick={handleOpenCollaborators}
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <UserPlusIcon className="size-3.5" />
+            {t.collab.inviteCollaborators}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyLink()}
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
+          >
+            <CopyIcon className="size-3.5" />
+            复制链接
+          </button>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -2215,6 +2366,12 @@ function ChatsPageContent({
                     onOpenChange={setCollaboratorPickerOpen}
                     onSelectedAgentIdsChange={setSelectedCollaboratorIds}
                     onTeamModeChange={setTeamModeIntent}
+                  />
+                  <TaskPresenceControl
+                    roster={visibleCollaborationRoster}
+                    threadId={threadId}
+                    isNewThread={isNewThread}
+                    onOpenCollaborators={() => setCollaboratorPickerOpen(true)}
                   />
                   <ChatHeaderRecButton
                     threadId={threadId}

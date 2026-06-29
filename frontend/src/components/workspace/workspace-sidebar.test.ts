@@ -126,6 +126,29 @@ describe("workspace sidebar project grouping", () => {
     ).toBe("个人空间");
   });
 
+  test("folds localized generated team labels into personal space", () => {
+    expect(
+      __testing.projectNameForThread(
+        { mode: "team" },
+        {
+          project: "团队",
+          workspace_path: "",
+        },
+        "个人空间",
+      ),
+    ).toBe("个人空间");
+    expect(
+      __testing.projectNameForThread(
+        { mode: "team" },
+        {
+          project: "团队 · 协作",
+          workspace_path: "",
+        },
+        "个人空间",
+      ),
+    ).toBe("个人空间");
+  });
+
   test("keeps explicit project labels for code threads", () => {
     expect(
       __testing.projectNameForThread(
@@ -164,6 +187,32 @@ describe("workspace sidebar thread status lights", () => {
     });
 
     expect(statusByHref.get(href)).toBe("waiting");
+  });
+
+  test("maps active team task lights onto unified realtime links", () => {
+    const statusByHref = __testing.buildThreadRunStatusByHref({
+      activeTeamTasks: [
+        {
+          id: "task-1",
+          room_id: "room-1",
+          title: "Run SOP",
+          description: "",
+          sop_template: "",
+          status: "running",
+          assignees: [],
+          created_at: "2026-06-29T00:00:00Z",
+          updated_at: "2026-06-29T00:00:00Z",
+          produced_artifacts: [],
+          metadata: {},
+        },
+      ],
+      backgroundTasks: undefined,
+      liveThreadRunStatusByHref: new Map(),
+      threadHrefById: new Map(),
+    });
+
+    expect(statusByHref.get("/workspace/realtime/room-1")).toBe("running");
+    expect(statusByHref.has("/workspace/team/room-1")).toBe(false);
   });
 
   test("merges live workbench status over active background task status", () => {

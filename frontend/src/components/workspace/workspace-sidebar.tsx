@@ -197,6 +197,16 @@ function isConversationThreadMode(mode: string): boolean {
   );
 }
 
+function isGeneratedTeamProjectName(project: string): boolean {
+  const value = project.trim();
+  return (
+    value === "Team" ||
+    value.startsWith("Team · ") ||
+    value === "团队" ||
+    value.startsWith("团队 · ")
+  );
+}
+
 function buildThreadRunStatusByHref({
   activeTeamTasks,
   backgroundTasks,
@@ -214,7 +224,7 @@ function buildThreadRunStatusByHref({
     if (!activeStatuses.has(task.status)) continue;
     const status = teamTaskRunStatus(task.status);
     if (!status) continue;
-    const href = `/workspace/team/${encodeURIComponent(task.room_id)}`;
+    const href = `/workspace/realtime/${encodeURIComponent(task.room_id)}`;
     byHref.set(href, mergeThreadRunStatus(byHref.get(href), status));
   }
 
@@ -294,10 +304,8 @@ function projectNameForThread(
   const workspaceProject = workspacePath ? basename(workspacePath) : "";
 
   if (thread.mode === "team") {
-    const generatedTeamProject =
-      explicitProject === "Team" || explicitProject.startsWith("Team · ");
     if (workspaceProject) return workspaceProject;
-    return generatedTeamProject
+    return isGeneratedTeamProjectName(explicitProject)
       ? personalSpaceLabel
       : explicitProject || personalSpaceLabel;
   }
@@ -556,6 +564,17 @@ function readProjectGroupingEnabled(): boolean {
   } catch (e) {
     swallow(e);
     return true;
+  }
+}
+
+function activeTaskRoomIdFromPathname(pathname: string): string | null {
+  const match = /^\/workspace\/(?:realtime|team)\/([^/?#]+)/.exec(pathname);
+  const value = match?.[1];
+  if (!value || value === "new") return null;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
 }
 
@@ -845,10 +864,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // Group code/team threads by project. Team history defaults to its bound
   // workspace folder, so multi-agent work sits with the project instead of
   // falling back to loose chat recents.
-  const activeTeamThreadId = pathname.startsWith("/workspace/team/")
-    ? (pathname.split("/").filter(Boolean)[2] ?? null)
-    : null;
-  const activeTeamTasksQuery = useTeamTasks(activeTeamThreadId ?? null);
+  const activeTaskRoomId = activeTaskRoomIdFromPathname(pathname);
+  const activeTeamTasksQuery = useTeamTasks(activeTaskRoomId);
   const activeTeamTasks = useMemo(
     () => activeTeamTasksQuery.data ?? [],
     [activeTeamTasksQuery.data],
@@ -1315,8 +1332,6 @@ function isBrowserSurfaceRoute(pathname: string) {
 function isCompanySurfaceRoute(pathname: string) {
   if (isAgentChatRoute(pathname)) return false;
   return (
-    pathname === "/workspace/team" ||
-    pathname.startsWith("/workspace/team/") ||
     pathname === "/workspace/agents" ||
     pathname.startsWith("/workspace/agents/") ||
     pathname === "/workspace/intelligence" ||
