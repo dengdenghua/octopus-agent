@@ -1012,6 +1012,12 @@ export interface Translations {
     webuiAssets: string;
     webuiEnvInvalid: string;
     webuiDevFallback: string;
+    modelCompat: string;
+    compatProfiles: string;
+    domesticProfiles: string;
+    requiredProfilesPresent: string;
+    missingProfiles: string;
+    profileIds: string;
     apiSurface: string;
     routeCount: string;
     requiredRoutesPresent: string;

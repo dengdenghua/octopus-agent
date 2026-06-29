@@ -128,6 +128,14 @@ class TestBasicRoutes:
         assert data["loopback_aliases"]["same_loopback_family"] is True
         assert "http://localhost:8000" in data["loopback_aliases"]["aliases"]
         assert "http://127.0.0.1:8000" in data["loopback_aliases"]["aliases"]
+        assert data["model_compat"]["schema"] == "octopus.openai_compat_profile_self_check.v1"
+        assert data["model_compat"]["required_profiles_present"] is True
+        assert data["model_compat"]["missing_required_profile_ids"] == []
+        assert data["model_compat"]["domestic_profile_count"] >= 13
+        assert "kimi_coding" in data["model_compat"]["profile_ids"]
+        assert "deepseek" in data["model_compat"]["profile_ids"]
+        assert "qwen" in data["model_compat"]["profile_ids"]
+        assert _check_by_id(data, "openai_compat_profiles")["passed"] is True
         assert _check_by_id(data, "frontend_origin")["passed"] is True
         assert _check_by_id(data, "vite_proxy_target")["passed"] is True
 

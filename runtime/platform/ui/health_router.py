@@ -183,6 +183,7 @@ def build_runtime_self_check(
     process = _process_info()
     api_surface = _api_surface_info(request)
     webui = _webui_static_info(root)
+    model_compat = _model_compat_info()
     checks = [
         {
             "id": "runtime_version",
@@ -256,6 +257,15 @@ def build_runtime_self_check(
             ),
             "detail": webui["detail"],
         },
+        {
+            "id": "openai_compat_profiles",
+            "severity": "error",
+            "passed": bool(model_compat["required_profiles_present"]),
+            "detail": (
+                f"profiles={model_compat['profile_count']} "
+                f"missing={','.join(model_compat['missing_required_profile_ids']) or 'none'}"
+            ),
+        },
     ]
     ready = all(
         bool(row["passed"]) or row.get("severity") == "warn" for row in checks
@@ -286,6 +296,7 @@ def build_runtime_self_check(
         },
         "frontend": frontend,
         "webui": webui,
+        "model_compat": model_compat,
         "api_surface": api_surface,
         "loopback_aliases": aliases,
         "paths": {
@@ -442,6 +453,74 @@ def _webui_dist_candidates(root: Path, env_path: str) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def _model_compat_info() -> dict[str, Any]:
+    required_profile_ids = [
+        "kimi_coding",
+        "kimi",
+        "deepseek",
+        "qwen",
+        "glm",
+        "doubao",
+        "minimax",
+        "hunyuan",
+        "baichuan",
+        "yi",
+        "stepfun",
+        "siliconflow",
+        "qianfan",
+    ]
+    try:
+        from runtime.sensing.model_router.openai_compat_providers import (
+            describe_openai_compat_profile,
+            known_openai_compat_profiles,
+        )
+
+        profiles = list(known_openai_compat_profiles())
+        summaries = [describe_openai_compat_profile(profile) for profile in profiles]
+        profile_ids = [str(summary.get("id") or "") for summary in summaries]
+        by_id = {str(summary.get("id") or ""): summary for summary in summaries}
+        missing = [profile_id for profile_id in required_profile_ids if profile_id not in by_id]
+        return {
+            "schema": "octopus.openai_compat_profile_self_check.v1",
+            "available": True,
+            "profile_count": len(profiles),
+            "profile_ids": profile_ids,
+            "required_profile_ids": required_profile_ids,
+            "missing_required_profile_ids": missing,
+            "required_profiles_present": not missing,
+            "domestic_profile_count": len(required_profile_ids) - len(missing),
+            "domestic_profiles": [
+                {
+                    "id": profile_id,
+                    "display_name": str(
+                        by_id.get(profile_id, {}).get("display_name") or profile_id
+                    ),
+                    "compat_score": by_id.get(profile_id, {}).get("compat_score"),
+                    "normalization_hints": by_id.get(profile_id, {}).get(
+                        "normalization_hints",
+                        [],
+                    ),
+                }
+                for profile_id in required_profile_ids
+                if profile_id in by_id
+            ],
+            "error": "",
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "schema": "octopus.openai_compat_profile_self_check.v1",
+            "available": False,
+            "profile_count": 0,
+            "profile_ids": [],
+            "required_profile_ids": required_profile_ids,
+            "missing_required_profile_ids": required_profile_ids,
+            "required_profiles_present": False,
+            "domestic_profile_count": 0,
+            "domestic_profiles": [],
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 def _journal_source_usable(state: Any) -> bool:

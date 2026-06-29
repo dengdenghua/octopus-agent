@@ -67,6 +67,15 @@ interface RuntimeSelfCheckPayload {
     dev_fallback_expected?: boolean;
     detail?: string;
   };
+  model_compat?: {
+    available?: boolean;
+    profile_count?: number;
+    domestic_profile_count?: number;
+    profile_ids?: string[];
+    required_profile_ids?: string[];
+    missing_required_profile_ids?: string[];
+    required_profiles_present?: boolean;
+  };
   api_surface?: {
     route_count?: number;
     required_routes_present?: boolean;
@@ -150,6 +159,7 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
   const backend = data?.backend ?? {};
   const frontend = data?.frontend ?? {};
   const webui = data?.webui ?? {};
+  const modelCompat = data?.model_compat ?? {};
   const apiSurface = data?.api_surface ?? {};
   const loopbackAliases = data?.loopback_aliases?.aliases ?? [];
   const checks = data?.checks ?? [];
@@ -322,6 +332,31 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
                 <InfoRow
                   label={t.runtimeSelfCheckPanel.webuiDevFallback}
                   value={webui.dev_fallback_expected}
+                />
+              </InfoBlock>
+
+              <InfoBlock title={t.runtimeSelfCheckPanel.modelCompat}>
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.compatProfiles}
+                  value={modelCompat.profile_count}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.domesticProfiles}
+                  value={modelCompat.domestic_profile_count}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.requiredProfilesPresent}
+                  value={modelCompat.required_profiles_present}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.missingProfiles}
+                  value={modelCompat.missing_required_profile_ids?.join(", ")}
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.profileIds}
+                  value={modelCompat.profile_ids?.join(", ")}
+                  mono
                 />
               </InfoBlock>
 

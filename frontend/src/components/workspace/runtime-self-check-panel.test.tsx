@@ -61,6 +61,15 @@ const SAMPLE = {
     detail:
       "configured OCTOPUS_WEBUI_DIST is invalid: /missing/dist; fallback=/repo/frontend/dist",
   },
+  model_compat: {
+    available: true,
+    profile_count: 13,
+    domestic_profile_count: 13,
+    profile_ids: ["kimi_coding", "deepseek", "qwen", "glm", "doubao"],
+    required_profile_ids: ["kimi_coding", "deepseek", "qwen", "glm", "doubao"],
+    missing_required_profile_ids: [],
+    required_profiles_present: true,
+  },
   api_surface: {
     route_count: 180,
     required_routes_present: true,
@@ -95,6 +104,12 @@ const SAMPLE = {
       severity: "warn",
       detail:
         "configured OCTOPUS_WEBUI_DIST is invalid: /missing/dist; fallback=/repo/frontend/dist",
+    },
+    {
+      id: "openai_compat_profiles",
+      passed: true,
+      severity: "error",
+      detail: "profiles=13 missing=none",
     },
   ],
   next_actions: ["frontend=0.1.0 runtime=0.2.0"],
@@ -155,10 +170,16 @@ describe("RuntimeSelfCheckPanel", () => {
     expect(screen.getAllByText("/repo/frontend/dist").length).toBeGreaterThan(
       0,
     );
+    expect(screen.getByText("Model compatibility")).toBeInTheDocument();
+    expect(screen.getByText("Domestic profiles")).toBeInTheDocument();
+    expect(
+      screen.getByText("kimi_coding, deepseek, qwen, glm, doubao"),
+    ).toBeInTheDocument();
     expect(screen.getByText("API surface")).toBeInTheDocument();
     expect(screen.getByText("180")).toBeInTheDocument();
     expect(screen.getByText("frontend_version")).toBeInTheDocument();
     expect(screen.getByText("webui_dist")).toBeInTheDocument();
+    expect(screen.getByText("openai_compat_profiles")).toBeInTheDocument();
     expect(screen.getByText("warn")).toBeInTheDocument();
     expect(screen.getByText("Warnings")).toBeInTheDocument();
     expect(screen.getAllByText("frontend=0.1.0 runtime=0.2.0").length).toBe(2);
