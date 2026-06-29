@@ -121,6 +121,10 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
     const base = normalizeBaseUrl(baseUrl ?? getBackendBaseURL());
     return `${base}/api/runtime/self-check`;
   }, [baseUrl]);
+  const clientBackendBaseUrl = useMemo(
+    () => normalizeBaseUrl(baseUrl ?? getBackendBaseURL()),
+    [baseUrl],
+  );
 
   const load = useCallback(
     async ({ refresh = false }: { refresh?: boolean } = {}) => {
@@ -285,6 +289,19 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
               </InfoBlock>
 
               <InfoBlock title={t.runtimeSelfCheckPanel.frontend}>
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.clientBackendBaseUrl}
+                  value={
+                    clientBackendBaseUrl ||
+                    t.runtimeSelfCheckPanel.sameOriginBackend
+                  }
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.selfCheckEndpoint}
+                  value={endpoint}
+                  mono
+                />
                 <InfoRow
                   label={t.runtimeSelfCheckPanel.observedOrigin}
                   value={frontend.observed_origin}

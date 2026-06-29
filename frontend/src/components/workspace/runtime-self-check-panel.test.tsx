@@ -158,6 +158,11 @@ describe("RuntimeSelfCheckPanel", () => {
       0,
     );
     expect(screen.getByText("Frontend")).toBeInTheDocument();
+    expect(screen.getByText("Client backend base URL")).toBeInTheDocument();
+    expect(
+      screen.getByText("http://127.0.0.1:8000/api/runtime/self-check"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Self-check endpoint")).toBeInTheDocument();
     expect(screen.getByText("Observed origin")).toBeInTheDocument();
     expect(screen.getAllByText("http://localhost:3000").length).toBeGreaterThan(
       0,
@@ -206,6 +211,19 @@ describe("RuntimeSelfCheckPanel", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(screen.getAllByText("degraded").length).toBeGreaterThan(0);
     });
+  });
+
+  it("labels same-origin dev proxy backend resolution", async () => {
+    mockOnce({ ...SAMPLE, ready: true, status: "ok", next_actions: [] });
+    renderWithProviders(<RuntimeSelfCheckPanel />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Runtime Self-Check")).toBeInTheDocument();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/runtime/self-check");
+    expect(screen.getByText("same-origin / Vite proxy")).toBeInTheDocument();
+    expect(screen.getByText("/api/runtime/self-check")).toBeInTheDocument();
   });
 
   it("shows fetch failures", async () => {

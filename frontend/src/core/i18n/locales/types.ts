@@ -1001,6 +1001,9 @@ export interface Translations {
     cwd: string;
     argv: string;
     frontend: string;
+    clientBackendBaseUrl: string;
+    sameOriginBackend: string;
+    selfCheckEndpoint: string;
     observedOrigin: string;
     canonicalOrigin: string;
     proxyTarget: string;
