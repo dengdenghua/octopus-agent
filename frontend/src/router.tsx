@@ -36,7 +36,7 @@ function LegacyCodeRedirect() {
 function LegacyTeamRedirect() {
   const { threadId } = useParams<{ threadId?: string }>();
   const { search } = useLocation();
-  return <HashRedirect to={legacyTeamWorkspaceTarget(threadId, search)} />;
+  return <Navigate to={legacyTeamWorkspaceTarget(threadId, search)} replace />;
 }
 
 function LegacyAgentChatRedirect() {

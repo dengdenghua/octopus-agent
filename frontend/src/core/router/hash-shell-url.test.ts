@@ -94,6 +94,34 @@ describe("hash router shell URL normalization", () => {
     expect(window.location.hash).toBe("#/workspace/realtime/rt-thread");
   });
 
+  test("rewrites retired team entries into realtime tasks", () => {
+    window.history.replaceState(null, "", "/#/workspace/team/team-thread");
+
+    normalizeHashRouterShellUrl();
+
+    expect(window.location.hash).toBe("#/workspace/realtime/team-thread");
+
+    window.history.replaceState(
+      null,
+      "",
+      "/#/workspace/team/team%20thread?surface=chat",
+    );
+
+    normalizeHashRouterShellUrl();
+
+    expect(window.location.hash).toBe(
+      "#/workspace/realtime/team%20thread?surface=chat",
+    );
+  });
+
+  test("keeps team invite links on the join route", () => {
+    window.history.replaceState(null, "", "/#/workspace/team/join?token=abc");
+
+    normalizeHashRouterShellUrl();
+
+    expect(window.location.hash).toBe("#/workspace/team/join?token=abc");
+  });
+
   test("patches history writes so pathname routes become hash routes", () => {
     installHashRouterShellUrlNormalizer();
     window.history.replaceState(null, "", "/");

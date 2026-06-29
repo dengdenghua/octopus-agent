@@ -207,6 +207,22 @@ function isGeneratedTeamProjectName(project: string): boolean {
   );
 }
 
+function threadMetadataMode(thread: {
+  metadata?: Record<string, unknown>;
+}): string {
+  const mode = thread.metadata?.["mode"];
+  return typeof mode === "string" ? mode : "";
+}
+
+function isGeneratedTeamThreadTitle(
+  thread: { metadata?: Record<string, unknown> },
+  title: string,
+): boolean {
+  return (
+    threadMetadataMode(thread) === "team" && isGeneratedTeamProjectName(title)
+  );
+}
+
 function buildThreadRunStatusByHref({
   activeTeamTasks,
   backgroundTasks,
@@ -458,7 +474,9 @@ function deriveThreadTitle(thread: {
   values?: Record<string, unknown>;
 }): string {
   const metaTitle = cleanDisplayText(thread.metadata?.["title"]);
-  if (metaTitle) return truncateThreadTitle(metaTitle);
+  if (metaTitle && !isGeneratedTeamThreadTitle(thread, metaTitle)) {
+    return truncateThreadTitle(metaTitle);
+  }
 
   const messages = thread.values?.["messages"];
   if (Array.isArray(messages)) {
@@ -475,8 +493,16 @@ function deriveThreadTitle(thread: {
     }
   }
   const valuesTitle = cleanDisplayText(thread.values?.["title"]);
-  if (valuesTitle && valuesTitle !== "New chat" && valuesTitle !== "New task") {
+  if (
+    valuesTitle &&
+    valuesTitle !== "New chat" &&
+    valuesTitle !== "New task" &&
+    !isGeneratedTeamThreadTitle(thread, valuesTitle)
+  ) {
     return truncateThreadTitle(valuesTitle);
+  }
+  if (threadMetadataMode(thread) === "team") {
+    return `task/${thread.thread_id.slice(0, 6)}`;
   }
   return `thread/${thread.thread_id.slice(0, 6)}`;
 }
@@ -497,7 +523,14 @@ function readUserProjects(): string[] {
     const raw = window.localStorage.getItem(PROJECTS_KEY);
     if (!raw) return [];
     const data = JSON.parse(raw);
-    return Array.isArray(data) ? (data as string[]).filter(Boolean) : [];
+    return Array.isArray(data)
+      ? (data as string[]).filter(
+          (name) =>
+            typeof name === "string" &&
+            !!name.trim() &&
+            !isGeneratedTeamProjectName(name),
+        )
+      : [];
   } catch (e) {
     swallow(e);
     return [];
@@ -506,7 +539,10 @@ function readUserProjects(): string[] {
 
 function writeUserProjects(names: string[]) {
   try {
-    window.localStorage.setItem(PROJECTS_KEY, JSON.stringify(names));
+    window.localStorage.setItem(
+      PROJECTS_KEY,
+      JSON.stringify(names.filter((name) => !isGeneratedTeamProjectName(name))),
+    );
   } catch (e) {
     swallow(e, "storage");
   }
@@ -1693,7 +1729,7 @@ function AvatarCell({
 }
 
 function ProjectGroupIcon({ project }: { project: string }) {
-  const isTeamProject = project === "Team" || project.startsWith("Team · ");
+  const isTeamProject = isGeneratedTeamProjectName(project);
   const isCodeProject = project === "Code";
 
   if (!isTeamProject && !isCodeProject) {

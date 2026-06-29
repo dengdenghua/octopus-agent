@@ -32,7 +32,9 @@ function canonicalWorkspaceHashRoute(route: string): string {
 
   if (
     normalized === "/workspace/code" ||
-    normalized === "/workspace/code/new"
+    normalized === "/workspace/code/new" ||
+    normalized === "/workspace/team" ||
+    normalized === "/workspace/team/new"
   ) {
     return "#/workspace/realtime/new";
   }
@@ -40,6 +42,14 @@ function canonicalWorkspaceHashRoute(route: string): string {
   const legacyCodeThread = normalized.match(/^\/workspace\/code\/([^/?#]+)$/);
   if (legacyCodeThread) {
     return `#/workspace/realtime/${legacyCodeThread[1]}`;
+  }
+
+  const legacyTeamThread = normalized.match(
+    /^\/workspace\/team\/(?!join(?:[/?#]|$))([^?#]+)(\?[^#]*)?$/,
+  );
+  if (legacyTeamThread) {
+    const [, threadId, search = ""] = legacyTeamThread;
+    return `#/workspace/realtime/${threadId}${search}`;
   }
 
   const legacyAgentChat = normalized.match(

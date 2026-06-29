@@ -164,6 +164,41 @@ describe("workspace sidebar project grouping", () => {
     ).toBe("个人空间");
   });
 
+  test("does not render generated team labels as history titles", () => {
+    const [withPrompt, withoutPrompt] = __testing.buildProjectThreadSummaries([
+      {
+        thread_id: "team-prompt",
+        title: "team-prompt",
+        updated_at: "2026-06-29T00:00:00Z",
+        metadata: {
+          mode: "team",
+          title: "团队",
+        },
+        values: {
+          messages: [
+            {
+              type: "human",
+              content: "帮我做一个产品调研",
+            },
+          ],
+        },
+      } as never,
+      {
+        thread_id: "team-empty",
+        title: "team-empty",
+        updated_at: "2026-06-29T00:00:00Z",
+        metadata: {
+          mode: "team",
+          title: "Team · Eve",
+        },
+        values: {},
+      } as never,
+    ]);
+
+    expect(withPrompt?.title).toBe("帮我做一个产品调研");
+    expect(withoutPrompt?.title).toBe("task/team-e");
+  });
+
   test("keeps explicit project labels for code threads", () => {
     expect(
       __testing.projectNameForThread(
