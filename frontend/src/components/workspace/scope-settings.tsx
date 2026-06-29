@@ -11,10 +11,10 @@
  *     team  → + team workspace
  *     code  → + user-authorized `extra_workspaces`
  *
- * Only agents whose profile sets ``capabilities.code_mode_unlock`` can
- * actually use the project-write tier. Everyone else silently degrades to
- * `chat` — their turn can't write anywhere outside their own workspace no
- * matter what this panel contains.
+ * Code mode is available to every agent by default · the per-agent
+ * ``code_mode_unlock`` gate was removed. Tool/permission scoping lives in
+ * the skills & permissions system. Write reach is still bounded to the
+ * agent's own workspace plus the ``extra_workspaces`` authorized here.
  *
  * The panel is purely UI for the third tier: it reads and writes
  * `thread.metadata.extra_workspaces` through the existing
@@ -46,16 +46,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { apiClient } from "@/core/api/api-client";
-import { useActiveAgentId } from "@/core/agents/active";
-import { useAgents } from "@/core/agents/hooks";
 import { cn } from "@/lib/utils";
 
 interface ScopeSettingsProps {
   threadId: string;
-  /** Whether the current agent even has the code_mode_unlock
-   *  capability. When false, we render a read-only notice — editing
-   *  the list wouldn't change backend behavior since the resolver
-   *  would downgrade to `chat` tier anyway. */
+  /** Whether code mode is available. Always true now (the per-agent
+   *  unlock gate was removed); kept as a prop so the panel can still
+   *  render a read-only notice if a future gate disables it. */
   codeModeEnabled: boolean;
 }
 
@@ -221,10 +218,10 @@ export function ScopeSettings({
 }
 
 /**
- * Drop-in button + dialog for the code page header. Auto-detects the
- * active agent's code-mode capability so the caller doesn't have to
- * plumb it. Renders nothing on SSR / before agent list loads — we
- * don't want a flash of the "disabled" state on mount.
+ * Drop-in button + dialog for the code page header. Code mode is
+ * available to every agent now; this wrapper keeps the former prop
+ * boundary in one place in case a future deployment introduces another
+ * gate.
  */
 export function ScopeSettingsButton({
   threadId,
@@ -234,17 +231,10 @@ export function ScopeSettingsButton({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const { agents } = useAgents();
-  const activeId = useActiveAgentId();
   const { t } = useI18n();
-  const active = agents.find((a) => a.name === activeId);
-  // Capability type isn't on the bare `Agent` wire · backend sends it
-  // nested under a `capabilities` dict. Tolerant cast: if we can't see
-  // it, treat as "don't know" → disabled (safe default).
-  const caps = (
-    active as { capabilities?: Record<string, unknown> } | undefined
-  )?.capabilities;
-  const codeModeEnabled = Boolean(caps?.code_mode_unlock);
+  // Code mode is available to every agent by default · tool/permission
+  // scoping is configured in the skills & permissions system.
+  const codeModeEnabled = true;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

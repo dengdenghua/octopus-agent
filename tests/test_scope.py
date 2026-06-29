@@ -12,8 +12,8 @@ Covered scenarios (mirrored from the design ladder in scope.py docstring):
     1. chat / coder                → own workspace only · /tmp/x rejected
     2. team / coder + team_id       → own + teams/<id>
     3. code / coder + extras        → own + extra_workspaces
-    4. code / non-code-capable agent → silently downgrades to chat;
-                                        extra_workspaces ignored
+    4. code / any agent             → code scope; user-granted
+                                      extra_workspaces honored
     5. executor integration         → out-of-scope path → PermissionError
                                         + no Session → enforcement skipped
 
@@ -94,7 +94,6 @@ class TestChatTier:
 
         sess = mk_session(
             agent_id="coder",
-            caps={"code_mode_unlock": True},  # unlock irrelevant at chat tier
             mode="chat",
         )
         scope = resolve_write_scope(sess)
@@ -130,7 +129,6 @@ class TestChatTier:
 
         sess = mk_session(
             mode="chat",
-            caps={"code_mode_unlock": True},
             extra_workspaces=["/opt/project"],
         )
         scope = resolve_write_scope(sess)
@@ -195,7 +193,6 @@ class TestCodeTier:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             extra_workspaces=[str(extra)],
         )
         scope = resolve_write_scope(sess)
@@ -214,7 +211,6 @@ class TestCodeTier:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             extra_workspaces=["relative/path", "", "./x"],
         )
         scope = resolve_write_scope(sess)
@@ -225,16 +221,20 @@ class TestCodeTier:
 
 
 # ═══════════════════════════════════════════════════════════
-# 4. code tier downgrade — non-unlocked agent
+# 4. code tier — available to all agents
 # ═══════════════════════════════════════════════════════════
 
 
-class TestCodeCapabilityGate:
-    def test_non_unlocked_agent_downgrades(self, mk_session, tmp_path: Path):
-        """Any agent without ``capabilities.code_mode_unlock`` requesting
-        code tier lands in chat scope. This is the newly-registered-
-        agent safety net — a future persona added tomorrow gets the
-        safe default even if the request body says ``mode=code``."""
+class TestCodeModeAvailableToAll:
+    """Code mode is available to every agent by default · the per-agent
+    ``code_mode_unlock`` capability gate was removed. Tool/permission
+    scoping now lives in the skills & permissions system, not a global
+    flag. Write reach is still bounded by the workspace roots."""
+
+    def test_any_agent_gets_code_scope(self, mk_session, tmp_path: Path):
+        """An agent with no capabilities requesting code tier now lands
+        in code scope, and its user-granted extra workspaces are honored
+        — no ``code_mode_unlock`` flag required."""
         from runtime.platform.process.scope import resolve_write_scope
 
         extra = tmp_path / "secret-project"
@@ -242,24 +242,23 @@ class TestCodeCapabilityGate:
 
         sess = mk_session(
             agent_id="vibe_selling",
-            caps={},  # NO code_mode_unlock
+            caps={},  # no code_mode_unlock needed anymore
             mode="code",
             extra_workspaces=[str(extra)],
         )
         scope = resolve_write_scope(sess)
 
-        assert scope.mode == "chat"
-        assert scope.requested_mode == "code"  # we remember what was asked
-        # Authorized extra is NOT honored
-        assert not scope.allows(extra / "file.py")
+        assert scope.mode == "code"
+        assert scope.requested_mode == "code"
+        # Authorized extra IS honored now
+        assert scope.allows(extra / "file.py")
 
-    def test_missing_capabilities_attr_defaults_to_locked(
+    def test_legacy_agent_without_caps_gets_code_scope(
         self, mk_session, tmp_path: Path,
     ):
-        """Legacy Agent objects (e.g. built via ``presets`` in a test
-        that predates the capabilities field) must also default-lock.
-        The resolver uses ``getattr(agent, 'capabilities', {})`` for
-        exactly this fallback."""
+        """Legacy Agent objects with no ``capabilities`` attribute at all
+        also reach code scope · the resolver only requires a session, not
+        a capability flag."""
         from runtime.platform.process.scope import resolve_write_scope
         from runtime.platform.process.session import Session
 
@@ -278,8 +277,8 @@ class TestCodeCapabilityGate:
         )
         scope = resolve_write_scope(sess)
 
-        assert scope.mode == "chat"
-        assert not scope.allows(extra / "a.py")
+        assert scope.mode == "code"
+        assert scope.allows(extra / "a.py")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -458,7 +457,6 @@ class TestExecutorEnforcement:
         wp.mkdir()
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             thread_id="t-code-sandbox",
         )
         sess.metadata["workspace_path"] = str(wp)
@@ -492,7 +490,6 @@ class TestExecutorEnforcement:
         wp.mkdir()
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             thread_id="t-code-sandbox-deny",
         )
         sess.metadata["workspace_path"] = str(wp)
@@ -533,7 +530,6 @@ class TestSandboxMode:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             extra_workspaces=[str(wp)],
             thread_id="t-sandbox",
         )
@@ -558,7 +554,6 @@ class TestSandboxMode:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             thread_id="t-full",
         )
         sess.metadata["workspace_path"] = str(wp)
@@ -578,7 +573,6 @@ class TestSandboxMode:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
         )
         sess.metadata["workspace_path"] = str(wp)
         scope = resolve_write_scope(sess)
@@ -595,7 +589,6 @@ class TestSandboxMode:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
         )
         sess.metadata["workspace_path"] = str(wp)
         sess.metadata["sandbox_mode"] = "bogus"
@@ -616,7 +609,6 @@ class TestExecutionScope:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             extra_workspaces=[str(wp)],
             thread_id="t-exec-sandbox",
         )
@@ -643,7 +635,6 @@ class TestExecutionScope:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             thread_id="t-exec-full",
         )
         sess.metadata["workspace_path"] = str(wp)
@@ -677,7 +668,6 @@ class TestExecutionScope:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
         )
         sess.metadata["workspace_path"] = str(wp)
         sess.metadata["permission_mode"] = "bypassPermissions"
@@ -736,7 +726,6 @@ class TestExtraWorkspacesValidation:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             extra_workspaces=[str(nonexistent)],
         )
         scope = resolve_write_scope(sess)
@@ -753,7 +742,6 @@ class TestExtraWorkspacesValidation:
 
         sess = mk_session(
             mode="code",
-            caps={"code_mode_unlock": True},
             extra_workspaces=[str(parent), str(child)],
         )
         scope = resolve_write_scope(sess)

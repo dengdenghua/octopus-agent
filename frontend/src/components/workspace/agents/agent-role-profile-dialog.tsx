@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
@@ -33,7 +27,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useAgent,
@@ -71,7 +64,6 @@ type EditableAgentConfig = {
   arms: string[];
   extraAffinity: string;
   privateSkills: string;
-  codeModeUnlock: boolean;
 };
 
 function makeCodeName(agent: AgentWorldAgent): string {
@@ -1077,7 +1069,6 @@ export function AgentRoleProfileDialog({
     arms: [],
     extraAffinity: "",
     privateSkills: "",
-    codeModeUnlock: false,
   });
 
   const localAgentName = open && agent?.is_installed ? agent.name : null;
@@ -1112,7 +1103,6 @@ export function AgentRoleProfileDialog({
     if (!agent) return null;
     const fallbackPrivateSkills =
       agent.private_skills ?? agent.key_skills ?? [];
-    const capabilities = fullAgent?.capabilities ?? agent.capabilities ?? {};
     return {
       description: fullAgent?.description ?? agent.description ?? "",
       model: fullAgent?.model ?? agent.model ?? "",
@@ -1126,7 +1116,6 @@ export function AgentRoleProfileDialog({
           ? registry.private_skills
           : fallbackPrivateSkills,
       ),
-      codeModeUnlock: capabilities.code_mode_unlock === true,
     };
   }, [agent, fullAgent, registry]);
 
@@ -1144,8 +1133,7 @@ export function AgentRoleProfileDialog({
     !!serverState &&
     (form.description !== serverState.description ||
       form.model !== serverState.model ||
-      form.soul !== serverState.soul ||
-      form.codeModeUnlock !== serverState.codeModeUnlock);
+      form.soul !== serverState.soul);
   const registryDirty =
     !!serverState &&
     (!sameList(form.arms, serverState.arms) ||
@@ -1171,8 +1159,7 @@ export function AgentRoleProfileDialog({
         return true;
       }
       return permission.skill_names.some(
-        (skill) =>
-          selectedArmSkillSet.has(skill) || desiredSkillSet.has(skill),
+        (skill) => selectedArmSkillSet.has(skill) || desiredSkillSet.has(skill),
       );
     }).length ?? 0;
   const permissionTotalCount = permissionsQuery.data?.length ?? 0;
@@ -1264,10 +1251,6 @@ export function AgentRoleProfileDialog({
             description: form.description,
             model: form.model.trim() || null,
             soul: form.soul,
-            capabilities: {
-              ...(fullAgent?.capabilities ?? agent.capabilities ?? {}),
-              code_mode_unlock: form.codeModeUnlock,
-            },
           },
         });
       }
@@ -1583,46 +1566,6 @@ export function AgentRoleProfileDialog({
                     </div>
                     {configExpanded ? (
                       <div className="mt-2 space-y-2 border-t border-white/8 pt-2">
-                        <div className="rounded-sm border border-white/8 bg-black/18 p-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 text-[11px] font-medium text-white/88">
-                                <CircuitBoard className="size-3.5 text-primary/85" />
-                                {t.agentRoleProfile.codeMode}
-                              </div>
-                              <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-white/42">
-                                {t.agentRoleProfile.codeModeDescription}
-                              </p>
-                            </div>
-                            <Switch
-                              aria-label={t.agentRoleProfile.toggleCodeMode}
-                              checked={form.codeModeUnlock}
-                              className="mt-0.5"
-                              disabled={isLoading || isSaving}
-                              onCheckedChange={(checked) =>
-                                setField("codeModeUnlock", checked)
-                              }
-                            />
-                          </div>
-                          {form.codeModeUnlock !==
-                          serverState?.codeModeUnlock ? (
-                            <Button
-                              className="mt-2 h-7 w-full rounded-sm border-white/10 bg-white/[0.04] text-[11px] text-white/78 hover:bg-white/[0.08] hover:text-white"
-                              disabled={isLoading || isSaving}
-                              size="sm"
-                              type="button"
-                              variant="outline"
-                              onClick={() => void handleSave()}
-                            >
-                              {isSaving ? (
-                                <Loader2 className="mr-1.5 size-3 animate-spin" />
-                              ) : (
-                                <Save className="mr-1.5 size-3" />
-                              )}
-                              {t.agentRoleProfile.saveCodeMode}
-                            </Button>
-                          ) : null}
-                        </div>
                         <div className="grid grid-cols-2 gap-1.5">
                           {configActions.map((action) => {
                             const Icon = action.icon;

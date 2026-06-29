@@ -750,9 +750,10 @@ function ChatsPageContent({
       : workDir;
   const projectWorkspacePath = effectiveWorkDir.trim();
   const isProjectCodeMode = !!projectWorkspacePath;
-  const codeModeUnlocked = Boolean(
-    displayAgent?.capabilities?.code_mode_unlock,
-  );
+  // Code mode is available to every agent by default · per-agent unlock
+  // flag removed. Tool/permission scoping lives in the skills &
+  // permissions system, not a global gate.
+  const codeModeUnlocked = true;
   // Local CLI partner (Codex / Claude Code): driven by spawning its own CLI, so
   // its model comes from the CLI's config, not the Octopus model picker.
   const partnerCaps = activeAgent?.capabilities as

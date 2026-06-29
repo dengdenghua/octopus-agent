@@ -58,11 +58,11 @@ class AgentWire(BaseModel):
     model: str | None = None
     tool_groups: list[str] | None = None
     soul: str | None = None
-    # Capability flags for feature-gating on the client — e.g. the
-    # code-page scope-settings dialog reads ``code_mode_unlock`` to
-    # decide whether to let the user authorize extra_workspaces.
-    # Kept as a free-form dict so adding a new capability server-side
-    # doesn't require a typed wire migration.
+    # Capability flags for feature-gating on the client. Kept as a
+    # free-form dict so adding a new capability server-side doesn't
+    # require a typed wire migration. (The former ``code_mode_unlock``
+    # flag was removed — code mode is available to every agent by
+    # default.)
     capabilities: dict[str, Any] = Field(default_factory=dict)
 
 

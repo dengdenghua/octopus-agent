@@ -42,13 +42,11 @@ class Agent:
         self.extra_affinity: list[str] = list(extra_affinity or [])
         self.groups: list[str] = list(groups or [])
         self.extra_skills: list[str] = list(extra_skills or [])
-        # Capability flags · read by scope resolver / feature gates.
-        # Currently recognized:
-        #   ``code_mode_unlock`` — when True, `/workspace/code` mode
-        #   can extend the write scope with user-authorized
-        #   ``extra_workspaces`` · default False so any newly-
-        #   registered agent gets the safe chat/team tier only until
-        #   someone explicitly opts them in.
+        # Capability flags · read by feature gates. Free-form so adding
+        # one server-side needs no typed migration. (The former
+        # ``code_mode_unlock`` flag was removed — code mode is available
+        # to every agent by default; tool/permission scoping lives in the
+        # skills & permissions system.)
         self.capabilities: dict[str, Any] = dict(capabilities or {})
         self.budget: dict[str, Any] = dict(budget or {})
 

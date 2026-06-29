@@ -17,12 +17,12 @@ This module makes scope **Session-derived** and **mode-gated**:
     │ code   │ chat scope  +  extra_workspaces (user-granted)   │
     └────────┴──────────────────────────────────────────────────┘
 
-**Code-mode is a capability flag on the agent.** By default, only agents
-whose profile declares ``capabilities.code_mode_unlock = true`` can
-actually use the `code` tier. Everyone else degrades gracefully to
-`chat` scope even if the request says ``mode=code`` — so a future agent
-registered tomorrow gets the sane default (own workspace only) without
-anyone having to remember to gate it.
+**Code-mode is available to every agent by default.** The old per-agent
+``capabilities.code_mode_unlock`` gate was removed — any agent can use the
+`code` tier. Fine-grained tool/permission scoping lives in the skills &
+permissions system, not a global flag. Write reach is still bounded: the
+`code` tier only *adds* user-granted ``extra_workspaces`` on top of the
+agent's own workspace.
 
 This module is the **single source of truth**. Skills that enforce
 path boundaries (`write_skills._ensure_sandbox`, the executor's
@@ -119,9 +119,9 @@ class WriteScope:
     Fields
     ------
     mode :
-        The effective mode after code-mode capability gating. A turn
-        that asked for ``code`` but whose agent lacks the capability
-        will land here as ``chat``.
+        The effective mode after resolver constraints. Code mode is
+        available to every agent; ``team`` can still degrade to
+        ``chat`` when no ``team_id`` is present.
     roots :
         Allowed write-paths, ordered from "most specific / primary" to
         "most permissive / extra". `roots[0]` is the default sandbox —
@@ -129,9 +129,8 @@ class WriteScope:
         default to this. Every write target must be equal to or
         contained under one of these.
     requested_mode :
-        What the caller asked for before gating. Surfaced so we can
-        log "user asked for code mode but agent X doesn't have it" once
-        the LLM tries a write outside `chat` scope.
+        What the caller asked for before resolver constraints. Surfaced
+        so diagnostics can explain why the effective mode differs.
     """
     mode: str
     roots: tuple[Path, ...]
@@ -297,11 +296,12 @@ def agent_has_capability(agent: Any, name: str) -> bool:
 
 
 def _agent_has_code_mode(session: Session | None) -> bool:
-    """Back-compat wrapper · remove when no callers left. Use
-    ``agent_has_capability(agent, "code_mode_unlock")`` directly."""
-    if session is None:
-        return False
-    return agent_has_capability(session.agent, "code_mode_unlock")
+    """Code mode is available to every agent by default · the per-agent
+    ``code_mode_unlock`` capability flag was removed. Tool/permission
+    scoping now lives entirely in the skills & permissions system, not a
+    global gate. Still requires a session — ``extra_workspaces`` and
+    ``workspace_path`` live in its metadata."""
+    return session is not None
 
 
 def _extra_workspaces_from_metadata(
@@ -368,8 +368,9 @@ def resolve_write_scope(session: Session | None) -> WriteScope:
       unset (e.g. a legacy path without a persona), we fall back to
       ``<data>/workspace/tmp`` so writes still have somewhere to land
       without being free-form.
-    * Mode ``code`` is downgraded to ``chat`` unless the agent's
-      profile sets ``capabilities.code_mode_unlock = true``.
+    * Mode ``code`` is available to every agent (the per-agent
+      ``code_mode_unlock`` gate was removed) · it adds user-granted
+      ``extra_workspaces`` on top of the agent's own workspace.
     * Mode ``team`` requires ``session.metadata['team_id']`` — without
       it we stay in ``chat`` scope (can't grant team access if we
       don't know which team).
