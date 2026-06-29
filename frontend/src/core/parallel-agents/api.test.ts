@@ -1,16 +1,22 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("@/core/config", () => ({
   getBackendBaseURL: () => "http://127.0.0.1:8000",
 }));
 
+const authState = vi.hoisted(() => ({ token: null as string | null }));
 vi.mock("@/core/auth/api", () => ({
-  getToken: () => null,
+  getToken: () => authState.token,
 }));
 
-import { streamBatch, toBackendURL } from "./api";
+import { fetchBatchRecoverySnapshot, streamBatch, toBackendURL } from "./api";
 
 describe("parallel agents backend URLs", () => {
+  afterEach(() => {
+    authState.token = null;
+    vi.unstubAllGlobals();
+  });
+
   test("prefixes relative API paths once", () => {
     expect(toBackendURL("/api/agents/parallel/status")).toBe(
       "http://127.0.0.1:8000/api/agents/parallel/status",
@@ -21,6 +27,69 @@ describe("parallel agents backend URLs", () => {
     expect(
       toBackendURL("http://127.0.0.1:8000/api/agents/parallel/stream/b1"),
     ).toBe("http://127.0.0.1:8000/api/agents/parallel/stream/b1");
+  });
+
+  test("fetches recovery snapshot with auth headers", async () => {
+    authState.token = "sk-test";
+    const calls: Array<{ init?: RequestInit; url: string }> = [];
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            schema: "octopus.parallel_batch_recovery_snapshot.v1",
+            batch_id: "batch_1",
+            status: "partial",
+            terminal: true,
+            resume_available: true,
+            created_at: "2026-06-29T00:00:00Z",
+            completed_at: "2026-06-29T00:00:01Z",
+            task_count: 2,
+            completed_tasks: 1,
+            failed_tasks: 1,
+            cancelled_tasks: 0,
+            running_tasks: 0,
+            pending_tasks: 0,
+            tasks: [],
+            dag: {},
+            event_sequence: { last_sequence: 8 },
+            artifact_paths: [],
+            conflicts: [],
+            completion_receipt: { ready: false },
+            file_write_observability: {},
+            recovery_hints: { rerunnable_task_ids: ["task_failed"] },
+            safety: {
+              raw_subagent_outputs_included: false,
+              event_payloads_included: false,
+              owner_id_included: false,
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    });
+
+    const snapshot = await fetchBatchRecoverySnapshot("batch_1");
+
+    expect(snapshot?.batch_id).toBe("batch_1");
+    expect(snapshot?.recovery_hints.rerunnable_task_ids).toEqual([
+      "task_failed",
+    ]);
+    expect(calls[0]?.url).toBe(
+      "http://127.0.0.1:8000/api/agents/parallel/batch/batch_1/recovery-snapshot",
+    );
+    expect(calls[0]?.init?.credentials).toBe("include");
+    expect(calls[0]?.init?.headers).toMatchObject({
+      Authorization: "Bearer sk-test",
+    });
+  });
+
+  test("returns null when recovery snapshot request fails", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(new Response("missing", { status: 404 })),
+    );
+
+    await expect(fetchBatchRecoverySnapshot("missing")).resolves.toBeNull();
   });
 });
 

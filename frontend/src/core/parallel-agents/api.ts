@@ -55,6 +55,7 @@ export interface WorkContract {
   depends_on: string[];
   owned_scope: string[];
   forbidden_scope: string[];
+  write_paths?: string[];
   success_criteria: string[];
 }
 
@@ -87,6 +88,77 @@ export interface BatchResult {
   conflicts: string[];
   plan?: BatchPlan | null;
   event_log?: BatchStreamEvent[];
+}
+
+export interface BatchRecoveryTask {
+  task_id: string;
+  status: ParallelTaskStatus | string;
+  subagent_name: string;
+  depends_on: string[];
+  priority: number;
+  write_paths: string[];
+  description_preview?: string | null;
+  result_preview?: string | null;
+  error?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  duration_seconds?: number | null;
+  artifact_paths: string[];
+  work_contract?: WorkContract | null;
+  route_decision?: Record<string, unknown>;
+}
+
+export interface BatchRecoverySnapshot {
+  schema: "octopus.parallel_batch_recovery_snapshot.v1" | string;
+  batch_id: string;
+  status: ParallelTaskStatus | string;
+  terminal: boolean;
+  resume_available: boolean;
+  created_at: string | null;
+  completed_at: string | null;
+  task_count: number;
+  completed_tasks: number;
+  failed_tasks: number;
+  cancelled_tasks: number;
+  running_tasks: number;
+  pending_tasks: number;
+  tasks: BatchRecoveryTask[];
+  dag: Record<string, string[]>;
+  plan?: BatchPlan | null;
+  event_sequence: {
+    event_count?: number;
+    first_sequence?: number | null;
+    last_sequence?: number | null;
+    next_after_sequence?: number;
+    types?: Record<string, number>;
+    [key: string]: unknown;
+  };
+  artifact_paths: string[];
+  conflicts: string[];
+  completion_receipt: Record<string, unknown>;
+  file_write_observability: Record<string, unknown>;
+  recovery_hints: {
+    rerunnable_task_ids?: string[];
+    failed_task_ids?: string[];
+    cancelled_task_ids?: string[];
+    pending_task_ids?: string[];
+    running_task_ids?: string[];
+    blocked_by_dependency?: string[];
+    checkpoint?: {
+      batch_id?: string;
+      after_sequence?: number;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  };
+  safety: {
+    raw_subagent_outputs_included?: boolean;
+    event_payloads_included?: boolean;
+    owner_id_included?: boolean;
+    result_preview_max_chars?: number;
+    description_preview_max_chars?: number;
+    [key: string]: unknown;
+  };
 }
 
 export interface OrchestratorStatus {
@@ -157,6 +229,21 @@ export async function fetchBatch(batchId: string): Promise<BatchResult | null> {
     const res = await authedFetch(`/api/agents/parallel/batch/${batchId}`);
     if (!res.ok) return null;
     return (await res.json()) as BatchResult;
+  } catch (e) {
+    swallow(e);
+    return null;
+  }
+}
+
+export async function fetchBatchRecoverySnapshot(
+  batchId: string,
+): Promise<BatchRecoverySnapshot | null> {
+  try {
+    const res = await authedFetch(
+      `/api/agents/parallel/batch/${batchId}/recovery-snapshot`,
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as BatchRecoverySnapshot;
   } catch (e) {
     swallow(e);
     return null;
