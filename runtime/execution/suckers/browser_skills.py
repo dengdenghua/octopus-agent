@@ -230,13 +230,62 @@ def _dispatch_higher_track(
         # navigate verb itself), then acts — so we never split a flow between
         # the real browser and headless PW.
         if url and verb != "navigate":
-            chosen._call("navigate", {"url": url})
-        res = chosen._call(verb, payload)
-        if res.raw is not None:
-            return res.raw
-        return {} if res.ok else {"error": res.error or "browser_error"}
+            nav = chosen.navigate(url)
+            if not nav.ok:
+                return _browser_result_payload(nav)
+        res = _call_browser_backend(chosen, verb, payload, fallback_url=url)
+        return _browser_result_payload(res)
     except Exception as e:  # noqa: BLE001
         return {"error": f"browser_error: {type(e).__name__}: {e}"}
+
+
+def _call_browser_backend(
+    backend: Any,
+    verb: str,
+    payload: dict[str, Any],
+    *,
+    fallback_url: str = "",
+):
+    if verb == "navigate":
+        return backend.navigate(str(payload.get("url") or fallback_url))
+    if verb == "click":
+        return backend.click(str(payload.get("selector") or ""))
+    if verb == "type":
+        return backend.type(
+            str(payload.get("selector") or ""),
+            str(payload.get("text") or ""),
+            clear=bool(payload.get("clear") or payload.get("clear_first")),
+        )
+    if verb == "scroll":
+        delta_raw = payload.get("delta_y", payload.get("deltaY", 0))
+        return backend.scroll(
+            selector=payload.get("selector"),
+            delta_y=int(delta_raw or 0),
+        )
+    if verb == "wait":
+        timeout_raw = payload.get("timeout_ms", payload.get("timeout", 10_000))
+        return backend.wait(
+            str(payload.get("selector") or ""),
+            timeout_ms=int(timeout_raw or 10_000),
+        )
+    if verb == "state":
+        return backend.state(max_items=int(payload.get("max_items") or 30))
+    if verb == "extract":
+        return backend.extract()
+    raise ValueError(f"unsupported browser backend verb: {verb}")
+
+
+def _browser_result_payload(result: Any) -> dict[str, Any]:
+    raw = getattr(result, "raw", None)
+    if isinstance(raw, dict):
+        return raw
+    ok = bool(getattr(result, "ok", False))
+    data = getattr(result, "data", None)
+    if isinstance(data, dict):
+        return dict(data)
+    if ok:
+        return {}
+    return {"error": str(getattr(result, "error", None) or "browser_error")}
 
 
 def _with_page(

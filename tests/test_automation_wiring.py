@@ -116,20 +116,55 @@ def test_combined_grounding_merges_best_effort_parts():
 
 
 class _FakeTrack:
-    """A recording higher-priority backend for the resolver."""
+    """A recording higher-priority backend for the resolver.
 
-    def __init__(self):
+    It intentionally implements only the public BrowserBackend protocol, not
+    adapter-private helpers such as ``_call``.
+    """
+
+    def __init__(self, *, fail_navigate: bool = False):
         from runtime.execution.suckers.browser_backend import Track
         self.track = Track.ELECTRON
         self.calls = []
+        self.fail_navigate = fail_navigate
 
     def available(self):
         return True
 
-    def _call(self, action, payload):
+    def _record(self, action, payload, *, ok=True, error=""):
         from runtime.execution.suckers.browser_backend import BrowserResult, Track
         self.calls.append((action, dict(payload)))
-        return BrowserResult.from_track(Track.ELECTRON, {"ok": True, "action": action})
+        response = {"ok": ok, "action": action}
+        if error:
+            response["error"] = error
+        response.update(payload)
+        return BrowserResult.from_track(Track.ELECTRON, response)
+
+    def navigate(self, url):
+        return self._record(
+            "navigate",
+            {"url": url},
+            ok=not self.fail_navigate,
+            error="nav failed" if self.fail_navigate else "",
+        )
+
+    def click(self, selector):
+        return self._record("click", {"selector": selector})
+
+    def type(self, selector, text, *, clear=False):
+        return self._record("type", {"selector": selector, "text": text, "clear": clear})
+
+    def scroll(self, *, selector=None, delta_y=0):
+        return self._record("scroll", {"selector": selector, "delta_y": delta_y})
+
+    def wait(self, selector, *, timeout_ms=10_000):
+        return self._record("wait", {"selector": selector, "timeout_ms": timeout_ms})
+
+    def state(self, *, max_items=30):
+        return self._record("state", {"max_items": max_items})
+
+    def extract(self):
+        return self._record("extract", {})
 
 
 def test_with_page_navigate_then_acts_on_higher_track(monkeypatch):
@@ -155,6 +190,23 @@ def test_navigate_verb_has_no_separate_prenavigate(monkeypatch):
     bs._with_page(None, lambda p: {"pw": True}, verb="navigate",
                   payload={"url": "http://h.test"}, url="http://h.test")
     assert fake.calls == [("navigate", {"url": "http://h.test"})]
+
+
+def test_higher_track_navigation_failure_stops_followup_action(monkeypatch):
+    from runtime.execution.suckers import browser_skills as bs
+
+    fake = _FakeTrack(fail_navigate=True)
+    monkeypatch.setattr(bs, "_higher_track_backends", lambda: [fake])
+
+    out = bs._with_page(
+        None, lambda p: {"pw": True}, verb="click",
+        payload={"selector": "#go"}, url="http://h.test",
+    )
+
+    assert fake.calls == [("navigate", {"url": "http://h.test"})]
+    assert out["ok"] is False
+    assert out["error"] == "nav failed"
+    assert out.get("pw") is None
 
 
 def test_falls_back_to_pw_when_no_higher_track(monkeypatch):

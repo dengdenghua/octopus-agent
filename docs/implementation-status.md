@@ -44,8 +44,8 @@
 |---|---|---|
 | Playwright 轨（后台无状态爬取/提取） | **已接线** | `runtime/execution/suckers/browser_skills.py` 的 `browser_*` 技能 |
 | Electron webview 轨（桌面应用内可见操作） | **已接线**（仅 Electron 环境） | `runtime/execution/suckers/browser_act_skills.py` 的 `live_browser_*` 技能，经本地 bridge |
-| 扩展 relay 轨（操控用户真实浏览器标签页） | **休眠代码** | `extensions/` 有扩展，但未接入 skill 路由 |
-| 统一 BrowserBackend 抽象 + 路由优先级 | **已实装**（接缝+三轨 adapter，待真机联调） | `runtime/execution/suckers/browser_backend.py`（Protocol + `resolve_backend` 优先级 extension>electron>playwright）+ `browser_backends.py`（ElectronBackend/PlaywrightBackend/ExtensionBackend，包各轨现有函数，可注入 transport 单测）+ mock。adapter 映射已测；切换三轨现有 skill 调用点改走统一接口、以及真机端到端验证仍待有运行时的环境完成 |
+| 扩展 relay 轨（操控用户真实浏览器标签页） | **已接线**（需要扩展/书签 relay 在线） | `runtime/platform/ui/browser_router.py` 提供 `/api/browser/relay/*`；`runtime/execution/suckers/browser_backends.py` 的 `ExtensionBackend` 通过 relay status/command 调用；`runtime/execution/suckers/browser_skills.py` 的 `_higher_track_backends()` 将 extension 放在 Electron/Playwright 之前 |
+| 统一 BrowserBackend 抽象 + 路由优先级 | **已实装并接入 browser skills**（真机端到端待联调） | `runtime/execution/suckers/browser_backend.py`（Protocol + `resolve_backend` 优先级 extension>electron>playwright）+ `browser_backends.py`（ElectronBackend/PlaywrightBackend/ExtensionBackend，包各轨现有函数，可注入 transport 单测）+ mock。`browser_skills.py` 通过 public `BrowserBackend` 方法先尝试 extension/Electron，再 fallback Playwright；adapter 映射与调用接线见 `tests/test_browser_backend.py`、`tests/test_browser_backends.py`、`tests/test_automation_wiring.py` |
 
 ## 维护本表
 
