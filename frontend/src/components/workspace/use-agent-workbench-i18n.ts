@@ -172,6 +172,13 @@ export function useAgentWorkbenchI18n() {
   }
 
   function workbenchStatus(blocks: WorkBlock[], phases: AgentPhase[]) {
+    if (blocks.length === 0 && phases.length === 0) {
+      return {
+        label: t.agentWorkbenchPanel.agentStatusPending,
+        className: agentRunBadgeClass("pending"),
+        dotClassName: agentRunDotClass("pending"),
+      };
+    }
     if (
       phases.some((phase) => phase.status === "error") ||
       blocks.some((block) => block.status === "error")

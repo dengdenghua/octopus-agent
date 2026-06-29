@@ -37,6 +37,7 @@ export function workbenchRunState({
   paused?: boolean;
   phases: AgentPhase[];
 }): AgentRunState {
+  if (blocks.length === 0 && phases.length === 0) return "pending";
   if (
     blocks.some((block) => block.status === "error") ||
     phases.some((phase) => phase.status === "error")
@@ -68,7 +69,7 @@ export function agentRunDotClass(status: AgentRunStatusInput): string {
   if (state === "running") return "bg-emerald-500";
   if (state === "waiting") return "bg-amber-500";
   if (state === "done") return "bg-muted-foreground/50";
-  return "bg-muted-foreground/35";
+  return "bg-amber-500/80";
 }
 
 export function agentRunStatusLightClass(
@@ -92,7 +93,7 @@ export function agentRunProgressBarClass(status: AgentRunStatusInput): string {
   const state = agentRunStateFromStatus(status);
   if (state === "error") return "bg-destructive";
   if (state === "waiting") return "bg-amber-500";
-  if (state === "pending") return "bg-muted-foreground/45";
+  if (state === "pending") return "bg-amber-500/70";
   return "bg-emerald-500";
 }
 
@@ -104,6 +105,9 @@ export function agentRunBadgeClass(status: AgentRunStatusInput): string {
   if (state === "waiting") {
     return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
   }
+  if (state === "pending") {
+    return "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
   if (state === "error") return "bg-destructive/10 text-destructive";
   return "bg-muted text-muted-foreground";
 }
@@ -111,7 +115,8 @@ export function agentRunBadgeClass(status: AgentRunStatusInput): string {
 export function agentRunTextClass(status: AgentRunStatusInput): string {
   const state = agentRunStateFromStatus(status);
   if (state === "running") return "text-foreground";
-  if (state === "waiting") return "text-amber-700 dark:text-amber-300";
+  if (state === "waiting" || state === "pending")
+    return "text-amber-700 dark:text-amber-300";
   if (state === "done") return "text-emerald-600 dark:text-emerald-300";
   if (state === "error") return "text-destructive";
   return "text-muted-foreground";
@@ -120,7 +125,8 @@ export function agentRunTextClass(status: AgentRunStatusInput): string {
 export function agentRunIconClass(status: AgentRunStatusInput): string {
   const state = agentRunStateFromStatus(status);
   if (state === "running") return "text-emerald-600 dark:text-emerald-400";
-  if (state === "waiting") return "text-amber-600 dark:text-amber-400";
+  if (state === "waiting" || state === "pending")
+    return "text-amber-600 dark:text-amber-400";
   if (state === "error") return "text-destructive";
   if (state === "done") return "text-sky-600 dark:text-sky-400";
   return "text-muted-foreground";
@@ -132,6 +138,9 @@ export function agentRunPanelClass(status: AgentRunStatusInput): string {
     return "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
   }
   if (state === "waiting") {
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
+  }
+  if (state === "pending") {
     return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300";
   }
   if (state === "error") {
@@ -149,6 +158,7 @@ export function agentRunRobotButtonClass(status: AgentRunStatusInput): string {
     return "border-emerald-500/40 bg-emerald-500/10 animate-[breathing_2s_ease-in-out_infinite]";
   }
   if (state === "waiting") return "border-amber-500/40 bg-amber-500/10";
+  if (state === "pending") return "border-amber-500/40 bg-amber-500/10";
   if (state === "error") return "border-destructive/50 bg-destructive/10";
   if (state === "done") return "border-sky-500/30 bg-sky-500/8";
   return "border-border/60 bg-muted/35";

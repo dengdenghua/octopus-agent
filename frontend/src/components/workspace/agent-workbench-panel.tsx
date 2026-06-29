@@ -929,7 +929,7 @@ export function AgentWorkbenchPanel({
             <MainComputerStatusButton
               active={effectiveActiveTab === "agent"}
               label={t.agentWorkbenchPanel.agentStatusPending}
-              onClick={() => onSelectTab?.("agent")}
+              onClick={openMainProcess}
               runState="pending"
               title={t.agentWorkbenchPanel.noRunningRobotProcess}
             />
@@ -1218,9 +1218,13 @@ export function AgentWorkbenchPanel({
       <header className="relative shrink-0 border-b border-border/60 px-3 py-2.5">
         <div className="flex items-center gap-2.5">
           <MainComputerStatusButton
-            active={effectiveActiveTab === "agent"}
+            active={
+              effectiveActiveTab === "agent" &&
+              !selectedAgent &&
+              !selectedRosterSeat
+            }
             label={mainRunStatus.label}
-            onClick={() => onSelectTab?.("agent")}
+            onClick={openMainProcess}
             runState={mainRunState}
             title={t.agentWorkbenchPanel.viewMainAgentSlot}
           />

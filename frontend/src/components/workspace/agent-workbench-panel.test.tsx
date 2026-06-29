@@ -165,6 +165,18 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.getAllByText("子电脑已就位，等待独立进程开始输出。").length,
     ).toBeGreaterThan(0);
 
+    const mainComputerButton = screen.getByRole("button", {
+      name: "主电脑 · 等待中",
+    });
+    expect(mainComputerButton).toHaveClass("border-amber-500/40");
+
+    fireEvent.click(mainComputerButton);
+
+    expect(screen.queryByText("子电脑待命")).not.toBeInTheDocument();
+    expect(screen.getByText("暂无操作记录")).toBeInTheDocument();
+
+    fireEvent.click(codexSeat);
+
     fireEvent.click(screen.getByRole("button", { name: "主电脑" }));
 
     expect(screen.queryByText("子电脑待命")).not.toBeInTheDocument();
