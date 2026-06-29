@@ -38,6 +38,17 @@ MilestoneGate = Callable[[Milestone, list[Task]], dict[str, Any]]  # -> {"met", 
 MAX_TASK_ATTEMPTS = 2
 
 
+def stub_generate_milestones(goal: str) -> list[Milestone]:
+    """No-LLM fallback: a single deliverable milestone. Lets the API/engine run
+    deterministically without a model router (production injects LLM hooks)."""
+    return [Milestone(id="MS1", name="deliver", goal=goal, success_criteria=["goal met"])]
+
+
+def stub_decompose_tasks(ms: Milestone) -> list[Task]:
+    """No-LLM fallback: one task carrying the milestone goal."""
+    return [Task(id=f"{ms.id}-T1", milestone_id=ms.id, type="code", goal=ms.goal)]
+
+
 def _default_execute(task: Task, context: dict[str, Any]) -> str:
     return f"[{task.assigned_role}] output for «{task.goal}»"
 

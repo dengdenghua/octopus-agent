@@ -1390,6 +1390,26 @@ def create_app(
         )
     )
 
+    # ─── Project OS · milestone-driven project execution ──
+    # GET /api/projects/* (state/report, public) + POST plan/tick/run (auth).
+    # LLM hooks when a model router is available, else deterministic stubs.
+    from runtime.sensing.gateway.projects_router import create_projects_router
+
+    app.include_router(
+        create_projects_router(
+            model_router=(
+                getattr(getattr(stack, "planner", None), "router", None)
+                if stack is not None
+                else None
+            ),
+            identity_store=cocoloop_identity_store,
+            require_auth=cocoloop_require_auth,
+            jwt_secret=cocoloop_jwt_secret,
+            jwt_issuer=cocoloop_jwt_issuer,
+            jwt_audience=cocoloop_jwt_audience,
+        )
+    )
+
     # ─── FS router · extracted to fs_router.py ─────────
     # The 3 endpoints + 2 helpers that used to live here inline now
     # sit in runtime/sensing/siphon/fs_router.py. Same contract ·
