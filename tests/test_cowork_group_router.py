@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from runtime.memory.cowork.group_store import GroupStore
+from runtime.safety.auth import Identity, IdentityStore
 from runtime.sensing.gateway.cowork_group_router import create_cowork_group_router
 
 
@@ -60,3 +61,32 @@ def test_invalid_mode_rejected(tmp_path) -> None:
 def test_invite_requires_target(tmp_path) -> None:
     c = _client(tmp_path)
     assert c.post("/api/cowork/t/members", json={"kind": "agent"}).status_code == 422
+
+
+def test_mutations_require_auth_when_enabled(tmp_path) -> None:
+    store = IdentityStore()
+    store.add(Identity(actor_id="alice"), api_key_plaintext="sk-alice")
+    app = FastAPI()
+    app.include_router(
+        create_cowork_group_router(
+            store=GroupStore(base_dir=tmp_path),
+            identity_store=store,
+            require_auth=True,
+        )
+    )
+    client = TestClient(app)
+
+    assert client.get("/api/cowork/thread-auth").status_code == 200
+    assert client.post(
+        "/api/cowork/thread-auth/members",
+        json={"target_id": "alice", "kind": "agent"},
+    ).status_code == 401
+
+    ok = client.post(
+        "/api/cowork/thread-auth/members",
+        json={"target_id": "alice", "kind": "agent"},
+        headers={"Authorization": "Bearer sk-alice"},
+    )
+    assert ok.status_code == 200
+    body = client.get("/api/cowork/thread-auth").json()
+    assert body["events"][0]["actor"] == "alice"
