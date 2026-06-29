@@ -76,7 +76,7 @@ export default function TeamRoleModelsPanel() {
     roleModels.roles[role as keyof typeof roleModels.roles] ?? role;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border/50 bg-muted/15">
+    <div className="relative rounded-lg border border-border/50 bg-muted/15">
       <div className="flex items-center gap-2 px-3 py-2">
         <CoinsIcon className="size-3.5 shrink-0 text-muted-foreground" />
         <button
@@ -103,21 +103,26 @@ export default function TeamRoleModelsPanel() {
       </div>
 
       {expanded && (
-        <div className="border-t border-border/40 bg-background/70 px-3 py-2">
-          <div className="grid max-h-44 grid-cols-[1fr_auto] gap-x-4 gap-y-1.5 overflow-y-auto pr-1">
+        <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-50 rounded-lg border border-border/70 bg-popover px-3 py-2 shadow-md">
+          <div className="grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto pr-1 md:grid-cols-2 md:gap-x-3">
             {(data?.roles ?? []).map((r) => (
-              <div key={r.role} className="contents">
-                <div className="flex items-center gap-1.5 text-[11px]">
-                  <span className="font-medium">{roleLabel(r.role)}</span>
-                  <span className="text-muted-foreground">
+              <div
+                key={r.role}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/45"
+              >
+                <div className="min-w-0 text-[11px]">
+                  <div className="truncate font-medium">
+                    {roleLabel(r.role)}
+                  </div>
+                  <div className="truncate text-muted-foreground">
                     {roleModels.defaultPrefix}
                     {tierLabel(r.default)}
-                  </span>
+                  </div>
                 </div>
                 <select
                   value={r.tier}
                   onChange={(e) => void setTier(r.role, e.target.value)}
-                  className="text-[11px]"
+                  className="h-7 rounded-md border border-border/60 bg-background px-1.5 text-[11px]"
                   style={{ minWidth: 96 }}
                 >
                   {(data?.tiers ?? ["default", "cheap", "primary"]).map((t) => (
@@ -129,7 +134,7 @@ export default function TeamRoleModelsPanel() {
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+          <p className="mt-2 border-t border-border/40 pt-2 text-[11px] leading-snug text-muted-foreground">
             {roleModels.help}
           </p>
         </div>
