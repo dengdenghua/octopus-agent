@@ -224,7 +224,7 @@ export function RecentChatList() {
   );
 
   // Group threads by project (mode-filtered).
-  // Chat mode: flat Recents. Code/Team mode: per-project groups
+  // Chat mode: flat Recents. Code/collaboration work: per-project groups
   // plus uncategorized Recents.
   const groups = useMemo<ThreadGroup[]>(() => {
     const recentsLabel = !env.STATIC_WEBSITE_ONLY

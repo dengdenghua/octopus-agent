@@ -26,9 +26,9 @@ export const ACTIVE_AGENT_KEY = "octopus.active-agent";
 export const ACTIVE_AGENT_EVENT = "octopus:active-agent";
 
 export const ROUTE_LOCKS: { prefix: string; agent: string }[] = [
-  // Team mode does NOT lock to a specific agent — the leader is
+  // Collaborative tasks do NOT lock to a specific agent — the leader is
   // chosen by the user from the agent roster (same as chat mode).
-  // This means "coder" in team mode is the SAME person as "coder"
+  // This means "coder" in a collaborative task is the SAME person as "coder"
   // in chat mode — they're just "pulled into the group".
 ];
 

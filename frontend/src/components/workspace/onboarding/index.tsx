@@ -156,7 +156,7 @@ function WelcomeStep() {
   );
 }
 
-/* ---------- Step 2: Chat Modes ---------- */
+/* ---------- Step 2: Task Capabilities ---------- */
 function ChatModesStep() {
   const { t } = useI18n();
   const modes = [

@@ -331,7 +331,7 @@ export interface Translations {
     readme: string;
   };
 
-  // Team Mode
+  // Collaboration capability
   teamMode: {
     mode: string;
     modeTeam: string;
@@ -481,7 +481,7 @@ export interface Translations {
     thinkThoughts: string[];
   };
 
-  // Create Team Dialog (CreateTeamDialog component)
+  // Collaboration picker (CreateTeamDialog component)
   createTeamDialog: {
     title: string;
     description: string;
