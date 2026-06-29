@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,6 +39,13 @@ def _client_with_trace(
     *,
     include_write_diagnostic: bool = False,
 ) -> TestClient:
+    fake_api_key = "sk-kimi-" + ("A" * 32)
+    secret_action = "exec_shell(" + json.dumps({
+        "command": (
+            'curl -H "Authorization: Bearer '
+            f'{fake_api_key}" https://x'
+        ),
+    }) + ")"
     store = AgentTraceStore(tmp_path / "agent_trace.sqlite")
     store.record_event(
         thread_id="thread-1",
@@ -73,7 +81,13 @@ def _client_with_trace(
         state={
             "current_phase": "implementation",
             "messages_snapshot": [{"content": "secret message body"}],
-            "steps_snapshot": [{"iteration": 1}],
+            "steps_snapshot": [
+                {
+                    "iteration": 1,
+                    "action": secret_action,
+                    "observation": "sent report to ops@example.com",
+                },
+            ],
             "working_set_snapshot": [{"path": "runtime/memory/trace_store.py"}],
         },
         iteration=2,
@@ -990,6 +1004,10 @@ def test_trace_resume_proposal_is_sanitized(tmp_path: Path) -> None:
     assert proposal["resume_plan"]["steps"][1] == "Continue from iteration 3."
     assert proposal["safety"]["raw_state_included"] is False
     assert "secret message body" not in str(proposal)
+    assert "sk-kimi-" not in str(proposal)
+    assert "ops@example.com" not in str(proposal)
+    assert "[REDACTED:api_key]" in str(proposal)
+    assert "[REDACTED:email]" in str(proposal)
     assert missing.status_code == 404
 
 
@@ -1006,6 +1024,8 @@ def test_trace_resume_proposals_supports_thread_scope(tmp_path: Path) -> None:
     assert proposal["checkpoint"]["type"] == "react"
     assert proposal["recovery_hints"]["phase"] == "implementation"
     assert "secret message body" not in str(data)
+    assert "sk-kimi-" not in str(data)
+    assert "ops@example.com" not in str(data)
 
 
 def test_trace_router_exposes_loop_run_checkpoints_and_resume_proposals(tmp_path: Path) -> None:

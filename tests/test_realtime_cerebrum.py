@@ -1302,28 +1302,32 @@ def test_resume_proposal_block_preserves_sanitized_tool_context() -> None:
     from runtime.protocol import TurnParams
     from runtime.sensing.gateway.realtime_cerebrum import _build_intent
 
-    resume_text = """
+    fake_api_key = "sk-kimi-" + ("A" * 32)
+    proposal = {
+        "schema": "octopus.resume_proposal.v1",
+        "checkpoint_id": 8,
+        "task_id": "task-tools",
+        "checkpoint_type": "react",
+        "iteration": 4,
+        "phase": "verify",
+        "recent_tool_calls": [
+            {
+                "iteration": 3,
+                "tool": "exec_shell",
+                "input_preview": f"pytest tests/test_x.py -q --token {fake_api_key}",
+                "observation_preview": (
+                    "failed for ops@example.com: assertion message body"
+                ),
+            },
+        ],
+        "raw_state_included": False,
+        "raw_message_snapshots_included": False,
+    }
+    resume_text = f"""
 Resume this agent run from the selected durable checkpoint.
 
 <octopus_resume_proposal>
-{
-  "schema": "octopus.resume_proposal.v1",
-  "checkpoint_id": 8,
-  "task_id": "task-tools",
-  "checkpoint_type": "react",
-  "iteration": 4,
-  "phase": "verify",
-  "recent_tool_calls": [
-    {
-      "iteration": 3,
-      "tool": "exec_shell",
-      "input_preview": "pytest tests/test_x.py -q",
-      "observation_preview": "failed: assertion message body"
-    }
-  ],
-  "raw_state_included": false,
-  "raw_message_snapshots_included": false
-}
+{json.dumps(proposal, ensure_ascii=False, indent=2)}
 </octopus_resume_proposal>
 """.strip()
     intent = _build_intent(
@@ -1340,12 +1344,16 @@ Resume this agent run from the selected durable checkpoint.
         {
             "iteration": 3,
             "tool": "exec_shell",
-            "input_preview": "pytest tests/test_x.py -q",
-            "observation_preview": "failed: assertion message body",
+            "input_preview": "pytest tests/test_x.py -q --token [REDACTED:api_key]",
+            "observation_preview": (
+                "failed for [REDACTED:email]: assertion message body"
+            ),
         }
     ]
     assert resume_intent["safety"]["raw_state_included"] is False
     assert "messages_snapshot" not in str(resume_intent)
+    assert "sk-kimi-" not in str(resume_intent)
+    assert "ops@example.com" not in str(resume_intent)
 
 
 def test_resume_proposal_block_prepares_confirmation_without_running_react(

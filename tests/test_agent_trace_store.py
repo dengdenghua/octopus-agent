@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -131,6 +132,13 @@ def test_checkpoint_returns_newest_by_iteration_then_id(store: AgentTraceStore) 
 
 
 def test_resume_proposal_is_sanitized(store: AgentTraceStore) -> None:
+    fake_api_key = "sk-kimi-" + ("A" * 32)
+    secret_action = "exec_shell(" + json.dumps({
+        "command": (
+            "pytest tests/test_agent_trace_store.py -q --token "
+            f"{fake_api_key}"
+        ),
+    }) + ")"
     checkpoint_id = store.record_checkpoint(
         task_id="task-1",
         checkpoint_type="react",
@@ -150,8 +158,8 @@ def test_resume_proposal_is_sanitized(store: AgentTraceStore) -> None:
                 },
                 {
                     "iteration": 2,
-                    "action": 'exec_shell({"command": "pytest tests/test_agent_trace_store.py -q"})',
-                    "observation": "36 passed",
+                    "action": secret_action,
+                    "observation": "36 passed; notified ops@example.com",
                 },
             ],
             "working_set_snapshot": [
@@ -179,14 +187,19 @@ def test_resume_proposal_is_sanitized(store: AgentTraceStore) -> None:
         {
             "iteration": 2,
             "tool": "exec_shell",
-            "input_preview": '{"command": "pytest tests/test_agent_trace_store.py -q"}',
-            "observation_preview": "36 passed",
+            "input_preview": (
+                '{"command": "pytest tests/test_agent_trace_store.py -q '
+                '--token [REDACTED:api_key]"}'
+            ),
+            "observation_preview": "36 passed; notified [REDACTED:email]",
         },
     ]
     assert proposal["resume_plan"]["steps"][1] == "Continue from iteration 4."
     assert proposal["safety"]["raw_state_included"] is False
     assert proposal["safety"]["raw_message_snapshots_included"] is False
     assert "secret message body" not in str(proposal)
+    assert "sk-kimi-" not in str(proposal)
+    assert "ops@example.com" not in str(proposal)
     assert store.resume_proposal(99999) is None
 
 

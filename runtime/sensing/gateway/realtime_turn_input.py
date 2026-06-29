@@ -487,12 +487,31 @@ def _sanitize_recent_tool_calls(value: Any) -> list[dict[str, Any]]:
         out.append({
             "iteration": _safe_int(item.get("iteration")) or 0,
             "tool": tool,
-            "input_preview": _truncate_text(item.get("input_preview"), 240),
-            "observation_preview": _truncate_text(item.get("observation_preview"), 280),
+            "input_preview": _sanitize_preview_text(item.get("input_preview"), 240),
+            "observation_preview": _sanitize_preview_text(
+                item.get("observation_preview"),
+                280,
+            ),
         })
         if len(out) >= 8:
             break
     return out
+
+
+def _sanitize_preview_text(value: Any, limit: int) -> str:
+    return _truncate_text(_redact_preview_text(value), limit)
+
+
+def _redact_preview_text(value: Any) -> str:
+    text = str(value or "")
+    if not text:
+        return text
+    try:
+        from runtime.platform.observability.redactor import redact_text
+
+        return redact_text(text)
+    except Exception:  # pragma: no cover - resume sanitation must not block runs
+        return text
 
 
 def _truncate_text(value: Any, limit: int) -> str:
