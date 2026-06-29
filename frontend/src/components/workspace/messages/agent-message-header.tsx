@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { getBackendBaseURL } from "@/core/config";
 import { cn } from "@/lib/utils";
+import { useEffect, useState } from "react";
 
 interface AgentMessageHeaderProps {
   agentDisplayName: string;
@@ -26,6 +27,11 @@ export function AgentAvatar({
       ? avatarUrl
       : `${backendBase}${avatarUrl}`
     : null;
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  useEffect(() => {
+    setFailedAvatarUrl(null);
+  }, [fullAvatarUrl]);
+  const showImage = Boolean(fullAvatarUrl && failedAvatarUrl !== fullAvatarUrl);
   const emoji = icon?.trim() || "";
   const initial = (agentDisplayName || "?").trim().charAt(0).toUpperCase();
 
@@ -33,17 +39,18 @@ export function AgentAvatar({
     <div
       className={cn(
         "flex shrink-0 items-center justify-center overflow-hidden border border-border/60 bg-muted text-[13px] leading-none",
-        !fullAvatarUrl &&
+        !showImage &&
           !emoji &&
           "text-[11px] font-semibold text-muted-foreground",
         className,
       )}
     >
-      {fullAvatarUrl ? (
+      {showImage && fullAvatarUrl ? (
         <img
           src={fullAvatarUrl}
           alt={agentDisplayName}
           className="h-full w-full object-cover"
+          onError={() => setFailedAvatarUrl(fullAvatarUrl)}
         />
       ) : emoji ? (
         emoji

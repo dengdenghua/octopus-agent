@@ -80,7 +80,9 @@ function messageListTree({
   lastTurnToolEvents = [],
   mode = "code",
   currentAgent = null,
+  agentRoster = [],
   completedAgentOutput = false,
+  showSenderName = false,
 }: {
   thread: BaseStream<AgentThreadState>;
   liveToolEvents?: LiveToolEvent[];
@@ -93,6 +95,15 @@ function messageListTree({
     avatar_url?: string | null;
     icon?: string | null;
   } | null;
+  agentRoster?: Array<{
+    name?: string | null;
+    agent_id?: string | null;
+    display_name?: string | null;
+    avatar_url?: string | null;
+    icon?: string | null;
+    role?: string | null;
+  }>;
+  showSenderName?: boolean;
 }) {
   return (
     <SubtasksProvider>
@@ -106,6 +117,8 @@ function messageListTree({
           mode={mode}
           completedAgentOutput={completedAgentOutput}
           currentAgent={currentAgent}
+          agentRoster={agentRoster}
+          showSenderName={showSenderName}
         />
       </ThreadProviders>
     </SubtasksProvider>
@@ -124,6 +137,15 @@ function renderMessageList(args: {
     avatar_url?: string | null;
     icon?: string | null;
   } | null;
+  agentRoster?: Array<{
+    name?: string | null;
+    agent_id?: string | null;
+    display_name?: string | null;
+    avatar_url?: string | null;
+    icon?: string | null;
+    role?: string | null;
+  }>;
+  showSenderName?: boolean;
   completedAgentOutput?: boolean;
 }) {
   return renderWithProviders(messageListTree(args), {
@@ -133,6 +155,36 @@ function renderMessageList(args: {
 }
 
 describe("MessageList process trace lifecycle", () => {
+  test("uses team roster avatars for assistant messages without avatar metadata", () => {
+    const thread = mockThread({
+      messages: [
+        message("user-1", "human", "你好"),
+        message("assistant-1", "ai", "你好，我是 Eve。"),
+      ],
+    });
+
+    renderMessageList({
+      thread,
+      mode: "chat",
+      showSenderName: true,
+      agentRoster: [
+        {
+          name: "general",
+          display_name: "Eve",
+          avatar_url: "/api/agents/general/avatar",
+          role: "tl",
+        },
+      ],
+    });
+
+    expect(screen.getByText("Eve")).toBeInTheDocument();
+    expect(screen.getByText("队长")).toBeInTheDocument();
+    expect(screen.getByAltText("Eve")).toHaveAttribute(
+      "src",
+      expect.stringContaining("/api/agents/general/avatar"),
+    );
+  });
+
   test("does not render a completed process trace block in chat answers", () => {
     const messages = [
       message("user-1", "human", "What is NAS?"),

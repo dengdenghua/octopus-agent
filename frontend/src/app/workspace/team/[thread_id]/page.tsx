@@ -496,6 +496,17 @@ export default function TeamPage() {
       null,
     [teamConfig?.members, teamConfig?.leaderId],
   );
+  const messageAgentRoster = useMemo(
+    () =>
+      teamConfig?.members.map((member) => ({
+        name: member.name,
+        display_name: member.display_name ?? member.name,
+        avatar_url: member.avatar_url ?? undefined,
+        icon: member.icon ?? undefined,
+        role: member.name === teamConfig.leaderId ? "tl" : "member",
+      })) ?? [],
+    [teamConfig?.leaderId, teamConfig?.members],
+  );
   const removalHandledRef = useRef(false);
 
   useEffect(() => {
@@ -1053,6 +1064,7 @@ export default function TeamPage() {
                     mode={isCoworkMode ? "team" : "chat"}
                     showSenderName={Boolean(teamId)}
                     currentAgent={leaderAgent}
+                    agentRoster={messageAgentRoster}
                     liveToolEvents={liveToolEvents}
                     lastTurnToolEvents={lastTurnToolEvents}
                     footer={

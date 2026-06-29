@@ -6,7 +6,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 
 import {
   Conversation,
@@ -71,9 +71,119 @@ interface TurnMarker {
   number: number;
 }
 type TurnLocatorRunState = AgentRunState;
+type MessageListAgentRole = "tl" | "member" | string;
 
+interface MessageListAgentRosterEntry {
+  agent_id?: string | null;
+  avatar_url?: string | null;
+  display_name?: string | null;
+  icon?: string | null;
+  name?: string | null;
+  role?: MessageListAgentRole | null;
+}
+
+interface AgentIdentity {
+  avatar?: string;
+  icon?: string | null;
+  id?: string;
+  name?: string;
+  role?: string;
+}
+
+const EMPTY_AGENT_ROSTER: MessageListAgentRosterEntry[] = [];
 const TURN_LOCATOR_VISIBLE_LIMIT = 17;
 const TURN_SCROLL_VIEWPORT_CLASS = "message-list-scroll-viewport";
+
+function cleanIdentityText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function identityKey(value: unknown): string | undefined {
+  return cleanIdentityText(value)?.toLowerCase();
+}
+
+function agentIdForRosterEntry(
+  entry?: MessageListAgentRosterEntry | null,
+): string | undefined {
+  return cleanIdentityText(entry?.name) ?? cleanIdentityText(entry?.agent_id);
+}
+
+function displayNameForRosterEntry(
+  entry?: MessageListAgentRosterEntry | null,
+): string | undefined {
+  return (
+    cleanIdentityText(entry?.display_name) ??
+    cleanIdentityText(entry?.name) ??
+    cleanIdentityText(entry?.agent_id)
+  );
+}
+
+function fallbackAgentAvatarUrl(agentId?: string | null): string | undefined {
+  const cleanAgentId = cleanIdentityText(agentId);
+  return cleanAgentId
+    ? `/api/agents/${encodeURIComponent(cleanAgentId)}/avatar`
+    : undefined;
+}
+
+function rosterEntryHasUsableAvatar(
+  entry?: MessageListAgentRosterEntry | null,
+) {
+  return Boolean(
+    cleanIdentityText(entry?.avatar_url) ||
+    fallbackAgentAvatarUrl(agentIdForRosterEntry(entry)),
+  );
+}
+
+function preferRosterEntry(
+  current: MessageListAgentRosterEntry | undefined,
+  next: MessageListAgentRosterEntry,
+): MessageListAgentRosterEntry {
+  if (!current) return next;
+  if (
+    !rosterEntryHasUsableAvatar(current) &&
+    rosterEntryHasUsableAvatar(next)
+  ) {
+    return next;
+  }
+  if (!cleanIdentityText(current.icon) && cleanIdentityText(next.icon)) {
+    return next;
+  }
+  if (
+    !cleanIdentityText(current.display_name) &&
+    cleanIdentityText(next.display_name)
+  ) {
+    return next;
+  }
+  return current;
+}
+
+function buildAgentRosterMap(entries: MessageListAgentRosterEntry[]) {
+  const map = new Map<string, MessageListAgentRosterEntry>();
+  for (const entry of entries) {
+    for (const key of [
+      identityKey(entry.name),
+      identityKey(entry.agent_id),
+      identityKey(entry.display_name),
+    ]) {
+      if (!key) continue;
+      map.set(key, preferRosterEntry(map.get(key), entry));
+    }
+  }
+  return map;
+}
+
+function findRosterEntry(
+  map: Map<string, MessageListAgentRosterEntry>,
+  ...keys: Array<unknown>
+): MessageListAgentRosterEntry | undefined {
+  for (const key of keys) {
+    const normalized = identityKey(key);
+    if (!normalized) continue;
+    const entry = map.get(normalized);
+    if (entry) return entry;
+  }
+  return undefined;
+}
 
 export function nearestTurnKeyByViewportCenter(
   markers: TurnMarker[],
@@ -271,6 +381,7 @@ export function MessageList({
   lastTurnToolEvents,
   liveToolEvents,
   currentAgent,
+  agentRoster = EMPTY_AGENT_ROSTER,
   completedAgentOutput = false,
   showSenderName = false,
   mode,
@@ -298,6 +409,7 @@ export function MessageList({
     avatar_url?: string | null;
     icon?: string | null;
   } | null;
+  agentRoster?: MessageListAgentRosterEntry[];
 }) {
   const { t } = useI18n();
   const [settings] = useLocalSettings();
@@ -305,19 +417,27 @@ export function MessageList({
   const updateSubtask = useUpdateSubtask();
   const loadingProgressAtRef = useRef<number | null>(null);
   const [loadingAgeMs, setLoadingAgeMs] = useState(0);
-  const agentRoster = thread.values?.agent_roster;
+  const threadAgentRoster = Array.isArray(thread.values?.agent_roster)
+    ? (thread.values.agent_roster as MessageListAgentRosterEntry[])
+    : EMPTY_AGENT_ROSTER;
   // Kept for compatibility. Other code branches used to gate behavior
   // on this. The per-message header now renders unconditionally when
   // the AI message carries agent metadata, so this flag is informational
   // only.
-  const _isGroupChat = agentRoster && agentRoster.length > 0;
+  const _isGroupChat = threadAgentRoster.length + agentRoster.length > 0;
   void _isGroupChat;
 
-  // O(1) lookup by agent display_name.
-  const agentRosterMap = useMemo(() => {
-    if (!agentRoster) return new Map();
-    return new Map(agentRoster.map((a) => [a.display_name, a]));
-  }, [agentRoster]);
+  const combinedAgentRoster = useMemo(
+    () => [...threadAgentRoster, ...agentRoster],
+    [agentRoster, threadAgentRoster],
+  );
+  // O(1) lookup by agent id, backend name, or display name.
+  const agentRosterMap = useMemo(
+    () => buildAgentRosterMap(combinedAgentRoster),
+    [combinedAgentRoster],
+  );
+  const soleRosterEntry =
+    combinedAgentRoster.length === 1 ? combinedAgentRoster[0] : undefined;
 
   const messages = thread.messages;
 
@@ -330,12 +450,7 @@ export function MessageList({
       ...(lastTurnToolEvents ?? []),
     ]
       .map((event) =>
-        [
-          event.id,
-          event.name,
-          event.status,
-          event.finishedAt ?? "",
-        ].join(":"),
+        [event.id, event.name, event.status, event.finishedAt ?? ""].join(":"),
       )
       .join("|");
     return [
@@ -358,10 +473,7 @@ export function MessageList({
     const streamText = thread.streamingMessage
       ? extractTextFromMessage(thread.streamingMessage).trim()
       : "";
-    return [
-      structuralFingerprint,
-      streamText.slice(-240),
-    ].join("::");
+    return [structuralFingerprint, streamText.slice(-240)].join("::");
   }, [structuralFingerprint, thread.streamingMessage]);
 
   useEffect(() => {
@@ -465,6 +577,71 @@ export function MessageList({
     return -1;
   }, [groupedMessages]);
   const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const resolveAgentIdentity = useCallback(
+    (msg?: (typeof messages)[number]): AgentIdentity => {
+      const aiMsg = msg?.type === "ai" ? (msg as AIMessage) : undefined;
+      const explicitDisplayName = cleanIdentityText(
+        aiMsg?.additional_kwargs?.agent_display_name,
+      );
+      const explicitAgentId =
+        cleanIdentityText(aiMsg?.additional_kwargs?.agent_id) ??
+        cleanIdentityText(aiMsg?.additional_kwargs?.agent_name) ??
+        cleanIdentityText(aiMsg?.additional_kwargs?.agent);
+      const threadAgentId =
+        cleanIdentityText(thread.values?.["agent_name"]) ??
+        cleanIdentityText(thread.values?.["agent_id"]) ??
+        cleanIdentityText(thread.values?.["lead_agent_name"]);
+      const threadDisplayName =
+        cleanIdentityText(thread.values?.["team_leader"]) ??
+        cleanIdentityText(thread.values?.["lead_agent_name"]);
+      const rosterMatch =
+        findRosterEntry(
+          agentRosterMap,
+          explicitAgentId,
+          explicitDisplayName,
+          currentAgent?.name,
+          currentAgent?.display_name,
+          threadAgentId,
+          threadDisplayName,
+        ) ?? soleRosterEntry;
+      const rosterAgentId = agentIdForRosterEntry(rosterMatch);
+      const name =
+        explicitDisplayName ??
+        displayNameForRosterEntry(rosterMatch) ??
+        currentAgent?.display_name ??
+        currentAgent?.name ??
+        threadDisplayName;
+      const avatar =
+        cleanIdentityText(aiMsg?.additional_kwargs?.agent_avatar_url) ??
+        cleanIdentityText(rosterMatch?.avatar_url) ??
+        cleanIdentityText(currentAgent?.avatar_url) ??
+        fallbackAgentAvatarUrl(
+          rosterAgentId ?? currentAgent?.name ?? explicitAgentId,
+        );
+      const icon =
+        cleanIdentityText(aiMsg?.additional_kwargs?.agent_icon) ??
+        cleanIdentityText(rosterMatch?.icon) ??
+        cleanIdentityText(currentAgent?.icon);
+      const role = cleanIdentityText(rosterMatch?.role);
+
+      return {
+        avatar,
+        icon,
+        id: rosterAgentId ?? currentAgent?.name ?? explicitAgentId,
+        name,
+        role,
+      };
+    },
+    [
+      agentRosterMap,
+      currentAgent?.avatar_url,
+      currentAgent?.display_name,
+      currentAgent?.icon,
+      currentAgent?.name,
+      soleRosterEntry,
+      thread.values,
+    ],
+  );
   const turnMarkers = useMemo<TurnMarker[]>(() => {
     const markers: TurnMarker[] = [];
     for (let index = 0; index < groupedMessages.length; index += 1) {
@@ -483,23 +660,11 @@ export function MessageList({
       const turnAiMessage = turnMessages.find(
         (message): message is AIMessage => message.type === "ai",
       );
-      const agentName =
-        (turnAiMessage?.additional_kwargs?.agent_display_name as
-          | string
-          | undefined) ||
-        currentAgent?.display_name ||
-        currentAgent?.name ||
-        t.message.assistant;
-      const agentAvatar =
-        (turnAiMessage?.additional_kwargs?.agent_avatar_url as
-          | string
-          | undefined) ||
-        currentAgent?.avatar_url ||
-        undefined;
-      const agentIcon =
-        (turnAiMessage?.additional_kwargs?.agent_icon as string | undefined) ||
-        currentAgent?.icon ||
-        undefined;
+      const {
+        name: agentName,
+        avatar: agentAvatar,
+        icon: agentIcon,
+      } = resolveAgentIdentity(turnAiMessage);
       const rawLabel = firstMessage
         ? extractTextFromMessage(firstMessage).replace(/\s+/g, " ").trim()
         : "";
@@ -514,7 +679,7 @@ export function MessageList({
       });
     }
     return markers;
-  }, [currentAgent, groupedMessages, t.message]);
+  }, [groupedMessages, resolveAgentIdentity, t.message]);
   const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -667,24 +832,6 @@ export function MessageList({
     }
   }, [subtaskUpdates, updateSubtask]);
 
-  const getAgentIdentity = (msg?: (typeof messages)[number]) => {
-    const aiMsg = msg?.type === "ai" ? (msg as AIMessage) : undefined;
-    const name =
-      (aiMsg?.additional_kwargs?.agent_display_name as string | undefined) ||
-      currentAgent?.display_name ||
-      currentAgent?.name;
-    const avatar =
-      (aiMsg?.additional_kwargs?.agent_avatar_url as string | undefined) ||
-      currentAgent?.avatar_url ||
-      undefined;
-    const icon =
-      (aiMsg?.additional_kwargs?.agent_icon as string | undefined) ||
-      currentAgent?.icon ||
-      undefined;
-    const role = name ? agentRosterMap.get(name)?.role : undefined;
-    return { name, avatar, icon, role };
-  };
-
   const renderAssistantFrame = ({
     key,
     agentName,
@@ -709,7 +856,9 @@ export function MessageList({
       <div key={key} className="flex w-full items-start gap-3">
         <AgentAvatar
           agentDisplayName={displayName}
-          avatarUrl={agentAvatar ? withAgentAvatarVersion(agentAvatar) : agentAvatar}
+          avatarUrl={
+            agentAvatar ? withAgentAvatarVersion(agentAvatar) : agentAvatar
+          }
           icon={agentIcon}
           className="mt-1 size-8 rounded-md"
         />
@@ -755,7 +904,7 @@ export function MessageList({
     if (msg.type !== "ai") {
       return <div key={key}>{content}</div>;
     }
-    const { name, avatar, icon, role } = getAgentIdentity(msg);
+    const { name, avatar, icon, role } = resolveAgentIdentity(msg);
     return renderAssistantFrame({
       key,
       agentName: name,
@@ -780,7 +929,7 @@ export function MessageList({
       avatar: agentAvatar,
       icon: agentIcon,
       role: agentRole,
-    } = getAgentIdentity(aiMessage);
+    } = resolveAgentIdentity(aiMessage);
     const content = (
       <MessageGroup
         enableClarificationActions={enableClarificationActions}

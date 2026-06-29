@@ -3,10 +3,12 @@ import type { Message, Thread } from "@/core/api/types";
 import type { Todo } from "../todos";
 
 export interface AgentRosterEntry {
-  name: string;
-  display_name: string;
-  avatar_url?: string;
-  role: "tl" | "member";
+  agent_id?: string | null;
+  avatar_url?: string | null;
+  display_name?: string | null;
+  icon?: string | null;
+  name?: string | null;
+  role?: "tl" | "member" | string | null;
 }
 
 export interface ExecutionMetrics {
