@@ -18,20 +18,20 @@ test.describe("Chat golden path", () => {
   });
 
   test("can load the workspace chat route", async ({ page }) => {
-    await page.goto("/#/workspace/agents/general/chats/new");
+    await page.goto("/#/workspace/realtime/new?agent=general");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page).toHaveURL(/#\/workspace/);
+    await expect(page).toHaveURL(/#\/workspace\/realtime\/new\?agent=general/);
     await expect(page.locator("textarea").first()).toBeVisible({
       timeout: 15_000,
     });
   });
 
   test("workspace sidebar shows the chat entry", async ({ page }) => {
-    await page.goto("/#/workspace/chats/new");
+    await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(page).toHaveURL(/#\/workspace\/chats\/new/);
+    await expect(page).toHaveURL(/#\/workspace\/realtime\/new/);
     await expect(page.getByText("Octopus").first()).toBeVisible({
       timeout: 15_000,
     });
@@ -39,7 +39,7 @@ test.describe("Chat golden path", () => {
   });
 
   test("new chat page has a message input", async ({ page }) => {
-    await page.goto("/#/workspace/chats/new");
+    await page.goto("/#/workspace/realtime/new");
     await page.waitForLoadState("domcontentloaded");
 
     const input = page
