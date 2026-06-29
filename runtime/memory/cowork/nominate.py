@@ -23,16 +23,35 @@ _STOPWORDS = frozenset(
 )
 
 
+def _expand_cjk(token: str) -> set[str]:
+    """CJK has no spaces, so a run like 算法实现 is one token that won't match
+    算法工程师. Emit overlapping bigrams (算法, 法实, 实现) so compound terms
+    partially match. Latin tokens pass through unchanged."""
+    if re.fullmatch(r"[一-鿿]+", token) and len(token) > 2:
+        return {token[i : i + 2] for i in range(len(token) - 1)}
+    return {token}
+
+
 def tokenize(text: str) -> set[str]:
-    """Lowercase alnum/CJK tokens worth matching on (drops short stopwords)."""
+    """Lowercase alnum/CJK tokens worth matching on (CJK expanded to bigrams,
+    short stopwords dropped)."""
     raw = re.findall(r"[a-zA-Z0-9]{3,}|[一-鿿]{2,}", (text or "").lower())
-    return {t for t in raw if t not in _STOPWORDS}
+    out: set[str] = set()
+    for t in raw:
+        if t not in _STOPWORDS:
+            out |= _expand_cjk(t)
+    return out
 
 
 def domain_tokens(agent_id: str, family: str = "") -> set[str]:
-    """An agent's topic surface from its id + family (split on separators)."""
-    parts = re.split(r"[-_./]+", f"{agent_id} {family}".lower())
-    return {p for p in parts if len(p) >= 2}
+    """An agent's topic surface from its id + family (split on separators; CJK
+    runs expanded to bigrams so 算法工程师 matches 算法… goals)."""
+    parts = re.split(r"[-_./\s]+", f"{agent_id} {family}".lower())
+    out: set[str] = set()
+    for p in parts:
+        if len(p) >= 2:
+            out |= _expand_cjk(p)
+    return out
 
 
 def relevance(text: str, agent_id: str, family: str = "") -> float:

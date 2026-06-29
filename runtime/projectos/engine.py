@@ -75,6 +75,15 @@ def _default_gate(milestone: Milestone, tasks: list[Task]) -> dict[str, Any]:
     return {"met": met, "reason": "all tasks done" if met else "tasks pending"}
 
 
+def _default_assign(task: Task) -> str:
+    """Default routing: the fixed role for the task type. A custom group injects
+    an assigner that picks one of ITS actual members instead (see cowork_bridge)."""
+    return ROLE_FOR_TASK.get(task.type, "engineer")
+
+
+AgentAssigner = Callable[[Task], str]  # (task) -> concrete agent/member id
+
+
 class ProjectEngine:
     def __init__(
         self,
@@ -85,6 +94,7 @@ class ProjectEngine:
         execute_task: Executor = _default_execute,
         qa_task: QAEvaluator = _default_qa,
         gate_milestone: MilestoneGate = _default_gate,
+        assign_agent: AgentAssigner = _default_assign,
     ) -> None:
         self.store = store
         self._generate = generate_milestones
@@ -92,6 +102,7 @@ class ProjectEngine:
         self._execute = execute_task
         self._qa = qa_task
         self._gate = gate_milestone
+        self._assign = assign_agent
 
     # ── planning ─────────────────────────────────────────────────────────────
     def plan(self, name: str, goal: str) -> Project:
@@ -192,6 +203,7 @@ class ProjectEngine:
         tasks = self.store.tasks_for_milestone(ms.id)
         for task in ready_tasks(tasks):
             task.assigned_role = ROLE_FOR_TASK.get(task.type, task.assigned_role or "engineer")
+            task.assigned_agent = self._assign(task)  # concrete member (custom group) or role
             task.status = "running"
             task.attempts += 1
             self.store.save_task(task)

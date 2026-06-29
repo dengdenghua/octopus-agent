@@ -29,9 +29,17 @@ class RunBody(BaseModel):
     max_ticks: int = 50
 
 
+class FromGroupBody(BaseModel):
+    name: str = Field(min_length=1)
+    goal: str = Field(min_length=1)
+    run: bool = True
+    max_ticks: int = 50
+
+
 def create_projects_router(
     *,
     store: ProjectStore | None = None,
+    group_store: Any = None,
     model_router: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -42,16 +50,26 @@ def create_projects_router(
     """Create the ``/api/projects/*`` router."""
     project_store = store or ProjectStore()
 
-    def _engine() -> ProjectEngine:
+    def _group_store():
+        if group_store is not None:
+            return group_store
+        from runtime.memory.cowork.group_store import GroupStore
+
+        return GroupStore()
+
+    def _base_hooks() -> dict[str, Any]:
+        """Intelligence hooks: LLM when a model router is available, else stubs."""
         if model_router is not None:
             from runtime.projectos.llm_hooks import create_llm_hooks
 
-            return ProjectEngine(project_store, **create_llm_hooks(model_router))
-        return ProjectEngine(
-            project_store,
-            generate_milestones=stub_generate_milestones,
-            decompose_tasks=stub_decompose_tasks,
-        )
+            return create_llm_hooks(model_router)
+        return {
+            "generate_milestones": stub_generate_milestones,
+            "decompose_tasks": stub_decompose_tasks,
+        }
+
+    def _engine() -> ProjectEngine:
+        return ProjectEngine(project_store, **_base_hooks())
 
     def _auth_dep(request: Request) -> None:
         from runtime.adapters.web_auth import _resolve_actor
@@ -109,6 +127,27 @@ def create_projects_router(
         """Turn a one-line goal into a project with generated milestones."""
         project = _engine().plan(body.name, body.goal)
         return {"ok": True, **_full_state(project.id)}
+
+    @router.post("/api/projects/from-group/{thread_id}", dependencies=[Depends(_auth_dep)])
+    def from_group(thread_id: str, body: FromGroupBody) -> dict[str, Any]:
+        """Turn a custom cowork group into a project team: plan milestones and (by
+        default) run them, routing each task to the group's ACTUAL members by
+        capability — not the fixed 4 roles. This is "assemble a group → turn on
+        project mode"."""
+        from runtime.projectos.cowork_bridge import engine_for_group, roster_from_group
+
+        gs = _group_store()
+        roster = [a for a, _ in roster_from_group(gs, thread_id)]
+        if not roster:
+            raise HTTPException(400, "group has no participant agents to staff the project")
+        engine = engine_for_group(project_store, gs, thread_id, hooks=_base_hooks())
+        project = engine.plan(body.name, body.goal)
+        result = (
+            engine.run(project.id, max_ticks=body.max_ticks)
+            if body.run
+            else {"final_status": project.status}
+        )
+        return {"ok": True, "roster": roster, "result": result, **_full_state(project.id)}
 
     @router.post("/api/projects/{project_id}/tick", dependencies=[Depends(_auth_dep)])
     def tick(project_id: str) -> dict[str, Any]:
