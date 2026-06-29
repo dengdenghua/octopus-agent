@@ -198,7 +198,7 @@ function syncThreadAgentSelection(agents: string[]) {
  *  threads, agent_roster on team threads, fallback to bare ``agent``
  *  field). */
 function isProjectThreadMode(mode: string): boolean {
-  return mode === "code";
+  return mode === "code" || mode === "team";
 }
 
 function isConversationThreadMode(mode: string): boolean {
@@ -296,6 +296,65 @@ function mergeThreadRunStatus(
   };
   if (!current) return next;
   return priority[next] > priority[current] ? next : current;
+}
+
+function projectNameForThread(
+  thread: Pick<ThreadSummary, "mode">,
+  meta: Record<string, unknown>,
+  personalSpaceLabel = "Personal space",
+): string {
+  const explicitProject = cleanDisplayText(meta["project"]);
+  const workspacePath =
+    typeof meta["workspace_path"] === "string"
+      ? meta["workspace_path"].trim()
+      : "";
+  const workspaceProject = workspacePath ? basename(workspacePath) : "";
+
+  if (thread.mode === "team") {
+    const generatedTeamProject =
+      explicitProject === "Team" || explicitProject.startsWith("Team · ");
+    if (workspaceProject) return workspaceProject;
+    return generatedTeamProject
+      ? personalSpaceLabel
+      : explicitProject || personalSpaceLabel;
+  }
+  if (explicitProject) return explicitProject;
+  if (thread.mode === "code") {
+    return workspaceProject || "Code";
+  }
+  return "Project";
+}
+
+function summarizeThreadForSidebar(thread: AgentThread): ThreadSummary {
+  return {
+    id: thread.thread_id,
+    title: deriveThreadTitle(thread),
+    updatedAt: thread.updated_at,
+    mode:
+      typeof thread.metadata?.["mode"] === "string"
+        ? (thread.metadata["mode"] as string)
+        : "chat",
+    href: threadHref(thread),
+    workspacePath:
+      typeof thread.metadata?.["workspace_path"] === "string"
+        ? (thread.metadata["workspace_path"] as string)
+        : undefined,
+    agents: deriveThreadAgents(thread),
+  };
+}
+
+function buildConversationThreadSummaries(
+  threads: AgentThread[],
+): ThreadSummary[] {
+  return threads
+    .map(summarizeThreadForSidebar)
+    .filter((thread) => isConversationThreadMode(thread.mode));
+}
+
+function buildProjectThreadSummaries(threads: AgentThread[]): ThreadSummary[] {
+  return threads
+    .map(summarizeThreadForSidebar)
+    .filter((thread) => isProjectThreadMode(thread.mode));
 }
 
 function firstString(...values: unknown[]): string {
@@ -666,41 +725,12 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     );
   })();
 
-  const conversationThreads: ThreadSummary[] = mergedConversationRaw
-    .map((t) => ({
-      id: t.thread_id,
-      title: deriveThreadTitle(t),
-      updatedAt: t.updated_at,
-      mode:
-        typeof t.metadata?.["mode"] === "string"
-          ? (t.metadata["mode"] as string)
-          : "chat",
-      href: threadHref(t),
-      workspacePath:
-        typeof t.metadata?.["workspace_path"] === "string"
-          ? (t.metadata["workspace_path"] as string)
-          : undefined,
-      agents: deriveThreadAgents(t),
-    }))
-    .filter((t) => isConversationThreadMode(t.mode));
+  const conversationThreads: ThreadSummary[] = buildConversationThreadSummaries(
+    mergedConversationRaw,
+  );
 
-  const projectThreads: ThreadSummary[] = mergedProjectRaw
-    .map((t) => ({
-      id: t.thread_id,
-      title: deriveThreadTitle(t),
-      updatedAt: t.updated_at,
-      mode:
-        typeof t.metadata?.["mode"] === "string"
-          ? (t.metadata["mode"] as string)
-          : "chat",
-      href: threadHref(t),
-      workspacePath:
-        typeof t.metadata?.["workspace_path"] === "string"
-          ? (t.metadata["workspace_path"] as string)
-          : undefined,
-      agents: deriveThreadAgents(t),
-    }))
-    .filter((t) => isProjectThreadMode(t.mode));
+  const projectThreads: ThreadSummary[] =
+    buildProjectThreadSummaries(mergedProjectRaw);
 
   // User-defined projects (localStorage) — so an empty project still
   // shows in the sidebar before any threads are tagged with it.
@@ -735,8 +765,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
   // "New project" flow:
   //   1. Try the native directory picker (Chromium) — lets the user
-  //      either pick an existing folder or type a new folder name in
-  // Implementation note.
+  //      either pick an existing folder or type a new folder name.
   //   2. Fall back to a hidden <input type="file" webkitdirectory> in
   //      Safari / Firefox where showDirectoryPicker isn't available.
   //   3. Final fallback: an inline input row in the sidebar (used when
@@ -838,34 +867,9 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     [saveProjectName],
   );
 
-  // Group threads by project · priority:
-  //   1. explicit ``metadata.project`` (user-tagged)
-  //   2. mode-derived synthetic project:
-  //        code → workspace_path basename (the folder you're working in)
-  //   3. fall through to "Recent" (only chat-mode threads land here)
-  //
-  // Why this matters: code conversations are about a *project*,
-  // Implementation note.
-  // ad-hoc questions and made it impossible to find which thread
-  // belonged to which project. Now they cluster under their actual
-  // Implementation note.
-  const teamTaskThreads = mergedProjectRaw
-    .map((t) => ({
-      id: t.thread_id,
-      title: deriveThreadTitle(t),
-      updatedAt: t.updated_at,
-      mode:
-        typeof t.metadata?.["mode"] === "string"
-          ? (t.metadata["mode"] as string)
-          : "chat",
-      href: threadHref(t),
-      workspacePath:
-        typeof t.metadata?.["workspace_path"] === "string"
-          ? (t.metadata["workspace_path"] as string)
-          : undefined,
-      agents: deriveThreadAgents(t),
-    }))
-    .filter((t) => t.mode === "team");
+  // Group code/team threads by project. Team history defaults to its bound
+  // workspace folder, so multi-agent work sits with the project instead of
+  // falling back to loose chat recents.
   const activeTeamThreadId = pathname.startsWith("/workspace/team/")
     ? (pathname.split("/").filter(Boolean)[2] ?? null)
     : null;
@@ -922,24 +926,19 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const explicitProjectThreadIdsByProject: Record<string, string[]> = {};
   for (const name of userProjects) byProject[name] = [];
   const rawThreadMap = new Map(mergedProjectRaw.map((r) => [r.thread_id, r]));
-  for (const t of projectThreads) {
-    const raw = rawThreadMap.get(t.id);
+  for (const thread of projectThreads) {
+    const raw = rawThreadMap.get(thread.id);
     const meta = (raw?.metadata ?? {}) as Record<string, unknown>;
     const explicitProject = cleanDisplayText(meta["project"]);
-    let project: string;
-    if (explicitProject) {
-      project = explicitProject;
-      (explicitProjectThreadIdsByProject[project] ??= []).push(t.id);
-    } else if (t.mode === "code") {
-      const wp =
-        typeof meta["workspace_path"] === "string"
-          ? (meta["workspace_path"] as string).trim()
-          : "";
-      project = wp ? basename(wp) : "Code";
-    } else {
-      project = "Project";
+    const project = projectNameForThread(
+      thread,
+      meta,
+      t.codeMode.personalSpace,
+    );
+    if (explicitProject && project === explicitProject) {
+      (explicitProjectThreadIdsByProject[project] ??= []).push(thread.id);
     }
-    (byProject[project] ??= []).push(t);
+    (byProject[project] ??= []).push(thread);
   }
   // Belt-and-suspenders · ensure Recent never contains non-chat
   const projectOrder = Object.keys(byProject);
@@ -1007,13 +1006,13 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   };
   const browserSurfaceActive = isBrowserSurfaceRoute(pathname);
   const sidebarConversationThreads = conversationThreads;
-  // Unified history: merge conversation threads + team task threads,
-  // sorted by updatedAt so the most recent activity surfaces first.
+  // Chat history stays chat-only. Team history is grouped under Projects by
+  // workspace so it reads as project work rather than loose conversation.
   const allHistoryThreads = useMemo(() => {
-    return [...sidebarConversationThreads, ...teamTaskThreads].sort((a, b) =>
+    return [...sidebarConversationThreads].sort((a, b) =>
       (b.updatedAt || "").localeCompare(a.updatedAt || ""),
     );
-  }, [sidebarConversationThreads, teamTaskThreads]);
+  }, [sidebarConversationThreads]);
 
   return (
     <Sidebar
@@ -1398,10 +1397,15 @@ function isAgentSurfaceActive(pathname: string, search = "") {
 
 export const __testing = {
   buildThreadRunStatusByHref,
+  isProjectThreadMode,
   isNavRouteActive,
   isCompanySurfaceActive,
   isAgentSurfaceActive,
+  buildConversationThreadSummaries,
+  buildProjectThreadSummaries,
   mergeThreadRunStatus,
+  projectNameForThread,
+  summarizeThreadForSidebar,
 };
 
 type WorkspaceSurfaceMode = "agent" | "browser";

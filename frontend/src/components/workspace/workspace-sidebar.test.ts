@@ -57,6 +57,86 @@ describe("workspace sidebar route activation", () => {
   });
 });
 
+describe("workspace sidebar project grouping", () => {
+  const makeThread = (
+    threadId: string,
+    mode: string,
+    metadata: Record<string, unknown> = {},
+  ) =>
+    ({
+      thread_id: threadId,
+      title: threadId,
+      updated_at: "2026-06-29T00:00:00Z",
+      metadata: {
+        mode,
+        ...metadata,
+      },
+      values: {},
+    }) as never;
+
+  test("treats team threads as project threads", () => {
+    expect(__testing.isProjectThreadMode("team")).toBe(true);
+    expect(__testing.isProjectThreadMode("code")).toBe(true);
+    expect(__testing.isProjectThreadMode("chat")).toBe(false);
+  });
+
+  test("keeps team history out of chat recents and under projects", () => {
+    const threads = [
+      makeThread("chat-1", "chat"),
+      makeThread("team-1", "team", {
+        workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+      }),
+      makeThread("code-1", "code", {
+        workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+      }),
+    ];
+
+    expect(
+      __testing.buildConversationThreadSummaries(threads).map((t) => t.id),
+    ).toEqual(["chat-1"]);
+    expect(
+      __testing.buildProjectThreadSummaries(threads).map((t) => t.id),
+    ).toEqual(["team-1", "code-1"]);
+  });
+
+  test("groups team history by workspace folder before generated team label", () => {
+    expect(
+      __testing.projectNameForThread(
+        { mode: "team" },
+        {
+          project: "Team · Eve",
+          workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+        },
+      ),
+    ).toBe("octopus-agent");
+  });
+
+  test("groups team history without a folder under personal space", () => {
+    expect(
+      __testing.projectNameForThread(
+        { mode: "team" },
+        {
+          project: "Team",
+          workspace_path: "",
+        },
+        "个人空间",
+      ),
+    ).toBe("个人空间");
+  });
+
+  test("keeps explicit project labels for code threads", () => {
+    expect(
+      __testing.projectNameForThread(
+        { mode: "code" },
+        {
+          project: "总项目",
+          workspace_path: "/Users/dangbei/Public/octopus/octopus-agent",
+        },
+      ),
+    ).toBe("总项目");
+  });
+});
+
 describe("workspace sidebar thread status lights", () => {
   test("maps paused and pending background tasks onto conversation history", () => {
     const href = "/workspace/agents/general/chats/thread-1";
