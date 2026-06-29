@@ -10,14 +10,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-try:
-    import httpx
-
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
-    httpx = None
-
 
 class SkillMeta(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -54,18 +46,18 @@ class InstallResult(BaseModel):
 
 class SkillMarket:
 
+    # Local-only skill store. The remote registry (an unpublished
+    # ``octopus-agent/skill-hub`` repo) was dead plumbing: every fetch 404'd and
+    # fell back to the local registry anyway, so the network path is removed.
+    # Skills live under ~/.octopus/skills; the built-in catalog ships separately
+    # under skills/public (auto-registered, no install step). DEFAULT_REPO is
+    # kept only as a publish-instructions hint (no network call).
     DEFAULT_REPO = "octopus-agent/skill-hub"
-    DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/octopus-agent/skill-hub/main/registry.json"
 
-    def __init__(
-        self,
-        skills_dir: str | Path | None = None,
-        registry_url: str | None = None,
-    ) -> None:
+    def __init__(self, skills_dir: str | Path | None = None) -> None:
         if skills_dir is None:
             skills_dir = Path(os.path.expanduser("~/.octopus/skills"))
         self._dir = Path(skills_dir)
-        self._registry_url = registry_url or self.DEFAULT_REGISTRY_URL
 
     def search(self, query: str, limit: int = 20) -> list[SearchResult]:
         registry = self._fetch_registry()
@@ -107,32 +99,18 @@ class SkillMarket:
                 message=f"Skill '{name}' already installed at {dest}",
             )
 
-        content = self._fetch_skill_content(name)
-        if content is None:
-            return InstallResult(
-                name=name,
-                version=version or "0.1.0",
-                path="",
-                status="failed",
-                message=f"Skill '{name}' not found in registry",
-            )
-
-        dest.mkdir(parents=True, exist_ok=True)
-
-        skill_md = content.get("SKILL.md", "")
-        meta = content.get("meta.json", {})
-
-        (dest / "SKILL.md").write_text(skill_md, encoding="utf-8")
-        (dest / "meta.json").write_text(
-            json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8",
-        )
-
+        # Remote fetch removed — there's no registry to pull from. Local skills
+        # are added by dropping a folder under ~/.octopus/skills, and the built-in
+        # catalog under skills/public auto-registers without an install step.
         return InstallResult(
             name=name,
-            version=meta.get("version", "0.1.0"),
-            path=str(dest),
-            status="installed",
-            message=f"Skill '{name}' installed to {dest}",
+            version=version or "0.1.0",
+            path="",
+            status="failed",
+            message=(
+                f"Remote skill market is disabled. Add '{name}' locally under "
+                f"{dest}/ (SKILL.md + meta.json), or use the built-in skills/public catalog."
+            ),
         )
 
     def uninstall(self, name: str) -> bool:
@@ -225,15 +203,12 @@ class SkillMarket:
     def _is_installed(self, name: str) -> bool:
         return (self._dir / name).exists()
 
+    # NOTE: the former _fetch_registry()/_fetch_skill_content() GitHub plumbing
+    # (raw.githubusercontent.com/octopus-agent/skill-hub) was removed — it pointed
+    # at an unpublished repo and always 404'd. The market is now local-only.
+
     def _fetch_registry(self) -> list[dict[str, Any]] | None:
-        if not HTTPX_AVAILABLE:
-            return self._local_registry()
-        try:
-            resp = httpx.get(self._registry_url, timeout=10.0, follow_redirects=True)
-            if resp.status_code == 200:
-                return resp.json()
-        except (ConnectionError, TimeoutError, OSError, TypeError, ValueError):  # noqa: BLE001 — network probe; fall back to local registry
-            pass
+        # Local-only: the remote registry was removed (see class docstring).
         return self._local_registry()
 
     def _local_registry(self) -> list[dict[str, Any]] | None:
@@ -244,31 +219,3 @@ class SkillMarket:
             except (OSError, json.JSONDecodeError, TypeError, ValueError):  # noqa: BLE001 — local registry corrupt; return None for upstream fallback
                 pass
         return None
-
-    def _fetch_skill_content(self, name: str) -> dict[str, Any] | None:
-        if not HTTPX_AVAILABLE:
-            return None
-
-        base = (
-            f"https://raw.githubusercontent.com/"
-            f"{self.DEFAULT_REPO}/main/skills/{name}"
-        )
-
-        content: dict[str, Any] = {}
-        try:
-            resp = httpx.get(f"{base}/SKILL.md", timeout=10.0, follow_redirects=True)
-            if resp.status_code == 200:
-                content["SKILL.md"] = resp.text
-        except (ConnectionError, TimeoutError, OSError, ValueError, TypeError):
-            return None
-
-        try:
-            resp = httpx.get(f"{base}/meta.json", timeout=10.0, follow_redirects=True)
-            if resp.status_code == 200:
-                content["meta.json"] = resp.json()
-            else:
-                content["meta.json"] = {"name": name, "version": "0.1.0"}
-        except (ConnectionError, TimeoutError, OSError, ValueError, TypeError):
-            content["meta.json"] = {"name": name, "version": "0.1.0"}
-
-        return content
