@@ -52,7 +52,9 @@ def plan_turn(state: GroupState, text: str) -> TurnPlan:
     resp = responders(state, addressed)
     is_multi = len(resp) > 1
 
-    if not resp:
+    if state.mode == "project":
+        reason = "project mode — the milestone engine dispatches tasks"
+    elif not resp:
         reason = (
             "addressed agents are not active members"
             if addressed

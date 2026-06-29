@@ -134,12 +134,15 @@ def create_projects_router(
         default) run them, routing each task to the group's ACTUAL members by
         capability — not the fixed 4 roles. This is "assemble a group → turn on
         project mode"."""
+        from runtime.memory.cowork.service import set_mode
         from runtime.projectos.cowork_bridge import engine_for_group, roster_from_group
 
         gs = _group_store()
         roster = [a for a, _ in roster_from_group(gs, thread_id)]
         if not roster:
             raise HTTPException(400, "group has no participant agents to staff the project")
+        # Project is a collaboration mode of the group — reflect it in the roster.
+        set_mode(gs, thread_id, actor="project-os", mode="project")
         engine = engine_for_group(project_store, gs, thread_id, hooks=_base_hooks())
         project = engine.plan(body.name, body.goal)
         result = (

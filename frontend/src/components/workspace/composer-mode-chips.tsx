@@ -1,11 +1,11 @@
 /**
- * Composer mode chips — the "+" menu modes shown as deletable chips beside the
- * permission button.
+ * Composer (codex) mode chips — the "+" menu turn-shaping modes shown as
+ * deletable chips beside the permission button:
+ *   - plan → map     - spec → clipboard-check     - goal → target
  *
- * Four modes sit together in the "+" menu; selecting one drops a deletable chip
- * to the right of the permission indicator:
- *   - project (milestone / MS mode) → 🚩 flag
- *   - plan  → map        - spec → clipboard-check      - goal → target
+ * NOTE: "project" is NOT here — a project isn't a composer mode, it's a *group*
+ * collaboration mode (chat/cluster/swarm/project, see cowork). It's selected via
+ * the group's mode picker, not the composer "+" menu.
  *
  * Self-contained (own zh/en labels, decoupled from the concurrently-edited
  * locale bundle). Two drop-ins for the composer: ComposerModeMenuItems inside
@@ -13,7 +13,6 @@
  */
 import {
   ClipboardCheckIcon,
-  FlagIcon,
   MapIcon,
   TargetIcon,
   XIcon,
@@ -24,7 +23,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-export type ComposerMode = "project" | "plan" | "spec" | "goal";
+export type ComposerMode = "plan" | "spec" | "goal";
 
 interface ModeMeta {
   icon: LucideIcon;
@@ -32,15 +31,14 @@ interface ModeMeta {
   en: string;
 }
 
-// Order = how they appear in the "+" menu. MS/project leads with the flag.
+// Order = how they appear in the "+" menu.
 export const COMPOSER_MODES: Record<ComposerMode, ModeMeta> = {
-  project: { icon: FlagIcon, zh: "项目模式", en: "Project" },
   plan: { icon: MapIcon, zh: "规划", en: "Plan" },
   spec: { icon: ClipboardCheckIcon, zh: "规格", en: "Spec" },
   goal: { icon: TargetIcon, zh: "目标", en: "Goal" },
 };
 
-const MODE_ORDER: ComposerMode[] = ["project", "plan", "spec", "goal"];
+const MODE_ORDER: ComposerMode[] = ["plan", "spec", "goal"];
 
 function useLabel() {
   const { locale } = useI18n();
@@ -91,17 +89,11 @@ export function ComposerModeChips({
     <div className={cn("flex items-center gap-1", className)}>
       {active.map((mode) => {
         const Icon = COMPOSER_MODES[mode].icon;
-        const isProject = mode === "project";
         return (
           <span
             key={mode}
             data-testid={`composer-chip-${mode}`}
-            className={cn(
-              "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium",
-              isProject
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border/60 bg-muted/50 text-muted-foreground",
-            )}
+            className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-muted/50 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground"
             title={label(mode)}
           >
             <Icon className="size-3" />

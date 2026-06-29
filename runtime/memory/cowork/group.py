@@ -29,12 +29,15 @@ from typing import Literal
 MemberKind = Literal["agent", "human"]
 MemberRole = Literal["participant", "observer"]
 GrantScope = Literal["all", "from_join", "range", "summary"]
-GroupMode = Literal["chat", "cluster", "swarm"]
+GroupMode = Literal["chat", "cluster", "swarm", "project"]
 
 EventAction = Literal["invite", "leave", "mute", "unmute", "mode"]
 
 DEFAULT_MODE: GroupMode = "chat"
-VALID_MODES: frozenset[str] = frozenset({"chat", "cluster", "swarm"})
+# "project" is the milestone-driven collaboration mode — there is no separate
+# "project mode" entity; a project is just a group running in this mode (the
+# Project OS engine drives task dispatch over the same roster).
+VALID_MODES: frozenset[str] = frozenset({"chat", "cluster", "swarm", "project"})
 
 
 @dataclass(frozen=True)
@@ -236,6 +239,8 @@ def responders(state: GroupState, addressed: list[str] | None = None) -> list[st
                  nobody (wait for an @mention) — like a real group chat.
       - cluster: the leader (first agent participant) orchestrates.
       - swarm:   every unmuted agent participant works in parallel.
+      - project: the milestone engine assigns tasks per milestone, so chat-style
+                 turn responders don't apply — returns [] (the Project OS drives).
     Observers and muted members never respond; humans aren't auto-driven."""
     agents = [
         m for m in state.roster
@@ -245,6 +250,8 @@ def responders(state: GroupState, addressed: list[str] | None = None) -> list[st
         targeted = [m.id for m in agents if m.id in set(addressed)]
         if targeted:
             return targeted
+    if state.mode == "project":
+        return []  # the Project OS engine dispatches tasks, not the chat turn
     if state.mode == "swarm":
         return [m.id for m in agents]
     if state.mode == "cluster":

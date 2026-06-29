@@ -39,7 +39,7 @@ class InviteBody(BaseModel):
 
 
 class ModeBody(BaseModel):
-    mode: str  # chat | cluster | swarm
+    mode: str  # chat | cluster | swarm | project
 
 
 class BoardBody(BaseModel):
@@ -259,9 +259,11 @@ def create_cowork_group_router(
 
     @router.post("/api/cowork/{thread_id}/mode", dependencies=[Depends(_auth_dep)])
     def set_mode(thread_id: str, body: ModeBody, request: Request) -> dict[str, Any]:
-        """Switch the collaboration mode (chat/cluster/swarm) — non-destructive."""
-        if body.mode not in ("chat", "cluster", "swarm"):
-            raise HTTPException(400, "mode must be chat | cluster | swarm")
+        """Switch the collaboration mode (chat/cluster/swarm/project) —
+        non-destructive. 'project' runs the milestone-driven Project OS over the
+        group; there is no separate project entity."""
+        if body.mode not in ("chat", "cluster", "swarm", "project"):
+            raise HTTPException(400, "mode must be chat | cluster | swarm | project")
         group_store.append(
             thread_id,
             MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
