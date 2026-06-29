@@ -3938,6 +3938,13 @@ export interface Translations {
     noActiveTasks: string;
     cancelAll: string;
     depends: string;
+    recoveryReady: string;
+    rerunnableTasks: (count: number) => string;
+    failedTasks: (count: number) => string;
+    dependencyBlocked: (count: number) => string;
+    checkpointSequence: (sequence: number) => string;
+    recoverySafe: string;
+    recoveryUnsafe: string;
     statusLabels: {
       pending: string;
       running: string;

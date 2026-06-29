@@ -4304,6 +4304,13 @@ export const zhCN: Translations = {
     noActiveTasks: "无活跃的并行任务",
     cancelAll: "取消全部",
     depends: "依赖",
+    recoveryReady: "恢复快照",
+    rerunnableTasks: (count: number) => `${count} 个可续跑任务`,
+    failedTasks: (count: number) => `${count} 个失败`,
+    dependencyBlocked: (count: number) => `${count} 个依赖阻塞`,
+    checkpointSequence: (sequence: number) => `检查点 #${sequence}`,
+    recoverySafe: "已脱敏",
+    recoveryUnsafe: "包含原始数据",
     statusLabels: {
       pending: "等待中",
       running: "运行中",

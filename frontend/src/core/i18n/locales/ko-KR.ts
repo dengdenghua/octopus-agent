@@ -4546,6 +4546,13 @@ Strategy:
     noActiveTasks: "No active parallel tasks",
     cancelAll: "Cancel all",
     depends: "Depends",
+    recoveryReady: "Recovery snapshot",
+    rerunnableTasks: (count: number) => `${count} rerunnable task(s)`,
+    failedTasks: (count: number) => `${count} failed`,
+    dependencyBlocked: (count: number) => `${count} dependency-blocked`,
+    checkpointSequence: (sequence: number) => `checkpoint #${sequence}`,
+    recoverySafe: "redacted",
+    recoveryUnsafe: "raw data included",
     statusLabels: {
       pending: "Pending",
       running: "Running",

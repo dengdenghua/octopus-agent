@@ -26,7 +26,9 @@ import {
   MinimizeIcon,
   PauseCircleIcon,
   RefreshCwIcon,
+  RotateCcwIcon,
   SearchIcon,
+  ShieldCheckIcon,
   SquareIcon,
   TimerIcon,
   XCircleIcon,
@@ -40,9 +42,11 @@ import {
   cancelAll as apiCancelAll,
   cancelTask as apiCancelTask,
   fetchBatch as apiFetchBatch,
+  fetchBatchRecoverySnapshot as apiFetchBatchRecoverySnapshot,
   fetchOrchestratorStatus as apiFetchOrchestratorStatus,
   STATUS_BG,
   STATUS_TEXT_COLOR as STATUS_COLORS,
+  type BatchRecoverySnapshot,
   type BatchResult,
   type OrchestratorStatus,
   type TaskResult,
@@ -116,6 +120,75 @@ function formatDuration(seconds: number | null): string {
   if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`;
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
   return `${(seconds / 60).toFixed(1)}m`;
+}
+
+function RecoverySnapshotNotice({
+  snapshot,
+}: {
+  snapshot: BatchRecoverySnapshot | null;
+}) {
+  const { t } = useI18n();
+  if (!snapshot) return null;
+
+  const labels = t.parallelAgents;
+  const rerunnable = snapshot.recovery_hints.rerunnable_task_ids ?? [];
+  const failed = snapshot.recovery_hints.failed_task_ids ?? [];
+  const blocked = snapshot.recovery_hints.blocked_by_dependency ?? [];
+  const afterSequence = snapshot.recovery_hints.checkpoint?.after_sequence;
+  const rawOutputsIncluded =
+    snapshot.safety.raw_subagent_outputs_included === true ||
+    snapshot.safety.event_payloads_included === true ||
+    snapshot.safety.owner_id_included === true;
+
+  if (
+    !snapshot.resume_available &&
+    failed.length === 0 &&
+    blocked.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="border-b bg-amber-500/5 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
+          <RotateCcwIcon className="size-3.5" />
+          {labels.recoveryReady}
+        </span>
+        {rerunnable.length > 0 && (
+          <span className="text-muted-foreground">
+            {labels.rerunnableTasks(rerunnable.length)}
+          </span>
+        )}
+        {failed.length > 0 && (
+          <span className="text-red-500">
+            {labels.failedTasks(failed.length)}
+          </span>
+        )}
+        {blocked.length > 0 && (
+          <span className="text-yellow-600 dark:text-yellow-400">
+            {labels.dependencyBlocked(blocked.length)}
+          </span>
+        )}
+        {typeof afterSequence === "number" && (
+          <span className="text-muted-foreground font-mono">
+            {labels.checkpointSequence(afterSequence)}
+          </span>
+        )}
+        <span
+          className={cn(
+            "inline-flex items-center gap-1",
+            rawOutputsIncluded
+              ? "text-red-500"
+              : "text-emerald-600 dark:text-emerald-400",
+          )}
+        >
+          <ShieldCheckIcon className="size-3" />
+          {rawOutputsIncluded ? labels.recoveryUnsafe : labels.recoverySafe}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +533,8 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<OrchestratorStatus | null>(null);
   const [activeBatch, setActiveBatch] = useState<BatchResult | null>(null);
+  const [recoverySnapshot, setRecoverySnapshot] =
+    useState<BatchRecoverySnapshot | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [collapsed, setCollapsed] = useState(false);
   const [showResults, setShowResults] = useState(false);
@@ -475,7 +550,14 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
   // Fetch batch details for active batches
   const fetchBatch = useCallback(async (batchId: string) => {
     const data = await apiFetchBatch(batchId);
-    if (data) setActiveBatch(data);
+    if (!data) return;
+    setActiveBatch(data);
+    if (data.status === "running") {
+      setRecoverySnapshot(null);
+      return;
+    }
+    const snapshot = await apiFetchBatchRecoverySnapshot(batchId);
+    setRecoverySnapshot(snapshot);
   }, []);
 
   useEffect(() => {
@@ -659,7 +741,10 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
               {/* Refresh */}
               <button
                 type="button"
-                onClick={fetchStatus}
+                onClick={() => {
+                  fetchStatus();
+                  if (activeBatch) fetchBatch(activeBatch.batch_id);
+                }}
                 className="text-muted-foreground hover:text-foreground rounded p-1"
               >
                 <RefreshCwIcon className="size-3.5" />
@@ -677,6 +762,8 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
               )}
             </div>
           </div>
+
+          <RecoverySnapshotNotice snapshot={recoverySnapshot} />
 
           {/* Filter bar */}
           {activeBatch && activeBatch.results.length > 5 && (
