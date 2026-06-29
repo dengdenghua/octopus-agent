@@ -90,6 +90,15 @@ def create_cowork_group_router(
             "responders": responders(state),
         }
 
+    @router.get("/api/cowork/{thread_id}/plan")
+    def plan(thread_id: str, text: str = "") -> dict[str, Any]:
+        """Given a draft message, who would act this turn and how (mode →
+        single / cluster / swarm), honouring @agent mentions. The realtime
+        driver reads this to dispatch without a manual mode switch."""
+        from runtime.memory.cowork.turn_plan import plan_turn_for_thread
+
+        return plan_turn_for_thread(group_store, thread_id, text).to_dict()
+
     @router.post("/api/cowork/{thread_id}/members", dependencies=[Depends(_auth_dep)])
     def invite_member(thread_id: str, body: InviteBody, request: Request) -> dict[str, Any]:
         """Pull a member (agent or human) into the thread, with a context grant."""
