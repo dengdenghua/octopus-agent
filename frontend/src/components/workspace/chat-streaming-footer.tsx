@@ -1,8 +1,6 @@
 import {
   ChevronDownIcon,
   CircleIcon,
-  DownloadIcon,
-  FileTextIcon,
   Loader2Icon,
   MessageCircleIcon,
   MonitorIcon,
@@ -34,10 +32,7 @@ export interface ChatStreamingFooterProps {
 }
 
 export interface PersistentRunFooterProps extends ChatStreamingFooterProps {
-  hasResult?: boolean;
   onOpenWorkbench?: () => void;
-  onOpenResult?: () => void;
-  onExportReplay?: () => void;
   onStop?: () => void;
   className?: string;
 }
@@ -192,10 +187,7 @@ export function PersistentRunFooter({
   thread,
   liveToolEvents,
   mode = "chat",
-  hasResult = false,
   onOpenWorkbench,
-  onOpenResult,
-  onExportReplay,
   onStop,
   className,
 }: PersistentRunFooterProps) {
@@ -221,7 +213,8 @@ export function PersistentRunFooter({
   const total = visibleEvents.length;
   const participants = realAgentParticipants(visibleEvents);
   const isActive = thread.isLoading || running > 0 || waiting > 0;
-  const shouldShow = isActive || total > 0 || hasResult;
+  const isComplete = total > 0 && done + error >= total;
+  const shouldShow = isActive;
   const [isMounted, setIsMounted] = useState(shouldShow);
 
   useEffect(() => {
@@ -242,7 +235,7 @@ export function PersistentRunFooter({
         ? "waiting"
         : isActive
           ? "running"
-          : total > 0 || hasResult
+          : isComplete
             ? "done"
             : "pending";
   const phase =
@@ -251,9 +244,7 @@ export function PersistentRunFooter({
       : {
           title: thread.isLoading
             ? t.chatStreamingFooter.thinking
-            : hasResult
-              ? t.chatStreamingFooter.completed
-              : t.chatStreamingFooter.readyToExecute,
+            : t.chatStreamingFooter.readyToExecute,
           subtitle:
             normalizedMode === "team"
               ? t.chatStreamingFooter.readyForAgentCollaboration
@@ -335,26 +326,6 @@ export function PersistentRunFooter({
               <span className="hidden sm:inline">
                 {t.chatStreamingFooter.viewMachine}
               </span>
-            </FooterActionButton>
-          )}
-          {hasResult && onOpenResult && (
-            <FooterActionButton
-              label={t.chatStreamingFooter.viewResult}
-              onClick={onOpenResult}
-            >
-              <FileTextIcon className="size-3.5" />
-              <span className="hidden sm:inline">
-                {t.chatStreamingFooter.viewResult}
-              </span>
-            </FooterActionButton>
-          )}
-          {onExportReplay && (
-            <FooterActionButton
-              label={t.share.exportReplay}
-              onClick={onExportReplay}
-            >
-              <DownloadIcon className="size-3.5" />
-              <span className="hidden md:inline">{t.share.exportReplay}</span>
             </FooterActionButton>
           )}
           {isActive && onStop && (

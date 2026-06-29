@@ -1,4 +1,5 @@
 import {
+  BotIcon,
   ClipboardListIcon,
   FolderIcon,
   MonitorIcon,
@@ -8,7 +9,9 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { FileTree } from "@/components/workspace/file-tree";
+import { WorkstationSeat } from "@/components/workspace/workstation-seat";
 import { WorkDirSelector } from "@/components/workspace/workdir-selector";
+import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import type { Team } from "@/core/teams";
 import { cn } from "@/lib/utils";
 
@@ -114,6 +117,12 @@ export function TeamWorkbenchPanel({
             </Button>
           )}
         </div>
+        <TeamMachineRail
+          team={team}
+          currentParticipantId={currentParticipantId}
+          onMention={onMention}
+          onSelectMembers={() => onSelectTab("members")}
+        />
         {activeTab === "workspace" && (
           <WorkspacePathBar
             workDir={workDir}
@@ -139,6 +148,101 @@ export function TeamWorkbenchPanel({
           />
         )}
       </main>
+    </div>
+  );
+}
+
+function TeamMachineRail({
+  team,
+  currentParticipantId,
+  onMention,
+  onSelectMembers,
+}: {
+  team: Team | null;
+  currentParticipantId?: string;
+  onMention?: (name: string) => void;
+  onSelectMembers: () => void;
+}) {
+  const humans = (team?.participants ?? []).filter(
+    (participant) => participant.status !== "removed",
+  );
+  const agents = team?.members ?? [];
+  if (agents.length === 0 && humans.length === 0) return null;
+
+  return (
+    <div className="mt-1.5 flex min-w-0 items-center gap-2 border-t border-border/35 py-1.5">
+      <UsersIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {agents.map((agent) => {
+          const name = agent.display_name ?? agent.name;
+          const isLeader = team?.leaderId === agent.name;
+          const rawAvatar =
+            agent.avatar_url ??
+            (agent.name.startsWith("local_")
+              ? `/api/agents/${agent.name}/avatar`
+              : undefined);
+          const avatarSrc = rawAvatar
+            ? withAgentAvatarVersion(rawAvatar)
+            : undefined;
+          return (
+            <WorkstationSeat
+              key={agent.name}
+              name={name}
+              avatar={agent.icon}
+              avatarUrl={avatarSrc}
+              avatarNode={
+                <BotIcon
+                  className="size-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              }
+              showBotBadge
+              fallbackInitial={name.charAt(0)}
+              dotClassName="bg-muted-foreground/45"
+              dotLabel={isLeader ? "队长 · 随时待命" : "随时待命"}
+              title={
+                agent.description ||
+                `${name} · ${isLeader ? "队长" : "AI 成员"}`
+              }
+              ariaLabel={`@${name}`}
+              selected={isLeader}
+              iconOnly
+              iconCaption={isLeader ? "队长" : undefined}
+              onClick={() => {
+                onSelectMembers();
+                onMention?.(agent.name);
+              }}
+              className="shrink-0"
+            />
+          );
+        })}
+        {humans.map((participant) => {
+          const isSelf = participant.id === currentParticipantId;
+          const isOnline = participant.status === "active";
+          return (
+            <WorkstationSeat
+              key={participant.id}
+              name={participant.display_name}
+              fallbackInitial={participant.display_name.charAt(0)}
+              dotClassName={
+                isOnline ? "bg-emerald-500" : "bg-muted-foreground/35"
+              }
+              dotLabel={isOnline ? "在线" : "离线"}
+              title={`${participant.display_name} · ${
+                isOnline ? "在线" : "离线"
+              } · ${participant.role}`}
+              ariaLabel={`${participant.display_name} · ${
+                isOnline ? "在线" : "离线"
+              }`}
+              selected={isSelf}
+              iconOnly
+              iconCaption={isSelf ? "You" : undefined}
+              onClick={onSelectMembers}
+              className="shrink-0"
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

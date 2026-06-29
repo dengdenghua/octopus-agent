@@ -2080,29 +2080,6 @@ function ChatsPageContent({
     },
     [openAgentPlanPanel, openArtifactsPanel, setArtifactsOpen],
   );
-  const hasRunResult =
-    hasFinalArtifact || Boolean(previewBlocks) || artifactCount > 0;
-  const openRunResultPanel = useCallback(() => {
-    if (hasFinalArtifact) {
-      openFinalArtifactPanel();
-      return;
-    }
-    if (previewBlocks) {
-      openPreviewPanel();
-      return;
-    }
-    if (artifactCount > 0) {
-      openArtifactsPanel();
-    }
-  }, [
-    artifactCount,
-    hasFinalArtifact,
-    openArtifactsPanel,
-    openFinalArtifactPanel,
-    openPreviewPanel,
-    previewBlocks,
-  ]);
-
   return (
     <SubtasksProvider>
       <ThreadProviders thread={thread} isMock={false}>
@@ -2227,13 +2204,8 @@ function ChatsPageContent({
                 liveToolEvents={agentDisplayEvents}
                 threadId={threadId}
                 mode={effectiveMode}
-                hasResult={hasRunResult}
                 onOpenWorkbench={
                   canOpenAgentWorkbench ? openAgentPanel : undefined
-                }
-                onOpenResult={hasRunResult ? openRunResultPanel : undefined}
-                onExportReplay={
-                  replayBlocks.length > 0 ? handleExportReplay : undefined
                 }
                 onStop={thread.isLoading ? handleStop : undefined}
               />

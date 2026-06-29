@@ -108,7 +108,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "查看主电脑" }),
+      screen.getByRole("button", { name: "主电脑 · 已完成" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
   });
@@ -131,15 +131,17 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("button", { name: "Eve · 群主" }),
-    ).toHaveAttribute("title", "Eve · 群主");
+    expect(screen.getByRole("button", { name: "Eve · 群主" })).toHaveAttribute(
+      "title",
+      "Eve · 群主",
+    );
     expect(
       container.querySelector('button[aria-label="Eve · 群主"] img'),
     ).toHaveAttribute("src", "/api/agents/general/avatar");
     expect(screen.getByText("群主")).toBeInTheDocument();
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
-    const codexSeat = screen.getByRole("button", {
+    const workbenchHeader = screen.getByRole("banner");
+    const codexSeat = within(workbenchHeader).getByRole("button", {
       name: "Codex CLI · 子电脑 · 在场",
     });
     expect(codexSeat).toHaveAttribute("title", "Codex CLI · 子电脑 · 在场");
@@ -166,7 +168,9 @@ describe("<AgentWorkbenchPanel />", () => {
     fireEvent.click(screen.getByRole("button", { name: "主电脑" }));
 
     expect(screen.queryByText("子电脑待命")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Eve · 群主" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Eve · 群主" }),
+    ).toBeInTheDocument();
   });
 
   test("uses the leader avatar for the main workstation in solo mode", () => {

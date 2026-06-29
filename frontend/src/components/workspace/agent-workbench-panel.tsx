@@ -785,8 +785,8 @@ export function AgentWorkbenchPanel({
     phases: mainPhases,
     paused,
   });
-  const subagentDock = (
-    <SubagentDock
+  const machineRail = (
+    <MachineScopeRail
       agents={agentTiles}
       leaderSeat={leaderRosterSeat}
       mainRunState={mainRunState}
@@ -873,7 +873,6 @@ export function AgentWorkbenchPanel({
   );
 
   const visibleTabs = workbenchTabs.filter((tab) => !closedTabs.has(tab.id));
-  const showSubagentDock = effectiveActiveTab === "agent";
 
   // Workbench view: summary / computer view.
   if (emptyShell) {
@@ -1012,11 +1011,11 @@ export function AgentWorkbenchPanel({
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          {machineRail}
         </header>
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/70">
           {emptyEmbeddedPage}
         </main>
-        {showSubagentDock ? subagentDock : null}
       </div>
     );
   }
@@ -1303,6 +1302,7 @@ export function AgentWorkbenchPanel({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        {machineRail}
       </header>
 
       {effectiveEmbeddedPage ? (
@@ -1530,12 +1530,11 @@ export function AgentWorkbenchPanel({
           )}
         </main>
       )}
-      {showSubagentDock ? subagentDock : null}
     </div>
   );
 }
 
-function SubagentDock({
+function MachineScopeRail({
   agents,
   leaderSeat,
   mainRunState,
@@ -1556,91 +1555,93 @@ function SubagentDock({
 }) {
   const { t } = useI18n();
   const hasCollaborators = rosterSeats.length > 0;
+  const hasMachineChoices =
+    Boolean(leaderSeat) || agents.length > 0 || hasCollaborators;
+  if (!hasMachineChoices) return null;
   const mainSeatLabel =
     leaderSeat && hasCollaborators
       ? `${leaderSeat.name} · ${t.agentWorkbenchPanel.leaderSeat}`
       : leaderSeat?.name;
   const mainDockShowsPresence = Boolean(leaderSeat && hasCollaborators);
   return (
-    <div className="shrink-0 border-t border-border/25 bg-background/60 px-4 py-1.5">
-      <div className="flex min-w-0 items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <WorkstationSeat
-            name={leaderSeat?.name ?? t.agentWorkbenchPanel.mainController}
-            avatar={leaderSeat?.icon ?? null}
-            avatarUrl={leaderSeat?.avatarUrl ?? null}
-            avatarNode={
-              leaderSeat ? undefined : (
+    <div className="mt-1.5 flex min-w-0 items-center gap-2 border-t border-border/35 pt-1.5">
+      <MonitorIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <WorkstationSeat
+          name={leaderSeat?.name ?? t.agentWorkbenchPanel.mainController}
+          avatar={leaderSeat?.icon ?? null}
+          avatarUrl={leaderSeat?.avatarUrl ?? null}
+          avatarNode={
+            leaderSeat ? undefined : (
+              <BotIcon
+                className="size-3.5 text-muted-foreground"
+                aria-hidden="true"
+              />
+            )
+          }
+          fallbackInitial={leaderSeat?.name.charAt(0)}
+          selected={selectedAgentId === null}
+          onClick={onSelectMain}
+          dotClassName={
+            mainDockShowsPresence
+              ? "bg-emerald-500"
+              : agentRunDotClass(mainRunState)
+          }
+          dotLabel={
+            mainDockShowsPresence
+              ? t.agentWorkbenchPanel.dockStatusPresent
+              : undefined
+          }
+          ariaLabel={mainSeatLabel ?? t.agentWorkbenchPanel.viewMainAgentSlot}
+          title={mainSeatLabel ?? t.agentWorkbenchPanel.mainAgentProcessTitle}
+          iconOnly
+          iconCaption={
+            hasCollaborators ? t.agentWorkbenchPanel.leaderSeat : undefined
+          }
+          className="shrink-0"
+        />
+        {agents.map((agent) => {
+          const label = agent.codename ?? agent.name ?? agent.label;
+          return (
+            <WorkstationSeat
+              key={agent.id}
+              name={repairMojibakeText(label)}
+              avatar={agent.avatar}
+              avatarNode={
                 <BotIcon
                   className="size-3.5 text-muted-foreground"
                   aria-hidden="true"
                 />
-              )
-            }
-            fallbackInitial={leaderSeat?.name.charAt(0)}
-            selected={selectedAgentId === null}
-            onClick={onSelectMain}
-            dotClassName={
-              mainDockShowsPresence
-                ? "bg-emerald-500"
-                : agentRunDotClass(mainRunState)
-            }
-            dotLabel={
-              mainDockShowsPresence
-                ? t.agentWorkbenchPanel.dockStatusPresent
-                : undefined
-            }
-            ariaLabel={mainSeatLabel ?? t.agentWorkbenchPanel.viewMainAgentSlot}
-            title={mainSeatLabel ?? t.agentWorkbenchPanel.mainAgentProcessTitle}
-            iconOnly
-            iconCaption={
-              hasCollaborators ? t.agentWorkbenchPanel.leaderSeat : undefined
-            }
-            className="shrink-0"
-          />
-          {agents.map((agent) => {
-            const label = agent.codename ?? agent.name ?? agent.label;
-            return (
-              <WorkstationSeat
-                key={agent.id}
-                name={repairMojibakeText(label)}
-                avatar={agent.avatar}
-                avatarNode={
-                  <BotIcon
-                    className="size-3.5 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                }
-                selected={selectedAgentId === agent.id}
-                onClick={() => onSelectAgent(agent.id)}
-                dotClassName={agentRunDotClass(agent.status)}
-                dotLabel={dockAgentStatusLabel(agent.status, t)}
-                ariaLabel={t.agentWorkbenchPanel.viewAgentProcess(label)}
-                title={`${label}: ${agent.task}`}
-                iconOnly
-                className="shrink-0"
-              />
-            );
-          })}
-          {rosterSeats.map((seat) => (
-            <WorkstationSeat
-              key={seat.id}
-              name={seat.name}
-              avatar={seat.icon ?? null}
-              avatarUrl={seat.avatarUrl ?? null}
-              showBotBadge
-              fallbackInitial={seat.name.charAt(0)}
-              dotClassName="bg-emerald-500"
-              dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
-              title={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
-              ariaLabel={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
-              selected={selectedAgentId === seat.id}
-              onClick={() => onSelectRoster(seat.id)}
+              }
+              selected={selectedAgentId === agent.id}
+              onClick={() => onSelectAgent(agent.id)}
+              dotClassName={agentRunDotClass(agent.status)}
+              dotLabel={dockAgentStatusLabel(agent.status, t)}
+              ariaLabel={t.agentWorkbenchPanel.viewAgentProcess(label)}
+              title={`${label}: ${agent.task}`}
               iconOnly
               className="shrink-0"
             />
-          ))}
-        </div>
+          );
+        })}
+        {rosterSeats.map((seat) => (
+          <WorkstationSeat
+            key={seat.id}
+            name={seat.name}
+            avatar={seat.icon ?? null}
+            avatarUrl={seat.avatarUrl ?? null}
+            showBotBadge
+            fallbackInitial={seat.name.charAt(0)}
+            dotClassName="bg-emerald-500"
+            dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
+            title={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+            ariaLabel={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+            selected={selectedAgentId === seat.id}
+            onClick={() => onSelectRoster(seat.id)}
+            iconOnly
+            className="shrink-0"
+          />
+        ))}
       </div>
     </div>
   );
@@ -1838,7 +1839,9 @@ function RosterComputerPlaceholder({
                   key={row.label}
                   className={cn(
                     "flex items-start gap-2 border-l-2 px-3 py-2 text-left",
-                    active ? "border-l-primary bg-muted/30" : "border-l-transparent",
+                    active
+                      ? "border-l-primary bg-muted/30"
+                      : "border-l-transparent",
                   )}
                 >
                   <span className="mt-0.5 w-5 shrink-0 font-mono text-[10px] text-muted-foreground">
@@ -2078,7 +2081,8 @@ function SubagentProcessView({
 
 function agentStatusTextClass(status: AgentTile["status"]): string {
   if (status === "running") return "text-primary";
-  if (status === "waiting_approval") return "text-amber-600 dark:text-amber-300";
+  if (status === "waiting_approval")
+    return "text-amber-600 dark:text-amber-300";
   if (status === "error") return "text-destructive";
   if (status === "done") return "text-emerald-600 dark:text-emerald-300";
   return "text-muted-foreground";

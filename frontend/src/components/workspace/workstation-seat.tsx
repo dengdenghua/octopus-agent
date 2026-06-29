@@ -70,12 +70,12 @@ export function WorkstationSeat({
 }: WorkstationSeatProps) {
   const base = iconOnly
     ? iconCaption
-      ? "group/seat relative inline-flex h-10 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border text-left transition-colors"
-      : "group/seat relative inline-grid size-9 shrink-0 place-items-center rounded-xl border text-left transition-colors"
-    : "group/seat inline-flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-colors";
+      ? "group/seat relative inline-flex h-10 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border text-left transition-colors"
+      : "group/seat relative inline-grid size-9 shrink-0 place-items-center rounded-md border text-left transition-colors"
+    : "group/seat inline-flex min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors";
   const tone = selected
-    ? "border-foreground/30 bg-muted/50 text-foreground"
-    : "border-border/60 bg-background/85 text-foreground hover:bg-muted/40";
+    ? "border-foreground/25 bg-muted/45 text-foreground"
+    : "border-transparent bg-transparent text-foreground hover:border-border/45 hover:bg-muted/35";
   const statusText = dotLabel ? `${name} · ${dotLabel}` : name;
   const accessibleLabel = ariaLabel ?? statusText;
 
@@ -103,7 +103,10 @@ export function WorkstationSeat({
       )}
       {showBotBadge && (
         <span className="absolute -bottom-0.5 -right-0.5 grid size-3 place-items-center rounded-full bg-background">
-          <BotIcon className="size-2 text-muted-foreground" aria-hidden="true" />
+          <BotIcon
+            className="size-2 text-muted-foreground"
+            aria-hidden="true"
+          />
         </span>
       )}
     </span>

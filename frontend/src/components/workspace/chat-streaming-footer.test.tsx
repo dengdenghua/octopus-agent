@@ -63,10 +63,7 @@ describe("ChatStreamingFooter", () => {
     expect(onOpenWorkbench).toHaveBeenCalledTimes(1);
   });
 
-  test("persistent run footer keeps result and replay actions after completion", () => {
-    const onOpenResult = vi.fn();
-    const onExportReplay = vi.fn();
-
+  test("persistent run footer hides completed history and replay actions", () => {
     render(
       <AllProviders>
         <PersistentRunFooter
@@ -83,21 +80,15 @@ describe("ChatStreamingFooter", () => {
               input: { command: "pnpm test" },
             },
           ]}
-          hasResult
-          onOpenResult={onOpenResult}
-          onExportReplay={onExportReplay}
         />
       </AllProviders>,
     );
 
-    expect(screen.getAllByText("Completed").length).toBeGreaterThan(0);
-    expect(screen.getByText("Verification done")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /View result/i }));
-    fireEvent.click(
-      screen.getByRole("button", { name: /Export replayable HTML/i }),
-    );
-    expect(onOpenResult).toHaveBeenCalledTimes(1);
-    expect(onExportReplay).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Completed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Verification done")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Export replayable HTML/i }),
+    ).not.toBeInTheDocument();
   });
 
   test("deep mode shows a compact phase summary and lightweight timeline details", () => {

@@ -899,11 +899,6 @@ export default function TeamPage() {
     setShowTeamWorkbench(true);
     setShowPreview(false);
   }, []);
-  const openRunResult = useCallback(() => {
-    if (!previewBlocks) return;
-    setShowPreview(true);
-    setShowTeamWorkbench(false);
-  }, [previewBlocks]);
 
   const handleCreateTeam = useCallback(
     async (config: TeamConfig) => {
@@ -1142,9 +1137,7 @@ export default function TeamPage() {
                     liveToolEvents={teamRunEvents}
                     threadId={threadId}
                     mode={isCoworkMode ? "team" : "chat"}
-                    hasResult={Boolean(previewBlocks)}
                     onOpenWorkbench={openRunWorkbench}
-                    onOpenResult={previewBlocks ? openRunResult : undefined}
                     onStop={thread.isLoading ? handleStop : undefined}
                   />
                 }
