@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogClose,
@@ -21,6 +22,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import {
@@ -218,10 +228,10 @@ function PluginListItem({
   const surfaceBadges = pluginSurfaceBadges(entry);
 
   return (
-    <div className="group flex min-w-0 items-center gap-3 rounded-lg border border-border/45 bg-card/55 px-3 py-3 shadow-sm transition-colors hover:border-primary/20 hover:bg-card">
+    <Card className="group flex flex-row items-center gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30">
       <div
         className={cn(
-          "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/50 bg-background shadow-sm",
+          "flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background",
           !plugin.enabled && "bg-muted/40",
         )}
       >
@@ -241,48 +251,51 @@ function PluginListItem({
           />
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <CardContent className="min-w-0 flex-1 p-0">
         <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-[15px] font-semibold leading-5">
+          <h3 className="truncate text-sm font-semibold leading-5">
             {plugin.name}
           </h3>
         </div>
-        <p className="mt-1 line-clamp-1 text-sm leading-5 text-muted-foreground">
+        <p className="mt-0.5 line-clamp-1 text-sm leading-5 text-muted-foreground">
           {plugin.description}
         </p>
         {surfaceBadges.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {surfaceBadges.map((badge) => (
-              <span
+              <Badge
                 key={badge}
-                className="rounded-md border border-border/60 bg-muted/35 px-1.5 py-0.5 text-[11px] font-medium leading-4 text-muted-foreground"
+                variant="outline"
+                className="text-xs font-normal"
               >
                 {badge}
-              </span>
+              </Badge>
             ))}
           </div>
         )}
-      </div>
+      </CardContent>
       <div className="flex shrink-0 items-center gap-1.5">
         {hasConfig && hubPlugin && (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             aria-label={`配置 ${plugin.name}`}
+            className="size-8"
             onClick={() => onConfigure(hubPlugin)}
-            className="flex size-8 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Settings2 className="size-4" />
-          </button>
+          </Button>
         )}
         <span
           title={statusTitle}
           className={cn(
-            "flex size-8 items-center justify-center rounded-lg bg-muted/55 transition-colors",
+            "flex size-8 items-center justify-center rounded-lg transition-colors",
             plugin.error
-              ? "text-rose-500"
+              ? "bg-destructive/10 text-destructive"
               : plugin.enabled
-                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
-                : "text-foreground hover:bg-muted",
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:bg-muted",
           )}
         >
           {plugin.error ? (
@@ -294,7 +307,7 @@ function PluginListItem({
           )}
         </span>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -413,7 +426,7 @@ export default function PluginsPage() {
     return (
       <div className="workspace-panel mx-auto flex min-h-[40vh] max-w-6xl items-center justify-center rounded-lg">
         <div className="flex flex-col items-center gap-3">
-          <Puzzle className="size-8 animate-pulse text-purple-500" />
+          <Puzzle className="size-8 animate-pulse text-primary" />
           <p className="text-sm text-muted-foreground">
             {t.plugins.pageLoading}
           </p>
@@ -423,93 +436,93 @@ export default function PluginsPage() {
   }
 
   return (
-    <div className="flex w-full flex-col gap-5 px-4 py-4">
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => switchTab(value as PluginsTab)}
+      className="flex w-full flex-col gap-5 px-4 py-4"
+    >
       {/* ── Tab bar ── */}
       <section className="mx-auto flex w-full max-w-6xl items-center justify-between">
-        <div className="inline-flex items-center gap-1 rounded-full bg-muted/50 p-1">
-          <button
-            type="button"
-            onClick={() => switchTab("plugins")}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === "plugins"
-                ? "bg-background text-primary shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            }`}
-          >
+        <TabsList variant="line">
+          <TabsTrigger value="plugins">
             <Puzzle className="size-3.5" />
             {t.plugins.pageTitle}
-          </button>
-          <button
-            type="button"
-            onClick={() => switchTab("skills")}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeTab === "skills"
-                ? "bg-background text-emerald-600 shadow-sm dark:text-emerald-400"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-            }`}
-          >
+          </TabsTrigger>
+          <TabsTrigger value="skills">
             <BoxesIcon className="size-3.5" />
             {t.plugins.tabSkillMarket}
-          </button>
-        </div>
-        {activeTab === "plugins" && (
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="plugins" className="mt-0">
           <div className="hidden items-center gap-2 sm:flex">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 rounded-full px-3"
+              className="h-9 rounded-lg px-3"
               onClick={openCreatePluginChat}
             >
               <Plus className="mr-1.5 size-4" />
-              创建
+              {t.common.create}
             </Button>
           </div>
-        )}
+        </TabsContent>
       </section>
 
       {/* ── Plugins tab content ── */}
-      {activeTab === "plugins" && (
+      <TabsContent value="plugins" className="mt-0">
         <section className="mx-auto flex w-full max-w-6xl flex-col gap-6">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-center">
             <div className="relative w-full lg:max-w-[560px]">
               <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                aria-label="搜索插件"
-                className="h-11 rounded-2xl border-border/60 bg-background pl-11 text-base shadow-sm"
-                placeholder="搜索插件"
+                aria-label={t.common.search}
+                className="h-11 rounded-lg border-border bg-background pl-11 text-base shadow-none"
+                placeholder={t.common.search}
                 value={pluginQuery}
                 onChange={(event) => setPluginQuery(event.target.value)}
               />
             </div>
             <div className="flex flex-wrap justify-center gap-2">
-              <select
-                aria-label="按作者筛选插件"
-                className="h-11 shrink-0 rounded-2xl border border-transparent bg-muted/60 px-4 text-sm font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+              <Select
                 value={pluginAuthorFilter}
-                onChange={(event) => setPluginAuthorFilter(event.target.value)}
+                onValueChange={setPluginAuthorFilter}
               >
-                <option value="all">全部作者</option>
-                {pluginAuthors.map((author) => (
-                  <option key={author} value={author}>
-                    Built by {author}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="按状态筛选插件"
-                className="h-11 shrink-0 rounded-2xl border border-transparent bg-muted/60 px-4 text-sm font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
+                <SelectTrigger className="h-11 w-auto gap-2 rounded-lg bg-background shadow-none">
+                  <SelectValue>
+                    {pluginAuthorFilter === "all"
+                      ? "全部作者"
+                      : `Built by ${pluginAuthorFilter}`}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部作者</SelectItem>
+                  {pluginAuthors.map((author) => (
+                    <SelectItem key={author} value={author}>
+                      Built by {author}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
                 value={pluginStatusFilter}
-                onChange={(event) =>
-                  setPluginStatusFilter(
-                    event.target.value as PluginStatusFilter,
-                  )
+                onValueChange={(value) =>
+                  setPluginStatusFilter(value as PluginStatusFilter)
                 }
               >
-                <option value="all">全部</option>
-                <option value="enabled">已启用</option>
-                <option value="disabled">未启用</option>
-              </select>
+                <SelectTrigger className="h-11 w-auto gap-2 rounded-lg bg-background shadow-none">
+                  <SelectValue>
+                    {pluginStatusFilter === "all" && "全部"}
+                    {pluginStatusFilter === "enabled" && "已启用"}
+                    {pluginStatusFilter === "disabled" && "未启用"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部</SelectItem>
+                  <SelectItem value="enabled">已启用</SelectItem>
+                  <SelectItem value="disabled">未启用</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -524,7 +537,7 @@ export default function PluginsPage() {
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-border/70 bg-muted/10 px-6 py-12 text-center">
+            <div className="rounded-lg border border-dashed border-border bg-muted/10 px-6 py-12 text-center">
               <Puzzle className="mx-auto mb-3 size-10 text-muted-foreground/30" />
               <p className="text-sm text-muted-foreground">
                 {allPlugins.length === 0
@@ -539,10 +552,10 @@ export default function PluginsPage() {
             </div>
           )}
         </section>
-      )}
+      </TabsContent>
 
       {/* ── Skills tab content ── */}
-      {activeTab === "skills" && (
+      <TabsContent value="skills" className="mt-0">
         <LocalSkillDirectoryPanel
           allButtonPosition="end"
           onDirectorySelect={() => switchSkillView("directory")}
@@ -550,7 +563,7 @@ export default function PluginsPage() {
           skillPacksContent={<SkillPacksTab variant="embedded" />}
           skillPacksSelected={skillView === "packs"}
         />
-      )}
+      </TabsContent>
 
       {/* ── Config dialog ── */}
       {configTarget && (
@@ -562,6 +575,6 @@ export default function PluginsPage() {
           }}
         />
       )}
-    </div>
+    </Tabs>
   );
 }

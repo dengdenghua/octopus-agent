@@ -73,7 +73,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { StatusBadge, type StatusTone } from "@/components/ui/state";
 import { getAPIClient } from "@/core/api";
 import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
@@ -175,20 +174,14 @@ type ThreadSummary = {
   agents: string[];
 };
 
+type ThreadRunStatus = "running" | "pending" | "failed" | "current";
+
 function syncThreadAgentSelection(agents: string[]) {
   if (agents.length !== 1) return;
   const agent = agents[0]?.trim();
   if (!agent) return;
   emitAgentChanged(agent, "thread");
 }
-
-type OngoingWorkItem = {
-  id: string;
-  title: string;
-  subtitle: string;
-  href: string;
-  status: "running" | "pending" | "failed" | "current";
-};
 
 /** Pull a list of agent ids out of thread metadata · accepts the
  *  several places the backend stashes them (single agent on solo
@@ -211,49 +204,48 @@ function isConversationThreadMode(mode: string): boolean {
   );
 }
 
-function buildOngoingWorkItems({
+function buildThreadRunStatusByHref({
   activeTeamThreadId,
   activeTeamTasks,
   teamTaskThreads,
-  sidebar,
 }: {
   activeTeamThreadId: string | null;
   activeTeamTasks: TeamTask[];
   teamTaskThreads: ThreadSummary[];
-  sidebar: Translations["sidebar"];
-}): OngoingWorkItem[] {
-  const items: OngoingWorkItem[] = [];
+}): Map<string, ThreadRunStatus> {
+  const byHref = new Map<string, ThreadRunStatus>();
   const activeStatuses = new Set(["running", "failed", "pending"]);
   for (const task of activeTeamTasks) {
     if (!activeStatuses.has(task.status)) continue;
-    items.push({
-      id: `task:${task.id}`,
-      title: task.title || sidebar.unnamedTask,
-      subtitle:
-        task.status === "running"
-          ? sidebar.taskStatusRunning
-          : task.status === "failed"
-            ? sidebar.taskStatusFailed
-            : sidebar.taskStatusPending,
-      href: `/workspace/team/${encodeURIComponent(task.room_id)}`,
-      status: task.status as OngoingWorkItem["status"],
-    });
+    const href = `/workspace/team/${encodeURIComponent(task.room_id)}`;
+    byHref.set(
+      href,
+      mergeThreadRunStatus(byHref.get(href), task.status as ThreadRunStatus),
+    );
   }
 
   const activeThread = activeTeamThreadId
     ? teamTaskThreads.find((thread) => thread.id === activeTeamThreadId)
     : null;
-  if (activeThread && !items.some((item) => item.href === activeThread.href)) {
-    items.push({
-      id: `thread:${activeThread.id}`,
-      title: activeThread.title,
-      subtitle: sidebar.currentTaskSession,
-      href: activeThread.href,
-      status: "current",
-    });
+  if (activeThread && !byHref.has(activeThread.href)) {
+    byHref.set(activeThread.href, "current");
   }
 
-  return items.slice(0, 6);
+  return byHref;
+}
+
+function mergeThreadRunStatus(
+  current: ThreadRunStatus | undefined,
+  next: ThreadRunStatus,
+): ThreadRunStatus {
+  const priority: Record<ThreadRunStatus, number> = {
+    failed: 4,
+    running: 3,
+    pending: 2,
+    current: 1,
+  };
+  if (!current) return next;
+  return priority[next] > priority[current] ? next : current;
 }
 
 function firstString(...values: unknown[]): string {
@@ -832,15 +824,14 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
     () => activeTeamTasksQuery.data ?? [],
     [activeTeamTasksQuery.data],
   );
-  const ongoingWorkItems = useMemo(
+  const runStatusByHref = useMemo(
     () =>
-      buildOngoingWorkItems({
+      buildThreadRunStatusByHref({
         activeTeamThreadId,
         activeTeamTasks,
         teamTaskThreads,
-        sidebar: t.sidebar,
       }),
-    [activeTeamThreadId, activeTeamTasks, teamTaskThreads, t.sidebar],
+    [activeTeamThreadId, activeTeamTasks, teamTaskThreads],
   );
 
   const byProject: Record<string, ThreadSummary[]> = {};
@@ -986,16 +977,17 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           deletableProjects={deletableProjects}
           deletingProject={deletingProject}
           groupingEnabled={projectGroupingEnabled}
+          runStatusByHref={runStatusByHref}
           onDraftCommit={saveProjectName}
           onDraftCancel={() => setProjectDraftOpen(false)}
           onDeleteProject={deleteProject}
           onToggleGrouping={toggleProjectGrouping}
         />
-        <OngoingTasksSection items={ongoingWorkItems} pathname={pathname} />
         <ChatsSection
           threads={allHistoryThreads}
           pathname={pathname}
           label={t.sidebar.sectionChats}
+          runStatusByHref={runStatusByHref}
         />
         {/* Hidden directory input — used as the Safari/Firefox fallback
             when showDirectoryPicker is unavailable. webkitdirectory
@@ -1571,6 +1563,68 @@ function ThreadAvatar({
   );
 }
 
+function ThreadRunStatusLight({
+  className,
+  status,
+}: {
+  className?: string;
+  status?: ThreadRunStatus;
+}) {
+  const { t } = useI18n();
+  if (!status) return null;
+  const label =
+    status === "running"
+      ? t.sidebar.taskStatusRunning
+      : status === "failed"
+        ? t.sidebar.taskStatusFailed
+        : status === "pending"
+          ? t.sidebar.taskStatusPending
+          : t.sidebar.currentTaskSession;
+  const toneClass =
+    status === "failed"
+      ? "bg-destructive shadow-destructive/20"
+      : status === "pending"
+        ? "bg-amber-500 shadow-amber-500/25"
+        : status === "current"
+          ? "bg-sky-500 shadow-sky-500/25"
+          : "bg-emerald-500 shadow-emerald-500/25";
+  const haloClass =
+    status === "failed"
+      ? null
+      : status === "pending"
+        ? "bg-amber-500/25"
+        : status === "current"
+          ? "bg-sky-500/25"
+          : "bg-emerald-500/25";
+
+  return (
+    <span
+      aria-label={label}
+      title={label}
+      className={cn(
+        "relative inline-flex size-2 shrink-0 items-center justify-center rounded-full",
+        className,
+      )}
+    >
+      {haloClass && (
+        <span
+          className={cn(
+            "absolute inline-flex size-3 rounded-full animate-ping",
+            haloClass,
+          )}
+        />
+      )}
+      <span
+        className={cn(
+          "relative inline-flex size-2 rounded-full shadow-sm",
+          toneClass,
+          status !== "failed" && "animate-pulse",
+        )}
+      />
+    </span>
+  );
+}
+
 /** One image cell · falls back to a colored initial circle if the
  *  backend has no avatar for the agent (404 on
  *  ``/api/agents/<id>/avatar``). The initial fallback uses a hash-based
@@ -1699,6 +1753,7 @@ function ProjectGroup({
   pathname,
   deletable,
   deleting,
+  runStatusByHref,
   onDeleteProject,
 }: {
   project: string;
@@ -1706,6 +1761,7 @@ function ProjectGroup({
   pathname: string;
   deletable: boolean;
   deleting: boolean;
+  runStatusByHref: Map<string, ThreadRunStatus>;
   onDeleteProject: (project: string) => void | Promise<void>;
 }) {
   const { t } = useI18n();
@@ -1773,6 +1829,7 @@ function ProjectGroup({
           <ul className="mt-0.5 space-y-px pl-6">
             {threads.slice(0, 12).map((thread) => {
               const active = pathname.includes(thread.id);
+              const runStatus = runStatusByHref.get(thread.href);
               return (
                 <li key={thread.id} className="group/thread relative">
                   <Link
@@ -1793,10 +1850,16 @@ function ProjectGroup({
                         "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
                     )}
                   >
-                    <ThreadAvatar
-                      agents={thread.agents}
-                      className="size-5 shrink-0"
-                    />
+                    <span className="relative shrink-0">
+                      <ThreadAvatar
+                        agents={thread.agents}
+                        className="size-5 shrink-0"
+                      />
+                      <ThreadRunStatusLight
+                        status={runStatus}
+                        className="absolute -bottom-0.5 -right-0.5 ring-2 ring-sidebar"
+                      />
+                    </span>
                     <span className="min-w-0 flex-1 truncate leading-tight">
                       {thread.title}
                     </span>
@@ -1986,6 +2049,7 @@ function ProjectsSection({
   deletableProjects,
   deletingProject,
   groupingEnabled,
+  runStatusByHref,
   onDraftCommit,
   onDraftCancel,
   onDeleteProject,
@@ -1998,6 +2062,7 @@ function ProjectsSection({
   deletableProjects: Set<string>;
   deletingProject: string | null;
   groupingEnabled: boolean;
+  runStatusByHref: Map<string, ThreadRunStatus>;
   onDraftCommit: (name: string) => void;
   onDraftCancel: () => void;
   onDeleteProject: (project: string) => void | Promise<void>;
@@ -2079,6 +2144,7 @@ function ProjectsSection({
                 pathname={pathname}
                 deletable={deletableProjects.has(project)}
                 deleting={deletingProject === project}
+                runStatusByHref={runStatusByHref}
                 onDeleteProject={onDeleteProject}
               />
             ))}
@@ -2086,84 +2152,6 @@ function ProjectsSection({
         )}
       </SidebarGroup>
     </div>
-  );
-}
-
-function OngoingTasksSection({
-  items,
-  pathname,
-}: {
-  items: OngoingWorkItem[];
-  pathname: string;
-}) {
-  const { t } = useI18n();
-  return (
-    <div className="mt-2 group-data-[collapsible=icon]:hidden">
-      <SidebarGroup className="p-0 px-2 pb-0">
-        <SectionHeader label={t.sidebar.sectionOngoing} />
-        {items.length === 0 ? (
-          <EmptyHint>{t.sidebar.noOngoingTasks}</EmptyHint>
-        ) : (
-          <ul className="mt-0.5 space-y-px">
-            {items.map((item) => {
-              const active = pathname === routePath(item.href);
-              return (
-                <li key={item.id}>
-                  <Link
-                    to={item.href}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "flex min-h-8 items-center gap-2 rounded-md px-2 py-1 text-xs opacity-78 transition-[opacity,background-color] duration-150",
-                      "hover:bg-muted/40 hover:opacity-100",
-                      active &&
-                        "bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)] opacity-100",
-                    )}
-                  >
-                    <OngoingStatusDot status={item.status} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate leading-tight text-foreground/90">
-                        {item.title}
-                      </span>
-                      <span className="block truncate text-[10px] leading-tight text-muted-foreground/70">
-                        {item.subtitle}
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </SidebarGroup>
-    </div>
-  );
-}
-
-function OngoingStatusDot({ status }: { status: OngoingWorkItem["status"] }) {
-  const { t } = useI18n();
-  const toneByStatus: Record<OngoingWorkItem["status"], StatusTone> = {
-    current: "success",
-    failed: "error",
-    pending: "queued",
-    running: "running",
-  };
-  const label =
-    status === "running"
-      ? t.sidebar.taskStatusRunning
-      : status === "failed"
-        ? t.sidebar.taskStatusFailed
-        : status === "pending"
-          ? t.sidebar.taskStatusPending
-          : t.sidebar.currentTaskSession;
-  return (
-    <StatusBadge
-      tone={toneByStatus[status]}
-      icon={status === "running"}
-      dot={status !== "running"}
-      className="h-5 max-w-[86px] px-1.5 text-[10px]"
-    >
-      {label}
-    </StatusBadge>
   );
 }
 
@@ -2215,6 +2203,7 @@ function ChatsSection({
   emptyLabel,
   newActionLabel,
   newPath,
+  runStatusByHref,
 }: {
   threads: ThreadSummary[];
   pathname: string;
@@ -2222,6 +2211,7 @@ function ChatsSection({
   emptyLabel?: string;
   newActionLabel?: string;
   newPath?: string;
+  runStatusByHref?: Map<string, ThreadRunStatus>;
 }) {
   const { t: tr } = useI18n();
   // Match the ProjectsSection pattern · persist open/close so the
@@ -2295,6 +2285,7 @@ function ChatsSection({
             <ul className="mt-0.5 space-y-px">
               {displayedThreads.map((t) => {
                 const active = pathname.includes(t.id);
+                const runStatus = runStatusByHref?.get(t.href);
                 return (
                   <li key={t.id} className="group/thread relative">
                     <Link
@@ -2313,6 +2304,10 @@ function ChatsSection({
                           "opacity-100 bg-[color:color-mix(in_oklch,var(--sidebar-accent)_55%,transparent)]",
                       )}
                     >
+                      <ThreadRunStatusLight
+                        status={runStatus}
+                        className="ml-0.5"
+                      />
                       <span className="min-w-0 flex-1 truncate leading-tight">
                         {t.title}
                       </span>
