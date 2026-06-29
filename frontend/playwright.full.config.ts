@@ -6,6 +6,8 @@ const backendHost = process.env.GATEWAY_HOST || "127.0.0.1";
 const backendBase = `http://${backendHost}:${backendPort}`;
 const pythonBin = process.env.PYTHON || "./.venv/bin/python";
 const reuseServers = process.env.OCTOPUS_E2E_REUSE_SERVER === "1";
+const testMatch =
+  process.env.OCTOPUS_E2E_TEST_MATCH || "full-stack-smoke.spec.ts";
 const backendEnv =
   "OCTOPUS_FF_REGENERATION_ENABLED=0 " +
   "OCTOPUS_FF_CAMOUFLAGE_ENABLED=0 " +
@@ -23,7 +25,7 @@ const backendEnv =
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: /full-stack-smoke\.spec\.ts/,
+  testMatch,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
