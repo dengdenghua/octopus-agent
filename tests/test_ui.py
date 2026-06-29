@@ -70,6 +70,13 @@ def _seed_journal(path: Path) -> None:
     runtime.run(graph, budget=budget, caller="arms/seed", arm_id=ArmId("seed_arm"))
 
 
+def _check_by_id(data: dict, check_id: str) -> dict:
+    for row in data.get("checks", []):
+        if row.get("id") == check_id:
+            return row
+    raise AssertionError(f"missing check {check_id}")
+
+
 # ═══════════════════════════════════════════════════════════
 # Implementation note.
 # ═══════════════════════════════════════════════════════════
@@ -99,7 +106,10 @@ class TestBasicRoutes:
         )
         client = TestClient(app, base_url="http://localhost:8000")
 
-        r = client.get("/api/runtime/self-check")
+        r = client.get(
+            "/api/runtime/self-check",
+            headers={"Origin": "http://localhost:3000"},
+        )
         data = r.json()
 
         assert r.status_code == 200
@@ -110,9 +120,63 @@ class TestBasicRoutes:
         assert data["version_drift"]["frontend_matches_runtime"] is True
         assert data["backend"]["canonical_base_url"] == "http://127.0.0.1:8000"
         assert data["backend"]["request_origin_base_url"] == "http://localhost:8000"
+        assert data["frontend"]["observed_origin"] == "http://localhost:3000"
+        assert data["frontend"]["canonical_origin"] == "http://localhost:3000"
+        assert data["frontend"]["origin_normalized"] is True
+        assert data["frontend"]["proxy_target"] == "http://127.0.0.1:8000"
+        assert data["frontend"]["proxy_targets_backend"] is True
         assert data["loopback_aliases"]["same_loopback_family"] is True
         assert "http://localhost:8000" in data["loopback_aliases"]["aliases"]
         assert "http://127.0.0.1:8000" in data["loopback_aliases"]["aliases"]
+        assert _check_by_id(data, "frontend_origin")["passed"] is True
+        assert _check_by_id(data, "vite_proxy_target")["passed"] is True
+
+    def test_runtime_self_check_flags_noncanonical_frontend_origin(self):
+        app = create_app(
+            journal_path=None,
+            server_host="localhost",
+            server_port=8000,
+        )
+        client = TestClient(app, base_url="http://localhost:8000")
+
+        data = client.get(
+            "/api/runtime/self-check",
+            headers={"Origin": "http://127.0.0.1:3000"},
+        ).json()
+
+        assert data["ready"] is False
+        assert data["status"] == "degraded"
+        assert data["frontend"]["observed_origin"] == "http://127.0.0.1:3000"
+        assert data["frontend"]["canonical_origin"] == "http://localhost:3000"
+        assert data["frontend"]["origin_normalized"] is False
+        assert _check_by_id(data, "frontend_origin") == {
+            "id": "frontend_origin",
+            "passed": False,
+            "detail": (
+                "origin=http://127.0.0.1:3000 "
+                "canonical=http://localhost:3000"
+            ),
+        }
+        assert any("origin=http://127.0.0.1:3000" in item for item in data["next_actions"])
+
+    def test_runtime_self_check_flags_vite_proxy_mismatch(self, monkeypatch):
+        monkeypatch.setenv("OCTOPUS_INTERNAL_GATEWAY_BASE_URL", "http://127.0.0.1:9999")
+        app = create_app(
+            journal_path=None,
+            server_host="localhost",
+            server_port=8000,
+        )
+        client = TestClient(app, base_url="http://localhost:8000")
+
+        data = client.get(
+            "/api/runtime/self-check",
+            headers={"Origin": "http://localhost:3000"},
+        ).json()
+
+        assert data["ready"] is False
+        assert data["frontend"]["proxy_target"] == "http://127.0.0.1:9999"
+        assert data["frontend"]["proxy_targets_backend"] is False
+        assert _check_by_id(data, "vite_proxy_target")["passed"] is False
 
     def test_runtime_self_check_uses_request_port_when_server_port_missing(self):
         app = create_app(journal_path=None)

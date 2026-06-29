@@ -1,14 +1,17 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const frontendPort = process.env.FRONTEND_PORT || "3000";
-const backendPort = process.env.GATEWAY_PORT || "8000";
+const frontendPort = process.env.FRONTEND_PORT || "13000";
+const backendPort = process.env.GATEWAY_PORT || "18000";
 const backendHost = process.env.GATEWAY_HOST || "127.0.0.1";
 const backendBase = `http://${backendHost}:${backendPort}`;
 const pythonBin = process.env.PYTHON || "./.venv/bin/python";
+const reuseServers = process.env.OCTOPUS_E2E_REUSE_SERVER === "1";
 const backendEnv =
   "OCTOPUS_FF_REGENERATION_ENABLED=0 " +
   "OCTOPUS_FF_CAMOUFLAGE_ENABLED=0 " +
-  "OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS=0";
+  "OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS=0 " +
+  `GATEWAY_PORT=${backendPort} ` +
+  `OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase}`;
 
 /**
  * Full-stack Playwright configuration.
@@ -46,13 +49,13 @@ export default defineConfig({
       command: `${backendEnv} ${pythonBin} -m runtime serve --config config.e2e.yaml --host ${backendHost} --port ${backendPort}`,
       url: `${backendBase}/api/status`,
       cwd: "..",
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: reuseServers,
       timeout: 120_000,
     },
     {
-      command: `cross-env GATEWAY_PORT=${backendPort} OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase} pnpm dev -- --host 0.0.0.0 --port ${frontendPort}`,
+      command: `cross-env GATEWAY_PORT=${backendPort} OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase} pnpm exec vite --host 0.0.0.0 --port ${frontendPort} --strictPort`,
       url: `http://127.0.0.1:${frontendPort}`,
-      reuseExistingServer: !process.env.CI,
+      reuseExistingServer: reuseServers,
       timeout: 90_000,
     },
   ],

@@ -38,6 +38,18 @@ interface RuntimeSelfCheckPayload {
     server_host?: string;
     server_port?: number | null;
   };
+  frontend?: {
+    observed_origin?: string;
+    canonical_origin?: string;
+    canonical_host?: string;
+    port?: number;
+    env_port?: number | null;
+    dev_proxy_mode?: boolean;
+    proxy_target?: string;
+    proxy_targets_backend?: boolean;
+    origin_normalized?: boolean;
+    loopback_aliases?: string[];
+  };
   loopback_aliases?: {
     requested_host?: string;
     canonical_host?: string;
@@ -112,6 +124,7 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
 
   const versions = data?.version_drift?.version_sources ?? {};
   const backend = data?.backend ?? {};
+  const frontend = data?.frontend ?? {};
   const loopbackAliases = data?.loopback_aliases?.aliases ?? [];
   const checks = data?.checks ?? [];
   const nextActions = data?.next_actions ?? [];
@@ -209,6 +222,28 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
                 <InfoRow
                   label={t.runtimeSelfCheckPanel.port}
                   value={backend.port}
+                />
+              </InfoBlock>
+
+              <InfoBlock title={t.runtimeSelfCheckPanel.frontend}>
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.observedOrigin}
+                  value={frontend.observed_origin}
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.canonicalOrigin}
+                  value={frontend.canonical_origin}
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.proxyTarget}
+                  value={frontend.proxy_target}
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.proxyMatchesBackend}
+                  value={frontend.proxy_targets_backend}
                 />
               </InfoBlock>
             </section>

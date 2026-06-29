@@ -33,6 +33,18 @@ const SAMPLE = {
     server_host: "0.0.0.0",
     server_port: 8000,
   },
+  frontend: {
+    observed_origin: "http://localhost:3000",
+    canonical_origin: "http://localhost:3000",
+    canonical_host: "localhost",
+    port: 3000,
+    env_port: null,
+    dev_proxy_mode: true,
+    proxy_target: "http://127.0.0.1:8000",
+    proxy_targets_backend: true,
+    origin_normalized: true,
+    loopback_aliases: ["http://127.0.0.1:3000", "http://localhost:3000"],
+  },
   loopback_aliases: {
     requested_host: "localhost",
     canonical_host: "127.0.0.1",
@@ -97,6 +109,13 @@ describe("RuntimeSelfCheckPanel", () => {
     expect(screen.getAllByText("http://localhost:8000").length).toBeGreaterThan(
       0,
     );
+    expect(screen.getByText("Frontend")).toBeInTheDocument();
+    expect(screen.getByText("Observed origin")).toBeInTheDocument();
+    expect(screen.getAllByText("http://localhost:3000").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText("Vite proxy target")).toBeInTheDocument();
+    expect(screen.getByText("Proxy matches backend")).toBeInTheDocument();
     expect(screen.getByText("frontend_version")).toBeInTheDocument();
     expect(screen.getAllByText("frontend=0.1.0 runtime=0.2.0").length).toBe(2);
   });

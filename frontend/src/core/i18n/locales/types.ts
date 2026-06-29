@@ -995,6 +995,11 @@ export interface Translations {
     runtime: string;
     pyproject: string;
     frontendPackage: string;
+    frontend: string;
+    observedOrigin: string;
+    canonicalOrigin: string;
+    proxyTarget: string;
+    proxyMatchesBackend: string;
     backend: string;
     canonicalBaseUrl: string;
     requestOrigin: string;

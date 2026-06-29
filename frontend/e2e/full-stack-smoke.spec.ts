@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 
-const backendPort = process.env.GATEWAY_PORT || "8000";
+const backendPort = process.env.GATEWAY_PORT || "18000";
 const backendBase = `http://127.0.0.1:${backendPort}`;
-const frontendPort = process.env.FRONTEND_PORT || "3000";
+const frontendPort = process.env.FRONTEND_PORT || "13000";
 const frontendOrigins = [
   `http://127.0.0.1:${frontendPort}`,
   `http://localhost:${frontendPort}`,
@@ -54,6 +54,14 @@ test.describe("Full-stack golden smoke", () => {
       const authStatus = await fetchFromPage(page, "/api/auth/status");
       expect(authStatus.ok).toBe(true);
       expect(typeof authStatus.body.enabled).toBe("boolean");
+
+      const selfCheck = await fetchFromPage(page, "/api/runtime/self-check");
+      expect(selfCheck.ok).toBe(true);
+      expect(selfCheck.body.frontend).toMatchObject({
+        canonical_origin: `http://localhost:${frontendPort}`,
+        proxy_target: backendBase,
+        proxy_targets_backend: true,
+      });
 
       const agents = await fetchFromPage(page, "/api/agents");
       expect(agents.ok).toBe(true);
