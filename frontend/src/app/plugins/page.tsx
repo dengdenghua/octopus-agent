@@ -453,7 +453,7 @@ export default function PluginsPage() {
             {t.plugins.tabSkillMarket}
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="plugins" className="mt-0">
+        {activeTab === "plugins" && (
           <div className="hidden items-center gap-2 sm:flex">
             <Button
               type="button"
@@ -466,7 +466,7 @@ export default function PluginsPage() {
               {t.common.create}
             </Button>
           </div>
-        </TabsContent>
+        )}
       </section>
 
       {/* ── Plugins tab content ── */}
