@@ -99,6 +99,18 @@ def create_cowork_group_router(
 
         return plan_turn_for_thread(group_store, thread_id, text).to_dict()
 
+    @router.get("/api/cowork/{thread_id}/view/{member_id}")
+    def member_view(thread_id: str, member_id: str, max_message: int = 0) -> dict[str, Any]:
+        """The history slice ``member_id`` is allowed to see at ``max_message``
+        (their context grant resolved). The context assembler uses this to bound
+        what reaches the agent's prompt — the enforcement half of the privacy seam."""
+        from runtime.memory.cowork.context_view import resolve_view
+
+        view = resolve_view(group_store.state(thread_id), member_id, max_message)
+        if view is None:
+            raise HTTPException(404, "member not in group")
+        return view.to_dict()
+
     @router.post("/api/cowork/{thread_id}/members", dependencies=[Depends(_auth_dep)])
     def invite_member(thread_id: str, body: InviteBody, request: Request) -> dict[str, Any]:
         """Pull a member (agent or human) into the thread, with a context grant."""
