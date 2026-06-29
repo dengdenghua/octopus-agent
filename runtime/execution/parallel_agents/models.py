@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -154,6 +154,63 @@ class BatchResult(BaseModel):
     file_write_observability: dict[str, object] = Field(default_factory=dict)
 
 
+class BatchRecoveryTask(BaseModel):
+
+    model_config = ConfigDict(extra="ignore")
+
+    task_id: str
+    status: str
+    subagent_name: str
+    depends_on: list[str] = Field(default_factory=list)
+    priority: int = 0
+    write_paths: list[str] = Field(default_factory=list)
+    description_preview: str | None = None
+    result_preview: str | None = None
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    duration_seconds: float | None = None
+    artifact_paths: list[str] = Field(default_factory=list)
+    work_contract: WorkContract | None = None
+    route_decision: dict[str, Any] = Field(default_factory=dict)
+
+
+class BatchRecoverySnapshot(BaseModel):
+
+    model_config = ConfigDict(
+        extra="ignore",
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
+
+    schema_: Literal["octopus.parallel_batch_recovery_snapshot.v1"] = Field(
+        default="octopus.parallel_batch_recovery_snapshot.v1",
+        alias="schema",
+    )
+    batch_id: str
+    status: str
+    terminal: bool
+    resume_available: bool
+    created_at: str | None = None
+    completed_at: str | None = None
+    task_count: int
+    completed_tasks: int
+    failed_tasks: int
+    cancelled_tasks: int
+    running_tasks: int
+    pending_tasks: int
+    tasks: list[BatchRecoveryTask] = Field(default_factory=list)
+    dag: dict[str, list[str]] = Field(default_factory=dict)
+    plan: BatchPlan | None = None
+    event_sequence: dict[str, object] = Field(default_factory=dict)
+    artifact_paths: list[str] = Field(default_factory=list)
+    conflicts: list[str] = Field(default_factory=list)
+    completion_receipt: dict[str, object] = Field(default_factory=dict)
+    file_write_observability: dict[str, object] = Field(default_factory=dict)
+    recovery_hints: dict[str, object] = Field(default_factory=dict)
+    safety: dict[str, object] = Field(default_factory=dict)
+
+
 class OrchestratorStatus(BaseModel):
 
     active_count: int = 0
@@ -182,7 +239,5 @@ class SplitResult(BaseModel):
     dag_levels: list[list[str]] = Field(default_factory=list)
     total_levels: int = 0
     is_parallelizable: bool = False
-
-
 
 

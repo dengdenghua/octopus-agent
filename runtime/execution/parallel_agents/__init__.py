@@ -2,6 +2,8 @@
 from .models import (
     BatchPhase,
     BatchPlan,
+    BatchRecoverySnapshot,
+    BatchRecoveryTask,
     BatchResult,
     BatchStreamEvent,
     DispatchTaskInput,
@@ -18,6 +20,8 @@ from .stack_runner import make_stack_subagent_runner
 __all__ = [
     "BatchPhase",
     "BatchPlan",
+    "BatchRecoverySnapshot",
+    "BatchRecoveryTask",
     "BatchResult",
     "BatchStreamEvent",
     "DispatchTaskInput",

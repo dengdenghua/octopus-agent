@@ -152,6 +152,31 @@ def test_get_batch_allows_owner() -> None:
     assert resp.json()["batch_id"] == batch_id
 
 
+def test_recovery_snapshot_blocks_non_owner() -> None:
+    client, keys = _build_app()
+    batch_id = _dispatch_batch(client, keys, "alice")
+
+    resp = client.get(
+        f"/api/agents/parallel/batch/{batch_id}/recovery-snapshot",
+        headers=_bearer(keys["bob"]),
+    )
+    assert resp.status_code == 403
+    assert "not the owner" in resp.json()["detail"]
+
+
+def test_recovery_snapshot_allows_owner() -> None:
+    client, keys = _build_app()
+    batch_id = _dispatch_batch(client, keys, "alice")
+
+    resp = client.get(
+        f"/api/agents/parallel/batch/{batch_id}/recovery-snapshot",
+        headers=_bearer(keys["alice"]),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["batch_id"] == batch_id
+    assert resp.json()["safety"]["owner_id_included"] is False
+
+
 # ── cancel_task: only owner can cancel ─────────────────────────────
 
 

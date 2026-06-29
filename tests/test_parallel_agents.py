@@ -546,6 +546,90 @@ class TestRunnerError:
         assert "failed_work_items" in receipt["issues"]
 
 
+class TestRecoverySnapshot:
+    def test_failed_batch_recovery_snapshot_is_redacted_and_actionable(self):
+        def runner(description, *, subagent_name, context=None, cancel_event=None):
+            if subagent_name == "breaker":
+                raise RuntimeError("boom!")
+            emit = (context or {}).get("emit_tool_event")
+            if callable(emit):
+                emit(
+                    tool_name="write_file",
+                    status="completed",
+                    artifact_paths=["/tmp/parallel-report.md"],
+                    payload={"secret": "PAYLOAD_SHOULD_NOT_LEAK"},
+                )
+            return "ok:" + ("a" * 320) + "RESULT_SHOULD_NOT_LEAK"
+
+        o = ParallelAgentOrchestrator(max_concurrency=2, task_runner=runner)
+        try:
+            batch = o.dispatch([
+                DispatchTaskInput(task_id="ok", description="safe output"),
+                DispatchTaskInput(
+                    task_id="bad",
+                    description="explode",
+                    subagent_name="breaker",
+                ),
+                DispatchTaskInput(
+                    task_id="child",
+                    description="depends on failure",
+                    depends_on=["bad"],
+                ),
+            ])
+
+            snapshot = None
+            for _ in range(100):
+                snapshot = o.recovery_snapshot(batch.batch_id)
+                assert snapshot is not None
+                if snapshot.terminal:
+                    break
+                time.sleep(0.02)
+
+            assert snapshot is not None
+            data = snapshot.model_dump()
+            assert data["schema"] == "octopus.parallel_batch_recovery_snapshot.v1"
+            assert data["batch_id"] == batch.batch_id
+            assert data["status"] == "partial"
+            assert data["terminal"] is True
+            assert data["resume_available"] is True
+            assert data["task_count"] == 3
+            assert data["completed_tasks"] == 1
+            assert data["failed_tasks"] == 1
+            assert data["cancelled_tasks"] == 1
+            assert data["dag"] == {"ok": [], "bad": [], "child": ["bad"]}
+
+            tasks = {task["task_id"]: task for task in data["tasks"]}
+            assert tasks["ok"]["artifact_paths"] == ["/tmp/parallel-report.md"]
+            assert tasks["bad"]["status"] == "failed"
+            assert "boom" in tasks["bad"]["error"]
+            assert tasks["child"]["status"] == "cancelled"
+            assert tasks["child"]["error"] == "dependency_failed"
+
+            events = data["event_sequence"]
+            assert events["event_count"] >= 1
+            assert events["first_sequence"] == 1
+            assert events["last_sequence"] == events["next_after_sequence"]
+            assert events["types"]["batch_complete"] == 1
+            assert data["artifact_paths"] == ["/tmp/parallel-report.md"]
+
+            hints = data["recovery_hints"]
+            assert hints["failed_task_ids"] == ["bad"]
+            assert hints["blocked_by_dependency"] == ["child"]
+            assert set(hints["rerunnable_task_ids"]) == {"bad", "child"}
+            assert hints["checkpoint"] == {
+                "batch_id": batch.batch_id,
+                "after_sequence": events["last_sequence"],
+            }
+            assert data["completion_receipt"]["ready"] is False
+            assert "failed_work_items" in data["completion_receipt"]["issues"]
+            assert data["safety"]["raw_subagent_outputs_included"] is False
+            assert data["safety"]["event_payloads_included"] is False
+            assert "PAYLOAD_SHOULD_NOT_LEAK" not in str(data)
+            assert "RESULT_SHOULD_NOT_LEAK" not in str(data)
+        finally:
+            o.shutdown(wait=False)
+
+
 # ═══════════════════════════════════════════════════════════════
 # FastAPI router
 # ═══════════════════════════════════════════════════════════════
@@ -651,6 +735,38 @@ class TestRouter:
 
     def test_get_unknown_batch_404(self, app_client):
         r = app_client.get("/api/agents/parallel/batch/nope")
+        assert r.status_code == 404
+
+    def test_recovery_snapshot_endpoint(self, app_client, orch):
+        r = app_client.post(
+            "/api/agents/parallel/dispatch",
+            json={"tasks": [{"description": "one", "subagent_name": "w"}]},
+        )
+        assert r.status_code == 200
+        bid = r.json()["batch_id"]
+
+        for _ in range(100):
+            g = app_client.get(
+                f"/api/agents/parallel/batch/{bid}/recovery-snapshot",
+            ).json()
+            if g["terminal"]:
+                break
+            time.sleep(0.02)
+
+        g = app_client.get(
+            f"/api/agents/parallel/batch/{bid}/recovery-snapshot",
+        )
+        assert g.status_code == 200
+        data = g.json()
+        assert data["schema"] == "octopus.parallel_batch_recovery_snapshot.v1"
+        assert data["status"] == "completed"
+        assert data["task_count"] == 1
+        assert data["completed_tasks"] == 1
+        assert data["event_sequence"]["types"]["batch_complete"] == 1
+        assert data["safety"]["owner_id_included"] is False
+
+    def test_recovery_snapshot_unknown_batch_404(self, app_client):
+        r = app_client.get("/api/agents/parallel/batch/nope/recovery-snapshot")
         assert r.status_code == 404
 
     def test_dispatch_empty_400(self, app_client):

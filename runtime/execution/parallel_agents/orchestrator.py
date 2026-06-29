@@ -42,6 +42,8 @@ from .helpers import (
 )
 from .models import (
     BatchPlan,
+    BatchRecoverySnapshot,
+    BatchRecoveryTask,
     BatchResult,
     BatchStreamEvent,
     DispatchTaskInput,
@@ -434,6 +436,14 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             if batch is None:
                 return None
             return batch.to_wire()
+
+    def recovery_snapshot(self, batch_id: str) -> BatchRecoverySnapshot | None:
+        """Return a redacted recovery/audit view for a parallel batch."""
+        with self._lock:
+            batch = self._batches.get(batch_id)
+            if batch is None:
+                return None
+            return self._build_recovery_snapshot_locked(batch)
 
     def cancel_task(self, task_id: str) -> bool:
         with self._lock:
@@ -859,6 +869,145 @@ class ParallelAgentOrchestrator(OwnershipMixin):
         if strategy == "concat":
             return "\n\n".join(parts)
         return "\n\n".join(parts)
+
+    def _build_recovery_snapshot_locked(
+        self,
+        batch: _BatchEntry,
+    ) -> BatchRecoverySnapshot:
+        total, completed, failed, cancelled = batch.counts()
+        run_state = converge_run_state([t.status for t in batch.tasks.values()])
+        artifacts_by_task: dict[str, list[str]] = {
+            task_id: [] for task_id in batch.tasks
+        }
+        event_types: dict[str, int] = {}
+        first_sequence: int | None = None
+        last_sequence: int | None = None
+        for event in batch.event_log:
+            event_types[event.type] = event_types.get(event.type, 0) + 1
+            sequence = event.sequence or 0
+            if sequence > 0:
+                first_sequence = (
+                    sequence if first_sequence is None
+                    else min(first_sequence, sequence)
+                )
+                last_sequence = (
+                    sequence if last_sequence is None
+                    else max(last_sequence, sequence)
+                )
+            if event.task_id and event.artifact_paths:
+                bucket = artifacts_by_task.setdefault(event.task_id, [])
+                for path in event.artifact_paths:
+                    if path not in bucket:
+                        bucket.append(path)
+
+        all_artifacts: list[str] = []
+        for paths in artifacts_by_task.values():
+            for path in paths:
+                if path not in all_artifacts:
+                    all_artifacts.append(path)
+
+        failed_task_ids = [
+            entry.task_id for entry in batch.tasks.values()
+            if entry.status in {"failed", "timed_out"}
+        ]
+        cancelled_task_ids = [
+            entry.task_id for entry in batch.tasks.values()
+            if entry.status == "cancelled"
+        ]
+        pending_task_ids = [
+            entry.task_id for entry in batch.tasks.values()
+            if entry.status == "pending"
+        ]
+        running_task_ids = [
+            entry.task_id for entry in batch.tasks.values()
+            if entry.status == "running"
+        ]
+        blocked_by_dependency = [
+            entry.task_id for entry in batch.tasks.values()
+            if entry.error == "dependency_failed"
+        ]
+        rerunnable_task_ids = [
+            entry.task_id for entry in batch.tasks.values()
+            if entry.status in {"failed", "cancelled", "timed_out", "pending"}
+        ]
+
+        return BatchRecoverySnapshot(
+            batch_id=batch.batch_id,
+            status=run_state.state,
+            terminal=run_state.terminal,
+            resume_available=bool(rerunnable_task_ids),
+            created_at=_iso(batch.created_at),
+            completed_at=_iso(batch.completed_at),
+            task_count=total,
+            completed_tasks=completed,
+            failed_tasks=failed,
+            cancelled_tasks=cancelled,
+            running_tasks=sum(
+                1 for entry in batch.tasks.values()
+                if entry.status == "running"
+            ),
+            pending_tasks=sum(
+                1 for entry in batch.tasks.values()
+                if entry.status == "pending"
+            ),
+            tasks=[
+                BatchRecoveryTask(
+                    task_id=entry.task_id,
+                    status=entry.status,
+                    subagent_name=entry.subagent_name,
+                    depends_on=list(entry.depends_on),
+                    priority=entry.priority,
+                    write_paths=list(entry.write_paths),
+                    description_preview=_preview(entry.description, max_chars=180),
+                    result_preview=_preview(entry.result, max_chars=260),
+                    error=entry.error,
+                    started_at=_iso(entry.started_at),
+                    completed_at=_iso(entry.completed_at),
+                    duration_seconds=entry.duration(),
+                    artifact_paths=artifacts_by_task.get(entry.task_id, []),
+                    work_contract=entry.work_contract,
+                    route_decision=dict(entry.route_decision or {}),
+                )
+                for entry in batch.tasks.values()
+            ],
+            dag={
+                task_id: list(entry.depends_on)
+                for task_id, entry in batch.tasks.items()
+            },
+            plan=batch.plan,
+            event_sequence={
+                "event_count": len(batch.event_log),
+                "first_sequence": first_sequence,
+                "last_sequence": last_sequence,
+                "next_after_sequence": last_sequence or 0,
+                "types": event_types,
+            },
+            artifact_paths=all_artifacts,
+            conflicts=list(batch.conflicts),
+            completion_receipt=batch.completion_receipt(),
+            file_write_observability=file_write_lease_snapshot(
+                batch.runtime_session_metadata,
+            ),
+            recovery_hints={
+                "rerunnable_task_ids": rerunnable_task_ids,
+                "failed_task_ids": failed_task_ids,
+                "cancelled_task_ids": cancelled_task_ids,
+                "pending_task_ids": pending_task_ids,
+                "running_task_ids": running_task_ids,
+                "blocked_by_dependency": blocked_by_dependency,
+                "checkpoint": {
+                    "batch_id": batch.batch_id,
+                    "after_sequence": last_sequence or 0,
+                },
+            },
+            safety={
+                "raw_subagent_outputs_included": False,
+                "event_payloads_included": False,
+                "owner_id_included": False,
+                "result_preview_max_chars": 260,
+                "description_preview_max_chars": 180,
+            },
+        )
 
     def _publish_task_update_locked(
         self,

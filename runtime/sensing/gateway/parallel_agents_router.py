@@ -108,6 +108,14 @@ def create_parallel_agents_router(
             raise HTTPException(404, f"batch not found: {batch_id}")
         return batch.model_dump()
 
+    @router.get("/api/agents/parallel/batch/{batch_id}/recovery-snapshot")
+    def get_batch_recovery_snapshot(request: Request, batch_id: str) -> dict:
+        _require_batch_owner(request, batch_id)
+        snapshot = orchestrator.recovery_snapshot(batch_id)
+        if snapshot is None:
+            raise HTTPException(404, f"batch not found: {batch_id}")
+        return snapshot.model_dump()
+
     # ─── dispatch / split ────────────────────────────────
 
     @router.post("/api/agents/parallel/dispatch")
