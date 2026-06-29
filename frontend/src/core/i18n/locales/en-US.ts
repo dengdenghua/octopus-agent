@@ -3155,6 +3155,11 @@ export const enUS: Translations = {
           `changes ${count > 5 ? `${fields}…` : fields}`,
         addedFields: (fields: string, count: number) =>
           `adds ${count > 5 ? `${fields}…` : fields}`,
+        compatScore: (score: string) => `compat ${score}`,
+        normalizationHints: (hints: string, count: number) =>
+          `normalizes: ${count > 5 ? `${hints}…` : hints}`,
+        compatibilityNotes: (notes: string, count: number) =>
+          `notes: ${count > 2 ? `${notes}…` : notes}`,
         retryReasons: (reasons: string, count: number) =>
           `retry plan: ${count > 4 ? `${reasons}…` : reasons}`,
         loadFailed: "Failed to load compatibility diagnostics",

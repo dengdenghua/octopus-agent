@@ -2959,6 +2959,11 @@ export const zhCN: Translations = {
           `改写 ${count > 5 ? `${fields}…` : fields}`,
         addedFields: (fields: string, count: number) =>
           `新增 ${count > 5 ? `${fields}…` : fields}`,
+        compatScore: (score: string) => `兼容分 ${score}`,
+        normalizationHints: (hints: string, count: number) =>
+          `规范化: ${count > 5 ? `${hints}…` : hints}`,
+        compatibilityNotes: (notes: string, count: number) =>
+          `注意: ${count > 2 ? `${notes}…` : notes}`,
         retryReasons: (reasons: string, count: number) =>
           `重试策略: ${count > 4 ? `${reasons}…` : reasons}`,
         loadFailed: "加载兼容诊断失败",

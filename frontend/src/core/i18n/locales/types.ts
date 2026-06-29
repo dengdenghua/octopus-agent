@@ -2701,6 +2701,9 @@ export interface Translations {
         removedFields: (fields: string, count: number) => string;
         changedFields: (fields: string, count: number) => string;
         addedFields: (fields: string, count: number) => string;
+        compatScore: (score: string) => string;
+        normalizationHints: (hints: string, count: number) => string;
+        compatibilityNotes: (notes: string, count: number) => string;
         retryReasons: (reasons: string, count: number) => string;
         loadFailed: string;
       };

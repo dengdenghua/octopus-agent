@@ -558,6 +558,7 @@ def create_config_router(
 
         from runtime.sensing.model_router.openai_compat_providers import (
             apply_custom_openai_compat_profile,
+            describe_openai_compat_profile,
             normalize_openai_compat_payload,
             plan_openai_compat_retries,
             resolve_openai_compat_profile,
@@ -570,6 +571,7 @@ def create_config_router(
                 entry,
                 base_profile=base_profile,
             )
+            profile_summary = describe_openai_compat_profile(profile)
             original = _sample_openai_compat_payload(upstream)
             normalized = normalize_openai_compat_payload(
                 original,
@@ -582,7 +584,8 @@ def create_config_router(
                 body=(
                     "unsupported reasoning_effort thinking tool_choice "
                     "temperature top_p max_completion_tokens "
-                    "additionalProperties"
+                    "additionalProperties extra inputs are not permitted "
+                    "unsupported parameter"
                 ),
                 profile=profile,
             )
@@ -590,6 +593,10 @@ def create_config_router(
                 "model": upstream,
                 "profile": profile.id,
                 "profile_display_name": profile.display_name,
+                "profile_summary": profile_summary,
+                "compat_score": profile_summary["compat_score"],
+                "normalization_hints": profile_summary["normalization_hints"],
+                "compatibility_notes": profile_summary["notes"],
                 "thinking_request_style": profile.thinking_request_style,
                 "omit_sampling_parameters": profile.omit_sampling_parameters,
                 "drop_tool_choice": profile.drop_tool_choice,

@@ -448,6 +448,10 @@ class TestCustomModelCompatDiagnostics:
 
         upstream = row["upstreams"][0]
         assert upstream["profile"] == "kimi_coding"
+        assert upstream["profile_summary"]["id"] == "kimi_coding"
+        assert upstream["compat_score"] == upstream["profile_summary"]["compat_score"]
+        assert "drop_sampling_parameters" in upstream["normalization_hints"]
+        assert any("coding endpoint" in note for note in upstream["compatibility_notes"])
         removed = set(upstream["normalization"]["removed_fields"])
         assert {
             "frequency_penalty",

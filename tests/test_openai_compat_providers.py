@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from runtime.sensing.model_router.openai_compat_providers import (
     apply_custom_openai_compat_profile,
+    describe_openai_compat_profile,
     extract_openai_compat_reasoning,
     extract_openai_compat_usage,
     known_openai_compat_profiles,
@@ -60,6 +61,18 @@ def test_profile_catalog_includes_main_domestic_providers() -> None:
         "stepfun",
         "siliconflow",
     }.issubset(ids)
+
+
+def test_profile_summary_exposes_policy_for_diagnostics() -> None:
+    profile = resolve_openai_compat_profile("https://api.kimi.com/coding/v1")
+    summary = describe_openai_compat_profile(profile)
+
+    assert summary["id"] == "kimi_coding"
+    assert summary["display_name"] == "Kimi Coding"
+    assert 60 <= summary["compat_score"] < 100
+    assert "drop_sampling_parameters" in summary["normalization_hints"]
+    assert "retry_without_tool_choice" in summary["normalization_hints"]
+    assert any("coding endpoint" in note for note in summary["notes"])
 
 
 def test_custom_entry_can_override_compat_profile_and_field_policy() -> None:
@@ -237,6 +250,25 @@ def test_retry_plan_reports_reason_and_payload_delta() -> None:
     assert plan[2].removed_fields == ("max_tokens",)
     assert plan[2].added_fields == ("max_completion_tokens",)
     assert plan[-1].reason == "combined_compatibility_fallback"
+
+
+def test_retry_plan_drops_sampling_on_generic_strict_validation_error() -> None:
+    profile = resolve_openai_compat_profile("https://dashscope.aliyuncs.com/compatible-mode/v1")
+    plan = plan_openai_compat_retries(
+        {
+            "model": "qwen-plus",
+            "messages": [],
+            "temperature": 0.7,
+            "top_p": 0.8,
+        },
+        status_code=400,
+        body="extra inputs are not permitted: temperature",
+        profile=profile,
+    )
+
+    assert plan
+    assert plan[0].reason == "drop_sampling_parameters"
+    assert plan[0].removed_fields == ("temperature", "top_p")
 
 
 def test_retry_plan_adds_combined_fallback_for_multi_field_rejections() -> None:

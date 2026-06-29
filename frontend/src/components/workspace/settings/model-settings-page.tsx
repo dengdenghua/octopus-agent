@@ -297,6 +297,16 @@ interface CompatDiagnosticUpstream {
   model: string;
   profile?: string | null;
   profile_display_name?: string | null;
+  profile_summary?: {
+    id?: string;
+    display_name?: string;
+    compat_score?: number;
+    normalization_hints?: string[];
+    notes?: string[];
+  };
+  compat_score?: number | null;
+  normalization_hints?: string[];
+  compatibility_notes?: string[];
   normalization?: {
     removed_fields?: string[];
     added_fields?: string[];
@@ -412,6 +422,49 @@ function summarizeCompatRetryReasons(
   for (const upstream of diagnostic?.upstreams ?? []) {
     for (const retry of upstream.fallback_retries ?? []) {
       if (retry.reason) seen.add(retry.reason);
+    }
+  }
+  return Array.from(seen).sort();
+}
+
+function summarizeCompatScoreRange(
+  diagnostic: CompatDiagnostic | undefined,
+): { min: number; max: number } | null {
+  const scores: number[] = [];
+  for (const upstream of diagnostic?.upstreams ?? []) {
+    const candidates = [
+      upstream.compat_score,
+      upstream.profile_summary?.compat_score,
+    ];
+    for (const value of candidates) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        scores.push(Math.round(value));
+      }
+    }
+  }
+  if (scores.length === 0) return null;
+  return {
+    min: Math.min(...scores),
+    max: Math.max(...scores),
+  };
+}
+
+function collectCompatProfileText(
+  diagnostic: CompatDiagnostic | undefined,
+  key: "normalization_hints" | "compatibility_notes",
+): string[] {
+  const seen = new Set<string>();
+  for (const upstream of diagnostic?.upstreams ?? []) {
+    const direct =
+      key === "normalization_hints"
+        ? upstream.normalization_hints
+        : upstream.compatibility_notes;
+    const summary =
+      key === "normalization_hints"
+        ? upstream.profile_summary?.normalization_hints
+        : upstream.profile_summary?.notes;
+    for (const value of [...(direct ?? []), ...(summary ?? [])]) {
+      if (typeof value === "string" && value.trim()) seen.add(value);
     }
   }
   return Array.from(seen).sort();
@@ -1114,7 +1167,21 @@ function CompatDiagnosticSummary({
   const added = collectCompatFields(diagnostic, "added_fields");
   const fallbackCount = countCompatRetries(diagnostic);
   const retryReasons = summarizeCompatRetryReasons(diagnostic);
+  const scoreRange = summarizeCompatScoreRange(diagnostic);
+  const normalizationHints = collectCompatProfileText(
+    diagnostic,
+    "normalization_hints",
+  );
+  const compatibilityNotes = collectCompatProfileText(
+    diagnostic,
+    "compatibility_notes",
+  );
   const headerNames = diagnostic.default_header_names ?? [];
+  const scoreLabel = scoreRange
+    ? scoreRange.min === scoreRange.max
+      ? `${scoreRange.min}`
+      : `${scoreRange.min}-${scoreRange.max}`
+    : null;
 
   return (
     <div className="mt-3 space-y-2 border-l border-border pl-3 text-[11px] text-muted-foreground">
@@ -1131,6 +1198,11 @@ function CompatDiagnosticSummary({
         <span className="rounded border border-border px-1.5 py-0.5">
           {t.settings.model.compatDiagnostics.fallbacks(fallbackCount)}
         </span>
+        {scoreLabel && (
+          <span className="rounded border border-border px-1.5 py-0.5">
+            {t.settings.model.compatDiagnostics.compatScore(scoreLabel)}
+          </span>
+        )}
         {headerNames.length > 0 && (
           <span className="rounded border border-border px-1.5 py-0.5">
             {t.settings.model.compatDiagnostics.headers(headerNames.join(", "))}
@@ -1162,6 +1234,22 @@ function CompatDiagnosticSummary({
                 added.length,
               )}
             </span>
+          )}
+        </div>
+      )}
+      {normalizationHints.length > 0 && (
+        <div title={normalizationHints.join(", ")}>
+          {t.settings.model.compatDiagnostics.normalizationHints(
+            normalizationHints.slice(0, 5).join(", "),
+            normalizationHints.length,
+          )}
+        </div>
+      )}
+      {compatibilityNotes.length > 0 && (
+        <div title={compatibilityNotes.join("; ")}>
+          {t.settings.model.compatDiagnostics.compatibilityNotes(
+            compatibilityNotes.slice(0, 2).join("; "),
+            compatibilityNotes.length,
           )}
         </div>
       )}

@@ -154,6 +154,15 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
               model: "kimi-k2.7-code",
               profile: "kimi_coding",
               profile_display_name: "Kimi Coding",
+              compat_score: 82,
+              normalization_hints: [
+                "drop_sampling_parameters",
+                "retry_without_tool_choice",
+              ],
+              compatibility_notes: [
+                "coding endpoint rejects sampling knobs",
+                "drops OpenAI reasoning/thinking extensions",
+              ],
               normalization: {
                 removed_fields: [
                   "parallel_tool_calls",
@@ -188,7 +197,10 @@ describe("ModelSettingsPage · custom-model list rendering", () => {
     });
     expect(screen.getByText("Kimi Coding")).toBeInTheDocument();
     expect(screen.getByText("2 个 fallback")).toBeInTheDocument();
+    expect(screen.getByText("兼容分 82")).toBeInTheDocument();
     expect(screen.getByText("请求头: User-Agent")).toBeInTheDocument();
+    expect(screen.getByText(/drop_sampling_parameters/)).toBeInTheDocument();
+    expect(screen.getByText(/coding endpoint rejects/)).toBeInTheDocument();
     expect(screen.getByText(/parallel_tool_calls/)).toBeInTheDocument();
     expect(
       screen.getByText(/combined_compatibility_fallback/),

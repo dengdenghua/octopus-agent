@@ -32,6 +32,7 @@ class OpenAICompatProviderProfile:
     retry_without_tool_choice: bool = True
     retry_without_sampling: bool = True
     retry_max_tokens_as_completion_tokens: bool = True
+    compatibility_notes: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -72,12 +73,20 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
             "k2.7_code",
         ),
         omit_sampling_parameters=True,
+        compatibility_notes=(
+            "coding endpoint rejects sampling knobs",
+            "drops OpenAI reasoning/thinking extensions",
+        ),
     ),
     OpenAICompatProviderProfile(
         id="deepseek",
         display_name="DeepSeek",
         base_url_markers=("api.deepseek.com",),
         model_markers=("deepseek-", "deepseek/", "deepseek_"),
+        compatibility_notes=(
+            "reasoning text may arrive as reasoning_content",
+            "some deployments prefer max_completion_tokens on retry",
+        ),
     ),
     OpenAICompatProviderProfile(
         id="kimi",
@@ -90,24 +99,34 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         ),
         model_markers=("kimi", "moonshot"),
         max_temperature=1.0,
+        compatibility_notes=("temperature is clamped to 1.0",),
     ),
     OpenAICompatProviderProfile(
         id="qwen",
         display_name="Alibaba Cloud Qwen / DashScope",
         base_url_markers=("dashscope.aliyuncs.com", "bailian.aliyuncs.com"),
         model_markers=("qwen", "qwq", "qvq", "tongyi"),
+        compatibility_notes=(
+            "DashScope-compatible mode may reject OpenAI-only fields",
+            "max_tokens can be retried as max_completion_tokens",
+        ),
     ),
     OpenAICompatProviderProfile(
         id="glm",
         display_name="Zhipu / Z.AI GLM",
         base_url_markers=("open.bigmodel.cn", "api.z.ai"),
         model_markers=("glm-", "chatglm", "zai/", "z.ai/"),
+        compatibility_notes=(
+            "GLM reasoning may arrive as reasoning",
+            "legacy function_call responses are accepted",
+        ),
     ),
     OpenAICompatProviderProfile(
         id="doubao",
         display_name="Volcano Engine Doubao / Ark",
         base_url_markers=("ark.cn-beijing.volces.com", "volces.com/api/v3"),
         model_markers=("doubao",),
+        compatibility_notes=("Ark OpenAI-compatible endpoint uses strict request validation",),
     ),
     OpenAICompatProviderProfile(
         id="minimax",
@@ -115,42 +134,49 @@ _PROFILES: tuple[OpenAICompatProviderProfile, ...] = (
         base_url_markers=("api.minimaxi.com", "api.minimax.io", "api.minimax.chat"),
         model_markers=("minimax", "abab"),
         thinking_request_style="minimax_adaptive",
+        compatibility_notes=("thinking requests are translated to MiniMax adaptive style",),
     ),
     OpenAICompatProviderProfile(
         id="hunyuan",
         display_name="Tencent Hunyuan",
         base_url_markers=("api.hunyuan.cloud.tencent.com",),
         model_markers=("hunyuan",),
+        compatibility_notes=("tool schemas may require additionalProperties stripping",),
     ),
     OpenAICompatProviderProfile(
         id="baichuan",
         display_name="Baichuan",
         base_url_markers=("api.baichuan-ai.com", "platform.baichuan-ai.com"),
         model_markers=("baichuan",),
+        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
     OpenAICompatProviderProfile(
         id="yi",
         display_name="01.AI Yi",
         base_url_markers=("api.lingyiwanwu.com", "platform.01.ai"),
         model_markers=("yi-", "yi_", "yi/"),
+        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
     OpenAICompatProviderProfile(
         id="stepfun",
         display_name="StepFun",
         base_url_markers=("api.stepfun.ai", "api.stepfun.com"),
         model_markers=("step-", "stepfun"),
+        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
     OpenAICompatProviderProfile(
         id="siliconflow",
         display_name="SiliconFlow",
         base_url_markers=("api.siliconflow.cn", "api.siliconflow.com"),
         model_markers=("siliconflow/",),
+        compatibility_notes=("proxy-hosted models vary; diagnostics surface normalized payloads",),
     ),
     OpenAICompatProviderProfile(
         id="qianfan",
         display_name="Baidu Qianfan",
         base_url_markers=("qianfan.baidubce.com",),
         model_markers=("ernie", "wenxin", "qianfan"),
+        compatibility_notes=("falls back by removing strict OpenAI-only fields",),
     ),
 )
 
@@ -161,6 +187,37 @@ def known_openai_compat_profiles() -> tuple[OpenAICompatProviderProfile, ...]:
 
 def openai_compat_profile_ids() -> tuple[str, ...]:
     return tuple(profile.id for profile in (GENERIC_OPENAI_PROFILE, *_PROFILES))
+
+
+def describe_openai_compat_profile(
+    profile: OpenAICompatProviderProfile,
+) -> dict[str, Any]:
+    """Machine-readable summary for UI/API compatibility diagnostics."""
+    normalization_hints: list[str] = []
+    if profile.thinking_request_style != "openai":
+        normalization_hints.append(f"thinking:{profile.thinking_request_style}")
+    if profile.omit_sampling_parameters:
+        normalization_hints.append("drop_sampling_parameters")
+    if profile.drop_tool_choice:
+        normalization_hints.append("drop_tool_choice")
+    if profile.max_temperature is not None:
+        normalization_hints.append(f"max_temperature:{profile.max_temperature:g}")
+    for field_name in profile.unsupported_request_fields:
+        normalization_hints.append(f"drop:{field_name}")
+    if profile.retry_without_tool_choice:
+        normalization_hints.append("retry_without_tool_choice")
+    if profile.retry_without_sampling:
+        normalization_hints.append("retry_without_sampling")
+    if profile.retry_max_tokens_as_completion_tokens:
+        normalization_hints.append("retry_max_tokens_as_completion_tokens")
+    score = _compatibility_score(profile)
+    return {
+        "id": profile.id,
+        "display_name": profile.display_name,
+        "compat_score": score,
+        "normalization_hints": normalization_hints,
+        "notes": list(profile.compatibility_notes),
+    }
 
 
 def resolve_openai_compat_profile(
@@ -300,6 +357,20 @@ def plan_openai_compat_retries(
         ))
 
     lower = (body or "").lower()
+    strict_validation = _mentions_any(
+        lower,
+        (
+            "unsupported parameter",
+            "unsupported field",
+            "unsupported request",
+            "unrecognized field",
+            "unknown field",
+            "unknown parameter",
+            "extra inputs are not permitted",
+            "extra_forbidden",
+            "invalid parameter",
+        ),
+    )
 
     if "reasoning_effort" in payload or "thinking" in payload:
         candidate = dict(payload)
@@ -322,6 +393,7 @@ def plan_openai_compat_retries(
         and _payload_has_sampling(payload)
         and (
             _mentions_any(lower, ("temperature", "top_p", "sampling", "presence_penalty", "frequency_penalty"))
+            or strict_validation
             or profile.omit_sampling_parameters
         )
     ):
@@ -358,6 +430,26 @@ def plan_openai_compat_retries(
         add("combined_compatibility_fallback", cascade)
 
     return variants
+
+
+def _compatibility_score(profile: OpenAICompatProviderProfile) -> int:
+    score = 100
+    if profile.thinking_request_style != "openai":
+        score -= 6
+    if profile.omit_sampling_parameters:
+        score -= 10
+    if profile.drop_tool_choice:
+        score -= 8
+    if profile.max_temperature is not None:
+        score -= 3
+    score -= min(12, len(profile.unsupported_request_fields) * 3)
+    if profile.retry_without_tool_choice:
+        score -= 2
+    if profile.retry_without_sampling:
+        score -= 2
+    if profile.retry_max_tokens_as_completion_tokens:
+        score -= 2
+    return max(60, score)
 
 
 def extract_openai_compat_reasoning(message: dict[str, Any]) -> str:
@@ -637,6 +729,7 @@ __all__ = [
     "OpenAICompatProviderProfile",
     "OpenAICompatRetryPayload",
     "apply_custom_openai_compat_profile",
+    "describe_openai_compat_profile",
     "extract_openai_compat_reasoning",
     "extract_openai_compat_usage",
     "known_openai_compat_profiles",
