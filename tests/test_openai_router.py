@@ -331,6 +331,45 @@ class TestRequestShape:
         assert payload["max_tokens"] == 128
         assert "temperature" not in payload
 
+    def test_kimi_coding_agentic_payload_drops_thinking_and_sampling_but_keeps_tools(
+        self,
+    ):
+        fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
+        r = OpenAIModelRouter(
+            base_url="https://api.kimi.com/coding/v1",
+            client=fake,
+        )
+        r.call(
+            _req(model="K2.7 Code").model_copy(
+                update={
+                    "enable_thinking": True,
+                    "reasoning_effort": "xhigh",
+                    "temperature": 0.8,
+                    "tools": [
+                        ToolSpec(
+                            name="read_file",
+                            description="Read a project file",
+                            input_schema={
+                                "type": "object",
+                                "properties": {"path": {"type": "string"}},
+                                "required": ["path"],
+                            },
+                        ),
+                    ],
+                },
+            ),
+        )
+
+        payload = fake.calls[0]["json"]
+        assert payload["model"] == "K2.7 Code"
+        assert payload["tools"][0]["function"]["name"] == "read_file"
+        assert payload["tool_choice"] == "auto"
+        assert payload["max_tokens"] == 128
+        assert "temperature" not in payload
+        assert "reasoning_effort" not in payload
+        assert "thinking" not in payload
+        assert r._profile_for_model("K2.7 Code").id == "kimi_coding"
+
     def test_kimi_coding_model_name_omits_sampling_on_plain_proxy(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(
