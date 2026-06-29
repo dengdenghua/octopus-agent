@@ -775,7 +775,10 @@ export function AgentWorkbenchPanel({
     },
     [onSelectTab],
   );
-  const emptyShell = blocks.length === 0 && agentTiles.length === 0;
+  const emptyShell =
+    blocks.length === 0 &&
+    agentTiles.length === 0 &&
+    visibleRosterSeats.length === 0;
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases);
   const mainRunState = workbenchRunState({
     blocks: mainBlocks,

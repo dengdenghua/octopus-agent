@@ -83,7 +83,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "主控 · 等待中" }),
+      screen.getByRole("button", { name: "主电脑 · 等待中" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /文件/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Diff/ })).not.toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("<AgentWorkbenchPanel />", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "查看主 Agent 工位" }),
+      screen.getByRole("button", { name: "查看主电脑" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
   });
@@ -139,15 +139,24 @@ describe("<AgentWorkbenchPanel />", () => {
     ).toHaveAttribute("src", "/api/agents/general/avatar");
     expect(screen.getByText("群主")).toBeInTheDocument();
     expect(screen.queryByText("工位")).not.toBeInTheDocument();
+    const codexSeat = screen.getByRole("button", {
+      name: "Codex CLI · 子电脑 · 在场",
+    });
+    expect(codexSeat).toHaveAttribute("title", "Codex CLI · 子电脑 · 在场");
     expect(
-      screen.getByRole("img", { name: "Codex CLI · 协作 · 在场" }),
-    ).toHaveAttribute("title", "Codex CLI · 协作 · 在场");
-    expect(
-      screen.getByRole("img", { name: "Claude Code · 协作 · 在场" }),
-    ).toHaveAttribute("title", "Claude Code · 协作 · 在场");
+      screen.getByRole("button", { name: "Claude Code · 子电脑 · 在场" }),
+    ).toHaveAttribute("title", "Claude Code · 子电脑 · 在场");
     expect(screen.queryByText("Codex CLI")).not.toBeInTheDocument();
     expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
     expect(screen.queryByText("协作")).not.toBeInTheDocument();
+
+    fireEvent.click(codexSeat);
+
+    expect(screen.getAllByText("子电脑").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Codex CLI").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("子电脑已就位，等待独立进程开始输出。").length,
+    ).toBeGreaterThan(0);
   });
 
   test("uses the leader avatar for the main workstation in solo mode", () => {
@@ -232,8 +241,8 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getByTitle("主控 · 待确认")).toBeInTheDocument();
-    expect(screen.queryByTitle("主控 · 遇到问题")).not.toBeInTheDocument();
+    expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
+    expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("button", { name: "查看 Review-03 独立进程" }),
     );
@@ -358,7 +367,7 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("src/app.tsx")).not.toBeInTheDocument();
     expect(screen.queryByText("stream connection")).not.toBeInTheDocument();
     expect(screen.queryByText("搜索 Agent Workspace")).not.toBeInTheDocument();
-    expect(screen.getByTitle("主控 · 执行任务中...")).toBeInTheDocument();
+    expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
   });
 
   test("groups screen frames by phase while keeping phase titles visible", () => {
@@ -508,8 +517,8 @@ describe("<AgentWorkbenchPanel />", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("等待验证")).toBeInTheDocument();
-    expect(screen.getByTitle("主控 · 待确认")).toBeInTheDocument();
-    expect(screen.queryByTitle("主控 · 遇到问题")).not.toBeInTheDocument();
+    expect(screen.getByTitle("主电脑 · 待确认")).toBeInTheDocument();
+    expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
   });
 
   test("shows recovered tool failures as warnings instead of failing the phase", () => {
@@ -555,8 +564,8 @@ describe("<AgentWorkbenchPanel />", () => {
         })
         .querySelector(".text-amber-500"),
     ).toBeTruthy();
-    expect(screen.getByTitle("主控 · 已完成")).toBeInTheDocument();
-    expect(screen.queryByTitle("主控 · 遇到问题")).not.toBeInTheDocument();
+    expect(screen.getByTitle("主电脑 · 已完成")).toBeInTheDocument();
+    expect(screen.queryByTitle("主电脑 · 遇到问题")).not.toBeInTheDocument();
   });
 
   test("shows only observed context categories in the summary", () => {
@@ -1001,9 +1010,9 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(
       screen.queryByRole("tab", { name: "\u5b50\u667a\u80fd\u4f53" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByTitle("主控 · 执行任务中...")).toBeInTheDocument();
+    expect(screen.getByTitle("主电脑 · 执行任务中...")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "查看主 Agent 工位" }),
+      screen.getByRole("button", { name: "查看主电脑" }),
     ).toBeInTheDocument();
   });
 
