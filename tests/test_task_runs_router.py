@@ -150,11 +150,15 @@ def test_task_runs_router_recovery_queue_filters_and_isolates_owner(tmp_path):
     assert alice_queue.status_code == 200
     assert alice_queue.json()["schema"] == "octopus.task_recovery_queue.v1"
     assert alice_queue.json()["filters"]["owner_id"] == "alice"
-    assert [item["task_id"] for item in alice_queue.json()["items"]] == [
-        "task-alice-expired"
-    ]
+    assert [item["task_id"] for item in alice_queue.json()["items"]] == ["task-alice-expired"]
     assert alice_queue.json()["items"][0]["recommended_action"] == "takeover_and_resume"
     assert alice_queue.json()["items"][0]["latest_checkpoint_id"] == "ckpt-alice"
+    assert alice_queue.json()["items"][0]["operation"] == "takeover_then_resume"
+    assert alice_queue.json()["items"][0]["steps"] == [
+        "takeover_task",
+        "resume_from_checkpoint",
+    ]
+    assert alice_queue.json()["items"][0]["recovery_plan"]["checkpoint_id"] == "ckpt-alice"
 
     assert alice_with_monitor.status_code == 200
     assert alice_with_monitor.json()["filters"]["include_monitor"] is True
@@ -164,10 +168,9 @@ def test_task_runs_router_recovery_queue_filters_and_isolates_owner(tmp_path):
     }
 
     assert bob_queue.status_code == 200
-    assert [item["task_id"] for item in bob_queue.json()["items"]] == [
-        "task-bob-failed"
-    ]
+    assert [item["task_id"] for item in bob_queue.json()["items"]] == ["task-bob-failed"]
     assert bob_queue.json()["items"][0]["recommended_action"] == "resume_from_checkpoint"
+    assert bob_queue.json()["items"][0]["operation"] == "resume_from_checkpoint"
 
 
 def test_task_runs_router_list_total_counts_filtered_rows_not_page_size(tmp_path):

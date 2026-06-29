@@ -266,14 +266,19 @@ def task_recovery_advice(
         action = "resume_paused_task"
         reason = "task is paused"
 
+    checkpoint_id = record.latest_checkpoint_id or record.resume_checkpoint_id
+    operation, steps = _task_recovery_operation(action)
     return {
         "can_takeover": can_takeover,
         "can_resume": can_resume,
         "has_checkpoint": has_checkpoint,
         "recommended_action": action,
+        "operation": operation,
+        "steps": steps,
         "reason": reason,
         "latest_checkpoint_id": record.latest_checkpoint_id,
         "resume_checkpoint_id": record.resume_checkpoint_id,
+        "checkpoint_id": checkpoint_id,
     }
 
 
@@ -373,12 +378,12 @@ def build_task_recovery_queue(
                 "can_takeover": bool(health.get("can_takeover")),
                 "can_resume": bool(health.get("can_resume")),
                 "has_checkpoint": bool(health.get("has_checkpoint")),
-                "latest_checkpoint_id": health.get("recovery", {}).get(
-                    "latest_checkpoint_id"
-                ),
-                "resume_checkpoint_id": health.get("recovery", {}).get(
-                    "resume_checkpoint_id"
-                ),
+                "latest_checkpoint_id": health.get("recovery", {}).get("latest_checkpoint_id"),
+                "resume_checkpoint_id": health.get("recovery", {}).get("resume_checkpoint_id"),
+                "checkpoint_id": health.get("recovery", {}).get("checkpoint_id"),
+                "operation": health.get("recovery", {}).get("operation"),
+                "steps": health.get("recovery", {}).get("steps", []),
+                "recovery_plan": health.get("recovery"),
                 "lease_health": health,
                 "updated_at": task.updated_at,
                 "created_at": task.created_at,
@@ -423,6 +428,30 @@ def _task_recovery_priority(action: str, health: dict[str, Any]) -> int:
     if bool(health.get("can_resume")):
         score += 3
     return score
+
+
+def _task_recovery_operation(action: str) -> tuple[str, list[str]]:
+    plans = {
+        "takeover_and_resume": (
+            "takeover_then_resume",
+            ["takeover_task", "resume_from_checkpoint"],
+        ),
+        "takeover_for_approval": (
+            "takeover_then_approval",
+            ["takeover_task", "approval_decision"],
+        ),
+        "resume_from_checkpoint": ("resume_from_checkpoint", ["resume_from_checkpoint"]),
+        "restart": ("restart_task", ["restart_task"]),
+        "resume_paused_task": ("resume_paused_task", ["resume_task"]),
+        "takeover": ("takeover_task", ["takeover_task"]),
+        "dispatch": ("dispatch_task", ["dispatch_task"]),
+        "await_operator_approval": ("approval_decision", ["approval_decision"]),
+        "approval_policy_denied": ("review_policy", ["review_policy"]),
+        "capability_policy_denied": ("review_policy", ["review_policy"]),
+        "monitor": ("monitor", []),
+        "none": ("none", []),
+    }
+    return plans.get(action, ("inspect_task", ["inspect_task"]))
 
 
 def _empty_payload() -> dict[str, Any]:

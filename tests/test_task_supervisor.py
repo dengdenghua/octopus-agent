@@ -453,12 +453,21 @@ def test_task_lease_health_recommends_takeover_resume_and_terminal_recovery(tmp_
     assert expired_health["can_resume"] is True
     assert expired_health["recommended_action"] == "takeover_and_resume"
     assert expired_health["recovery"]["latest_checkpoint_id"] == "ckpt-active"
+    assert expired_health["recovery"]["operation"] == "takeover_then_resume"
+    assert expired_health["recovery"]["steps"] == [
+        "takeover_task",
+        "resume_from_checkpoint",
+    ]
+    assert expired_health["recovery"]["checkpoint_id"] == "ckpt-active"
 
     assert failed_health["state"] == "terminal"
     assert failed_health["can_takeover"] is False
     assert failed_health["can_resume"] is True
     assert failed_health["recommended_action"] == "resume_from_checkpoint"
     assert failed_health["recovery"]["latest_checkpoint_id"] == "ckpt-failed"
+    assert failed_health["recovery"]["operation"] == "resume_from_checkpoint"
+    assert failed_health["recovery"]["steps"] == ["resume_from_checkpoint"]
+    assert failed_health["recovery"]["checkpoint_id"] == "ckpt-failed"
 
     assert overview["takeover_recommended_count"] == 1
     assert overview["resumable_count"] == 2
@@ -514,8 +523,18 @@ def test_task_supervisor_recovery_queue_prioritizes_actionable_work(tmp_path):
     assert queue["items"][0]["can_takeover"] is True
     assert queue["items"][0]["can_resume"] is True
     assert queue["items"][0]["latest_checkpoint_id"] == "ckpt-expired"
+    assert queue["items"][0]["checkpoint_id"] == "ckpt-expired"
+    assert queue["items"][0]["operation"] == "takeover_then_resume"
+    assert queue["items"][0]["steps"] == [
+        "takeover_task",
+        "resume_from_checkpoint",
+    ]
+    assert queue["items"][0]["recovery_plan"]["checkpoint_id"] == "ckpt-expired"
     assert queue["items"][1]["recommended_action"] == "resume_from_checkpoint"
+    assert queue["items"][1]["operation"] == "resume_from_checkpoint"
     assert queue["items"][2]["recommended_action"] == "await_operator_approval"
+    assert queue["items"][2]["operation"] == "approval_decision"
+    assert queue["items"][2]["steps"] == ["approval_decision"]
 
     assert with_monitor["total"] == 4
     assert with_monitor["items"][-1]["task_id"] == "task-monitor"
