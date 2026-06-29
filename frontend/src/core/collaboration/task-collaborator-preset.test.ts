@@ -43,7 +43,7 @@ describe("task collaborator presets", () => {
       "/workspace/realtime/new",
     );
     expect(taskCollaboratorRouteForLeader("local codex")).toBe(
-      "/workspace/agents/local%20codex/chats/new",
+      "/workspace/realtime/new?agent=local+codex",
     );
   });
 });

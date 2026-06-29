@@ -99,6 +99,8 @@ import { swallow } from "@/core/utils/log";
 import { SubtasksProvider } from "@/core/tasks/context";
 import { getAPIClient } from "@/core/api";
 import { copyTextToClipboard } from "@/core/clipboard";
+import { threadCollaborationLink } from "@/core/collaboration/thread-collaboration-link";
+import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useThreadSettings } from "@/core/settings";
 import { useThreadStream } from "@/core/threads/hooks";
 import type { ReasoningEffort } from "@/core/threads";
@@ -147,14 +149,6 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-const BOOKMARKLET_AGENT_IDS = new Set([
-  "general",
-  "coder",
-  "desktop_operator",
-  "vibe_selling",
-  "ecommerce_mind",
-]);
 
 function normalizeReasoningEffortForUi(
   effort: ReasoningEffort | undefined,
@@ -794,14 +788,6 @@ function TaskCollaboratorControl({
   );
 }
 
-function taskCollaborationLink(threadId: string, isNewThread: boolean) {
-  const route = isNewThread
-    ? "/workspace/realtime/new"
-    : `/workspace/realtime/${encodeURIComponent(threadId)}`;
-  if (typeof window === "undefined") return route;
-  return `${window.location.origin}${window.location.pathname}#${route}`;
-}
-
 function TaskPresenceControl({
   roster,
   threadId,
@@ -817,13 +803,25 @@ function TaskPresenceControl({
   const [open, setOpen] = useState(false);
   const displayRoster = roster.slice(0, 5);
   const extraCount = Math.max(0, roster.length - displayRoster.length);
+  const memberCount = Math.max(1, roster.length);
   const handleOpenCollaborators = () => {
     setOpen(false);
     onOpenCollaborators();
   };
   const handleCopyLink = async () => {
     try {
-      await copyTextToClipboard(taskCollaborationLink(threadId, isNewThread));
+      await copyTextToClipboard(
+        threadCollaborationLink({
+          threadId,
+          isNewThread,
+          origin:
+            typeof window === "undefined" ? undefined : window.location.origin,
+          pathname:
+            typeof window === "undefined"
+              ? undefined
+              : window.location.pathname,
+        }),
+      );
       toast.success(t.collab.linkCopied);
     } catch {
       toast.error(t.collab.copyFailed);
@@ -836,16 +834,16 @@ function TaskPresenceControl({
         <button
           type="button"
           className={cn(
-            "inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-md border border-transparent bg-transparent px-1.5 text-[12px] font-medium text-muted-foreground transition-colors",
+            "inline-flex h-8 max-w-[10rem] items-center gap-1.5 rounded-sm border border-transparent bg-transparent px-1.5 text-[12px] font-medium text-muted-foreground transition-colors",
             "hover:border-border/50 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35",
           )}
           title={t.collab.collaborateTitle}
         >
-          <span className="flex -space-x-1">
+          <span className="grid grid-flow-col auto-cols-[1.25rem] gap-0.5">
             {displayRoster.map((agent) => (
               <span
                 key={agent.agent_id}
-                className="grid size-5 place-items-center overflow-hidden rounded-full border border-background bg-muted text-[10px] font-semibold text-muted-foreground"
+                className="grid size-5 place-items-center overflow-hidden rounded-sm border border-border/60 bg-muted text-[10px] font-semibold text-muted-foreground"
                 title={agent.display_name}
               >
                 {agent.avatar_url ? (
@@ -862,14 +860,14 @@ function TaskPresenceControl({
               </span>
             ))}
             {extraCount > 0 && (
-              <span className="grid size-5 place-items-center rounded-full border border-background bg-muted text-[9px] font-semibold text-muted-foreground">
+              <span className="grid size-5 place-items-center rounded-sm border border-border/60 bg-muted text-[9px] font-semibold text-muted-foreground">
                 +{extraCount}
               </span>
             )}
           </span>
           <span className="hidden min-w-0 truncate sm:inline">
             {formatCollaboratorCount(
-              Math.max(1, roster.length),
+              memberCount,
               t.chatInputBox.collaboratorsCountUnit,
             )}
           </span>
@@ -914,7 +912,9 @@ function TaskPresenceControl({
                   {agent.display_name}
                 </span>
                 <span className="block truncate text-[11px] text-muted-foreground">
-                  {agent.role === "tl" ? "主控" : "子电脑"}
+                  {agent.role === "tl"
+                    ? t.agentWorkbenchPanel.mainController
+                    : t.agentWorkbenchPanel.subComputer}
                 </span>
               </span>
             </div>
@@ -935,7 +935,7 @@ function TaskPresenceControl({
             className="inline-flex h-8 items-center justify-center gap-1.5 rounded-sm text-[12px] font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
           >
             <CopyIcon className="size-3.5" />
-            复制链接
+            {t.collab.copyLink}
           </button>
         </div>
       </DropdownMenuContent>
@@ -1132,10 +1132,7 @@ function ChatsPageContent({
   const initialPrompt = useMemo(() => {
     return searchParams.get("prompt") ?? "";
   }, [searchParams]);
-  const requestedAgent = searchParams.get("agent") ?? "";
-  const bookmarkletAgent = BOOKMARKLET_AGENT_IDS.has(requestedAgent)
-    ? requestedAgent
-    : "";
+  const queryAgentName = (searchParams.get("agent") ?? "").trim();
   const routeAgentName = useMemo(() => {
     const raw = params.agentName?.trim();
     if (!raw) return "";
@@ -1149,10 +1146,10 @@ function ChatsPageContent({
   const isAgentRoute = !!routeAgentName;
   const memoryMode = searchParams.get("memory") ?? "";
 
-  // Route-scoped agent identity.
-  // Plain chats use the general model-chat persona; agent identity is
-  // route-scoped to `/workspace/agents/:agent/chats/...`.
-  const activeAgentId = routeAgentName || bookmarkletAgent || "general";
+  // Unified task routes carry the selected persona in ?agent=. Legacy
+  // /workspace/agents/:agent/chats URLs still hydrate this page through the
+  // redirect shim, but no longer remain as a separate work surface.
+  const activeAgentId = routeAgentName || queryAgentName || "general";
   const { agent: activeAgent } = useAgent(activeAgentId);
   const hintedThreadOwnerAgentId = routeState?.threadOwnerAgentId?.trim() || "";
   const hintedWorkspacePath =
@@ -1430,28 +1427,17 @@ function ChatsPageContent({
   const streamMode: ReasoningMode | "team" = collaborationEnabled
     ? "team"
     : effectiveMode;
-  const threadRouteBase = isAgentRoute
-    ? `/workspace/agents/${encodeURIComponent(activeAgentId)}/chats`
-    : location.pathname.startsWith("/workspace/chats")
-      ? "/workspace/chats"
-      : "/workspace/realtime";
   const threadRouteFor = useCallback(
-    (id: string) => `${threadRouteBase}/${id}`,
-    [threadRouteBase],
+    (id: string) => `/workspace/realtime/${encodeURIComponent(id)}`,
+    [],
   );
   const newThreadRouteForMode = useCallback(
     (mode: string, prompt?: string) => {
-      const query = prompt?.trim()
-        ? `?prompt=${encodeURIComponent(prompt.trim())}`
-        : "";
-      if (mode === "react" || mode === "deep") {
-        return `/workspace/agents/${encodeURIComponent(activeAgentId)}/chats/new${query}`;
-      }
-      return location.pathname.startsWith("/workspace/chats")
-        ? `/workspace/chats/new${query}`
-        : `/workspace/realtime/new${query}`;
+      const agentId =
+        mode === "react" || mode === "deep" ? activeAgentId : "general";
+      return taskWorkspaceRoute({ agentId, prompt });
     },
-    [activeAgentId, location.pathname],
+    [activeAgentId],
   );
 
   // ── Agent-switch refresh ───────────────────────────────────
@@ -1471,7 +1457,7 @@ function ChatsPageContent({
     if (initialPrompt) setComposerSeed(initialPrompt);
   }, [initialPrompt]);
   useEffect(() => {
-    const selectedAgent = routeAgentName || bookmarkletAgent || "general";
+    const selectedAgent = routeAgentName || queryAgentName || "general";
     try {
       window.localStorage.setItem(ACTIVE_AGENT_KEY, selectedAgent);
       window.dispatchEvent(
@@ -1482,7 +1468,7 @@ function ChatsPageContent({
     } catch (e) {
       swallow(e, "storage");
     }
-  }, [bookmarkletAgent, routeAgentName]);
+  }, [queryAgentName, routeAgentName]);
   useEffect(() => {
     if (
       !resolvedThreadOwnerAgentId ||
@@ -1519,10 +1505,9 @@ function ChatsPageContent({
     if (prev === null || prev === activeAgentId) return;
     // Agent actually changed mid-session → flush both views.
     qc.invalidateQueries({ queryKey: ["threads", "search"] });
-    // route — hitting it falls through the `*` catch-all in router.tsx
-    // which redirects to `/` (landing page). Use `/chats/new` so we
-    // land on a fresh chat for the new agent instead of bouncing out
-    // of the workspace entirely.
+    // The visible route stays on the unified realtime surface; the selected
+    // agent is carried by ?agent= for fresh tasks and by thread metadata for
+    // history.
   }, [activeAgentId, qc]);
 
   useEvent(
@@ -1531,9 +1516,7 @@ function ChatsPageContent({
       if (source === "thread") return;
       if (!name || name === activeAgentId) return;
       qc.invalidateQueries({ queryKey: ["threads", "search"] });
-      navigate(`/workspace/agents/${encodeURIComponent(name)}/chats/new`, {
-        replace: false,
-      });
+      navigate(taskWorkspaceRoute({ agentId: name }), { replace: false });
     },
     [activeAgentId, navigate, qc],
   );

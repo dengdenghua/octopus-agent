@@ -31,6 +31,7 @@ import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useDeleteAgent } from "@/core/agents";
 import type { Agent } from "@/core/agents";
 import { useI18n } from "@/core/i18n/hooks";
+import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 
 interface AgentCardProps {
   agent: Agent;
@@ -46,7 +47,7 @@ export function AgentCard({ agent, isDefault, onSelect }: AgentCardProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   function handleChat() {
-    navigate(`/workspace/agents/${agent.name}/chats/new`);
+    navigate(taskWorkspaceRoute({ agentId: agent.name }));
   }
 
   async function handleDelete() {

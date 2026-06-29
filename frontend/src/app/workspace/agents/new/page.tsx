@@ -37,6 +37,7 @@ import { swallow } from "@/core/utils/log";
 import type { Agent } from "@/core/agents";
 import { checkAgentName, getAgent } from "@/core/agents/api";
 import { useI18n } from "@/core/i18n/hooks";
+import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useThreadStream } from "@/core/threads/hooks";
 import { uuid } from "@/core/utils/uuid";
 import { isIMEComposing } from "@/lib/ime";
@@ -1069,15 +1070,15 @@ export default function NewAgentPage() {
             <div className="bg-background flex shrink-0 justify-center border-t px-4 py-4">
               <div className="w-full max-w-(--container-width-md)">
                 {agent ? (
-                  <div className="flex flex-col items-center gap-4 rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent py-8 text-center">
-                    <div className="flex size-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5">
+                  <div className="flex flex-col items-center gap-4 rounded-lg border border-primary/20 bg-gradient-to-br from-primary/5 to-transparent py-8 text-center">
+                    <div className="flex size-12 items-center justify-center rounded-md bg-primary/10">
                       <CheckCircleIcon className="text-primary h-6 w-6" />
                     </div>
                     <p className="font-semibold">{t.agents.agentCreated}</p>
                     <div className="flex gap-2">
                       <Button
                         onClick={() =>
-                          navigate(`/workspace/agents/${agentName}/chats/new`)
+                          navigate(taskWorkspaceRoute({ agentId: agentName }))
                         }
                       >
                         {t.agents.startChatting}

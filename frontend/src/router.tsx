@@ -10,7 +10,10 @@ import {
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useI18n } from "@/core/i18n/hooks";
-import { legacyTeamWorkspaceTarget } from "@/core/router/legacy-workspace-routes";
+import {
+  legacyAgentChatWorkspaceTarget,
+  legacyTeamWorkspaceTarget,
+} from "@/core/router/legacy-workspace-routes";
 
 /**
  * Redirect old /realtime/:id bookmarks into the workspace shell.
@@ -34,6 +37,19 @@ function LegacyTeamRedirect() {
   const { threadId } = useParams<{ threadId?: string }>();
   const { search } = useLocation();
   return <HashRedirect to={legacyTeamWorkspaceTarget(threadId, search)} />;
+}
+
+function LegacyAgentChatRedirect() {
+  const { agentName, threadId } = useParams<{
+    agentName?: string;
+    threadId?: string;
+  }>();
+  const { search } = useLocation();
+  return (
+    <HashRedirect
+      to={legacyAgentChatWorkspaceTarget(agentName, threadId, search)}
+    />
+  );
 }
 
 function StorageRedirect() {
@@ -220,7 +236,7 @@ export function AppRouter() {
               <Route path="mcp" element={<McpPage />} />
               <Route
                 path="agents/:agentName/chats/:threadId"
-                element={<ChatPage />}
+                element={<LegacyAgentChatRedirect />}
               />
               <Route path="agents" element={<AgentsPage />} />
               <Route path="agents/new" element={<AgentsNewPage />} />

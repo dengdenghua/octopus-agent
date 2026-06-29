@@ -485,22 +485,7 @@ function threadHref(thread: {
   thread_id: string;
   metadata?: Record<string, unknown>;
 }) {
-  const mode =
-    typeof thread.metadata?.["mode"] === "string"
-      ? (thread.metadata["mode"] as string)
-      : "chats";
-  if (mode === "react" || mode === "deep" || mode === "agent") {
-    const agent =
-      typeof thread.metadata?.["agent"] === "string"
-        ? thread.metadata["agent"].trim()
-        : typeof thread.metadata?.["agent_name"] === "string"
-          ? thread.metadata["agent_name"].trim()
-          : "";
-    if (agent) {
-      return `/workspace/agents/${encodeURIComponent(agent)}/chats/${thread.thread_id}`;
-    }
-  }
-  return `/workspace/realtime/${thread.thread_id}`;
+  return `/workspace/realtime/${encodeURIComponent(thread.thread_id)}`;
 }
 
 const PROJECTS_KEY = "octopus.projects";
@@ -2276,9 +2261,9 @@ function ChatsSection({
   }, [open]);
   const deleteThread = useDeleteThread();
   const navigate = useNavigate();
-  // Navigate to a fresh thread URL each click — using Link to /chats/new
-  // when already on /chats/new is a no-op (same pathname → react-router
-  // doesn't re-mount, so threadId never resets).
+  // Emit a task-new event each click. Reusing a fixed /new link can be a
+  // no-op when the pathname is already selected, so the workspace shell owns
+  // fresh thread creation.
   const [threadToDelete, setThreadToDelete] = useState<ThreadSummary | null>(
     null,
   );

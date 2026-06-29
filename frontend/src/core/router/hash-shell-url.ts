@@ -3,11 +3,18 @@ export function toHashRouterShellUrl(route: string) {
   if (route.startsWith("/#/")) return route;
   if (route.startsWith("#/")) return `/${route}`;
   const normalized = route.startsWith("/") ? route : `/${route}`;
-  return `/#${normalized}`;
+  return `/#${canonicalWorkspaceHashRoute(normalized).slice(1)}`;
 }
 
-function normalizeLegacyHashRoute(hash: string): string {
-  const route = hash.startsWith("#") ? hash.slice(1) : hash;
+function safeDecodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function canonicalWorkspaceHashRoute(route: string): string {
   const normalized = route.startsWith("/") ? route : `/${route}`;
 
   if (
@@ -35,6 +42,29 @@ function normalizeLegacyHashRoute(hash: string): string {
     return `#/workspace/realtime/${legacyCodeThread[1]}`;
   }
 
+  const legacyAgentChat = normalized.match(
+    /^\/workspace\/agents\/([^/?#]+)\/chats\/([^?#]+)(\?[^#]*)?$/,
+  );
+  if (legacyAgentChat) {
+    const [, agent, threadId, search = ""] = legacyAgentChat;
+    const params = new URLSearchParams(search);
+    if (agent && !params.has("agent")) {
+      params.set("agent", safeDecodePathSegment(agent));
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return threadId === "new"
+      ? `#/workspace/realtime/new${query}`
+      : `#/workspace/realtime/${threadId}${query}`;
+  }
+
+  return `#${normalized}`;
+}
+
+function normalizeLegacyHashRoute(hash: string): string {
+  const route = hash.startsWith("#") ? hash.slice(1) : hash;
+  const normalized = route.startsWith("/") ? route : `/${route}`;
+  const canonical = canonicalWorkspaceHashRoute(normalized);
+  if (canonical !== `#${normalized}`) return canonical;
   return hash;
 }
 

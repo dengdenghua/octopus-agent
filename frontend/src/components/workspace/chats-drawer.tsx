@@ -68,21 +68,7 @@ function deriveTitle(thread: AgentThread): string {
 }
 
 function threadHref(thread: AgentThread): string {
-  const meta = (thread.metadata ?? {}) as Record<string, unknown>;
-  const mode =
-    typeof meta["mode"] === "string" ? (meta["mode"] as string) : "chats";
-  if (mode === "react" || mode === "deep" || mode === "agent") {
-    const agent =
-      typeof meta["agent"] === "string"
-        ? (meta["agent"] as string).trim()
-        : typeof meta["agent_name"] === "string"
-          ? (meta["agent_name"] as string).trim()
-          : "";
-    if (agent) {
-      return `/workspace/agents/${encodeURIComponent(agent)}/chats/${thread.thread_id}`;
-    }
-  }
-  return `/workspace/realtime/${thread.thread_id}`;
+  return `/workspace/realtime/${encodeURIComponent(thread.thread_id)}`;
 }
 
 function threadOwnerAgent(thread: AgentThread): string {

@@ -35,13 +35,13 @@ describe("hash router shell URL normalization", () => {
     normalizeHashRouterShellUrl();
 
     expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("#/workspace/agents/general/chats/new");
+    expect(window.location.hash).toBe("#/workspace/realtime/new?agent=general");
   });
 
   test("formats programmatic routes for the hash router shell", () => {
-    expect(toHashRouterShellUrl("/workspace/agents/general/chats/abc")).toBe(
-      "/#/workspace/agents/general/chats/abc",
-    );
+    expect(
+      toHashRouterShellUrl("/workspace/agents/local%20codex/chats/abc"),
+    ).toBe("/#/workspace/realtime/abc?agent=local+codex");
   });
 
   test("rewrites direct app path loads into hash routes", () => {
@@ -99,7 +99,7 @@ describe("hash router shell URL normalization", () => {
     window.history.replaceState(null, "", "/");
     window.history.pushState(null, "", "/workspace/agents/general/chats/abc");
     expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("#/workspace/agents/general/chats/abc");
+    expect(window.location.hash).toBe("#/workspace/realtime/abc?agent=general");
   });
 
   test("installs a hashchange listener so navigation keeps the URL canonical", () => {

@@ -39,6 +39,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EnterpriseAssetsTab } from "@/components/workspace/agents/enterprise-assets-tab";
 import { ACTIVE_AGENT_KEY } from "@/core/agents/active";
 import { emitAgentChanged } from "@/core/events";
+import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { swallow } from "@/core/utils/log";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
@@ -101,7 +102,9 @@ export function agentWorldIdentityKey(agent: AgentWorldAgent): string {
     | null
     | undefined;
   const profileName =
-    typeof profile?.name === "string" ? normalizeAgentNameKey(profile.name) : "";
+    typeof profile?.name === "string"
+      ? normalizeAgentNameKey(profile.name)
+      : "";
   if (profileName) return profileName;
 
   const displayName = agent.display_name || agent.name || agent.id;
@@ -919,9 +922,7 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
             className="h-9 shrink-0 rounded-lg border border-transparent bg-muted/60 px-3 text-xs font-medium outline-none transition-colors hover:bg-muted focus:border-primary/40"
             value={pluginStatusFilter}
             onChange={(event) =>
-              setPluginStatusFilter(
-                event.target.value as PluginStatusFilter,
-              )
+              setPluginStatusFilter(event.target.value as PluginStatusFilter)
             }
           >
             <option value="all">全部</option>
@@ -1008,7 +1009,9 @@ export function AgentWorldUnified() {
     if (tab === "skills") return "skills";
     return "agents";
   });
-  const [skillView, setSkillView] = useState<"directory" | "packs">("directory");
+  const [skillView, setSkillView] = useState<"directory" | "packs">(
+    "directory",
+  );
   const [activeCategory, setActiveCategory] =
     useState<AgentCategoryFilter>("all");
   const [importOpen, setImportOpen] = useState(false);
@@ -1127,10 +1130,7 @@ export function AgentWorldUnified() {
   }, [fetchAgents, queryClient]);
 
   const chatRouteForAgent = useCallback((agent: AgentWorldAgent | null) => {
-    const name = agent?.name?.trim();
-    return name
-      ? `/workspace/agents/${encodeURIComponent(name)}/chats/new`
-      : "/workspace/realtime/new";
+    return taskWorkspaceRoute({ agentId: agent?.name });
   }, []);
 
   return (

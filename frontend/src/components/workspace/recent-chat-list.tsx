@@ -85,21 +85,7 @@ type ThreadGroup = {
 };
 
 function routeForThread(thread: AgentThread) {
-  const mode =
-    typeof thread.metadata?.mode === "string" ? thread.metadata.mode : "chat";
-  if (mode === "react" || mode === "deep" || mode === "agent") {
-    const agent =
-      typeof thread.metadata?.agent === "string" && thread.metadata.agent.trim()
-        ? thread.metadata.agent.trim()
-        : typeof thread.metadata?.agent_name === "string" &&
-            thread.metadata.agent_name.trim()
-          ? thread.metadata.agent_name.trim()
-          : "";
-    if (agent) {
-      return `/workspace/agents/${encodeURIComponent(agent)}/chats/${thread.thread_id}`;
-    }
-  }
-  return `/workspace/realtime/${thread.thread_id}`;
+  return `/workspace/realtime/${encodeURIComponent(thread.thread_id)}`;
 }
 
 function ownerAgentForThread(thread: AgentThread): string {

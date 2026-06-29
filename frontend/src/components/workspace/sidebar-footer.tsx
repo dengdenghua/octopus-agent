@@ -51,6 +51,7 @@ import {
   taskCollaboratorRouteForLeader,
   writeTaskCollaboratorPreset,
 } from "@/core/collaboration/task-collaborator-preset";
+import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
 import { useMoliliLink } from "@/core/molili";
 import { useAuth } from "@/providers/AuthProvider";
 import { cn } from "@/lib/utils";
@@ -308,7 +309,7 @@ export function AgentFooter() {
   const selectAgent = (name: string) => {
     setActiveName(name);
     emitAgentChanged(name);
-    _navigate(`/workspace/agents/${encodeURIComponent(name)}/chats/new`);
+    _navigate(taskWorkspaceRoute({ agentId: name }));
   };
 
   const renderAgentItem = (a: Agent) => {

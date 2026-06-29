@@ -1,3 +1,5 @@
+import { taskWorkspaceRoute } from "@/core/router/task-workspace-route";
+
 export type TaskCollaboratorMode = "chat" | "cluster" | "swarm";
 
 export interface TaskCollaboratorPreset {
@@ -70,7 +72,5 @@ export function consumeTaskCollaboratorPreset(): TaskCollaboratorPreset | null {
 export function taskCollaboratorRouteForLeader(
   leaderId?: string | null,
 ): string {
-  const clean = leaderId?.trim();
-  if (!clean || clean === "general") return "/workspace/realtime/new";
-  return `/workspace/agents/${encodeURIComponent(clean)}/chats/new`;
+  return taskWorkspaceRoute({ agentId: leaderId });
 }

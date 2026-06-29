@@ -101,6 +101,21 @@ describe("workspace sidebar project grouping", () => {
     );
   });
 
+  test("routes agent chat history into the unified realtime workspace", () => {
+    const threads = [
+      makeThread("agent-1", "agent", {
+        agent: "local codex",
+      }),
+      makeThread("deep-1", "deep", {
+        agent_name: "researcher",
+      }),
+    ];
+
+    expect(
+      __testing.buildConversationThreadSummaries(threads).map((t) => t.href),
+    ).toEqual(["/workspace/realtime/agent-1", "/workspace/realtime/deep-1"]);
+  });
+
   test("groups team history by workspace folder before generated team label", () => {
     expect(
       __testing.projectNameForThread(
@@ -164,7 +179,7 @@ describe("workspace sidebar project grouping", () => {
 
 describe("workspace sidebar thread status lights", () => {
   test("maps paused and pending background tasks onto conversation history", () => {
-    const href = "/workspace/agents/general/chats/thread-1";
+    const href = "/workspace/realtime/thread-1";
     const statusByHref = __testing.buildThreadRunStatusByHref({
       activeTeamTasks: [],
       backgroundTasks: {
@@ -216,7 +231,7 @@ describe("workspace sidebar thread status lights", () => {
   });
 
   test("merges live workbench status over active background task status", () => {
-    const href = "/workspace/agents/general/chats/thread-2";
+    const href = "/workspace/realtime/thread-2";
     const statusByHref = __testing.buildThreadRunStatusByHref({
       activeTeamTasks: [],
       backgroundTasks: {
