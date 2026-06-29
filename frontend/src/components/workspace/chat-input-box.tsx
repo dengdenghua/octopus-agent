@@ -1182,6 +1182,7 @@ export function ChatInputBox({
             {showInspirationToggle && (
               <button
                 type="button"
+                data-testid="chat-mode-toggle"
                 disabled={disabled || status === "streaming"}
                 onClick={() =>
                   onModeChange?.(mode === "chat" ? "react" : "chat", draft)

@@ -982,7 +982,9 @@ export interface Translations {
     agentStatusError: string;
     agentStatusDone: string;
     agentStatusPending: string;
+    mainComputer: string;
     mainController: string;
+    subComputer: string;
     currentConversation: string;
     workbenchSlots: string;
     viewMainAgentSlot: string;
@@ -994,6 +996,7 @@ export interface Translations {
     dockStatusPresent: string;
     collaboratorSeat: string;
     leaderSeat: string;
+    collaboratorComputerWaiting: string;
     viewAgentProcess: (label: string) => string;
     agentClusterIndependentProcess: string;
     subAgent: string;

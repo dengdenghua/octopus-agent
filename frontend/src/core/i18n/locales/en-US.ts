@@ -1166,7 +1166,9 @@ export const enUS: Translations = {
     agentStatusError: "Error",
     agentStatusDone: "Finished",
     agentStatusPending: "Waiting",
+    mainComputer: "Main computer",
     mainController: "Main",
+    subComputer: "Sub computer",
     currentConversation: "Current conversation",
     workbenchSlots: "Slots",
     viewMainAgentSlot: "View main agent slot",
@@ -1178,6 +1180,8 @@ export const enUS: Translations = {
     dockStatusPresent: "Present",
     collaboratorSeat: "Collaborator",
     leaderSeat: "Leader",
+    collaboratorComputerWaiting:
+      "Sub computer is present, waiting for its independent process.",
     viewAgentProcess: (label) => `View ${label} independent process`,
     agentClusterIndependentProcess: "Agent Cluster - Independent Process",
     subAgent: "Subagent",

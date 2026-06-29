@@ -205,10 +205,7 @@ function MainProcessPhaseTimeline({
                 .join(" · ")
             : phaseStatusLabel(group.status, t);
         return (
-          <section
-            key={group.id}
-            className="border-b border-border/25 py-2.5"
-          >
+          <section key={group.id} className="border-b border-border/25 py-2.5">
             <button
               type="button"
               onClick={() =>
@@ -283,7 +280,7 @@ function MainProcessPhaseTimeline({
   );
 }
 
-function RobotStatusButton({
+function MainComputerStatusButton({
   active,
   label,
   onClick,
@@ -315,10 +312,10 @@ function RobotStatusButton({
           type="button"
           onClick={onClick}
           className={buttonClassName}
-          aria-label={`${t.agentWorkbenchPanel.mainController} · ${label}`}
-          title={`${t.agentWorkbenchPanel.mainController} · ${label}`}
+          aria-label={`${t.agentWorkbenchPanel.mainComputer} · ${label}`}
+          title={`${t.agentWorkbenchPanel.mainComputer} · ${label}`}
         >
-          <BotIcon className={iconClassName} />
+          <MonitorIcon className={iconClassName} />
           {pulseClassName && (
             <span
               className={cn(
@@ -331,9 +328,7 @@ function RobotStatusButton({
         </button>
       </TooltipTrigger>
       <TooltipContent align="start" side="bottom" className="max-w-52">
-        <div className="font-medium">
-          {t.agentWorkbenchPanel.mainController}
-        </div>
+        <div className="font-medium">{t.agentWorkbenchPanel.mainComputer}</div>
         <div className="mt-0.5 text-[11px] opacity-80">
           {t.agentWorkbenchPanel.currentConversation}
           {" · "}
@@ -409,8 +404,7 @@ function ScreenFrameRow({
                 "bg-amber-500/10 text-amber-700 dark:text-amber-300",
               block.status === "waiting_approval" &&
                 "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-              block.status === "error" &&
-                "bg-destructive/10 text-destructive",
+              block.status === "error" && "bg-destructive/10 text-destructive",
             )}
           >
             {statusLabel}
@@ -626,6 +620,9 @@ export function AgentWorkbenchPanel({
   const selectedBlock =
     phaseBlocks.find((block) => block.id === selectedBlockId) ?? defaultBlock;
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedRosterSeatId, setSelectedRosterSeatId] = useState<
+    string | null
+  >(null);
   const selectableAgentIds = useMemo(
     () => new Set(agentTiles.map((agent) => agent.id)),
     [agentTiles],
@@ -641,7 +638,10 @@ export function AgentWorkbenchPanel({
     () => screenBlocksForAgent(blocks, selectedAgent?.id ?? null),
     [blocks, selectedAgent?.id],
   );
-  const mainBlocks = useMemo(() => screenBlocksForAgent(blocks, null), [blocks]);
+  const mainBlocks = useMemo(
+    () => screenBlocksForAgent(blocks, null),
+    [blocks],
+  );
   const mainPhases = useMemo(
     () =>
       phases.map((phase) => ({
@@ -705,14 +705,13 @@ export function AgentWorkbenchPanel({
 
   useEffect(() => {
     setSelectedAgentId((current) =>
-      current && selectableAgentIds.has(current)
-        ? current
-        : null,
+      current && selectableAgentIds.has(current) ? current : null,
     );
   }, [selectableAgentIds]);
 
   const openMainProcess = useCallback(() => {
     setSelectedAgentId(null);
+    setSelectedRosterSeatId(null);
     setActivityView("screen");
     setManualBlockSelection(false);
     onSelectTab?.("agent");
@@ -721,6 +720,7 @@ export function AgentWorkbenchPanel({
   const openSubagentProcess = useCallback(
     (agentId: string) => {
       setSelectedAgentId(agentId);
+      setSelectedRosterSeatId(null);
       setActivityView("screen");
       setManualBlockSelection(false);
       onSelectTab?.("agent");
@@ -733,6 +733,7 @@ export function AgentWorkbenchPanel({
     const target = findAgentTileByFocusId(focusedAgentId, agentTiles);
     if (!target) return;
     setSelectedAgentId(target.id);
+    setSelectedRosterSeatId(null);
     setActivityView("screen");
   }, [focusedAgentId, agentTiles]);
 
@@ -753,6 +754,27 @@ export function AgentWorkbenchPanel({
   }, [agentTiles, rosterSeats]);
   const leaderRosterSeat =
     rosterSeats.find((seat) => seat.role === "tl") ?? null;
+  const selectedRosterSeat = selectedRosterSeatId
+    ? (visibleRosterSeats.find((seat) => seat.id === selectedRosterSeatId) ??
+      null)
+    : null;
+  useEffect(() => {
+    setSelectedRosterSeatId((current) =>
+      current && visibleRosterSeats.some((seat) => seat.id === current)
+        ? current
+        : null,
+    );
+  }, [visibleRosterSeats]);
+  const openRosterProcess = useCallback(
+    (seatId: string) => {
+      setSelectedAgentId(null);
+      setSelectedRosterSeatId(seatId);
+      setActivityView("screen");
+      setManualBlockSelection(false);
+      onSelectTab?.("agent");
+    },
+    [onSelectTab],
+  );
   const emptyShell = blocks.length === 0 && agentTiles.length === 0;
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases);
   const mainRunState = workbenchRunState({
@@ -766,9 +788,10 @@ export function AgentWorkbenchPanel({
       leaderSeat={leaderRosterSeat}
       mainRunState={mainRunState}
       rosterSeats={visibleRosterSeats}
-      selectedAgentId={selectedAgent?.id ?? null}
+      selectedAgentId={selectedAgent?.id ?? selectedRosterSeat?.id ?? null}
       onSelectMain={openMainProcess}
       onSelectAgent={openSubagentProcess}
+      onSelectRoster={openRosterProcess}
     />
   );
   const SelectedIcon = selectedBlock
@@ -901,7 +924,7 @@ export function AgentWorkbenchPanel({
       >
         <header className="relative shrink-0 border-b border-border/60 px-3 py-2.5">
           <div className="flex items-center gap-2.5">
-            <RobotStatusButton
+            <MainComputerStatusButton
               active={effectiveActiveTab === "agent"}
               label={t.agentWorkbenchPanel.agentStatusPending}
               onClick={() => onSelectTab?.("agent")}
@@ -1018,7 +1041,9 @@ export function AgentWorkbenchPanel({
           </button>
         ))}
         <span className="ml-auto text-[10px] text-muted-foreground font-mono">
-          {selectedAgent?.label ?? "Agent 01"}
+          {selectedRosterSeat
+            ? t.agentWorkbenchPanel.subComputer
+            : (selectedAgent?.label ?? "Agent 01")}
         </span>
       </div>
 
@@ -1052,41 +1077,55 @@ export function AgentWorkbenchPanel({
               <span
                 className={cn(
                   "inline-block size-1.5 rounded-full",
-                  selectedAgent
-                    ? agentRunDotClass(selectedAgent.status)
-                    : agentRunDotClass(mainRunState),
+                  selectedRosterSeat
+                    ? "bg-emerald-500"
+                    : selectedAgent
+                      ? agentRunDotClass(selectedAgent.status)
+                      : agentRunDotClass(mainRunState),
                 )}
               />
-              {t.agentWorkbench.currentProgress}{" "}
-              {screenProgress.total > 0
-                ? `${screenProgress.current}/${screenProgress.total}`
-                : phases.length > 0
-                  ? `${Math.max(1, phases.findIndex((p) => p.id === currentPhase?.id) + 1)}/${phases.length}`
-                  : "0/0"}
+              {selectedRosterSeat ? (
+                t.agentWorkbenchPanel.subComputer
+              ) : (
+                <>
+                  {t.agentWorkbench.currentProgress}{" "}
+                  {screenProgress.total > 0
+                    ? `${screenProgress.current}/${screenProgress.total}`
+                    : phases.length > 0
+                      ? `${Math.max(1, phases.findIndex((p) => p.id === currentPhase?.id) + 1)}/${phases.length}`
+                      : "0/0"}
+                </>
+              )}
             </span>
             <span className="h-4 w-px bg-border/45" />
             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-              {selectedAgent
-                ? `${selectedAgent.label} · ${repairMojibakeText(
-                    selectedAgent.codename ?? selectedAgent.name,
-                  )}${
-                    selectedAgent.role
-                      ? ` · ${repairMojibakeText(selectedAgent.role)}`
-                      : ""
-                  }`
-                : (currentPhase?.title ?? t.agentWorkbench.computerView)}
+              {selectedRosterSeat
+                ? `${t.agentWorkbenchPanel.subComputer} · ${selectedRosterSeat.name}`
+                : selectedAgent
+                  ? `${selectedAgent.label} · ${repairMojibakeText(
+                      selectedAgent.codename ?? selectedAgent.name,
+                    )}${
+                      selectedAgent.role
+                        ? ` · ${repairMojibakeText(selectedAgent.role)}`
+                        : ""
+                    }`
+                  : (currentPhase?.title ?? t.agentWorkbench.computerView)}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
               <span>
-                {selectedAgent
-                  ? dockAgentStatusLabel(selectedAgent.status, t)
-                  : mainPhaseStatusLabel(mainPhases, t)}
+                {selectedRosterSeat
+                  ? t.agentWorkbenchPanel.dockStatusPresent
+                  : selectedAgent
+                    ? dockAgentStatusLabel(selectedAgent.status, t)
+                    : mainPhaseStatusLabel(mainPhases, t)}
               </span>
             </span>
           </div>
 
           {/* Tool call timeline */}
-          {selectedAgent ? (
+          {selectedRosterSeat ? (
+            <RosterComputerPlaceholder seat={selectedRosterSeat} />
+          ) : selectedAgent ? (
             <SubagentProcessView
               agent={selectedAgent}
               blocks={screenBlocks}
@@ -1220,7 +1259,7 @@ export function AgentWorkbenchPanel({
     >
       <header className="relative shrink-0 border-b border-border/60 px-3 py-2.5">
         <div className="flex items-center gap-2.5">
-          <RobotStatusButton
+          <MainComputerStatusButton
             active={effectiveActiveTab === "agent"}
             label={mainRunStatus.label}
             onClick={() => onSelectTab?.("agent")}
@@ -1545,6 +1584,7 @@ function SubagentDock({
   selectedAgentId,
   onSelectMain,
   onSelectAgent,
+  onSelectRoster,
 }: {
   agents: AgentTile[];
   leaderSeat: WorkbenchRosterSeat | null;
@@ -1553,6 +1593,7 @@ function SubagentDock({
   selectedAgentId: string | null;
   onSelectMain: () => void;
   onSelectAgent: (agentId: string) => void;
+  onSelectRoster: (seatId: string) => void;
 }) {
   const { t } = useI18n();
   const hasCollaborators = rosterSeats.length > 0;
@@ -1560,6 +1601,7 @@ function SubagentDock({
     leaderSeat && hasCollaborators
       ? `${leaderSeat.name} · ${t.agentWorkbenchPanel.leaderSeat}`
       : leaderSeat?.name;
+  const mainDockShowsPresence = Boolean(leaderSeat && hasCollaborators);
   return (
     <div className="shrink-0 border-t border-border/25 bg-background/60 px-4 py-1.5">
       <div className="flex min-w-0 items-center">
@@ -1579,13 +1621,18 @@ function SubagentDock({
             fallbackInitial={leaderSeat?.name.charAt(0)}
             selected={selectedAgentId === null}
             onClick={onSelectMain}
-            dotClassName={agentRunDotClass(mainRunState)}
-            ariaLabel={
-              mainSeatLabel ?? t.agentWorkbenchPanel.viewMainAgentSlot
+            dotClassName={
+              mainDockShowsPresence
+                ? "bg-emerald-500"
+                : agentRunDotClass(mainRunState)
             }
-            title={
-              mainSeatLabel ?? t.agentWorkbenchPanel.mainAgentProcessTitle
+            dotLabel={
+              mainDockShowsPresence
+                ? t.agentWorkbenchPanel.dockStatusPresent
+                : undefined
             }
+            ariaLabel={mainSeatLabel ?? t.agentWorkbenchPanel.viewMainAgentSlot}
+            title={mainSeatLabel ?? t.agentWorkbenchPanel.mainAgentProcessTitle}
             iconOnly
             iconCaption={
               hasCollaborators ? t.agentWorkbenchPanel.leaderSeat : undefined
@@ -1626,8 +1673,10 @@ function SubagentDock({
               fallbackInitial={seat.name.charAt(0)}
               dotClassName="bg-emerald-500"
               dotLabel={t.agentWorkbenchPanel.dockStatusPresent}
-              title={`${seat.name} · ${t.agentWorkbenchPanel.collaboratorSeat} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
-              ariaLabel={`${seat.name} · ${t.agentWorkbenchPanel.collaboratorSeat} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+              title={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+              ariaLabel={`${seat.name} · ${t.agentWorkbenchPanel.subComputer} · ${t.agentWorkbenchPanel.dockStatusPresent}`}
+              selected={selectedAgentId === seat.id}
+              onClick={() => onSelectRoster(seat.id)}
               iconOnly
               className="shrink-0"
             />
@@ -1648,6 +1697,72 @@ function dockAgentStatusLabel(
   if (status === "error") return t.agentWorkbenchPanel.dockStatusError;
   if (status === "done") return t.agentWorkbenchPanel.dockStatusDone;
   return t.agentWorkbenchPanel.dockStatusPending;
+}
+
+function RosterComputerPlaceholder({ seat }: { seat: WorkbenchRosterSeat }) {
+  const { t } = useI18n();
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2 p-3">
+        <section className="overflow-hidden rounded-xl border border-border/55 bg-background/90 shadow-sm">
+          <div className="flex items-center justify-center border-b border-border/40 px-3 py-2 text-sm font-medium text-muted-foreground">
+            {t.agentWorkbenchPanel.subComputer}
+          </div>
+          <div className="grid gap-4 p-4 sm:grid-cols-[8rem_1fr]">
+            <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div className="rounded-md bg-foreground px-2.5 py-1.5 font-mono text-sm font-semibold text-background">
+                {t.agentWorkbenchPanel.subComputer}
+              </div>
+              <div className="mt-7 flex size-20 items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-4xl">
+                {seat.avatarUrl ? (
+                  <img
+                    src={seat.avatarUrl}
+                    alt={seat.name}
+                    className="size-full object-cover"
+                  />
+                ) : seat.icon?.trim() ? (
+                  <span aria-hidden="true">{seat.icon}</span>
+                ) : (
+                  <BotIcon className="size-10 text-foreground" />
+                )}
+              </div>
+              <div className="mt-4 truncate text-sm font-semibold text-foreground">
+                {seat.name}
+              </div>
+              <div className="mt-1 truncate text-xs text-muted-foreground">
+                {t.agentWorkbenchPanel.collaboratorSeat}
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-lg font-semibold text-foreground">
+                    {seat.name}
+                  </div>
+                  <div className="mt-1 truncate text-sm text-muted-foreground">
+                    {t.agentWorkbenchPanel.collaboratorComputerWaiting}
+                  </div>
+                </div>
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  <span className="size-2 rounded-full bg-emerald-500" />
+                  {t.agentWorkbenchPanel.dockStatusPresent}
+                </span>
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <DotProgress progress={0.18} hue={118} cols={18} rows={3} />
+                <span className="text-xs text-muted-foreground">
+                  {t.agentWorkbenchPanel.waitingForSubagentOutput}
+                </span>
+              </div>
+              <div className="mt-4 rounded-lg border border-dashed border-border/60 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                {t.agentWorkbenchPanel.collaboratorComputerWaiting}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }
 
 function SubagentProcessView({

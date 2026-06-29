@@ -8,8 +8,9 @@ version_compat: "0.2"
 preset: null
 
 planner:
-  type: static
+  type: llm
   model: mock/planner
+  mock_response: null
   max_nodes: 10
 
 budget:

@@ -8,10 +8,7 @@ const frontendOrigins = [
   `http://localhost:${frontendPort}`,
 ];
 
-async function fetchFromPage(
-  page: Page,
-  path: string,
-) {
+async function fetchFromPage(page: Page, path: string) {
   return page.evaluate(async (requestPath) => {
     const response = await fetch(requestPath);
     return {
@@ -20,6 +17,63 @@ async function fetchFromPage(
       body: await response.json(),
     };
   }, path);
+}
+
+async function reactFill(page: Page, selector: string, text: string) {
+  const el = page.locator(selector).filter({ visible: true }).first();
+  await el.waitFor({ state: "visible", timeout: 15_000 });
+  await el.evaluate((node: Element, value: string) => {
+    const proto =
+      node instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (!setter) throw new Error("no native value setter");
+    setter.call(node, value);
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  }, text);
+}
+
+async function waitForThreadState(
+  page: Page,
+  threadId: string,
+  predicate: (state: Record<string, unknown>) => boolean,
+) {
+  return expect
+    .poll(
+      async () => {
+        const response = await page.request.get(
+          `${backendBase}/api/threads/${encodeURIComponent(threadId)}/state`,
+        );
+        if (!response.ok()) {
+          return null;
+        }
+        const state = (await response.json()) as Record<string, unknown>;
+        return predicate(state) ? state : null;
+      },
+      { intervals: [500, 1000, 1500, 2000], timeout: 30_000 },
+    )
+    .not.toBeNull();
+}
+
+function threadStateMessages(state: Record<string, unknown>): unknown[] {
+  const values = state.values;
+  if (
+    values &&
+    typeof values === "object" &&
+    Array.isArray((values as { messages?: unknown }).messages)
+  ) {
+    return (values as { messages: unknown[] }).messages;
+  }
+  return Array.isArray(state.messages) ? state.messages : [];
+}
+
+function extractRealtimeThreadId(url: string): string {
+  const match = /#\/workspace\/realtime\/([^/?#]+)/.exec(url);
+  if (!match?.[1] || match[1] === "new") {
+    throw new Error(`expected realtime thread URL, got ${url}`);
+  }
+  return decodeURIComponent(match[1]);
 }
 
 test.describe("Full-stack golden smoke", () => {
@@ -110,5 +164,53 @@ test.describe("Full-stack golden smoke", () => {
     expect(
       agentsBody.some((agent: { name?: string }) => agent.name === "general"),
     ).toBe(true);
+  });
+
+  test("realtime new thread sends, persists, and resumes after refresh", async ({
+    page,
+  }) => {
+    const origin = frontendOrigins[0];
+    const prompt = `Reply directly with one short sentence: full-stack realtime smoke ${Date.now()}`;
+
+    await page.goto(`${origin}/#/workspace/realtime/new`);
+    await page.waitForLoadState("domcontentloaded");
+    const chatModeToggle = page.getByTestId("chat-mode-toggle");
+    await expect(chatModeToggle).toBeVisible({ timeout: 20_000 });
+    if ((await chatModeToggle.getAttribute("aria-pressed")) !== "true") {
+      await chatModeToggle.click();
+    }
+    await expect(chatModeToggle).toHaveAttribute("aria-pressed", "true");
+
+    await reactFill(page, '[data-testid="chat-composer-input"]', prompt);
+    await expect(page.getByTestId("chat-send-button")).toBeEnabled({
+      timeout: 10_000,
+    });
+    await page.getByTestId("chat-send-button").click();
+
+    await page.waitForURL(/#\/workspace\/realtime\/(?!new)[^/]+$/, {
+      timeout: 20_000,
+    });
+    const threadId = extractRealtimeThreadId(page.url());
+
+    await waitForThreadState(page, threadId, (state) => {
+      const messages = threadStateMessages(state);
+      return messages.some((message) =>
+        JSON.stringify(message).includes(prompt),
+      );
+    });
+
+    await waitForThreadState(page, threadId, (state) => {
+      const messages = threadStateMessages(state);
+      return messages.length >= 2;
+    });
+
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+    await expect(page.getByTestId("chat-composer-input")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText(prompt, { exact: true })).toBeVisible({
+      timeout: 20_000,
+    });
   });
 });
