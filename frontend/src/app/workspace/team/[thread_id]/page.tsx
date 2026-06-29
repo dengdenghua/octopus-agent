@@ -1,17 +1,13 @@
 import {
-  BotIcon,
   CheckCircle2Icon,
   ClipboardListIcon,
-  FolderPlusIcon,
   LinkIcon,
   Loader2Icon,
   MonitorIcon,
   PanelRightIcon,
   PauseCircleIcon,
-  PlusIcon,
   UserCogIcon,
   UserPlusIcon,
-  UsersIcon,
   XCircleIcon,
   XIcon,
 } from "lucide-react";
@@ -28,12 +24,6 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ArtifactsProvider } from "@/components/workspace/artifacts";
 import { ChatBox, useThreadChat } from "@/components/workspace/chats";
 import { ChatHeaderMenuButton } from "@/components/workspace/chat-header-menu-button";
@@ -69,8 +59,6 @@ import { TodoList } from "@/components/workspace/todo-list";
 import { TokenUsageIndicator } from "@/components/workspace/token-usage-indicator";
 import { Welcome } from "@/components/workspace/welcome";
 import { WorkDirSelector } from "@/components/workspace/workdir-selector";
-import { LocalAgentConnectDialog } from "@/components/workspace/agents/local-agent-connect-dialog";
-import { CliTeamDialog } from "@/components/workspace/cli-team-panel";
 import {
   useRegenerateHandler,
   usePlanActionHandler,
@@ -440,8 +428,6 @@ export default function TeamPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
-  const [connectLocalAgentOpen, setConnectLocalAgentOpen] = useState(false);
-  const [showCliTeam, setShowCliTeam] = useState(false);
   const [chatsDrawerOpen, setChatsDrawerOpen] = useState(false);
   const [selectedTaskAgentIds, setSelectedTaskAgentIds] = useState<string[]>(
     [],
@@ -940,38 +926,6 @@ export default function TeamPage() {
                         className="min-w-0 max-w-[min(46vw,24rem)]"
                         variant="muted"
                       />
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-8 shrink-0 rounded-lg border border-transparent text-muted-foreground transition-all hover:border-border/50 hover:bg-muted/50 hover:text-foreground"
-                            title="新建 / 接入"
-                          >
-                            <PlusIcon className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-48">
-                          <DropdownMenuItem
-                            onSelect={() => setShowCreateTeam(true)}
-                          >
-                            <FolderPlusIcon className="size-4" />
-                            新建项目
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setConnectLocalAgentOpen(true)}
-                          >
-                            <BotIcon className="size-4" />
-                            接入本地伙伴
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setShowCliTeam(true)}
-                          >
-                            <UsersIcon className="size-4" />
-                            CLI 团队 · 开跑
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </div>
                     <div className="ml-auto flex items-center gap-2">
                       {(teamId || messageAgentRoster.length > 0) && (
@@ -1276,11 +1230,6 @@ export default function TeamPage() {
                 applyTeam(team);
               }}
             />
-            <LocalAgentConnectDialog
-              open={connectLocalAgentOpen}
-              onOpenChange={setConnectLocalAgentOpen}
-            />
-            <CliTeamDialog open={showCliTeam} onOpenChange={setShowCliTeam} />
             <ChatsDrawer
               open={chatsDrawerOpen}
               onOpenChange={setChatsDrawerOpen}
