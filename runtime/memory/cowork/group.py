@@ -170,16 +170,21 @@ def _as_int(value: object) -> int | None:
         return None
 
 
-def fold_state(events: list[MemberEvent]) -> GroupState:
+def fold_state(events: list[MemberEvent], until_seq: int | None = None) -> GroupState:
     """Reconstruct the current group by folding the membership event log.
 
     Order is by ``seq``. invite adds (or re-adds — joined_at_message refreshes);
     leave removes; mute/unmute toggle; mode sets the active overlay. Removed
     members simply drop from the roster — their past blackboard writes stay
-    (attributed) because the blackboard is a separate, append-only store."""
+    (attributed) because the blackboard is a separate, append-only store.
+
+    ``until_seq`` folds only events up to and including that seq — that's all
+    "replay to a point" / "fork at message N" need, for free, because the whole
+    state is event-sourced."""
     members: dict[str, Member] = {}
     mode: GroupMode = DEFAULT_MODE
-    for ev in sorted(events, key=lambda e: e.seq):
+    scoped = events if until_seq is None else [e for e in events if e.seq <= until_seq]
+    for ev in sorted(scoped, key=lambda e: e.seq):
         if ev.action == "invite":
             if not ev.target_id:
                 continue
@@ -200,7 +205,7 @@ def fold_state(events: list[MemberEvent]) -> GroupState:
                 m.muted = ev.action == "mute"
         elif ev.action == "mode" and ev.mode in VALID_MODES:
             mode = ev.mode  # type: ignore[assignment]
-    return GroupState(roster=list(members.values()), mode=mode, event_count=len(events))
+    return GroupState(roster=list(members.values()), mode=mode, event_count=len(scoped))
 
 
 def visible_message_range(

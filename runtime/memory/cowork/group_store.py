@@ -47,6 +47,10 @@ class GroupStore:
         self._lock = threading.Lock()
         self._init_schema()
 
+    @property
+    def base_dir(self) -> Path:
+        return self._dir
+
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self._events_db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
@@ -89,9 +93,9 @@ class GroupStore:
             out.append(ev)
         return out
 
-    def state(self, thread_id: str) -> GroupState:
-        """The folded current group (roster + mode)."""
-        return fold_state(self.events(thread_id))
+    def state(self, thread_id: str, until_seq: int | None = None) -> GroupState:
+        """The folded group (roster + mode). ``until_seq`` replays to a point."""
+        return fold_state(self.events(thread_id), until_seq=until_seq)
 
     # ── thread-scoped shared blackboard ──────────────────────────────────────
     def blackboard(self, thread_id: str):

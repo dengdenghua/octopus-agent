@@ -47,6 +47,27 @@ class BoardBody(BaseModel):
     value: Any = None
 
 
+class AssignBody(BaseModel):
+    assignee: str = Field(min_length=1)
+    prompt: str = Field(min_length=1)
+
+
+class CompleteBody(BaseModel):
+    result: str = ""
+    blackboard_key: str | None = None
+
+
+class BreakoutBody(BaseModel):
+    child_thread: str = Field(min_length=1)
+    members: list[dict] = Field(default_factory=list)
+    grant: dict | None = None
+    at_message: int | None = None
+
+
+class MergeBody(BaseModel):
+    summary: str = ""
+
+
 def create_cowork_group_router(
     *,
     store: GroupStore | None = None,
@@ -58,6 +79,11 @@ def create_cowork_group_router(
 ) -> APIRouter:
     """Create the ``/api/cowork/*`` thread-group router."""
     group_store = store or GroupStore()
+
+    def _async_store():
+        from runtime.memory.cowork.async_work import AsyncWorkStore
+
+        return AsyncWorkStore(base_dir=group_store.base_dir, group_store=group_store)
 
     def _actor(request: Request) -> str:
         from runtime.adapters.web_auth import _resolve_actor
@@ -78,10 +104,11 @@ def create_cowork_group_router(
     router = APIRouter(tags=["cowork"])
 
     @router.get("/api/cowork/{thread_id}")
-    def get_group(thread_id: str) -> dict[str, Any]:
+    def get_group(thread_id: str, until_seq: int | None = None) -> dict[str, Any]:
         """Folded group state (roster + mode), the shared blackboard, the raw
-        membership timeline, and who would respond this turn under the mode."""
-        state = group_store.state(thread_id)
+        membership timeline, and who would respond this turn under the mode.
+        ``until_seq`` replays the group as it was at that event (time-travel)."""
+        state = group_store.state(thread_id, until_seq=until_seq)
         return {
             "thread_id": thread_id,
             "state": state.to_dict(),
@@ -89,6 +116,81 @@ def create_cowork_group_router(
             "events": [e.to_dict() for e in group_store.events(thread_id)],
             "responders": responders(state),
         }
+
+    @router.get("/api/cowork/{thread_id}/nominate")
+    def nominate_turn(thread_id: str, text: str = "", threshold: float = 0.5) -> dict[str, Any]:
+        """Self-nomination gate: of the participant agents, who is relevant enough
+        to speak for ``text`` — so a swarm doesn't pile on every turn."""
+        from runtime.memory.cowork.nominate import gate
+
+        state = group_store.state(thread_id)
+        participants = [
+            (m.id, m.id) for m in state.roster
+            if m.kind == "agent" and m.role == "participant" and not m.muted
+        ]
+        return {"nominated": gate(participants, text, threshold=threshold)}
+
+    @router.get("/api/cowork/{thread_id}/catchup/{member_id}")
+    def catchup(thread_id: str, member_id: str) -> dict[str, Any]:
+        """Catch-up brief for a member (roster + shared board + grant scope). The
+        realtime layer fills in recent messages via build_catchup in-process."""
+        from runtime.memory.cowork.catchup import build_catchup
+
+        cu = build_catchup(
+            group_store.state(thread_id), member_id, messages=[],
+            blackboard=group_store.blackboard_snapshot(thread_id),
+        )
+        if cu is None:
+            raise HTTPException(404, "member not in group")
+        return {**cu.to_dict(), "render": cu.render()}
+
+    @router.get("/api/cowork/{thread_id}/tasks")
+    def list_tasks(thread_id: str) -> dict[str, Any]:
+        """Background tasks in this thread (async coworkers)."""
+        return {"tasks": [t.to_dict() for t in _async_store().list(thread_id)]}
+
+    @router.post("/api/cowork/{thread_id}/tasks", dependencies=[Depends(_auth_dep)])
+    def assign_task(thread_id: str, body: AssignBody, request: Request) -> dict[str, Any]:
+        """Give a member a task to work in the background; result lands on the
+        shared blackboard when complete."""
+        task = _async_store().assign(thread_id, body.assignee, body.prompt, actor=_actor(request))
+        return {"ok": True, "task": task.to_dict()}
+
+    @router.post(
+        "/api/cowork/{thread_id}/tasks/{task_id}/complete", dependencies=[Depends(_auth_dep)]
+    )
+    def complete_task(thread_id: str, task_id: str, body: CompleteBody) -> dict[str, Any]:
+        """A runner reports a background task done — posts the result to the board."""
+        ok = _async_store().complete(task_id, body.result, blackboard_key=body.blackboard_key)
+        if not ok:
+            raise HTTPException(404, "task not found")
+        return {"ok": True, "blackboard": group_store.blackboard_snapshot(thread_id)}
+
+    @router.post("/api/cowork/{thread_id}/breakout", dependencies=[Depends(_auth_dep)])
+    def breakout_fork(thread_id: str, body: BreakoutBody, request: Request) -> dict[str, Any]:
+        """Spin off a focused side-thread with a subset of members + a grant."""
+        from runtime.memory.cowork.breakout import fork
+        from runtime.memory.cowork.group import ContextGrant
+
+        res = fork(
+            group_store, thread_id, body.child_thread, actor=_actor(request),
+            members=body.members, grant=ContextGrant.from_dict(body.grant),
+            at_message=body.at_message,
+        )
+        return {"ok": True, **res}
+
+    @router.post(
+        "/api/cowork/{thread_id}/breakout/{child_thread}/merge", dependencies=[Depends(_auth_dep)]
+    )
+    def breakout_merge(
+        thread_id: str, child_thread: str, body: MergeBody, request: Request
+    ) -> dict[str, Any]:
+        """Merge a breakout's conclusion back onto the parent's blackboard."""
+        from runtime.memory.cowork.breakout import merge_back
+
+        res = merge_back(group_store, child_thread, thread_id, actor=_actor(request),
+                         summary=body.summary)
+        return {"ok": True, **res, "blackboard": group_store.blackboard_snapshot(thread_id)}
 
     @router.get("/api/cowork/{thread_id}/plan")
     def plan(thread_id: str, text: str = "") -> dict[str, Any]:
