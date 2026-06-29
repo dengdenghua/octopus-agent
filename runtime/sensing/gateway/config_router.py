@@ -663,6 +663,68 @@ def create_config_router(
             "parallel_tool_calls": True,
         }
 
+    def _builtin_openai_compat_catalog() -> list[dict[str, Any]]:
+        from runtime.sensing.model_router.openai_compat_providers import (
+            known_openai_compat_profiles,
+        )
+
+        catalog: list[dict[str, Any]] = []
+        for profile in known_openai_compat_profiles():
+            model = _sample_model_for_profile(profile)
+            base_url = _sample_base_url_for_profile(profile)
+            diagnostic = _compat_diagnostic_for_entry({
+                "id": profile.id,
+                "name": profile.display_name,
+                "provider": "openai",
+                "base_url": base_url,
+                "models": [model],
+                "compat_profile": profile.id,
+            })
+            diagnostic["built_in"] = True
+            diagnostic["sample_base_url"] = base_url
+            catalog.append(diagnostic)
+        return catalog
+
+    def _sample_model_for_profile(profile: Any) -> str:
+        if profile.id == "kimi_coding":
+            return "kimi-k2.7-code"
+        if profile.id == "kimi":
+            return "kimi-k2-0711-preview"
+        if profile.id == "deepseek":
+            return "deepseek-chat"
+        if profile.id == "qwen":
+            return "qwen-plus"
+        if profile.id == "glm":
+            return "glm-4-flash"
+        if profile.id == "doubao":
+            return "doubao-pro-32k"
+        if profile.id == "minimax":
+            return "MiniMax-M2"
+        if profile.id == "hunyuan":
+            return "hunyuan-large"
+        if profile.id == "baichuan":
+            return "Baichuan4"
+        if profile.id == "yi":
+            return "yi-lightning"
+        if profile.id == "stepfun":
+            return "step-2-mini"
+        if profile.id == "siliconflow":
+            return "deepseek-ai/DeepSeek-V3"
+        if profile.id == "qianfan":
+            return "ernie-4.5-turbo-128k"
+        markers = tuple(getattr(profile, "model_markers", ()) or ())
+        marker = str(markers[0] if markers else profile.id).rstrip("-_/ ")
+        return marker or profile.id
+
+    def _sample_base_url_for_profile(profile: Any) -> str:
+        markers = tuple(getattr(profile, "base_url_markers", ()) or ())
+        marker = str(markers[0] if markers else "example.com/v1")
+        if marker.startswith("http://") or marker.startswith("https://"):
+            return marker.rstrip("/")
+        if marker.startswith("/"):
+            return f"https://api.example.com{marker}".rstrip("/")
+        return f"https://{marker.rstrip('/')}"
+
     def _field_delta(
         original: dict[str, Any],
         normalized: dict[str, Any],
@@ -828,6 +890,22 @@ def create_config_router(
             "diagnostics": [
                 _compat_diagnostic_for_entry(entry) for entry in entries
             ],
+        }
+
+    @router.get("/api/config/openai-compat-profiles")
+    def api_openai_compat_profiles() -> dict[str, Any]:
+        """List built-in OpenAI-compatible provider profiles.
+
+        This is a dry run over representative provider/model pairs: no
+        upstream request is made and no API key is required. It gives
+        operators a stable compatibility matrix before any custom model
+        is configured.
+        """
+        diagnostics = _builtin_openai_compat_catalog()
+        return {
+            "schema": "octopus.openai_compat_profile_catalog.v1",
+            "total": len(diagnostics),
+            "diagnostics": diagnostics,
         }
 
     @router.put("/api/config/custom-models/{model_id}")

@@ -409,6 +409,57 @@ class TestCustomModelsUpsert:
 
 
 class TestCustomModelCompatDiagnostics:
+    def test_builtin_openai_compat_profile_catalog_is_dry_run_matrix(
+        self,
+        client: TestClient,
+    ) -> None:
+        r = client.get("/api/config/openai-compat-profiles")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["schema"] == "octopus.openai_compat_profile_catalog.v1"
+        assert data["total"] >= 10
+
+        by_id = {row["id"]: row for row in data["diagnostics"]}
+        assert {
+            "deepseek",
+            "kimi",
+            "kimi_coding",
+            "qwen",
+            "glm",
+            "doubao",
+            "minimax",
+            "hunyuan",
+            "baichuan",
+            "siliconflow",
+        }.issubset(by_id)
+
+        kimi_coding = by_id["kimi_coding"]
+        assert kimi_coding["built_in"] is True
+        assert kimi_coding["applicable"] is True
+        assert kimi_coding["has_api_key"] is False
+        assert kimi_coding["upstreams"][0]["model"] == "kimi-k2.7-code"
+        assert kimi_coding["upstreams"][0]["profile"] == "kimi_coding"
+        assert "drop_sampling_parameters" in kimi_coding["upstreams"][0][
+            "normalization_hints"
+        ]
+        assert {
+            "frequency_penalty",
+            "presence_penalty",
+            "reasoning_effort",
+            "temperature",
+            "thinking",
+            "top_p",
+        }.issubset(
+            set(kimi_coding["upstreams"][0]["normalization"]["removed_fields"])
+        )
+
+        qwen_reasons = {
+            item["reason"]
+            for item in by_id["qwen"]["upstreams"][0]["fallback_retries"]
+        }
+        assert "rename_max_tokens" in qwen_reasons
+        assert "strict_tool_schema" in qwen_reasons
+
     def test_openai_compat_diagnostics_are_dry_run_and_secret_safe(
         self,
         client: TestClient,
