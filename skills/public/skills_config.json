@@ -141,62 +141,62 @@
     "sourcePlugin": "codex:build-web-apps"
   },
   "27_shadcn-best-practices": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:build-web-apps"
   },
   "27_stripe-best-practices": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:build-web-apps"
   },
   "27_supabase-best-practices": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:build-web-apps"
   },
   "27_game-playtest": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_game-studio": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_game-ui-frontend": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_phaser-2d-game": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_react-three-fiber-game": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_sprite-pipeline": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_three-webgl-game": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_web-3d-asset-pipeline": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
   "27_web-game-foundations": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:game-studio"
   },
@@ -206,22 +206,22 @@
     "sourcePlugin": "codex:openai-developers"
   },
   "27_build-chatgpt-app": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:openai-developers"
   },
   "27_chatgpt-app-submission": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:openai-developers"
   },
   "27_openai-api-troubleshooting": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:openai-developers"
   },
   "27_openai-platform-api-key": {
-    "enabled": true,
+    "enabled": false,
     "installedVersion": "0.0.37",
     "sourcePlugin": "codex:openai-developers"
   },
