@@ -11,7 +11,7 @@ import {
   XCircleIcon,
   XIcon,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   lazy,
   Suspense,
@@ -81,6 +81,7 @@ import {
 } from "@/core/teams";
 import { useThreadStream } from "@/core/threads/hooks";
 import {
+  normalizeTeamMode,
   serveMeshForMode,
   type TeamMode,
 } from "@/components/workspace/team-mode-picker";
@@ -418,11 +419,21 @@ function TeamThreadUpdateBridge({
 export default function TeamPage() {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const location = useLocation();
   const { threadId, isNewThread, setIsNewThread } = useThreadChat();
+  const initialPrompt = useMemo(() => {
+    return new URLSearchParams(location.search).get("prompt") ?? "";
+  }, [location.search]);
+  const initialTeamMode = useMemo(() => {
+    return normalizeTeamMode(
+      new URLSearchParams(location.search).get("teamMode"),
+    );
+  }, [location.search]);
+  const [composerSeed, setComposerSeed] = useState(initialPrompt);
   const [settings, setSettings] = useThreadSettings(threadId);
   const { agents } = useAgents();
   const [mounted, setMounted] = useState(false);
-  const [teamMode, setTeamMode] = useState<TeamMode>("chat");
+  const [teamMode, setTeamMode] = useState<TeamMode>(initialTeamMode);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamConfig, setTeamConfig] = useState<Team | null>(null);
@@ -615,6 +626,14 @@ export default function TeamPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (initialPrompt) setComposerSeed(initialPrompt);
+  }, [initialPrompt]);
+
+  useEffect(() => {
+    setTeamMode(initialTeamMode);
+  }, [initialTeamMode]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !workDir || !isAbsolutePath(workDir))
@@ -1143,6 +1162,7 @@ export default function TeamPage() {
                         )}
                         <TeamRoomMessageStrip />
                         <TeamInputBox
+                          key={composerSeed || "empty-team-composer"}
                           status={teamInputStatus}
                           workDir={workDir}
                           showWorkDirSelector={false}
@@ -1162,6 +1182,7 @@ export default function TeamPage() {
                           }
                           onSubmit={handleSubmit}
                           onStop={handleStop}
+                          defaultValue={composerSeed}
                         />
                       </div>
                     ) : (

@@ -48,6 +48,7 @@ interface TeamInputBoxProps {
   teamMembers?: Agent[];
   selectedAgentIds?: string[];
   onSelectedAgentIdsChange?: (agentIds: string[]) => void;
+  defaultValue?: string;
   onSubmit?: (message: { text: string }) => void;
   onStop?: () => void;
   submitBehavior?: "run" | "message";
@@ -64,13 +65,14 @@ export function TeamInputBox({
   onTeamModeChange,
   onModelChange,
   teamMembers = [],
+  defaultValue = "",
   onSubmit,
   onStop,
   submitBehavior = "run",
 }: TeamInputBoxProps) {
   const { t } = useI18n();
   const { models } = useModels();
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(defaultValue);
   const collab = useOptionalCollab();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const activeTeamMode: TeamMode = TEAM_MODES.includes(teamMode)
@@ -85,6 +87,11 @@ export function TeamInputBox({
     () => models as unknown as PickerModel[],
     [models],
   );
+
+  useEffect(() => {
+    if (!defaultValue.trim()) return;
+    setInput((current) => (current.trim() ? current : defaultValue));
+  }, [defaultValue]);
 
   useEffect(() => {
     const handler = (e: CustomEvent<{ text: string }>) => {

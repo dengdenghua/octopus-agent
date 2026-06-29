@@ -17,7 +17,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
-import { emitAgentChanged } from "@/core/events";
+import { emitAgentChanged, eventBus } from "@/core/events";
 import { useI18n } from "@/core/i18n/hooks";
 import { useDeleteThread, useThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
@@ -142,8 +142,8 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
 
   const startNewChat = useCallback(() => {
     onOpenChange(false);
-    navigate(`/workspace/realtime/${uuid()}`);
-  }, [navigate, onOpenChange]);
+    eventBus.emit("task:new");
+  }, [onOpenChange]);
 
   const handleDelete = useCallback(
     (thread: AgentThread) => {
@@ -188,7 +188,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
             )}
           >
             <MessageSquarePlusIcon className="size-4" />
-            {t.sidebar.actionNewChat}
+            {t.sidebar.actionNewTask}
           </button>
 
           <div className="relative">
@@ -227,7 +227,8 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
                     <Link
                       to={href}
                       state={{
-                        threadOwnerAgentId: threadOwnerAgent(thread) || undefined,
+                        threadOwnerAgentId:
+                          threadOwnerAgent(thread) || undefined,
                         workspacePath: threadWorkspacePath(thread) || undefined,
                       }}
                       onMouseDown={() => {

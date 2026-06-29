@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import { MoliliLoginDialog } from "@/components/auth/molili-login-dialog";
@@ -12,7 +12,9 @@ import {
   STUB_RESPONSE_EVENT,
   type StubResponseDetail,
 } from "@/core/api/client";
+import { useEvent } from "@/core/events";
 import { swallow } from "@/core/utils/log";
+import { uuid } from "@/core/utils/uuid";
 import { useWorkspaceShortcuts } from "@/core/shortcuts/use-global-shortcuts";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAppearance } from "@/hooks/use-appearance";
@@ -116,8 +118,16 @@ function StubResponseBannerHost() {
 export default function WorkspaceLayout() {
   const electron = inElectron();
   const { materialTheme } = useAppearance();
+  const navigate = useNavigate();
   useTitleBarThemeSync();
   useWorkspaceShortcuts();
+  useEvent(
+    "task:new",
+    () => {
+      navigate(`/workspace/realtime/${uuid()}`);
+    },
+    [navigate],
+  );
   return (
     <Fragment>
       {/* Implementation note. */}

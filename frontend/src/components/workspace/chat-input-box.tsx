@@ -13,8 +13,11 @@ import {
   SlidersHorizontalIcon,
   SquareIcon,
   Trash2Icon,
+  UserPlusIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   MentionAutocompletePopup,
@@ -28,10 +31,17 @@ import {
   consumeComposerImageEntries,
   rememberLastComposerTarget,
 } from "@/core/composer-image-inbox";
+import {
+  dedupeAgentsByName,
+  useAgents,
+  useLocalCliAgents,
+  useMobileDevices,
+} from "@/core/agents";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
 import type { Agent } from "@/core/agents/types";
 import { useModels } from "@/core/models/hooks";
+import { AgentAvatar } from "@/components/workspace/sidebar-footer";
 import { EvolutionIndicator } from "./evolution-indicator";
 import { ModelPicker, type PickerModel } from "./model-picker";
 import { PartnerModelControl } from "./partner-model-control";
@@ -72,6 +82,13 @@ import {
   PersonalModeSelector,
   type PersonalMode,
 } from "./personal-mode-selector";
+import { TEAM_MODE_META, TEAM_MODES, type TeamMode } from "./team-mode-picker";
+import {
+  createTeam,
+  dispatchTeamUpdated,
+  writePreferredTeam,
+} from "@/core/teams";
+import { uuid } from "@/core/utils/uuid";
 
 /**
  * Simplified chat composer for the /workspace/chats route. Same visual
@@ -221,6 +238,15 @@ function parseComposerUrls(value: string): string[] {
   );
 }
 
+function promptSearchParams(prompt: string, teamMode?: TeamMode): string {
+  const params = new URLSearchParams();
+  const text = prompt.trim();
+  if (text) params.set("prompt", text);
+  if (teamMode && teamMode !== "chat") params.set("teamMode", teamMode);
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : "";
+}
+
 export function ChatInputBox({
   status,
   disabled,
@@ -264,8 +290,19 @@ export function ChatInputBox({
   className,
 }: ChatInputBoxProps) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const { models } = useModels();
+  const { agents: builtinAgents } = useAgents();
+  const { cliAgents } = useLocalCliAgents();
+  const { mobileAgents } = useMobileDevices();
   const [draft, setDraft] = useState(defaultValue);
+  const [collaboratorPanelOpen, setCollaboratorPanelOpen] = useState(false);
+  const [collaboratorQuery, setCollaboratorQuery] = useState("");
+  const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<
+    string[]
+  >([]);
+  const [teamModeIntent, setTeamModeIntent] = useState<TeamMode>("cluster");
+  const [routingToTeam, setRoutingToTeam] = useState(false);
   const [researchUrlText, setResearchUrlText] = useState("");
   const [researchTextTitle, setResearchTextTitle] = useState("");
   const [researchTextBody, setResearchTextBody] = useState("");
@@ -338,7 +375,7 @@ export function ChatInputBox({
     allowAgentModes && mode === "deep" && !!onDeepResearch;
   const isDeepResearchMode = canUseDeepResearch && researchConfigOpen;
   const isProjectMode = mode === "code" && !!workDir?.trim();
-  const isBusy = disabled || uploadingMaterials;
+  const isBusy = disabled || uploadingMaterials || routingToTeam;
   const sendLabel = t.chatInputBox.send;
   const stopLabel = t.chatInputBox.stop;
   const permissionLabel =
@@ -371,6 +408,63 @@ export function ChatInputBox({
     displayAgentLabel.trim().charAt(0).toUpperCase() || "A";
   const displayAgentIcon = displayAgent?.icon?.trim() || "";
   const displayAgentName = displayAgent?.name?.trim() || "";
+  const allCollaboratorAgents = useMemo(
+    () => dedupeAgentsByName([...mobileAgents, ...cliAgents, ...builtinAgents]),
+    [builtinAgents, cliAgents, mobileAgents],
+  );
+  const availableCollaboratorAgents = useMemo(() => {
+    const q = collaboratorQuery.trim().toLowerCase();
+    return allCollaboratorAgents.filter((agent) => {
+      if (displayAgentName && agent.name === displayAgentName) return false;
+      if (!q) return true;
+      const label = agent.display_name ?? agent.name;
+      return (
+        label.toLowerCase().includes(q) ||
+        agent.name.toLowerCase().includes(q) ||
+        agent.description.toLowerCase().includes(q)
+      );
+    });
+  }, [allCollaboratorAgents, collaboratorQuery, displayAgentName]);
+  const selectedCollaborators = useMemo(() => {
+    const selected = new Set(selectedCollaboratorIds);
+    return allCollaboratorAgents.filter((agent) => selected.has(agent.name));
+  }, [allCollaboratorAgents, selectedCollaboratorIds]);
+  const selectedCollaboratorSet = useMemo(
+    () => new Set(selectedCollaboratorIds),
+    [selectedCollaboratorIds],
+  );
+  const currentAgentForTeam = useMemo<Agent | null>(() => {
+    if (!displayAgentName) return null;
+    return (
+      allCollaboratorAgents.find(
+        (agent) => agent.name === displayAgentName,
+      ) ?? {
+        name: displayAgentName,
+        display_name: displayAgentLabel,
+        description: displayAgentLabel,
+        icon: displayAgentIcon || null,
+        avatar_url: displayAgent?.avatar_url ?? null,
+        model: null,
+        tool_groups: null,
+      }
+    );
+  }, [
+    allCollaboratorAgents,
+    displayAgent?.avatar_url,
+    displayAgentIcon,
+    displayAgentLabel,
+    displayAgentName,
+  ]);
+  const teamRosterForStart = useMemo(() => {
+    const roster = currentAgentForTeam
+      ? [currentAgentForTeam, ...selectedCollaborators]
+      : selectedCollaborators;
+    return dedupeAgentsByName(roster);
+  }, [currentAgentForTeam, selectedCollaborators]);
+  const isTeamDraft = selectedCollaborators.length > 0;
+  const TeamDraftModeIcon = isTeamDraft
+    ? TEAM_MODE_META[teamModeIntent].icon
+    : UsersRoundIcon;
   const hasWorkDir = Boolean(workDir?.trim());
   const showModeSegment = isProjectMode;
   // Surface the workspace-directory picker even in a fresh personal-space
@@ -396,7 +490,8 @@ export function ChatInputBox({
     (showAgentSegment ? 1 : 0) +
     (showWorkDirSegment ? 1 : 0) +
     (showModeSegment ? 1 : 0) +
-    (showPersonalModeSegment ? 1 : 0);
+    (showPersonalModeSegment ? 1 : 0) +
+    (isTeamDraft ? 1 : 0);
   const showStatusStrip = statusSegmentCount > 0;
 
   useEffect(() => {
@@ -409,6 +504,15 @@ export function ChatInputBox({
     onModeChange?.("deep");
     window.setTimeout(() => fileInputRef.current?.click(), 0);
   }, [allowAgentModes, onModeChange]);
+
+  const toggleCollaborator = useCallback((agent: Agent) => {
+    setSelectedCollaboratorIds((current) => {
+      if (current.includes(agent.name)) {
+        return current.filter((id) => id !== agent.name);
+      }
+      return [...current, agent.name];
+    });
+  }, []);
 
   useEffect(() => {
     const handler = (
@@ -504,6 +608,31 @@ export function ChatInputBox({
       if (result !== false) setDraft("");
       return;
     }
+    if (isTeamDraft && teamRosterForStart.length > 0) {
+      setRoutingToTeam(true);
+      try {
+        const title = text.split(/\n+/)[0]?.trim().slice(0, 40) || "团队任务";
+        const team = await createTeam({
+          name: title,
+          members: teamRosterForStart,
+          leaderId:
+            currentAgentForTeam?.name ?? teamRosterForStart[0]?.name ?? null,
+        });
+        writePreferredTeam(team);
+        dispatchTeamUpdated(team);
+        setDraft("");
+        setSelectedCollaboratorIds([]);
+        setCollaboratorPanelOpen(false);
+        navigate(
+          `/workspace/team/${uuid()}${promptSearchParams(text, teamModeIntent)}`,
+        );
+      } catch (error) {
+        swallow(error, "create-team-from-composer");
+      } finally {
+        setRoutingToTeam(false);
+      }
+      return;
+    }
     onSubmit?.({
       text,
       images: pendingImages.length > 0 ? pendingImages : undefined,
@@ -521,6 +650,7 @@ export function ChatInputBox({
     isDeepResearchMode,
     onDeepResearch,
     onSubmit,
+    navigate,
     parsedResearchUrls,
     researchMaterials,
     researchSources,
@@ -530,6 +660,10 @@ export function ChatInputBox({
     onPermissionModeChange,
     onCompressContext,
     pendingImages,
+    isTeamDraft,
+    teamRosterForStart,
+    currentAgentForTeam?.name,
+    teamModeIntent,
   ]);
 
   const addMaterial = useCallback((material: Partial<ResearchMaterial>) => {
@@ -902,6 +1036,150 @@ export function ChatInputBox({
           rows={2}
           className="w-full resize-none bg-transparent px-3 py-1.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/50 disabled:opacity-60"
         />
+        {collaboratorPanelOpen && (
+          <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,520px)] overflow-hidden rounded-lg border border-border/70 bg-popover shadow-md">
+            <div className="flex items-start justify-between gap-3 border-b border-border/45 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[12px] font-medium text-foreground">
+                  <UsersRoundIcon className="size-4 text-primary" />
+                  <span>拉人 / 队形</span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-normal text-muted-foreground">
+                    {isTeamDraft ? `${teamRosterForStart.length} 人` : "单人"}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                  默认单人；拉人后自动进入群聊，可在集群 / 蜂群之间切换。
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCollaboratorPanelOpen(false)}
+                className="rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+              >
+                收起
+              </button>
+            </div>
+
+            <div className="border-b border-border/35 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCollaboratorIds([]);
+                    setTeamModeIntent("chat");
+                  }}
+                  className={cn(
+                    "h-7 rounded-md border px-2.5 text-[11px] font-medium transition-colors",
+                    !isTeamDraft
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border/55 text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                  )}
+                >
+                  单人
+                </button>
+                {TEAM_MODES.map((teamMode) => {
+                  const meta = TEAM_MODE_META[teamMode];
+                  const Icon = meta.icon;
+                  const active = isTeamDraft && teamModeIntent === teamMode;
+                  return (
+                    <button
+                      key={teamMode}
+                      type="button"
+                      disabled={!isTeamDraft}
+                      onClick={() => setTeamModeIntent(teamMode)}
+                      title={meta.description}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition-colors",
+                        active
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : "border-border/55 text-muted-foreground hover:bg-muted/55 hover:text-foreground",
+                        !isTeamDraft &&
+                          "cursor-not-allowed opacity-45 hover:bg-transparent",
+                      )}
+                    >
+                      <Icon className="size-3.5" />
+                      {meta.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="p-3">
+              <label className="flex h-8 items-center gap-2 rounded-md border border-border/50 bg-background/45 px-2">
+                <SearchIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                <input
+                  value={collaboratorQuery}
+                  onChange={(event) => setCollaboratorQuery(event.target.value)}
+                  placeholder="搜索 Agent / 本地伙伴"
+                  className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/45"
+                />
+              </label>
+              {selectedCollaborators.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedCollaborators.map((agent) => (
+                    <button
+                      key={agent.name}
+                      type="button"
+                      onClick={() => toggleCollaborator(agent)}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-primary/20 bg-primary/8 px-2 py-1 text-[11px] text-primary"
+                    >
+                      <AgentAvatar
+                        agent={agent}
+                        className="size-4 rounded text-[9px]"
+                      />
+                      <span className="truncate">
+                        {agent.display_name ?? agent.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="mt-2 max-h-52 overflow-y-auto pr-1">
+                <div className="space-y-1">
+                  {availableCollaboratorAgents.slice(0, 16).map((agent) => {
+                    const selected = selectedCollaboratorSet.has(agent.name);
+                    const label = agent.display_name ?? agent.name;
+                    return (
+                      <button
+                        key={agent.name}
+                        type="button"
+                        onClick={() => toggleCollaborator(agent)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
+                          selected ? "bg-primary/8" : "hover:bg-muted/55",
+                        )}
+                      >
+                        <AgentAvatar
+                          agent={agent}
+                          className="size-7 rounded-md text-[11px]"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[12px] font-medium">
+                            {label}
+                          </span>
+                          <span className="block truncate text-[11px] text-muted-foreground">
+                            {agent.description || agent.name}
+                          </span>
+                        </span>
+                        <span
+                          className={cn(
+                            "grid size-5 shrink-0 place-items-center rounded border text-[10px]",
+                            selected
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : "border-border/50 text-transparent",
+                          )}
+                        >
+                          ✓
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {isDeepResearchMode && researchConfigOpen && (
           <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-lg border border-border/70 bg-popover px-3 py-3 shadow-md">
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -1131,6 +1409,14 @@ export function ChatInputBox({
                 <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
                   {t.chatInputBox.quickCapabilities}
                 </DropdownMenuLabel>
+                <DropdownMenuItem
+                  onClick={() => setCollaboratorPanelOpen((open) => !open)}
+                  className="gap-2 rounded-md text-[13px]"
+                >
+                  <UserPlusIcon className="size-4" />
+                  拉人 / 队形
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 {canUseDeepResearch && (
                   <>
                     <DropdownMenuItem
@@ -1354,6 +1640,32 @@ export function ChatInputBox({
                   chromeless
                   onModeChange={onPersonalModeChange ?? (() => undefined)}
                 />
+              </>
+            ) : null}
+            {isTeamDraft ? (
+              <>
+                {(showAgentSegment ||
+                  showWorkDirSegment ||
+                  showPersonalModeSegment) && (
+                  <span
+                    className="h-3 w-px shrink-0 bg-border/35"
+                    aria-hidden="true"
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCollaboratorPanelOpen(true)}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-1 text-foreground transition-colors hover:bg-muted/55"
+                  title={TEAM_MODE_META[teamModeIntent].description}
+                >
+                  <TeamDraftModeIcon className="size-3.5 text-primary" />
+                  <span className="truncate">
+                    {TEAM_MODE_META[teamModeIntent].label}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {teamRosterForStart.length}人
+                  </span>
+                </button>
               </>
             ) : null}
           </div>

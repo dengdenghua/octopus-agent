@@ -25,7 +25,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { swallow } from "@/core/utils/log";
-import { uuid } from "@/core/utils/uuid";
 import {
   useEvent,
   eventBus,
@@ -63,12 +62,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -77,7 +70,6 @@ import { getAPIClient } from "@/core/api";
 import { getBackendBaseURL } from "@/core/config";
 import { withAgentAvatarVersion } from "@/core/agents/avatar";
 import { useI18n } from "@/core/i18n/hooks";
-import type { Translations } from "@/core/i18n/locales/types";
 import { useDeleteThread, useThreads } from "@/core/threads/hooks";
 import type { AgentThread } from "@/core/threads/types";
 import {
@@ -584,10 +576,8 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const queryClient = useQueryClient();
   const apiClient = useMemo(() => getAPIClient(), []);
 
-  // Resolve a NavRoute's labelKey against the sidebar namespace. Every
-  // key we reference from the routes arrays is declared as a string on
-  // the Translations interface · the cast keeps TS narrowing happy
-  // without silently swallowing typos.
+  // Resolve a NavRoute's labelKey against the sidebar namespace. The cast
+  // keeps TS narrowing happy without silently swallowing typos in route keys.
   const resolveLabel = useCallback(
     (key: string) =>
       (t.sidebar as unknown as Record<string, string>)[key] ?? key,
@@ -671,7 +661,6 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
   // Project aggregation is intentionally handled separately below and
   // stays global across agents within the same workspace.
   const activeAgentId = useActiveAgentId();
-
   const { data: rawConversationThreads } = useThreads(
     {
       limit: 30,
@@ -1040,7 +1029,7 @@ export function WorkspaceSidebar(props: React.ComponentProps<typeof Sidebar>) {
           space back. */}
       <SidebarContent className="gap-1.5 px-2.5 py-2 group-data-[collapsible=icon]:px-1 group-data-[collapsible=icon]:py-1.5">
         <SidebarGroup className="p-0 px-1 pb-0.5 group-data-[collapsible=icon]:px-0">
-          <SurfaceCreateButton activeAgentId={activeAgentId} />
+          <SurfaceCreateButton />
         </SidebarGroup>
         {/* Unified sidebar — no more surface branching. All navigation
             items are always visible regardless of the current route. */}
@@ -1495,54 +1484,22 @@ export function WorkspaceSurfaceSwitch({
   );
 }
 
-function SurfaceCreateButton({
-  activeAgentId,
-}: {
-  activeAgentId: string | null;
-}) {
+function SurfaceCreateButton() {
   const { t } = useI18n();
-  const navigate = useNavigate();
-  const chatRoute = activeAgentId
-    ? `/workspace/agents/${encodeURIComponent(activeAgentId)}/chats/new`
-    : PRIMARY_WORKSPACE_ROUTE;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          title={t.sidebar.actionNew}
-          aria-label={t.sidebar.actionNew}
-          className="flex h-7 w-full shrink-0 items-center justify-center gap-1.5 rounded-full border border-border/40 bg-background/48 px-3 text-[11px] font-medium text-muted-foreground shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition-[background-color,border-color,color,box-shadow] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:px-0"
-        >
-          <PlusIcon className="size-4" />
-          <span className="group-data-[collapsible=icon]:sr-only">
-            {t.sidebar.actionNew}
-          </span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        side="bottom"
-        align="start"
-        sideOffset={6}
-        className="w-48 rounded-xl border-border/70 p-1.5 shadow-xl shadow-black/10"
-      >
-        <DropdownMenuItem
-          onSelect={() => navigate(chatRoute)}
-          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs"
-        >
-          <MessageSquarePlusIcon className="size-4 shrink-0" />
-          {t.sidebar.actionNewChat}
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => navigate("/workspace/team/new")}
-          className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs"
-        >
-          <PlusIcon className="size-4 shrink-0" />
-          {t.sidebar.actionNewTask}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <button
+      type="button"
+      title={t.sidebar.actionNewTask}
+      aria-label={t.sidebar.actionNewTask}
+      onClick={() => eventBus.emit("task:new")}
+      className="flex h-7 w-full shrink-0 items-center justify-center gap-1.5 rounded-md border border-border/55 bg-background/60 px-3 text-[11px] font-medium text-muted-foreground transition-[background-color,border-color,color] hover:border-border hover:bg-background hover:text-foreground group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:translate-x-[3px] group-data-[collapsible=icon]:px-0"
+    >
+      <PlusIcon className="size-4" />
+      <span className="group-data-[collapsible=icon]:sr-only">
+        {t.sidebar.actionNewTask}
+      </span>
+    </button>
   );
 }
 
@@ -2297,7 +2254,6 @@ function ChatsSection({
   label,
   emptyLabel,
   newActionLabel,
-  newPath,
   runStatusByHref,
 }: {
   threads: ThreadSummary[];
@@ -2305,7 +2261,6 @@ function ChatsSection({
   label?: string;
   emptyLabel?: string;
   newActionLabel?: string;
-  newPath?: string;
   runStatusByHref?: Map<string, ThreadRunStatus>;
 }) {
   const { t: tr } = useI18n();
@@ -2336,10 +2291,10 @@ function ChatsSection({
     null,
   );
   const startNewChat = useCallback(() => {
-    navigate(newPath ?? `/workspace/realtime/${uuid()}`);
-  }, [navigate, newPath]);
+    eventBus.emit("task:new");
+  }, []);
   const sectionLabel = label ?? tr.sidebar.sectionChats;
-  const actionLabel = newActionLabel ?? tr.sidebar.actionNewChat;
+  const actionLabel = newActionLabel ?? tr.sidebar.actionNewTask;
   const visibleLimit = 20;
   const displayedThreads = useMemo(() => {
     const current = threads.find((thread) => pathname.includes(thread.id));

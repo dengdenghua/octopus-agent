@@ -48,6 +48,7 @@ export interface EventMap {
   "team:room-updated": { roomId: string };
 
   // 任务相关
+  "task:new": void;
   "task:changed": { type: string; task_id?: string; threadId?: string };
 
   // ReAct 相关
