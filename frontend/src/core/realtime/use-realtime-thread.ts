@@ -198,11 +198,13 @@ export function useRealtimeThread(
       });
 
     let resumeSeq = 0;
+    let resumeInFlight = false;
     const requestResume = (
       client: RealtimeClient,
       mode: "preserve-live" | "replace",
     ): void => {
       const seq = ++resumeSeq;
+      resumeInFlight = true;
       void client
         .request<ResumeResponse>("thread/resume", {
           threadId: args.threadId,
@@ -210,6 +212,7 @@ export function useRealtimeThread(
         })
         .then((result) => {
           if (cancelled || seq !== resumeSeq) return;
+          resumeInFlight = false;
           setState((prev) => {
             if (mode === "preserve-live" && prev.turns.length > 0) {
               // Live events landed before this resume response. Keep
@@ -235,6 +238,7 @@ export function useRealtimeThread(
         })
         .catch(() => {
           if (cancelled || seq !== resumeSeq) return;
+          resumeInFlight = false;
           setState((prev) => {
             const next: Conversation = { ...prev, resumeState: "needsResume" };
             stateRef.current = next;
@@ -311,12 +315,17 @@ export function useRealtimeThread(
       // queueing in the outbox. Drive the flag from the actual
       // socket open event instead.
       setConnected(true);
-      if (openedOnce) {
-        const client = clientRef.current;
-        if (client) requestResume(client, "replace");
+      const client = clientRef.current;
+      if (
+        client &&
+        (openedOnce ||
+          (stateRef.current.resumeState !== "resumed" && !resumeInFlight))
+      ) {
+        requestResume(client, "replace");
       } else {
         openedOnce = true;
       }
+      openedOnce = true;
     };
 
     const factory =
@@ -348,12 +357,11 @@ export function useRealtimeThread(
       onClose,
     });
     clientRef.current = client;
+    requestResume(client, "preserve-live");
     client.connect();
     // Note: do NOT setConnected(true) here. The previous optimistic
     // flag has been replaced — onOpen drives it now (see comment on
     // ``onOpen`` above).
-
-    requestResume(client, "preserve-live");
 
     return () => {
       cancelled = true;

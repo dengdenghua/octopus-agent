@@ -224,6 +224,60 @@ describe("useRealtimeThread reconnect reconciliation", () => {
     );
     expect(resumeCount).toBe(2);
   });
+
+  it("resumes on first socket open after the startup resume request failed", async () => {
+    const handles: FakeClientHandles[] = [];
+    let resumeCount = 0;
+    const factory = (deps: {
+      onIncomingRequest: IncomingRequestFn;
+      onNotification: (n: {
+        method: string;
+        params: Record<string, unknown>;
+      }) => void;
+      onOpen?: () => void;
+      onClose?: (code: number, reason: string) => void;
+    }) => {
+      handles.push({
+        emitRequest: (req) => deps.onIncomingRequest(req),
+        emitOpen: () => deps.onOpen?.(),
+        emitClose: (code, reason) => deps.onClose?.(code, reason),
+      });
+      return {
+        connect: () => {},
+        close: () => {},
+        notify: () => {},
+        request: (method: string) => {
+          if (method !== "thread/resume") return Promise.resolve({});
+          resumeCount += 1;
+          if (resumeCount === 1) {
+            return Promise.reject(new Error("backend not ready"));
+          }
+          return Promise.resolve({
+            thread: { id: "th" },
+            turns: [turn("t-ready", "completed")],
+            hasMore: false,
+          });
+        },
+      };
+    };
+
+    const rendered = renderHook(() =>
+      useRealtimeThread({ threadId: "th", clientFactory: factory as never }),
+    );
+
+    await waitFor(() => expect(resumeCount).toBe(1));
+    expect(rendered.result.current.state.resumeState).toBe("needsResume");
+
+    act(() => {
+      handles[0]!.emitOpen();
+    });
+
+    await waitFor(() =>
+      expect(rendered.result.current.state.turns[0]?.id).toBe("t-ready"),
+    );
+    expect(rendered.result.current.state.resumeState).toBe("resumed");
+    expect(resumeCount).toBe(2);
+  });
 });
 
 describe("useRealtimeThread backwards pagination", () => {
