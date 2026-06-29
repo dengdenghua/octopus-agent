@@ -29,7 +29,25 @@ describe("loopback origin normalization", () => {
     vi.stubEnv("VITE_CANONICAL_LOOPBACK_HOST", "127.0.0.1");
     expect(
       loopbackOriginRedirectURL(
-      "http://localhost:3000/#/workspace/realtime/new",
+        "http://localhost:3000/#/workspace/realtime/new",
+      ),
+    ).toBe("http://127.0.0.1:3000/#/workspace/realtime/new");
+  });
+
+  test("can be disabled for special local deployments", () => {
+    vi.stubEnv("VITE_DISABLE_LOOPBACK_ORIGIN_NORMALIZATION", "true");
+    expect(
+      loopbackOriginRedirectURL(
+        "http://127.0.0.1:3000/#/workspace/realtime/new",
+      ),
+    ).toBeNull();
+  });
+
+  test("treats canonical host none as an opt-out", () => {
+    vi.stubEnv("VITE_CANONICAL_LOOPBACK_HOST", "none");
+    expect(
+      loopbackOriginRedirectURL(
+        "http://127.0.0.1:3000/#/workspace/realtime/new",
       ),
     ).toBeNull();
   });
