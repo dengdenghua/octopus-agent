@@ -28,14 +28,27 @@ function normalizeBackendBaseURL(value: string | undefined | null) {
   }
 }
 
+function getRuntimeBackendParamFromURL() {
+  const shellParam = new URLSearchParams(window.location.search).get(
+    RUNTIME_BACKEND_PARAM,
+  );
+  if (shellParam) return shellParam;
+
+  const hash = window.location.hash || "";
+  const queryStart = hash.indexOf("?");
+  if (queryStart < 0) return "";
+  return new URLSearchParams(hash.slice(queryStart + 1)).get(
+    RUNTIME_BACKEND_PARAM,
+  );
+}
+
 function getRuntimeBackendBaseURL() {
   if (typeof window === "undefined") {
     return "";
   }
 
   try {
-    const params = new URLSearchParams(window.location.search);
-    const fromURL = params.get(RUNTIME_BACKEND_PARAM);
+    const fromURL = getRuntimeBackendParamFromURL();
     if (fromURL) {
       const normalized = normalizeBackendBaseURL(fromURL);
       if (!normalized) {

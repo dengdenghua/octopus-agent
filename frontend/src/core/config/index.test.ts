@@ -41,6 +41,27 @@ describe("backend base URL resolution", () => {
     );
   });
 
+  test("reads runtime backend query param from hash-router routes", () => {
+    setLocation(
+      "http://localhost:3000/#/workspace/realtime/new?octopusBackend=http%3A%2F%2Flocalhost%3A8001%2F",
+    );
+
+    expect(getBackendBaseURL()).toBe("http://localhost:8001");
+    expect(getOctopusBaseURL()).toBe("http://localhost:8001/api");
+    expect(window.sessionStorage.getItem("octopusBackend")).toBe(
+      "http://localhost:8001",
+    );
+  });
+
+  test("prefers shell query runtime backend over hash route query", () => {
+    setLocation(
+      "http://localhost:3000/?octopusBackend=http%3A%2F%2F127.0.0.1%3A8000%2F#/workspace/realtime/new?octopusBackend=http%3A%2F%2Flocalhost%3A8001",
+    );
+
+    expect(getBackendBaseURL()).toBe("http://127.0.0.1:8000");
+    expect(getOctopusBaseURL()).toBe("http://127.0.0.1:8000/api");
+  });
+
   test("lets Electron-injected runtime backend override dev proxy defaults", () => {
     setLocation("http://localhost:3000/#/workspace/realtime/new");
     window.octopus = {
