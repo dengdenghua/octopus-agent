@@ -189,6 +189,9 @@ def create_app(
     subagent_registry: Any = None,
     server_host: str | None = None,
     server_port: int | None = None,
+    frontend_host: str | None = None,
+    frontend_port: int | None = None,
+    frontend_proxy_target: str | None = None,
     tentacle_enabled: bool = True,
     tentacle_ws_port: int = 8765,
 ) -> Any:
@@ -619,6 +622,9 @@ def create_app(
             group_registry=group_registry,
             server_host=server_host,
             server_port=server_port,
+            frontend_host=frontend_host,
+            frontend_port=frontend_port,
+            frontend_proxy_target=frontend_proxy_target,
         )
     )
 

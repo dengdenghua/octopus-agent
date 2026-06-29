@@ -33,6 +33,12 @@ const SAMPLE = {
     server_host: "0.0.0.0",
     server_port: 8000,
   },
+  process: {
+    pid: 4242,
+    python: "3.12.13",
+    cwd: "/repo",
+    argv: ["python", "-m", "runtime", "serve"],
+  },
   frontend: {
     observed_origin: "http://localhost:3000",
     canonical_origin: "http://localhost:3000",
@@ -44,6 +50,21 @@ const SAMPLE = {
     proxy_targets_backend: true,
     origin_normalized: true,
     loopback_aliases: ["http://127.0.0.1:3000", "http://localhost:3000"],
+  },
+  webui: {
+    available: true,
+    selected_dist: "/repo/frontend/dist",
+    env_dist: "/missing/dist",
+    env_dist_invalid: true,
+    assets_count: 12,
+    dev_fallback_expected: false,
+    detail:
+      "configured OCTOPUS_WEBUI_DIST is invalid: /missing/dist; fallback=/repo/frontend/dist",
+  },
+  api_surface: {
+    route_count: 180,
+    required_routes_present: true,
+    missing_required_routes: [],
   },
   loopback_aliases: {
     requested_host: "localhost",
@@ -59,15 +80,27 @@ const SAMPLE = {
     {
       id: "runtime_version",
       passed: true,
+      severity: "error",
       detail: "runtime=0.2.0 pyproject=0.2.0",
     },
     {
       id: "frontend_version",
       passed: false,
+      severity: "error",
       detail: "frontend=0.1.0 runtime=0.2.0",
+    },
+    {
+      id: "webui_dist",
+      passed: false,
+      severity: "warn",
+      detail:
+        "configured OCTOPUS_WEBUI_DIST is invalid: /missing/dist; fallback=/repo/frontend/dist",
     },
   ],
   next_actions: ["frontend=0.1.0 runtime=0.2.0"],
+  warnings: [
+    "configured OCTOPUS_WEBUI_DIST is invalid: /missing/dist; fallback=/repo/frontend/dist",
+  ],
 };
 
 beforeEach(() => {
@@ -116,13 +149,30 @@ describe("RuntimeSelfCheckPanel", () => {
     );
     expect(screen.getByText("Vite proxy target")).toBeInTheDocument();
     expect(screen.getByText("Proxy matches backend")).toBeInTheDocument();
+    expect(screen.getByText("Process")).toBeInTheDocument();
+    expect(screen.getByText("4242")).toBeInTheDocument();
+    expect(screen.getByText("WebUI static bundle")).toBeInTheDocument();
+    expect(screen.getAllByText("/repo/frontend/dist").length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.getByText("API surface")).toBeInTheDocument();
+    expect(screen.getByText("180")).toBeInTheDocument();
     expect(screen.getByText("frontend_version")).toBeInTheDocument();
+    expect(screen.getByText("webui_dist")).toBeInTheDocument();
+    expect(screen.getByText("warn")).toBeInTheDocument();
+    expect(screen.getByText("Warnings")).toBeInTheDocument();
     expect(screen.getAllByText("frontend=0.1.0 runtime=0.2.0").length).toBe(2);
   });
 
   it("refreshes the self-check on demand", async () => {
     mockOnce(SAMPLE);
-    mockOnce({ ...SAMPLE, ready: true, status: "ok", next_actions: [] });
+    mockOnce({
+      ...SAMPLE,
+      ready: true,
+      status: "degraded",
+      next_actions: [],
+      warnings: ["configured OCTOPUS_WEBUI_DIST is invalid"],
+    });
     renderWithProviders(<RuntimeSelfCheckPanel />);
 
     await waitFor(() => {
@@ -133,7 +183,7 @@ describe("RuntimeSelfCheckPanel", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(screen.getByText("ready")).toBeInTheDocument();
+      expect(screen.getAllByText("degraded").length).toBeGreaterThan(0);
     });
   });
 

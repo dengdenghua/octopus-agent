@@ -11,6 +11,7 @@ interface RuntimeCheckRow {
   id: string;
   passed: boolean;
   detail: string;
+  severity?: "error" | "warn" | string;
 }
 
 interface RuntimeSelfCheckPayload {
@@ -26,6 +27,13 @@ interface RuntimeSelfCheckPayload {
       pyproject?: string;
       frontend_package?: string;
     };
+  };
+  process?: {
+    pid?: number;
+    python?: string;
+    executable?: string;
+    cwd?: string;
+    argv?: string[];
   };
   backend?: {
     canonical_base_url?: string;
@@ -50,6 +58,20 @@ interface RuntimeSelfCheckPayload {
     origin_normalized?: boolean;
     loopback_aliases?: string[];
   };
+  webui?: {
+    available?: boolean;
+    selected_dist?: string;
+    env_dist?: string;
+    env_dist_invalid?: boolean;
+    assets_count?: number;
+    dev_fallback_expected?: boolean;
+    detail?: string;
+  };
+  api_surface?: {
+    route_count?: number;
+    required_routes_present?: boolean;
+    missing_required_routes?: string[];
+  };
   loopback_aliases?: {
     requested_host?: string;
     canonical_host?: string;
@@ -62,6 +84,7 @@ interface RuntimeSelfCheckPayload {
   };
   checks?: RuntimeCheckRow[];
   next_actions?: string[];
+  warnings?: string[];
 }
 
 export interface RuntimeSelfCheckPanelProps {
@@ -123,11 +146,16 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
   }, [load]);
 
   const versions = data?.version_drift?.version_sources ?? {};
+  const process = data?.process ?? {};
   const backend = data?.backend ?? {};
   const frontend = data?.frontend ?? {};
+  const webui = data?.webui ?? {};
+  const apiSurface = data?.api_surface ?? {};
   const loopbackAliases = data?.loopback_aliases?.aliases ?? [];
   const checks = data?.checks ?? [];
   const nextActions = data?.next_actions ?? [];
+  const warnings = data?.warnings ?? [];
+  const degraded = Boolean(data && (!data.ready || data.status === "degraded"));
 
   return (
     <Card>
@@ -137,10 +165,10 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
             {t.runtimeSelfCheckPanel.title}
           </CardTitle>
           {data && (
-            <Badge variant={data.ready ? "default" : "destructive"}>
-              {data.ready
-                ? t.runtimeSelfCheckPanel.ready
-                : t.runtimeSelfCheckPanel.degraded}
+            <Badge variant={degraded ? "destructive" : "default"}>
+              {degraded
+                ? t.runtimeSelfCheckPanel.degraded
+                : t.runtimeSelfCheckPanel.ready}
             </Badge>
           )}
         </div>
@@ -201,6 +229,27 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
                 />
               </InfoBlock>
 
+              <InfoBlock title={t.runtimeSelfCheckPanel.process}>
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.pid}
+                  value={process.pid}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.python}
+                  value={process.python}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.cwd}
+                  value={process.cwd}
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.argv}
+                  value={process.argv?.join(" ")}
+                  mono
+                />
+              </InfoBlock>
+
               <InfoBlock title={t.runtimeSelfCheckPanel.backend}>
                 <InfoRow
                   label={t.runtimeSelfCheckPanel.canonicalBaseUrl}
@@ -246,6 +295,51 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
                   value={frontend.proxy_targets_backend}
                 />
               </InfoBlock>
+
+              <InfoBlock title={t.runtimeSelfCheckPanel.webui}>
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.webuiAvailable}
+                  value={webui.available}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.webuiDist}
+                  value={webui.selected_dist}
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.webuiEnvDist}
+                  value={webui.env_dist}
+                  mono
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.webuiAssets}
+                  value={webui.assets_count}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.webuiEnvInvalid}
+                  value={webui.env_dist_invalid}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.webuiDevFallback}
+                  value={webui.dev_fallback_expected}
+                />
+              </InfoBlock>
+
+              <InfoBlock title={t.runtimeSelfCheckPanel.apiSurface}>
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.routeCount}
+                  value={apiSurface.route_count}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.requiredRoutesPresent}
+                  value={apiSurface.required_routes_present}
+                />
+                <InfoRow
+                  label={t.runtimeSelfCheckPanel.missingRoutes}
+                  value={apiSurface.missing_required_routes?.join(", ")}
+                  mono
+                />
+              </InfoBlock>
             </section>
 
             <InfoBlock title={t.runtimeSelfCheckPanel.loopbackAliases}>
@@ -283,6 +377,9 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
                             ? t.runtimeSelfCheckPanel.passed
                             : t.runtimeSelfCheckPanel.failed}
                         </Badge>
+                        {check.severity && (
+                          <Badge variant="outline">{check.severity}</Badge>
+                        )}
                         <code className="text-sm font-semibold">
                           {check.id}
                         </code>
@@ -299,6 +396,18 @@ export function RuntimeSelfCheckPanel({ baseUrl }: RuntimeSelfCheckPanelProps) {
                 </div>
               )}
             </InfoBlock>
+
+            {warnings.length > 0 && (
+              <InfoBlock title={t.runtimeSelfCheckPanel.warnings}>
+                <ul className="list-disc space-y-1 pl-5 text-sm">
+                  {warnings.map((warning) => (
+                    <li key={warning} className="break-words">
+                      {warning}
+                    </li>
+                  ))}
+                </ul>
+              </InfoBlock>
+            )}
 
             {nextActions.length > 0 && (
               <InfoBlock title={t.runtimeSelfCheckPanel.nextActions}>

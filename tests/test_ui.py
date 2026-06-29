@@ -151,6 +151,7 @@ class TestBasicRoutes:
         assert data["frontend"]["origin_normalized"] is False
         assert _check_by_id(data, "frontend_origin") == {
             "id": "frontend_origin",
+            "severity": "error",
             "passed": False,
             "detail": (
                 "origin=http://127.0.0.1:3000 "
@@ -186,6 +187,66 @@ class TestBasicRoutes:
 
         assert data["backend"]["canonical_base_url"] == "http://127.0.0.1:8123"
         assert data["backend"]["port"] == 8123
+
+    def test_runtime_self_check_reports_process_api_and_webui_state(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        dist = tmp_path / "dist"
+        assets = dist / "assets"
+        assets.mkdir(parents=True)
+        (dist / "index.html").write_text("<html>webui</html>", encoding="utf-8")
+        (assets / "bundle.js").write_text("console.log('ok')", encoding="utf-8")
+        monkeypatch.setenv("OCTOPUS_WEBUI_DIST", str(dist))
+        app = create_app(
+            journal_path=tmp_path / "events.jsonl",
+            server_host="localhost",
+            server_port=8000,
+            frontend_host="localhost",
+            frontend_port=3000,
+            frontend_proxy_target="http://127.0.0.1:8000",
+        )
+        client = TestClient(app, base_url="http://localhost:8000")
+
+        data = client.get(
+            "/api/runtime/self-check",
+            headers={"Origin": "http://localhost:3000"},
+        ).json()
+
+        assert data["ready"] is True
+        assert data["process"]["pid"] > 0
+        assert data["api_surface"]["required_routes_present"] is True
+        assert data["api_surface"]["missing_required_routes"] == []
+        assert data["webui"]["available"] is True
+        assert data["webui"]["selected_dist"] == str(dist)
+        assert data["webui"]["assets_count"] == 1
+        assert _check_by_id(data, "api_surface")["passed"] is True
+        assert _check_by_id(data, "webui_dist")["passed"] is True
+
+    def test_runtime_self_check_warns_on_invalid_webui_dist(
+        self, tmp_path: Path, monkeypatch,
+    ):
+        monkeypatch.setenv("OCTOPUS_WEBUI_DIST", str(tmp_path / "missing"))
+        app = create_app(
+            journal_path=tmp_path / "events.jsonl",
+            server_host="localhost",
+            server_port=8000,
+        )
+        client = TestClient(app, base_url="http://localhost:8000")
+
+        data = client.get(
+            "/api/runtime/self-check",
+            headers={"Origin": "http://localhost:3000"},
+        ).json()
+
+        assert data["ready"] is True
+        assert data["status"] == "degraded"
+        assert data["webui"]["available"] is True
+        assert data["webui"]["env_dist_invalid"] is True
+        assert data["webui"]["selected_dist"]
+        assert _check_by_id(data, "webui_dist")["severity"] == "warn"
+        assert _check_by_id(data, "webui_dist")["passed"] is False
+        assert data["next_actions"] == []
+        assert any("OCTOPUS_WEBUI_DIST" in item for item in data["warnings"])
 
     def test_skills_endpoint(self, client: TestClient):
         r = client.get("/api/skills")

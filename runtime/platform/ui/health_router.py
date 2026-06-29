@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -179,19 +180,25 @@ def build_runtime_self_check(
         "version_sources": version_sources,
     }
     aliases = _loopback_aliases(observed_host, observed_port, request_scheme)
+    process = _process_info()
+    api_surface = _api_surface_info(request)
+    webui = _webui_static_info(root)
     checks = [
         {
             "id": "runtime_version",
+            "severity": "error",
             "passed": drift["runtime_matches_pyproject"],
             "detail": f"runtime={__version__} pyproject={pyproject_version}",
         },
         {
             "id": "frontend_version",
+            "severity": "error",
             "passed": drift["frontend_matches_runtime"],
             "detail": f"frontend={frontend_version or 'missing'} runtime={__version__}",
         },
         {
             "id": "loopback_aliases",
+            "severity": "error",
             "passed": bool(aliases["same_loopback_family"]),
             "detail": (
                 "localhost and 127.0.0.1 are treated as equivalent local aliases"
@@ -201,11 +208,13 @@ def build_runtime_self_check(
         },
         {
             "id": "backend_base_url",
+            "severity": "error",
             "passed": bool(canonical_base_url),
             "detail": canonical_base_url,
         },
         {
             "id": "frontend_origin",
+            "severity": "error",
             "passed": bool(frontend["origin_normalized"]),
             "detail": (
                 f"origin={frontend['observed_origin'] or 'missing'} "
@@ -214,21 +223,56 @@ def build_runtime_self_check(
         },
         {
             "id": "vite_proxy_target",
+            "severity": "error",
             "passed": bool(frontend["proxy_targets_backend"]),
             "detail": (
                 f"proxy_target={frontend['proxy_target']} "
                 f"backend={canonical_base_url}"
             ),
         },
+        {
+            "id": "api_surface",
+            "severity": "error",
+            "passed": bool(api_surface["required_routes_present"]),
+            "detail": (
+                "missing="
+                + ",".join(api_surface["missing_required_routes"])
+                if api_surface["missing_required_routes"]
+                else f"routes={api_surface['route_count']}"
+            ),
+        },
+        {
+            "id": "journal_path",
+            "severity": "error",
+            "passed": bool(_journal_source_usable(state)),
+            "detail": _journal_source_detail(state),
+        },
+        {
+            "id": "webui_dist",
+            "severity": "warn",
+            "passed": bool(
+                not webui["env_dist_invalid"]
+                and (webui["available"] or webui["dev_fallback_expected"])
+            ),
+            "detail": webui["detail"],
+        },
     ]
-    ready = all(bool(row["passed"]) for row in checks)
+    ready = all(
+        bool(row["passed"]) or row.get("severity") == "warn" for row in checks
+    )
+    warning_count = sum(
+        1
+        for row in checks
+        if row.get("severity") == "warn" and not bool(row["passed"])
+    )
     return {
         "schema": "octopus.runtime_self_check.v1",
         "ready": ready,
-        "status": "ok" if ready else "degraded",
+        "status": "ok" if ready and warning_count == 0 else "degraded",
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "version": __version__,
         "version_drift": drift,
+        "process": process,
         "backend": {
             "canonical_base_url": canonical_base_url,
             "request_origin_base_url": request_origin_base_url,
@@ -241,6 +285,8 @@ def build_runtime_self_check(
             "server_port": server_port,
         },
         "frontend": frontend,
+        "webui": webui,
+        "api_surface": api_surface,
         "loopback_aliases": aliases,
         "paths": {
             "project_root": str(root),
@@ -252,7 +298,12 @@ def build_runtime_self_check(
         "next_actions": [
             str(row["detail"])
             for row in checks
-            if not bool(row["passed"])
+            if not bool(row["passed"]) and row.get("severity") != "warn"
+        ],
+        "warnings": [
+            str(row["detail"])
+            for row in checks
+            if not bool(row["passed"]) and row.get("severity") == "warn"
         ],
     }
 
@@ -273,6 +324,147 @@ def _frontend_version(root: Path) -> str:
     except (OSError, json.JSONDecodeError, TypeError):
         return ""
     return str(payload.get("version") or "")
+
+
+def _process_info() -> dict[str, Any]:
+    argv = [str(part) for part in sys.argv[:8]]
+    if len(sys.argv) > len(argv):
+        argv.append("...")
+    return {
+        "schema": "octopus.runtime_process.v1",
+        "pid": os.getpid(),
+        "python": sys.version.split()[0],
+        "executable": sys.executable,
+        "cwd": os.getcwd(),
+        "argv": argv,
+    }
+
+
+def _api_surface_info(request: Request | None) -> dict[str, Any]:
+    app = getattr(request, "app", None) if request is not None else None
+    routes = list(getattr(app, "routes", []) or [])
+    route_paths = sorted(
+        {
+            str(getattr(route, "path", "") or "")
+            for route in routes
+            if str(getattr(route, "path", "") or "")
+        }
+    )
+    required = (
+        "/api/health",
+        "/api/status",
+        "/api/runtime/self-check",
+    )
+    missing = [path for path in required if path not in route_paths]
+    return {
+        "schema": "octopus.api_surface.v1",
+        "route_count": len(route_paths),
+        "required_routes": list(required),
+        "missing_required_routes": missing,
+        "required_routes_present": not missing,
+    }
+
+
+def _webui_static_info(root: Path) -> dict[str, Any]:
+    env_path = os.environ.get("OCTOPUS_WEBUI_DIST") or ""
+    candidates = _webui_dist_candidates(root, env_path)
+    env_candidate = candidates[0] if env_path and candidates else None
+    env_dist_invalid = bool(
+        env_candidate
+        and not (
+            bool(env_candidate["exists"])
+            and bool(env_candidate["has_index"])
+        )
+    )
+    selected = next(
+        (
+            row
+            for row in candidates
+            if row["exists"] and row["has_index"]
+        ),
+        None,
+    )
+    assets_count = 0
+    if selected is not None:
+        assets_dir = Path(str(selected["path"])) / "assets"
+        if assets_dir.is_dir():
+            with contextlib.suppress(OSError):
+                assets_count = sum(1 for item in assets_dir.iterdir() if item.is_file())
+    dev_fallback_expected = not bool(env_path) and selected is None
+    detail = (
+        f"configured OCTOPUS_WEBUI_DIST is invalid: {env_path}; "
+        f"fallback={selected['path'] if selected is not None else 'none'}"
+        if env_dist_invalid
+        else
+        f"dist={selected['path']} assets={assets_count}"
+        if selected is not None
+        else "frontend dist not found; dev server fallback expected"
+        if dev_fallback_expected
+        else f"configured OCTOPUS_WEBUI_DIST is invalid: {env_path}"
+    )
+    return {
+        "schema": "octopus.webui_static.v1",
+        "available": selected is not None,
+        "selected_dist": str(selected["path"]) if selected is not None else "",
+        "env_dist": env_path,
+        "env_dist_invalid": env_dist_invalid,
+        "assets_count": assets_count,
+        "dev_fallback_expected": dev_fallback_expected,
+        "candidates": candidates,
+        "detail": detail,
+    }
+
+
+def _webui_dist_candidates(root: Path, env_path: str) -> list[dict[str, Any]]:
+    raw_candidates: list[tuple[str, Path]] = []
+    if env_path:
+        raw_candidates.append(("env", Path(env_path)))
+    raw_candidates.extend(
+        [
+            ("frontend_dist", root / "frontend" / "dist"),
+            ("ui_package_dist", Path(__file__).resolve().parent / "dist"),
+        ]
+    )
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for source, path in raw_candidates:
+        text = str(path)
+        if text in seen:
+            continue
+        seen.add(text)
+        out.append(
+            {
+                "source": source,
+                "path": text,
+                "exists": path.is_dir(),
+                "has_index": (path / "index.html").is_file(),
+                "has_assets": (path / "assets").is_dir(),
+            }
+        )
+    return out
+
+
+def _journal_source_usable(state: Any) -> bool:
+    journal_path = getattr(state, "journal_path", None)
+    if journal_path is None:
+        return True
+    try:
+        parent = Path(journal_path).expanduser().resolve().parent
+    except (OSError, TypeError, ValueError):
+        return False
+    return parent.exists() and os.access(parent, os.W_OK)
+
+
+def _journal_source_detail(state: Any) -> str:
+    journal_path = getattr(state, "journal_path", None)
+    if journal_path is None:
+        return "in-memory"
+    try:
+        parent = Path(journal_path).expanduser().resolve().parent
+    except (OSError, TypeError, ValueError):
+        return f"invalid journal_path={journal_path}"
+    writable = parent.exists() and os.access(parent, os.W_OK)
+    return f"journal_path={journal_path} parent={parent} writable={writable}"
 
 
 def _clean_host(value: str | None) -> str:
