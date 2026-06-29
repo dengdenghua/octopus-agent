@@ -751,6 +751,8 @@ export function AgentWorkbenchPanel({
       return !runningAgentIds.has(id) && seat.role !== "tl";
     });
   }, [agentTiles, rosterSeats]);
+  const leaderRosterSeat =
+    rosterSeats.find((seat) => seat.role === "tl") ?? null;
   const emptyShell = blocks.length === 0 && agentTiles.length === 0;
   const mainRunStatus = workbenchStatus(mainBlocks, mainPhases);
   const mainRunState = workbenchRunState({
@@ -761,6 +763,7 @@ export function AgentWorkbenchPanel({
   const subagentDock = (
     <SubagentDock
       agents={agentTiles}
+      leaderSeat={leaderRosterSeat}
       mainRunState={mainRunState}
       rosterSeats={visibleRosterSeats}
       selectedAgentId={selectedAgent?.id ?? null}
@@ -1536,6 +1539,7 @@ export function AgentWorkbenchPanel({
 
 function SubagentDock({
   agents,
+  leaderSeat,
   mainRunState,
   rosterSeats,
   selectedAgentId,
@@ -1543,6 +1547,7 @@ function SubagentDock({
   onSelectAgent,
 }: {
   agents: AgentTile[];
+  leaderSeat: WorkbenchRosterSeat | null;
   mainRunState: AgentRunState;
   rosterSeats: WorkbenchRosterSeat[];
   selectedAgentId: string | null;
@@ -1550,27 +1555,41 @@ function SubagentDock({
   onSelectAgent: (agentId: string) => void;
 }) {
   const { t } = useI18n();
+  const hasCollaborators = rosterSeats.length > 0;
+  const mainSeatLabel =
+    leaderSeat && hasCollaborators
+      ? `${leaderSeat.name} · ${t.agentWorkbenchPanel.leaderSeat}`
+      : leaderSeat?.name;
   return (
     <div className="shrink-0 border-t border-border/25 bg-background/60 px-4 py-1.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-          {t.agentWorkbenchPanel.workbenchSlots}
-        </span>
+      <div className="flex min-w-0 items-center">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <WorkstationSeat
-            name={t.agentWorkbenchPanel.mainController}
+            name={leaderSeat?.name ?? t.agentWorkbenchPanel.mainController}
+            avatar={leaderSeat?.icon ?? null}
+            avatarUrl={leaderSeat?.avatarUrl ?? null}
             avatarNode={
-              <BotIcon
-                className="size-3.5 text-muted-foreground"
-                aria-hidden="true"
-              />
+              leaderSeat ? undefined : (
+                <BotIcon
+                  className="size-3.5 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              )
             }
+            fallbackInitial={leaderSeat?.name.charAt(0)}
             selected={selectedAgentId === null}
             onClick={onSelectMain}
             dotClassName={agentRunDotClass(mainRunState)}
-            ariaLabel={t.agentWorkbenchPanel.viewMainAgentSlot}
-            title={t.agentWorkbenchPanel.mainAgentProcessTitle}
+            ariaLabel={
+              mainSeatLabel ?? t.agentWorkbenchPanel.viewMainAgentSlot
+            }
+            title={
+              mainSeatLabel ?? t.agentWorkbenchPanel.mainAgentProcessTitle
+            }
             iconOnly
+            iconCaption={
+              hasCollaborators ? t.agentWorkbenchPanel.leaderSeat : undefined
+            }
             className="shrink-0"
           />
           {agents.map((agent) => {

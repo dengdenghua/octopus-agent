@@ -1132,6 +1132,7 @@ export const zhCN: Translations = {
     dockStatusPending: "等待中",
     dockStatusPresent: "在场",
     collaboratorSeat: "协作",
+    leaderSeat: "群主",
     viewAgentProcess: (label) => `查看 ${label} 独立进程`,
     agentClusterIndependentProcess: "Agent 集群 - 独立进程",
     subAgent: "子智能体",

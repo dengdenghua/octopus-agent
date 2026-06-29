@@ -993,6 +993,7 @@ export interface Translations {
     dockStatusPending: string;
     dockStatusPresent: string;
     collaboratorSeat: string;
+    leaderSeat: string;
     viewAgentProcess: (label: string) => string;
     agentClusterIndependentProcess: string;
     subAgent: string;

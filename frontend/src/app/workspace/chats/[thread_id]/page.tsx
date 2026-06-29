@@ -2401,9 +2401,7 @@ function ChatsPageContent({
                   threadId={threadId}
                   workDir={workDir}
                   browserPreviewBlocks={previewBlocks}
-                  rosterSeats={
-                    collaborationEnabled ? collaborationRosterSeats : undefined
-                  }
+                  rosterSeats={collaborationRosterSeats}
                   onClose={closeAgentWorkbenchPanel}
                   onSelectTab={selectAgentWorkbenchTab}
                 />

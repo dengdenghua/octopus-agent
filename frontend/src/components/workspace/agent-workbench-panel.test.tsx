@@ -107,29 +107,38 @@ describe("<AgentWorkbenchPanel />", () => {
       />,
     );
 
-    expect(screen.getByText("工位")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "查看主 Agent 工位" }),
     ).toBeInTheDocument();
+    expect(screen.queryByText("工位")).not.toBeInTheDocument();
   });
 
   test("renders invited collaborators as workstation seats before they run", () => {
-    renderWorkbench(
+    const { container } = renderWorkbench(
       <AgentWorkbenchPanel
         activeTab="agent"
         events={[]}
         rosterSeats={[
-          { id: "general", name: "Eve", role: "tl" },
+          {
+            id: "general",
+            name: "Eve",
+            role: "tl",
+            avatarUrl: "/api/agents/general/avatar",
+          },
           { id: "codex-cli", name: "Codex CLI", role: "member" },
           { id: "claude-code", name: "Claude Code", role: "member" },
         ]}
       />,
     );
 
-    expect(screen.getByText("工位")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "查看主 Agent 工位" }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: "Eve · 群主" }),
+    ).toHaveAttribute("title", "Eve · 群主");
+    expect(
+      container.querySelector('button[aria-label="Eve · 群主"] img'),
+    ).toHaveAttribute("src", "/api/agents/general/avatar");
+    expect(screen.getByText("群主")).toBeInTheDocument();
+    expect(screen.queryByText("工位")).not.toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: "Codex CLI · 协作 · 在场" }),
     ).toHaveAttribute("title", "Codex CLI · 协作 · 在场");
@@ -139,6 +148,33 @@ describe("<AgentWorkbenchPanel />", () => {
     expect(screen.queryByText("Codex CLI")).not.toBeInTheDocument();
     expect(screen.queryByText("Claude Code")).not.toBeInTheDocument();
     expect(screen.queryByText("协作")).not.toBeInTheDocument();
+  });
+
+  test("uses the leader avatar for the main workstation in solo mode", () => {
+    const { container } = renderWorkbench(
+      <AgentWorkbenchPanel
+        activeTab="agent"
+        events={[]}
+        rosterSeats={[
+          {
+            id: "general",
+            name: "Eve",
+            role: "tl",
+            avatarUrl: "/api/agents/general/avatar",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Eve" })).toHaveAttribute(
+      "title",
+      "Eve",
+    );
+    expect(
+      container.querySelector('button[aria-label="Eve"] img'),
+    ).toHaveAttribute("src", "/api/agents/general/avatar");
+    expect(screen.queryByText("群主")).not.toBeInTheDocument();
+    expect(screen.queryByText("工位")).not.toBeInTheDocument();
   });
 
   test("renders dispatched subagent seats before lifecycle events arrive", () => {
@@ -966,7 +1002,9 @@ describe("<AgentWorkbenchPanel />", () => {
       screen.queryByRole("tab", { name: "\u5b50\u667a\u80fd\u4f53" }),
     ).not.toBeInTheDocument();
     expect(screen.getByTitle("主控 · 执行任务中...")).toBeInTheDocument();
-    expect(screen.getByText("工位")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "查看主 Agent 工位" }),
+    ).toBeInTheDocument();
   });
 
   test("renders diff output as an Agent computer inner page", () => {

@@ -34,6 +34,8 @@ export interface WorkstationSeatProps {
   compactName?: boolean;
   /** Avatar-only presentation for dense horizontal docks. */
   iconOnly?: boolean;
+  /** Tiny caption below the avatar in avatar-only mode. */
+  iconCaption?: string;
   className?: string;
   /** aria-label override for the button form. */
   ariaLabel?: string;
@@ -62,11 +64,14 @@ export function WorkstationSeat({
   onClick,
   compactName,
   iconOnly,
+  iconCaption,
   className,
   ariaLabel,
 }: WorkstationSeatProps) {
   const base = iconOnly
-    ? "group/seat relative inline-grid size-9 shrink-0 place-items-center rounded-xl border text-left transition-colors"
+    ? iconCaption
+      ? "group/seat relative inline-flex h-10 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl border text-left transition-colors"
+      : "group/seat relative inline-grid size-9 shrink-0 place-items-center rounded-xl border text-left transition-colors"
     : "group/seat inline-flex min-w-0 items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-colors";
   const tone = selected
     ? "border-foreground/30 bg-muted/50 text-foreground"
@@ -75,7 +80,12 @@ export function WorkstationSeat({
   const accessibleLabel = ariaLabel ?? statusText;
 
   const avatarElement = (
-    <span className="relative grid size-7 shrink-0 place-items-center overflow-hidden rounded-lg bg-muted text-[14px] leading-none">
+    <span
+      className={cn(
+        "relative grid shrink-0 place-items-center overflow-hidden rounded-lg bg-muted leading-none",
+        iconOnly && iconCaption ? "size-6 text-[12px]" : "size-7 text-[14px]",
+      )}
+    >
       {avatarUrl ? (
         <img
           src={avatarUrl}
@@ -122,6 +132,11 @@ export function WorkstationSeat({
     <>
       {avatarElement}
       {iconStatusDot}
+      {iconCaption ? (
+        <span className="max-w-full truncate text-[9px] font-medium leading-none text-muted-foreground">
+          {iconCaption}
+        </span>
+      ) : null}
     </>
   ) : (
     <>
