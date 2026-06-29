@@ -63,15 +63,17 @@ function getRuntimeBackendBaseURL() {
 }
 
 export function getBackendBaseURL() {
-  // In dev mode, always use relative paths so requests go through Vite proxy.
-  // This prevents CORS issues (e.g. localhost:3001 -> localhost:8001).
-  if (import.meta.env.DEV) {
-    return "";
-  }
-
   const runtimeBackend = getRuntimeBackendBaseURL();
   if (runtimeBackend) {
     return runtimeBackend;
+  }
+
+  // In dev mode, always use relative paths so requests go through Vite proxy.
+  // This prevents CORS issues (e.g. localhost:3001 -> localhost:8001).
+  // Runtime overrides still win so Electron and ?octopusBackend=... debug
+  // sessions can point at the backend that actually owns their session.
+  if (import.meta.env.DEV) {
+    return "";
   }
 
   const val = import.meta.env.VITE_BACKEND_BASE_URL;
@@ -92,13 +94,13 @@ export function getBackendBaseURL() {
 }
 
 export function getOctopusBaseURL(_isMock?: boolean) {
-  if (import.meta.env.DEV) {
-    return "/api";
-  }
-
   const runtimeBackend = getRuntimeBackendBaseURL();
   if (runtimeBackend) {
     return `${runtimeBackend}/api`;
+  }
+
+  if (import.meta.env.DEV) {
+    return "/api";
   }
 
   const val = import.meta.env.VITE_OCTOPUS_BASE_URL;
