@@ -385,12 +385,12 @@ export const zhCN: Translations = {
     readme: "README",
   },
 
-  // Team Mode
+  // Collaboration Mode
   teamMode: {
-    mode: "团队模式",
-    modeTeam: "团队",
-    modeTeamDesc: "与多个智能体协作",
-    createTeam: "创建团队",
+    mode: "协作任务",
+    modeTeam: "协作",
+    modeTeamDesc: "在当前任务里随时拉人协作",
+    createTeam: "拉人协作",
     chat: "单人任务",
     chatDescription: "先由一个角色推进，过程中可以随时添加成员升级为群任务",
     cowork: "群任务",
@@ -547,10 +547,10 @@ export const zhCN: Translations = {
     ],
   },
 
-  // Create Team Dialog
+  // Collaboration picker
   createTeamDialog: {
-    title: "创建团队",
-    description: "添加智能体并设置 TL（团队负责人），创建你的协作团队。",
+    title: "拉人协作",
+    description: "添加智能体并设置主控，让他们直接接入当前任务。",
     allAgents: (n: number) => `所有智能体 · ${n}`,
     selected: (n: number, max: number) => `已选成员 · ${n}/${max}`,
     memberCounter: (n: number, max: number) => `${n}/${max} 成员`,
@@ -564,12 +564,12 @@ export const zhCN: Translations = {
     leaderLabel: "TL",
     leaderUnset: "未设置",
     emptyHintL1: "点击左侧智能体",
-    emptyHintL2: "添加到团队中",
+    emptyHintL2: "添加到当前任务",
     currentTl: "当前 TL",
     setAsTl: "设为 TL",
-    teamNameLabel: "团队名称 *",
-    teamNamePlaceholder: "例如 dev-team",
-    create: "创建团队",
+    teamNameLabel: "协作名称 *",
+    teamNamePlaceholder: "例如 产品调研",
+    create: "开始协作",
     cancel: "取消",
     roleModels: {
       title: "模型分层",
@@ -1380,7 +1380,7 @@ export const zhCN: Translations = {
     sectionOlder: "更早",
     agents: "智能体",
     skills: "技能",
-    createTeam: "创建团队",
+    createTeam: "拉人协作",
     switchAgent: "切换智能体",
     selectAgent: "选择智能体",
     confirmDeleteProject: (project: string) =>
@@ -1413,7 +1413,7 @@ export const zhCN: Translations = {
     navAdmin: "管理员",
     navSwarm: "协作",
     navCompany: "工作",
-    navTeam: "团队",
+    navTeam: "协作",
     navDatabase: "本地数据库",
     navKnowledgeGraph: "知识库",
     navReflex: "反射规则",
@@ -1455,7 +1455,7 @@ export const zhCN: Translations = {
     localCliPartners: "本地 CLI 伙伴",
     oneOnOneTask: "一对一任务",
     soloTasks: "单人任务",
-    groupTasks: "群聊任务",
+    groupTasks: "协作任务",
     recentThreadsSummary: (recent, hidden) =>
       `最近 ${recent} 条 · 其余 ${hidden} 条在历史抽屉`,
     // Header/footer tooltips
@@ -5011,14 +5011,14 @@ export const zhCN: Translations = {
     yourAIPlatform: "你的 AI 智能体平台",
     welcomeDesc:
       "Octopus 是一个开源的超级智能体平台，可以编排子智能体、记忆和沙箱来完成几乎任何事情 \u2014 由可扩展的技能驱动。",
-    chatModes: "对话模式",
-    chatModesDesc: "选择适合你任务的模式",
+    chatModes: "任务能力",
+    chatModesDesc: "从一个任务开始，按需要接入能力和协作者",
     modeChat: "对话",
     modeChatDesc: "与 AI 智能体自然对话",
     modeCode: "编程",
     modeCodeDesc: "AI 辅助开发和调试",
-    modeTeam: "团队",
-    modeTeamDesc: "与多个智能体协作",
+    modeTeam: "拉人",
+    modeTeamDesc: "在当前任务里添加协作者",
     keyFeatures: "核心功能",
     keyFeaturesDesc: "构建 AI 智能体所需的一切",
     featureAgentWorld: "Agent 市场",
@@ -6799,12 +6799,12 @@ export const zhCN: Translations = {
   },
 
   teamSelector: {
-    selectTeam: "选择团队",
-    noTeams: "暂无团队，点击下方创建",
+    selectTeam: "选择协作组",
+    noTeams: "暂无协作组，点击下方拉人",
     memberCount: (count) => `${count} 成员`,
-    confirmDisband: (name) => `确定要解散团队 "${name}" 吗?`,
-    disbandTeam: "解散团队",
-    createTeam: "新建团队",
+    confirmDisband: (name) => `确定要解散协作组 "${name}" 吗?`,
+    disbandTeam: "解散协作组",
+    createTeam: "拉人协作",
   },
 
   teamMembers: {
@@ -6863,16 +6863,16 @@ export const zhCN: Translations = {
     missingToken: "邀请链接缺少 token。",
     invalidInvite: "邀请链接无效或已失效。",
     joinSuccess: (name) => `已加入 ${name}`,
-    joinFailed: "加入团队失败",
+    joinFailed: "加入协作失败",
     guestName: "访客",
-    title: "加入团队",
-    description: "加入后会保存到你的团队列表，后续可直接进入 Team 模式。",
+    title: "加入协作任务",
+    description: "加入后会回到同一个任务工作台，可在右上角继续管理成员。",
     loadingInvite: "正在读取邀请...",
     membersAndParticipants: (members, participants) =>
       `${members} 个 AI 成员 · ${participants} 个参与者`,
     displayNamePlaceholder: "你的显示名称",
     joining: "加入中...",
-    joinButton: "加入团队",
+    joinButton: "加入任务",
   },
 
   evolutionIndicator: {

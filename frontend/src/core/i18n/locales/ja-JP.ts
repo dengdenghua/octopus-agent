@@ -400,12 +400,12 @@ export const jaJP: Translations = {
     readme: "README",
   },
 
-  // Team Mode
+  // Collaboration Mode
   teamMode: {
     mode: "Collaboration",
-    modeTeam: "Team",
-    modeTeamDesc: "Collaborate with multiple agents",
-    createTeam: "Create Team",
+    modeTeam: "Collaborate",
+    modeTeamDesc: "Invite helpers into the current task",
+    createTeam: "Invite collaborators",
     chat: "Solo Task",
     chatDescription:
       "Start with one role and add members later without losing the task thread",
@@ -566,11 +566,11 @@ export const jaJP: Translations = {
     ],
   },
 
-  // Create Team Dialog
+  // Collaboration picker
   createTeamDialog: {
-    title: "Create team",
+    title: "Invite collaborators",
     description:
-      "Add agents and set a TL (team leader) to build your collaborative team.",
+      "Add agents and set the main controller so they join the current task.",
     allAgents: (n: number) => `All agents · ${n}`,
     selected: (n: number, max: number) => `Selected · ${n}/${max}`,
     memberCounter: (n: number, max: number) => `${n}/${max} members`,
@@ -584,12 +584,12 @@ export const jaJP: Translations = {
     leaderLabel: "TL",
     leaderUnset: "Not set",
     emptyHintL1: "Click an agent on the left",
-    emptyHintL2: "to add them to the team",
+    emptyHintL2: "to add them to this task",
     currentTl: "Current TL",
     setAsTl: "Set as TL",
-    teamNameLabel: "Team name *",
-    teamNamePlaceholder: "e.g. dev-team",
-    create: "Create team",
+    teamNameLabel: "Collaboration name *",
+    teamNamePlaceholder: "e.g. product research",
+    create: "Start collaboration",
     cancel: "Cancel",
     roleModels: {
       title: "Model tiers",
@@ -1429,7 +1429,7 @@ export const jaJP: Translations = {
     sectionOlder: "Older",
     agents: "Agents",
     skills: "Skills",
-    createTeam: "Create Team",
+    createTeam: "Invite collaborators",
     switchAgent: "Switch Agent",
     selectAgent: "Select Agent",
     confirmDeleteProject: (project: string) =>
@@ -1462,7 +1462,7 @@ export const jaJP: Translations = {
     navAdmin: "Admin",
     navSwarm: "Collab",
     navCompany: "Cowork",
-    navTeam: "チーム",
+    navTeam: "共同作業",
     navDatabase: "Local Database",
     navKnowledgeGraph: "Knowledge Base",
     navReflex: "Reflex Rules",
@@ -1505,7 +1505,7 @@ export const jaJP: Translations = {
     localCliPartners: "ローカル CLI パートナー",
     oneOnOneTask: "one-on-one タスク",
     soloTasks: "個人タスク",
-    groupTasks: "グループタスク",
+    groupTasks: "共同タスク",
     recentThreadsSummary: (recent, hidden) =>
       `最近 ${recent} 件 · 残り ${hidden} 件は履歴にあります`,
     // Header/footer tooltips
@@ -5278,14 +5278,14 @@ Strategy:
     yourAIPlatform: "Your AI Agent Platform",
     welcomeDesc:
       "Octopus is an open-source super agent harness that orchestrates sub-agents, memory, and sandboxes to do almost anything \u2014 powered by extensible skills.",
-    chatModes: "Chat Modes",
-    chatModesDesc: "Choose the right mode for your task",
+    chatModes: "Task capabilities",
+    chatModesDesc: "Start with one task, then add capabilities and helpers",
     modeChat: "Chat",
     modeChatDesc: "Natural conversations with AI agents",
     modeCode: "Code",
     modeCodeDesc: "AI-assisted development and debugging",
-    modeTeam: "Team",
-    modeTeamDesc: "Collaborate with multiple agents",
+    modeTeam: "Invite",
+    modeTeamDesc: "Add collaborators to the current task",
     keyFeatures: "Key Features",
     keyFeaturesDesc: "Everything you need to build with AI agents",
     featureAgentWorld: "Agent Market",
@@ -7101,13 +7101,13 @@ Strategy:
   },
 
   teamSelector: {
-    selectTeam: "Select team",
-    noTeams: "No teams yet, create one below",
+    selectTeam: "Select group",
+    noTeams: "No groups yet, invite collaborators below",
     memberCount: (count) => `${count} members`,
     confirmDisband: (name) =>
-      `Are you sure you want to disband team \"${name}\"?`,
-    disbandTeam: "Disband team",
-    createTeam: "Create team",
+      `Are you sure you want to disband group \"${name}\"?`,
+    disbandTeam: "Disband group",
+    createTeam: "Invite collaborators",
   },
 
   teamMembers: {
@@ -7167,17 +7167,17 @@ Strategy:
     missingToken: "The invite link is missing a token.",
     invalidInvite: "The invite link is invalid or has expired.",
     joinSuccess: (name) => `Joined ${name}`,
-    joinFailed: "Failed to join team",
+    joinFailed: "Failed to join collaboration",
     guestName: "Guest",
-    title: "Join team",
+    title: "Join collaborative task",
     description:
-      "After joining, this team will be saved to your team list so you can open Team mode directly later.",
+      "After joining, you will return to the same task workspace and can manage members from the top-right control.",
     loadingInvite: "Reading invite...",
     membersAndParticipants: (members, participants) =>
       `${members} AI members · ${participants} participants`,
     displayNamePlaceholder: "Your display name",
     joining: "Joining...",
-    joinButton: "Join team",
+    joinButton: "Join task",
   },
 
   evolutionIndicator: {
