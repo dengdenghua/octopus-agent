@@ -212,7 +212,7 @@ export function TeamInputBox({
   return (
     <div
       data-testid="team-composer"
-      className="rounded-xl border border-border/70 bg-card focus-within:border-primary/40 focus-within:shadow-sm focus-within:shadow-primary/10 transition-[border-color,box-shadow] duration-200"
+      className="rounded-lg border border-border/70 bg-card transition-[border-color] duration-200 focus-within:border-primary/40"
     >
       <FloorBar />
       <div className="relative">
@@ -254,7 +254,10 @@ export function TeamInputBox({
                 <PlusIcon className="size-4 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-52">
+            <DropdownMenuContent
+              align="start"
+              className="w-52 rounded-lg border-border/70 p-1 shadow-md"
+            >
               {teamMembers.length > 0 && (
                 <>
                   <DropdownMenuLabel className="flex items-center gap-1.5 text-xs">
@@ -266,7 +269,7 @@ export function TeamInputBox({
                       <DropdownMenuItem
                         key={agent.name}
                         onSelect={() => mentionMemberFromMenu(displayName)}
-                        className="gap-2"
+                        className="gap-2 rounded-md"
                       >
                         <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border/60 bg-muted text-[11px] leading-none">
                           {agent.icon?.trim() || displayName.charAt(0)}
@@ -282,7 +285,7 @@ export function TeamInputBox({
               )}
               <DropdownMenuItem
                 onSelect={() => summonLocalFileAgent()}
-                className="gap-2"
+                className="gap-2 rounded-md"
               >
                 <DatabaseIcon className="size-3.5 text-muted-foreground" />
                 <span className="text-[13px]">检索本地数据库</span>
@@ -314,7 +317,10 @@ export function TeamInputBox({
                 <ChevronDownIcon className="size-3 text-muted-foreground/70" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent
+              align="start"
+              className="w-56 rounded-lg border-border/70 p-1 shadow-md"
+            >
               <DropdownMenuRadioGroup
                 value={activeTeamMode}
                 onValueChange={(value) => onTeamModeChange?.(value as TeamMode)}
@@ -326,7 +332,7 @@ export function TeamInputBox({
                     <DropdownMenuRadioItem
                       key={mode}
                       value={mode}
-                      className="items-start gap-2 py-1.5"
+                      className="items-start gap-2 rounded-md py-1.5"
                     >
                       <Icon className="mt-0.5 size-3.5 shrink-0" />
                       <span className="min-w-0">

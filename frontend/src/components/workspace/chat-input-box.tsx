@@ -830,10 +830,10 @@ export function ChatInputBox({
         data-testid="chat-composer"
         className={cn(
           "group relative",
-          "rounded-xl border border-transparent bg-[color:color-mix(in_oklch,var(--card)_92%,transparent)]",
-          "backdrop-blur-[6px] transition-[box-shadow,border-color] duration-200",
+          "rounded-lg border border-border/45 bg-card/85",
+          "transition-[border-color] duration-200",
           "hover:border-border/60",
-          "focus-within:border-transparent",
+          "focus-within:border-border/70",
           className,
         )}
       >
@@ -903,7 +903,7 @@ export function ChatInputBox({
           className="w-full resize-none bg-transparent px-3 py-1.5 text-[13px] leading-snug outline-none placeholder:text-muted-foreground/50 disabled:opacity-60"
         />
         {isDeepResearchMode && researchConfigOpen && (
-          <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-2xl border border-border/70 bg-popover/95 px-3 py-3 shadow-[0_18px_70px_-28px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+          <div className="absolute bottom-11 left-2 right-2 z-30 max-h-[min(70vh,560px)] overflow-y-auto rounded-lg border border-border/70 bg-popover px-3 py-3 shadow-md">
             <div className="mb-2 flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2 text-[12px] font-medium text-foreground">
                 <SearchIcon className="size-4 text-primary" />
@@ -1114,7 +1114,7 @@ export function ChatInputBox({
                   type="button"
                   data-testid="chat-tools-trigger"
                   disabled={isBusy || status === "streaming"}
-                  className="flex size-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
                   title={t.chatInputBox.quickCapabilities}
                   aria-label={t.chatInputBox.quickCapabilities}
                 >
@@ -1126,7 +1126,7 @@ export function ChatInputBox({
                 align="start"
                 side="top"
                 sideOffset={8}
-                className="w-60 rounded-xl border-border/70 p-1.5 shadow-[0_16px_48px_-24px_rgba(0,0,0,0.35)]"
+                className="w-60 rounded-lg border-border/70 p-1.5 shadow-md"
               >
                 <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
                   {t.chatInputBox.quickCapabilities}
@@ -1135,7 +1135,7 @@ export function ChatInputBox({
                   <>
                     <DropdownMenuItem
                       onClick={() => setResearchConfigOpen((open) => !open)}
-                      className="gap-2 rounded-lg text-[13px]"
+                      className="gap-2 rounded-md text-[13px]"
                     >
                       <SlidersHorizontalIcon className="size-4" />
                       {t.chatInputBox.deepResearchConfig}
@@ -1146,7 +1146,7 @@ export function ChatInputBox({
                 {allowAgentModes && (
                   <DropdownMenuItem
                     onClick={openResearchFilePicker}
-                    className="gap-2 rounded-lg text-[13px]"
+                    className="gap-2 rounded-md text-[13px]"
                   >
                     <PaperclipIcon className="size-4" />
                     {t.chatInputBox.addResearchMaterial}
@@ -1154,7 +1154,7 @@ export function ChatInputBox({
                 )}
                 <DropdownMenuItem
                   onClick={() => imageInputRef.current?.click()}
-                  className="gap-2 rounded-lg text-[13px]"
+                  className="gap-2 rounded-md text-[13px]"
                 >
                   <ImageIcon className="size-4" />
                   {t.chatInputBox.addImage}
