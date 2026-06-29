@@ -65,6 +65,25 @@ UI 路径：`设置 → 模型 → 自定义模型 → 添加`
 OCTOPUS_LIVE_MODEL_SMOKE=1 KIMI_API_KEY=sk-... .venv/bin/python -m pytest tests/test_openai_compat_provider_smoke.py -q
 ```
 
+默认矩阵会覆盖每个内置国产兼容 profile；没有配置 key 的供应商会被 pytest 标记
+为 skip。可用环境变量如下：
+
+| Profile | Key env | Model env | 默认模型 |
+| :--- | :--- | :--- | :--- |
+| `deepseek` | `DEEPSEEK_API_KEY` | `DEEPSEEK_SMOKE_MODEL` | `deepseek-chat` |
+| `kimi` | `MOONSHOT_API_KEY` / `KIMI_API_KEY` | `KIMI_SMOKE_MODEL` | `moonshot-v1-8k` |
+| `kimi_coding` | `KIMI_CODING_API_KEY` / `KIMI_API_KEY` | `KIMI_CODING_SMOKE_MODEL` | `K2.7-Code` |
+| `qwen` | `DASHSCOPE_API_KEY` / `QWEN_API_KEY` | `QWEN_SMOKE_MODEL` | `qwen-plus` |
+| `glm` | `ZHIPU_API_KEY` / `GLM_API_KEY` | `GLM_SMOKE_MODEL` | `glm-4-flash` |
+| `doubao` | `ARK_API_KEY` / `DOUBAO_API_KEY` / `VOLCENGINE_API_KEY` | `DOUBAO_SMOKE_MODEL` | `doubao-pro-32k` |
+| `minimax` | `MINIMAX_API_KEY` | `MINIMAX_SMOKE_MODEL` | `MiniMax-M2` |
+| `hunyuan` | `HUNYUAN_API_KEY` / `TENCENT_HUNYUAN_API_KEY` | `HUNYUAN_SMOKE_MODEL` | `hunyuan-large` |
+| `baichuan` | `BAICHUAN_API_KEY` | `BAICHUAN_SMOKE_MODEL` | `Baichuan4` |
+| `yi` | `YI_API_KEY` / `LINGYIWANWU_API_KEY` | `YI_SMOKE_MODEL` | `yi-lightning` |
+| `stepfun` | `STEPFUN_API_KEY` | `STEPFUN_SMOKE_MODEL` | `step-2-mini` |
+| `siliconflow` | `SILICONFLOW_API_KEY` | `SILICONFLOW_SMOKE_MODEL` | `deepseek-ai/DeepSeek-V3` |
+| `qianfan` | `QIANFAN_API_KEY` / `BAIDU_QIANFAN_API_KEY` | `QIANFAN_SMOKE_MODEL` | `ernie-4.5-turbo-128k` |
+
 ---
 
 ## 常见厂商 · 抄作业表

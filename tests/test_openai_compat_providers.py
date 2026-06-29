@@ -12,6 +12,10 @@ from runtime.sensing.model_router.openai_compat_providers import (
     resolve_openai_compat_profile,
     retry_payloads_after_openai_compat_error,
 )
+from runtime.sensing.model_router.openai_compat_smoke_matrix import (
+    openai_compat_smoke_provider_ids,
+    openai_compat_smoke_providers,
+)
 
 
 def test_domestic_provider_profile_detection_by_base_url() -> None:
@@ -61,6 +65,14 @@ def test_profile_catalog_includes_main_domestic_providers() -> None:
         "stepfun",
         "siliconflow",
     }.issubset(ids)
+
+
+def test_live_smoke_matrix_covers_every_builtin_domestic_profile() -> None:
+    profile_ids = {profile.id for profile in known_openai_compat_profiles()}
+    smoke_ids = set(openai_compat_smoke_provider_ids())
+
+    assert profile_ids <= smoke_ids
+    assert len(openai_compat_smoke_providers()) == len(smoke_ids)
 
 
 def test_profile_summary_exposes_policy_for_diagnostics() -> None:
