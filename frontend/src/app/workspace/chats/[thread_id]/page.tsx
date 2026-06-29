@@ -123,6 +123,7 @@ import {
   TASK_COLLABORATOR_PRESET_EVENT,
   type TaskCollaboratorPreset,
 } from "@/core/collaboration/task-collaborator-preset";
+import { collaborationRosterFromThread } from "@/core/collaboration/thread-collaboration";
 import { usePauseTask, useTasks } from "@/core/tasks/hooks";
 import { isAIMessage, type Message } from "@/core/api/types";
 import { useI18n } from "@/core/i18n/hooks";
@@ -1045,6 +1046,30 @@ function ChatsPageContent({
       selected.has(agent.name),
     );
   }, [allTaskCollaboratorAgents, selectedCollaboratorIds]);
+  const persistedCollaborationRoster = useMemo(
+    () =>
+      collaborationRosterFromThread(
+        threadIdentityQuery.data?.metadata,
+        threadIdentityQuery.data?.values,
+        currentTaskAgentName,
+      ),
+    [
+      currentTaskAgentName,
+      threadIdentityQuery.data?.metadata,
+      threadIdentityQuery.data?.values,
+    ],
+  );
+  const persistedCollaboratorIds = useMemo(
+    () =>
+      persistedCollaborationRoster
+        .filter(
+          (agent) =>
+            agent.role !== "tl" && agent.agent_id !== currentTaskAgentName,
+        )
+        .map((agent) => agent.agent_id),
+    [currentTaskAgentName, persistedCollaborationRoster],
+  );
+  const persistedCollaboratorKey = persistedCollaboratorIds.join("\u0000");
   const applyTaskCollaboratorPreset = useCallback(
     (preset: TaskCollaboratorPreset) => {
       const nextIds = Array.from(
@@ -1079,6 +1104,29 @@ function ChatsPageContent({
     return () =>
       window.removeEventListener(TASK_COLLABORATOR_PRESET_EVENT, handler);
   }, [applyTaskCollaboratorPreset]);
+  useEffect(() => {
+    if (
+      isNewThread ||
+      threadIdentityQuery.isPending ||
+      localStartedThreadIdRef.current === threadId
+    ) {
+      return;
+    }
+    setSelectedCollaboratorIds((current) =>
+      current.join("\u0000") === persistedCollaboratorKey
+        ? current
+        : persistedCollaboratorIds,
+    );
+    if (persistedCollaboratorIds.length > 0) {
+      setTeamModeIntent("cluster");
+    }
+  }, [
+    isNewThread,
+    persistedCollaboratorKey,
+    persistedCollaboratorIds,
+    threadId,
+    threadIdentityQuery.isPending,
+  ]);
   const collaborationRoster = useMemo<ChatCollaborationRosterEntry[]>(() => {
     const leaderName = composerDisplayAgent.name?.trim() || effectiveAgentId;
     const roster: ChatCollaborationRosterEntry[] = [
@@ -1108,16 +1156,21 @@ function ChatsPageContent({
     return roster;
   }, [composerDisplayAgent, effectiveAgentId, selectedCollaborators]);
   const collaborationEnabled = selectedCollaborators.length > 0;
+  const visibleCollaborationRoster =
+    collaborationEnabled || persistedCollaborationRoster.length === 0
+      ? collaborationRoster
+      : persistedCollaborationRoster;
+  const visibleCollaborationEnabled = visibleCollaborationRoster.length > 1;
   const collaborationRosterSeats = useMemo<WorkbenchRosterSeat[]>(
     () =>
-      collaborationRoster.map((agent) => ({
+      visibleCollaborationRoster.map((agent) => ({
         id: agent.agent_id,
         name: agent.display_name,
         avatarUrl: agent.avatar_url ?? null,
         icon: agent.icon ?? null,
         role: agent.role,
       })),
-    [collaborationRoster],
+    [visibleCollaborationRoster],
   );
   const collaborationTeamName =
     firstString(threadIdentityQuery.data?.values?.title, initialPrompt) ||
@@ -2230,7 +2283,9 @@ function ChatsPageContent({
                   icon: displayAgent?.icon || null,
                 }}
                 agentRoster={
-                  collaborationEnabled ? collaborationRoster : undefined
+                  visibleCollaborationEnabled
+                    ? visibleCollaborationRoster
+                    : undefined
                 }
                 footer={
                   hasCompletedAgentOutput &&

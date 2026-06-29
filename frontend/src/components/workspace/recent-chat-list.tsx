@@ -87,7 +87,6 @@ type ThreadGroup = {
 function routeForThread(thread: AgentThread) {
   const mode =
     typeof thread.metadata?.mode === "string" ? thread.metadata.mode : "chat";
-  if (mode === "team") return `/workspace/team/${thread.thread_id}`;
   if (mode === "react" || mode === "deep" || mode === "agent") {
     const agent =
       typeof thread.metadata?.agent === "string" && thread.metadata.agent.trim()

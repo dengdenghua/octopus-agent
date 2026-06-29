@@ -492,8 +492,7 @@ function threadHref(thread: {
       return `/workspace/agents/${encodeURIComponent(agent)}/chats/${thread.thread_id}`;
     }
   }
-  const segment = mode === "team" ? "team" : "realtime";
-  return `/workspace/${segment}/${thread.thread_id}`;
+  return `/workspace/realtime/${thread.thread_id}`;
 }
 
 const PROJECTS_KEY = "octopus.projects";

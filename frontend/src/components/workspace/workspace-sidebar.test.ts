@@ -94,9 +94,11 @@ describe("workspace sidebar project grouping", () => {
     expect(
       __testing.buildConversationThreadSummaries(threads).map((t) => t.id),
     ).toEqual(["chat-1"]);
-    expect(
-      __testing.buildProjectThreadSummaries(threads).map((t) => t.id),
-    ).toEqual(["team-1", "code-1"]);
+    const projectThreads = __testing.buildProjectThreadSummaries(threads);
+    expect(projectThreads.map((t) => t.id)).toEqual(["team-1", "code-1"]);
+    expect(projectThreads.find((t) => t.id === "team-1")?.href).toBe(
+      "/workspace/realtime/team-1",
+    );
   });
 
   test("groups team history by workspace folder before generated team label", () => {
