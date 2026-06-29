@@ -8,6 +8,7 @@ run_backend=1
 run_frontend_static=1
 run_frontend_build="${OCTOPUS_VERIFY_SKIP_BUILD:-0}"
 run_full_stack="${OCTOPUS_VERIFY_SKIP_FULL_STACK:-0}"
+run_full_stack_mobile="${OCTOPUS_VERIFY_FULL_STACK_MOBILE:-0}"
 
 usage() {
   cat <<'EOF'
@@ -22,6 +23,8 @@ Environment:
   PYTHON                         Python executable. Defaults to .venv/bin/python, then python3/python.
   OCTOPUS_VERIFY_SKIP_BUILD=1     Skip frontend production build.
   OCTOPUS_VERIFY_SKIP_FULL_STACK=1 Skip full-stack Playwright smoke.
+  OCTOPUS_VERIFY_FULL_STACK_MOBILE=1
+                                  Also run mobile full-stack Playwright smoke.
   OCTOPUS_LIVE_MODEL_SMOKE=1      Also run live OpenAI-compatible provider smoke tests.
 EOF
 }
@@ -102,4 +105,9 @@ fi
 if [[ "$run_full_stack" != "1" ]]; then
   section "full-stack smoke"
   (cd frontend && PYTHON="$PYTHON_BIN" pnpm e2e:full)
+
+  if [[ "$run_full_stack_mobile" == "1" ]]; then
+    section "mobile full-stack smoke"
+    (cd frontend && PYTHON="$PYTHON_BIN" pnpm e2e:full:mobile)
+  fi
 fi
