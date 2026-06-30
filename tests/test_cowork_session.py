@@ -174,10 +174,15 @@ def test_post_room_message_requires_linked_room(tmp_path) -> None:
 
 
 def test_post_room_message_writes_into_session_transcript(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+
     rms = RoomMessageStore(base_dir=tmp_path / "rooms")
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
     app = FastAPI()
     app.include_router(create_cowork_group_router(
-        store=GroupStore(base_dir=tmp_path), room_message_store=rms,
+        store=GroupStore(base_dir=tmp_path),
+        collaboration_store=collab_store,
+        room_message_store=rms,
     ))
     c = TestClient(app)
     t = "thread-write"
@@ -190,6 +195,9 @@ def test_post_room_message_writes_into_session_transcript(tmp_path) -> None:
     assert r.status_code == 200
     body = r.json()
     assert body["room_id"] == "room-w" and body["seq"] == 1
+    assert [m["text"] for m in collab_store.messages_for_session(t)] == [
+        "summary from the group"
+    ]
 
     # The write lands in the SAME transcript the unified read surfaces.
     sess = c.get(f"/api/collab/{t}").json()
@@ -225,3 +233,228 @@ def test_collab_endpoint_includes_room_participants(tmp_path) -> None:
     sess = c.get("/api/collab/t1").json()
     assert sess["room_id"] == "room-9"
     assert [p["display_name"] for p in sess["room_participants"]] == ["Bob"]
+
+
+def test_collab_room_endpoint_creates_and_links_persistent_room(tmp_path) -> None:
+    from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    rooms = create_team_rooms_router(state_path=tmp_path / "team_rooms.json")
+    app = FastAPI()
+    app.include_router(rooms)
+    app.include_router(create_cowork_group_router(
+        store=store,
+        team_rooms_state_path=tmp_path / "team_rooms.json",
+        team_rooms_router=rooms,
+    ))
+    c = TestClient(app)
+    c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
+
+    r = c.post(
+        "/api/collab/t1/room",
+        json={
+            "name": "Unified launch",
+            "mode": "swarm",
+            "members": [{"name": "alice", "display_name": "Alice"}],
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["created"] is True
+    assert body["room"]["name"] == "Unified launch"
+    assert body["session"]["room_id"] == body["room"]["id"]
+    assert body["session"]["mode"] == "swarm"
+
+    # Idempotent: the same session keeps the same linked room instead of
+    # creating another "team" path.
+    again = c.post("/api/collab/t1/room", json={"name": "ignored"}).json()
+    assert again["created"] is False
+    assert again["room"]["id"] == body["room"]["id"]
+
+
+def test_collab_task_endpoint_auto_creates_room_and_folds_task(tmp_path) -> None:
+    from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
+    from runtime.sensing.gateway.team_tasks_router import create_team_tasks_router
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
+    rooms = create_team_rooms_router(state_path=tmp_path / "team_rooms.json")
+    tasks = create_team_tasks_router(state_path=tmp_path / "team_tasks.json")
+    app = FastAPI()
+    app.include_router(rooms)
+    app.include_router(tasks)
+    app.include_router(create_cowork_group_router(
+        store=store,
+        collaboration_store=collab_store,
+        team_rooms_state_path=tmp_path / "team_rooms.json",
+        team_tasks_state_path=tmp_path / "team_tasks.json",
+        team_rooms_router=rooms,
+        team_tasks_router=tasks,
+    ))
+    c = TestClient(app)
+    c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
+
+    r = c.post(
+        "/api/collab/t1/tasks",
+        json={
+            "title": "Draft release plan",
+            "description": "Use the unified collaboration path",
+            "assignees": [{"kind": "agent", "ref": "alice"}],
+            "room": {
+                "name": "Release room",
+                "members": [{"name": "alice", "display_name": "Alice"}],
+            },
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["room_id"] == body["session"]["room_id"]
+    assert body["task"]["metadata"]["collab_session_id"] == "t1"
+    assert body["task"]["metadata"]["source"] == "collab_session"
+    assert collab_store.room_for_session("t1")["name"] == "Release room"
+    assert [task["title"] for task in collab_store.tasks_for_session("t1")] == [
+        "Draft release plan"
+    ]
+
+    sess = c.get("/api/collab/t1").json()
+    assert [task["title"] for task in sess["room_tasks"]] == ["Draft release plan"]
+    listed = c.get("/api/collab/t1/tasks").json()
+    assert listed["count"] == 1
+    assert listed["tasks"][0]["room_id"] == body["room_id"]
+
+
+def test_collab_session_prefers_unified_task_store(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
+    collab_store.upsert_room("t1", {"id": "room-1", "name": "Canonical"})
+    collab_store.upsert_task(
+        "t1",
+        {
+            "id": "task-canonical",
+            "room_id": "room-1",
+            "title": "Canonical task",
+            "status": "done",
+            "created_at": "t0",
+            "updated_at": "t1",
+        },
+    )
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(
+        store=store,
+        collaboration_store=collab_store,
+    ))
+    c = TestClient(app)
+    c.post("/api/collab/t1/link-room", json={"room_id": "room-1"})
+
+    sess = c.get("/api/collab/t1").json()
+    assert sess["room_id"] == "room-1"
+    assert [task["title"] for task in sess["room_tasks"]] == ["Canonical task"]
+    listed = c.get("/api/collab/t1/tasks").json()
+    assert listed["tasks"][0]["id"] == "task-canonical"
+
+
+def test_collab_session_prefers_unified_message_store(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
+    collab_store.upsert_room("t1", {"id": "room-1", "name": "Canonical"})
+    collab_store.append_message(
+        "t1",
+        room_id="room-1",
+        text="canonical transcript line",
+        participant_id="p1",
+        display_name="Planner",
+    )
+    legacy = RoomMessageStore(base_dir=tmp_path / "rooms")
+    legacy.append("room-1", text="legacy transcript line", participant_id="old", display_name="Old")
+
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(
+        store=store,
+        collaboration_store=collab_store,
+        room_message_store=legacy,
+    ))
+    c = TestClient(app)
+    c.post("/api/collab/t1/link-room", json={"room_id": "room-1"})
+
+    sess = c.get("/api/collab/t1").json()
+    assert [m["text"] for m in sess["room_messages"]] == ["canonical transcript line"]
+    hits = c.get("/api/cowork/t1/search", params={"q": "canonical"}).json()["hits"]
+    assert any(h["kind"] == "room_message" for h in hits)
+
+
+def test_team_room_projection_updates_unified_room_snapshot(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+    from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
+
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
+    projected: list[str] = []
+
+    def project(room: dict) -> None:
+        updated = collab_store.upsert_room_by_id(room)
+        if updated is not None:
+            projected.append(updated["name"])
+
+    rooms = create_team_rooms_router(
+        state_path=tmp_path / "team_rooms.json",
+        room_projection=project,
+    )
+    app = FastAPI()
+    app.include_router(rooms)
+    c = TestClient(app)
+    room = c.post(
+        "/api/teams",
+        json={
+            "id": "room-1",
+            "name": "Before",
+            "members": [{"name": "alice"}],
+            "leaderId": "alice",
+        },
+    ).json()
+    collab_store.upsert_room("t1", room)
+
+    updated = c.put(
+        "/api/teams/room-1",
+        json={
+            "name": "After",
+            "members": [{"name": "alice"}, {"name": "bob"}],
+            "leaderId": "alice",
+        },
+    )
+    assert updated.status_code == 200
+    assert collab_store.room_for_session("t1")["name"] == "After"
+    assert projected[-1] == "After"
+
+
+def test_team_room_projection_can_promote_to_thread_session(tmp_path) -> None:
+    from runtime.memory.cowork.collaboration_store import CollaborationStore
+
+    collab_store = CollaborationStore(base_dir=tmp_path / "cowork")
+    collab_store.upsert_room_by_id({"id": "room-1", "name": "Team first"})
+    collab_store.upsert_task_for_room(
+        "room-1",
+        {
+            "id": "task-1",
+            "room_id": "room-1",
+            "title": "created from team",
+            "created_at": "t0",
+            "updated_at": "t0",
+        },
+    )
+
+    assert collab_store.session_id_for_room("room-1") == "team:room-1"
+    assert [t["title"] for t in collab_store.tasks_for_session("team:room-1")] == [
+        "created from team"
+    ]
+
+    collab_store.upsert_room("thread-1", {"id": "room-1", "name": "Thread linked"})
+
+    assert collab_store.session_id_for_room("room-1") == "thread-1"
+    assert collab_store.room_for_session("team:room-1") is None
+    assert [t["title"] for t in collab_store.tasks_for_session("thread-1")] == [
+        "created from team"
+    ]

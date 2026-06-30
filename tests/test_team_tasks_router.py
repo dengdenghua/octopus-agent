@@ -113,6 +113,9 @@ def _client(
     tmp_path: Path,
     runner_factory,
     events: list[tuple[str, dict[str, Any]]],
+    *,
+    task_projection=None,
+    task_delete_projection=None,
 ) -> TestClient:
     app = FastAPI()
 
@@ -123,6 +126,8 @@ def _client(
         create_team_tasks_router(
             state_path=tmp_path / "team_tasks.json",
             team_event_broadcaster=_broadcast,
+            task_projection=task_projection,
+            task_delete_projection=task_delete_projection,
             runner_factory=runner_factory,
         ),
     )
@@ -242,6 +247,33 @@ def test_create_update_delete_broadcast_task_progress_events(tmp_path: Path) -> 
     assert events[-1][1]["event"] == "task_deleted"
     assert events[-1][1]["deleted"] is True
     assert events[-1][1]["task_id"] == task["id"]
+
+
+def test_team_task_projection_tracks_legacy_task_lifecycle(tmp_path: Path) -> None:
+    events: list[tuple[str, dict[str, Any]]] = []
+    projected: dict[str, dict[str, Any]] = {}
+    deleted: list[str] = []
+    client = _client(
+        tmp_path,
+        _SuccessRunner,
+        events,
+        task_projection=lambda room_id, task: projected.__setitem__(task["id"], task),
+        task_delete_projection=lambda task_id: deleted.append(task_id),
+    )
+
+    task = _create_task(client, title="project me")
+    assert projected[task["id"]]["title"] == "project me"
+
+    updated = client.patch(
+        f"/api/team-tasks/{task['id']}",
+        json={"title": "project me updated"},
+    )
+    assert updated.status_code == 200
+    assert projected[task["id"]]["title"] == "project me updated"
+
+    deleted_response = client.delete(f"/api/team-tasks/{task['id']}")
+    assert deleted_response.status_code == 200
+    assert deleted == [task["id"]]
 
 
 def test_create_task_persists_source_metadata(tmp_path: Path) -> None:

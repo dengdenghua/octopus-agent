@@ -676,6 +676,7 @@ def create_app(
         app.state.cowork_runtime = cowork_runtime
         app.state.cowork_group_store = cowork_runtime.group_store
         app.state.cowork_async_store = cowork_runtime.async_store
+        app.state.collaboration_store = cowork_runtime.collaboration_store
         if (
             stack is not None
             and cowork_runtime.runner_enabled
@@ -854,6 +855,43 @@ def create_app(
     from runtime.platform.ui.team_twin_speaker import make_twin_responder
     from runtime.sensing.gateway.team_rooms_router import create_team_rooms_router
 
+    def _project_room_to_collaboration(room: dict[str, Any]) -> None:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        upsert_room = getattr(collab_store, "upsert_room_by_id", None)
+        if callable(upsert_room):
+            upsert_room(room)
+
+    def _project_room_message_to_collaboration(room_id: str, message: dict[str, Any]) -> None:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        append_message = getattr(collab_store, "append_message_for_room", None)
+        if not callable(append_message):
+            return
+        append_message(
+            room_id,
+            text=str(message.get("text") or ""),
+            participant_id=str(message.get("participant_id") or ""),
+            display_name=str(message.get("display_name") or ""),
+        )
+
+    def _collaboration_room_messages(
+        room_id: str,
+        limit: int,
+        after_seq: int,
+        q: str,
+    ) -> list[dict[str, Any]]:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        if collab_store is None:
+            return []
+        if str(q or "").strip():
+            search = getattr(collab_store, "search_messages_for_room", None)
+            return search(room_id, q, limit=limit) if callable(search) else []
+        history = getattr(collab_store, "messages_for_room", None)
+        return (
+            history(room_id, limit=limit, after_seq=after_seq)
+            if callable(history)
+            else []
+        )
+
     team_rooms_router = create_team_rooms_router(
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
@@ -864,6 +902,9 @@ def create_app(
         # Bridge bound digital twins to the model router so they actually
         # generate + emit speech when the floor reaches them. None-safe: no
         # router (e.g. no planner) → twins stay silent, human paths unchanged.
+        room_projection=_project_room_to_collaboration,
+        room_message_projection=_project_room_message_to_collaboration,
+        room_message_provider=_collaboration_room_messages,
         twin_responder=make_twin_responder(stack),
     )
     app.state.team_rooms_router = team_rooms_router
@@ -877,6 +918,9 @@ def create_app(
     _resolve_room_members = getattr(team_rooms_router, "list_room_members", None)
 
     async def _team_event_broadcaster(room_id: str, payload: dict[str, Any]) -> None:
+        task_payload = payload.get("task")
+        if isinstance(task_payload, dict):
+            _project_task_to_collaboration(room_id, task_payload)
         sync = getattr(
             getattr(app.state, "company_router", None),
             "sync_team_task_event",
@@ -897,6 +941,37 @@ def create_app(
             return
         await _broadcast_room(room_id, payload)
 
+    def _project_task_to_collaboration(room_id: str, task_payload: dict[str, Any]) -> None:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        if collab_store is None:
+            return
+        metadata = task_payload.get("metadata")
+        session_id = (
+            metadata.get("collab_session_id")
+            if isinstance(metadata, dict)
+            else None
+        )
+        try:
+            if isinstance(session_id, str) and session_id:
+                upsert_task = getattr(collab_store, "upsert_task", None)
+                if callable(upsert_task):
+                    upsert_task(session_id, task_payload)
+            else:
+                upsert_for_room = getattr(collab_store, "upsert_task_for_room", None)
+                if callable(upsert_for_room):
+                    upsert_for_room(room_id, task_payload)
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning(
+                "collaboration task projection sync failed",
+                exc_info=True,
+            )
+
+    def _delete_task_from_collaboration(task_id: str) -> None:
+        collab_store = getattr(app.state, "collaboration_store", None)
+        delete_task = getattr(collab_store, "delete_task", None)
+        if callable(delete_task):
+            delete_task(task_id)
+
     team_tasks_router = create_team_tasks_router(
         identity_store=cocoloop_identity_store,
         require_auth=cocoloop_require_auth,
@@ -904,6 +979,8 @@ def create_app(
         jwt_issuer=cocoloop_jwt_issuer,
         jwt_audience=cocoloop_jwt_audience,
         team_event_broadcaster=(_team_event_broadcaster if _broadcast_room is not None else None),
+        task_projection=_project_task_to_collaboration,
+        task_delete_projection=_delete_task_from_collaboration,
         room_membership_resolver=_resolve_room_members,
     )
     app.state.team_tasks_router = team_tasks_router
@@ -1462,6 +1539,13 @@ def create_app(
                 if cowork_runtime is not None
                 else None
             ),
+            collaboration_store=(
+                getattr(cowork_runtime, "collaboration_store", None)
+                if cowork_runtime is not None
+                else None
+            ),
+            team_rooms_router=team_rooms_router,
+            team_tasks_router=team_tasks_router,
             runtime=cowork_runtime,
             identity_store=cocoloop_identity_store,
             require_auth=cocoloop_require_auth,

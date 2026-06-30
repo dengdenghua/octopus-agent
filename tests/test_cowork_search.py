@@ -198,6 +198,28 @@ def test_room_task_search_matches_assignee_and_sop(tmp_path) -> None:
     assert any(h.kind == "room_task" for h in by_sop)
 
 
+def test_room_message_search_finds_scattered_terms(tmp_path) -> None:
+    """Multi-word queries must find messages where terms appear separately —
+    not only when the exact phrase appears verbatim.  Previously the search
+    used terms[-1] (the full phrase) as a single LIKE, so "nutrition plan"
+    would miss a message saying "nutrition rollout is the plan"."""
+    from runtime.memory.cowork.room_messages import RoomMessageStore
+    from runtime.memory.cowork.session import link_room
+
+    store = GroupStore(base_dir=tmp_path)
+    link_room(store, "t1", "room-9")
+    rms = RoomMessageStore(base_dir=tmp_path / "rooms")
+    # Terms appear in the same message but NOT as the verbatim phrase.
+    rms.append("room-9", text="nutrition rollout is the plan", participant_id="p", display_name="Bob")
+    # Unrelated message — must NOT appear.
+    rms.append("room-9", text="unrelated content here", participant_id="p", display_name="Bob")
+
+    hits = search_group(store, "t1", "nutrition plan", room_message_store=rms)
+    rm_hits = [h for h in hits if h.kind == "room_message"]
+    assert len(rm_hits) == 1, "scattered terms should be found via per-term OR union"
+    assert "nutrition" in rm_hits[0].snippet.lower()
+
+
 def test_search_skips_room_tasks_when_unlinked(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
     store.blackboard("t1").write("k", "nutrition", writer="u")

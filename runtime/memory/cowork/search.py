@@ -191,13 +191,20 @@ def _search_room_messages(
     room_id = getattr(store.state(thread_id), "room_id", None)
     if not room_id:
         return []
-    query = terms[-1] if terms else ""  # _terms keeps the full phrase last
-    try:
-        rows = room_message_store.search(room_id, query, limit=50)
-    except Exception:  # noqa: BLE001 — linked-room search degrades to other surfaces
-        return []
+    # Query each term independently then union by seq — so a message containing
+    # "nutrition" and "plan" in any order is found even when "nutrition plan"
+    # doesn't appear verbatim.  _field_score then ranks across all matched terms.
+    seen: dict[object, dict] = {}
+    for term in terms:
+        try:
+            for m in room_message_store.search(room_id, term, limit=50):
+                s = m.get("seq")
+                if s is not None and s not in seen:
+                    seen[s] = m
+        except Exception:  # noqa: BLE001 — linked-room search degrades to other surfaces
+            return []
     out: list[SearchHit] = []
-    for m in rows:
+    for m in seen.values():
         text = _as_text(m.get("text"))
         score = _field_score(text, terms, 1.5)
         if score <= 0:

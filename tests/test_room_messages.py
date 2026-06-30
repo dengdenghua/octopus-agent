@@ -72,6 +72,64 @@ def test_messages_endpoint_reads_store(tmp_path) -> None:
     assert len(found["messages"]) == 1
 
 
+def test_messages_endpoint_prefers_canonical_provider(tmp_path) -> None:
+    store = RoomMessageStore(base_dir=tmp_path / "legacy")
+    store.append("team-x", text="legacy line", participant_id="old", display_name="Old")
+
+    app = FastAPI()
+    app.include_router(
+        create_team_rooms_router(
+            state_path=tmp_path / "team_rooms.json",
+            room_message_store=store,
+            room_message_provider=lambda team_id, limit, after_seq, q: [
+                {
+                    "seq": 1,
+                    "participant_id": "p1",
+                    "display_name": "Alice",
+                    "text": "canonical nutrition line",
+                    "ts": "t0",
+                }
+            ],
+        )
+    )
+    c = TestClient(app)
+
+    body = c.get("/api/teams/team-x/messages").json()
+    assert [m["text"] for m in body["messages"]] == ["canonical nutrition line"]
+
+
+def test_room_message_projection_receives_ws_persist_lines(tmp_path) -> None:
+    from runtime.sensing.gateway.team_rooms_ws import TeamRoomWsContext, _remember_line
+
+    projected: list[tuple[str, dict]] = []
+    ctx = TeamRoomWsContext(
+        teams={},
+        lock=__import__("threading").Lock(),
+        live_sockets={},
+        auth=lambda _request: None,
+        save=lambda: None,
+        broadcast=lambda *args, **kwargs: None,
+        broadcast_presence=lambda _team_id: None,
+        broadcast_floor=lambda _team_id, _team: None,
+        active_participant=lambda _team_id, _participant_id: None,
+        message_store=RoomMessageStore(base_dir=tmp_path / "legacy"),
+        message_projection=lambda room_id, message: projected.append((room_id, message)),
+    )
+
+    _remember_line(ctx, "team-x", "p1", "Alice", "hello from ws")
+
+    assert projected == [
+        (
+            "team-x",
+            {
+                "participant_id": "p1",
+                "display_name": "Alice",
+                "text": "hello from ws",
+            },
+        )
+    ]
+
+
 def test_persist_pool_append_persists(tmp_path) -> None:
     """The WS path offloads store.append to a background worker — verify that
     pooled append actually persists (no deadlock off the event loop)."""

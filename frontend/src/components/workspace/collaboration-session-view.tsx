@@ -97,7 +97,7 @@ export function CollaborationSessionView({
           <Stat
             icon={MessageSquareIcon}
             value={session.room_messages.length}
-            label={t.coworkCollab.kindEvent}
+            label={t.coworkCollab.kindRoomMessage}
           />
           <Stat
             icon={ListTodoIcon}

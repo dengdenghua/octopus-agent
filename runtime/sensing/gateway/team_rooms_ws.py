@@ -103,6 +103,7 @@ class TeamRoomWsContext:
     # is also appended here so room transcripts survive reconnect/restart and
     # can be caught up on / searched. None disables persistence (back-compat).
     message_store: Any = None
+    message_projection: Callable[[str, dict[str, Any]], None] | None = None
 
 
 def _remember_line(
@@ -133,6 +134,17 @@ def _remember_line(
             _persist_pool().submit(
                 store.append, team_id,
                 text=text, participant_id=participant_id, display_name=display_name,
+            )
+    projection = ctx.message_projection
+    if projection is not None:
+        with contextlib.suppress(Exception):
+            projection(
+                team_id,
+                {
+                    "participant_id": participant_id,
+                    "display_name": display_name,
+                    "text": text,
+                },
             )
 
 

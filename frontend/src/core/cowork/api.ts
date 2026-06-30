@@ -4,6 +4,8 @@ import { getBackendBaseURL } from "@/core/config";
 import type {
   CollabRoomMessageInput,
   CollabRoomMessageResponse,
+  CollabRoomInput,
+  CollabRoomResponse,
   CollaborationSession,
   CoworkGroupResponse,
   CoworkInviteInput,
@@ -171,6 +173,27 @@ export async function linkCoworkRoom(
     },
   );
   await parseJson<{ ok: boolean }>(res, "Link cowork room");
+}
+
+export async function ensureCollabRoom(
+  threadId: string,
+  input: CollabRoomInput,
+): Promise<CollabRoomResponse> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/room`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        name: input.name ?? "",
+        members: input.members ?? [],
+        leaderId: input.leaderId ?? null,
+        mode: input.mode ?? null,
+        ...(input.id ? { id: input.id } : {}),
+      }),
+    },
+  );
+  return parseJson<CollabRoomResponse>(res, "Ensure collab room");
 }
 
 export async function postCollabRoomMessage(

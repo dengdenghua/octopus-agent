@@ -133,6 +133,7 @@ import {
   coworkSessionToCollaborationRoster,
   useCollabSession,
   useCoworkGroup,
+  useEnsureCollabRoom,
   useInviteCoworkMember,
   useRemoveCoworkMember,
   useSetCoworkMode,
@@ -997,6 +998,7 @@ function RealtimePageContent({
   const inviteCoworkMemberMutation = useInviteCoworkMember();
   const removeCoworkMemberMutation = useRemoveCoworkMember();
   const setCoworkModeMutation = useSetCoworkMode();
+  const ensureCollabRoomMutation = useEnsureCollabRoom();
   const persistedThreadWorkspacePath = threadWorkspaceQuery.data ?? "";
 
   useEffect(() => {
@@ -1447,6 +1449,84 @@ function RealtimePageContent({
     t,
     teamModeIntent,
     threadId,
+  ]);
+  const collaborationRoomMemberPayload = useMemo(
+    () =>
+      visibleCollaborationRoster.map((agent) => ({
+        name: agent.agent_id,
+        display_name: agent.display_name,
+        description:
+          agent.role === "tl"
+            ? t.collab.common.leader
+            : t.collab.common.aiMember,
+        avatar_url: agent.avatar_url ?? undefined,
+        icon: agent.icon ?? undefined,
+      })),
+    [t, visibleCollaborationRoster],
+  );
+  const collaborationRoomSignature = useMemo(
+    () =>
+      [
+        threadId,
+        collaborationTeamName,
+        teamModeIntent,
+        ...collaborationRoomMemberPayload.map((member) => member.name),
+      ].join("\u0000"),
+    [
+      collaborationRoomMemberPayload,
+      collaborationTeamName,
+      teamModeIntent,
+      threadId,
+    ],
+  );
+  const lastEnsuredCollabRoomRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      isNewThread ||
+      !threadId ||
+      threadId === "new" ||
+      !visibleCollaborationEnabled ||
+      collabSessionQuery.isPending ||
+      collabSessionQuery.data?.room_id ||
+      ensureCollabRoomMutation.isPending
+    ) {
+      return;
+    }
+    if (lastEnsuredCollabRoomRef.current === collaborationRoomSignature) {
+      return;
+    }
+    lastEnsuredCollabRoomRef.current = collaborationRoomSignature;
+    ensureCollabRoomMutation.mutate(
+      {
+        threadId,
+        input: {
+          id: `collab-${threadId}`,
+          name: collaborationTeamName,
+          members: collaborationRoomMemberPayload,
+          leaderId: collaborationRoomMemberPayload[0]?.name ?? effectiveAgentId,
+          mode: teamModeIntent,
+        },
+      },
+      {
+        onError: () => {
+          if (lastEnsuredCollabRoomRef.current === collaborationRoomSignature) {
+            lastEnsuredCollabRoomRef.current = null;
+          }
+        },
+      },
+    );
+  }, [
+    collabSessionQuery.data?.room_id,
+    collabSessionQuery.isPending,
+    collaborationRoomMemberPayload,
+    collaborationRoomSignature,
+    collaborationTeamName,
+    effectiveAgentId,
+    ensureCollabRoomMutation,
+    isNewThread,
+    teamModeIntent,
+    threadId,
+    visibleCollaborationEnabled,
   ]);
   useEffect(() => {
     setSelectedCollaboratorIds((current) =>

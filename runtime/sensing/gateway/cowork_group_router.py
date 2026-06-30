@@ -11,6 +11,7 @@ static AgentGroupRegistry of agent-team *templates*, a different concept).
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -87,13 +88,34 @@ class RoomMessageBody(BaseModel):
     display_name: str = ""
 
 
+class EnsureRoomBody(BaseModel):
+    id: str | None = None
+    name: str = ""
+    members: list[dict[str, Any]] = Field(default_factory=list)
+    leaderId: str | None = None  # noqa: N815 - team room wire uses camelCase
+    mode: str | None = None
+
+
+class CollabTaskBody(BaseModel):
+    title: str = Field(min_length=1)
+    description: str = ""
+    sop_template: str = ""
+    assignees: list[dict[str, Any]] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    run: bool = False
+    room: EnsureRoomBody | None = None
+
+
 def create_cowork_group_router(
     *,
     store: GroupStore | None = None,
     async_store: Any = None,
+    collaboration_store: Any = None,
     room_message_store: Any = None,
     team_rooms_state_path: Any = None,
     team_tasks_state_path: Any = None,
+    team_rooms_router: Any = None,
+    team_tasks_router: Any = None,
     runtime: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -103,6 +125,13 @@ def create_cowork_group_router(
 ) -> APIRouter:
     """Create the ``/api/cowork/*`` thread-group router."""
     group_store = store or GroupStore()
+
+    def _collaboration_store():
+        if collaboration_store is not None:
+            return collaboration_store
+        from runtime.memory.cowork.collaboration_store import CollaborationStore
+
+        return CollaborationStore(base_dir=group_store.base_dir)
 
     def _async_store():
         if async_store is not None:
@@ -140,6 +169,11 @@ def create_cowork_group_router(
     def _room_participants(room_id: str) -> list[dict[str, Any]]:
         """Read a linked room's participant config from the team_rooms store
         (read-only bridge — the team_rooms router owns the file)."""
+        canonical = _collaboration_store().room_by_id(room_id)
+        if canonical is not None:
+            participants = canonical.get("participants")
+            return participants if isinstance(participants, list) else []
+
         from pathlib import Path
 
         from runtime.platform.process.paths import app_paths
@@ -156,6 +190,10 @@ def create_cowork_group_router(
         bridge — the team_tasks router owns the file). This is the third source
         of truth Codex flagged; folding it in makes the session view cover the
         room's *work*, not just its roster + transcript."""
+        canonical = _collaboration_store().tasks_for_room(room_id)
+        if canonical:
+            return canonical
+
         from pathlib import Path
 
         from runtime.platform.process.paths import app_paths
@@ -168,6 +206,127 @@ def create_cowork_group_router(
             for t in tasks.values()
             if t.room_id == room_id
         ]
+
+    def _room_messages(thread_id: str, room_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
+        canonical = _collaboration_store().messages_for_session(thread_id, limit=limit)
+        if canonical:
+            return canonical
+        try:
+            return _room_message_store().history(room_id, limit=limit)
+        except Exception:  # noqa: BLE001 — linked-room transcript is best-effort
+            return []
+
+    class _SessionMessageSearch:
+        def __init__(self, thread_id: str) -> None:
+            self.thread_id = thread_id
+
+        def search(self, room_id: str, query: str, *, limit: int = 50) -> list[dict[str, Any]]:
+            canonical = _collaboration_store().search_messages(
+                self.thread_id, query, limit=limit
+            )
+            if canonical:
+                return canonical
+            return _room_message_store().search(room_id, query, limit=limit)
+
+    def _room_snapshot(room_id: str) -> dict[str, Any] | None:
+        canonical = _collaboration_store().room_by_id(room_id)
+        if canonical is not None:
+            return canonical
+
+        from pathlib import Path
+
+        from runtime.platform.process.paths import app_paths
+        from runtime.sensing.gateway.team_rooms_router import _load_state
+
+        path = team_rooms_state_path or (app_paths().data_dir / "team_rooms.json")
+        room = _load_state(Path(path)).get(room_id)
+        return room.model_dump() if room is not None else None
+
+    def _session_payload(thread_id: str) -> dict[str, Any]:
+        from runtime.memory.cowork.session import resolve_session
+
+        session = resolve_session(
+            group_store, thread_id,
+            async_store=_async_store(), presence_store=_presence_store(),
+            room_message_store=None,
+            room_messages_provider=lambda room_id: _room_messages(thread_id, room_id),
+            room_participants_provider=_room_participants,
+            room_tasks_provider=_room_tasks,
+        )
+        return session.to_dict()
+
+    def _room_members_from_group(thread_id: str) -> list[dict[str, Any]]:
+        state = group_store.state(thread_id)
+        return [
+            {
+                "name": member.id,
+                "display_name": member.id,
+                "description": "",
+            }
+            for member in state.roster
+            if member.kind == "agent" and member.role == "participant" and not member.muted
+        ]
+
+    async def _maybe_await(value: Any) -> Any:
+        if inspect.isawaitable(value):
+            return await value
+        return value
+
+    async def _ensure_room(
+        thread_id: str,
+        body: EnsureRoomBody,
+        request: Request,
+    ) -> tuple[dict[str, Any], bool]:
+        """Ensure the collaboration session has one persistent room.
+
+        This is the write-side half of the unified path: a thread remains the
+        canonical session, while the former Team Room becomes the session's
+        persistent surface for humans, invite links, room tasks, and WS.
+        """
+        from runtime.memory.cowork.session import link_room
+
+        state = group_store.state(thread_id)
+        if state.room_id:
+            room = _room_snapshot(state.room_id) or {"id": state.room_id}
+            _collaboration_store().upsert_room(thread_id, dict(room))
+            return room, False
+
+        creator = getattr(team_rooms_router, "create_team_from_payload", None)
+        if not callable(creator):
+            raise HTTPException(501, "collab room creation is not wired")
+
+        members = [m for m in body.members if str(m.get("name") or "").strip()]
+        if not members:
+            members = _room_members_from_group(thread_id)
+        if not members:
+            raise HTTPException(
+                400,
+                "collab room needs at least one agent member; invite a collaborator first",
+            )
+
+        leader_id = body.leaderId or str(members[0].get("name") or "")
+        if leader_id not in {str(m.get("name") or "") for m in members}:
+            leader_id = str(members[0].get("name") or "")
+        payload = {
+            "id": body.id or f"collab-{thread_id}",
+            "name": body.name.strip() or f"Collaboration · {thread_id}",
+            "members": members,
+            "leaderId": leader_id,
+        }
+        room = await _maybe_await(creator(request, payload))
+        room_id = str((room or {}).get("id") or "")
+        if not room_id:
+            raise HTTPException(502, "team room creator returned no id")
+        room = _collaboration_store().upsert_room(thread_id, dict(room))
+        link_room(group_store, thread_id, room_id, actor=_actor(request))
+        if body.mode:
+            if body.mode not in ("chat", "cluster", "swarm", "project"):
+                raise HTTPException(400, "mode must be chat | cluster | swarm | project")
+            group_store.append(
+                thread_id,
+                MemberEvent(action="mode", actor=_actor(request), mode=body.mode),  # type: ignore[arg-type]
+            )
+        return room, True
 
     def _actor(request: Request) -> str:
         from runtime.adapters.web_auth import _resolve_actor
@@ -207,16 +366,90 @@ def create_cowork_group_router(
         shared blackboard, async tasks, and presence (instead of stitching the
         per-surface endpoints). The cowork thread is the canonical session; a
         Team Room is its optional linked surface."""
-        from runtime.memory.cowork.session import resolve_session
+        return _session_payload(thread_id)
 
-        session = resolve_session(
-            group_store, thread_id,
-            async_store=_async_store(), presence_store=_presence_store(),
-            room_message_store=_room_message_store(),
-            room_participants_provider=_room_participants,
-            room_tasks_provider=_room_tasks,
+    @router.post("/api/collab/{thread_id}/room", dependencies=[Depends(_auth_dep)])
+    async def ensure_session_room(
+        thread_id: str,
+        body: EnsureRoomBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Create/link the session's persistent room.
+
+        This is the canonical replacement for "go create a Team elsewhere":
+        the user stays in one collaboration thread, and persistence/invites/tasks
+        become properties of that same session.
+        """
+        room, created = await _ensure_room(thread_id, body, request)
+        return {
+            "ok": True,
+            "created": created,
+            "room": room,
+            "session": _session_payload(thread_id),
+        }
+
+    @router.get("/api/collab/{thread_id}/tasks")
+    def list_session_tasks(thread_id: str) -> dict[str, Any]:
+        """List heavyweight room tasks through the canonical session path."""
+        room_id = getattr(group_store.state(thread_id), "room_id", None)
+        tasks = _collaboration_store().tasks_for_session(thread_id)
+        if not tasks and room_id:
+            tasks = _room_tasks(room_id)
+        return {
+            "thread_id": thread_id,
+            "room_id": room_id,
+            "tasks": tasks,
+            "count": len(tasks),
+        }
+
+    @router.post("/api/collab/{thread_id}/tasks", dependencies=[Depends(_auth_dep)])
+    async def create_session_task(
+        thread_id: str,
+        body: CollabTaskBody,
+        request: Request,
+    ) -> dict[str, Any]:
+        """Create a heavyweight task through the collaboration session.
+
+        The underlying TeamTask store is still reused for compatibility, but the
+        caller no longer has to choose a separate Team surface first.
+        """
+        creator = getattr(team_tasks_router, "create_task_from_payload", None)
+        if not callable(creator):
+            raise HTTPException(501, "collab task creation is not wired")
+        room_body = body.room or EnsureRoomBody()
+        room, _created = await _ensure_room(thread_id, room_body, request)
+        room_id = str(room.get("id") or getattr(group_store.state(thread_id), "room_id", "") or "")
+        if not room_id:
+            raise HTTPException(409, "collab session has no linked room")
+        metadata = {
+            **body.metadata,
+            "collab_session_id": thread_id,
+            "source": "collab_session",
+        }
+        task = await _maybe_await(
+            creator(
+                request,
+                {
+                    "room_id": room_id,
+                    "title": body.title,
+                    "description": body.description,
+                    "sop_template": body.sop_template,
+                    "assignees": body.assignees,
+                    "metadata": metadata,
+                },
+            )
         )
-        return session.to_dict()
+        if body.run:
+            runner = getattr(team_tasks_router, "run_task_from_request", None)
+            if callable(runner):
+                task = await _maybe_await(runner(request, task["id"]))
+        task = _collaboration_store().upsert_task(thread_id, dict(task))
+        return {
+            "ok": True,
+            "room_id": room_id,
+            "task": task,
+            "session": _session_payload(thread_id),
+        }
 
     @router.post("/api/collab/{thread_id}/link-room", dependencies=[Depends(_auth_dep)])
     def link_session_room(thread_id: str, body: LinkRoomBody) -> dict[str, Any]:
@@ -225,7 +458,9 @@ def create_cowork_group_router(
         from runtime.memory.cowork.session import link_room
 
         state = link_room(group_store, thread_id, body.room_id)
-        return {"ok": True, "state": state.to_dict()}
+        room = _room_snapshot(body.room_id) or {"id": body.room_id}
+        _collaboration_store().upsert_room(thread_id, room)
+        return {"ok": True, "state": state.to_dict(), "session": _session_payload(thread_id)}
 
     @router.post("/api/collab/{thread_id}/room-message", dependencies=[Depends(_auth_dep)])
     def post_room_message(thread_id: str, body: RoomMessageBody) -> dict[str, Any]:
@@ -239,12 +474,22 @@ def create_cowork_group_router(
         room_id = getattr(group_store.state(thread_id), "room_id", None)
         if not room_id:
             raise HTTPException(409, "no room linked to this session — link one first")
-        seq = _room_message_store().append(
-            room_id,
+        seq = _collaboration_store().append_message(
+            thread_id,
+            room_id=room_id,
             text=body.text,
             participant_id=body.participant_id,
             display_name=body.display_name,
         )
+        try:
+            _room_message_store().append(
+                room_id,
+                text=body.text,
+                participant_id=body.participant_id,
+                display_name=body.display_name,
+            )
+        except Exception:  # noqa: BLE001 — legacy transcript projection is best-effort
+            pass
         return {"ok": True, "room_id": room_id, "seq": seq}
 
     @router.get("/api/cowork/{thread_id}/nominate")
@@ -284,7 +529,7 @@ def create_cowork_group_router(
             kinds=kind_filter,
             until_seq=until_seq,
             async_store=_async_store(),
-            room_message_store=_room_message_store(),
+            room_message_store=_SessionMessageSearch(thread_id),
             room_task_provider=_room_tasks,
         )
         return {"thread_id": thread_id, "query": q, "hits": [h.to_dict() for h in hits]}

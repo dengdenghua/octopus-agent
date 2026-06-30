@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  ensureCollabRoom,
   getCollabSession,
   getCoworkGroup,
   getCoworkPresence,
@@ -12,6 +13,7 @@ import {
   setCoworkMode,
 } from "./api";
 import type {
+  CollabRoomInput,
   CoworkInviteInput,
   CoworkMode,
   CoworkSearchKind,
@@ -151,6 +153,25 @@ export function useLinkCoworkRoom() {
     mutationFn: ({ threadId, roomId }: { threadId: string; roomId: string }) =>
       linkCoworkRoom(threadId, roomId),
     onSuccess: (_void, { threadId }) => {
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
+      void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
+    },
+  });
+}
+
+export function useEnsureCollabRoom() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      input,
+    }: {
+      threadId: string;
+      input: CollabRoomInput;
+    }) => ensureCollabRoom(threadId, input),
+    onSuccess: (_data, { threadId }) => {
       void qc.invalidateQueries({
         queryKey: coworkQueryKeys.session(threadId),
       });

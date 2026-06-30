@@ -57,6 +57,7 @@ def resolve_session(
     async_store: Any = None,
     presence_store: Any = None,
     room_message_store: Any = None,
+    room_messages_provider: Any = None,
     room_participants_provider: Any = None,
     room_tasks_provider: Any = None,
 ) -> CollaborationSession:
@@ -88,7 +89,12 @@ def resolve_session(
     room_participants: list[dict[str, Any]] = []
     room_tasks: list[dict[str, Any]] = []
     if state.room_id:
-        if room_message_store is not None:
+        if room_messages_provider is not None:
+            try:
+                room_messages = room_messages_provider(state.room_id) or []
+            except Exception:  # noqa: BLE001 — linked-room transcript is best-effort
+                room_messages = []
+        elif room_message_store is not None:
             try:
                 room_messages = room_message_store.history(state.room_id, limit=50)
             except Exception:  # noqa: BLE001 — linked-room transcript is best-effort

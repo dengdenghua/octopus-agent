@@ -15,6 +15,7 @@ from typing import Any
 
 from runtime.memory.cowork.async_runner import AsyncWorkRunner
 from runtime.memory.cowork.async_work import AsyncTask, AsyncWorkStore
+from runtime.memory.cowork.collaboration_store import CollaborationStore
 from runtime.memory.cowork.group_store import GroupStore
 from runtime.memory.cowork.nominate import CompetenceStore
 
@@ -25,6 +26,7 @@ _LOG = logging.getLogger("octopus.cowork.runtime")
 class CoworkRuntime:
     group_store: GroupStore
     async_store: AsyncWorkStore
+    collaboration_store: CollaborationStore
     runner: AsyncWorkRunner | None = None
     runner_enabled: bool = False
     runner_reason: str = "disabled"
@@ -54,6 +56,7 @@ def create_cowork_runtime(
     """Build the shared cowork runtime used by app wiring and tests."""
     group_store = GroupStore(base_dir=base_dir)
     async_store = AsyncWorkStore(base_dir=group_store.base_dir, group_store=group_store)
+    collaboration_store = CollaborationStore(base_dir=group_store.base_dir)
     runner: AsyncWorkRunner | None = None
     runner_enabled, runner_reason = _subagent_execution_available()
     if enable_runner and runner_enabled:
@@ -69,6 +72,7 @@ def create_cowork_runtime(
     return CoworkRuntime(
         group_store=group_store,
         async_store=async_store,
+        collaboration_store=collaboration_store,
         runner=runner,
         runner_enabled=runner is not None,
         runner_reason=runner_reason,

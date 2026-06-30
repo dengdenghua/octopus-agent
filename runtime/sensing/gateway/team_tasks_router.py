@@ -57,6 +57,7 @@ from runtime.safety.organization import (
 _LOG = logging.getLogger("octopus.team_tasks")
 
 TeamEventBroadcaster = Callable[[str, dict[str, Any]], Awaitable[None] | None]
+TaskProjection = Callable[[str, dict[str, Any]], None]
 RunnerFactory = Callable[..., Any]
 RoomMembershipResolver = Callable[[str], list[str]]
 
@@ -148,6 +149,8 @@ def create_team_tasks_router(
     jwt_audience: str | None = None,
     reset_callback: Any = None,
     team_event_broadcaster: TeamEventBroadcaster | None = None,
+    task_projection: TaskProjection | None = None,
+    task_delete_projection: Callable[[str], None] | None = None,
     runner_factory: RunnerFactory | None = None,
     room_membership_resolver: RoomMembershipResolver | None = None,
     max_concurrent_runs: int = _MAX_CONCURRENT_RUNS,
@@ -232,6 +235,22 @@ def create_team_tasks_router(
     def _save() -> None:
         _save_state(path, tasks)
 
+    def _project_task(task: TeamTaskWire) -> None:
+        if task_projection is None:
+            return
+        try:
+            task_projection(task.room_id, task.model_dump())
+        except Exception:  # noqa: BLE001 - projection must not block task writes
+            _LOG.warning("team task projection failed for %s", task.id, exc_info=True)
+
+    def _project_task_delete(task_id: str) -> None:
+        if task_delete_projection is None:
+            return
+        try:
+            task_delete_projection(task_id)
+        except Exception:  # noqa: BLE001 - projection must not block task deletion
+            _LOG.warning("team task delete projection failed for %s", task_id, exc_info=True)
+
     async def _broadcast_task_event(room_id: str, payload: dict[str, Any]) -> None:
         if team_event_broadcaster is None:
             return
@@ -302,6 +321,7 @@ def create_team_tasks_router(
             updated = current.model_copy(update={"updated_at": _now(), **updates})
             tasks[task_id] = updated
             _save()
+            _project_task(updated)
             return updated
 
     def _build_terminal_task(
@@ -347,6 +367,7 @@ def create_team_tasks_router(
                 return None
             tasks[task.id] = task
             _save()
+            _project_task(task)
             return task
 
     def _append_process_event(task_id: str, event: dict[str, Any]) -> None:
@@ -361,11 +382,13 @@ def create_team_tasks_router(
             ]
             events.append(_jsonable(event))
             metadata["process_events"] = events[-300:]
-            tasks[task_id] = current.model_copy(update={
+            updated = current.model_copy(update={
                 "metadata": metadata,
                 "updated_at": _now(),
             })
+            tasks[task_id] = updated
             _save()
+            _project_task(updated)
 
     def _current_metadata(task_id: str, *, fallback: dict[str, Any] | None = None) -> dict[str, Any]:
         with lock:
@@ -662,6 +685,7 @@ def create_team_tasks_router(
                 _record_terminal_event(updated, status="failed", error=error)
                 _persist_prebuilt_task(updated)
         finally:
+            projected_after_exit: TeamTaskWire | None = None
             with lock:
                 running.pop(task.id, None)
                 # Safety net: if the task is still "running" after the
@@ -669,7 +693,7 @@ def create_team_tasks_router(
                 # clause), mark it "failed" so it never gets stuck.
                 current = tasks.get(task.id)
                 if current is not None and current.status == "running":
-                    tasks[task.id] = current.model_copy(update={
+                    projected_after_exit = current.model_copy(update={
                         "status": "failed",
                         "completed_at": _now(),
                         "metadata": {
@@ -677,7 +701,10 @@ def create_team_tasks_router(
                             "error": "worker exited without setting terminal status",
                         },
                     })
+                    tasks[task.id] = projected_after_exit
                     _save()
+            if projected_after_exit is not None:
+                _project_task(projected_after_exit)
 
     def _reset_state() -> None:
         with lock:
@@ -717,6 +744,7 @@ def create_team_tasks_router(
         with lock:
             tasks[task.id] = task
             _save()
+        _project_task(task)
         await _broadcast_task_event(
             task.room_id,
             _task_payload(task, event="task_created"),
@@ -776,6 +804,7 @@ def create_team_tasks_router(
             tasks[task_id] = updated
             running[task_id] = source
             _save()
+        _project_task(updated)
 
         await _broadcast_task_event(
             updated.room_id,
@@ -912,6 +941,7 @@ def create_team_tasks_router(
             updated = current.model_copy(update=updates)
             tasks[task_id] = updated
             _save()
+        _project_task(updated)
         await _broadcast_task_event(
             updated.room_id,
             _task_payload(updated, event="task_updated"),
@@ -932,6 +962,7 @@ def create_team_tasks_router(
                 source.cancel(reason="team task deleted")
             if existed is not None:
                 _save()
+                _project_task_delete(existed.id)
         if existed is not None:
             await _broadcast_task_event(
                 existed.room_id,

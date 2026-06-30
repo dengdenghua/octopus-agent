@@ -72,6 +72,21 @@ export interface CollabRoomMessageResponse {
   seq: number;
 }
 
+export interface CollabRoomInput {
+  id?: string | null;
+  name?: string;
+  members?: Array<Record<string, unknown>>;
+  leaderId?: string | null;
+  mode?: CoworkMode | null;
+}
+
+export interface CollabRoomResponse {
+  ok: boolean;
+  created: boolean;
+  room: Record<string, unknown>;
+  session: CollaborationSession;
+}
+
 export type CoworkSearchKind =
   | "blackboard"
   | "task"
