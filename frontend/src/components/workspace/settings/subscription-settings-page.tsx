@@ -18,15 +18,14 @@ import {
   useCancelSubscription,
   useProfile,
 } from "@/core/account";
-import { swallow } from "@/core/utils/log";
 import { formatDate } from "@/core/utils/datetime";
 import { useI18n } from "@/core/i18n/hooks";
 import {
-  useCreatePaymentLink,
-  useMoliliGoods,
-  useMoliliLink,
-  type MoliliGoods,
-} from "@/core/molili";
+  useCreateOrder,
+  useOctGoods,
+  useOctLink,
+  type OctGoods,
+} from "@/core/oct";
 import { PayOrderDialog } from "@/components/workspace/pay-order-dialog";
 
 export default function SubscriptionSettingsPage() {
@@ -154,28 +153,20 @@ export default function SubscriptionSettingsPage() {
 
 /* Implementation note. */
 function formatCreditsSummary(
-  creditsInfo: string | undefined,
+  credits: number | undefined,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
-  if (!creditsInfo) return "";
-  try {
-    const parsed = JSON.parse(creditsInfo) as Record<string, unknown>;
-    const total = typeof parsed.total === "number" ? parsed.total : undefined;
-    if (typeof total === "number") {
-      return t.subscriptionSettings.totalCredits(total.toLocaleString());
-    }
-  } catch (e) {
-    swallow(e);
-  }
-  return creditsInfo;
+  if (typeof credits !== "number" || credits <= 0) return "";
+  return t.subscriptionSettings.totalCredits(credits.toLocaleString());
 }
 
 function goodsUnit(
-  goods: MoliliGoods,
+  goods: OctGoods,
   t: ReturnType<typeof useI18n>["t"],
 ): string {
-  if (goods.type === 1) return t.payOrder.perMonth;
-  if (goods.type === 2) return t.payOrder.perYear;
+  const days = goods.memberDays ?? 0;
+  if (days >= 365) return t.payOrder.perYear;
+  if (days >= 28) return t.payOrder.perMonth;
   return t.payOrder.oneTime;
 }
 
@@ -202,10 +193,10 @@ interface PayState {
 
 function OfficialPricingSection() {
   const { t } = useI18n();
-  const link = useMoliliLink();
+  const link = useOctLink();
   const linked = Boolean(link.data);
-  const goodsQuery = useMoliliGoods(linked);
-  const createLink = useCreatePaymentLink();
+  const goodsQuery = useOctGoods(linked);
+  const createOrder = useCreateOrder();
   const { data: profile } = useProfile();
   const isLoggedIn = Boolean(profile?.username);
   const [pay, setPay] = useState<PayState>({
@@ -213,24 +204,23 @@ function OfficialPricingSection() {
     paymentLink: null,
     orderNo: null,
   });
-  const [pendingId, setPendingId] = useState<number | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const onBuy = async (g: MoliliGoods) => {
+  const onBuy = async (g: OctGoods) => {
     setPendingId(g.id);
     try {
-      const resp = await createLink.mutateAsync(g.id);
-      const data = resp?.data;
-      if (!data?.paymentLink || !data?.orderNo) {
-        const msg = resp?.errMessage || resp?.errCode || t.payOrder.goodsFailed;
-        toast.error(msg);
+      const o = await createOrder.mutateAsync({ goodsId: g.id, currency: "CNY" });
+      if (!o?.payUrl || !o?.orderNo) {
+        toast.error(t.payOrder.goodsFailed);
         return;
       }
+      const priceFen = g.priceFen ?? 0;
       setPay({
         open: true,
-        paymentLink: data.paymentLink,
-        orderNo: data.orderNo,
-        goodsName: g.name,
-        amountYuan: (g.price / 100).toFixed(g.price % 100 === 0 ? 0 : 2),
+        paymentLink: o.payUrl,
+        orderNo: o.orderNo,
+        goodsName: g.title,
+        amountYuan: (priceFen / 100).toFixed(priceFen % 100 === 0 ? 0 : 2),
       });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t.payOrder.goodsFailed);
@@ -314,16 +304,9 @@ function OfficialPricingSection() {
     );
   }
 
-  const goods = (goodsQuery.data ?? []).slice().sort((a, b) => {
-    // Recommended first, then by sort order, then by price ascending.
-    const ar = a.isRecommend === 1 ? 1 : 0;
-    const br = b.isRecommend === 1 ? 1 : 0;
-    if (ar !== br) return br - ar;
-    const as = a.sort ?? 9999;
-    const bs = b.sort ?? 9999;
-    if (as !== bs) return as - bs;
-    return a.price - b.price;
-  });
+  const goods = (goodsQuery.data ?? [])
+    .slice()
+    .sort((a, b) => (a.priceFen ?? 0) - (b.priceFen ?? 0));
 
   return (
     <div className="space-y-6" data-subscription-pricing>
@@ -343,15 +326,11 @@ function OfficialPricingSection() {
         )}
       >
         {goods.map((g) => {
-          const isRecommended = g.isRecommend === 1;
+          const isRecommended = (g.memberDays ?? 0) >= 365;
           const isPending = pendingId === g.id;
-          const yuan = (g.price / 100).toFixed(g.price % 100 === 0 ? 0 : 2);
-          const originalYuan =
-            g.originalPrice && g.originalPrice > g.price
-              ? (g.originalPrice / 100).toFixed(
-                  g.originalPrice % 100 === 0 ? 0 : 2,
-                )
-              : null;
+          const priceFen = g.priceFen ?? 0;
+          const yuan = (priceFen / 100).toFixed(priceFen % 100 === 0 ? 0 : 2);
+          const originalYuan = null;
           return (
             <div
               key={g.id}
@@ -368,7 +347,7 @@ function OfficialPricingSection() {
                 </span>
               )}
 
-              <h3 className="text-sm font-bold text-center">{g.name}</h3>
+              <h3 className="text-sm font-bold text-center">{g.title}</h3>
 
               <div className="mt-3 text-center">
                 <span className="text-2xl font-bold tracking-tight">
@@ -383,9 +362,9 @@ function OfficialPricingSection() {
                   ¥{originalYuan}
                 </p>
               )}
-              {formatCreditsSummary(g.creditsInfo, t) && (
+              {formatCreditsSummary((g.credits ?? 0) + (g.bonusCredits ?? 0), t) && (
                 <p className="text-muted-foreground text-xs text-center mt-1">
-                  {formatCreditsSummary(g.creditsInfo, t)}
+                  {formatCreditsSummary((g.credits ?? 0) + (g.bonusCredits ?? 0), t)}
                 </p>
               )}
 

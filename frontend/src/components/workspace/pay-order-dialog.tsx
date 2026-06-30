@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useI18n } from "@/core/i18n/hooks";
-import { useConfirmOrder } from "@/core/molili";
+import { octApi } from "@/core/oct";
 
 const POLL_INTERVAL_MS = 2_000;
 const POLL_MAX_ATTEMPTS = 30; // 30 * 2s = 60s window
@@ -34,7 +34,6 @@ export function PayOrderDialog({
   amountYuan,
 }: PayOrderDialogProps) {
   const { t } = useI18n();
-  const confirm = useConfirmOrder();
   const [polling, setPolling] = useState(false);
   const cancelRef = useRef(false);
 
@@ -60,8 +59,8 @@ export function PayOrderDialog({
         return;
       }
       try {
-        const result = await confirm.mutateAsync(orderNo);
-        if (result.paid) {
+        const o = await octApi.orders.findByOrderNo(orderNo);
+        if (o.status === "PAID") {
           toast.success(t.payOrder.paidSuccess);
           setPolling(false);
           onOpenChange(false);
