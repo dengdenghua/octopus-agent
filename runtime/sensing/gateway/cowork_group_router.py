@@ -242,6 +242,49 @@ def create_cowork_group_router(
             }
         return {"thread_id": thread_id, **status}
 
+    @router.get("/api/cowork/{thread_id}/health")
+    def health(thread_id: str) -> dict[str, Any]:
+        """Unified operational health for a collaboration thread — one call for
+        an ops panel: runner state, task queue + failure reasons, presence,
+        mode/roster, and recent events. Read-only (like presence/search)."""
+        from runtime.memory.cowork.presence import group_presence
+
+        async_store = _async_store()
+        tasks = async_store.list(thread_id)
+        failures = [
+            {"task_id": t.task_id, "assignee": t.assignee, "error": t.result or ""}
+            for t in tasks
+            if getattr(t, "status", "") == "failed"
+        ][:10]
+        if runtime is not None and hasattr(runtime, "status"):
+            rstatus = runtime.status(thread_id)
+            runner = {
+                "enabled": bool(rstatus.get("runner_enabled")),
+                "reason": rstatus.get("runner_reason") or "",
+            }
+        else:
+            runner = {"enabled": False, "reason": "runtime not attached"}
+
+        state = group_store.state(thread_id)
+        members = group_presence(group_store, _presence_store(), thread_id)
+        events = group_store.events(thread_id)
+        return {
+            "thread_id": thread_id,
+            "mode": state.mode,
+            "roster_size": len(state.roster),
+            "runner": runner,
+            "tasks": {
+                "counts": async_store.counts(thread_id),
+                "failures": failures,
+            },
+            "presence": {
+                "members": len(members),
+                "online": sum(1 for m in members if m.online),
+                "unread": sum(m.unread for m in members),
+            },
+            "recent_events": [e.to_dict() for e in events[-10:]],
+        }
+
     @router.post("/api/cowork/{thread_id}/tasks", dependencies=[Depends(_auth_dep)])
     def assign_task(thread_id: str, body: AssignBody, request: Request) -> dict[str, Any]:
         """Give a member a task to work in the background; result lands on the

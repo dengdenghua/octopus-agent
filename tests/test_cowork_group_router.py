@@ -203,3 +203,29 @@ def test_app_cowork_router_uses_shared_runtime_store(tmp_path, monkeypatch) -> N
     summary = client.get("/api/cowork/thread-shared/tasks/summary").json()
     assert summary["task_counts"]["pending"] == 1
     assert summary["runner_enabled"] is False
+
+
+def test_health_endpoint_aggregates_runner_tasks_presence(tmp_path) -> None:
+    from runtime.memory.cowork.async_work import AsyncWorkStore
+
+    store = GroupStore(base_dir=tmp_path)
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(store=store))
+    c = TestClient(app)
+    t = "thread-health"
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "user", "kind": "human"})
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "alice", "kind": "agent"})
+
+    # Seed a failed task via the same-dir store the router reads.
+    aw = AsyncWorkStore(base_dir=store.base_dir, group_store=store)
+    task = aw.assign(t, "alice", "do x", actor="user")
+    aw.fail(task.task_id, "boom")
+
+    h = c.get(f"/api/cowork/{t}/health").json()
+    assert h["roster_size"] == 2
+    assert h["mode"] in ("chat", "cluster", "swarm", "project")
+    assert h["runner"]["enabled"] is False  # no runtime attached in this client
+    assert h["tasks"]["counts"]["failed"] == 1
+    assert h["tasks"]["failures"][0]["error"] == "boom"
+    assert h["presence"]["members"] == 2
+    assert len(h["recent_events"]) >= 2
