@@ -32,6 +32,7 @@ class CollaborationSession:
     tasks: list[dict[str, Any]]
     presence: list[dict[str, Any]]
     room_messages: list[dict[str, Any]]  # linked room's recent transcript, if any
+    room_participants: list[dict[str, Any]]  # linked room's participant config, if any
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -43,6 +44,7 @@ class CollaborationSession:
             "tasks": self.tasks,
             "presence": self.presence,
             "room_messages": self.room_messages,
+            "room_participants": self.room_participants,
         }
 
 
@@ -53,6 +55,7 @@ def resolve_session(
     async_store: Any = None,
     presence_store: Any = None,
     room_message_store: Any = None,
+    room_participants_provider: Any = None,
 ) -> CollaborationSession:
     """Fold the canonical thread into one session view. ``async_store`` /
     ``presence_store`` are reused if given, else built from the group store's
@@ -77,11 +80,18 @@ def resolve_session(
         ]
 
     room_messages: list[dict[str, Any]] = []
-    if state.room_id and room_message_store is not None:
-        try:
-            room_messages = room_message_store.history(state.room_id, limit=50)
-        except Exception:  # noqa: BLE001 — linked-room transcript is best-effort
-            room_messages = []
+    room_participants: list[dict[str, Any]] = []
+    if state.room_id:
+        if room_message_store is not None:
+            try:
+                room_messages = room_message_store.history(state.room_id, limit=50)
+            except Exception:  # noqa: BLE001 — linked-room transcript is best-effort
+                room_messages = []
+        if room_participants_provider is not None:
+            try:
+                room_participants = room_participants_provider(state.room_id) or []
+            except Exception:  # noqa: BLE001 — linked-room roster is best-effort
+                room_participants = []
 
     return CollaborationSession(
         session_id=thread_id,
@@ -92,6 +102,7 @@ def resolve_session(
         tasks=tasks,
         presence=presence,
         room_messages=room_messages,
+        room_participants=room_participants,
     )
 
 

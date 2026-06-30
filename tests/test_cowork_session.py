@@ -59,7 +59,21 @@ def test_unlinked_session_has_no_room_messages(tmp_path) -> None:
     rms.append("room-9", text="orphan", participant_id="p", display_name="P")
     # no link → the room's messages are NOT pulled in
     s = resolve_session(store, "t1", room_message_store=rms)
-    assert s.room_id is None and s.room_messages == []
+    assert s.room_id is None and s.room_messages == [] and s.room_participants == []
+
+
+def test_session_folds_room_participants_via_provider(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
+                                   target_kind="agent"))
+    link_room(store, "t1", "room-9")
+    s = resolve_session(
+        store, "t1",
+        room_participants_provider=lambda rid: (
+            [{"id": "p1", "display_name": "Bob"}] if rid == "room-9" else []
+        ),
+    )
+    assert [p["display_name"] for p in s.room_participants] == ["Bob"]
 
 
 def _client(tmp_path) -> TestClient:
@@ -89,3 +103,31 @@ def test_collab_endpoints(tmp_path) -> None:
     assert sess["blackboard"]["k"] == "v"
     assert [m["text"] for m in sess["room_messages"]] == ["room line"]
     assert "presence" in sess and "tasks" in sess
+
+
+def test_collab_endpoint_includes_room_participants(tmp_path) -> None:
+    from runtime.sensing.gateway.team_rooms_router import (
+        TeamParticipantWire,
+        TeamRoomWire,
+        _save_state,
+    )
+
+    # Seed the team_rooms store the cowork router will read.
+    tr_path = tmp_path / "team_rooms.json"
+    room = TeamRoomWire(
+        id="room-9", name="R", created_at="t0", updated_at="t0",
+        participants=[TeamParticipantWire(id="p1", display_name="Bob", joined_at="t0")],
+    )
+    _save_state(tr_path, {"room-9": room})
+
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(
+        store=GroupStore(base_dir=tmp_path), team_rooms_state_path=tr_path,
+    ))
+    c = TestClient(app)
+    c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
+    c.post("/api/collab/t1/link-room", json={"room_id": "room-9"})
+
+    sess = c.get("/api/collab/t1").json()
+    assert sess["room_id"] == "room-9"
+    assert [p["display_name"] for p in sess["room_participants"]] == ["Bob"]

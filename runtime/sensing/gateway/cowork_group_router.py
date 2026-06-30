@@ -86,6 +86,7 @@ def create_cowork_group_router(
     store: GroupStore | None = None,
     async_store: Any = None,
     room_message_store: Any = None,
+    team_rooms_state_path: Any = None,
     runtime: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -128,6 +129,20 @@ def create_cowork_group_router(
             store = RoomMessageStore()
             _room_msg_holder["v"] = store
         return store
+
+    def _room_participants(room_id: str) -> list[dict[str, Any]]:
+        """Read a linked room's participant config from the team_rooms store
+        (read-only bridge — the team_rooms router owns the file)."""
+        from pathlib import Path
+
+        from runtime.platform.process.paths import app_paths
+        from runtime.sensing.gateway.team_rooms_router import _load_state
+
+        path = team_rooms_state_path or (app_paths().data_dir / "team_rooms.json")
+        room = _load_state(Path(path)).get(room_id)
+        if room is None:
+            return []
+        return [p.model_dump() for p in room.participants]
 
     def _actor(request: Request) -> str:
         from runtime.adapters.web_auth import _resolve_actor
@@ -173,6 +188,7 @@ def create_cowork_group_router(
             group_store, thread_id,
             async_store=_async_store(), presence_store=_presence_store(),
             room_message_store=_room_message_store(),
+            room_participants_provider=_room_participants,
         )
         return session.to_dict()
 
