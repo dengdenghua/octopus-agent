@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextvars
 import json
 import os
 from collections.abc import Iterator
@@ -16,11 +15,8 @@ except ImportError:  # pragma: no cover
     HTTPX_AVAILABLE = False
     httpx = None  # type: ignore[assignment]
 
+from .actor_context import current_actor  # noqa: F401 — re-export: moved to a neutral home
 from .models import CostEntry, ModelRequest, ModelResponse, ModelRouter, ModelStreamEvent
-
-current_actor: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "molili_router_current_actor", default=None,
-)
 
 
 class MoliliCredentialsRequired(RuntimeError):

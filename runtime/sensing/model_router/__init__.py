@@ -1,4 +1,7 @@
 
+from .actor_context import (
+    current_actor as molili_current_actor,
+)
 from .capability_probe import (
     clear_capability_cache,
     get_cached_capabilities,
@@ -19,9 +22,6 @@ from .models import (
 from .molili_router import (
     MoliliCredentialsRequired,
     MoliliModelRouter,
-)
-from .molili_router import (
-    current_actor as molili_current_actor,
 )
 from .multi_router import DispatchRecord, MultiModelRouter, RouteAttempt
 from .ollama_router import OllamaModelRouter, OllamaRouterError

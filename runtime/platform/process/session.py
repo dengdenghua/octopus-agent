@@ -150,7 +150,7 @@ def session_scope(session: Session) -> Iterator[Session]:
     # avoid a cycle if this module is imported before eyes is ready.
     molili_tok = None
     try:
-        from runtime.sensing.model_router.molili_router import (
+        from runtime.sensing.model_router.actor_context import (
             current_actor as _molili_actor,
         )
         molili_tok = _molili_actor.set(session.actor) if session.actor else None
@@ -164,7 +164,7 @@ def session_scope(session: Session) -> Iterator[Session]:
         _current_agent_id.reset(tok_agent)
         if molili_tok is not None:
             try:
-                from runtime.sensing.model_router.molili_router import (
+                from runtime.sensing.model_router.actor_context import (
                     current_actor as _molili_actor,
                 )
                 _molili_actor.reset(molili_tok)
@@ -188,7 +188,7 @@ def bind_thread_session(
     tok_agent = _current_agent_id.set(session.agent_id)
     tok_molili: Token | None = None
     try:
-        from runtime.sensing.model_router.molili_router import (
+        from runtime.sensing.model_router.actor_context import (
             current_actor as _molili_actor,
         )
         if session.actor:
@@ -210,7 +210,7 @@ def unbind_thread_session(
     _current_agent_id.reset(tok_agent)
     if tok_molili is not None:
         try:
-            from runtime.sensing.model_router.molili_router import (
+            from runtime.sensing.model_router.actor_context import (
                 current_actor as _molili_actor,
             )
             _molili_actor.reset(tok_molili)

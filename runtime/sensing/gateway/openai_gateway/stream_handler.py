@@ -402,7 +402,7 @@ def _stream_chat_wrapped(
     import json
 
     from runtime.memory.journal.journal_context import _AGENT_ID, _CONVERSATION_ID
-    from runtime.sensing.model_router.molili_router import current_actor as _molili_actor_ctx
+    from runtime.sensing.model_router.actor_context import current_actor as _molili_actor_ctx
 
     # ContextVars are shared across coroutines that reuse the same
     # OS thread (Starlette's SSE streams live in a threadpool). If we

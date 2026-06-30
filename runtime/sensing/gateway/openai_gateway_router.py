@@ -496,7 +496,7 @@ def create_openai_router(
         # orchestration. Runs BEFORE reflex so it's never short-circuited by
         # the trivial-input fast path.
         if is_mix_model(requested_model):
-            from runtime.sensing.model_router.molili_router import (
+            from runtime.sensing.model_router.actor_context import (
                 current_actor as _molili_actor_ctx,
             )
             _mix_agent_ctx = (
@@ -551,7 +551,7 @@ def create_openai_router(
             selected_agent.agent_id if selected_agent is not None else None
         )
 
-        from runtime.sensing.model_router.molili_router import current_actor as _molili_actor_ctx
+        from runtime.sensing.model_router.actor_context import current_actor as _molili_actor_ctx
 
         if stream:
             return StreamingResponse(
