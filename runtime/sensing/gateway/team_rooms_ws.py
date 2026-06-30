@@ -11,8 +11,10 @@ builds once and passes to a thin ``@router.websocket`` wrapper.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from collections.abc import Awaitable, Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import TYPE_CHECKING, Any
@@ -51,6 +53,19 @@ if TYPE_CHECKING:
 # persist messages), so this is a small in-memory transcript window.
 _RING_SIZE = 20
 
+# Single background worker for durable message writes — keeps synchronous
+# sqlite I/O off the WS event loop and serializes appends (no write contention).
+_PERSIST_POOL: ThreadPoolExecutor | None = None
+
+
+def _persist_pool() -> ThreadPoolExecutor:
+    global _PERSIST_POOL
+    if _PERSIST_POOL is None:
+        _PERSIST_POOL = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="room-persist",
+        )
+    return _PERSIST_POOL
+
 
 @dataclass
 class TeamRoomWsContext:
@@ -84,6 +99,10 @@ class TeamRoomWsContext:
     # responder has context. The router hands over one shared empty dict; the
     # handler appends as messages land and trims to ``_RING_SIZE``.
     recent_messages: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    # Durable message log (optional injection): when set, every remembered line
+    # is also appended here so room transcripts survive reconnect/restart and
+    # can be caught up on / searched. None disables persistence (back-compat).
+    message_store: Any = None
 
 
 def _remember_line(
@@ -104,6 +123,17 @@ def _remember_line(
         })
         if len(buf) > _RING_SIZE:
             del buf[: len(buf) - _RING_SIZE]
+    # Durable persistence (best-effort): so the transcript survives beyond the
+    # in-memory ring. Offloaded to a single background worker — the store does
+    # synchronous sqlite I/O, which must never run on the WS event loop (it
+    # would block the broadcast). One worker serializes writes (no contention).
+    store = ctx.message_store
+    if store is not None:
+        with contextlib.suppress(Exception):
+            _persist_pool().submit(
+                store.append, team_id,
+                text=text, participant_id=participant_id, display_name=display_name,
+            )
 
 
 async def _twin_speak(

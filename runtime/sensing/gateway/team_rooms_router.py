@@ -169,6 +169,7 @@ def create_team_rooms_router(
     jwt_issuer: str | None = None,
     jwt_audience: str | None = None,
     reset_callback: Any = None,
+    room_message_store: Any = None,
     twin_responder: (
         Callable[
             [TeamRoomWire, TeamParticipantWire, list[dict[str, Any]]],
@@ -803,6 +804,13 @@ def create_team_rooms_router(
                 "participant": participant.model_dump(),
             }
 
+    if room_message_store is None:
+        from runtime.memory.cowork.room_messages import RoomMessageStore
+
+        room_message_store = RoomMessageStore(
+            base_dir=(state_path.parent / "teamroom") if state_path else None,
+        )
+
     _ws_ctx = TeamRoomWsContext(
         teams=teams,
         lock=lock,
@@ -814,7 +822,21 @@ def create_team_rooms_router(
         broadcast_floor=_broadcast_floor,
         active_participant=_active_participant,
         twin_responder=twin_responder,
+        message_store=room_message_store,
     )
+
+    @router.get("/api/teams/{team_id}/messages")
+    def get_room_messages(
+        team_id: str, limit: int = 200, after_seq: int = 0, q: str = "",
+    ) -> dict[str, Any]:
+        """Durable room transcript — reconnect catch-up (``after_seq``) and
+        search (``q``). Closes the gap where room chat was live-only / a 20-line
+        in-memory ring."""
+        if q.strip():
+            messages = room_message_store.search(team_id, q, limit=limit)
+        else:
+            messages = room_message_store.history(team_id, limit=limit, after_seq=after_seq)
+        return {"team_id": team_id, "messages": messages}
 
     @router.websocket("/api/teams/{team_id}/ws")
     async def team_room_ws_route(ws: WebSocket, team_id: str) -> None:
