@@ -134,6 +134,32 @@ def create_cowork_group_router(
         ]
         return {"nominated": gate(participants, text, threshold=threshold)}
 
+    @router.get("/api/cowork/{thread_id}/search")
+    def search(
+        thread_id: str,
+        q: str = "",
+        limit: int = 20,
+        kinds: str = "",
+        until_seq: int | None = None,
+    ) -> dict[str, Any]:
+        """Replayable group search across the shared blackboard, async tasks,
+        and the membership/mode event log. ``kinds`` is a comma-separated
+        subset of ``blackboard,task,event`` (default all); ``until_seq`` bounds
+        the event scan to a past point (time-travel)."""
+        from runtime.memory.cowork.search import search_group
+
+        kind_filter = tuple(k.strip() for k in kinds.split(",") if k.strip()) or None
+        hits = search_group(
+            group_store,
+            thread_id,
+            q,
+            limit=max(1, min(100, limit)),
+            kinds=kind_filter,
+            until_seq=until_seq,
+            async_store=_async_store(),
+        )
+        return {"thread_id": thread_id, "query": q, "hits": [h.to_dict() for h in hits]}
+
     @router.get("/api/cowork/{thread_id}/catchup/{member_id}")
     def catchup(thread_id: str, member_id: str) -> dict[str, Any]:
         """Catch-up brief for a member (roster + shared board + grant scope). The

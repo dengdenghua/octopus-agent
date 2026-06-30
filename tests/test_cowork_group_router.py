@@ -59,6 +59,29 @@ def test_invalid_mode_rejected(tmp_path) -> None:
     assert c.post("/api/cowork/t/mode", json={"mode": "bogus"}).status_code == 400
 
 
+def test_search_endpoint_spans_surfaces_and_filters(tmp_path) -> None:
+    c = _client(tmp_path)
+    t = "thread-search"
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "nutrition-expert", "kind": "agent"})
+    c.post(f"/api/cowork/{t}/blackboard", json={"key": "decision", "value": "enter nutrition"})
+
+    body = c.get(f"/api/cowork/{t}/search", params={"q": "nutrition"}).json()
+    assert body["query"] == "nutrition"
+    kinds = {h["kind"] for h in body["hits"]}
+    assert "blackboard" in kinds and "event" in kinds
+
+    # kinds filter narrows the surfaces searched.
+    only_board = c.get(
+        f"/api/cowork/{t}/search", params={"q": "nutrition", "kinds": "blackboard"}
+    ).json()["hits"]
+    assert {h["kind"] for h in only_board} == {"blackboard"}
+
+    # Empty query is a clean empty result, not an error.
+    empty = c.get(f"/api/cowork/{t}/search", params={"q": ""})
+    assert empty.status_code == 200
+    assert empty.json()["hits"] == []
+
+
 def test_invite_requires_target(tmp_path) -> None:
     c = _client(tmp_path)
     assert c.post("/api/cowork/t/members", json={"kind": "agent"}).status_code == 422
