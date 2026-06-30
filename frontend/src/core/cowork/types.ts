@@ -1,6 +1,6 @@
 export type CoworkMemberKind = "agent" | "human";
 export type CoworkMemberRole = "participant" | "observer";
-export type CoworkMode = "chat" | "cluster" | "swarm";
+export type CoworkMode = "chat" | "cluster" | "swarm" | "project";
 export type CoworkGrantScope = "all" | "from_join" | "range" | "summary";
 
 export interface CoworkContextGrant {

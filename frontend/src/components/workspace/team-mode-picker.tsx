@@ -1,5 +1,6 @@
 import {
   BoxesIcon,
+  FlagIcon,
   GitBranchIcon,
   MessageCircleIcon,
   type LucideIcon,
@@ -13,10 +14,12 @@ import { cn } from "@/lib/utils";
  * - chat (单聊): one agent answers — @someone routes to them, else the leader.
  * - cluster (集群): the leader decomposes → dispatches → each role works → merges.
  * - swarm (蜂群): agents react to a shared blackboard, parallel & leaderless.
+ * - project (项目): milestone-driven — handed to the Project OS to break into
+ *   a task DAG, execute, and gate on acceptance.
  * The backend still auto-picks cluster vs swarm by graph shape when no explicit
  * pick is sent; choosing 集群/蜂群 forces that engine (serve_mesh "0"/"1").
  */
-export type TeamMode = "chat" | "cluster" | "swarm";
+export type TeamMode = "chat" | "cluster" | "swarm" | "project";
 
 export type LegacyTeamMode =
   | "cowork"
@@ -29,7 +32,12 @@ export type LegacyTeamMode =
 export function normalizeTeamMode(
   value: TeamMode | LegacyTeamMode | string | null | undefined,
 ): TeamMode {
-  if (value === "cluster" || value === "swarm" || value === "chat") {
+  if (
+    value === "cluster"
+    || value === "swarm"
+    || value === "chat"
+    || value === "project"
+  ) {
     return value;
   }
   // Legacy: the old single "cowork/group" auto-picked the engine — map it to
@@ -59,9 +67,14 @@ export const TEAM_MODE_META: Record<
     description: "围一块黑板各自反应、并行涌现（无中心、自组织）",
     icon: BoxesIcon,
   },
+  project: {
+    label: "项目",
+    description: "里程碑驱动 · 交给 Project OS 拆任务 → 执行 → 验收",
+    icon: FlagIcon,
+  },
 };
 
-export const TEAM_MODES: TeamMode[] = ["chat", "cluster", "swarm"];
+export const TEAM_MODES: TeamMode[] = ["chat", "cluster", "swarm", "project"];
 
 /** Per-turn engine force the backend reads (集群→sequential, 蜂群→mesh). */
 export function serveMeshForMode(mode: TeamMode): "0" | "1" | undefined {
