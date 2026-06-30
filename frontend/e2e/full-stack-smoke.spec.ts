@@ -34,6 +34,19 @@ async function reactFill(page: Page, selector: string, text: string) {
   }, text);
 }
 
+async function inputValue(page: Page, selector: string) {
+  return page.evaluate((targetSelector) => {
+    const node = document.querySelector(targetSelector);
+    if (
+      node instanceof HTMLInputElement ||
+      node instanceof HTMLTextAreaElement
+    ) {
+      return node.value;
+    }
+    return null;
+  }, selector);
+}
+
 async function waitForThreadState(
   page: Page,
   threadId: string,
@@ -170,6 +183,13 @@ test.describe("Full-stack golden smoke", () => {
     await expect(page.getByTestId("chat-composer-input")).toBeVisible({
       timeout: 20_000,
     });
+
+    await page.getByTestId("chat-tools-trigger").click();
+    await page.getByTestId("chat-insert-codex-plan").click();
+    await expect
+      .poll(() => inputValue(page, '[data-testid="chat-composer-input"]'))
+      .toBe("/codex plan\n");
+    await expect(page.getByTestId("chat-send-button")).toBeDisabled();
 
     const agents = await request.get(`${backendBase}/api/agents`);
     expect(agents.ok()).toBeTruthy();

@@ -1157,6 +1157,7 @@ export function ChatInputBox({
                   {t.chatInputBox.composerInsertions}
                 </DropdownMenuLabel>
                 <DropdownMenuItem
+                  data-testid="chat-insert-codex-plan"
                   onClick={() => insertCodexModeMarker("plan")}
                   className="gap-2 rounded-md text-[13px]"
                 >
@@ -1164,6 +1165,7 @@ export function ChatInputBox({
                   {t.chatInputBox.insertCodexPlan}
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  data-testid="chat-insert-codex-spec"
                   onClick={() => insertCodexModeMarker("spec")}
                   className="gap-2 rounded-md text-[13px]"
                 >
@@ -1171,6 +1173,7 @@ export function ChatInputBox({
                   {t.chatInputBox.insertCodexSpec}
                 </DropdownMenuItem>
                 <DropdownMenuItem
+                  data-testid="chat-insert-codex-goal"
                   onClick={() => insertCodexModeMarker("goal")}
                   className="gap-2 rounded-md text-[13px]"
                 >
