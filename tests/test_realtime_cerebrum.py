@@ -620,6 +620,15 @@ def test_cowork_project_mode_runs_project_os(
     assert len(todo_items) == 1
     assert todo_items[0]["explanation"].startswith("Project OS")
     assert all(entry["status"] == "completed" for entry in todo_items[0]["plan"])
+    trace_items = [
+        item for item in turn["items"]
+        if item["type"] == "reasoning"
+        and "octopus.projectos.run_trace.v1" in item.get("content", "")
+    ]
+    assert len(trace_items) == 1
+    trace = json.loads(trace_items[0]["content"])
+    assert trace["schema"] == "octopus.projectos.run_trace.v1"
+    assert trace["tick_events"]
     projects = project_store.list_projects()
     assert len(projects) == 1
     project = projects[0]
@@ -703,12 +712,21 @@ def test_cowork_project_mode_reuses_active_project(
         item for item in second["response"].result["turn"]["items"]
         if item["type"] == "todo-list"
     ]
+    second_trace_items = [
+        item for item in second["response"].result["turn"]["items"]
+        if item["type"] == "reasoning"
+        and "octopus.projectos.run_trace.v1" in item.get("content", "")
+    ]
     assert "Project OS 已接管并运行项目" in first_text
     assert "Project OS 已继续推进项目" in second_text
     assert first_todos
     assert any(entry["status"] == "in_progress" for entry in first_todos[-1]["plan"])
     assert second_todos
     assert all(entry["status"] == "completed" for entry in second_todos[-1]["plan"])
+    assert second_trace_items
+    second_trace = json.loads(second_trace_items[-1]["content"])
+    assert second_trace["reused"] is True
+    assert second_trace["project_id"] == first_project_id
 
 
 def test_blocked_topology_id_falls_back_to_react(

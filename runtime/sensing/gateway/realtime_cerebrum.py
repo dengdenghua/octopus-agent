@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,7 @@ from runtime.protocol import (
     AgentMessageItem,
     ItemStatus,
     JsonRpcErrorCode,
+    ReasoningItem,
     ServerMethod,
     TodoEntry,
     TodoListItem,
@@ -1107,6 +1109,18 @@ class CerebrumRuntime:
         item.status = ItemStatus.COMPLETED
         await self._emit_item_completed(turn, log, emitter, item)
 
+    async def _emit_reasoning(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        item: ReasoningItem,
+    ) -> None:
+        turn.items.append(item)
+        await self._emit_item_started(turn, log, emitter, item)
+        item.status = ItemStatus.COMPLETED
+        await self._emit_item_completed(turn, log, emitter, item)
+
     async def _drive_project_os(
         self,
         turn: Turn,
@@ -1171,6 +1185,17 @@ class CerebrumRuntime:
         todo_item = _project_os_todo_item(state)
         if todo_item is not None:
             await self._emit_todo_list(turn, log, emitter, todo_item)
+        trace = state.get("trace")
+        if isinstance(trace, dict):
+            await self._emit_reasoning(
+                turn,
+                log,
+                emitter,
+                ReasoningItem(
+                    summary=["Project OS run trace"],
+                    content=json.dumps(trace, ensure_ascii=False, sort_keys=True),
+                ),
+            )
         await self._emit_agent_message(
             turn,
             log,

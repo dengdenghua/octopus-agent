@@ -97,6 +97,9 @@ def test_project_from_group_can_reuse_active_thread_project(tmp_path) -> None:
     )
     pid = first["project"]["id"]
     assert first["reused"] is False
+    assert first["trace"]["schema"] == "octopus.projectos.run_trace.v1"
+    assert first["trace"]["tick_events"]
+    assert first["trace"]["milestones"][0]["assignments"]
     assert store.project_for_thread("thread-1").id == pid
     assert first["project"]["status"] == "running"
 
@@ -113,6 +116,8 @@ def test_project_from_group_can_reuse_active_thread_project(tmp_path) -> None:
     )
     assert second["project"]["id"] == pid
     assert second["reused"] is True
+    assert second["trace"]["reused"] is True
+    assert second["trace"]["project_id"] == pid
     assert second["result"]["final_status"] == "done"
 
 
