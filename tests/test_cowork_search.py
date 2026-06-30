@@ -123,3 +123,33 @@ def test_results_span_all_three_surfaces(tmp_path) -> None:
 
     hits = search_group(store, "t1", "merger", async_store=async_store)
     assert {h.kind for h in hits} == {"blackboard", "task", "event"}
+
+
+def test_search_includes_linked_room_transcript(tmp_path) -> None:
+    """When a room is linked, session search also covers the room transcript."""
+    from runtime.memory.cowork.room_messages import RoomMessageStore
+    from runtime.memory.cowork.session import link_room
+
+    store = GroupStore(base_dir=tmp_path)
+    store.blackboard("t1").write("decision", "enter nutrition", writer="u")
+    rms = RoomMessageStore(base_dir=tmp_path / "rooms")
+    rms.append("room-9", text="the nutrition rollout plan", participant_id="p", display_name="Bob")
+    link_room(store, "t1", "room-9")
+
+    hits = search_group(store, "t1", "nutrition", room_message_store=rms)
+    kinds = {h.kind for h in hits}
+    assert "blackboard" in kinds and "room_message" in kinds
+    rm = next(h for h in hits if h.kind == "room_message")
+    assert rm.ref["room_id"] == "room-9" and "nutrition" in rm.snippet.lower()
+
+
+def test_search_skips_room_when_unlinked(tmp_path) -> None:
+    from runtime.memory.cowork.room_messages import RoomMessageStore
+
+    store = GroupStore(base_dir=tmp_path)
+    store.blackboard("t1").write("k", "nutrition", writer="u")
+    rms = RoomMessageStore(base_dir=tmp_path / "rooms")
+    rms.append("room-9", text="nutrition orphan", participant_id="p", display_name="P")
+    # no link → room transcript is NOT searched
+    hits = search_group(store, "t1", "nutrition", room_message_store=rms)
+    assert {h.kind for h in hits} == {"blackboard"}

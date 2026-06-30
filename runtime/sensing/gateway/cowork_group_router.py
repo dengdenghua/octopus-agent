@@ -222,10 +222,11 @@ def create_cowork_group_router(
         kinds: str = "",
         until_seq: int | None = None,
     ) -> dict[str, Any]:
-        """Replayable group search across the shared blackboard, async tasks,
-        and the membership/mode event log. ``kinds`` is a comma-separated
-        subset of ``blackboard,task,event`` (default all); ``until_seq`` bounds
-        the event scan to a past point (time-travel)."""
+        """Replayable, session-wide search across the shared blackboard, async
+        tasks, the membership/mode event log, and (when a room is linked) the
+        room transcript. ``kinds`` is a comma-separated subset of
+        ``blackboard,task,event,room_message`` (default all); ``until_seq``
+        bounds the event scan to a past point (time-travel)."""
         from runtime.memory.cowork.search import search_group
 
         kind_filter = tuple(k.strip() for k in kinds.split(",") if k.strip()) or None
@@ -237,6 +238,7 @@ def create_cowork_group_router(
             kinds=kind_filter,
             until_seq=until_seq,
             async_store=_async_store(),
+            room_message_store=_room_message_store(),
         )
         return {"thread_id": thread_id, "query": q, "hits": [h.to_dict() for h in hits]}
 
