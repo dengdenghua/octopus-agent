@@ -163,7 +163,7 @@ export function CommandPalette() {
         keywords: "observability monitoring health",
       },
       {
-        to: "/workspace/diagnostics",
+        to: "/workspace/observability",
         label: t.sidebar.diagnostics,
         icon: StethoscopeIcon,
         keywords: "diagnostics debug troubleshoot",

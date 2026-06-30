@@ -157,34 +157,3 @@ class TestWorkerDecisionCache:
             decision_cache=cache,
         )
         assert w.decision_cache is cache
-
-
-# ─── make_enterprise_arm integration ────────────────────────
-
-
-@pytest.mark.skip(
-    reason="make_enterprise_arm factory was never implemented (and the enterprise "
-    "arm was dropped from presets in the roster reskin). EnterpriseDecisionCache "
-    "itself is covered by the classes above. Unskip if the factory is built."
-)
-class TestMakeEnterpriseArm:
-    def test_enterprise_arm_has_ganglion(self):
-        from runtime.core.graph_runtime import GraphRuntime
-        from runtime.execution.arms.presets import make_enterprise_arm
-
-        runtime = MagicMock(spec=GraphRuntime)
-        arm = make_enterprise_arm(runtime)
-        assert arm.decision_cache is not None
-        assert isinstance(arm.decision_cache, EnterpriseDecisionCache)
-        assert arm.arm_id == "enterprise_arm"
-        # cleanup
-        arm.decision_cache.stop()
-
-    def test_enterprise_arm_description_mentions_ganglion(self):
-        from runtime.core.graph_runtime import GraphRuntime
-        from runtime.execution.arms.presets import make_enterprise_arm
-
-        runtime = MagicMock(spec=GraphRuntime)
-        arm = make_enterprise_arm(runtime)
-        assert "Ganglion" in arm.description
-        arm.decision_cache.stop()

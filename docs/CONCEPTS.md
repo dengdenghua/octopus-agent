@@ -24,7 +24,7 @@ What each part means:
 | Workspace | The IDE-like control surface for humans | Frontend / UI |
 | Planner | Breaks a goal into steps or a task graph | Cerebrum |
 | Reflex Layer | Answers known/simple intents without an LLM round trip | SpinalCord |
-| Scheduler | Runs task graphs and coordinates execution | Ganglia（未实装）|
+| Scheduler | Runs task graphs and coordinates execution | Ganglia（GraphRuntime 已实装；独立 Ganglion 自治层未实装）|
 | Agent / Worker | A role-specific AI worker | Arm |
 | Skill / Tool | A callable capability used by agents | Sucker / Beak |
 | Event Bus | Carries typed events through the runtime | Nerves |

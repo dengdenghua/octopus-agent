@@ -2,15 +2,14 @@
  * Smoke tests for workspace panels that used to be easy to orphan:
  *
  *   - /workspace/intelligence -> <intelligence-panel.tsx>
- *   - agent collaboration status -> <swarm-panel.tsx>
  *   - /workspace/knowledge    -> <knowledge-graph-panel.tsx>
  *
  * What we verify
  * --------------
  *
  * 1. Each panel mounts without throwing (catches Rules-of-Hooks
- *    violations like the one in ``SwarmPanel`` where ``useMemo`` was
- *    called after an ``if (loading) return`` · that bug was silent
+ *    violations where ``useMemo`` was called after an ``if (loading) return``;
+ *    those bugs were silent
  *    under ``tsc`` + all the other tests · the only way to catch
  *    it is to actually render).
  * 2. After the loading indicator resolves, the empty-state content
@@ -25,8 +24,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
-// ArenaPanel uses useI18n heavily (``t.arena.title`` / ``t.arena.prompt``
-// etc.). Build a stub ``t`` where the top level is a plain object
+// Build a stub ``t`` where the top level is a plain object
 // (no render-a-Proxy-as-child hazard) · each top-level key is itself
 // a Proxy that returns its own property NAME as a string on any read ·
 // so ``t.arena.XYZ`` JSX just shows "XYZ" instead of throwing.
@@ -106,12 +104,9 @@ vi.mock("./messages/markdown-content", () => ({
   }) => <div className={className}>{content}</div>,
 }));
 
-import { ArenaPanel } from "./arena-panel";
 import EvolutionDashboard from "./evolution-dashboard";
 import { IntelligencePanel } from "./intelligence-panel";
 import { KnowledgeGraphPanel } from "./knowledge-graph-panel";
-import { SwarmPanel } from "./swarm-panel";
-import { WikiPanel } from "./wiki-panel";
 
 // ─── Global fetch stub ───────────────────────────────────────────
 //
@@ -217,23 +212,6 @@ function withProviders(node: React.ReactNode) {
   );
 }
 
-describe("SwarmPanel", () => {
-  it("mounts without throwing (hook-order regression guard)", async () => {
-    render(withProviders(<SwarmPanel />));
-    await waitFor(() => {
-      // Either the empty state OR the stats grid rendered · both
-      // are proof the post-loading code path ran without the
-      // "Rendered more hooks than during the previous render" crash.
-      expect(
-        screen.queryByText(/暂无并行任务/) ?? screen.queryByText(/总任务/),
-      ).toBeTruthy();
-    });
-    // React prints hook-order mismatches to console.error · assert
-    // we saw none.
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-  });
-});
-
 describe("KnowledgeGraphPanel", () => {
   it("renders empty-state content when KG is empty", async () => {
     render(withProviders(<KnowledgeGraphPanel />));
@@ -325,22 +303,6 @@ describe("IntelligencePanel", () => {
   });
 });
 
-describe("ArenaPanel", () => {
-  it("mounts in idle phase without throwing (hook-order regression guard)", async () => {
-    render(withProviders(<ArenaPanel />));
-    // Idle phase renders the prompt form first · the battle flow
-    // only starts after user submits · so we don't wait for any
-    // specific text, just for the next microtask to drain so any
-    // fetch-on-mount has had a chance to blow up.
-    await waitFor(() => {
-      // ArenaPanel has NO fetch-on-mount in idle phase · so the
-      // mount itself is the assertion. Just confirm React didn't
-      // emit any error during the sync render + microtask flush.
-      expect(consoleErrorSpy).not.toHaveBeenCalled();
-    });
-  });
-});
-
 describe("EvolutionDashboard", () => {
   it("mounts + fetches in parallel without hook-order or render errors", async () => {
     render(withProviders(<EvolutionDashboard />));
@@ -361,24 +323,3 @@ describe("EvolutionDashboard", () => {
   });
 });
 
-describe("WikiPanel", () => {
-  it("mounts and clears loading without render errors", async () => {
-    // WikiPanel does a lot on mount: /api/wiki/status + /api/wiki/docs
-    // + 8 parallel /api/fs/read calls for LEGACY_CANDIDATES. All stubs
-    // above resolve fast · the panel should land on a non-loading
-    // branch (either generate-wiki CTA when no docs exist, or the
-    // content shell when legacyDocs populated).
-    render(withProviders(<WikiPanel workDir="/tmp/mock-project" />));
-    await waitFor(() => {
-      // Loading path renders ``t.wiki.loadingWiki`` ("loadingWiki"
-      // under our i18n Proxy). Once the 10 parallel fetches settle,
-      // the loading branch should give way to either "noWikiYet" /
-      // "generateWiki" / the docs shell ("repoWiki" / "docs"). Any
-      // of these indicates successful mount; we just assert we're
-      // out of the loading spinner.
-      const loading = screen.queryByText("loadingWiki");
-      expect(loading).toBeNull();
-    });
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
-  });
-});

@@ -228,7 +228,7 @@ ok "Python dependencies installed"
 if [[ "$MINIMAL" -eq 0 ]]; then
     if [[ -d "frontend" ]]; then
         info "Installing frontend dependencies..."
-        (cd frontend && npm install)
+        (cd frontend && corepack enable 2>/dev/null; pnpm install --frozen-lockfile)
         ok "Frontend dependencies installed"
     else
         warn "frontend/ directory not found, skipping frontend setup"
@@ -274,6 +274,6 @@ echo "       python -m runtime serve"
 if [[ "$MINIMAL" -eq 0 ]]; then
     echo ""
     echo "    6. Start the frontend (in another terminal):"
-    echo "       cd ${PROJECT_DIR}/frontend && npm run dev"
+    echo "       cd ${PROJECT_DIR}/frontend && pnpm dev"
 fi
 echo ""

@@ -12,7 +12,7 @@ install:  ## Install development dependencies
 	pip install -e ".[dev]"
 
 install-all:  ## Install all optional dependencies
-	pip install -e ".[dev,serve,web,tracing,langfuse,discord,browser]"
+	pip install -e ".[dev,all]"
 
 quickstart:  ## Bootstrap local config and run environment checks
 	python -m runtime quickstart --non-interactive

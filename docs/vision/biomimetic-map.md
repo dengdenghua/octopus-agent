@@ -190,11 +190,13 @@ In code, organ names appear in three places:
 3. **Config keys**: `immunity.*`, `regeneration.*`
 
 Organs that exist **only as documentation concepts** (no code presence):
-- Ganglia, Skin, Beak (as a named module), Siphon (as a named module), Eyes (as a named module)
+- Beak (as a named module), Siphon (as a named module), Eyes (as a named module)
+
+Organs that are **partially or fully implemented** under engineering-named modules:
 
 These concepts are implemented under engineering-named modules:
-- Ganglia → not implemented
-- Skin → not implemented
+- Ganglia → partially implemented (`runtime/core/graph_runtime/runtime.py` — DAG execution done; autonomous per-arm Ganglion layer not done)
+- Skin → implemented (`runtime/sensing/normalize/sensors/file_watcher.py` — `FileWatcherSensor` with watchdog backend)
 - Beak → `tool_engine/executor.py`
 - Siphon → `protocol/` + `platform/ui/`
 - Eyes → `sensing/model_router/`

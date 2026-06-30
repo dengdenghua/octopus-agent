@@ -46,7 +46,7 @@
 | 职责 | 落在章鱼哪个器官/协议 |
 |---|---|
 | 目标分解为 TaskNode 树 | `cerebrum/` Planner |
-| 状态机驱动（pending/running/blocked/done）| `ganglia/` LocalRuntime（未实装）|
+| 状态机驱动（pending/running/blocked/done）| `core/graph_runtime/` GraphRuntime（已实装；独立 Ganglion 自治层未实装）|
 | Checkpoint + 断点续跑 | `genome/checkpoint/` |
 | JSONL trajectory 落盘 | `genome/journal/` |
 | 卡住探测 | `ink/` CircuitBreaker 的 `zero_gain_steps`（BDG-I5 附近）|
@@ -151,13 +151,16 @@
 
 | 信号 | 去向 | 实现位置 |
 |---|---|---|
-| 新 skill 候选 | 模块 3 | `regeneration/skill_forge/` ✅ |
-| workflow 改写建议 | 模块 2 | `regeneration/workflow_rewriter/` ❌ 缺口 |
-| KG 新增三元组 | 模块 4 | `regeneration/kg_updater/` ❌ 缺口 |
-| 记忆巩固指令 | 模块 5 | `regeneration/memory_consolidator/` ❌ 缺口 |
-| 上下文配方打分 | 模块 6 | `regeneration/recipe_evaluator/` ❌ 缺口 |
+| 新 skill 候选 | 模块 3 | `runtime/safety/recovery/skill_forge.py` ✅ |
+| workflow 改写建议 | 模块 2 | `runtime/safety/recovery/workflow_rewriter.py` ✅ |
+| KG 新增三元组 | 模块 4 | `runtime/safety/recovery/kg_updater.py` ✅ |
+| 记忆巩固指令 | 模块 5 | `runtime/safety/recovery/memory_consolidator.py` ✅ |
+| 上下文配方打分 | 模块 6 | `runtime/safety/recovery/recipe_evaluator.py` ✅ |
 
-**现状**：Regeneration 当前只有第一条完整（skill forge），另外四条都需要扩展。
+**现状**：五条信号全部已实装，由 `runtime/safety/recovery/scheduler.py` 的
+`RegenerationScheduler._tick_once()` 离线调度（每模块一个 tick，原子写
+`learned_*.json`）。逐模块的实装状态与代码证据见
+[implementation-status.md](implementation-status.md)。
 
 触发模式：
 - **实时**：每 N 次调用后（反射级别的小调整）
@@ -174,7 +177,7 @@
 | 器官 | 归入模块 |
 |---|---|
 | `cerebrum/` | 1 长任务 |
-| `ganglia/` | 1 长任务（未实装）|
+| `core/graph_runtime/` | 1 长任务（GraphRuntime 已实装；Ganglion 自治层未实装）|
 | `nerves/graph/` | 2 工作流 |
 | `suckers/` | 3 技能 |
 | `genome/knowledge/` | 4 KG |

@@ -88,9 +88,6 @@ const McpPage = lazy(() => import("./app/workspace/mcp/page"));
 const AgentsPage = lazy(() => import("./app/workspace/agents/page"));
 const AgentsNewPage = lazy(() => import("./app/workspace/agents/new/page"));
 const SkillsPage = lazy(() => import("./app/workspace/skills/page"));
-// /workspace/store now redirects to /workspace/agents (HR/agent market).
-// The StorePage component is unused but the file remains for browser/page.tsx
-// which still imports UnifiedStoreOverlay from the same module.
 const ChannelsPage = lazy(() => import("./app/workspace/channels/page"));
 const ArchitecturePage = lazy(
   () => import("./app/workspace/architecture/page"),

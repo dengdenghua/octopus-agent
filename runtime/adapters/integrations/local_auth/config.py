@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import bcrypt
 from pydantic import BaseModel, Field
 
 
@@ -13,6 +12,8 @@ def hash_password(plaintext: str) -> str:
     Returns a string in the format ``bcrypt:<hash>`` for forward
     compatibility and to distinguish from legacy sha256 hashes.
     """
+    import bcrypt
+
     pw_bytes = plaintext.encode("utf-8")
     hashed = bcrypt.hashpw(pw_bytes, bcrypt.gensalt(rounds=12))
     return f"bcrypt:{hashed.decode('utf-8')}"
@@ -21,6 +22,8 @@ def hash_password(plaintext: str) -> str:
 def verify_password(plaintext: str, hashed: str) -> bool:
     """Verify a plaintext password against a bcrypt or legacy sha256 hash."""
     if hashed.startswith("bcrypt:"):
+        import bcrypt
+
         stored = hashed[7:].encode("utf-8")
         return bcrypt.checkpw(plaintext.encode("utf-8"), stored)
     # Legacy sha256 fallback for migration

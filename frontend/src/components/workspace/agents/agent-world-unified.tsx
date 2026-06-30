@@ -23,8 +23,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -35,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -64,7 +67,7 @@ import { AgentCard } from "./agent-card";
 import { AgentRoleProfileDialog } from "./agent-role-profile-dialog";
 import { AgentWorldCard } from "./agent-world-card";
 import { LocalAgentConnectDialog } from "./local-agent-connect-dialog";
-import { LocalSkillDirectoryPanel } from "@/components/store/unified-store";
+import { LocalSkillDirectoryPanel } from "@/components/store/local-skill-directory-panel";
 import { SkillPacksTab } from "@/components/workspace/agents/skill-packs-tab";
 
 // ---------------------------------------------------------------------------
@@ -77,7 +80,6 @@ import {
   CATEGORY_ICONS,
   LOCAL_AGENT_IDS,
   LOCAL_AGENT_RANK,
-  localAgentToWorldAgent as _localAgentToWorldAgent,
   worldAgentToAgent,
   type AgentCategoryFilter,
 } from "./agent-world-data";
@@ -172,12 +174,12 @@ function AgentPackImportPanel({ onImported }: { onImported: () => void }) {
 
   const counts: Array<[string, number]> = preview
     ? [
-        ["Plugins", preview.plugins.length],
-        ["Apps", preview.apps.length],
-        ["Agents", preview.agents.length],
-        ["Skills", preview.skills.length],
-        ["Commands", preview.commands.length],
-        ["MCP", preview.mcp_servers.length],
+        [t.agentWorld.packContentLabels.plugins, preview.plugins.length],
+        [t.agentWorld.packContentLabels.apps, preview.apps.length],
+        [t.agentWorld.packContentLabels.agents, preview.agents.length],
+        [t.agentWorld.packContentLabels.skills, preview.skills.length],
+        [t.agentWorld.packContentLabels.commands, preview.commands.length],
+        [t.agentWorld.packContentLabels.mcp, preview.mcp_servers.length],
       ]
     : [];
 
@@ -401,17 +403,6 @@ function AgentsTab({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-1 rounded-lg border border-border bg-background px-3 py-2 md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-2">
-          <BotIcon className="h-4 w-4 shrink-0 text-primary" />
-          <div className="text-sm font-semibold">
-            {t.agentWorldUnified.roleLibrary}
-          </div>
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {t.agentWorldUnified.roleLibraryDescription}
-        </div>
-      </div>
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 flex-1">
           <div
@@ -442,9 +433,11 @@ function AgentsTab({
                 >
                   <CategoryIcon className="mr-1.5 h-3.5 w-3.5" />
                   {label}
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    {count}
-                  </span>
+                  {category !== "all" && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      {count}
+                    </span>
+                  )}
                 </Button>
               );
             })}
@@ -545,17 +538,6 @@ import {
 } from "@/core/plugins/api";
 import type { PluginInfo, HubPluginInfo } from "@/core/plugins/types";
 import { getBackendBaseURL } from "@/core/config";
-import { Input as UiInput } from "@/components/ui/input";
-import { Label as UiLabel } from "@/components/ui/label";
-import {
-  Dialog as UiDialog,
-  DialogClose as UiDialogClose,
-  DialogContent as UiDialogContent,
-  DialogDescription as UiDialogDescription,
-  DialogFooter as UiDialogFooter,
-  DialogHeader as UiDialogHeader,
-  DialogTitle as UiDialogTitle,
-} from "@/components/ui/dialog";
 import {
   CheckCircle as CheckCircleIcon,
   XCircle as XCircleIcon,
@@ -576,30 +558,6 @@ function pluginImageUrl(plugin: PluginInfo | HubPluginInfo): string | null {
   return `${getBackendBaseURL()}${raw}`;
 }
 
-function pluginSurfaceBadges(entry: PluginEntry): string[] {
-  if (entry.source === "hub") {
-    const labels = entry.plugin.capabilities
-      .map((capability) => capability.type)
-      .filter(Boolean)
-      .map((type) => {
-        if (type === "skill") return "技能";
-        if (type === "channel") return "通道";
-        if (type === "api") return "API";
-        if (type === "config_ui") return "配置";
-        return type;
-      });
-    return Array.from(new Set(labels)).slice(0, 4);
-  }
-  const surfaces = entry.plugin.smoke?.surfaces;
-  const badges: string[] = [];
-  if (surfaces?.mcp) badges.push("MCP");
-  if (surfaces?.apps) badges.push("App");
-  if (surfaces?.skills) badges.push("技能");
-  if (surfaces?.commands) badges.push("命令");
-  if (surfaces?.capabilities && !badges.includes("API")) badges.push("能力");
-  return badges.slice(0, 5);
-}
-
 function HubPluginConfigDialog({
   plugin,
   open,
@@ -609,6 +567,7 @@ function HubPluginConfigDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useI18n();
   const [config, setConfig] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
 
@@ -648,26 +607,26 @@ function HubPluginConfigDialog({
   const properties = schema?.properties;
 
   return (
-    <UiDialog open={open} onOpenChange={onOpenChange}>
-      <UiDialogContent className="max-w-md">
-        <UiDialogHeader>
-          <UiDialogTitle>{plugin.name} 配置</UiDialogTitle>
-          <UiDialogDescription>
-            配置 {plugin.name} 插件的运行参数
-          </UiDialogDescription>
-        </UiDialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t.plugins.configureTitle(plugin.name)}</DialogTitle>
+          <DialogDescription>
+            {t.plugins.configureDescription(plugin.name)}
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="space-y-4 py-2">
           {properties && Object.keys(properties).length > 0 ? (
             Object.entries(properties).map(([key, prop]) => (
               <div key={key} className="space-y-1">
-                <UiLabel htmlFor={`cfg-${key}`}>{prop.title || key}</UiLabel>
+                <Label htmlFor={`cfg-${key}`}>{prop.title || key}</Label>
                 {prop.description && (
                   <p className="text-xs text-muted-foreground">
                     {prop.description}
                   </p>
                 )}
-                <UiInput
+                <Input
                   id={`cfg-${key}`}
                   type={
                     prop.format === "password"
@@ -690,20 +649,22 @@ function HubPluginConfigDialog({
               </div>
             ))
           ) : (
-            <p className="text-sm text-muted-foreground">此插件无需配置</p>
+            <p className="text-sm text-muted-foreground">
+              {t.plugins.configureNoConfig}
+            </p>
           )}
         </div>
 
-        <UiDialogFooter>
-          <UiDialogClose asChild>
-            <Button variant="outline">取消</Button>
-          </UiDialogClose>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">{t.plugins.configureCancel}</Button>
+          </DialogClose>
           <Button onClick={handleSave} disabled={saving}>
-            {saving ? "保存中..." : "保存"}
+            {saving ? t.plugins.configureSaving : t.plugins.configureSave}
           </Button>
-        </UiDialogFooter>
-      </UiDialogContent>
-    </UiDialog>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -714,6 +675,7 @@ function PluginListItem({
   entry: PluginEntry;
   onConfigure: (plugin: HubPluginInfo) => void;
 }) {
+  const { t } = useI18n();
   const { plugin } = entry;
   const hubPlugin = entry.source === "hub" ? entry.plugin : null;
   const imageUrl = pluginImageUrl(plugin);
@@ -721,11 +683,10 @@ function PluginListItem({
     hubPlugin?.config_schema && Object.keys(hubPlugin.config_schema).length > 0,
   );
   const statusTitle = plugin.error
-    ? plugin.error
+    ? t.plugins.statusErrorTooltip
     : plugin.enabled
-      ? "已启用"
-      : "未启用";
-  const surfaceBadges = pluginSurfaceBadges(entry);
+      ? t.plugins.statusEnabledTooltip
+      : t.plugins.statusDisabledTooltip;
 
   return (
     <Card className="group flex flex-row items-center gap-3 border border-border bg-card p-3 shadow-none transition-colors hover:bg-accent/30">
@@ -760,19 +721,6 @@ function PluginListItem({
         <p className="mt-0.5 line-clamp-1 text-sm leading-5 text-muted-foreground">
           {plugin.description}
         </p>
-        {surfaceBadges.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {surfaceBadges.map((badge) => (
-              <Badge
-                key={badge}
-                variant="outline"
-                className="text-xs font-normal"
-              >
-                {badge}
-              </Badge>
-            ))}
-          </div>
-        )}
       </CardContent>
       <div className="flex shrink-0 items-center gap-1.5">
         {hasConfig && hubPlugin && (
@@ -780,7 +728,7 @@ function PluginListItem({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label={`配置 ${plugin.name}`}
+            aria-label={t.plugins.configureTitle(plugin.name)}
             className="size-8"
             onClick={() => onConfigure(hubPlugin)}
           >
@@ -905,15 +853,15 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
             <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
               <SelectValue>
                 {pluginAuthorFilter === "all"
-                  ? "全部作者"
-                  : `Built by ${pluginAuthorFilter}`}
+                  ? t.plugins.filterAllAuthors
+                  : t.plugins.filterByAuthor(pluginAuthorFilter)}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部作者</SelectItem>
+              <SelectItem value="all">{t.plugins.filterAllAuthors}</SelectItem>
               {pluginAuthors.map((author) => (
                 <SelectItem key={author} value={author}>
-                  Built by {author}
+                  {t.plugins.filterByAuthor(author)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -926,15 +874,15 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
           >
             <SelectTrigger className="h-9 w-auto gap-2 rounded-lg bg-background shadow-none">
               <SelectValue>
-                {pluginStatusFilter === "all" && "全部"}
-                {pluginStatusFilter === "enabled" && "已启用"}
-                {pluginStatusFilter === "disabled" && "未启用"}
+                {pluginStatusFilter === "all" && t.plugins.statusAll}
+                {pluginStatusFilter === "enabled" && t.plugins.statusEnabledFilter}
+                {pluginStatusFilter === "disabled" && t.plugins.statusDisabledFilter}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="enabled">已启用</SelectItem>
-              <SelectItem value="disabled">未启用</SelectItem>
+              <SelectItem value="all">{t.plugins.statusAll}</SelectItem>
+              <SelectItem value="enabled">{t.plugins.statusEnabledFilter}</SelectItem>
+              <SelectItem value="disabled">{t.plugins.statusDisabledFilter}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -966,12 +914,12 @@ function PluginsTabContent({ searchQuery }: { searchQuery: string }) {
           <p className="text-sm text-muted-foreground">
             {pluginEntries.length === 0
               ? t.plugins.emptyTitle
-              : "没有匹配的插件"}
+              : t.plugins.noMatches}
           </p>
           <p className="mt-1 text-xs text-muted-foreground/60">
             {pluginEntries.length === 0
               ? t.plugins.emptyHint
-              : "换个关键词或筛选条件试试"}
+              : t.plugins.tryDifferentQuery}
           </p>
         </div>
       )}
@@ -1141,27 +1089,30 @@ export function AgentWorldUnified() {
     return taskWorkspaceRoute({ agentId: agent?.name });
   }, []);
 
+  const searchPlaceholder: Record<string, string> = {
+    agents: t.agentWorldUnified.searchPlaceholderAgents,
+    plugins: t.agentWorldUnified.searchPlaceholderPlugins,
+    skills: t.agentWorldUnified.searchPlaceholderSkills,
+    enterprise: t.agentWorldUnified.searchPlaceholderAgents,
+  };
+
   return (
     <div className="relative flex size-full flex-col gap-2 px-2 pb-2 pt-2 md:px-3">
       {!hudOnly && (
-        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 items-center gap-2">
-            <h1 className="truncate text-sm font-semibold">
-              {t.agentWorld.title}
-            </h1>
+        <div className="flex flex-col gap-2 rounded-lg border border-border bg-background px-3 py-2 md:flex-row md:items-center md:justify-end">
+          <div className="relative w-full md:max-w-[280px]">
+            <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+            <Input
+              data-testid="agents-search-input"
+              placeholder={
+                searchPlaceholder[activeTab] ?? t.agentWorld.searchPlaceholder
+              }
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-8 rounded-lg border-border bg-background pl-8 text-xs shadow-none"
+            />
           </div>
-
-          <div className="flex flex-1 flex-col gap-2 md:flex-row md:items-center md:justify-end">
-            <div className="relative w-full md:max-w-[280px]">
-              <SearchIcon className="text-muted-foreground absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-              <Input
-                data-testid="agents-search-input"
-                placeholder={t.agentWorld.searchPlaceholder}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 rounded-lg border-border bg-background pl-8 text-xs shadow-none"
-              />
-            </div>
+          {activeTab === "agents" && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" className="h-8 rounded-lg shadow-none">
@@ -1187,7 +1138,7 @@ export function AgentWorldUnified() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
+          )}
         </div>
       )}
 
@@ -1197,7 +1148,10 @@ export function AgentWorldUnified() {
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList variant="line" className="mb-3">
               {SHOW_LOCAL_AGENT_LIBRARY && (
-                <TabsTrigger value="agents" className="h-8 gap-1.5 px-3 text-xs">
+                <TabsTrigger
+                  value="agents"
+                  className="h-8 gap-1.5 px-3 text-xs"
+                >
                   <BotIcon className="h-3.5 w-3.5" />
                   {t.agentWorldUnified.roleLibrary}
                 </TabsTrigger>

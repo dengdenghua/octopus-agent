@@ -195,7 +195,7 @@ export default function DesktopShellPage() {
       {
         name: t.desktop.apps.localApps.name,
         subtitle: t.desktop.apps.localApps.subtitle,
-        route: "/workspace/store",
+        route: "/workspace/agents",
         icon: AppWindowIcon,
         color: "from-violet-500 to-fuchsia-500",
       },
@@ -224,21 +224,21 @@ export default function DesktopShellPage() {
       {
         name: t.desktop.placeholders.browser,
         subtitle: t.desktop.placeholders.subtitle,
-        route: "/workspace/store",
+        route: "/workspace/agents",
         icon: GlobeIcon,
         color: "from-white to-muted text-foreground",
       },
       {
         name: t.desktop.placeholders.communication,
         subtitle: t.desktop.placeholders.subtitle,
-        route: "/workspace/store",
+        route: "/workspace/agents",
         icon: AppWindowIcon,
         color: "from-white to-muted text-foreground",
       },
       {
         name: t.desktop.placeholders.notes,
         subtitle: t.desktop.placeholders.subtitle,
-        route: "/workspace/store",
+        route: "/workspace/agents",
         icon: FileTextIcon,
         color: "from-white to-muted text-foreground",
       },
@@ -641,7 +641,7 @@ export default function DesktopShellPage() {
             </button>
             <button
               type="button"
-              onClick={() => navigate("/workspace/store")}
+              onClick={() => navigate("/workspace/agents")}
               className="hidden items-center gap-1.5 rounded-md px-1.5 py-0.5 text-foreground transition hover:bg-white/34 md:flex"
               title={t.desktop.header.market}
             >

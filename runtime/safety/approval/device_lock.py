@@ -5,7 +5,7 @@ try to drive the same phone simultaneously, results are unpredictable.
 This module provides a simple async lock keyed by device_id.
 
 Usage:
-    from runtime.safety.approval.device_lock import acquire_device, release_device
+    from runtime.safety.approval.device_lock import acquire_device
 
     async with acquire_device("pixel-8-pro"):
         await pool.call_tool("pixel-8-pro", "android.tap", {"x": 100, "y": 200})
