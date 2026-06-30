@@ -12,7 +12,9 @@ import {
  * browser-tour regression pass and fixed. If one of these goes red
  * in CI, a past bug came back.
  *
- * Prerequisites: backend on :8000, frontend on :3000.
+ * The default full-stack Playwright config starts both the backend and
+ * frontend on isolated test ports. Real-model checks stay opt-in so the local
+ * production gate remains deterministic and offline.
  *
  * Bug index:
  *   #1 · Intelligence subscriptions use the real router and clean up test data
@@ -22,7 +24,11 @@ import {
  *   workflow-as-skill · workflow editor contract is intentionally gated off
  */
 
-const BACKEND = "http://127.0.0.1:8000";
+const backendHost = process.env.GATEWAY_HOST || "127.0.0.1";
+const backendPort = process.env.GATEWAY_PORT || "18000";
+const BACKEND = `http://${backendHost}:${backendPort}`;
+const RUN_REAL_LLM_REGRESSIONS =
+  process.env.OCTOPUS_E2E_REAL_LLM_REGRESSIONS === "1";
 
 // ═══════════════════════════════════════════════════════════
 // Helpers
@@ -104,6 +110,11 @@ async function sendChatMessage(page: Page, text: string): Promise<void> {
 // ═══════════════════════════════════════════════════════════
 
 test.describe("Bug#2 regression · Cost tab reflects real chat cost", () => {
+  test.skip(
+    !RUN_REAL_LLM_REGRESSIONS,
+    "requires a real model/provider and writes non-zero budget commits",
+  );
+
   test("chat then observability/cost shows non-zero tokens", async ({
     page,
   }) => {
@@ -243,27 +254,24 @@ test.describe("Bug#6 regression · Team join page i18n", () => {
   test("en-US invite error state does not leak hard-coded Chinese", async ({
     page,
   }) => {
-    await page.context().addCookies([
-      {
-        name: "locale",
-        value: "en-US",
-        domain: "localhost",
-        path: "/",
-      },
-    ]);
-
     await page.goto("/#/workspace/team/join");
+    await page.evaluate(() => {
+      document.cookie = "locale=en-US; path=/; SameSite=Lax";
+      document.documentElement.lang = "en";
+    });
+    await page.reload();
     await page.waitForLoadState("domcontentloaded");
 
-    await expect(
-      page.getByRole("heading", { name: "Join team" }),
-    ).toBeVisible();
+    const heading = page.getByRole("heading", {
+      name: "Join collaborative task",
+    });
+    await expect(heading).toBeVisible();
     await expect(
       page.getByText("The invite link is missing a token."),
     ).toBeVisible();
 
     const visibleText = await page
-      .getByRole("heading", { name: "Join team" })
+      .getByRole("heading", { name: "Join collaborative task" })
       .locator("xpath=ancestor::div[contains(@class, 'max-w-md')][1]")
       .innerText();
     expect(visibleText).not.toMatch(/[\u4e00-\u9fff]/);

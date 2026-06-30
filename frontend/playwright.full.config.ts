@@ -9,6 +9,7 @@ const reuseServers = process.env.OCTOPUS_E2E_REUSE_SERVER === "1";
 const defaultTestMatch = [
   "full-stack-smoke.spec.ts",
   "chat.spec.ts",
+  "regression.spec.ts",
   "workflow-editor.spec.ts",
 ];
 const testMatch =
