@@ -4,6 +4,15 @@ export {
   octAuthApi,
   OctApiError,
 } from "./api";
+export {
+  useClaimDailyCredits,
+  useCreateOrder,
+  useDailyClaimInfo,
+  useFindOrder,
+  useOctGoods,
+  useOctLink,
+  useRefreshOctCredits,
+} from "./hooks";
 export type {
   OctBalance,
   OctEmailLoginResponse,

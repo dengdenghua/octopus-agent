@@ -82,6 +82,9 @@ export interface OctBalance {
   membershipActive?: boolean;
   membershipExpireAt?: number;
   membership?: OctMembership;
+  // hooks 归一补出的兼容字段(消费者读总余额/会员态)
+  surplusCredits?: number;
+  isMember?: boolean;
   [key: string]: unknown;
 }
 
