@@ -386,15 +386,3 @@ def test_schema_oct_requires_secret_when_enabled() -> None:
     SchemaOct(enabled=True, jwt_secret="x" * 32)  # ok
     with pytest.raises(ValueError, match="jwt_secret"):
         SchemaOct(enabled=True)
-
-
-def test_schema_oct_molili_mutually_exclusive() -> None:
-    # 评审 #6:oct 与 molili 不能同开(单密钥鉴权门冲突)
-    from runtime.platform.config.schema import AgentConfig, MoliliConfig
-    from runtime.platform.config.schema import OctConfig as SchemaOct
-
-    with pytest.raises(ValueError, match="同时"):
-        AgentConfig(
-            oct=SchemaOct(enabled=True, jwt_secret="x" * 32),
-            molili=MoliliConfig(enabled=True),
-        )

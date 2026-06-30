@@ -217,38 +217,6 @@ class EvolveConfig(BaseModel):
         return self.model or planner.model, self.base_url or planner.base_url
 
 
-class MoliliAuthConfig(BaseModel):
-
-    model_config = ConfigDict(frozen=True)
-
-    mock_mode: bool = False
-    mock_code: str | None = None
-    sms_send_url: str | None = None
-    sms_verify_url: str | None = None
-    send_phone_field: str = "mobile"
-    verify_phone_field: str = "mobile"
-    code_field: str = "verifyCode"
-    sms_type: str | None = None
-    user_id_path: str = "data.userId"
-    token_path: str = "data.token"
-    mobile_path: str = "data.userInfo.mobile"
-    credits_path: str = "data.userInfo"
-
-
-class MoliliConfig(BaseModel):
-
-    model_config = ConfigDict(frozen=True)
-
-    enabled: bool = False
-    base_url: str = "https://molili.8kbl.com/molili-agi/chatApi/v1"
-    info_url: str | None = None
-    request_timeout_seconds: float = Field(default=10.0, ge=1.0, le=600.0)
-    jwt_secret: str | None = Field(default=None, min_length=32)
-    jwt_expire_seconds: int = Field(default=2_592_000, gt=0)
-    jwt_issuer: str = "octopus-agent"
-    auth: MoliliAuthConfig = Field(default_factory=MoliliAuthConfig)
-
-
 class OctConfig(BaseModel):
     """oct 账号网关(octopus 自己的,octopus-mobile server)· 替代 molili。"""
 
@@ -350,7 +318,6 @@ class AgentConfig(BaseModel):
     evolve: EvolveConfig = Field(default_factory=EvolveConfig)
     canary: CanaryConfig = Field(default_factory=CanaryConfig)
     drift: DriftConfig = Field(default_factory=DriftConfig)
-    molili: MoliliConfig = Field(default_factory=MoliliConfig)
     oct: OctConfig = Field(default_factory=OctConfig)
     local_auth: LocalAuthConfig = Field(default_factory=LocalAuthConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
@@ -362,11 +329,3 @@ class AgentConfig(BaseModel):
     journal_file: str | None = None        # Implementation note.
     enable_web_skills: bool = True         # Implementation note.
     default_arm_id: str = "code_arm"
-
-    @model_validator(mode="after")
-    def _oct_molili_mutually_exclusive(self) -> AgentConfig:
-        # 全局只有一个 cocoloop_jwt_secret 驱动鉴权门;oct 与 molili 各自密钥不同时同开会导致
-        # 一方已签发的 JWT 被另一方密钥校验失败 → 静默锁死。迁移期二选一,默认走 oct。
-        if self.oct.enabled and self.molili.enabled:
-            raise ValueError("config.oct.enabled 与 config.molili.enabled 不能同时为 true(账号体系已统一到 oct)")
-        return self

@@ -339,7 +339,6 @@ def run_serve(
 
     require_ui_auth = bool(
         getattr(getattr(cfg, "oct", None), "enabled", False)
-        or getattr(getattr(cfg, "molili", None), "enabled", False)
         or getattr(getattr(cfg, "local_auth", None), "enabled", False)
     )
 
@@ -355,7 +354,6 @@ def run_serve(
         agent_registry=agent_registry,
         group_registry=group_registry,
         channel_manager=channel_manager,
-        molili_config=cfg.molili,
         oct_config=cfg.oct,
         local_auth_config=cfg.local_auth,
         cocoloop_require_auth=require_ui_auth,
