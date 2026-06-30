@@ -3672,6 +3672,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/cowork/{thread_id}/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search
+         * @description Replayable group search across the shared blackboard, async tasks,
+         *     and the membership/mode event log. ``kinds`` is a comma-separated
+         *     subset of ``blackboard,task,event`` (default all); ``until_seq`` bounds
+         *     the event scan to a past point (time-travel).
+         */
+        get: operations["search_api_cowork__thread_id__search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cowork/{thread_id}/tasks": {
         parameters: {
             query?: never;
@@ -19213,6 +19236,44 @@ export interface operations {
         parameters: {
             query?: {
                 text?: string;
+            };
+            header?: never;
+            path: {
+                thread_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    search_api_cowork__thread_id__search_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+                kinds?: string;
+                until_seq?: number | null;
             };
             header?: never;
             path: {

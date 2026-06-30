@@ -20,7 +20,9 @@ test.describe("Workflow Editor", () => {
     await expect(
       page.getByRole("link", { name: /新建实时任务/ }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: /查看技能/ })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "查看技能", exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole("button", { name: "Run" })).not.toBeVisible();
   });
 });

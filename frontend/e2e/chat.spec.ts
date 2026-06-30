@@ -7,12 +7,18 @@ import { test, expect } from "@playwright/test";
  */
 
 test.describe("Chat golden path", () => {
-  test("landing page loads", async ({ page }) => {
+  test("root shell loads the workspace", async ({ page }) => {
     await page.goto("/");
+    await page.waitForLoadState("domcontentloaded");
 
     await expect(page).toHaveTitle("Octopus");
-    await expect(page.locator("body")).toContainText("Octopus Agent OS");
-    await expect(page.locator("input").first()).toBeVisible({
+    await expect(page.locator('a[aria-label="Octopus"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      page.getByRole("button", { name: "New task", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("chat-composer-input")).toBeVisible({
       timeout: 10_000,
     });
   });

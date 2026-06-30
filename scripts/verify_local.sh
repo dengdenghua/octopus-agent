@@ -91,6 +91,7 @@ backend_tests=(
   tests/test_cowork_group.py
   tests/test_cowork_group_store.py
   tests/test_cowork_group_router.py
+  tests/test_cowork_search.py
   tests/test_cowork_turn_plan.py
   tests/test_cowork_advanced.py
   tests/test_production_readiness_gate.py
