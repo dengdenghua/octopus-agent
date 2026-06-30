@@ -77,6 +77,37 @@ def test_browser_session_health_reports_recent_actions_and_failures() -> None:
     assert failed["healthy"] is False
     assert "last_action_failed" in failed["issues"]
     assert failed["recent_actions"][-1]["error"] == "selector not found"
+    assert failed["diagnostics"][-1]["code"] == "last_action_failed"
+    assert failed["diagnostics"][-1]["metadata"]["error_category"] == "selector"
+    assert "inspect_selector" in failed["recommended_actions"]
+
+
+def test_browser_session_health_classifies_failed_action_recovery_actions() -> None:
+    config = {"headless": True}
+    center = BrowserSessionCenter(config, now=lambda: 100)
+
+    session = center.ensure("workspace")
+    center.record_action(
+        session,
+        "navigate",
+        "https://example.test",
+        status="failed",
+        error="Timeout 30000ms exceeded",
+    )
+    timeout = center.health_report("workspace")
+    assert timeout["diagnostics"][-1]["metadata"]["error_category"] == "timeout"
+    assert "retry_with_longer_timeout" in timeout["recommended_actions"]
+
+    center.record_action(
+        session,
+        "click",
+        "#submit",
+        status="failed",
+        error="Target closed because browser closed",
+    )
+    closed = center.health_report("workspace")
+    assert closed["diagnostics"][-1]["metadata"]["error_category"] == "browser_closed"
+    assert "reset_session" in closed["recommended_actions"]
 
 
 def test_browser_session_health_endpoint_reports_missing_and_ready_sessions() -> None:
@@ -90,6 +121,8 @@ def test_browser_session_health_endpoint_reports_missing_and_ready_sessions() ->
     ).json()
     assert missing["exists"] is False
     assert missing["issues"] == ["session_missing"]
+    assert missing["diagnostics"][0]["code"] == "session_missing"
+    assert missing["recommended_actions"] == ["ensure_session"]
 
     client.post(
         "/api/browser/session/ensure",

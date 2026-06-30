@@ -708,6 +708,12 @@ def plan_openai_compat_retries(
         payload,
         _OPTIONAL_REQUEST_FIELD_FALLBACKS,
     )
+    if strict_validation and not optional_fields:
+        optional_fields = tuple(
+            field_name
+            for field_name in _OPTIONAL_REQUEST_FIELD_FALLBACKS
+            if field_name in payload
+        )
     if optional_fields:
         candidate = dict(payload)
         for field_name in optional_fields:

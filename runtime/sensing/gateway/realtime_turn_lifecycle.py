@@ -110,9 +110,9 @@ def _inject_cowork_turn_plan(
 ) -> None:
     """Attach cowork turn-planning diagnostics to the realtime intent.
 
-    This is deliberately advisory: realtime still follows the existing stable
-    dispatch path, but every downstream driver can now see which cowork members
-    were addressed, whether the group mode wants multiple responders, and why.
+    Single-responder plans stay advisory; multi-responder plans are converted
+    into the existing ``agent_roster`` shape so the stable group-fanout driver
+    can run the selected members in parallel.
     """
     store = getattr(runtime, "_cowork_group_store", None)
     if store is None:

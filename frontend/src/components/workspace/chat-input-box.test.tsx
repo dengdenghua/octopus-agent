@@ -53,14 +53,14 @@ function textarea(): HTMLTextAreaElement {
 }
 
 async function openAgentSettings() {
-  const trigger = screen.getByLabelText("Tools");
+  const trigger = screen.getByLabelText("Insert into input");
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
   fireEvent.click(trigger);
   fireEvent.click(await screen.findByText("Research settings"));
 }
 
 async function openToolsMenu() {
-  const trigger = screen.getByLabelText("Tools");
+  const trigger = screen.getByLabelText("Insert into input");
   fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
   fireEvent.click(trigger);
   return screen.findByRole("menu");
@@ -80,9 +80,9 @@ describe("<ChatInputBox /> cowork materials", () => {
     await openToolsMenu();
 
     expect(screen.getByText("Research settings")).toBeInTheDocument();
-    expect(screen.getByText("Plan")).toBeInTheDocument();
-    expect(screen.getByText("Spec")).toBeInTheDocument();
-    expect(screen.getByText("Goal")).toBeInTheDocument();
+    expect(screen.getByText("Insert Plan marker")).toBeInTheDocument();
+    expect(screen.getByText("Insert Spec marker")).toBeInTheDocument();
+    expect(screen.getByText("Insert Goal marker")).toBeInTheDocument();
     expect(screen.getByText("Add material")).toBeInTheDocument();
     expect(
       screen.getByText("Add image (paste / drag / select)"),
@@ -112,7 +112,7 @@ describe("<ChatInputBox /> cowork materials", () => {
     );
 
     await openToolsMenu();
-    fireEvent.click(screen.getByText("Plan"));
+    fireEvent.click(screen.getByText("Insert Plan marker"));
 
     expect(textarea().value).toBe("/codex plan\n");
     expect(onModeChange).not.toHaveBeenCalled();
@@ -121,7 +121,13 @@ describe("<ChatInputBox /> cowork materials", () => {
       target: { value: "/codex plan\nAudit this repo" },
     });
     await openToolsMenu();
-    fireEvent.click(screen.getByText("Goal"));
+    fireEvent.click(screen.getByText("Insert Spec marker"));
+
+    expect(textarea().value).toBe("/codex spec\nAudit this repo");
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    await openToolsMenu();
+    fireEvent.click(screen.getByText("Insert Goal marker"));
 
     expect(textarea().value).toBe("/codex goal\nAudit this repo");
     expect(onModeChange).not.toHaveBeenCalled();

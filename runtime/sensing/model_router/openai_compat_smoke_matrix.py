@@ -8,6 +8,8 @@ claim.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -122,8 +124,57 @@ def openai_compat_smoke_provider_ids() -> tuple[str, ...]:
     return tuple(provider.id for provider in _SMOKE_PROVIDERS)
 
 
+def openai_compat_smoke_readiness() -> dict[str, Any]:
+    """Secret-safe local readiness for optional live provider smoke tests."""
+    chat_enabled = os.environ.get("OCTOPUS_LIVE_MODEL_SMOKE") == "1"
+    tool_enabled = os.environ.get("OCTOPUS_LIVE_MODEL_TOOL_SMOKE") == "1"
+    providers: list[dict[str, Any]] = []
+    configured = 0
+    for provider in _SMOKE_PROVIDERS:
+        key_env = _first_configured_env(provider.api_key_env)
+        has_api_key = bool(key_env)
+        if has_api_key:
+            configured += 1
+        model_override = os.environ.get(provider.model_env, "").strip()
+        providers.append({
+            "id": provider.id,
+            "base_url": provider.base_url,
+            "api_key_env": list(provider.api_key_env),
+            "configured_api_key_env": key_env,
+            "has_api_key": has_api_key,
+            "model_env": provider.model_env,
+            "model": model_override or provider.default_model,
+            "uses_default_model": not bool(model_override),
+            "chat_smoke_runnable": chat_enabled and has_api_key,
+            "tool_smoke_runnable": chat_enabled and tool_enabled and has_api_key,
+        })
+    return {
+        "schema": "octopus.openai_compat_live_smoke_readiness.v1",
+        "chat_smoke_enabled": chat_enabled,
+        "tool_smoke_enabled": tool_enabled,
+        "provider_count": len(_SMOKE_PROVIDERS),
+        "configured_provider_count": configured,
+        "missing_provider_count": len(_SMOKE_PROVIDERS) - configured,
+        "runnable_chat_provider_count": sum(
+            1 for row in providers if row["chat_smoke_runnable"]
+        ),
+        "runnable_tool_provider_count": sum(
+            1 for row in providers if row["tool_smoke_runnable"]
+        ),
+        "providers": providers,
+    }
+
+
+def _first_configured_env(names: tuple[str, ...]) -> str:
+    for name in names:
+        if os.environ.get(name, "").strip():
+            return name
+    return ""
+
+
 __all__ = [
     "OpenAICompatSmokeProvider",
     "openai_compat_smoke_provider_ids",
     "openai_compat_smoke_providers",
+    "openai_compat_smoke_readiness",
 ]

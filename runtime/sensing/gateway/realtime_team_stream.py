@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import re
 from typing import TYPE_CHECKING, Any
@@ -21,6 +22,7 @@ from runtime.protocol import (
     AgentMessageItem,
     ErrorItem,
     ItemStatus,
+    ReasoningItem,
     ServerMethod,
     SubagentItem,
     Turn,
@@ -966,6 +968,23 @@ async def _drive_group_fanout(
                 max_members=min(8, max(2, len(chat_members))),
                 turn_id=turn.id,
             )
+            arbitration = result.get("arbitration")
+            if isinstance(arbitration, dict):
+                with contextlib.suppress(Exception):
+                    audit_item = ReasoningItem(
+                        content=json.dumps(
+                            {
+                                "schema": "octopus.group_fanout_audit.v1",
+                                "arbitration": arbitration,
+                            },
+                            ensure_ascii=False,
+                            sort_keys=True,
+                        ),
+                        status=ItemStatus.COMPLETED,
+                    )
+                    turn.items.append(audit_item)
+                    log.item_started(turn.thread_id, turn.id, audit_item)
+                    log.item_completed(turn.thread_id, turn.id, audit_item)
             for reply in result.get("replies", []):
                 body = str(reply.get("reply") or "").strip()
                 if reply.get("ok") and body:

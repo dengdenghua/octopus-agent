@@ -476,6 +476,98 @@ def test_team_subagent_lifecycle_maps_to_first_class_item(
     assert sub_items[0]["status"] == "completed"
 
 
+def test_cowork_swarm_plan_drives_group_fanout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-cowork", actor="u", target_id="db-agent", kind="agent")
+    invite_member(store, "th-cowork", actor="u", target_id="ui-agent", kind="agent")
+    set_mode(store, "th-cowork", actor="u", mode="swarm")
+    seen: dict[str, Any] = {}
+
+    def fake_fanout(message: str, members: list[dict[str, Any]], **_kwargs: Any) -> dict[str, Any]:
+        seen["message"] = message
+        seen["members"] = members
+        return {
+            "ok": True,
+            "count": len(members),
+            "spoke": len(members),
+            "arbitration": {
+                "schema": "octopus.group_fanout_arbitration.v1",
+                "primary_agent_id": members[0]["name"],
+                "primary_response_id": "resp-1",
+                "recommended_next_action": "use_primary_response",
+                "answered_agent_ids": [member["name"] for member in members],
+                "failed_agent_ids": [],
+                "empty_agent_ids": [],
+                "ranking": [],
+                "outcomes": [],
+            },
+            "replies": [
+                {
+                    "agent_id": member["name"],
+                    "display_name": member["display_name"],
+                    "ok": True,
+                    "reply": f"{member['name']} replied",
+                }
+                for member in members
+            ],
+        }
+
+    monkeypatch.setattr(
+        "runtime.execution.agents.group_fanout.run_group_fanout",
+        fake_fanout,
+    )
+    _set_script(
+        [
+            {"type": "text_delta", "delta": "react should not run"},
+            {"type": "react_completed"},
+        ]
+    )
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-cowork",
+                "input": [{"type": "text", "text": "大家一起看下"}],
+                "approvalPolicy": "never",
+            },
+        )
+
+    assert seen["message"] == "大家一起看下"
+    assert [m["name"] for m in seen["members"]] == ["db-agent", "ui-agent"]
+    turn = out["response"].result["turn"]
+    agent_texts = [
+        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
+    ]
+    assert "db-agent replied" in agent_texts
+    assert "ui-agent replied" in agent_texts
+    assert "react should not run" not in agent_texts
+    audit_items = [
+        item for item in turn["items"]
+        if item["type"] == "reasoning"
+        and "octopus.group_fanout_audit.v1" in item.get("content", "")
+    ]
+    assert len(audit_items) == 1
+    assert "use_primary_response" in audit_items[0]["content"]
+
+
 def test_blocked_topology_id_falls_back_to_react(
     gateway: Any,
     monkeypatch: pytest.MonkeyPatch,

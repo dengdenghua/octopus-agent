@@ -402,7 +402,12 @@ def test_execute_rejection_points_to_replay_evidence():
     )
 
     assert response.status_code == 404
-    evidence = response.json()["detail"]["replay_evidence"]
+    detail = response.json()["detail"]
+    assert detail["diagnostic"]["schema"] == "octopus.computer_automation_diagnostic.v1"
+    assert detail["diagnostic"]["code"] == "preview_token_missing"
+    assert detail["diagnostic"]["recommended_action"] == "create_new_preview"
+    assert detail["recommended_actions"] == ["create_new_preview"]
+    evidence = detail["replay_evidence"]
     assert evidence["schema"] == "octopus.computer_replay_evidence_hint.v1"
     assert evidence["case_id"].startswith("computer-activity:")
     assert len(evidence["fingerprint"]) == 16
@@ -429,6 +434,9 @@ def test_execute_failure_points_to_replay_evidence(monkeypatch):
     ).json()
 
     assert response["ok"] is False
+    assert response["diagnostic"]["code"] == "action_execution_failed"
+    assert response["diagnostic"]["metadata"]["error_category"] == "display_unavailable"
+    assert response["recommended_actions"] == ["check_display_or_permissions"]
     evidence = response["replay_evidence"]
     assert evidence["case_id"].startswith("computer-activity:")
     assert evidence["replay_ready"] is True
@@ -475,6 +483,40 @@ def test_execute_rejects_when_another_project_holds_lease(monkeypatch):
     assert blocked.status_code == 409
     detail = blocked.json()["detail"]
     assert detail["lease"]["owner_id"] == "project-a"
+    assert detail["diagnostic"]["code"] == "lease_conflict"
+    assert detail["diagnostic"]["metadata"]["requested_owner_id"] == "project-b"
+    assert detail["diagnostic"]["metadata"]["current_owner_id"] == "project-a"
+    assert detail["recommended_actions"] == ["wait_or_release_lease"]
+
+
+def test_execute_rejects_preview_owner_mismatch_with_recovery_hint(monkeypatch):
+    monkeypatch.setattr(
+        computer_skills,
+        "_mouse_move",
+        lambda **kwargs: {"moved": True, **kwargs},
+    )
+    client = TestClient(_app())
+
+    preview = client.post(
+        "/api/computer/actions/preview",
+        json={
+            "action": "move",
+            "x": 10,
+            "y": 20,
+            "lease_owner_id": "project-a",
+        },
+    ).json()
+    blocked = client.post(
+        "/api/computer/actions/execute",
+        json={"token": preview["token"], "lease_owner_id": "project-b"},
+    )
+
+    assert blocked.status_code == 409
+    detail = blocked.json()["detail"]
+    assert detail["diagnostic"]["code"] == "preview_owner_mismatch"
+    assert detail["diagnostic"]["metadata"]["preview_owner_id"] == "project-a"
+    assert detail["diagnostic"]["metadata"]["requested_owner_id"] == "project-b"
+    assert detail["recommended_actions"] == ["create_new_preview"]
 
 
 def test_release_lease_allows_next_project_to_execute(monkeypatch):
@@ -523,3 +565,38 @@ def test_release_lease_allows_next_project_to_execute(monkeypatch):
     activity = client.get("/api/computer/activity").json()
     assert activity["items"][-3]["event"] == "lease_released"
     assert activity["items"][-1]["lease"]["owner_id"] == "project-b"
+
+
+def test_release_lease_conflict_includes_recovery_hint(monkeypatch):
+    monkeypatch.setattr(
+        computer_skills,
+        "_mouse_move",
+        lambda **kwargs: {"moved": True, **kwargs},
+    )
+    client = TestClient(_app())
+
+    first = client.post(
+        "/api/computer/actions/preview",
+        json={
+            "action": "move",
+            "x": 10,
+            "y": 20,
+            "lease_owner_id": "project-a",
+        },
+    ).json()
+    client.post(
+        "/api/computer/actions/execute",
+        json={"token": first["token"], "lease_owner_id": "project-a"},
+    )
+
+    blocked = client.post(
+        "/api/computer/lease/release",
+        json={"lease_owner_id": "project-b"},
+    )
+
+    assert blocked.status_code == 409
+    detail = blocked.json()["detail"]
+    assert detail["diagnostic"]["code"] == "lease_release_conflict"
+    assert detail["diagnostic"]["metadata"]["requested_owner_id"] == "project-b"
+    assert detail["diagnostic"]["metadata"]["current_owner_id"] == "project-a"
+    assert detail["recommended_actions"] == ["release_with_owner_or_force"]

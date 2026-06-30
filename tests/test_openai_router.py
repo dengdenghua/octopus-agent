@@ -486,6 +486,61 @@ class TestRequestShape:
             "drop_unsupported_fields:response_format",
         ]
 
+    def test_openai_compat_retries_unnamed_strict_validation_optional_fields(self):
+        fake = _FakeClient(responses=[
+            _FakeResponse(400, {
+                "error": {
+                    "message": "extra inputs are not permitted",
+                },
+            }),
+            _FakeResponse(200, _openai_response("compat ok")),
+        ])
+        r = OpenAIModelRouter(
+            base_url="https://plain-proxy.example/v1",
+            client=fake,
+        )
+        r._build_payload = lambda _request, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 128,
+            "response_format": {"type": "json_object"},
+            "stream_options": {"include_usage": True},
+            "parallel_tool_calls": True,
+            "temperature": 0.2,
+        }
+
+        resp = r.call(_req(model="proxy-model"))
+
+        assert resp.text == "compat ok"
+        assert len(fake.calls) == 2
+        first_payload = fake.calls[0]["json"]
+        retry_payload = fake.calls[1]["json"]
+        assert "response_format" in first_payload
+        assert "stream_options" in first_payload
+        assert "parallel_tool_calls" in first_payload
+        assert "response_format" not in retry_payload
+        assert "stream_options" not in retry_payload
+        assert "parallel_tool_calls" not in retry_payload
+        assert retry_payload["temperature"] == 0.2
+        assert r.last_compatibility_events == [
+            {
+                "attempt": 1,
+                "model": "proxy-model",
+                "profile": "openai_compat",
+                "reason": (
+                    "drop_unsupported_fields:"
+                    "parallel_tool_calls,response_format,stream_options"
+                ),
+                "removed_fields": [
+                    "parallel_tool_calls",
+                    "response_format",
+                    "stream_options",
+                ],
+                "added_fields": [],
+                "changed_fields": [],
+            },
+        ]
+
     def test_qwen_initial_payload_strips_strict_tool_schema_edges(self):
         fake = _FakeClient(response=_FakeResponse(200, _openai_response()))
         r = OpenAIModelRouter(

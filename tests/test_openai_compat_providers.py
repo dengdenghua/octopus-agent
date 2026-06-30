@@ -18,6 +18,7 @@ from runtime.sensing.model_router.openai_compat_providers import (
 from runtime.sensing.model_router.openai_compat_smoke_matrix import (
     openai_compat_smoke_provider_ids,
     openai_compat_smoke_providers,
+    openai_compat_smoke_readiness,
 )
 
 
@@ -76,6 +77,29 @@ def test_live_smoke_matrix_covers_every_builtin_domestic_profile() -> None:
 
     assert profile_ids <= smoke_ids
     assert len(openai_compat_smoke_providers()) == len(smoke_ids)
+
+
+def test_live_smoke_readiness_is_secret_safe_and_env_driven(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("OCTOPUS_LIVE_MODEL_SMOKE", "1")
+    monkeypatch.setenv("OCTOPUS_LIVE_MODEL_TOOL_SMOKE", "1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-deepseek-secret")
+    monkeypatch.setenv("DEEPSEEK_SMOKE_MODEL", "deepseek-chat-custom")
+
+    readiness = openai_compat_smoke_readiness()
+
+    assert "sk-deepseek-secret" not in repr(readiness)
+    assert readiness["chat_smoke_enabled"] is True
+    assert readiness["tool_smoke_enabled"] is True
+    assert readiness["provider_count"] == len(openai_compat_smoke_providers())
+    assert readiness["configured_provider_count"] >= 1
+    by_id = {row["id"]: row for row in readiness["providers"]}
+    deepseek = by_id["deepseek"]
+    assert deepseek["configured_api_key_env"] == "DEEPSEEK_API_KEY"
+    assert deepseek["model"] == "deepseek-chat-custom"
+    assert deepseek["chat_smoke_runnable"] is True
+    assert deepseek["tool_smoke_runnable"] is True
 
 
 def test_profile_catalog_audit_verifies_smoke_and_resolver_probes() -> None:
@@ -443,6 +467,34 @@ def test_retry_plan_drops_named_optional_fields_on_generic_proxy() -> None:
             "unsupported parameter: parallel_tool_calls; "
             "unknown field response_format and stream_options"
         ),
+        profile=profile,
+    )
+
+    assert plan[0].reason == (
+        "drop_unsupported_fields:"
+        "parallel_tool_calls,response_format,stream_options"
+    )
+    assert plan[0].removed_fields == (
+        "parallel_tool_calls",
+        "response_format",
+        "stream_options",
+    )
+    assert "temperature" in plan[0].payload
+
+
+def test_retry_plan_drops_optional_fields_on_unnamed_strict_validation_error() -> None:
+    profile = resolve_openai_compat_profile("https://plain-proxy.example/v1")
+    plan = plan_openai_compat_retries(
+        {
+            "model": "proxy-model",
+            "messages": [],
+            "parallel_tool_calls": True,
+            "response_format": {"type": "json_object"},
+            "stream_options": {"include_usage": True},
+            "temperature": 0.2,
+        },
+        status_code=400,
+        body="extra inputs are not permitted",
         profile=profile,
     )
 

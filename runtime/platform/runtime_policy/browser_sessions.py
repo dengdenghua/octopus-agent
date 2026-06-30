@@ -171,6 +171,15 @@ class BrowserSessionCenter:
                 "healthy": False,
                 "score": 0.0,
                 "issues": ["session_missing"],
+                "diagnostics": [
+                    _diagnostic(
+                        "session_missing",
+                        severity="error",
+                        message="Browser session does not exist.",
+                        recommended_action="ensure_session",
+                    ),
+                ],
+                "recommended_actions": ["ensure_session"],
                 "session": self.missing_snapshot(normalized),
                 "recent_actions": [],
                 "replay_ready": False,
@@ -193,6 +202,13 @@ class BrowserSessionCenter:
             issues.append("last_action_failed")
         if stale_seconds > 300:
             issues.append("stale_session")
+        diagnostics = _browser_session_diagnostics(
+            issues=issues,
+            last_action=actions[-1] if actions else None,
+            stale_seconds=stale_seconds,
+            recovered_from_crash=recovered_from_crash,
+            recovery_revalidated_at=recovery_revalidated_at,
+        )
         score = max(0.0, round(1.0 - (0.2 * len(issues)), 3))
         return {
             "schema": "octopus.browser_session_health.v1",
@@ -200,6 +216,8 @@ class BrowserSessionCenter:
             "healthy": not issues,
             "score": score,
             "issues": issues,
+            "diagnostics": diagnostics,
+            "recommended_actions": _recommended_actions(diagnostics),
             "session": snapshot,
             "recent_actions": recent,
             "stale_seconds": stale_seconds,
@@ -329,3 +347,125 @@ class BrowserSessionCenter:
         except (TypeError, ValueError):
             return fallback
         return max(minimum, min(_MAX_VIEWPORT_SIZE, coerced))
+
+
+def _browser_session_diagnostics(
+    *,
+    issues: list[str],
+    last_action: dict[str, Any] | None,
+    stale_seconds: int,
+    recovered_from_crash: bool,
+    recovery_revalidated_at: int,
+) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for issue in issues:
+        if issue == "session_unhealthy":
+            diagnostics.append(_diagnostic(
+                issue,
+                severity="error",
+                message="Browser runtime is not healthy.",
+                recommended_action="reset_session",
+            ))
+        elif issue == "recovered_from_crash":
+            diagnostics.append(_diagnostic(
+                issue,
+                severity="warning",
+                message="Browser profile recovered from an unclean shutdown.",
+                recommended_action="revalidate_session",
+                metadata={
+                    "recovered_from_crash": recovered_from_crash,
+                    "recovery_revalidated_at": recovery_revalidated_at,
+                },
+            ))
+        elif issue == "no_actions_recorded":
+            diagnostics.append(_diagnostic(
+                issue,
+                severity="info",
+                message="No browser actions have been recorded yet.",
+                recommended_action="run_navigation_probe",
+            ))
+        elif issue == "last_action_failed":
+            diagnostics.append(_failed_action_diagnostic(last_action or {}))
+        elif issue == "stale_session":
+            diagnostics.append(_diagnostic(
+                issue,
+                severity="warning",
+                message="Browser session has been idle for too long.",
+                recommended_action="refresh_or_reset",
+                metadata={"stale_seconds": stale_seconds},
+            ))
+        else:
+            diagnostics.append(_diagnostic(
+                issue,
+                severity="warning",
+                message=f"Browser session issue: {issue}",
+                recommended_action="inspect_health",
+            ))
+    return diagnostics
+
+
+def _failed_action_diagnostic(action: dict[str, Any]) -> dict[str, Any]:
+    error = str(action.get("error") or "")
+    category = _classify_browser_action_error(error)
+    action_name = str(action.get("action") or "action")
+    detail = str(action.get("detail") or "")
+    action_by_category = {
+        "selector": "inspect_selector",
+        "timeout": "retry_with_longer_timeout",
+        "browser_closed": "reset_session",
+        "navigation": "check_url_or_network",
+        "permission": "review_browser_permissions",
+    }
+    return _diagnostic(
+        "last_action_failed",
+        severity="error",
+        message=f"Last browser action failed: {action_name}.",
+        recommended_action=action_by_category.get(category, "inspect_last_action"),
+        metadata={
+            "action": action_name,
+            "detail": detail,
+            "error_category": category,
+            "error": error,
+        },
+    )
+
+
+def _classify_browser_action_error(error: str) -> str:
+    lower = error.lower()
+    if any(token in lower for token in ("selector", "locator", "not found", "strict mode")):
+        return "selector"
+    if any(token in lower for token in ("timeout", "timed out", "deadline")):
+        return "timeout"
+    if any(token in lower for token in ("browser closed", "target closed", "context closed", "page closed")):
+        return "browser_closed"
+    if any(token in lower for token in ("net::", "dns", "connection refused", "navigation failed")):
+        return "navigation"
+    if any(token in lower for token in ("permission", "denied", "not allowed")):
+        return "permission"
+    return "unknown"
+
+
+def _diagnostic(
+    code: str,
+    *,
+    severity: str,
+    message: str,
+    recommended_action: str,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "code": code,
+        "severity": severity,
+        "message": message,
+        "recommended_action": recommended_action,
+        "metadata": metadata or {},
+    }
+
+
+def _recommended_actions(diagnostics: list[dict[str, Any]]) -> list[str]:
+    actions: list[str] = []
+    for item in diagnostics:
+        action = str(item.get("recommended_action") or "").strip()
+        if action and action not in actions:
+            actions.append(action)
+    return actions

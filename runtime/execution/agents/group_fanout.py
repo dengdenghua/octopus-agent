@@ -10,9 +10,10 @@ This is the native-agent sibling of ``cli_team.run_cli_team`` (which fans out to
 external coding CLIs): same parallel-and-collect shape, but each unit is one of
 the room's in-process roster agents giving a conversational reply.
 
-Honest scope: this is *conversation*, not orchestration — every member answers
-independently, there is no leader, no shared task graph, no merge. Tracked work
-still goes through tasks / cluster mode.
+Honest scope: this is still *conversation*, not a full task graph.  It does,
+however, now returns a deterministic arbitration summary so downstream team
+surfaces can pick a primary response, classify failures, and decide the next
+action without re-parsing bubbles.
 """
 
 from __future__ import annotations
@@ -24,6 +25,113 @@ from typing import Any
 # Keep the group from getting spammy / expensive: a real group chat has a few
 # people chime in, not 20. Also bounds the parallel LLM fan-out cost.
 _MAX_FANOUT = 6
+_ARBITRATION_SCHEMA = "octopus.group_fanout_arbitration.v1"
+
+
+def _response_id(turn_id: str | None, index: int, agent_id: str) -> str:
+    prefix = str(turn_id or "fanout").strip() or "fanout"
+    safe_agent = "".join(
+        ch if ch.isalnum() or ch in ("-", "_", ".") else "-"
+        for ch in agent_id
+    ).strip("-") or "agent"
+    return f"{prefix}:resp:{index}:{safe_agent}"
+
+
+def _score_reply(reply: dict[str, Any]) -> int:
+    if not reply.get("ok"):
+        return 0
+    text = str(reply.get("reply") or "").strip()
+    if not text:
+        return 40
+    # Keep this intentionally boring and deterministic.  The score is a
+    # readiness signal, not a quality judgment: successful non-empty replies
+    # beat empty successes, and slightly fuller replies win stable ties.
+    return 100 + min(20, max(1, len(text) // 40))
+
+
+def _reply_status(reply: dict[str, Any]) -> str:
+    if not reply.get("ok"):
+        return "failed"
+    if str(reply.get("reply") or "").strip():
+        return "answered"
+    return "empty"
+
+
+def arbitrate_group_fanout(
+    replies: list[dict[str, Any]],
+    *,
+    turn_id: str | None = None,
+) -> dict[str, Any]:
+    """Build a machine-readable arbitration summary for fan-out replies.
+
+    The fan-out path remains lightweight and persona-oriented, but group/team
+    callers still need a reliable answer to "who gave the usable response?" and
+    "what should the runtime do next?".  This helper is deterministic and does
+    not ask another model to judge the model outputs.
+    """
+    rows: list[dict[str, Any]] = []
+    for index, reply in enumerate(replies):
+        agent_id = str(reply.get("agent_id") or "")
+        status = _reply_status(reply)
+        score = _score_reply(reply)
+        row = {
+            "response_id": str(reply.get("response_id") or _response_id(turn_id, index, agent_id)),
+            "roster_index": index,
+            "agent_id": agent_id,
+            "display_name": str(reply.get("display_name") or agent_id),
+            "status": status,
+            "ok": bool(reply.get("ok")),
+            "score": score,
+            "reply_chars": len(str(reply.get("reply") or "").strip()),
+            "error": reply.get("error"),
+        }
+        if status == "failed":
+            row["recommended_action"] = "retry_member"
+        elif status == "empty":
+            row["recommended_action"] = "ask_member_to_expand"
+        else:
+            row["recommended_action"] = "use_response"
+        rows.append(row)
+
+    ranked = sorted(
+        rows,
+        key=lambda row: (
+            int(row["score"]),
+            -int(row["roster_index"]),
+        ),
+        reverse=True,
+    )
+    for rank, row in enumerate(ranked, start=1):
+        row["rank"] = rank
+
+    primary = next((row for row in ranked if row["status"] == "answered"), None)
+    answered = [row["agent_id"] for row in rows if row["status"] == "answered"]
+    failed = [row["agent_id"] for row in rows if row["status"] == "failed"]
+    empty = [row["agent_id"] for row in rows if row["status"] == "empty"]
+
+    if primary and failed:
+        next_action = "use_primary_and_retry_failed_members"
+    elif primary:
+        next_action = "use_primary_response"
+    elif empty and not failed:
+        next_action = "ask_members_to_expand"
+    elif failed:
+        next_action = "retry_or_fallback_to_single_agent"
+    else:
+        next_action = "fallback_to_single_agent"
+
+    return {
+        "schema": _ARBITRATION_SCHEMA,
+        "turn_id": turn_id,
+        "primary_response_id": primary["response_id"] if primary else None,
+        "primary_agent_id": primary["agent_id"] if primary else None,
+        "recommended_next_action": next_action,
+        "answered_agent_ids": answered,
+        "failed_agent_ids": failed,
+        "empty_agent_ids": empty,
+        "ranking": ranked,
+        "outcomes": rows,
+    }
 
 
 def build_fanout_prompt(message: str, speaker: str, roster: list[str]) -> str:
@@ -53,8 +161,8 @@ def run_group_fanout(
     ``{output, success, error}`` (in production: ``delegation_skills._call_agent``).
 
     Returns ``{ok, replies:[{agent_id, display_name, reply, ok, error}], count,
-    spoke}``. Order follows the roster. Never raises — one member's failure is
-    isolated.
+    spoke, arbitration}``. Order follows the roster. Never raises — one
+    member's failure is isolated.
     """
     msg = (message or "").strip()
     if not msg:
@@ -105,11 +213,18 @@ def run_group_fanout(
         str(m.get("name") or m.get("agent_id")): i for i, m in enumerate(clean)
     }
     results.sort(key=lambda r: order.get(r["agent_id"], len(order)))
+    for index, reply in enumerate(results):
+        reply.setdefault(
+            "response_id",
+            _response_id(turn_id, index, str(reply.get("agent_id") or "")),
+        )
     spoke = sum(1 for r in results if r["ok"] and r["reply"].strip())
+    arbitration = arbitrate_group_fanout(results, turn_id=turn_id)
     return {
         "ok": spoke > 0,
         "replies": results,
         "count": len(results),
         "spoke": spoke,
         "dropped": max(0, len([m for m in (members or []) if isinstance(m, dict)]) - len(clean)),
+        "arbitration": arbitration,
     }

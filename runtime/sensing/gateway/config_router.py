@@ -829,11 +829,16 @@ def create_config_router(
         operators a stable compatibility matrix before any custom model
         is configured.
         """
+        from runtime.sensing.model_router.openai_compat_smoke_matrix import (
+            openai_compat_smoke_readiness,
+        )
+
         diagnostics = _builtin_openai_compat_catalog()
         return {
             "schema": "octopus.openai_compat_profile_catalog.v1",
             "total": len(diagnostics),
             "diagnostics": diagnostics,
+            "live_smoke": openai_compat_smoke_readiness(),
         }
 
     @router.put("/api/config/custom-models/{model_id}")

@@ -344,6 +344,7 @@ class CerebrumRuntime:
         allow_client_auto_approve: bool = False,
         reflex_router: Any = None,
         trace_store: Any = None,
+        cowork_group_store: Any = None,
     ) -> None:
         """Wire a CerebrumRuntime onto an existing octopus stack.
 
@@ -389,6 +390,7 @@ class CerebrumRuntime:
         self._thread_store = thread_store
         self._reflex_router = reflex_router
         self._trace_store = trace_store
+        self._cowork_group_store = cowork_group_store
         # Server-side authority over auto-approval. When False (default),
         # a client setting ``approvalPolicy="never"`` is downgraded to
         # ``"on-request"`` server-side — the client never gets to silently

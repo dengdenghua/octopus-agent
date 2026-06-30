@@ -229,6 +229,15 @@ class TestDispatch:
         assert results["coder"] == "ECHO[coder]: world"
         assert snap.aggregated_content is not None
         assert "hello" in snap.aggregated_content
+        summary = snap.coordination_summary
+        assert summary["schema"] == "octopus.parallel_batch_coordination.v1"
+        assert summary["ready"] is True
+        assert summary["primary_task_id"] in {
+            result.task_id for result in snap.results
+        }
+        assert summary["recommended_next_action"] == "use_aggregated_result"
+        assert summary["failed_task_ids"] == []
+        assert summary["conflict_count"] == 0
         event_types = [event.type for event in snap.event_log]
         assert "stage_change" in event_types
         assert "task_update" in event_types
@@ -436,6 +445,15 @@ class TestRunnerError:
             assert snap.failed_tasks == 1
             assert snap.results[0].status == "failed"
             assert "boom" in (snap.results[0].error or "")
+            assert snap.coordination_summary["ready"] is False
+            assert snap.coordination_summary["primary_task_id"] is None
+            assert snap.coordination_summary["failed_task_ids"] == [
+                snap.results[0].task_id,
+            ]
+            assert (
+                snap.coordination_summary["recommended_next_action"]
+                == "retry_failed_tasks"
+            )
         finally:
             o.shutdown(wait=False)
 
@@ -516,6 +534,12 @@ class TestRunnerError:
             assert snap.event_log[-1].payload["failed_tasks"] == 2
             assert snap.event_log[-1].payload["cancelled_tasks"] == 0
             assert snap.event_log[-1].payload["completion_receipt"]["ready"] is False
+            summary = snap.event_log[-1].payload["coordination_summary"]
+            assert summary["schema"] == "octopus.parallel_batch_coordination.v1"
+            assert summary["ready"] is False
+            assert summary["recommended_next_action"] == "retry_failed_tasks"
+            assert summary["failed_task_ids"] == ["a", "b"]
+            assert summary["contract_issue_count"] >= 1
         finally:
             o.shutdown(wait=False)
 
@@ -551,6 +575,9 @@ class TestRunnerError:
         assert receipt["ready"] is False
         assert receipt["state"]["failed"] == 1
         assert "failed_work_items" in receipt["issues"]
+        summary = final_event.payload["coordination_summary"]
+        assert summary["failed_task_ids"] == ["slow"]
+        assert summary["recommended_next_action"] == "retry_failed_tasks"
 
 
 class TestRecoverySnapshot:
@@ -629,6 +656,18 @@ class TestRecoverySnapshot:
             }
             assert data["completion_receipt"]["ready"] is False
             assert "failed_work_items" in data["completion_receipt"]["issues"]
+            summary = data["coordination_summary"]
+            assert summary["schema"] == "octopus.parallel_batch_coordination.v1"
+            assert summary["ready"] is False
+            assert summary["primary_task_id"] == "ok"
+            assert summary["failed_task_ids"] == ["bad"]
+            assert summary["cancelled_task_ids"] == ["child"]
+            assert summary["dependency_blocked_task_ids"] == ["child"]
+            assert (
+                summary["recommended_next_action"]
+                == "use_completed_outputs_and_retry_failed_tasks"
+            )
+            assert summary["checkpoint"]["batch_id"] == batch.batch_id
             assert data["safety"]["raw_subagent_outputs_included"] is False
             assert data["safety"]["event_payloads_included"] is False
             assert "PAYLOAD_SHOULD_NOT_LEAK" not in str(data)

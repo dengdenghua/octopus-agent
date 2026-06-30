@@ -152,6 +152,7 @@ class BatchResult(BaseModel):
     event_log: list[BatchStreamEvent] = Field(default_factory=list)
     completion_receipt: dict[str, object] = Field(default_factory=dict)
     file_write_observability: dict[str, object] = Field(default_factory=dict)
+    coordination_summary: dict[str, object] = Field(default_factory=dict)
 
 
 class BatchRecoveryTask(BaseModel):
@@ -207,6 +208,7 @@ class BatchRecoverySnapshot(BaseModel):
     conflicts: list[str] = Field(default_factory=list)
     completion_receipt: dict[str, object] = Field(default_factory=dict)
     file_write_observability: dict[str, object] = Field(default_factory=dict)
+    coordination_summary: dict[str, object] = Field(default_factory=dict)
     recovery_hints: dict[str, object] = Field(default_factory=dict)
     safety: dict[str, object] = Field(default_factory=dict)
 
@@ -239,5 +241,4 @@ class SplitResult(BaseModel):
     dag_levels: list[list[str]] = Field(default_factory=list)
     total_levels: int = 0
     is_parallelizable: bool = False
-
 

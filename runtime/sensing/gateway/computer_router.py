@@ -224,6 +224,59 @@ def create_computer_router(
             "queue_body": {"limit": limit},
         }
 
+    def _computer_diagnostic(
+        code: str,
+        *,
+        severity: str,
+        message: str,
+        recommended_action: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "schema": "octopus.computer_automation_diagnostic.v1",
+            "code": code,
+            "severity": severity,
+            "message": message,
+            "recommended_action": recommended_action,
+            "metadata": metadata or {},
+        }
+
+    def _execution_failure_diagnostic(
+        action: dict[str, Any],
+        result: dict[str, Any],
+    ) -> dict[str, Any]:
+        error = str(result.get("error") or "")
+        category = _classify_computer_error(error)
+        action_by_category = {
+            "display_unavailable": "check_display_or_permissions",
+            "permission": "review_desktop_permissions",
+            "coordinate": "replan_with_fresh_screenshot",
+            "timeout": "retry_with_shorter_sequence",
+        }
+        return _computer_diagnostic(
+            "action_execution_failed",
+            severity="error",
+            message="Desktop automation action failed.",
+            recommended_action=action_by_category.get(category, "queue_replay_case"),
+            metadata={
+                "action": str(action.get("action") or ""),
+                "error": error,
+                "error_category": category,
+            },
+        )
+
+    def _classify_computer_error(error: str) -> str:
+        lower = error.lower()
+        if any(token in lower for token in ("display", "screen", "x server", "quartz")):
+            return "display_unavailable"
+        if any(token in lower for token in ("permission", "accessibility", "denied", "not allowed")):
+            return "permission"
+        if any(token in lower for token in ("coordinate", "bounds", "out of range", "outside")):
+            return "coordinate"
+        if any(token in lower for token in ("timeout", "timed out", "deadline")):
+            return "timeout"
+        return "unknown"
+
     def _cleanup_lease(now: float | None = None) -> None:
         if not lease:
             return
@@ -275,11 +328,24 @@ def create_computer_router(
         _cleanup_lease(now)
         owner_id = owner["owner_id"]
         if lease and lease.get("owner_id") != owner_id:
+            lease_state = _public_lease(now)
             raise HTTPException(
                 status_code=409,
                 detail={
                     "error": "computer lease is held by another operator",
-                    "lease": _public_lease(now),
+                    "lease": lease_state,
+                    "diagnostic": _computer_diagnostic(
+                        "lease_conflict",
+                        severity="warning",
+                        message="Computer automation lease is held by another operator.",
+                        recommended_action="wait_or_release_lease",
+                        metadata={
+                            "requested_owner_id": owner_id,
+                            "current_owner_id": lease_state.get("owner_id"),
+                            "ttl_seconds": lease_state.get("ttl_seconds"),
+                        },
+                    ),
+                    "recommended_actions": ["wait_or_release_lease"],
                     "replay_evidence": _computer_replay_evidence(),
                 },
             )
@@ -297,11 +363,24 @@ def create_computer_router(
         now = time.time()
         _cleanup_lease(now)
         if lease and not force and lease.get("owner_id") != owner["owner_id"]:
+            lease_state = _public_lease(now)
             raise HTTPException(
                 status_code=409,
                 detail={
                     "error": "computer lease is held by another operator",
-                    "lease": _public_lease(now),
+                    "lease": lease_state,
+                    "diagnostic": _computer_diagnostic(
+                        "lease_release_conflict",
+                        severity="warning",
+                        message="Computer automation lease can only be released by its owner.",
+                        recommended_action="release_with_owner_or_force",
+                        metadata={
+                            "requested_owner_id": owner["owner_id"],
+                            "current_owner_id": lease_state.get("owner_id"),
+                            "ttl_seconds": lease_state.get("ttl_seconds"),
+                        },
+                    ),
+                    "recommended_actions": ["release_with_owner_or_force"],
                     "replay_evidence": _computer_replay_evidence(),
                 },
             )
@@ -1205,16 +1284,26 @@ def create_computer_router(
         token = str(body.get("token") or "")
         item = pending.pop(token, None)
         if not item:
+            diagnostic = _computer_diagnostic(
+                "preview_token_missing",
+                severity="error",
+                message="Preview token was not found or has expired.",
+                recommended_action="create_new_preview",
+                metadata={"token_present": bool(token)},
+            )
             _record_activity(
                 "execute_rejected",
                 ok=False,
                 token=token,
                 error="preview token not found or expired",
+                detail={"diagnostic": diagnostic},
             )
             raise HTTPException(
                 status_code=404,
                 detail={
                     "error": "preview token not found or expired",
+                    "diagnostic": diagnostic,
+                    "recommended_actions": ["create_new_preview"],
                     "replay_evidence": _computer_replay_evidence(),
                 },
             )
@@ -1226,6 +1315,16 @@ def create_computer_router(
                 "owner_label": str(item_owner.get("owner_label") or body_owner["owner_label"]),
             }
             if body.get("lease_owner_id") and body_owner["owner_id"] != owner["owner_id"]:
+                diagnostic = _computer_diagnostic(
+                    "preview_owner_mismatch",
+                    severity="error",
+                    message="Preview token belongs to another operator.",
+                    recommended_action="create_new_preview",
+                    metadata={
+                        "preview_owner_id": owner.get("owner_id"),
+                        "requested_owner_id": body_owner.get("owner_id"),
+                    },
+                )
                 _record_activity(
                     "execute_rejected",
                     ok=False,
@@ -1233,13 +1332,19 @@ def create_computer_router(
                     token=token,
                     risk=item.get("risk") if isinstance(item.get("risk"), dict) else {},
                     error="preview token belongs to another operator",
-                    detail={"lease_owner": owner, "requested_owner": body_owner},
+                    detail={
+                        "lease_owner": owner,
+                        "requested_owner": body_owner,
+                        "diagnostic": diagnostic,
+                    },
                 )
                 raise HTTPException(
                     status_code=409,
                     detail={
                         "error": "preview token belongs to another operator",
                         "lease_owner": owner,
+                        "diagnostic": diagnostic,
+                        "recommended_actions": ["create_new_preview"],
                         "replay_evidence": _computer_replay_evidence(),
                     },
                 )
@@ -1249,6 +1354,7 @@ def create_computer_router(
         action = item["action"]
         result = _execute(action)
         ok = "error" not in result
+        diagnostic = _execution_failure_diagnostic(action, result) if not ok else None
         preview_contract = (
             item.get("preview_contract")
             if isinstance(item.get("preview_contract"), dict)
@@ -1278,6 +1384,7 @@ def create_computer_router(
                 "result": result,
                 "preview_contract_id": preview_contract.get("contract_id"),
                 "execution_proof_id": execution_proof.get("proof_id"),
+                **({"diagnostic": diagnostic} if diagnostic else {}),
             },
             proof={
                 "preview_contract": preview_contract,
@@ -1302,6 +1409,8 @@ def create_computer_router(
             "lease": lease_state,
             "executed_at": time.time(),
             **({"replay_assertion_queue": assertion_queue} if assertion_queue else {}),
+            **({"diagnostic": diagnostic} if diagnostic else {}),
+            **({"recommended_actions": [diagnostic["recommended_action"]]} if diagnostic else {}),
             **({"replay_evidence": _computer_replay_evidence()} if not ok else {}),
         }
 

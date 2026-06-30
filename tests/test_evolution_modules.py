@@ -488,7 +488,39 @@ class TestCodexGap:
         assert "runtime/execution/tool_engine/executor.py" in (
             code_loop["evidence"]["implementation"]["missing"]
         )
+        subagents = next(
+            item for item in report["capabilities"]
+            if item["id"] == "subagents_parallel_work"
+        )
+        assert subagents["evidence"]["behavior"]["total"] == 5
+        assert subagents["evidence"]["behavior"]["passed"] == 0
+        assert "group_fanout_arbitration_contract" in (
+            subagents["evidence"]["behavior"]["missing"]
+        )
         assert report["top_gaps"]
+
+    def test_report_includes_group_fanout_behavior_evidence(self):
+        from runtime.safety.evolution.codex_gap import compute_codex_gap_report
+
+        report = compute_codex_gap_report()
+        subagents = next(
+            item for item in report["capabilities"]
+            if item["id"] == "subagents_parallel_work"
+        )
+        behavior = subagents["evidence"]["behavior"]
+
+        assert behavior["total"] == 5
+        assert behavior["passed"] == 5
+        assert behavior["missing"] == []
+        assert {
+            check["id"] for check in behavior["checks"]
+        } == {
+            "group_fanout_arbitration_contract",
+            "group_fanout_realtime_audit",
+            "group_fanout_arbitration_tests",
+            "parallel_batch_coordination_contract",
+            "parallel_batch_coordination_tests",
+        }
 
     def test_router_exposes_report(self):
         from fastapi import FastAPI

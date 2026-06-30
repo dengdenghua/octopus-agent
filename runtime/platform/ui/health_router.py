@@ -500,6 +500,9 @@ def _model_compat_info() -> dict[str, Any]:
             describe_openai_compat_profile,
             known_openai_compat_profiles,
         )
+        from runtime.sensing.model_router.openai_compat_smoke_matrix import (
+            openai_compat_smoke_readiness,
+        )
 
         required_profile_ids = list(REQUIRED_DOMESTIC_PROFILE_IDS)
         profiles = list(known_openai_compat_profiles())
@@ -527,6 +530,7 @@ def _model_compat_info() -> dict[str, Any]:
             "request_contract_ready": not audit["request_contract_mismatches"],
             "request_contract_probes": audit["request_contract_probes"],
             "sample_probes": audit["sample_probes"],
+            "live_smoke": openai_compat_smoke_readiness(),
             "domestic_profiles": [
                 {
                     "id": profile_id,

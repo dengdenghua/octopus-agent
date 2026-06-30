@@ -73,6 +73,43 @@ export interface BatchPlan {
   contracts: WorkContract[];
 }
 
+export interface ParallelBatchCoordinationTask {
+  task_id: string;
+  subagent_name: string;
+  status: ParallelTaskStatus | string;
+  recommended_action: string;
+  result_chars: number;
+  error: string | null;
+  depends_on: string[];
+  write_paths: string[];
+  duration_seconds: number | null;
+}
+
+export interface ParallelBatchCoordinationSummary {
+  schema: "octopus.parallel_batch_coordination.v1" | string;
+  batch_id: string;
+  status: ParallelTaskStatus | string;
+  ready: boolean;
+  primary_task_id: string | null;
+  recommended_next_action: string;
+  completed_task_ids: string[];
+  failed_task_ids: string[];
+  cancelled_task_ids: string[];
+  dependency_blocked_task_ids: string[];
+  conflict_count: number;
+  contract_issue_count: number;
+  contract_warning_count: number;
+  output_present: boolean;
+  aggregation_strategy: string;
+  tasks: ParallelBatchCoordinationTask[];
+  checkpoint: {
+    batch_id?: string;
+    after_sequence?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface BatchResult {
   batch_id: string;
   status: ParallelTaskStatus | string;
@@ -88,6 +125,9 @@ export interface BatchResult {
   conflicts: string[];
   plan?: BatchPlan | null;
   event_log?: BatchStreamEvent[];
+  completion_receipt?: Record<string, unknown>;
+  file_write_observability?: Record<string, unknown>;
+  coordination_summary?: ParallelBatchCoordinationSummary;
 }
 
 export interface BatchRecoveryTask {
@@ -137,6 +177,7 @@ export interface BatchRecoverySnapshot {
   conflicts: string[];
   completion_receipt: Record<string, unknown>;
   file_write_observability: Record<string, unknown>;
+  coordination_summary?: ParallelBatchCoordinationSummary;
   recovery_hints: {
     rerunnable_task_ids?: string[];
     failed_task_ids?: string[];

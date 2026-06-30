@@ -21,6 +21,7 @@ import {
   CpuIcon,
   GridIcon,
   LayoutListIcon,
+  ListChecksIcon,
   Loader2Icon,
   MaximizeIcon,
   MinimizeIcon,
@@ -49,6 +50,7 @@ import {
   type BatchRecoverySnapshot,
   type BatchResult,
   type OrchestratorStatus,
+  type ParallelBatchCoordinationSummary,
   type TaskResult,
 } from "@/core/parallel-agents/api";
 import { cn } from "@/lib/utils";
@@ -120,6 +122,103 @@ function formatDuration(seconds: number | null): string {
   if (seconds < 1) return `${(seconds * 1000).toFixed(0)}ms`;
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
   return `${(seconds / 60).toFixed(1)}m`;
+}
+
+function hasCoordinationSignal(
+  summary: ParallelBatchCoordinationSummary | undefined,
+): summary is ParallelBatchCoordinationSummary {
+  if (!summary) return false;
+  return Boolean(
+    summary.recommended_next_action ||
+      summary.primary_task_id ||
+      summary.failed_task_ids?.length ||
+      summary.cancelled_task_ids?.length ||
+      summary.dependency_blocked_task_ids?.length ||
+      summary.conflict_count ||
+      summary.contract_issue_count ||
+      summary.contract_warning_count,
+  );
+}
+
+function formatCoordinationAction(action: string): string {
+  if (!action) return "";
+  return action
+    .replace(/^use_/, "use ")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function CoordinationSummaryNotice({
+  summary,
+}: {
+  summary: ParallelBatchCoordinationSummary | undefined;
+}) {
+  const { t } = useI18n();
+  if (!hasCoordinationSignal(summary)) return null;
+
+  const labels = t.parallelAgents;
+  const checkpoint = summary.checkpoint?.after_sequence;
+  const failedTaskIds = summary.failed_task_ids ?? [];
+  const cancelledTaskIds = summary.cancelled_task_ids ?? [];
+  const dependencyBlockedTaskIds = summary.dependency_blocked_task_ids ?? [];
+  const warningCount =
+    (summary.conflict_count ?? 0) +
+    (summary.contract_issue_count ?? 0) +
+    (summary.contract_warning_count ?? 0);
+
+  return (
+    <div className="border-b bg-muted/20 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        <span className="inline-flex items-center gap-1 font-medium text-foreground">
+          <ListChecksIcon className="size-3.5 text-muted-foreground" />
+          {labels.coordinationSummary}
+        </span>
+        <span
+          className={cn(
+            "font-medium",
+            summary.ready
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-amber-600 dark:text-amber-400",
+          )}
+        >
+          {labels.coordinationAction(
+            formatCoordinationAction(summary.recommended_next_action),
+          )}
+        </span>
+        {summary.primary_task_id && (
+          <span className="text-muted-foreground font-mono">
+            {labels.primaryTask(summary.primary_task_id)}
+          </span>
+        )}
+        {failedTaskIds.length > 0 && (
+          <span className="text-red-500">
+            {labels.failedTasks(failedTaskIds.length)}
+          </span>
+        )}
+        {cancelledTaskIds.length > 0 && (
+          <span className="text-yellow-600 dark:text-yellow-400">
+            {labels.cancelledTasks(cancelledTaskIds.length)}
+          </span>
+        )}
+        {dependencyBlockedTaskIds.length > 0 && (
+          <span className="text-yellow-600 dark:text-yellow-400">
+            {labels.dependencyBlocked(dependencyBlockedTaskIds.length)}
+          </span>
+        )}
+        {warningCount > 0 && (
+          <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+            <AlertTriangleIcon className="size-3" />
+            {labels.coordinationWarnings(warningCount)}
+          </span>
+        )}
+        {typeof checkpoint === "number" && (
+          <span className="text-muted-foreground font-mono">
+            {labels.checkpointSequence(checkpoint)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function RecoverySnapshotNotice({
@@ -493,6 +592,8 @@ function AggregatedResultsView({
         </div>
       )}
 
+      <CoordinationSummaryNotice summary={batch.coordination_summary} />
+
       <div className="flex-1 overflow-y-auto px-4 py-3">
         {showRaw ? (
           <div className="space-y-3">
@@ -764,6 +865,12 @@ export function ParallelAgentsPanel({ className }: { className?: string }) {
           </div>
 
           <RecoverySnapshotNotice snapshot={recoverySnapshot} />
+          <CoordinationSummaryNotice
+            summary={
+              recoverySnapshot?.coordination_summary ??
+              activeBatch?.coordination_summary
+            }
+          />
 
           {/* Filter bar */}
           {activeBatch && activeBatch.results.length > 5 && (

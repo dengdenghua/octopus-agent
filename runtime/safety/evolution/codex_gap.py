@@ -21,6 +21,72 @@ class GapCapability:
     next_actions: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class GapBehaviorCheck:
+    id: str
+    title: str
+    path: str
+    required_terms: tuple[str, ...]
+
+
+BEHAVIOR_CHECKS: dict[str, tuple[GapBehaviorCheck, ...]] = {
+    "subagents_parallel_work": (
+        GapBehaviorCheck(
+            id="group_fanout_arbitration_contract",
+            title="Group fanout returns deterministic arbitration",
+            path="runtime/execution/agents/group_fanout.py",
+            required_terms=(
+                "octopus.group_fanout_arbitration.v1",
+                "arbitrate_group_fanout",
+                "primary_response_id",
+                "recommended_next_action",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="group_fanout_realtime_audit",
+            title="Realtime fanout records arbitration audit evidence",
+            path="runtime/sensing/gateway/realtime_team_stream.py",
+            required_terms=(
+                "octopus.group_fanout_audit.v1",
+                "ReasoningItem",
+                "arbitration",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="group_fanout_arbitration_tests",
+            title="Fanout arbitration covers success and failure outcomes",
+            path="tests/test_group_fanout.py",
+            required_terms=(
+                "test_arbitration_handles_all_failed_members",
+                "test_arbitration_handles_empty_successes",
+                "use_primary_and_retry_failed_members",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="parallel_batch_coordination_contract",
+            title="Parallel batches expose task-level coordination summary",
+            path="runtime/execution/parallel_agents/orchestrator.py",
+            required_terms=(
+                "octopus.parallel_batch_coordination.v1",
+                "_build_coordination_summary",
+                "primary_task_id",
+                "recommended_next_action",
+            ),
+        ),
+        GapBehaviorCheck(
+            id="parallel_batch_coordination_tests",
+            title="Parallel batch coordination covers completion and recovery",
+            path="tests/test_parallel_agents.py",
+            required_terms=(
+                "octopus.parallel_batch_coordination.v1",
+                "use_completed_outputs_and_retry_failed_tasks",
+                "retry_failed_tasks",
+            ),
+        ),
+    ),
+}
+
+
 CAPABILITIES: tuple[GapCapability, ...] = (
     GapCapability(
         id="code_execution_loop",
@@ -264,7 +330,7 @@ CAPABILITIES: tuple[GapCapability, ...] = (
             "runtime/sensing/gateway/team_tasks_router.py",
             "runtime/sensing/gateway/agent_world_router.py",
             "runtime/safety/organization/promotion_lift.py",
-            "frontend/src/components/workspace/swarm/agent-workbench-panel.tsx",
+            "frontend/src/components/workspace/agent-workbench-panel.tsx",
         ),
         test_paths=(
             "tests/test_team_rooms_router.py",
@@ -319,9 +385,22 @@ def compute_codex_gap_report(
 def _score_capability(base: Path, capability: GapCapability) -> dict[str, Any]:
     implementation = _path_status(base, capability.implementation_paths)
     tests = _path_status(base, capability.test_paths)
+    behavior = _behavior_status(
+        base,
+        BEHAVIOR_CHECKS.get(capability.id, ()),
+    )
     implementation_score = implementation["present"] / max(1, implementation["total"])
     test_score = tests["present"] / max(1, tests["total"])
-    score = round(implementation_score * 0.62 + test_score * 0.38, 3)
+    if behavior["total"]:
+        behavior_score = behavior["passed"] / max(1, behavior["total"])
+        score = round(
+            implementation_score * 0.52
+            + test_score * 0.30
+            + behavior_score * 0.18,
+            3,
+        )
+    else:
+        score = round(implementation_score * 0.62 + test_score * 0.38, 3)
     if score >= capability.target_score:
         status = "strong"
     elif score >= capability.target_score * 0.8:
@@ -339,6 +418,7 @@ def _score_capability(base: Path, capability: GapCapability) -> dict[str, Any]:
         "evidence": {
             "implementation": implementation,
             "tests": tests,
+            "behavior": behavior,
         },
         "next_actions": list(capability.next_actions),
     }
@@ -355,6 +435,43 @@ def _path_status(base: Path, paths: tuple[str, ...]) -> dict[str, Any]:
         "total": len(rows),
         "missing": [row["path"] for row in rows if not row["exists"]],
         "paths": rows,
+    }
+
+
+def _behavior_status(
+    base: Path,
+    checks: tuple[GapBehaviorCheck, ...],
+) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for check in checks:
+        path = base / check.path
+        exists = path.exists()
+        text = ""
+        if exists:
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                text = ""
+        missing_terms = [
+            term for term in check.required_terms
+            if term not in text
+        ]
+        rows.append({
+            "id": check.id,
+            "title": check.title,
+            "path": check.path,
+            "exists": exists,
+            "passed": exists and not missing_terms,
+            "missing_terms": missing_terms,
+        })
+    passed = sum(1 for row in rows if row["passed"])
+    return {
+        "passed": passed,
+        "total": len(rows),
+        "missing": [
+            row["id"] for row in rows if not row["passed"]
+        ],
+        "checks": rows,
     }
 
 
@@ -384,4 +501,10 @@ def _next_focus(top_gaps: list[dict[str, Any]]) -> list[str]:
     return out
 
 
-__all__ = ["CAPABILITIES", "GapCapability", "compute_codex_gap_report"]
+__all__ = [
+    "BEHAVIOR_CHECKS",
+    "CAPABILITIES",
+    "GapBehaviorCheck",
+    "GapCapability",
+    "compute_codex_gap_report",
+]

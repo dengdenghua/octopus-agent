@@ -228,6 +228,7 @@ class _BatchEntry:
 
     def to_wire(self) -> BatchResult:
         total, completed, failed, cancelled = self.counts()
+        coordination_summary = _build_coordination_summary(self)
         return BatchResult(
             batch_id=self.batch_id,
             status=self.derived_status(),
@@ -247,6 +248,7 @@ class _BatchEntry:
             file_write_observability=file_write_lease_snapshot(
                 self.runtime_session_metadata,
             ),
+            coordination_summary=coordination_summary,
         )
 
 
@@ -792,6 +794,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
                 "failed_tasks": failed,
                 "cancelled_tasks": cancelled,
                 "completion_receipt": batch.completion_receipt(),
+                "coordination_summary": _build_coordination_summary(batch),
             },
         )
         self._broadcast_locked(batch, ev)
@@ -990,6 +993,7 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             file_write_observability=file_write_lease_snapshot(
                 batch.runtime_session_metadata,
             ),
+            coordination_summary=_build_coordination_summary(batch),
             recovery_hints={
                 "rerunnable_task_ids": rerunnable_task_ids,
                 "failed_task_ids": failed_task_ids,
@@ -1134,3 +1138,112 @@ class ParallelAgentOrchestrator(OwnershipMixin):
             batch.subscribers = [
                 x for x in batch.subscribers if x not in dead
             ]
+
+
+def _task_row(entry: _TaskEntry) -> dict[str, object]:
+    if entry.status == "completed" and entry.result:
+        action = "use_result"
+    elif entry.status in {"failed", "timed_out"}:
+        action = "retry_task"
+    elif entry.status == "cancelled" and entry.error == "dependency_failed":
+        action = "retry_after_dependency"
+    elif entry.status == "cancelled":
+        action = "confirm_cancelled"
+    else:
+        action = "wait_for_task"
+    return {
+        "task_id": entry.task_id,
+        "subagent_name": entry.subagent_name,
+        "status": entry.status,
+        "recommended_action": action,
+        "result_chars": len(str(entry.result or "").strip()),
+        "error": entry.error,
+        "depends_on": list(entry.depends_on),
+        "write_paths": list(entry.write_paths),
+        "duration_seconds": entry.duration(),
+    }
+
+
+def _primary_task_id(batch: _BatchEntry) -> str | None:
+    for entry in batch.tasks.values():
+        if entry.status == "completed" and str(entry.result or "").strip():
+            return entry.task_id
+    return None
+
+
+def _coordination_next_action(
+    *,
+    receipt: dict[str, object],
+    failed_task_ids: list[str],
+    cancelled_task_ids: list[str],
+    conflict_count: int,
+    output_present: bool,
+) -> str:
+    if conflict_count > 0:
+        return "review_file_write_conflicts"
+    if failed_task_ids and output_present:
+        return "use_completed_outputs_and_retry_failed_tasks"
+    if failed_task_ids:
+        return "retry_failed_tasks"
+    if cancelled_task_ids and output_present:
+        return "use_completed_outputs_and_requeue_cancelled_tasks"
+    if cancelled_task_ids:
+        return "requeue_cancelled_tasks"
+    if receipt.get("ready") is True:
+        return "use_aggregated_result"
+    if output_present:
+        return "review_partial_outputs"
+    return "rerun_with_clearer_task_split"
+
+
+def _build_coordination_summary(batch: _BatchEntry) -> dict[str, object]:
+    """Machine-readable task-level arbitration for a parallel batch."""
+    rows = [_task_row(entry) for entry in batch.tasks.values()]
+    failed_task_ids = [
+        str(row["task_id"]) for row in rows
+        if row["status"] in {"failed", "timed_out"}
+    ]
+    cancelled_task_ids = [
+        str(row["task_id"]) for row in rows
+        if row["status"] == "cancelled"
+    ]
+    dependency_blocked_task_ids = [
+        entry.task_id for entry in batch.tasks.values()
+        if entry.error == "dependency_failed"
+    ]
+    receipt = batch.completion_receipt()
+    file_obs = file_write_lease_snapshot(batch.runtime_session_metadata)
+    conflict_count = int(file_obs.get("conflict_count") or 0)
+    primary_task_id = _primary_task_id(batch)
+    output_present = bool(batch.aggregated_content)
+    next_action = _coordination_next_action(
+        receipt=receipt,
+        failed_task_ids=failed_task_ids,
+        cancelled_task_ids=cancelled_task_ids,
+        conflict_count=conflict_count,
+        output_present=output_present,
+    )
+    return {
+        "schema": "octopus.parallel_batch_coordination.v1",
+        "batch_id": batch.batch_id,
+        "status": batch.derived_status(),
+        "ready": bool(receipt.get("ready")),
+        "primary_task_id": primary_task_id,
+        "recommended_next_action": next_action,
+        "completed_task_ids": [
+            str(row["task_id"]) for row in rows if row["status"] == "completed"
+        ],
+        "failed_task_ids": failed_task_ids,
+        "cancelled_task_ids": cancelled_task_ids,
+        "dependency_blocked_task_ids": dependency_blocked_task_ids,
+        "conflict_count": conflict_count,
+        "contract_issue_count": len(batch.validation_issues()),
+        "contract_warning_count": len(batch.validation_warnings()),
+        "output_present": output_present,
+        "aggregation_strategy": batch.aggregation_strategy or "concat",
+        "tasks": rows,
+        "checkpoint": {
+            "batch_id": batch.batch_id,
+            "after_sequence": batch.event_sequence,
+        },
+    }

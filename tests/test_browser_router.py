@@ -61,9 +61,12 @@ def test_browser_session_health_surfaces_recovery_proof() -> None:
     assert before["recovery_proof"]["recovered_from_crash"] is True
     assert before["recovery_proof"]["requires_operator_review"] is True
     assert "recovered_from_crash" in before["issues"]
+    assert before["diagnostics"][0]["code"] == "recovered_from_crash"
+    assert "revalidate_session" in before["recommended_actions"]
     assert after["recovery_proof"]["revalidated"] is True
     assert after["recovery_proof"]["requires_operator_review"] is False
     assert "recovered_from_crash" not in after["issues"]
+    assert "revalidate_session" not in after["recommended_actions"]
 
 
 def test_browser_config_update(client: TestClient) -> None:

@@ -142,14 +142,27 @@ const CATEGORY_ICON_POOL: Record<string, LucideIcon[]> = {
   "backend-api": [Server, Database, Network, CloudCog, GitBranch],
   "code-quality": [Code2, GitCommit, Bug, ShieldCheck, FileCode],
   "devops-cloud": [Cloud, Server, Container, HardDrive, Terminal],
-  "office-docs": [FileText, FileSpreadsheet, FileCheck, ClipboardCheck, ScrollText],
+  "office-docs": [
+    FileText,
+    FileSpreadsheet,
+    FileCheck,
+    ClipboardCheck,
+    ScrollText,
+  ],
   "slides-report": [Presentation, Monitor, LayoutTemplate, Image, Star],
   "chart-viz": [BarChart3, FileBarChart, LineChart, PieChart, Activity],
   "writing-editing": [PenLine, Pencil, PencilRuler, Type, BookOpen],
   "marketing-copy": [Megaphone, Sparkles, Tag, Target, Send],
   "seo-growth": [TrendingUp, Search, ArrowUpRight, Hash, Eye],
   ecommerce: [ShoppingCart, ShoppingBag, Store, CreditCard, Package],
-  "market-product": [BriefcaseBusiness, Handshake, TrendingUp, ShoppingCart, Target, Medal],
+  "market-product": [
+    BriefcaseBusiness,
+    Handshake,
+    TrendingUp,
+    ShoppingCart,
+    Target,
+    Medal,
+  ],
   "project-goal": [CheckCircle2, Flag, Target, Milestone, ListTodo],
   "finance-stock": [Wallet, Banknote, DollarSign, Coins, TrendingUp],
   "finance-model": [Calculator, FileSpreadsheet, Banknote, PiggyBank, Coins],
@@ -178,7 +191,8 @@ function hashString(str: string): number {
 }
 
 function getSkillIcon(category: string, skillName: string): LucideIcon {
-  const pool = CATEGORY_ICON_POOL[category] ?? CATEGORY_ICON_POOL.other ?? [Wrench];
+  const pool = CATEGORY_ICON_POOL[category] ??
+    CATEGORY_ICON_POOL.other ?? [Wrench];
   return pool[hashString(skillName) % pool.length] ?? pool[0] ?? Wrench;
 }
 
@@ -252,7 +266,6 @@ export function LocalSkillDirectoryPanel({
   const activeLabel =
     category === "all" ? t.unifiedStore.skills.all : categoryLabel(category);
   const showSkillPacks = Boolean(skillPacksContent && skillPacksSelected);
-  const enabledSkills = localSkills.filter((skill) => skill.enabled).length;
   const hiddenSkillCount = Math.max(
     0,
     allDomainSkills.length - localSkills.length,
@@ -270,8 +283,7 @@ export function LocalSkillDirectoryPanel({
       className="h-8 shrink-0 rounded-lg px-3 text-xs"
       onClick={() => handleCategorySelect("all")}
     >
-      {t.unifiedStore.skills.catalogCount(localSkills.length)}
-      <span className="ml-1 text-muted-foreground">{localSkills.length}</span>
+      {t.agentWorld.categories.all}
     </Button>
   );
 
@@ -368,36 +380,30 @@ export function LocalSkillDirectoryPanel({
         <>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {t.unifiedStore.skills.visibleCount(
-                activeLabel,
-                visibleSkills.length,
-              )}
+              {category === "all"
+                ? t.unifiedStore.skills.totalCount(visibleSkills.length)
+                : t.unifiedStore.skills.visibleCount(
+                    activeLabel,
+                    visibleSkills.length,
+                  )}
             </span>
-            <div className="flex items-center gap-3">
-              <span>{t.unifiedStore.skills.enabledCount(enabledSkills)}</span>
-              {hiddenSkillCount > 0 && (
-                <button
-                  type="button"
-                  className="rounded-lg px-2 py-1 transition-colors hover:bg-muted hover:text-foreground"
-                  onClick={() => setShowInternalSkills((value) => !value)}
-                >
-                  {showInternalSkills
-                    ? t.localSkillDirectory.hideInternalSkills
-                    : t.localSkillDirectory.showInternalSkills(
-                        hiddenSkillCount,
-                      )}
-                </button>
-              )}
-            </div>
+            {hiddenSkillCount > 0 && (
+              <button
+                type="button"
+                className="rounded-lg px-2 py-1 transition-colors hover:bg-muted hover:text-foreground"
+                onClick={() => setShowInternalSkills((value) => !value)}
+              >
+                {showInternalSkills
+                  ? t.localSkillDirectory.hideInternalSkills
+                  : t.localSkillDirectory.showInternalSkills(hiddenSkillCount)}
+              </button>
+            )}
           </div>
 
           {visibleSkills.length ? (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(320px,1fr))] gap-3">
               {visibleSkills.map((skill) => {
-                const SkillIcon = getSkillIcon(
-                  skill.localCategory,
-                  skill.name,
-                );
+                const SkillIcon = getSkillIcon(skill.localCategory, skill.name);
                 return (
                   <article
                     key={skill.name}
@@ -424,11 +430,17 @@ export function LocalSkillDirectoryPanel({
                           </h3>
                         </div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
-                          <Badge variant="outline" className="text-xs font-normal">
+                          <Badge
+                            variant="outline"
+                            className="text-xs font-normal"
+                          >
                             {categoryLabel(skill.localCategory)}
                           </Badge>
                           {skill.has_tests && (
-                            <Badge variant="outline" className="gap-1 text-xs font-normal">
+                            <Badge
+                              variant="outline"
+                              className="gap-1 text-xs font-normal"
+                            >
                               <ShieldCheck className="size-3" />
                               {t.localSkillDirectory.verified}
                             </Badge>
@@ -450,10 +462,13 @@ export function LocalSkillDirectoryPanel({
                                 : skill.market_visibility === "provider"
                                   ? t.localSkillDirectory.visibilityProvider
                                   : skill.market_visibility === "specialized"
-                                    ? t.localSkillDirectory.visibilitySpecialized
+                                    ? t.localSkillDirectory
+                                        .visibilitySpecialized
                                     : skill.market_visibility === "deprecated"
-                                      ? t.localSkillDirectory.visibilityDeprecated
-                                      : t.localSkillDirectory.visibilityInternal}
+                                      ? t.localSkillDirectory
+                                          .visibilityDeprecated
+                                      : t.localSkillDirectory
+                                          .visibilityInternal}
                             </Badge>
                           )}
                         </div>
@@ -462,15 +477,7 @@ export function LocalSkillDirectoryPanel({
                     <p className="mt-3 line-clamp-2 flex-1 text-sm leading-5 text-muted-foreground">
                       {skill.description || t.unifiedStore.skills.noDescription}
                     </p>
-                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-2.5">
-                      <span
-                        title={skill.trusted_source ?? undefined}
-                        className="truncate text-xs text-muted-foreground"
-                      >
-                        {skill.has_tests
-                          ? t.localSkillDirectory.verified
-                          : t.localSkillDirectory.localCapability}
-                      </span>
+                    <div className="mt-3 flex items-center justify-end gap-3 border-t border-border pt-2.5">
                       <Button
                         type="button"
                         size="sm"

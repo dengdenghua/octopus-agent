@@ -458,6 +458,12 @@ class TestCustomModelCompatDiagnostics:
         data = r.json()
         assert data["schema"] == "octopus.openai_compat_profile_catalog.v1"
         assert data["total"] >= 10
+        assert data["live_smoke"]["schema"] == (
+            "octopus.openai_compat_live_smoke_readiness.v1"
+        )
+        assert data["live_smoke"]["provider_count"] == data["total"]
+        assert data["live_smoke"]["chat_smoke_enabled"] is False
+        assert data["live_smoke"]["runnable_chat_provider_count"] == 0
 
         by_id = {row["id"]: row for row in data["diagnostics"]}
         assert {
@@ -553,6 +559,40 @@ class TestCustomModelCompatDiagnostics:
             "model_alias_mismatch": True,
             "passed": True,
         }
+
+    def test_openai_compat_profile_catalog_reports_live_smoke_readiness(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("OCTOPUS_LIVE_MODEL_SMOKE", "1")
+        monkeypatch.setenv("OCTOPUS_LIVE_MODEL_TOOL_SMOKE", "1")
+        monkeypatch.setenv("KIMI_API_KEY", "sk-kimi-secret")
+        monkeypatch.setenv("KIMI_SMOKE_MODEL", "moonshot-v1-auto")
+
+        r = client.get("/api/config/openai-compat-profiles")
+        assert r.status_code == 200
+        data = r.json()
+        smoke = data["live_smoke"]
+        assert "sk-kimi-secret" not in repr(smoke)
+        assert smoke["chat_smoke_enabled"] is True
+        assert smoke["tool_smoke_enabled"] is True
+        assert smoke["configured_provider_count"] >= 1
+        assert smoke["runnable_chat_provider_count"] >= 1
+
+        by_id = {row["id"]: row for row in smoke["providers"]}
+        kimi = by_id["kimi"]
+        assert kimi["has_api_key"] is True
+        assert kimi["configured_api_key_env"] == "KIMI_API_KEY"
+        assert kimi["model"] == "moonshot-v1-auto"
+        assert kimi["uses_default_model"] is False
+        assert kimi["chat_smoke_runnable"] is True
+        assert kimi["tool_smoke_runnable"] is True
+
+        deepseek = by_id["deepseek"]
+        assert deepseek["has_api_key"] is False
+        assert deepseek["configured_api_key_env"] == ""
+        assert deepseek["chat_smoke_runnable"] is False
 
     def test_openai_compat_diagnostics_are_dry_run_and_secret_safe(
         self,

@@ -281,6 +281,10 @@ export interface Translations {
     codexPlan: string;
     codexSpec: string;
     codexGoal: string;
+    composerInsertions: string;
+    insertCodexPlan: string;
+    insertCodexSpec: string;
+    insertCodexGoal: string;
     workflow: string;
     deepResearchConfig: string;
     roles: string;
@@ -1200,6 +1204,23 @@ export interface Translations {
     statusDisabled: string;
     emptyTitle: string;
     emptyHint: string;
+    searchPlaceholder: string;
+    filterAllAuthors: string;
+    filterByAuthor: (author: string) => string;
+    statusAll: string;
+    statusEnabledFilter: string;
+    statusDisabledFilter: string;
+    noMatches: string;
+    tryDifferentQuery: string;
+    configureTitle: (name: string) => string;
+    configureDescription: (name: string) => string;
+    configureNoConfig: string;
+    configureCancel: string;
+    configureSave: string;
+    configureSaving: string;
+    statusEnabledTooltip: string;
+    statusDisabledTooltip: string;
+    statusErrorTooltip: string;
   };
 
   // Live Preview
@@ -3085,6 +3106,7 @@ export interface Translations {
       all: string;
       other: string;
       visibleCount: (label: string, count: number) => string;
+      totalCount: (count: number) => string;
       enabledCount: (count: number) => string;
       noDescription: string;
       noMatch: (query: string) => string;
@@ -3146,6 +3168,14 @@ export interface Translations {
     toastCapabilityPackInstalled: (name: string, count: number) => string;
     toastUninstalled: (name: string) => string;
     authorPrefix: string;
+    packContentLabels: {
+      plugins: string;
+      apps: string;
+      agents: string;
+      skills: string;
+      commands: string;
+      mcp: string;
+    };
   };
 
   // Agent World Unified
@@ -3163,6 +3193,9 @@ export interface Translations {
     installFailed: string;
     connectLocalPartner: string;
     enterprise: string;
+    searchPlaceholderAgents: string;
+    searchPlaceholderPlugins: string;
+    searchPlaceholderSkills: string;
   };
 
   // Local Agent Connect Dialog
@@ -4003,6 +4036,11 @@ export interface Translations {
     cancelAll: string;
     depends: string;
     recoveryReady: string;
+    coordinationSummary: string;
+    coordinationAction: (action: string) => string;
+    primaryTask: (taskId: string) => string;
+    cancelledTasks: (count: number) => string;
+    coordinationWarnings: (count: number) => string;
     rerunnableTasks: (count: number) => string;
     failedTasks: (count: number) => string;
     dependencyBlocked: (count: number) => string;

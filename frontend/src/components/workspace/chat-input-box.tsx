@@ -137,6 +137,9 @@ export interface ChatInputBoxProps {
   onProjectAgentModeChange?: (mode: AgentModeName) => void;
   onAuditIntensityChange?: (intensity: AuditIntensity) => void;
   onPersonalModeChange?: (mode: PersonalMode) => void;
+  /** Project (milestone) mode toggle — surfaced as a deletable 🚩 chip. The turn
+   * can route this through the Project OS / cowork group when on. */
+  onProjectModeChange?: (active: boolean) => void;
   onProjectDetectionChange?: (detection: DetectResponse | null) => void;
   onReasoningEffortChange?: (effort: ReasoningEffort) => void;
   onModelChange?: (modelName: string) => void;
@@ -852,7 +855,7 @@ export function ChatInputBox({
         data-testid="chat-composer"
         className={cn(
           "group relative",
-          "rounded-lg border border-border/45 bg-card/85",
+          "rounded-md border border-border/55 bg-background",
           "transition-[border-color] duration-200",
           "hover:border-border/60",
           "focus-within:border-border/70",
@@ -1137,8 +1140,8 @@ export function ChatInputBox({
                   data-testid="chat-tools-trigger"
                   disabled={isBusy || status === "streaming"}
                   className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
-                  title={t.chatInputBox.quickCapabilities}
-                  aria-label={t.chatInputBox.quickCapabilities}
+                  title={t.chatInputBox.composerInsertions}
+                  aria-label={t.chatInputBox.composerInsertions}
                 >
                   <PlusIcon className="size-4" />
                 </button>
@@ -1151,28 +1154,28 @@ export function ChatInputBox({
                 className="w-60 rounded-md border-border/70 p-1.5 shadow-sm"
               >
                 <DropdownMenuLabel className="px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-                  {t.chatInputBox.quickCapabilities}
+                  {t.chatInputBox.composerInsertions}
                 </DropdownMenuLabel>
                 <DropdownMenuItem
                   onClick={() => insertCodexModeMarker("plan")}
                   className="gap-2 rounded-md text-[13px]"
                 >
                   <MapIcon className="size-4" />
-                  {t.chatInputBox.codexPlan}
+                  {t.chatInputBox.insertCodexPlan}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => insertCodexModeMarker("spec")}
                   className="gap-2 rounded-md text-[13px]"
                 >
                   <ClipboardCheckIcon className="size-4" />
-                  {t.chatInputBox.codexSpec}
+                  {t.chatInputBox.insertCodexSpec}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => insertCodexModeMarker("goal")}
                   className="gap-2 rounded-md text-[13px]"
                 >
                   <TargetIcon className="size-4" />
-                  {t.chatInputBox.codexGoal}
+                  {t.chatInputBox.insertCodexGoal}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {canUseDeepResearch && (
