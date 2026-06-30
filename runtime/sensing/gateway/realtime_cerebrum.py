@@ -1370,6 +1370,7 @@ class CerebrumRuntime:
                     else project.get("status")
                 ),
                 "available_actions": state.get("available_actions") or [],
+                "action_specs": state.get("action_specs") or [],
                 "control": state.get("control"),
                 "intervention": state.get("intervention"),
                 "audit_events": self._project_store.events_for_project(

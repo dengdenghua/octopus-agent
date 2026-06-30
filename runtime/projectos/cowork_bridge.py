@@ -94,6 +94,7 @@ def full_project_state(project_store: ProjectStore, project_id: str) -> dict[str
         "milestones": [milestone.to_dict() for milestone in milestones],
         "tasks": tasks_by_ms,
         "available_actions": _project_available_actions(project.status),
+        "action_specs": _project_action_specs(project.id, project.status),
     }
 
 
@@ -107,9 +108,60 @@ def _project_available_actions(status: str) -> list[str]:
     return ["inspect"]
 
 
+def _project_action_specs(project_id: str, status: str) -> list[dict[str, Any]]:
+    specs = {
+        "recover": {
+            "action": "recover",
+            "label": "Recover",
+            "api": {
+                "method": "POST",
+                "path": f"/api/projects/{project_id}/recover",
+                "body": {"run": False},
+            },
+            "realtime_command": "/project recover",
+        },
+        "recover_and_run": {
+            "action": "recover_and_run",
+            "label": "Recover and run",
+            "api": {
+                "method": "POST",
+                "path": f"/api/projects/{project_id}/recover",
+                "body": {"run": True},
+            },
+            "realtime_command": "/project recover run",
+        },
+        "run": {
+            "action": "run",
+            "label": "Run",
+            "api": {
+                "method": "POST",
+                "path": f"/api/projects/{project_id}/run",
+                "body": {"max_ticks": 50},
+            },
+        },
+        "tick": {
+            "action": "tick",
+            "label": "Tick",
+            "api": {"method": "POST", "path": f"/api/projects/{project_id}/tick"},
+        },
+        "inspect": {
+            "action": "inspect",
+            "label": "Inspect",
+            "api": {"method": "GET", "path": f"/api/projects/{project_id}"},
+        },
+        "report": {
+            "action": "report",
+            "label": "Report",
+            "api": {"method": "GET", "path": f"/api/projects/{project_id}/report"},
+        },
+    }
+    return [specs[action] for action in _project_available_actions(status)]
+
+
 def _task_read_model(task: Task) -> dict[str, Any]:
     raw = task.to_dict()
     raw["available_actions"] = _task_available_actions(task.status)
+    raw["action_specs"] = _task_action_specs(task)
     return raw
 
 
@@ -123,6 +175,58 @@ def _task_available_actions(status: str) -> list[str]:
     if status == "done":
         return ["reset"]
     return ["inspect"]
+
+
+def _task_action_specs(task: Task) -> list[dict[str, Any]]:
+    specs = {
+        "reassign": {
+            "action": "reassign",
+            "label": "Reassign",
+            "api": {
+                "method": "POST",
+                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "body": {"action": "reassign", "assigned_agent": ""},
+            },
+            "realtime_command": f"/project task {task.id} reassign agent=<agent-id>",
+            "requires": ["assigned_agent"],
+        },
+        "reset": {
+            "action": "reset",
+            "label": "Reset",
+            "api": {
+                "method": "POST",
+                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "body": {"action": "reset", "cascade": True},
+            },
+            "realtime_command": f"/project task {task.id} reset",
+        },
+        "complete": {
+            "action": "complete",
+            "label": "Complete",
+            "api": {
+                "method": "POST",
+                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "body": {"action": "complete", "output": ""},
+            },
+            "realtime_command": f'/project task {task.id} complete output="<result>"',
+            "requires": ["output"],
+        },
+        "skip": {
+            "action": "skip",
+            "label": "Skip",
+            "api": {
+                "method": "POST",
+                "path": f"/api/projects/{{project_id}}/tasks/{task.id}/intervene",
+                "body": {"action": "skip", "reason": ""},
+            },
+            "realtime_command": f'/project task {task.id} skip reason="<reason>"',
+        },
+        "inspect": {
+            "action": "inspect",
+            "label": "Inspect",
+        },
+    }
+    return [specs[action] for action in _task_available_actions(task.status)]
 
 
 def project_run_trace(

@@ -216,9 +216,20 @@ def test_project_state_exposes_action_hints(tmp_path) -> None:
     body = c.get("/api/projects/P-actions").json()
 
     assert body["available_actions"] == ["recover", "recover_and_run"]
+    assert body["action_specs"][0]["api"]["path"] == "/api/projects/P-actions/recover"
+    assert body["action_specs"][1]["realtime_command"] == "/project recover run"
     assert body["tasks"]["MS1"][0]["available_actions"] == [
         "reassign",
         "reset",
         "complete",
         "skip",
     ]
+    reassign_spec = body["tasks"]["MS1"][0]["action_specs"][0]
+    assert reassign_spec["action"] == "reassign"
+    assert reassign_spec["requires"] == ["assigned_agent"]
+    assert reassign_spec["api"]["path"] == (
+        "/api/projects/{project_id}/tasks/MS1-T1/intervene"
+    )
+    assert reassign_spec["realtime_command"] == (
+        "/project task MS1-T1 reassign agent=<agent-id>"
+    )

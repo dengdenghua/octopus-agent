@@ -102,7 +102,9 @@ def test_project_from_group_can_reuse_active_thread_project(tmp_path) -> None:
     assert first["trace"]["milestones"][0]["assignments"]
     assert first["trace"]["milestones"][0]["assignments"][0]["available_actions"]
     assert first["available_actions"] == ["run", "tick"]
+    assert first["action_specs"][0]["api"]["path"] == f"/api/projects/{pid}/run"
     assert first["tasks"]["MS1"][0]["available_actions"]
+    assert first["tasks"]["MS1"][0]["action_specs"]
     assert store.project_for_thread("thread-1").id == pid
     assert first["project"]["status"] == "running"
 
