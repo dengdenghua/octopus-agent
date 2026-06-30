@@ -76,8 +76,13 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
     ticks = result.get("ticks")
 
     reused = bool(state.get("reused"))
+    control = state.get("control") if isinstance(state.get("control"), dict) else None
+    if control:
+        headline = "Project OS 已执行控制命令。"
+    else:
+        headline = "Project OS 已继续推进项目。" if reused else "Project OS 已接管并运行项目。"
     lines = [
-        "Project OS 已继续推进项目。" if reused else "Project OS 已接管并运行项目。",
+        headline,
         "",
     ]
     if project_id:
@@ -159,6 +164,59 @@ def _project_os_todo_item(state: dict[str, Any]) -> TodoListItem | None:
     project_id = str(project.get("id") or "").strip()
     explanation = f"Project OS · {project_name}" + (f" ({project_id})" if project_id else "")
     return TodoListItem(explanation=explanation, plan=entries)
+
+
+def _parse_project_os_control(text: str) -> dict[str, Any] | None:
+    """Parse explicit Project OS control commands in project-mode chat."""
+    raw = str(text or "").strip()
+    if not raw.startswith("/project"):
+        return None
+    parts = raw.split()
+    if len(parts) < 2:
+        return {"type": "help"}
+    command = parts[1].lower()
+    rest = parts[2:]
+
+    def _kv(tokens: list[str]) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for token in tokens:
+            if "=" not in token:
+                continue
+            key, value = token.split("=", 1)
+            key = key.strip().lower()
+            if key:
+                out[key] = value.strip()
+        return out
+
+    if command == "recover":
+        opts = _kv(rest)
+        task_ids = [
+            item.strip()
+            for item in opts.get("tasks", opts.get("task_ids", "")).split(",")
+            if item.strip()
+        ]
+        return {
+            "type": "recover",
+            "task_ids": task_ids,
+            "run": "run" in rest or opts.get("run", "").lower() in {"1", "true", "yes"},
+        }
+    if command == "task" and len(rest) >= 2:
+        task_id = rest[0]
+        action = rest[1].lower()
+        tail = rest[2:]
+        opts = _kv(tail)
+        return {
+            "type": "task",
+            "task_id": task_id,
+            "action": action,
+            "assigned_agent": opts.get("agent") or opts.get("assigned_agent"),
+            "assigned_role": opts.get("role") or opts.get("assigned_role"),
+            "reason": opts.get("reason", ""),
+            "output": opts.get("output"),
+            "run": "run" in tail or opts.get("run", "").lower() in {"1", "true", "yes"},
+            "cascade": opts.get("cascade", "true").lower() not in {"0", "false", "no"},
+        }
+    return {"type": "help"}
 
 
 # ── Split-module compat re-exports ────────────────────────────
@@ -1158,9 +1216,84 @@ class CerebrumRuntime:
             max_ticks = 50
         max_ticks = max(1, min(max_ticks, 200))
 
+        control = _parse_project_os_control(text)
         from runtime.projectos.cowork_bridge import run_project_from_group
+        from runtime.projectos.cowork_bridge import full_project_state
 
         def _run() -> dict[str, Any]:
+            if control is not None:
+                project = self._project_store.project_for_thread(thread_id)
+                if project is None:
+                    return {
+                        "ok": False,
+                        "error": "project_not_found",
+                        "message": "Project OS 当前线程还没有可恢复或干预的项目。",
+                    }
+                engine = None
+                if control.get("type") in {"recover", "task"}:
+                    from runtime.projectos.cowork_bridge import engine_for_group
+
+                    engine = engine_for_group(
+                        self._project_store,
+                        self._cowork_group_store,
+                        thread_id,
+                        hooks=dict(self._project_os_hooks),
+                    )
+                if control.get("type") == "recover" and engine is not None:
+                    intervention = engine.recover(
+                        project.id,
+                        task_ids=control.get("task_ids") or [],
+                    )
+                    result = (
+                        engine.run(project.id, max_ticks=max_ticks)
+                        if control.get("run")
+                        else {"final_status": intervention.get("project_status")}
+                    )
+                    state = full_project_state(self._project_store, project.id) or {}
+                    return {
+                        "ok": True,
+                        "roster": [],
+                        "reused": True,
+                        "control": control,
+                        "intervention": intervention,
+                        "result": result,
+                        **state,
+                    }
+                if control.get("type") == "task" and engine is not None:
+                    intervention = engine.intervene_task(
+                        project.id,
+                        str(control.get("task_id") or ""),
+                        action=str(control.get("action") or ""),
+                        assigned_agent=control.get("assigned_agent"),
+                        assigned_role=control.get("assigned_role"),
+                        output=control.get("output"),
+                        reason=str(control.get("reason") or ""),
+                        cascade=bool(control.get("cascade", True)),
+                    )
+                    result = (
+                        engine.run(project.id, max_ticks=max_ticks)
+                        if control.get("run")
+                        else {"final_status": intervention.get("project_status")}
+                    )
+                    state = full_project_state(self._project_store, project.id) or {}
+                    return {
+                        "ok": True,
+                        "roster": [],
+                        "reused": True,
+                        "control": control,
+                        "intervention": intervention,
+                        "result": result,
+                        **state,
+                    }
+                return {
+                    "ok": False,
+                    "error": "unknown_project_command",
+                    "message": (
+                        "可用命令：/project recover [tasks=T1,T2] [run]；"
+                        "/project task <task_id> <reassign|reset|complete|skip> "
+                        "[agent=agent-id] [reason=...] [run]"
+                    ),
+                }
             return run_project_from_group(
                 self._project_store,
                 self._cowork_group_store,
@@ -1185,6 +1318,38 @@ class CerebrumRuntime:
                 "请先添加至少一个参与者后再运行项目。",
             )
             return
+        if not state.get("ok", True):
+            await self._emit_agent_message(
+                turn,
+                log,
+                emitter,
+                str(state.get("message") or "Project OS 控制命令无法执行。"),
+            )
+            return
+        project = state.get("project") if isinstance(state.get("project"), dict) else {}
+        if project.get("id") and isinstance(state.get("trace"), dict):
+            state["trace"]["audit_events"] = self._project_store.events_for_project(
+                str(project["id"]),
+                limit=20,
+            )
+        if project.get("id") and state.get("control"):
+            state["trace"] = {
+                "schema": "octopus.projectos.control_trace.v1",
+                "thread_id": thread_id,
+                "project_id": project.get("id"),
+                "project_name": project.get("name"),
+                "project_status": (
+                    state.get("result", {}).get("final_status")
+                    if isinstance(state.get("result"), dict)
+                    else project.get("status")
+                ),
+                "control": state.get("control"),
+                "intervention": state.get("intervention"),
+                "audit_events": self._project_store.events_for_project(
+                    str(project["id"]),
+                    limit=20,
+                ),
+            }
         todo_item = _project_os_todo_item(state)
         if todo_item is not None:
             await self._emit_todo_list(turn, log, emitter, todo_item)

@@ -761,6 +761,108 @@ def test_project_os_blocked_result_does_not_claim_auto_continue() -> None:
     assert "后续回合会继续" not in text
 
 
+def test_project_os_control_parser() -> None:
+    from runtime.sensing.gateway.realtime_cerebrum import _parse_project_os_control
+
+    assert _parse_project_os_control("hello") is None
+    assert _parse_project_os_control("/project recover tasks=MS1-T1,MS1-T2 run") == {
+        "type": "recover",
+        "task_ids": ["MS1-T1", "MS1-T2"],
+        "run": True,
+    }
+    assert _parse_project_os_control(
+        "/project task MS1-T1 reassign agent=build-agent reason=handoff run"
+    ) == {
+        "type": "task",
+        "task_id": "MS1-T1",
+        "action": "reassign",
+        "assigned_agent": "build-agent",
+        "assigned_role": None,
+        "reason": "handoff",
+        "output": None,
+        "run": True,
+        "cascade": True,
+    }
+
+
+def test_cowork_project_mode_accepts_task_control_command(
+    tmp_path: Path,
+) -> None:
+    from runtime.memory.cowork.group_store import GroupStore
+    from runtime.memory.cowork.service import invite_member, set_mode
+    from runtime.projectos.store import ProjectStore
+    from runtime.sensing.gateway.realtime_cerebrum import CerebrumRuntime
+    from runtime.sensing.gateway.realtime_gateway import RealtimeGateway
+
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    invite_member(store, "th-project-control", actor="u", target_id="research-agent", kind="agent")
+    invite_member(store, "th-project-control", actor="u", target_id="build-agent", kind="agent")
+    set_mode(store, "th-project-control", actor="u", mode="project")
+    project_store = ProjectStore(base_dir=tmp_path / "projectos")
+    runtime = CerebrumRuntime(
+        stack=object(),
+        agent=object(),
+        logs_root=str(tmp_path / "threads"),
+        cowork_group_store=store,
+        project_store=project_store,
+    )
+    gateway = RealtimeGateway(runtime=runtime, approval_timeout=5.0)
+    app = FastAPI()
+    app.include_router(gateway.router)
+
+    with TestClient(app) as client, client.websocket_connect("/api/realtime") as ws:
+        _drive(
+            ws,
+            {
+                "threadId": "th-project-control",
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "启动项目",
+                        "metadata": {"context": {"project_os_max_ticks": 1}},
+                    }
+                ],
+                "approvalPolicy": "never",
+            },
+        )
+        project_id = project_store.project_for_thread("th-project-control").id
+        out = _drive(
+            ws,
+            {
+                "threadId": "th-project-control",
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "/project task MS1-T1 reassign agent=build-agent run",
+                    }
+                ],
+                "approvalPolicy": "never",
+            },
+        )
+
+    task = project_store.get_task("MS1-T1")
+    assert task.assigned_agent == "build-agent"
+    assert task.status == "done"
+    events = project_store.events_for_project(project_id)
+    assert events[-1]["kind"] == "task.intervention"
+    assert events[-1]["payload"]["action"] == "reassign"
+
+    turn = out["response"].result["turn"]
+    agent_text = "\n".join(
+        item["text"] for item in turn["items"] if item["type"] == "agentMessage"
+    )
+    assert "Project OS 已执行控制命令" in agent_text
+    trace_items = [
+        item for item in turn["items"]
+        if item["type"] == "reasoning"
+        and "octopus.projectos.control_trace.v1" in item.get("content", "")
+    ]
+    assert trace_items
+    trace = json.loads(trace_items[-1]["content"])
+    assert trace["control"]["action"] == "reassign"
+    assert trace["audit_events"][-1]["kind"] == "task.intervention"
+
+
 def test_blocked_topology_id_falls_back_to_react(
     gateway: Any,
     monkeypatch: pytest.MonkeyPatch,
