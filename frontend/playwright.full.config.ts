@@ -1,9 +1,20 @@
 import { defineConfig, devices } from "@playwright/test";
+import { rmSync } from "node:fs";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const frontendPort = process.env.FRONTEND_PORT || "13000";
 const backendPort = process.env.GATEWAY_PORT || "18000";
 const backendHost = process.env.GATEWAY_HOST || "127.0.0.1";
 const backendBase = `http://${backendHost}:${backendPort}`;
+const configDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(configDir, "..");
+const rawE2eStateRoot =
+  process.env.OCTOPUS_E2E_STATE_ROOT || "test-results/full-stack-state";
+const e2eStateRoot = isAbsolute(rawE2eStateRoot)
+  ? resolve(rawE2eStateRoot)
+  : resolve(repoRoot, rawE2eStateRoot);
+const e2eDataDir = join(e2eStateRoot, "data");
 const pythonBin = process.env.PYTHON || "./.venv/bin/python";
 const reuseServers = process.env.OCTOPUS_E2E_REUSE_SERVER === "1";
 const defaultTestMatch = [
@@ -21,7 +32,31 @@ const backendEnv =
   "OCTOPUS_FF_CAMOUFLAGE_ENABLED=0 " +
   "OCTOPUS_FF_UI_AMBIENT_SUGGESTIONS=0 " +
   `GATEWAY_PORT=${backendPort} ` +
-  `OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase}`;
+  `OCTOPUS_INTERNAL_GATEWAY_BASE_URL=${backendBase} ` +
+  `OCTOPUS_HOME=${e2eStateRoot} ` +
+  `OCTOPUS_DATA_DIR=${e2eDataDir}`;
+
+const resolvedTestResultsRoot = resolve(repoRoot, "test-results");
+const e2eStateRootRelative = relative(resolvedTestResultsRoot, e2eStateRoot);
+const e2eStateRootIsDisposable =
+  e2eStateRootRelative &&
+  !e2eStateRootRelative.startsWith("..") &&
+  e2eStateRootRelative !== ".." &&
+  e2eStateRootRelative !== ".";
+
+if (!reuseServers && !e2eStateRootIsDisposable) {
+  throw new Error(
+    [
+      "OCTOPUS_E2E_STATE_ROOT must resolve under repo test-results when",
+      "OCTOPUS_E2E_REUSE_SERVER is not enabled.",
+      `resolved state root: ${e2eStateRoot}`,
+    ].join(" "),
+  );
+}
+
+if (!reuseServers) {
+  rmSync(e2eStateRoot, { force: true, recursive: true });
+}
 
 /**
  * Full-stack Playwright configuration.
@@ -58,7 +93,7 @@ export default defineConfig({
     {
       command: `${backendEnv} ${pythonBin} -m runtime serve --config config.e2e.yaml --host ${backendHost} --port ${backendPort}`,
       url: `${backendBase}/api/status`,
-      cwd: "..",
+      cwd: repoRoot,
       reuseExistingServer: reuseServers,
       timeout: 120_000,
     },

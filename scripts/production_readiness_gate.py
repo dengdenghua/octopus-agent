@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from runtime.safety.evolution.agent_competitor_scorecard import (
@@ -43,9 +44,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=MIN_SCORE,
         help=f"Minimum Octopus score for release-critical radars. Default: {MIN_SCORE}.",
     )
+    parser.add_argument(
+        "--review-queue-path",
+        type=Path,
+        default=None,
+        help=(
+            "Review queue to use for browser/desktop replay debt checks. "
+            "Defaults to the active OCTOPUS_DATA_DIR/OCTOPUS_HOME runtime queue."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    result = run_gate(min_score=args.min_score)
+    result = run_gate(
+        min_score=args.min_score,
+        review_queue_path=args.review_queue_path,
+    )
     if result.failures:
         print("production readiness gate failed:", file=sys.stderr)
         for failure in result.failures:
@@ -75,16 +88,23 @@ class GateResult:
         self.quality_summary = quality_summary
 
 
-def run_gate(*, min_score: int = MIN_SCORE) -> GateResult:
+def run_gate(
+    *,
+    min_score: int = MIN_SCORE,
+    review_queue_path: str | Path | None = None,
+) -> GateResult:
     failures: list[str] = []
 
     scorecard = compute_agent_competitor_scorecard(target_score=min_score)
-    automation = compute_automation_radar(target_score=min_score)
+    automation = compute_automation_radar(
+        target_score=min_score,
+        review_queue_path=review_queue_path,
+    )
     quality_reports = [
         compute_repo_context_quality(),
         compute_permission_sandbox_quality(),
         compute_product_experience_quality(),
-        compute_browser_desktop_quality(),
+        compute_browser_desktop_quality(review_queue_path=review_queue_path),
     ]
 
     _require_ready(

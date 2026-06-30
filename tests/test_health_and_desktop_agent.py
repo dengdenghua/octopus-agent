@@ -164,3 +164,24 @@ class TestHealthEndpoint:
         assert data["agents"] == 0
         assert data["channels"] == []
         assert data["groups"] == 0
+
+    def test_runtime_self_check_reports_isolated_runtime_paths(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        from runtime.platform.ui.health_router import build_runtime_self_check
+
+        data_dir = tmp_path / "e2e-state" / "data"
+        monkeypatch.setenv("OCTOPUS_HOME", str(tmp_path / "ignored-home"))
+        monkeypatch.setenv("OCTOPUS_DATA_DIR", str(data_dir))
+
+        class _State:
+            journal_path = None
+
+        payload = build_runtime_self_check(request=None, state=_State())
+
+        assert payload["paths"]["data_dir"] == str(data_dir.resolve())
+        assert payload["paths"]["runtime_root"] == str(data_dir.resolve().parent)
+        assert payload["paths"]["octopus_data_dir_env"] == str(data_dir)
+        assert payload["paths"]["octopus_home_env"] == str(tmp_path / "ignored-home")

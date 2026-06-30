@@ -11,6 +11,9 @@ run_frontend_build="${OCTOPUS_VERIFY_SKIP_BUILD:-0}"
 run_full_stack="${OCTOPUS_VERIFY_SKIP_FULL_STACK:-0}"
 run_full_stack_mobile="${OCTOPUS_VERIFY_SKIP_FULL_STACK_MOBILE:-0}"
 run_production_gate="${OCTOPUS_VERIFY_SKIP_PRODUCTION_GATE:-0}"
+VERIFY_STATE_ROOT="${OCTOPUS_VERIFY_STATE_ROOT:-$ROOT_DIR/test-results/local-verify-state}"
+VERIFY_DATA_DIR="$VERIFY_STATE_ROOT/data"
+VERIFY_REVIEW_QUEUE="$VERIFY_DATA_DIR/review_queue.json"
 
 usage() {
   cat <<'EOF'
@@ -34,6 +37,8 @@ Environment:
   OCTOPUS_VERIFY_SKIP_FULL_STACK=1 Skip full-stack Playwright smoke.
   OCTOPUS_VERIFY_SKIP_FULL_STACK_MOBILE=1
                                   Skip mobile full-stack Playwright smoke.
+  OCTOPUS_VERIFY_STATE_ROOT       Isolated runtime state root for local gates.
+                                  Defaults to test-results/local-verify-state.
   OCTOPUS_LIVE_MODEL_SMOKE=1      Also run live OpenAI-compatible provider smoke tests.
 EOF
 }
@@ -80,6 +85,7 @@ section() {
 
 PYTHON_BIN="$(resolve_python)"
 export PYTHON="$PYTHON_BIN"
+mkdir -p "$VERIFY_DATA_DIR"
 
 backend_tests=(
   tests/test_openapi_snapshot.py
@@ -108,7 +114,10 @@ fi
 
 if [[ "$run_production_gate" != "1" ]]; then
   section "production readiness gate"
-  "$PYTHON_BIN" scripts/production_readiness_gate.py
+  OCTOPUS_HOME="$VERIFY_STATE_ROOT" \
+  OCTOPUS_DATA_DIR="$VERIFY_DATA_DIR" \
+  "$PYTHON_BIN" scripts/production_readiness_gate.py \
+    --review-queue-path "$VERIFY_REVIEW_QUEUE"
 fi
 
 if [[ "$run_frontend_static" == "1" ]]; then
@@ -133,10 +142,20 @@ fi
 
 if [[ "$run_full_stack" != "1" ]]; then
   section "full-stack smoke"
-  (cd frontend && PYTHON="$PYTHON_BIN" pnpm e2e:full)
+  (
+    cd frontend
+    PYTHON="$PYTHON_BIN" \
+    OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack" \
+    pnpm e2e:full
+  )
 
   if [[ "$run_full_stack_mobile" != "1" ]]; then
     section "mobile full-stack smoke"
-    (cd frontend && PYTHON="$PYTHON_BIN" pnpm e2e:full:mobile)
+    (
+      cd frontend
+      PYTHON="$PYTHON_BIN" \
+      OCTOPUS_E2E_STATE_ROOT="$VERIFY_STATE_ROOT/full-stack-mobile" \
+      pnpm e2e:full:mobile
+    )
   fi
 fi

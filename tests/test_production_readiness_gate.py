@@ -1,10 +1,22 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
+from runtime.memory.learning.review_queue import ReviewQueue
 from scripts import production_readiness_gate as gate
 
 
-def test_production_readiness_gate_passes_current_release_signals() -> None:
-    result = gate.run_gate()
+@pytest.fixture
+def review_queue_path(tmp_path: Path) -> Path:
+    return tmp_path / "data" / "review_queue.json"
+
+
+def test_production_readiness_gate_passes_current_release_signals(
+    review_queue_path: Path,
+) -> None:
+    result = gate.run_gate(review_queue_path=review_queue_path)
 
     assert result.failures == []
     assert result.scorecard_score >= gate.MIN_SCORE
@@ -13,7 +25,10 @@ def test_production_readiness_gate_passes_current_release_signals() -> None:
     assert "octopus.product_experience_quality.v1" in result.quality_summary
 
 
-def test_production_readiness_gate_reports_not_ready_quality(monkeypatch) -> None:
+def test_production_readiness_gate_reports_not_ready_quality(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
     monkeypatch.setattr(
         gate,
         "compute_repo_context_quality",
@@ -27,7 +42,7 @@ def test_production_readiness_gate_reports_not_ready_quality(monkeypatch) -> Non
         },
     )
 
-    result = gate.run_gate()
+    result = gate.run_gate(review_queue_path=review_queue_path)
 
     assert any(
         "octopus.repo_context_quality.v1 is not ready" in failure
@@ -39,7 +54,10 @@ def test_production_readiness_gate_reports_not_ready_quality(monkeypatch) -> Non
     )
 
 
-def test_production_readiness_gate_blocks_scorecard_regression(monkeypatch) -> None:
+def test_production_readiness_gate_blocks_scorecard_regression(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
     real_scorecard = gate.compute_agent_competitor_scorecard
 
     def degraded_scorecard(*, target_score: int):
@@ -58,7 +76,7 @@ def test_production_readiness_gate_blocks_scorecard_regression(monkeypatch) -> N
         degraded_scorecard,
     )
 
-    result = gate.run_gate(min_score=95)
+    result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
     assert any("agent scorecard octopus overall is 94" in item for item in result.failures)
     assert any("product_experience" in item for item in result.failures)
@@ -66,11 +84,19 @@ def test_production_readiness_gate_blocks_scorecard_regression(monkeypatch) -> N
 
 def test_production_readiness_gate_allows_scored_automation_focus_without_evidence_gap(
     monkeypatch,
+    review_queue_path: Path,
 ) -> None:
     real_automation = gate.compute_automation_radar
 
-    def automation_with_scored_focus(*, target_score: int):
-        report = real_automation(target_score=target_score)
+    def automation_with_scored_focus(
+        *,
+        target_score: int,
+        review_queue_path: str | Path | None = None,
+    ):
+        report = real_automation(
+            target_score=target_score,
+            review_queue_path=review_queue_path,
+        )
         report["octopus_gaps"] = [{
             "id": "desktop_preview_execute",
             "evidence_ready": True,
@@ -79,16 +105,26 @@ def test_production_readiness_gate_allows_scored_automation_focus_without_eviden
 
     monkeypatch.setattr(gate, "compute_automation_radar", automation_with_scored_focus)
 
-    result = gate.run_gate(min_score=95)
+    result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
     assert not any("automation radar evidence gaps" in item for item in result.failures)
 
 
-def test_production_readiness_gate_blocks_automation_evidence_gap(monkeypatch) -> None:
+def test_production_readiness_gate_blocks_automation_evidence_gap(
+    monkeypatch,
+    review_queue_path: Path,
+) -> None:
     real_automation = gate.compute_automation_radar
 
-    def automation_with_missing_evidence(*, target_score: int):
-        report = real_automation(target_score=target_score)
+    def automation_with_missing_evidence(
+        *,
+        target_score: int,
+        review_queue_path: str | Path | None = None,
+    ):
+        report = real_automation(
+            target_score=target_score,
+            review_queue_path=review_queue_path,
+        )
         report["octopus_gaps"] = [{
             "id": "desktop_preview_execute",
             "evidence_ready": False,
@@ -97,7 +133,7 @@ def test_production_readiness_gate_blocks_automation_evidence_gap(monkeypatch) -
 
     monkeypatch.setattr(gate, "compute_automation_radar", automation_with_missing_evidence)
 
-    result = gate.run_gate(min_score=95)
+    result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
     assert any(
         "automation radar evidence gaps: desktop_preview_execute" in item
@@ -107,11 +143,15 @@ def test_production_readiness_gate_blocks_automation_evidence_gap(monkeypatch) -
 
 def test_production_readiness_gate_blocks_stale_browser_replay_artifacts(
     monkeypatch,
+    review_queue_path: Path,
 ) -> None:
     real_quality = gate.compute_browser_desktop_quality
 
-    def browser_quality_with_stale_artifacts():
-        report = real_quality()
+    def browser_quality_with_stale_artifacts(
+        *,
+        review_queue_path: str | Path | None = None,
+    ):
+        report = real_quality(review_queue_path=review_queue_path)
         report["replay_trends"] = {
             **report["replay_trends"],
             "stale_source_artifact_count": 2,
@@ -129,7 +169,7 @@ def test_production_readiness_gate_blocks_stale_browser_replay_artifacts(
         browser_quality_with_stale_artifacts,
     )
 
-    result = gate.run_gate(min_score=95)
+    result = gate.run_gate(min_score=95, review_queue_path=review_queue_path)
 
     assert any(
         "browser/desktop replay stale source artifacts: 2" in item
@@ -137,5 +177,29 @@ def test_production_readiness_gate_blocks_stale_browser_replay_artifacts(
     )
     assert any(
         "browser/desktop replay repair recipes pending: cases=2, recipes=1" in item
+        for item in result.failures
+    )
+
+
+def test_production_readiness_gate_uses_explicit_review_queue_path(
+    review_queue_path: Path,
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "missing" / "screenshot.png"
+    ReviewQueue(review_queue_path).upsert_item(
+        source="browser_pixel_replay_gate",
+        source_kind="browser_desktop_replay",
+        candidate_kind="browser_pixel_replay_gate_case",
+        priority="P0",
+        target_bucket="browser_desktop_replay",
+        title="Review stale browser pixel replay gate",
+        text="Browser pixel replay gate needs review.",
+        metadata={"artifact": {"local_path": str(artifact)}},
+    )
+
+    result = gate.run_gate(review_queue_path=review_queue_path)
+
+    assert any(
+        "browser/desktop replay stale source artifacts: 1" in item
         for item in result.failures
     )

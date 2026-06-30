@@ -1,8 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const backendPort = process.env.GATEWAY_PORT || "18000";
 const backendBase = `http://127.0.0.1:${backendPort}`;
 const frontendPort = process.env.FRONTEND_PORT || "13000";
+const e2eDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(e2eDir, "../..");
+const rawE2eStateRoot =
+  process.env.OCTOPUS_E2E_STATE_ROOT || "test-results/full-stack-state";
+const e2eStateRoot = isAbsolute(rawE2eStateRoot)
+  ? resolve(rawE2eStateRoot)
+  : resolve(repoRoot, rawE2eStateRoot);
+const e2eDataDir = join(e2eStateRoot, "data");
 const frontendOrigins = [
   `http://127.0.0.1:${frontendPort}`,
   `http://localhost:${frontendPort}`,
@@ -89,6 +99,10 @@ function extractRealtimeThreadId(url: string): string {
   return decodeURIComponent(match[1]);
 }
 
+function normalizedPath(value: unknown): string {
+  return String(value || "").replace(/\\/g, "/");
+}
+
 test.describe("Full-stack golden smoke", () => {
   test("backend, Vite proxy, and workspace shell are all live", async ({
     page,
@@ -129,6 +143,18 @@ test.describe("Full-stack golden smoke", () => {
         proxy_target: backendBase,
         proxy_targets_backend: true,
       });
+      expect(normalizedPath(selfCheck.body.paths?.runtime_root)).toBe(
+        normalizedPath(e2eStateRoot),
+      );
+      expect(normalizedPath(selfCheck.body.paths?.data_dir)).toBe(
+        normalizedPath(e2eDataDir),
+      );
+      expect(normalizedPath(selfCheck.body.paths?.octopus_home_env)).toBe(
+        normalizedPath(e2eStateRoot),
+      );
+      expect(normalizedPath(selfCheck.body.paths?.octopus_data_dir_env)).toBe(
+        normalizedPath(e2eDataDir),
+      );
 
       const agents = await fetchFromPage(page, "/api/agents");
       expect(agents.ok).toBe(true);

@@ -13,6 +13,11 @@ import pytest
 # ─── _emit_screenshot_artifact ──────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runtime_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OCTOPUS_DATA_DIR", str(tmp_path / "data"))
+
+
 def _make_png_b64(size: int = 16) -> str:
     """Return a minimal valid base64-encoded PNG-header bytes."""
     # Not a real PNG but enough to test save/decode path.

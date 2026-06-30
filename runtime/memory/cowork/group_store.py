@@ -45,18 +45,20 @@ class GroupStore:
         self._events_db = self._dir / "group_events.db"
         self._board_db = self._dir / "group_blackboard.db"
         self._lock = threading.Lock()
-        self._init_schema()
+        self._ensure_schema()
 
     @property
     def base_dir(self) -> Path:
         return self._dir
 
     def _connect(self) -> sqlite3.Connection:
+        self._dir.mkdir(parents=True, exist_ok=True)
         conn = sqlite3.connect(str(self._events_db), timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.executescript(_SCHEMA)
         return conn
 
-    def _init_schema(self) -> None:
+    def _ensure_schema(self) -> None:
         with self._lock, self._connect() as conn:
             conn.executescript(_SCHEMA)
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import shutil
+
 from runtime.memory.cowork.group import MemberEvent
 from runtime.memory.cowork.group_store import GroupStore
 
@@ -54,3 +56,10 @@ def test_state_survives_a_fresh_store_instance(tmp_path) -> None:
     )
     # A new instance over the same dir reads the persisted log.
     assert GroupStore(base_dir=tmp_path).state("t1").mode == "cluster"
+
+
+def test_store_recovers_if_base_dir_is_removed(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path / "cowork")
+    shutil.rmtree(store.base_dir)
+
+    assert store.events("missing-thread") == []

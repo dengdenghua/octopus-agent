@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Request
 
 from runtime import __version__
-from runtime.platform.process.paths import project_root
+from runtime.platform.process.paths import app_paths, project_root
 
 
 def create_health_router(
@@ -136,6 +136,7 @@ def build_runtime_self_check(
     frontend_proxy_target: str | None = None,
 ) -> dict[str, Any]:
     root = project_root(Path(__file__))
+    paths = app_paths()
     pyproject_version = _project_version(root)
     frontend_version = _frontend_version(root)
     request_url = str(getattr(request, "url", "") or "")
@@ -338,6 +339,10 @@ def build_runtime_self_check(
         "loopback_aliases": aliases,
         "paths": {
             "project_root": str(root),
+            "runtime_root": str(paths.root),
+            "data_dir": str(paths.data_dir),
+            "octopus_home_env": os.environ.get("OCTOPUS_HOME") or "",
+            "octopus_data_dir_env": os.environ.get("OCTOPUS_DATA_DIR") or "",
             "journal_source": (
                 str(state.journal_path) if getattr(state, "journal_path", None) else "in-memory"
             ),
