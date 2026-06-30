@@ -212,3 +212,40 @@ class OctModelRouter(Provider, ModelRouter):
                 yield from iter_openai_sse(r, model=model, provider="oct")
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"oct stream failed: {exc}") from exc
+
+
+class OctFallbackRouter(ModelRouter):
+    """actor 感知的 dispatcher fallback。
+
+    当前 actor 已绑定有效 oct 账号 → 走 OctModelRouter(网关计费,LLM 用量计入统一积分池);
+    否则(guest / 未登录 / 无 link)→ 走自配模型 fallback。**这样不会回退 P0(31b7900ba)**
+    修掉的"登录门控 fallback 把 guest 卡死"那个 bug:guest 永远走 self_router,不碰登录门控的网关。
+    """
+
+    provider_name = "oct"
+
+    def __init__(self, *, oct_router: OctModelRouter, self_router: ModelRouter, link_store: Any) -> None:
+        self._oct = oct_router
+        self._self = self_router
+        self._link_store = link_store
+
+    @property
+    def default_model(self) -> str | None:
+        return getattr(self._self, "default_model", None) or getattr(self._oct, "default_model", None)
+
+    def _pick(self) -> ModelRouter:
+        actor = current_actor.get()
+        if actor:
+            try:
+                link = self._link_store.get(actor)
+            except Exception:  # noqa: BLE001
+                link = None
+            if link is not None and not getattr(link, "token_invalid", False):
+                return self._oct
+        return self._self
+
+    def call(self, request: ModelRequest) -> ModelResponse:
+        return self._pick().call(request)
+
+    def call_stream(self, request: ModelRequest) -> Iterator[ModelStreamEvent]:
+        yield from self._pick().call_stream(request)
