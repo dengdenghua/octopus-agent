@@ -48,6 +48,8 @@ from runtime.protocol import (
     ItemStatus,
     JsonRpcErrorCode,
     ServerMethod,
+    TodoEntry,
+    TodoListItem,
     Turn,
     TurnParams,
     TurnStatus,
@@ -113,6 +115,45 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
         lines.append("")
         lines.append("项目还未结束；后续回合会继续从当前 Project OS 状态推进。")
     return "\n".join(lines)
+
+
+def _project_os_todo_item(state: dict[str, Any]) -> TodoListItem | None:
+    """Map Project OS milestones to the existing realtime todo-list item."""
+    project = state.get("project") if isinstance(state.get("project"), dict) else {}
+    milestones = state.get("milestones") if isinstance(state.get("milestones"), list) else []
+    tasks_by_ms = state.get("tasks") if isinstance(state.get("tasks"), dict) else {}
+    if not milestones:
+        return None
+
+    def _status(raw: Any) -> str:
+        value = str(raw or "").strip()
+        if value == "done":
+            return "completed"
+        if value in {"active", "in_progress", "running"}:
+            return "in_progress"
+        if value in {"blocked", "failed"}:
+            return "blocked"
+        return "pending"
+
+    entries: list[TodoEntry] = []
+    for milestone in milestones:
+        if not isinstance(milestone, dict):
+            continue
+        ms_id = str(milestone.get("id") or "").strip()
+        name = str(milestone.get("name") or ms_id or "milestone").strip()
+        status = _status(milestone.get("status"))
+        tasks = tasks_by_ms.get(ms_id) if isinstance(tasks_by_ms, dict) else []
+        tasks = tasks if isinstance(tasks, list) else []
+        done = sum(1 for task in tasks if isinstance(task, dict) and task.get("status") == "done")
+        suffix = f" · {done}/{len(tasks)} tasks" if tasks else ""
+        entries.append(TodoEntry(title=f"{name}{suffix}", status=status))
+    if not entries:
+        return None
+
+    project_name = str(project.get("name") or "Project OS").strip()
+    project_id = str(project.get("id") or "").strip()
+    explanation = f"Project OS · {project_name}" + (f" ({project_id})" if project_id else "")
+    return TodoListItem(explanation=explanation, plan=entries)
 
 
 # ── Split-module compat re-exports ────────────────────────────
@@ -1054,6 +1095,18 @@ class CerebrumRuntime:
         item.status = ItemStatus.COMPLETED
         await self._emit_item_completed(turn, log, emitter, item)
 
+    async def _emit_todo_list(
+        self,
+        turn: Turn,
+        log: EventLog,
+        emitter: EventEmitter,
+        item: TodoListItem,
+    ) -> None:
+        turn.items.append(item)
+        await self._emit_item_started(turn, log, emitter, item)
+        item.status = ItemStatus.COMPLETED
+        await self._emit_item_completed(turn, log, emitter, item)
+
     async def _drive_project_os(
         self,
         turn: Turn,
@@ -1115,6 +1168,9 @@ class CerebrumRuntime:
                 "请先添加至少一个参与者后再运行项目。",
             )
             return
+        todo_item = _project_os_todo_item(state)
+        if todo_item is not None:
+            await self._emit_todo_list(turn, log, emitter, todo_item)
         await self._emit_agent_message(
             turn,
             log,
