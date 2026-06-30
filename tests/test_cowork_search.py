@@ -176,6 +176,28 @@ def test_search_includes_linked_room_tasks(tmp_path) -> None:
     assert rt.ref["task_id"] == "task-1" and rt.actor == "alice"
 
 
+def test_room_task_search_matches_assignee_and_sop(tmp_path) -> None:
+    """Searching an agent name or SOP surfaces the room tasks routed to it —
+    parity with cowork async-task assignee search."""
+    from runtime.memory.cowork.session import link_room
+
+    store = GroupStore(base_dir=tmp_path)
+    link_room(store, "t1", "room-9")
+
+    def provider(room_id):
+        return [
+            {"id": "task-1", "title": "ship", "status": "pending",
+             "assignees": [{"kind": "agent", "ref": "analyst"}],
+             "sop_template": "market-research"},
+        ]
+
+    by_assignee = search_group(store, "t1", "analyst", room_task_provider=provider)
+    assert any(h.kind == "room_task" and h.ref["task_id"] == "task-1" for h in by_assignee)
+
+    by_sop = search_group(store, "t1", "market-research", room_task_provider=provider)
+    assert any(h.kind == "room_task" for h in by_sop)
+
+
 def test_search_skips_room_tasks_when_unlinked(tmp_path) -> None:
     store = GroupStore(base_dir=tmp_path)
     store.blackboard("t1").write("k", "nutrition", writer="u")

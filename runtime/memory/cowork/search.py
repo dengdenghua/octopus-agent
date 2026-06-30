@@ -220,8 +220,10 @@ def _search_room_messages(
 def _search_room_tasks(
     store: Any, thread_id: str, terms: list[str], room_task_provider: Any
 ) -> list[SearchHit]:
-    """Search the linked room's team tasks (title / description / status) — the
-    heavyweight room-scoped work units, distinct from the cowork async tasks."""
+    """Search the linked room's team tasks (title / description / status /
+    assignees / SOP) — the heavyweight room-scoped work units, distinct from the
+    cowork async tasks. Assignee matching mirrors :func:`_search_tasks` so an
+    agent/participant name surfaces the room tasks routed to them."""
     room_id = getattr(store.state(thread_id), "room_id", None)
     if not room_id:
         return []
@@ -235,9 +237,17 @@ def _search_room_tasks(
         title = _as_text(data.get("title"))
         description = _as_text(data.get("description"))
         status = _as_text(data.get("status"))
+        assignees = " ".join(
+            _as_text(a.get("ref"))
+            for a in (data.get("assignees") or [])
+            if isinstance(a, dict)
+        )
+        sop_template = _as_text(data.get("sop_template"))
         score = (
             _field_score(title, terms, 2.0)
             + _field_score(description, terms, 1.0)
+            + _field_score(assignees, terms, 1.0)
+            + _field_score(sop_template, terms, 1.0)
             + _field_score(status, terms, 0.5)
         )
         if score <= 0:
