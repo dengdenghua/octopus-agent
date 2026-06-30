@@ -8,7 +8,7 @@ run_backend=1
 run_frontend_static=1
 run_frontend_build="${OCTOPUS_VERIFY_SKIP_BUILD:-0}"
 run_full_stack="${OCTOPUS_VERIFY_SKIP_FULL_STACK:-0}"
-run_full_stack_mobile="${OCTOPUS_VERIFY_FULL_STACK_MOBILE:-0}"
+run_full_stack_mobile="${OCTOPUS_VERIFY_SKIP_FULL_STACK_MOBILE:-0}"
 
 usage() {
   cat <<'EOF'
@@ -18,13 +18,14 @@ Runs the local stability gate:
   - targeted backend regressions for model compatibility, team/cowork tasks, and org runs
   - frontend typecheck, lint, and build
   - full-stack Playwright smoke for FastAPI + Vite across localhost/127.0.0.1
+  - mobile full-stack Playwright smoke for core workspace responsive paths
 
 Environment:
   PYTHON                         Python executable. Defaults to .venv/bin/python, then python3/python.
   OCTOPUS_VERIFY_SKIP_BUILD=1     Skip frontend production build.
   OCTOPUS_VERIFY_SKIP_FULL_STACK=1 Skip full-stack Playwright smoke.
-  OCTOPUS_VERIFY_FULL_STACK_MOBILE=1
-                                  Also run mobile full-stack Playwright smoke.
+  OCTOPUS_VERIFY_SKIP_FULL_STACK_MOBILE=1
+                                  Skip mobile full-stack Playwright smoke.
   OCTOPUS_LIVE_MODEL_SMOKE=1      Also run live OpenAI-compatible provider smoke tests.
 EOF
 }
@@ -111,7 +112,7 @@ if [[ "$run_full_stack" != "1" ]]; then
   section "full-stack smoke"
   (cd frontend && PYTHON="$PYTHON_BIN" pnpm e2e:full)
 
-  if [[ "$run_full_stack_mobile" == "1" ]]; then
+  if [[ "$run_full_stack_mobile" != "1" ]]; then
     section "mobile full-stack smoke"
     (cd frontend && PYTHON="$PYTHON_BIN" pnpm e2e:full:mobile)
   fi
