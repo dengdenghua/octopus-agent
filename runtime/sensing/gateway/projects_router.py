@@ -38,6 +38,18 @@ class RecoverBody(BaseModel):
     max_ticks: int = 50
 
 
+class TaskInterventionBody(BaseModel):
+    action: str = Field(min_length=1)
+    assigned_agent: str | None = None
+    assigned_role: str | None = None
+    output: Any = None
+    reason: str = ""
+    reset_attempts: bool = True
+    cascade: bool = True
+    run: bool = False
+    max_ticks: int = 50
+
+
 class FromGroupBody(BaseModel):
     name: str = Field(min_length=1)
     goal: str = Field(min_length=1)
@@ -185,5 +197,38 @@ def create_projects_router(
                 **_full_state(project_id),
             }
         return {"ok": True, "recover": recovered, **_full_state(project_id)}
+
+    @router.post(
+        "/api/projects/{project_id}/tasks/{task_id}/intervene",
+        dependencies=[Depends(_auth_dep)],
+    )
+    def intervene_task(project_id: str, task_id: str, body: TaskInterventionBody) -> dict[str, Any]:
+        """Manually reassign, reset, complete, or skip a task."""
+        if project_store.get_project(project_id) is None:
+            raise HTTPException(404, "project not found")
+        engine = _engine()
+        intervention = engine.intervene_task(
+            project_id,
+            task_id,
+            action=body.action,
+            assigned_agent=body.assigned_agent,
+            assigned_role=body.assigned_role,
+            output=body.output,
+            reason=body.reason,
+            reset_attempts=body.reset_attempts,
+            cascade=body.cascade,
+        )
+        if any(str(event).startswith("task_not_found:") for event in intervention["events"]):
+            raise HTTPException(404, "task not found")
+        if any(str(event).startswith("unknown_task_action:") for event in intervention["events"]):
+            raise HTTPException(400, "unknown task intervention action")
+        if body.run:
+            return {
+                "ok": True,
+                "intervention": intervention,
+                "run": engine.run(project_id, max_ticks=body.max_ticks),
+                **_full_state(project_id),
+            }
+        return {"ok": True, "intervention": intervention, **_full_state(project_id)}
 
     return router

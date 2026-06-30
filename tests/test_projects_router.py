@@ -97,3 +97,71 @@ def test_recover_reopens_blocked_project_and_can_run(tmp_path) -> None:
     assert body["run"]["final_status"] == "done"
     assert body["project"]["status"] == "done"
     assert body["tasks"]["MS1"][0]["status"] == "done"
+
+
+def test_intervene_task_reassigns_and_runs(tmp_path) -> None:
+    c, store = _client_with_store(tmp_path)
+    project = Project(
+        id="P-intervene",
+        name="intervene",
+        goal="repair task",
+        milestone_ids=["MS1"],
+        current_ms="MS1",
+        status="blocked",
+    )
+    store.save_project(project)
+    store.save_milestone(
+        project.id,
+        Milestone(id="MS1", name="build", goal="build it", status="blocked"),
+    )
+    store.save_task(
+        Task(
+            id="MS1-T1",
+            milestone_id="MS1",
+            type="code",
+            goal="retry this",
+            assigned_agent="old-agent",
+            status="failed",
+            output="bad",
+            attempts=2,
+        )
+    )
+
+    res = c.post(
+        "/api/projects/P-intervene/tasks/MS1-T1/intervene",
+        json={
+            "action": "reassign",
+            "assigned_agent": "new-agent",
+            "run": True,
+            "max_ticks": 10,
+        },
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert body["ok"] is True
+    assert "task_reassigned:MS1-T1" in body["intervention"]["events"]
+    assert body["run"]["final_status"] == "done"
+    task = body["tasks"]["MS1"][0]
+    assert task["assigned_agent"] == "new-agent"
+    assert task["status"] == "done"
+
+
+def test_intervene_task_validates_missing_and_unknown_action(tmp_path) -> None:
+    c, store = _client_with_store(tmp_path)
+    project = Project(id="P-errors", name="errors", goal="g", milestone_ids=["MS1"])
+    store.save_project(project)
+    store.save_milestone(project.id, Milestone(id="MS1", name="build", goal="build it"))
+
+    missing = c.post(
+        "/api/projects/P-errors/tasks/no-task/intervene",
+        json={"action": "reset"},
+    )
+    assert missing.status_code == 404
+
+    store.save_task(Task(id="MS1-T1", milestone_id="MS1", type="code", goal="g"))
+    unknown = c.post(
+        "/api/projects/P-errors/tasks/MS1-T1/intervene",
+        json={"action": "teleport"},
+    )
+    assert unknown.status_code == 400

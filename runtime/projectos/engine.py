@@ -210,13 +210,11 @@ class ProjectEngine:
             for task in tasks:
                 if task.id not in reset_ids:
                     continue
-                task.status = "pending"
-                if reset_attempts:
-                    task.attempts = 0
-                if clear_outputs:
-                    task.output = None
-                    task.qa_verdict = None
-                self.store.save_task(task)
+                self._reset_task_for_rerun(
+                    task,
+                    reset_attempts=reset_attempts,
+                    clear_outputs=clear_outputs,
+                )
                 events.append(f"task_recovered:{task.id}")
                 changed = True
 
@@ -235,6 +233,106 @@ class ProjectEngine:
             events.append("project_recovered")
         else:
             events.append("nothing_to_recover")
+
+        current = self.store.get_project(project_id)
+        return {
+            "events": events,
+            "project_status": current.status if current else "failed",
+            "current_ms": current.current_ms if current else None,
+        }
+
+    def intervene_task(
+        self,
+        project_id: str,
+        task_id: str,
+        *,
+        action: str,
+        assigned_agent: str | None = None,
+        assigned_role: str | None = None,
+        output: Any = None,
+        reason: str = "",
+        reset_attempts: bool = True,
+        cascade: bool = True,
+    ) -> dict[str, Any]:
+        """Apply an operator intervention to one task.
+
+        ``reassign`` and ``reset`` put work back on the DAG frontier. ``complete``
+        and ``skip`` mark a task as accepted by the operator so the milestone
+        gate can move on.
+        """
+        project = self.store.get_project(project_id)
+        if project is None:
+            return {"events": ["project_not_found"], "project_status": "failed"}
+        task = self.store.get_task(task_id)
+        if task is None:
+            return {
+                "events": [f"task_not_found:{task_id}"],
+                "project_status": project.status,
+                "current_ms": project.current_ms,
+            }
+        ms = self.store.get_milestone(task.milestone_id)
+        if ms is None:
+            return {
+                "events": [f"milestone_not_found:{task.milestone_id}"],
+                "project_status": project.status,
+                "current_ms": project.current_ms,
+            }
+
+        action = str(action or "").strip().lower()
+        events: list[str] = []
+        tasks = self.store.tasks_for_milestone(ms.id)
+
+        if action == "reassign":
+            if assigned_agent is not None:
+                task.assigned_agent = str(assigned_agent)
+            if assigned_role is not None:
+                task.assigned_role = str(assigned_role)
+            self._reset_task_for_rerun(task, reset_attempts=reset_attempts, clear_outputs=True)
+            events.append(f"task_reassigned:{task.id}")
+        elif action == "reset":
+            reset_ids = {task.id}
+            if cascade:
+                reset_ids = self._with_downstream_tasks(tasks, reset_ids)
+            for current_task in tasks:
+                if current_task.id not in reset_ids:
+                    continue
+                self._reset_task_for_rerun(
+                    current_task,
+                    reset_attempts=reset_attempts,
+                    clear_outputs=True,
+                )
+                events.append(f"task_reset:{current_task.id}")
+        elif action == "complete":
+            task.status = "done"
+            task.output = output
+            task.qa_verdict = {"approved": True, "reason": reason or "operator completed"}
+            self.store.save_task(task)
+            events.append(f"task_completed_by_operator:{task.id}")
+        elif action == "skip":
+            task.status = "done"
+            task.output = {
+                "skipped": True,
+                "reason": reason or "operator skipped",
+                "previous_output": task.output,
+            }
+            task.qa_verdict = {"approved": True, "reason": reason or "operator skipped"}
+            self.store.save_task(task)
+            events.append(f"task_skipped:{task.id}")
+        else:
+            return {
+                "events": [f"unknown_task_action:{action or '<empty>'}"],
+                "project_status": project.status,
+                "current_ms": project.current_ms,
+            }
+
+        if ms.status in {"blocked", "done"} or project.status == "blocked":
+            ms.status = "in_progress"
+            self.store.save_milestone(project.id, ms)
+            project.status = "running"
+            project.current_ms = ms.id
+            self.store.save_project(project)
+            events.append(f"milestone_reopened:{ms.id}")
+            events.append("project_recovered")
 
         current = self.store.get_project(project_id)
         return {
@@ -292,7 +390,9 @@ class ProjectEngine:
         tasks = self.store.tasks_for_milestone(ms.id)
         for task in ready_tasks(tasks):
             task.assigned_role = ROLE_FOR_TASK.get(task.type, task.assigned_role or "engineer")
-            task.assigned_agent = self._assign(task)  # concrete member (custom group) or role
+            # Operator reassignment wins; otherwise pick a concrete group member
+            # or fallback role for this execution.
+            task.assigned_agent = task.assigned_agent or self._assign(task)
             task.status = "running"
             task.attempts += 1
             self.store.save_task(task)
@@ -370,6 +470,21 @@ class ProjectEngine:
                     out.add(task.id)
                     changed = True
         return out
+
+    def _reset_task_for_rerun(
+        self,
+        task: Task,
+        *,
+        reset_attempts: bool,
+        clear_outputs: bool,
+    ) -> None:
+        task.status = "pending"
+        if reset_attempts:
+            task.attempts = 0
+        if clear_outputs:
+            task.output = None
+            task.qa_verdict = None
+        self.store.save_task(task)
 
     def _context(self, project: Project, ms: Milestone, tasks: list[Task]) -> dict[str, Any]:
         return {

@@ -216,6 +216,94 @@ def test_recover_explicit_task_resets_downstream_dependants(tmp_path) -> None:
     assert eng.store.get_task("MS1-T2").output is None
 
 
+def test_intervene_reassign_resets_blocked_task_and_reopens_project(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    eng.tick(p.id)
+    task = eng.store.get_task("MS1-T1")
+    task.status = "failed"
+    task.output = "bad"
+    task.assigned_agent = "old-agent"
+    task.attempts = 2
+    eng.store.save_task(task)
+    ms = eng.store.get_milestone("MS1")
+    ms.status = "blocked"
+    eng.store.save_milestone(p.id, ms)
+    p.status = "blocked"
+    p.current_ms = "MS1"
+    eng.store.save_project(p)
+
+    result = eng.intervene_task(
+        p.id,
+        "MS1-T1",
+        action="reassign",
+        assigned_agent="new-agent",
+    )
+
+    updated = eng.store.get_task("MS1-T1")
+    assert result["project_status"] == "running"
+    assert "task_reassigned:MS1-T1" in result["events"]
+    assert "project_recovered" in result["events"]
+    assert updated.status == "pending"
+    assert updated.assigned_agent == "new-agent"
+    assert updated.attempts == 0
+    assert updated.output is None
+
+    done = eng.run(p.id, max_ticks=20)
+    assert done["final_status"] == "done"
+    assert eng.store.get_task("MS1-T1").assigned_agent == "new-agent"
+
+
+def test_intervene_complete_and_skip_allow_milestone_to_finish(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    eng.tick(p.id)
+
+    completed = eng.intervene_task(
+        p.id,
+        "MS1-T1",
+        action="complete",
+        output="operator accepted research",
+        reason="manual review passed",
+    )
+    assert "task_completed_by_operator:MS1-T1" in completed["events"]
+
+    skipped = eng.intervene_task(
+        p.id,
+        "MS1-T2",
+        action="skip",
+        reason="implementation not needed",
+    )
+    assert "task_skipped:MS1-T2" in skipped["events"]
+
+    tick = eng.tick(p.id)
+    assert "milestone_done:MS1" in tick["events"]
+    assert eng.store.get_milestone("MS1").status == "done"
+    assert eng.store.get_task("MS1-T2").output["skipped"] is True
+
+
+def test_intervene_reset_cascades_to_downstream_dependants(tmp_path) -> None:
+    eng = _engine(tmp_path)
+    p = eng.plan("x", "g")
+    eng.tick(p.id)
+    t1 = eng.store.get_task("MS1-T1")
+    t2 = eng.store.get_task("MS1-T2")
+    t1.status = "done"
+    t1.output = "old upstream"
+    t2.status = "done"
+    t2.output = "old downstream"
+    eng.store.save_task(t1)
+    eng.store.save_task(t2)
+
+    result = eng.intervene_task(p.id, "MS1-T1", action="reset")
+
+    assert "task_reset:MS1-T1" in result["events"]
+    assert "task_reset:MS1-T2" in result["events"]
+    assert eng.store.get_task("MS1-T1").status == "pending"
+    assert eng.store.get_task("MS1-T2").status == "pending"
+    assert eng.store.get_task("MS1-T2").output is None
+
+
 def test_milestone_gate_blocks_when_criteria_unmet(tmp_path) -> None:
     def strict_gate(ms: Milestone, tasks: list[Task]) -> dict:
         return {"met": ms.id != "MS1", "reason": "MS1 forced-fail"}
