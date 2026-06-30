@@ -334,7 +334,7 @@ export const jaJP: Translations = {
   // Chat Input Box
   chatInputBox: {
     quickCapabilities: "Tools",
-    collaborators: "Collaborators / formation",
+    collaborators: "Collaboration",
     collaboratorsSingle: "Solo",
     collaboratorsCountUnit: "members",
     collaboratorsHelp:

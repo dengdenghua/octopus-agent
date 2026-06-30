@@ -321,7 +321,7 @@ export const zhCN: Translations = {
   // Chat Input Box
   chatInputBox: {
     quickCapabilities: "工具",
-    collaborators: "拉人 / 队形",
+    collaborators: "协作",
     collaboratorsSingle: "单人",
     collaboratorsCountUnit: "人",
     collaboratorsHelp:
