@@ -9,6 +9,7 @@ run_frontend_static=1
 run_frontend_build="${OCTOPUS_VERIFY_SKIP_BUILD:-0}"
 run_full_stack="${OCTOPUS_VERIFY_SKIP_FULL_STACK:-0}"
 run_full_stack_mobile="${OCTOPUS_VERIFY_SKIP_FULL_STACK_MOBILE:-0}"
+run_production_gate="${OCTOPUS_VERIFY_SKIP_PRODUCTION_GATE:-0}"
 
 usage() {
   cat <<'EOF'
@@ -16,6 +17,7 @@ Usage: scripts/verify_local.sh [--full-stack-only]
 
 Runs the local stability gate:
   - targeted backend regressions for model compatibility, team/cowork tasks, and org runs
+  - production readiness scorecard gate for operator, automation, and policy evidence
   - frontend typecheck, lint, and build
   - full-stack Playwright smoke for FastAPI + Vite across localhost/127.0.0.1
   - mobile full-stack Playwright smoke for core workspace responsive paths
@@ -23,6 +25,8 @@ Runs the local stability gate:
 Environment:
   PYTHON                         Python executable. Defaults to .venv/bin/python, then python3/python.
   OCTOPUS_VERIFY_SKIP_BUILD=1     Skip frontend production build.
+  OCTOPUS_VERIFY_SKIP_PRODUCTION_GATE=1
+                                  Skip production readiness scorecard gate.
   OCTOPUS_VERIFY_SKIP_FULL_STACK=1 Skip full-stack Playwright smoke.
   OCTOPUS_VERIFY_SKIP_FULL_STACK_MOBILE=1
                                   Skip mobile full-stack Playwright smoke.
@@ -84,6 +88,7 @@ backend_tests=(
   tests/test_cowork_group_router.py
   tests/test_cowork_turn_plan.py
   tests/test_cowork_advanced.py
+  tests/test_production_readiness_gate.py
 )
 
 if [[ "${OCTOPUS_LIVE_MODEL_SMOKE:-0}" == "1" ]]; then
@@ -93,6 +98,11 @@ fi
 if [[ "$run_backend" == "1" ]]; then
   section "backend targeted stability tests"
   "$PYTHON_BIN" -m pytest "${backend_tests[@]}" -q
+fi
+
+if [[ "$run_production_gate" != "1" ]]; then
+  section "production readiness gate"
+  "$PYTHON_BIN" scripts/production_readiness_gate.py
 fi
 
 if [[ "$run_frontend_static" == "1" ]]; then

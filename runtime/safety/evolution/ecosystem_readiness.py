@@ -68,6 +68,7 @@ def compute_ecosystem_readiness(
         "score": score,
         "passed": present,
         "total": total,
+        "ready": present == total,
         "missing_count": total - present,
         "topics": topics,
         "next_actions": _next_actions(topics),

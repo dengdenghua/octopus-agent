@@ -591,6 +591,7 @@ class TestAgentCompetitorScorecard:
         ready = compute_ecosystem_readiness(root=tmp_path)
 
         assert ready["score"] == 1.0
+        assert ready["ready"] is True
         assert ready["passed"] == 5
         assert ready["next_actions"] == []
 
