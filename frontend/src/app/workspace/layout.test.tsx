@@ -20,10 +20,6 @@ vi.mock("@/components/workspace/workspace-sidebar", () => ({
   WorkspaceSidebar: () => <aside>sidebar</aside>,
 }));
 
-vi.mock("@/components/auth/molili-login-dialog", () => ({
-  MoliliLoginDialog: () => null,
-}));
-
 describe("<WorkspaceLayout /> stub response banner", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

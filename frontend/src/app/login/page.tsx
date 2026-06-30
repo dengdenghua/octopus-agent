@@ -4,7 +4,6 @@ import {
   ArrowRightIcon,
   KeyRoundIcon,
   MailIcon,
-  SmartphoneIcon,
   SparklesIcon,
   TargetIcon,
   ListChecksIcon,
@@ -26,8 +25,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   type AuthProviderInfo,
   getAuthProviderInfo,
-  isMoliliDisabled,
-  moliliSmsSend,
 } from "@/core/auth/api";
 import { octAuthApi, OctApiError } from "@/core/oct";
 import { useI18n } from "@/core/i18n/hooks";
@@ -59,163 +56,6 @@ function BrandMark() {
       <span className="absolute bottom-[0.48rem] left-[0.48rem] size-1.5 rounded-full bg-blue-300 shadow-[0_0_10px_rgba(96,165,250,0.82)]" />
       <span className="absolute bottom-[0.48rem] right-[0.48rem] size-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.82)]" />
     </span>
-  );
-}
-
-function isValidCnPhone(raw: string): boolean {
-  const cleaned = raw.trim();
-  const digits = cleaned.replace(/\D/g, "");
-  return /^1\d{10}$/.test(digits) || digits.length >= 7;
-}
-
-function normalizePhone(raw: string): string {
-  const cleaned = raw.trim();
-  if (cleaned.startsWith("+")) {
-    return `+${cleaned.slice(1).replace(/\D/g, "")}`;
-  }
-  return cleaned.replace(/\D/g, "");
-}
-
-function SmsLoginForm() {
-  const navigate = useNavigate();
-  const { smsLogin } = useAuth();
-  const { t } = useI18n();
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [sending, setSending] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    tickRef.current = setInterval(() => {
-      setCooldown((s) => Math.max(0, s - 1));
-    }, 1000);
-    return () => {
-      if (tickRef.current) clearInterval(tickRef.current);
-    };
-  }, [cooldown]);
-
-  async function sendCode() {
-    const normalizedPhone = normalizePhone(phone);
-    if (!isValidCnPhone(normalizedPhone)) {
-      toast.error(t.auth.errors.invalidPhone);
-      return;
-    }
-    setSending(true);
-    try {
-      await moliliSmsSend(normalizedPhone);
-      toast.success(t.auth.success.codeSent);
-      setCooldown(SMS_COOLDOWN_SECONDS);
-    } catch (err) {
-      if (isMoliliDisabled(err)) {
-        toast.error(t.auth.errors.moliliNotEnabled);
-      } else {
-        toast.error(
-          err instanceof Error ? err.message : t.auth.errors.sendFailed,
-        );
-      }
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const normalizedPhone = normalizePhone(phone);
-    if (!normalizedPhone || !code) {
-      toast.error(t.auth.errors.fillRequired);
-      return;
-    }
-    if (!isValidCnPhone(normalizedPhone)) {
-      toast.error(t.auth.errors.invalidPhone);
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await smsLogin(normalizedPhone, code.trim());
-      toast.success(t.auth.success.loginSuccess);
-      navigate("/workspace");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : t.auth.errors.loginFailed,
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="phone">{t.auth.phoneNumber}</Label>
-        <div className="relative">
-          <SmartphoneIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
-          <Input
-            id="phone"
-            type="tel"
-            placeholder={t.auth.placeholders.phone}
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            autoComplete="tel"
-            autoFocus
-            className="pl-9"
-          />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="code">{t.auth.verificationCode}</Label>
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <KeyRoundIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
-            <Input
-              id="code"
-              type="text"
-              inputMode="numeric"
-              placeholder={t.auth.placeholders.code}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={sendCode}
-            disabled={sending || cooldown > 0}
-            className="shrink-0"
-          >
-            {cooldown > 0
-              ? `${cooldown}s`
-              : sending
-                ? t.auth.sending
-                : t.auth.sendCode}
-          </Button>
-        </div>
-      </div>
-      <Button type="submit" className="w-full" disabled={submitting}>
-        {submitting ? t.auth.loggingIn : t.auth.login}
-        {!submitting && <ArrowRightIcon className="size-4" />}
-      </Button>
-      <p className="px-2 text-center text-[11px] leading-5 text-muted-foreground">
-        {t.auth.terms.autoRegister}
-        {t.auth.terms.agreeTo}{" "}
-        <Link
-          to="/terms"
-          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
-        >
-          {t.auth.terms.userAgreement}
-        </Link>{" "}
-        {t.common.other}{" "}
-        <Link
-          to="/privacy"
-          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
-        >
-          {t.auth.terms.privacyPolicy}
-        </Link>
-      </p>
-    </form>
   );
 }
 
@@ -481,7 +321,6 @@ export default function LoginPage() {
 
   const providersReady = authProviders !== null;
   const hasOct = authProviders?.some((p) => p.id === "oct") ?? false;
-  const hasMolili = authProviders?.some((p) => p.id === "molili") ?? false;
   const localProvider = authProviders?.find((p) => p.id === "local") ?? null;
 
   useEffect(() => {
@@ -608,25 +447,6 @@ export default function LoginPage() {
                 </Tabs>
               ) : hasOct ? (
                 <EmailLoginForm />
-              ) : hasMolili && localProvider ? (
-                <Tabs defaultValue="sms" className="w-full">
-                  <TabsList className="mb-5 grid w-full grid-cols-2">
-                    <TabsTrigger value="sms">{t.auth.phoneNumber}</TabsTrigger>
-                    <TabsTrigger value="local">
-                      {localProvider.label ?? t.registerPage.usernameLabel}
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="sms">
-                    <SmsLoginForm />
-                  </TabsContent>
-                  <TabsContent value="local">
-                    <LocalLoginForm
-                      passwordRequired={localProvider.password_required === true}
-                    />
-                  </TabsContent>
-                </Tabs>
-              ) : hasMolili ? (
-                <SmsLoginForm />
               ) : localProvider ? (
                 <LocalLoginForm
                   passwordRequired={localProvider.password_required === true}
@@ -639,9 +459,7 @@ export default function LoginPage() {
 
               {authStatus?.allow_registration && (
                 <div className="mt-4 text-center text-sm text-muted-foreground">
-                  {hasOct
-                    ? t.auth.terms.emailAutoRegister
-                    : t.auth.terms.autoRegister}
+                  {t.auth.terms.emailAutoRegister}
                   <Link
                     to="/register"
                     className="text-primary hover:text-primary/80"

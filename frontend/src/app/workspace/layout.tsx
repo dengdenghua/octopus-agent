@@ -2,7 +2,6 @@ import { Fragment, lazy, Suspense, useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { Toaster } from "sonner";
 
-import { MoliliLoginDialog } from "@/components/auth/molili-login-dialog";
 import { Banner } from "@/components/ui/banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
@@ -149,7 +148,6 @@ export default function WorkspaceLayout() {
           </div>
         </SidebarInset>
       </SidebarProvider>
-      <MoliliLoginDialog />
       <Suspense fallback={null}>
         <CommandPalette />
       </Suspense>

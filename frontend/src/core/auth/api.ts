@@ -159,9 +159,6 @@ export async function login(request: LoginRequest): Promise<LoginResponse> {
         data.user.username && data.user.username !== "anonymous"
           ? data.user.username
           : fallbackIdentity,
-      ...(data.credits && Object.keys(data.credits).length > 0
-        ? { molili_credits: data.credits }
-        : {}),
     });
   }
   return data;
@@ -194,91 +191,6 @@ export async function logout(): Promise<void> {
     headers: authHeaders(),
   });
   clearAuth();
-}
-
-// ---------------------------------------------------------------------------
-// Molili SMS login
-// ---------------------------------------------------------------------------
-
-export interface SmsSendResponse {
-  sent: boolean;
-  upstream?: Record<string, unknown>;
-}
-
-/** Thrown when the Molili auth routes aren't registered on the server ·
- * happens when ``config.molili.enabled`` is false. Callers should catch
- * this specifically and offer a graceful close (no point nagging the
- * user about SMS retry when the endpoint literally doesn't exist). */
-export class MoliliDisabledError extends Error {
-  constructor() {
-    super("Account login is not enabled on this server");
-    this.name = "MoliliDisabledError";
-  }
-}
-
-export function isMoliliDisabled(err: unknown): err is MoliliDisabledError {
-  return (
-    err instanceof MoliliDisabledError ||
-    (typeof err === "object" &&
-      err !== null &&
-      (err as { name?: string }).name === "MoliliDisabledError")
-  );
-}
-
-export async function moliliSmsSend(phone: string): Promise<SmsSendResponse> {
-  const res = await fetch(`${getBackendBaseURL()}/api/auth/molili/sms/send`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone }),
-  });
-  // 404 means the Molili router isn't mounted · raise a typed error so
-  // the dialog can show a helpful message + dismiss itself instead of
-  // toasting a bare "Not Found".
-  if (res.status === 404) {
-    throw new MoliliDisabledError();
-  }
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `发送验证码失败: ${res.statusText}`);
-  }
-  return (await res.json()) as SmsSendResponse;
-}
-
-export interface SmsVerifyResponse extends LoginResponse {
-  credits?: Record<string, unknown> | null;
-}
-
-export async function moliliSmsVerify(
-  phone: string,
-  code: string,
-): Promise<SmsVerifyResponse> {
-  const res = await fetch(`${getBackendBaseURL()}/api/auth/molili/sms/verify`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ phone, code }),
-  });
-  if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail ?? `登录失败: ${res.statusText}`);
-  }
-  const data = (await res.json()) as SmsVerifyResponse;
-  // Verify endpoint issues the same JWT shape as /api/auth/login, so we
-  // reuse the same storage slot — existing authHeaders() will pick it up.
-  if (data.access_token && data.user) {
-    _writeToken(data.access_token, {
-      ...data.user,
-      user_id: data.user.user_id || data.user.actor_id || phone,
-      mobile: data.user.mobile || phone,
-      username:
-        data.user.username && data.user.username !== "anonymous"
-          ? data.user.username
-          : data.user.mobile || phone,
-      ...(data.credits && Object.keys(data.credits).length > 0
-        ? { molili_credits: data.credits }
-        : {}),
-    });
-  }
-  return data;
 }
 
 export async function refreshToken(): Promise<LoginResponse> {

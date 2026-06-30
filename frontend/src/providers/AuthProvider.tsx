@@ -15,7 +15,6 @@ import {
   getUser as getStoredUser,
   login as loginApi,
   logout as logoutApi,
-  moliliSmsVerify,
   refreshToken,
   register as registerApi,
   _writeToken,
@@ -86,7 +85,6 @@ function normalizeUserIdentity(
   incoming: User,
   fallback?: Partial<User> | null,
   fallbackMobile?: string,
-  credits?: Record<string, unknown> | null,
 ): User {
   const mobile = incoming.mobile || fallback?.mobile || fallbackMobile;
   const actorId = incoming.actor_id || fallback?.actor_id;
@@ -117,9 +115,6 @@ function normalizeUserIdentity(
     username,
     ...(actorId ? { actor_id: actorId } : {}),
     ...(mobile ? { mobile } : {}),
-    ...(credits && Object.keys(credits).length > 0
-      ? { molili_credits: credits }
-      : {}),
   };
 }
 
@@ -130,7 +125,6 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isGuest: boolean;
   login: (request: LoginRequest) => Promise<void>;
-  smsLogin: (phone: string, code: string) => Promise<void>;
   emailLogin: (email: string, code: string) => Promise<void>;
   /** Deprecated: guest mode is disabled when auth is enabled. */
   guestLogin: () => Promise<void>;
@@ -179,8 +173,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             normalizeUserIdentity(
               currentUser,
               storedUser || tokenUser,
-              undefined,
-              undefined,
             ),
           );
         } catch (err) {
@@ -214,20 +206,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const smsLogin = useCallback(async (phone: string, code: string) => {
-    const response = await moliliSmsVerify(phone, code);
-    if (response.user) {
-      const normalized = normalizeUserIdentity(
-        response.user,
-        null,
-        phone,
-        response.credits,
-      );
-      if (response.access_token) _writeToken(response.access_token, normalized);
-      setUser(normalized);
-    }
-  }, []);
-
   const emailLogin = useCallback(async (email: string, code: string) => {
     // oct 账号网关:邮箱验证码登录 → agent 自有会话 JWT
     const response = await octAuthApi.emailLogin(email, code);
@@ -236,7 +214,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         response.user as unknown as User,
         null,
         email,
-        response.credits,
       );
       if (response.access_token) _writeToken(response.access_token, normalized);
       setUser(normalized);
@@ -280,7 +257,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated,
       isGuest,
       login,
-      smsLogin,
       emailLogin,
       guestLogin,
       register,
@@ -294,7 +270,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated,
       isGuest,
       login,
-      smsLogin,
       emailLogin,
       guestLogin,
       register,

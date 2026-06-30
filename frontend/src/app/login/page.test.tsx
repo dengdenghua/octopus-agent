@@ -6,8 +6,6 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/harness";
 
 const navigateMock = vi.fn();
-const smsSendMock = vi.fn();
-const smsLoginMock = vi.fn();
 const emailSendMock = vi.fn();
 const emailLoginMock = vi.fn();
 const getAuthProvidersMock = vi.fn();
@@ -25,15 +23,12 @@ vi.mock("react-router-dom", async () => {
 
 vi.mock("@/core/auth/api", () => ({
   getAuthProviderInfo: () => getAuthProvidersMock(),
-  moliliSmsSend: (phone: string) => smsSendMock(phone),
-  isMoliliDisabled: () => false,
   authHeaders: () => ({}),
   jsonAuthHeaders: () => ({}),
 }));
 
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => ({
-    smsLogin: (phone: string, code: string) => smsLoginMock(phone, code),
     emailLogin: (email: string, code: string) => emailLoginMock(email, code),
     guestLogin: vi.fn(),
     authStatus: { enabled: true, allow_registration: allowRegistrationMock() },
@@ -64,6 +59,7 @@ vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
     success: vi.fn(),
+    message: vi.fn(),
   },
 }));
 
@@ -98,9 +94,8 @@ async function renderPageAtLoginForm() {
   renderPage();
 
   // The login form is the landing surface · no onboarding stepper
-  // to advance through. We just wait for the auth provider probe to
-  // resolve so the SMS tab is rendered.
-  await screen.findByRole("textbox", { name: "手机号" });
+  // to advance through. We just wait for the auth provider probe to resolve.
+  await screen.findByRole("textbox", { name: "邮箱" });
 
   return user;
 }
@@ -108,13 +103,11 @@ async function renderPageAtLoginForm() {
 describe("LoginPage", () => {
   beforeEach(() => {
     navigateMock.mockReset();
-    smsSendMock.mockReset();
-    smsLoginMock.mockReset();
     emailSendMock.mockReset();
     emailLoginMock.mockReset();
     getAuthProvidersMock.mockReset();
     allowRegistrationMock.mockReset();
-    getAuthProvidersMock.mockResolvedValue([{ id: "molili" }]);
+    getAuthProvidersMock.mockResolvedValue([{ id: "oct" }]);
     allowRegistrationMock.mockReturnValue(false);
   });
 
@@ -122,9 +115,9 @@ describe("LoginPage", () => {
     vi.useRealTimers();
   });
 
-  it("defaults to the SMS tab with phone + code fields visible", async () => {
+  it("defaults to the email form with email + code fields visible", async () => {
     await renderPageAtLoginForm();
-    expect(screen.getByRole("textbox", { name: "手机号" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "邮箱" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "验证码" })).toBeInTheDocument();
     // Legacy password tab was removed upstream · nothing here asks
     // for a password.
@@ -158,31 +151,31 @@ describe("LoginPage", () => {
     expect(screen.queryByText("未注册手机号将自动创建账号")).not.toBeInTheDocument();
   });
 
-  it("获取验证码 is enabled by default; invalid phone surfaces toast error", async () => {
+  it("获取验证码 is enabled by default; invalid email surfaces toast error", async () => {
     // Current behavior: send button is always enabled while idle ·
-    // clicking with a bad phone fires a toast rather than disabling
+    // clicking with a bad email fires a toast rather than disabling
     // the button up front (older versions had a length-gated button).
     const { toast } = await import("sonner");
-    smsSendMock.mockResolvedValue({ sent: true });
+    emailSendMock.mockResolvedValue({ sent: true });
     const user = await renderPageAtLoginForm();
 
     const sendBtn = screen.getByRole("button", { name: "获取验证码" });
     expect(sendBtn).not.toBeDisabled();
 
     // Too short · click produces a toast.error, no API hit.
-    await user.type(screen.getByRole("textbox", { name: "手机号" }), "139");
+    await user.type(screen.getByRole("textbox", { name: "邮箱" }), "bad");
     await user.click(sendBtn);
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    expect(smsSendMock).not.toHaveBeenCalled();
+    expect(emailSendMock).not.toHaveBeenCalled();
   });
 
-  it("sends the SMS code and kicks off cooldown on success", async () => {
-    smsSendMock.mockResolvedValue({ sent: true });
+  it("sends the email code and kicks off cooldown on success", async () => {
+    emailSendMock.mockResolvedValue({ sent: true });
     const user = await renderPageAtLoginForm();
 
     await user.type(
-      screen.getByRole("textbox", { name: "手机号" }),
-      "13800001111",
+      screen.getByRole("textbox", { name: "邮箱" }),
+      "alice@example.com",
     );
 
     const sendBtn = screen.getByRole("button", { name: "获取验证码" });
@@ -191,7 +184,7 @@ describe("LoginPage", () => {
 
     // API hit with the trimmed phone.
     await waitFor(() =>
-      expect(smsSendMock).toHaveBeenCalledWith("13800001111"),
+      expect(emailSendMock).toHaveBeenCalledWith("alice@example.com"),
     );
 
     // Implementation note.
@@ -203,13 +196,13 @@ describe("LoginPage", () => {
     });
   });
 
-  it("calls smsLogin and navigates on successful verify", async () => {
-    smsLoginMock.mockResolvedValue(undefined);
+  it("calls emailLogin and navigates on successful verify", async () => {
+    emailLoginMock.mockResolvedValue(undefined);
     const user = await renderPageAtLoginForm();
 
     await user.type(
-      screen.getByRole("textbox", { name: "手机号" }),
-      "13800001111",
+      screen.getByRole("textbox", { name: "邮箱" }),
+      "alice@example.com",
     );
     await user.type(screen.getByRole("textbox", { name: "验证码" }), "123456");
 
@@ -218,7 +211,7 @@ describe("LoginPage", () => {
     await user.click(screen.getByRole("button", { name: "登录" }));
 
     await waitFor(() => {
-      expect(smsLoginMock).toHaveBeenCalledWith("13800001111", "123456");
+      expect(emailLoginMock).toHaveBeenCalledWith("alice@example.com", "123456");
     });
     await waitFor(() => {
       expect(navigateMock).toHaveBeenCalledWith("/workspace");
@@ -227,12 +220,12 @@ describe("LoginPage", () => {
 
   it("surfaces upstream error via toast (no navigation)", async () => {
     const { toast } = await import("sonner");
-    smsLoginMock.mockRejectedValue(new Error("验证码已过期"));
+    emailLoginMock.mockRejectedValue(new Error("验证码已过期"));
     const user = await renderPageAtLoginForm();
 
     await user.type(
-      screen.getByRole("textbox", { name: "手机号" }),
-      "13800001111",
+      screen.getByRole("textbox", { name: "邮箱" }),
+      "alice@example.com",
     );
     await user.type(screen.getByRole("textbox", { name: "验证码" }), "000000");
     await user.click(screen.getByRole("button", { name: "登录" }));
