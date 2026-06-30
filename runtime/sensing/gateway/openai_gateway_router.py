@@ -86,6 +86,22 @@ def _reasoning_effort_from_body(body: dict[str, Any]) -> str | None:
     return None
 
 
+def _deep_requested(body: dict[str, Any]) -> bool:
+    """Whether the caller explicitly asked for the deep agentic path.
+
+    Trivial inputs otherwise short-circuit through the reflex fast-path and
+    never produce a task_id / trace. Setting ``deep`` (or ``execution=deep``,
+    or ``context.deep``) forces planner+runtime so the run is verifiable +
+    replayable — the contract enterprise relies on to surface a trust trace.
+    """
+    if bool(body.get("deep")):
+        return True
+    if str(body.get("execution") or "").lower() == "deep":
+        return True
+    ctx = body.get("context")
+    return bool(isinstance(ctx, dict) and ctx.get("deep"))
+
+
 def create_openai_router(
     stack: Any,
     *,
@@ -428,6 +444,7 @@ def create_openai_router(
             stream_mode = "full"
         requested_model = body.get("model", "octopus-agent")
         reasoning_effort = _reasoning_effort_from_body(body)
+        force_deep = _deep_requested(body)
 
         agent_id = body.get("agent")
         selected_agent: Any = None
@@ -509,8 +526,14 @@ def create_openai_router(
                 )
             return mix_result
 
-        reflex_response = _maybe_reflex_chat(
-            reflex_router, intent, stack, requested_model, actor=actor,
+        # Deep runs must not be short-circuited by the reflex fast-path —
+        # that's what makes a trivial prompt come back with no task_id/trace.
+        reflex_response = (
+            None
+            if force_deep
+            else _maybe_reflex_chat(
+                reflex_router, intent, stack, requested_model, actor=actor,
+            )
         )
         if reflex_response is not None:
             if reflex_response.get("octopus") is not None:
@@ -550,6 +573,7 @@ def create_openai_router(
                 response = _run_chat(
                     stack, intent, requested_model, default_arm,
                     optimizer=prompt_optimizer, actor=actor, agent=selected_agent,
+                    force_deep=force_deep,
                 )
         finally:
             _molili_actor_ctx.reset(_molili_token)
@@ -568,9 +592,15 @@ def _run_chat(
     optimizer: Any = None,
     actor: str | None = None,
     agent: Any = None,
+    force_deep: bool = False,
 ) -> dict[str, Any]:
     task_id = uuid4()
     variant_name: str | None = None
+
+    # Hint the planner/optimizer that the caller wants a real multi-step run
+    # (not a trivial direct answer), so the graph is worth tracing/replaying.
+    if force_deep and isinstance(getattr(intent, "user_context", None), dict):
+        intent.user_context["force_deep"] = True
 
     plan_kwargs: dict[str, Any] = {}
     if agent is not None:
@@ -604,7 +634,7 @@ def _run_chat(
                 if reply is not None:
                     return _chat_completion_envelope(
                         reply, model=model, actor=actor, agent=agent,
-                        extra={"fallback": f"planner_error: {e}"},
+                        extra={"fallback": f"planner_error: {e}", "deep_requested": force_deep},
                     )
                 raise HTTPException(500, f"planner failed: {e}") from e
         except Exception as e:  # noqa: BLE001
@@ -612,7 +642,7 @@ def _run_chat(
             if reply is not None:
                 return _chat_completion_envelope(
                     reply, model=model, actor=actor, agent=agent,
-                    extra={"fallback": f"planner_error: {e}"},
+                    extra={"fallback": f"planner_error: {e}", "deep_requested": force_deep},
                 )
             raise HTTPException(500, f"planner failed: {e}") from e
 
@@ -656,6 +686,8 @@ def _run_chat(
     }
     if variant_name is not None:
         octopus_meta["variant"] = variant_name
+    if force_deep:
+        octopus_meta["deep_requested"] = True
     if actor is not None:
         octopus_meta["actor"] = actor
     if agent is not None:

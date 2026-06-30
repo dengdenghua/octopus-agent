@@ -225,6 +225,37 @@ class TestGatewayReflex:
         # Implementation note.
         assert stack.journal.read_by_type("trajectory")
 
+    def test_deep_flag_bypasses_reflex(self, gateway_with_reflex):
+        """``deep`` forces planner+runtime so a trivial prompt still produces a
+        task_id + trajectory (the verifiable/replayable trace), instead of the
+        reflex fast-path that returns no trace."""
+        stack, client = gateway_with_reflex
+        data = client.post("/v1/chat/completions", json={
+            "deep": True,
+            "messages": [{"role": "user", "content": "ping"}],
+        }).json()
+        assert data["octopus"].get("reflex") is not True
+        assert data["octopus"].get("deep_requested") is True
+        assert data["octopus"].get("task_id")  # a real run has a task id
+        assert stack.journal.read_by_type("trajectory")
+
+    def test_execution_deep_alias_also_bypasses_reflex(self, gateway_with_reflex):
+        _, client = gateway_with_reflex
+        data = client.post("/v1/chat/completions", json={
+            "execution": "deep",
+            "messages": [{"role": "user", "content": "ping"}],
+        }).json()
+        assert data["octopus"].get("reflex") is not True
+        assert data["octopus"].get("deep_requested") is True
+
+    def test_without_deep_ping_still_reflex(self, gateway_with_reflex):
+        """Control: same trivial input without the flag short-circuits to reflex."""
+        _, client = gateway_with_reflex
+        data = client.post("/v1/chat/completions", json={
+            "messages": [{"role": "user", "content": "ping"}],
+        }).json()
+        assert data["octopus"].get("reflex") is True
+
     def test_reflex_stream_frames(self, gateway_with_reflex):
         stack, client = gateway_with_reflex
         with client.stream(
