@@ -757,7 +757,6 @@ def create_config_router(
             ("anthropic", "runtime.sensing.model_router.anthropic_router", "AnthropicModelRouter"),
             ("openai",    "runtime.sensing.model_router.openai_router",    "OpenAIModelRouter"),
             ("gemini",    "runtime.sensing.model_router.gemini_router",    "GeminiModelRouter"),
-            ("molili",    "runtime.sensing.model_router.molili_router",    "MoliliModelRouter"),
         ]
         for name, modpath, classname in _specs:
             try:
