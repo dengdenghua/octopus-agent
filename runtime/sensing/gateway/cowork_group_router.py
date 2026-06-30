@@ -68,6 +68,15 @@ class MergeBody(BaseModel):
     summary: str = ""
 
 
+class ReadBody(BaseModel):
+    member_id: str = Field(min_length=1)
+    seq: int | None = None  # default: mark read up to the current event head
+
+
+class HeartbeatBody(BaseModel):
+    member_id: str = Field(min_length=1)
+
+
 def create_cowork_group_router(
     *,
     store: GroupStore | None = None,
@@ -88,6 +97,17 @@ def create_cowork_group_router(
         from runtime.memory.cowork.async_work import AsyncWorkStore
 
         return AsyncWorkStore(base_dir=group_store.base_dir, group_store=group_store)
+
+    _presence_holder: dict[str, Any] = {}
+
+    def _presence_store():
+        store = _presence_holder.get("v")
+        if store is None:
+            from runtime.memory.cowork.presence import PresenceStore
+
+            store = PresenceStore(base_dir=group_store.base_dir)
+            _presence_holder["v"] = store
+        return store
 
     def _actor(request: Request) -> str:
         from runtime.adapters.web_auth import _resolve_actor
@@ -159,6 +179,35 @@ def create_cowork_group_router(
             async_store=_async_store(),
         )
         return {"thread_id": thread_id, "query": q, "hits": [h.to_dict() for h in hits]}
+
+    @router.get("/api/cowork/{thread_id}/presence")
+    def presence(thread_id: str, online_window_s: int = 60) -> dict[str, Any]:
+        """Per-member presence + unread for the thread's roster. Unread counts
+        group events past each member's read marker (floored at their join)."""
+        from runtime.memory.cowork.presence import group_presence
+
+        members = group_presence(
+            group_store, _presence_store(), thread_id,
+            online_window_s=max(1, online_window_s),
+        )
+        return {"thread_id": thread_id, "members": [m.to_dict() for m in members]}
+
+    @router.post("/api/cowork/{thread_id}/read", dependencies=[Depends(_auth_dep)])
+    def mark_read(thread_id: str, body: ReadBody) -> dict[str, Any]:
+        """Mark ``member_id`` caught up to ``seq`` (default: the current event
+        head). The marker is monotonic — it never rewinds."""
+        seq = body.seq
+        if seq is None:
+            events = group_store.events(thread_id)
+            seq = max((e.seq for e in events), default=0)
+        _presence_store().mark_read(thread_id, body.member_id, int(seq))
+        return {"ok": True, **_presence_store().get(thread_id, body.member_id)}
+
+    @router.post("/api/cowork/{thread_id}/heartbeat", dependencies=[Depends(_auth_dep)])
+    def heartbeat(thread_id: str, body: HeartbeatBody) -> dict[str, Any]:
+        """Presence ping — refresh ``member_id``'s online status."""
+        _presence_store().heartbeat(thread_id, body.member_id)
+        return {"ok": True, **_presence_store().get(thread_id, body.member_id)}
 
     @router.get("/api/cowork/{thread_id}/catchup/{member_id}")
     def catchup(thread_id: str, member_id: str) -> dict[str, Any]:

@@ -82,6 +82,28 @@ def test_search_endpoint_spans_surfaces_and_filters(tmp_path) -> None:
     assert empty.json()["hits"] == []
 
 
+def test_presence_unread_and_read_receipts(tmp_path) -> None:
+    c = _client(tmp_path)
+    t = "thread-presence"
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "user", "kind": "human"})
+    c.post(f"/api/cowork/{t}/members", json={"target_id": "alice", "kind": "agent"})
+    c.post(f"/api/cowork/{t}/mode", json={"mode": "swarm"})  # more activity
+
+    pres = c.get(f"/api/cowork/{t}/presence").json()["members"]
+    user = next(m for m in pres if m["member_id"] == "user")
+    assert user["unread"] > 0
+    assert user["online"] is False
+
+    # Heartbeat → online; mark-read → unread clears.
+    assert c.post(f"/api/cowork/{t}/heartbeat", json={"member_id": "user"}).status_code == 200
+    assert c.post(f"/api/cowork/{t}/read", json={"member_id": "user"}).status_code == 200
+
+    after = c.get(f"/api/cowork/{t}/presence").json()["members"]
+    user2 = next(m for m in after if m["member_id"] == "user")
+    assert user2["unread"] == 0
+    assert user2["online"] is True
+
+
 def test_invite_requires_target(tmp_path) -> None:
     c = _client(tmp_path)
     assert c.post("/api/cowork/t/members", json={"kind": "agent"}).status_code == 422
