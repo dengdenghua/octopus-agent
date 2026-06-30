@@ -99,6 +99,7 @@ from runtime.core.cerebrum.todo_protocol import (
     render_todo_protocol_guidance,
     should_require_todo_protocol,
 )
+from runtime.core.cerebrum.work_mode import resolve_work_mode
 from runtime.execution.tool_engine import (
     normalize_tool_lifecycle_event,
     tool_lifecycle_event_to_react_event,
@@ -712,45 +713,17 @@ def stream_react_loop(
     )
     _uc = intent.user_context or {}
     _metadata = _uc.get("metadata") or {}
-    _wp = _uc.get("workspace_path") or _metadata.get("workspace_path")
-    _personal_wp = (
-        _uc.get("personal_workspace_path")
-        or _metadata.get("personal_workspace_path")
-        or _uc.get("cwd")
-        or _metadata.get("cwd")
-    )
-    _workspace_scope_value = str(
-        _uc.get("workspace_scope") or _metadata.get("workspace_scope") or ""
-    ).strip().lower()
-    _effective_wp = _wp
-    if not (isinstance(_effective_wp, str) and _effective_wp.strip()):
-        _personal_workspace_enabled = (
-            _uc.get("personal_workspace_enabled") is True
-            or _metadata.get("personal_workspace_enabled") is True
-            or _workspace_scope_value == "personal"
-        )
-        if _personal_workspace_enabled and isinstance(_personal_wp, str) and _personal_wp.strip():
-            _effective_wp = _personal_wp
+    # One model for the turn's work-type/scope (project↔personal↔code) — resolved
+    # in runtime.core.cerebrum.work_mode instead of scattered inline reads. The
+    # locals below stay as thin aliases so downstream call sites are unchanged.
+    _wm = resolve_work_mode(_uc)
+    _wp = _wm.project_workspace
+    _effective_wp = _wm.effective_workspace
     _resume_context_prompt = _build_resume_context_prompt(_uc.get("resume_intent"))
     if _resume_context_prompt:
         volatile_parts.append(_resume_context_prompt)
-    _goal_mode_value = (
-        _uc.get("goal_mode")
-        or _metadata.get("goal_mode")
-        or _uc.get("completion_policy")
-        or _metadata.get("completion_policy")
-    )
-    _is_goal_mode = _goal_mode_value is True or (
-        isinstance(_goal_mode_value, str)
-        and _goal_mode_value.lower() in {"goal", "goal_mode", "true"}
-    )
-    _is_code_mode = bool(
-        _uc.get("mode") == "code"
-        or _metadata.get("mode") == "code"
-        or _uc.get("capability_mode")
-        or _metadata.get("capability_mode")
-        or (isinstance(_effective_wp, str) and _effective_wp.strip())
-    )
+    _is_goal_mode = _wm.is_goal
+    _is_code_mode = _wm.is_code
     # Codebase grounding for code/project chats: the same wiki + source
     # retrieval the planner uses, so interactive chat is grounded the same way
     # planned turns are (previously only plan() got this). Volatile (goal-
@@ -775,38 +748,16 @@ def stream_react_loop(
     _browser_regression_preview_url = _uc.get("browser_regression_preview_url") or _metadata.get(
         "browser_regression_preview_url"
     )
-    _mode_value = str(_uc.get("mode") or _metadata.get("mode") or "").lower()
-    _capability_mode_value = str(
-        _uc.get("capability_mode") or _metadata.get("capability_mode") or ""
-    ).lower()
-    _agent_mode_value = str(
-        _uc.get("agent_mode") or _metadata.get("agent_mode") or "coder"
-    ).lower()
-    _workflow_preset_value = str(
-        _uc.get("workflow_preset") or _metadata.get("workflow_preset") or ""
-    ).strip().lower()
-    _codex_mode_value = str(
-        _uc.get("codex_mode") or _metadata.get("codex_mode") or ""
-    ).strip().lower()
-    _completion_policy_value = str(
-        _uc.get("completion_policy") or _metadata.get("completion_policy") or ""
-    ).strip().lower()
-    _is_codex_composer_plan_or_spec = _codex_mode_value in {
-        "plan",
-        "spec",
-    } or _completion_policy_value in {"plan", "spec"}
-    _mode_contract_value = str(
-        _uc.get("mode_contract") or _metadata.get("mode_contract") or ""
-    ).strip()
-    _is_goal_mode = (
-        _is_goal_mode
-        or _codex_mode_value == "goal"
-        or _completion_policy_value == "goal"
-    )
-    _personal_mode_value = str(
-        _uc.get("personal_mode") or _metadata.get("personal_mode") or ""
-    ).strip().lower()
-    _project_signals = _uc.get("project_signals") or _metadata.get("project_signals")
+    _mode_value = _wm.mode
+    _capability_mode_value = _wm.capability_mode
+    _agent_mode_value = _wm.agent_mode
+    _workflow_preset_value = _wm.workflow_preset
+    _codex_mode_value = _wm.codex_mode
+    _completion_policy_value = _wm.completion_policy
+    _is_codex_composer_plan_or_spec = _wm.is_codex_plan_or_spec
+    _mode_contract_value = _wm.mode_contract
+    _personal_mode_value = _wm.personal_mode
+    _project_signals = _wm.project_signals
     _is_swarm_mode = _mode_value in {
         "swarm",
         "swarms",
