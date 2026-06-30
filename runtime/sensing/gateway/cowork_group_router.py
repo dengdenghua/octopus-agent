@@ -93,6 +93,7 @@ def create_cowork_group_router(
     async_store: Any = None,
     room_message_store: Any = None,
     team_rooms_state_path: Any = None,
+    team_tasks_state_path: Any = None,
     runtime: Any = None,
     identity_store: Any = None,
     require_auth: bool = False,
@@ -150,6 +151,24 @@ def create_cowork_group_router(
             return []
         return [p.model_dump() for p in room.participants]
 
+    def _room_tasks(room_id: str) -> list[dict[str, Any]]:
+        """Read a linked room's team tasks from the team_tasks store (read-only
+        bridge — the team_tasks router owns the file). This is the third source
+        of truth Codex flagged; folding it in makes the session view cover the
+        room's *work*, not just its roster + transcript."""
+        from pathlib import Path
+
+        from runtime.platform.process.paths import app_paths
+        from runtime.sensing.gateway.team_tasks_router import _load_state as _load_tasks
+
+        path = team_tasks_state_path or (app_paths().data_dir / "team_tasks.json")
+        tasks = _load_tasks(Path(path))
+        return [
+            t.model_dump()
+            for t in tasks.values()
+            if t.room_id == room_id
+        ]
+
     def _actor(request: Request) -> str:
         from runtime.adapters.web_auth import _resolve_actor
 
@@ -195,6 +214,7 @@ def create_cowork_group_router(
             async_store=_async_store(), presence_store=_presence_store(),
             room_message_store=_room_message_store(),
             room_participants_provider=_room_participants,
+            room_tasks_provider=_room_tasks,
         )
         return session.to_dict()
 
@@ -250,9 +270,9 @@ def create_cowork_group_router(
     ) -> dict[str, Any]:
         """Replayable, session-wide search across the shared blackboard, async
         tasks, the membership/mode event log, and (when a room is linked) the
-        room transcript. ``kinds`` is a comma-separated subset of
-        ``blackboard,task,event,room_message`` (default all); ``until_seq``
-        bounds the event scan to a past point (time-travel)."""
+        room transcript + team tasks. ``kinds`` is a comma-separated subset of
+        ``blackboard,task,event,room_message,room_task`` (default all);
+        ``until_seq`` bounds the event scan to a past point (time-travel)."""
         from runtime.memory.cowork.search import search_group
 
         kind_filter = tuple(k.strip() for k in kinds.split(",") if k.strip()) or None
@@ -265,6 +285,7 @@ def create_cowork_group_router(
             until_seq=until_seq,
             async_store=_async_store(),
             room_message_store=_room_message_store(),
+            room_task_provider=_room_tasks,
         )
         return {"thread_id": thread_id, "query": q, "hits": [h.to_dict() for h in hits]}
 

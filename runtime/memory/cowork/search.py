@@ -21,14 +21,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-ALL_KINDS = ("blackboard", "task", "event", "room_message")
+ALL_KINDS = ("blackboard", "task", "event", "room_message", "room_task")
 
 
 @dataclass
 class SearchHit:
     """One ranked match, uniform across the three searched surfaces."""
 
-    kind: str  # blackboard | task | event
+    kind: str  # blackboard | task | event | room_message | room_task
     title: str
     snippet: str
     score: float
@@ -116,14 +116,16 @@ def search_group(
     until_seq: int | None = None,
     async_store: Any = None,
     room_message_store: Any = None,
+    room_task_provider: Any = None,
 ) -> list[SearchHit]:
     """Ranked matches for ``query`` across the session's surfaces.
 
     ``kinds`` restricts which surfaces are searched (default: all). ``until_seq``
     bounds the event scan to ``seq <= until_seq`` (replay). ``async_store`` is
     reused if given, else built from ``store.base_dir``. When the thread has a
-    linked room and ``room_message_store`` is given, the room transcript is
-    searched too — so search is session-wide, not just the cowork thread.
+    linked room, its transcript (``room_message_store``) and team tasks
+    (``room_task_provider`` — room_id → list of task dicts) are searched too — so
+    search is session-wide across all three sources, not just the cowork thread.
     """
     terms = _terms(query)
     if not terms or not thread_id:
@@ -140,6 +142,8 @@ def search_group(
         hits.extend(_search_events(store, thread_id, terms, until_seq))
     if "room_message" in wanted and room_message_store is not None:
         hits.extend(_search_room_messages(store, thread_id, terms, room_message_store))
+    if "room_task" in wanted and room_task_provider is not None:
+        hits.extend(_search_room_tasks(store, thread_id, terms, room_task_provider))
 
     # Highest score first; break ties by recency (events/tasks carry ts;
     # blackboard hits have no ts and sort last within a tie, which is fine).
@@ -208,6 +212,45 @@ def _search_room_messages(
                 actor=author,
                 ts=m.get("ts"),
                 ref={"room_id": room_id, "seq": m.get("seq")},
+            )
+        )
+    return out
+
+
+def _search_room_tasks(
+    store: Any, thread_id: str, terms: list[str], room_task_provider: Any
+) -> list[SearchHit]:
+    """Search the linked room's team tasks (title / description / status) — the
+    heavyweight room-scoped work units, distinct from the cowork async tasks."""
+    room_id = getattr(store.state(thread_id), "room_id", None)
+    if not room_id:
+        return []
+    try:
+        rows = room_task_provider(room_id) or []
+    except Exception:  # noqa: BLE001 — linked-room tasks degrade to other surfaces
+        return []
+    out: list[SearchHit] = []
+    for task in rows:
+        data = task if isinstance(task, dict) else {}
+        title = _as_text(data.get("title"))
+        description = _as_text(data.get("description"))
+        status = _as_text(data.get("status"))
+        score = (
+            _field_score(title, terms, 2.0)
+            + _field_score(description, terms, 1.0)
+            + _field_score(status, terms, 0.5)
+        )
+        if score <= 0:
+            continue
+        out.append(
+            SearchHit(
+                kind="room_task",
+                title=title or "(untitled task)",
+                snippet=_snippet(description or title, terms),
+                score=score,
+                actor=_as_text(data.get("created_by")),
+                ts=data.get("updated_at") or data.get("created_at"),
+                ref={"room_id": room_id, "task_id": data.get("id"), "status": status},
             )
         )
     return out

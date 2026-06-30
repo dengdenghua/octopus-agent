@@ -153,3 +153,35 @@ def test_search_skips_room_when_unlinked(tmp_path) -> None:
     # no link → room transcript is NOT searched
     hits = search_group(store, "t1", "nutrition", room_message_store=rms)
     assert {h.kind for h in hits} == {"blackboard"}
+
+
+def test_search_includes_linked_room_tasks(tmp_path) -> None:
+    """When a room is linked, search also covers its team tasks (3rd source)."""
+    from runtime.memory.cowork.session import link_room
+
+    store = GroupStore(base_dir=tmp_path)
+    store.blackboard("t1").write("decision", "enter nutrition", writer="u")
+    link_room(store, "t1", "room-9")
+
+    def provider(room_id):
+        if room_id != "room-9":
+            return []
+        return [{"id": "task-1", "title": "nutrition rollout", "status": "running",
+                 "created_by": "alice", "updated_at": "t1"}]
+
+    hits = search_group(store, "t1", "nutrition", room_task_provider=provider)
+    kinds = {h.kind for h in hits}
+    assert "blackboard" in kinds and "room_task" in kinds
+    rt = next(h for h in hits if h.kind == "room_task")
+    assert rt.ref["task_id"] == "task-1" and rt.actor == "alice"
+
+
+def test_search_skips_room_tasks_when_unlinked(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    store.blackboard("t1").write("k", "nutrition", writer="u")
+    # no link → the provider is never consulted
+    hits = search_group(
+        store, "t1", "nutrition",
+        room_task_provider=lambda rid: [{"id": "x", "title": "nutrition orphan"}],
+    )
+    assert {h.kind for h in hits} == {"blackboard"}

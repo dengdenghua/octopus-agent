@@ -33,6 +33,7 @@ class CollaborationSession:
     presence: list[dict[str, Any]]
     room_messages: list[dict[str, Any]]  # linked room's recent transcript, if any
     room_participants: list[dict[str, Any]]  # linked room's participant config, if any
+    room_tasks: list[dict[str, Any]]  # linked room's team tasks (the 3rd source), if any
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +46,7 @@ class CollaborationSession:
             "presence": self.presence,
             "room_messages": self.room_messages,
             "room_participants": self.room_participants,
+            "room_tasks": self.room_tasks,
         }
 
 
@@ -56,12 +58,15 @@ def resolve_session(
     presence_store: Any = None,
     room_message_store: Any = None,
     room_participants_provider: Any = None,
+    room_tasks_provider: Any = None,
 ) -> CollaborationSession:
     """Fold the canonical thread into one session view. ``async_store`` /
     ``presence_store`` are reused if given, else built from the group store's
     base dir; presence is omitted when no store is available. When the session
-    has a linked room and ``room_message_store`` is given, the room's recent
-    transcript is folded in too — so the linked surface stops being a bare id."""
+    has a linked room, its recent transcript (``room_message_store``), participant
+    config (``room_participants_provider``) and **team tasks**
+    (``room_tasks_provider`` — the third source of truth Codex flagged) are folded
+    in too, so one session view covers all three surfaces."""
     state = group_store.state(thread_id)
 
     if async_store is None:
@@ -81,6 +86,7 @@ def resolve_session(
 
     room_messages: list[dict[str, Any]] = []
     room_participants: list[dict[str, Any]] = []
+    room_tasks: list[dict[str, Any]] = []
     if state.room_id:
         if room_message_store is not None:
             try:
@@ -92,6 +98,11 @@ def resolve_session(
                 room_participants = room_participants_provider(state.room_id) or []
             except Exception:  # noqa: BLE001 — linked-room roster is best-effort
                 room_participants = []
+        if room_tasks_provider is not None:
+            try:
+                room_tasks = room_tasks_provider(state.room_id) or []
+            except Exception:  # noqa: BLE001 — linked-room team tasks are best-effort
+                room_tasks = []
 
     return CollaborationSession(
         session_id=thread_id,
@@ -103,6 +114,7 @@ def resolve_session(
         presence=presence,
         room_messages=room_messages,
         room_participants=room_participants,
+        room_tasks=room_tasks,
     )
 
 

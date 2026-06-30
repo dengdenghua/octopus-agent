@@ -76,6 +76,62 @@ def test_session_folds_room_participants_via_provider(tmp_path) -> None:
     assert [p["display_name"] for p in s.room_participants] == ["Bob"]
 
 
+def test_session_folds_room_tasks_via_provider(tmp_path) -> None:
+    store = GroupStore(base_dir=tmp_path)
+    store.append("t1", MemberEvent(action="invite", actor="u", target_id="alice",
+                                   target_kind="agent"))
+    link_room(store, "t1", "room-9")
+    s = resolve_session(
+        store, "t1",
+        room_tasks_provider=lambda rid: (
+            [{"id": "task-1", "title": "ship report", "status": "running"}]
+            if rid == "room-9" else []
+        ),
+    )
+    assert [t["title"] for t in s.room_tasks] == ["ship report"]
+    # unlinked → no room tasks even with a provider
+    s2 = resolve_session(store, "t2", room_tasks_provider=lambda rid: [{"id": "x"}])
+    assert s2.room_tasks == []
+
+
+def test_collab_endpoint_includes_room_tasks(tmp_path) -> None:
+    from runtime.sensing.gateway.team_tasks_router import (
+        TeamTaskWire,
+    )
+    from runtime.sensing.gateway.team_tasks_router import (
+        _save_state as _save_tasks,
+    )
+
+    # Seed the team_tasks store the cowork router will read.
+    tt_path = tmp_path / "team_tasks.json"
+    task = TeamTaskWire(
+        id="task-1", room_id="room-9", title="evaluate the merger",
+        status="running", created_at="t0", updated_at="t1",
+    )
+    other = TeamTaskWire(
+        id="task-2", room_id="room-OTHER", title="unrelated",
+        created_at="t0", updated_at="t0",
+    )
+    _save_tasks(tt_path, {"task-1": task, "task-2": other})
+
+    app = FastAPI()
+    app.include_router(create_cowork_group_router(
+        store=GroupStore(base_dir=tmp_path), team_tasks_state_path=tt_path,
+    ))
+    c = TestClient(app)
+    c.post("/api/cowork/t1/members", json={"target_id": "alice", "kind": "agent"})
+    c.post("/api/collab/t1/link-room", json={"room_id": "room-9"})
+
+    sess = c.get("/api/collab/t1").json()
+    # only this room's tasks, not the other room's
+    assert [t["title"] for t in sess["room_tasks"]] == ["evaluate the merger"]
+
+    # …and they are findable via session-wide search (room_task kind)
+    hits = c.get("/api/cowork/t1/search", params={"q": "merger"}).json()["hits"]
+    rt = next(h for h in hits if h["kind"] == "room_task")
+    assert rt["ref"]["task_id"] == "task-1" and rt["ref"]["status"] == "running"
+
+
 def _client(tmp_path) -> TestClient:
     app = FastAPI()
     app.include_router(create_cowork_group_router(store=GroupStore(base_dir=tmp_path)))
