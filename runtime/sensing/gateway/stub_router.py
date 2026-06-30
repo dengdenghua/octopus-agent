@@ -501,15 +501,19 @@ def create_stub_router(
         return {"id": provider_id, "name": provider_id, "available": False}
 
     # ─── Plugins ───────────────────────────────────────
-    @router.get("/api/plugins")
+    # Fallbacks for the real plugins_router (mounted earlier, so it wins the
+    # match in normal operation; these only serve if that mount raised). The
+    # real handlers share these function names + paths, so give the stubs
+    # explicit operation_ids to avoid duplicate-operation-id schema warnings.
+    @router.get("/api/plugins", operation_id="stub_list_plugins")
     def _plugins() -> list[Any]:
         return []
 
-    @router.get("/api/plugins/capabilities")
+    @router.get("/api/plugins/capabilities", operation_id="stub_plugin_capabilities")
     def _plugin_caps() -> list[Any]:
         return []
 
-    @router.get("/api/plugins/{plugin_id}")
+    @router.get("/api/plugins/{plugin_id}", operation_id="stub_get_plugin")
     def _plugin_get(plugin_id: str) -> dict[str, Any]:
         return {"id": plugin_id, "name": plugin_id, "enabled": False, "state": "stopped"}
 

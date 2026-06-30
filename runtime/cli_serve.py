@@ -342,6 +342,11 @@ def run_serve(
         or getattr(getattr(cfg, "local_auth", None), "enabled", False)
     )
 
+    # create_app mounts the OpenAI-compat router itself (single canonical
+    # mount, with auth + reflex wired). Thread the prompt optimizer through
+    # so /v1/chat/completions A/B variants actually take effect — a second
+    # app.include_router(create_openai_router(...)) here would be shadowed by
+    # the first match and only pollute the OpenAPI schema (duplicate op-ids).
     app = create_app(
         journal=stack.journal,
         registry=stack.registry,
@@ -352,24 +357,13 @@ def run_serve(
         molili_config=cfg.molili,
         local_auth_config=cfg.local_auth,
         cocoloop_require_auth=require_ui_auth,
+        default_arm=cfg.default_arm_id,
+        prompt_optimizer=optimizer,
         server_host=host,
         server_port=port,
         tentacle_enabled=cfg.tentacle.enabled,
         tentacle_ws_port=cfg.tentacle.ws_port,
     )
-    try:
-        from runtime.cli_core import _build_reflex_router
-        from runtime.sensing.gateway import create_openai_router
-
-        app.include_router(create_openai_router(
-            stack,
-            default_arm=cfg.default_arm_id,
-            reflex_router=_build_reflex_router(),
-            prompt_optimizer=optimizer,
-            agent_registry=agent_registry,
-        ))
-    except (OSError, ValueError, TypeError):  # noqa: BLE001 — agent registry init best-effort; service starts without it
-        pass
 
     print(c.bold(_("cli.serve.url_fmt", host=host, port=port)))
     if uds:

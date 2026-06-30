@@ -185,6 +185,7 @@ def create_app(
     molili_jwt_secret: str | None = None,
     local_auth_config: Any = None,
     default_arm: str = "code_arm",
+    prompt_optimizer: Any = None,
     parallel_agent_orchestrator: Any = None,
     subagent_registry: Any = None,
     server_host: str | None = None,
@@ -1154,6 +1155,7 @@ def create_app(
                 jwt_audience=cocoloop_jwt_audience,
                 agent_registry=agent_registry,
                 reflex_router=_reflex_router,
+                prompt_optimizer=prompt_optimizer,
             )
         )
 
