@@ -1,7 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { coworkGroupToCollaborationRoster } from "./roster";
-import type { CoworkGroupResponse } from "./types";
+import {
+  coworkGroupToCollaborationRoster,
+  coworkSessionToCollaborationRoster,
+} from "./roster";
+import type { CollaborationSession, CoworkGroupResponse } from "./types";
 
 function group(ids: string[]): CoworkGroupResponse {
   return {
@@ -23,6 +26,20 @@ function group(ids: string[]): CoworkGroupResponse {
     blackboard: {},
     events: [],
     responders: ids,
+  };
+}
+
+function session(ids: string[]): CollaborationSession {
+  return {
+    session_id: "thread-1",
+    room_id: null,
+    mode: "cluster",
+    roster: group(ids).state.roster,
+    blackboard: {},
+    tasks: [],
+    presence: [],
+    room_messages: [],
+    room_participants: [],
   };
 }
 
@@ -69,5 +86,21 @@ describe("cowork roster mapping", () => {
         [],
       ),
     ).toEqual([]);
+  });
+
+  test("maps unified collaboration session roster with the same semantics", () => {
+    const roster = coworkSessionToCollaborationRoster(
+      session(["general", "analyst"]),
+      "general",
+      [
+        { name: "general", display_name: "General" },
+        { name: "analyst", display_name: "Analyst" },
+      ],
+    );
+
+    expect(roster.map((entry) => [entry.agent_id, entry.role])).toEqual([
+      ["general", "tl"],
+      ["analyst", "member"],
+    ]);
   });
 });

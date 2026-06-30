@@ -345,6 +345,8 @@ export interface Translations {
     kindBlackboard: string;
     kindTask: string;
     kindEvent: string;
+    kindRoomMessage: string;
+    linkedRoom: string;
   };
 
   // Collaboration capability

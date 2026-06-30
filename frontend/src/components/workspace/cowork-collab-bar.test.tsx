@@ -14,6 +14,8 @@ const t = {
     kindBlackboard: "Blackboard",
     kindTask: "Task",
     kindEvent: "Event",
+    kindRoomMessage: "Room message",
+    linkedRoom: "Linked room",
   },
 } as unknown as Parameters<typeof PresenceDots>[0]["t"];
 
@@ -84,5 +86,16 @@ describe("SearchHitList", () => {
     expect(screen.getByText("scan rivals")).toBeTruthy();
     expect(screen.getByText("Blackboard")).toBeTruthy();
     expect(screen.getByText("Task")).toBeTruthy();
+  });
+
+  it("labels linked room transcript hits distinctly", () => {
+    render(
+      <SearchHitList
+        hits={[hit({ kind: "room_message", title: "Planner", snippet: "room note" })]}
+        t={t}
+      />,
+    );
+    expect(screen.getByText("Room message")).toBeTruthy();
+    expect(screen.getByText("Planner")).toBeTruthy();
   });
 });

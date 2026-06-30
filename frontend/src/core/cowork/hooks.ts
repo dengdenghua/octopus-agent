@@ -51,6 +51,7 @@ export function useInviteCoworkMember() {
     }) => inviteCoworkMember(threadId, input),
     onSuccess: (_state, { threadId }) => {
       void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
+      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
     },
   });
 }
@@ -67,6 +68,7 @@ export function useRemoveCoworkMember() {
     }) => removeCoworkMember(threadId, memberId),
     onSuccess: (_state, { threadId }) => {
       void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
+      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
     },
   });
 }
@@ -83,6 +85,7 @@ export function useSetCoworkMode() {
     }) => setCoworkMode(threadId, mode),
     onSuccess: (_state, { threadId }) => {
       void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
+      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
     },
   });
 }

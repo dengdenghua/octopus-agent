@@ -1,7 +1,13 @@
-import { FileTextIcon, ListTodoIcon, SearchIcon, UsersIcon } from "lucide-react";
+import {
+  FileTextIcon,
+  ListTodoIcon,
+  MessageSquareIcon,
+  SearchIcon,
+  UsersIcon,
+} from "lucide-react";
 import { useState } from "react";
 
-import { useCoworkPresence, useCoworkSearch } from "@/core/cowork/hooks";
+import { useCollabSession, useCoworkSearch } from "@/core/cowork/hooks";
 import type {
   CoworkMemberPresence,
   CoworkSearchHit,
@@ -16,11 +22,13 @@ const KIND_ICON: Record<CoworkSearchKind, typeof FileTextIcon> = {
   blackboard: FileTextIcon,
   task: ListTodoIcon,
   event: UsersIcon,
+  room_message: MessageSquareIcon,
 };
 
 function kindLabel(kind: CoworkSearchKind, t: T): string {
   if (kind === "blackboard") return t.coworkCollab.kindBlackboard;
   if (kind === "task") return t.coworkCollab.kindTask;
+  if (kind === "room_message") return t.coworkCollab.kindRoomMessage;
   return t.coworkCollab.kindEvent;
 }
 
@@ -125,13 +133,14 @@ export function CoworkCollabBar({
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
-  const presence = useCoworkPresence(threadId);
+  const session = useCollabSession(threadId);
   const search = useCoworkSearch(threadId, query);
 
   const seatNames: Record<string, string> = {};
   for (const seat of rosterSeats) seatNames[seat.id] = seat.name;
 
-  const members = presence.data?.members ?? [];
+  const collab = session.data;
+  const members = collab?.presence ?? [];
   const trimmed = query.trim();
 
   return (

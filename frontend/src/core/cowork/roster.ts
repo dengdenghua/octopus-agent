@@ -1,6 +1,6 @@
 import type { ThreadCollaborationRosterEntry } from "@/core/collaboration/thread-collaboration";
 
-import type { CoworkGroupResponse } from "./types";
+import type { CollaborationSession, CoworkGroupResponse, CoworkMember } from "./types";
 
 export interface CoworkAgentProfile {
   name: string;
@@ -35,13 +35,13 @@ function entryFor(
   };
 }
 
-export function coworkGroupToCollaborationRoster(
-  group: CoworkGroupResponse | null | undefined,
+function membersToCollaborationRoster(
+  members: CoworkMember[] | null | undefined,
   leaderId: string,
   profiles: CoworkAgentProfile[],
 ): ThreadCollaborationRosterEntry[] {
   const agentMembers =
-    group?.state.roster.filter(
+    members?.filter(
       (member) =>
         member.kind === "agent" &&
         member.role === "participant" &&
@@ -68,4 +68,20 @@ export function coworkGroupToCollaborationRoster(
     ...entry,
     role: index === 0 ? "tl" : "member",
   }));
+}
+
+export function coworkGroupToCollaborationRoster(
+  group: CoworkGroupResponse | null | undefined,
+  leaderId: string,
+  profiles: CoworkAgentProfile[],
+): ThreadCollaborationRosterEntry[] {
+  return membersToCollaborationRoster(group?.state.roster, leaderId, profiles);
+}
+
+export function coworkSessionToCollaborationRoster(
+  session: CollaborationSession | null | undefined,
+  leaderId: string,
+  profiles: CoworkAgentProfile[],
+): ThreadCollaborationRosterEntry[] {
+  return membersToCollaborationRoster(session?.roster, leaderId, profiles);
 }

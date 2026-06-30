@@ -405,7 +405,7 @@ export const jaJP: Translations = {
   },
 
   coworkCollab: {
-    searchPlaceholder: "ブラックボード / タスク / イベントを検索",
+    searchPlaceholder: "ブラックボード / タスク / イベント / ルームメッセージを検索",
     noResults: "一致なし",
     online: "オンライン",
     members: "メンバー",
@@ -413,6 +413,8 @@ export const jaJP: Translations = {
     kindBlackboard: "ブラックボード",
     kindTask: "タスク",
     kindEvent: "イベント",
+    kindRoomMessage: "ルームメッセージ",
+    linkedRoom: "リンク済みルーム",
   },
 
   // Collaboration Mode

@@ -24,10 +24,11 @@ export interface CoworkState {
   mode: CoworkMode;
   event_count: number;
   is_one_to_one: boolean;
+  room_id?: string | null;
 }
 
 export interface CoworkEvent {
-  action: "invite" | "leave" | "mute" | "unmute" | "mode";
+  action: "invite" | "leave" | "mute" | "unmute" | "mode" | "room_link";
   actor: string;
   target_id: string;
   target_kind: CoworkMemberKind;
@@ -59,7 +60,7 @@ export interface CoworkModeInput {
   mode: CoworkMode;
 }
 
-export type CoworkSearchKind = "blackboard" | "task" | "event";
+export type CoworkSearchKind = "blackboard" | "task" | "event" | "room_message";
 
 export interface CoworkSearchHit {
   kind: CoworkSearchKind;

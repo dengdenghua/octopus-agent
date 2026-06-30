@@ -390,7 +390,7 @@ export const zhCN: Translations = {
   },
 
   coworkCollab: {
-    searchPlaceholder: "搜索黑板 / 任务 / 事件",
+    searchPlaceholder: "搜索黑板 / 任务 / 事件 / 房间消息",
     noResults: "没有匹配结果",
     online: "在线",
     members: "成员",
@@ -398,6 +398,8 @@ export const zhCN: Translations = {
     kindBlackboard: "黑板",
     kindTask: "任务",
     kindEvent: "事件",
+    kindRoomMessage: "房间消息",
+    linkedRoom: "已关联房间",
   },
 
   // Collaboration Mode
