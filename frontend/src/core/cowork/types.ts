@@ -60,7 +60,24 @@ export interface CoworkModeInput {
   mode: CoworkMode;
 }
 
-export type CoworkSearchKind = "blackboard" | "task" | "event" | "room_message";
+export interface CollabRoomMessageInput {
+  text: string;
+  participant_id?: string;
+  display_name?: string;
+}
+
+export interface CollabRoomMessageResponse {
+  ok: boolean;
+  room_id: string;
+  seq: number;
+}
+
+export type CoworkSearchKind =
+  | "blackboard"
+  | "task"
+  | "event"
+  | "room_message"
+  | "room_task";
 
 export interface CoworkSearchHit {
   kind: CoworkSearchKind;
@@ -104,4 +121,5 @@ export interface CollaborationSession {
   presence: CoworkMemberPresence[];
   room_messages: Record<string, unknown>[];
   room_participants: Record<string, unknown>[];
+  room_tasks: Record<string, unknown>[];
 }

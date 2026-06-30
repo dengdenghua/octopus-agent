@@ -5,6 +5,7 @@ import {
   getCoworkGroup,
   inviteCoworkMember,
   linkCoworkRoom,
+  postCollabRoomMessage,
   removeCoworkMember,
   setCoworkMode,
 } from "./api";
@@ -110,6 +111,7 @@ describe("cowork api", () => {
         presence: [],
         room_messages: [{ text: "hi" }],
         room_participants: [{ id: "p1" }],
+        room_tasks: [{ id: "task-1" }],
       }),
     );
 
@@ -118,6 +120,7 @@ describe("cowork api", () => {
     expect(session.session_id).toBe("thread/1");
     expect(session.room_id).toBe("room-9");
     expect(session.room_messages).toHaveLength(1);
+    expect(session.room_tasks).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledWith("/api/collab/thread%2F1", {
       headers: {},
     });
@@ -134,6 +137,31 @@ describe("cowork api", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ room_id: "room-9" }),
+      },
+    ]);
+  });
+
+  test("posts a message into the linked collaboration room", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ ok: true, room_id: "room-9", seq: 7 }),
+    );
+
+    const result = await postCollabRoomMessage("thread/1", {
+      text: "summary",
+      display_name: "Planner",
+    });
+
+    expect(result.seq).toBe(7);
+    expect(fetchMock.mock.calls[0]).toEqual([
+      "/api/collab/thread%2F1/room-message",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: "summary",
+          participant_id: "",
+          display_name: "Planner",
+        }),
       },
     ]);
   });

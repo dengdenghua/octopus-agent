@@ -6,6 +6,7 @@ import {
   getCoworkPresence,
   inviteCoworkMember,
   linkCoworkRoom,
+  postCollabRoomMessage,
   removeCoworkMember,
   searchCowork,
   setCoworkMode,
@@ -14,6 +15,7 @@ import type {
   CoworkInviteInput,
   CoworkMode,
   CoworkSearchKind,
+  CollabRoomMessageInput,
 } from "./types";
 
 const COWORK_KEY = ["cowork"] as const;
@@ -24,8 +26,18 @@ export const coworkQueryKeys = {
     [...COWORK_KEY, "group", threadId ?? "none"] as const,
   presence: (threadId?: string | null) =>
     [...COWORK_KEY, "presence", threadId ?? "none"] as const,
-  search: (threadId?: string | null, query?: string, kinds?: CoworkSearchKind[]) =>
-    [...COWORK_KEY, "search", threadId ?? "none", query ?? "", (kinds ?? []).join(",")] as const,
+  search: (
+    threadId?: string | null,
+    query?: string,
+    kinds?: CoworkSearchKind[],
+  ) =>
+    [
+      ...COWORK_KEY,
+      "search",
+      threadId ?? "none",
+      query ?? "",
+      (kinds ?? []).join(","),
+    ] as const,
   session: (threadId?: string | null) =>
     [...COWORK_KEY, "session", threadId ?? "none"] as const,
 };
@@ -51,7 +63,9 @@ export function useInviteCoworkMember() {
     }) => inviteCoworkMember(threadId, input),
     onSuccess: (_state, { threadId }) => {
       void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
-      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
     },
   });
 }
@@ -68,7 +82,9 @@ export function useRemoveCoworkMember() {
     }) => removeCoworkMember(threadId, memberId),
     onSuccess: (_state, { threadId }) => {
       void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
-      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
     },
   });
 }
@@ -76,16 +92,13 @@ export function useRemoveCoworkMember() {
 export function useSetCoworkMode() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      threadId,
-      mode,
-    }: {
-      threadId: string;
-      mode: CoworkMode;
-    }) => setCoworkMode(threadId, mode),
+    mutationFn: ({ threadId, mode }: { threadId: string; mode: CoworkMode }) =>
+      setCoworkMode(threadId, mode),
     onSuccess: (_state, { threadId }) => {
       void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
-      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
     },
   });
 }
@@ -114,7 +127,10 @@ export function useCoworkSearch(
   return useQuery({
     queryKey: coworkQueryKeys.search(threadId, trimmed, opts.kinds),
     queryFn: () =>
-      searchCowork(threadId!, trimmed, { kinds: opts.kinds, limit: opts.limit }),
+      searchCowork(threadId!, trimmed, {
+        kinds: opts.kinds,
+        limit: opts.limit,
+      }),
     enabled: Boolean(threadId && threadId !== "new") && trimmed.length > 0,
     staleTime: 2000,
   });
@@ -135,8 +151,39 @@ export function useLinkCoworkRoom() {
     mutationFn: ({ threadId, roomId }: { threadId: string; roomId: string }) =>
       linkCoworkRoom(threadId, roomId),
     onSuccess: (_void, { threadId }) => {
-      void qc.invalidateQueries({ queryKey: coworkQueryKeys.session(threadId) });
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
       void qc.invalidateQueries({ queryKey: coworkQueryKeys.group(threadId) });
+    },
+  });
+}
+
+export function usePostCollabRoomMessage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      threadId,
+      input,
+    }: {
+      threadId: string;
+      input: CollabRoomMessageInput;
+    }) => postCollabRoomMessage(threadId, input),
+    onSuccess: (_data, { threadId }) => {
+      void qc.invalidateQueries({
+        queryKey: coworkQueryKeys.session(threadId),
+      });
+      void qc.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey;
+          return (
+            Array.isArray(key) &&
+            key[0] === COWORK_KEY[0] &&
+            key[1] === "search" &&
+            key[2] === threadId
+          );
+        },
+      });
     },
   });
 }

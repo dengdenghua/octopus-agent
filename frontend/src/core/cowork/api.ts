@@ -2,6 +2,8 @@ import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
 
 import type {
+  CollabRoomMessageInput,
+  CollabRoomMessageResponse,
   CollaborationSession,
   CoworkGroupResponse,
   CoworkInviteInput,
@@ -37,23 +39,20 @@ export async function inviteCoworkMember(
   threadId: string,
   input: CoworkInviteInput,
 ): Promise<CoworkGroupResponse["state"]> {
-  const res = await fetch(
-    `${BASE()}/${encodeURIComponent(threadId)}/members`,
-    {
-      method: "POST",
-      headers: jsonAuthHeaders(),
-      body: JSON.stringify({
-        kind: "agent",
-        role: "participant",
-        grant: { scope: "all", ...(input.grant ?? {}) },
-        ...input,
-      }),
-    },
-  );
-  const data = await parseJson<{ ok: boolean; state: CoworkGroupResponse["state"] }>(
-    res,
-    "Invite cowork member",
-  );
+  const res = await fetch(`${BASE()}/${encodeURIComponent(threadId)}/members`, {
+    method: "POST",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      kind: "agent",
+      role: "participant",
+      grant: { scope: "all", ...(input.grant ?? {}) },
+      ...input,
+    }),
+  });
+  const data = await parseJson<{
+    ok: boolean;
+    state: CoworkGroupResponse["state"];
+  }>(res, "Invite cowork member");
   return data.state;
 }
 
@@ -70,10 +69,10 @@ export async function removeCoworkMember(
       headers: authHeaders(),
     },
   );
-  const data = await parseJson<{ ok: boolean; state: CoworkGroupResponse["state"] }>(
-    res,
-    "Remove cowork member",
-  );
+  const data = await parseJson<{
+    ok: boolean;
+    state: CoworkGroupResponse["state"];
+  }>(res, "Remove cowork member");
   return data.state;
 }
 
@@ -86,10 +85,10 @@ export async function setCoworkMode(
     headers: jsonAuthHeaders(),
     body: JSON.stringify({ mode }),
   });
-  const data = await parseJson<{ ok: boolean; state: CoworkGroupResponse["state"] }>(
-    res,
-    "Set cowork mode",
-  );
+  const data = await parseJson<{
+    ok: boolean;
+    state: CoworkGroupResponse["state"];
+  }>(res, "Set cowork mode");
   return data.state;
 }
 
@@ -127,7 +126,10 @@ export async function markCoworkRead(
   const res = await fetch(`${BASE()}/${encodeURIComponent(threadId)}/read`, {
     method: "POST",
     headers: jsonAuthHeaders(),
-    body: JSON.stringify({ member_id: memberId, ...(seq != null ? { seq } : {}) }),
+    body: JSON.stringify({
+      member_id: memberId,
+      ...(seq != null ? { seq } : {}),
+    }),
   });
   await parseJson<{ ok: boolean }>(res, "Mark cowork read");
 }
@@ -169,4 +171,23 @@ export async function linkCoworkRoom(
     },
   );
   await parseJson<{ ok: boolean }>(res, "Link cowork room");
+}
+
+export async function postCollabRoomMessage(
+  threadId: string,
+  input: CollabRoomMessageInput,
+): Promise<CollabRoomMessageResponse> {
+  const res = await fetch(
+    `${COLLAB_BASE()}/${encodeURIComponent(threadId)}/room-message`,
+    {
+      method: "POST",
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        text: input.text,
+        participant_id: input.participant_id ?? "",
+        display_name: input.display_name ?? "",
+      }),
+    },
+  );
+  return parseJson<CollabRoomMessageResponse>(res, "Post collab room message");
 }

@@ -346,6 +346,7 @@ export interface Translations {
     kindTask: string;
     kindEvent: string;
     kindRoomMessage: string;
+    kindRoomTask: string;
     linkedRoom: string;
   };
 

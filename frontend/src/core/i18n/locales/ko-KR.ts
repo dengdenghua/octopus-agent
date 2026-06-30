@@ -405,7 +405,7 @@ export const koKR: Translations = {
   },
 
   coworkCollab: {
-    searchPlaceholder: "블랙보드 / 작업 / 이벤트 / 룸 메시지 검색",
+    searchPlaceholder: "블랙보드 / 작업 / 이벤트 / 룸 메시지 / 룸 작업 검색",
     noResults: "결과 없음",
     online: "온라인",
     members: "멤버",
@@ -414,6 +414,7 @@ export const koKR: Translations = {
     kindTask: "작업",
     kindEvent: "이벤트",
     kindRoomMessage: "룸 메시지",
+    kindRoomTask: "룸 작업",
     linkedRoom: "연결된 룸",
   },
 

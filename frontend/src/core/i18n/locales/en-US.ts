@@ -409,7 +409,8 @@ export const enUS: Translations = {
   },
 
   coworkCollab: {
-    searchPlaceholder: "Search blackboard / tasks / events / room messages",
+    searchPlaceholder:
+      "Search blackboard / tasks / events / room messages / room tasks",
     noResults: "No matches",
     online: "online",
     members: "Members",
@@ -418,6 +419,7 @@ export const enUS: Translations = {
     kindTask: "Task",
     kindEvent: "Event",
     kindRoomMessage: "Room message",
+    kindRoomTask: "Room task",
     linkedRoom: "Linked room",
   },
 

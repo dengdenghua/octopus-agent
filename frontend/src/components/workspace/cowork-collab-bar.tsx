@@ -23,12 +23,14 @@ const KIND_ICON: Record<CoworkSearchKind, typeof FileTextIcon> = {
   task: ListTodoIcon,
   event: UsersIcon,
   room_message: MessageSquareIcon,
+  room_task: ListTodoIcon,
 };
 
 function kindLabel(kind: CoworkSearchKind, t: T): string {
   if (kind === "blackboard") return t.coworkCollab.kindBlackboard;
   if (kind === "task") return t.coworkCollab.kindTask;
   if (kind === "room_message") return t.coworkCollab.kindRoomMessage;
+  if (kind === "room_task") return t.coworkCollab.kindRoomTask;
   return t.coworkCollab.kindEvent;
 }
 
@@ -49,7 +51,10 @@ export function PresenceDots({
   const extra = members.length - shown.length;
 
   return (
-    <div className="flex min-w-0 items-center gap-2" data-testid="cowork-presence">
+    <div
+      className="flex min-w-0 items-center gap-2"
+      data-testid="cowork-presence"
+    >
       <div className="flex items-center -space-x-0.5">
         {shown.map((m) => (
           <span
@@ -62,7 +67,9 @@ export function PresenceDots({
           />
         ))}
         {extra > 0 && (
-          <span className="pl-1.5 text-[10px] text-muted-foreground">+{extra}</span>
+          <span className="pl-1.5 text-[10px] text-muted-foreground">
+            +{extra}
+          </span>
         )}
       </div>
       <span className="shrink-0 text-[11px] text-muted-foreground">

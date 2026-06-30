@@ -15,6 +15,7 @@ const t = {
     kindTask: "Task",
     kindEvent: "Event",
     kindRoomMessage: "Room message",
+    kindRoomTask: "Room task",
     linkedRoom: "Linked room",
   },
 } as unknown as Parameters<typeof CollaborationSessionView>[0]["t"];
@@ -32,6 +33,7 @@ function session(
     presence: [{ member_id: "a", online: true, unread: 0 } as never],
     room_messages: [],
     room_participants: [],
+    room_tasks: [],
     ...over,
   };
 }
@@ -60,6 +62,7 @@ describe("CollaborationSessionView", () => {
             { text: "b" } as never,
             { text: "c" } as never,
           ],
+          room_tasks: [{ id: "task-1" } as never, { id: "task-2" } as never],
         })}
         t={t}
       />,
@@ -68,5 +71,6 @@ describe("CollaborationSessionView", () => {
     expect(room).toBeTruthy();
     expect(screen.getByText("room-9")).toBeTruthy();
     expect(room.textContent).toContain("3"); // room message count (unique to the room section)
+    expect(room.textContent).toContain("2"); // room task count
   });
 });

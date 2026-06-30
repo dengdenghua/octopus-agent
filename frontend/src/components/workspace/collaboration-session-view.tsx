@@ -98,6 +98,11 @@ export function CollaborationSessionView({
             value={session.room_messages.length}
             label={t.coworkCollab.kindEvent}
           />
+          <Stat
+            icon={ListTodoIcon}
+            value={session.room_tasks.length}
+            label={t.coworkCollab.kindRoomTask}
+          />
         </div>
       )}
     </div>
