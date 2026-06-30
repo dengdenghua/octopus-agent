@@ -126,6 +126,14 @@ def run_gate(*, min_score: int = MIN_SCORE) -> GateResult:
         "automation radar browser/desktop quality",
         automation.get("browser_desktop_quality"),
     )
+    browser_desktop_quality = _quality_report(
+        quality_reports,
+        "octopus.browser_desktop_quality.v1",
+    )
+    _require_browser_desktop_replay_trends(
+        failures,
+        browser_desktop_quality,
+    )
     _require_ready(
         failures,
         "automation radar parity certification",
@@ -223,6 +231,44 @@ def _require_no_evidence_gaps(
     ]
     if blocking:
         failures.append(f"{label}: {_row_ids(blocking)}")
+
+
+def _require_browser_desktop_replay_trends(
+    failures: list[str],
+    report: Mapping[str, Any] | None,
+) -> None:
+    if not isinstance(report, Mapping):
+        failures.append("browser/desktop replay trends are unavailable")
+        return
+    trends = report.get("replay_trends")
+    if not isinstance(trends, Mapping):
+        failures.append("browser/desktop replay trends are unavailable")
+        return
+    stale_count = int(trends.get("stale_source_artifact_count") or 0)
+    if stale_count:
+        failures.append(
+            "browser/desktop replay stale source artifacts: "
+            f"{stale_count}; reject or regenerate before release",
+        )
+    recipe_summary = trends.get("repair_recipe_summary")
+    if isinstance(recipe_summary, Mapping):
+        pending_cases = int(recipe_summary.get("total_pending_cases") or 0)
+        recipe_count = int(recipe_summary.get("recipe_count") or 0)
+        if pending_cases or recipe_count:
+            failures.append(
+                "browser/desktop replay repair recipes pending: "
+                f"cases={pending_cases}, recipes={recipe_count}",
+            )
+
+
+def _quality_report(
+    reports: Sequence[Mapping[str, Any]],
+    schema: str,
+) -> Mapping[str, Any] | None:
+    for report in reports:
+        if isinstance(report, Mapping) and report.get("schema") == schema:
+            return report
+    return None
 
 
 def _nested_int(report: Mapping[str, Any], *keys: str) -> int:

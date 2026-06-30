@@ -103,3 +103,39 @@ def test_production_readiness_gate_blocks_automation_evidence_gap(monkeypatch) -
         "automation radar evidence gaps: desktop_preview_execute" in item
         for item in result.failures
     )
+
+
+def test_production_readiness_gate_blocks_stale_browser_replay_artifacts(
+    monkeypatch,
+) -> None:
+    real_quality = gate.compute_browser_desktop_quality
+
+    def browser_quality_with_stale_artifacts():
+        report = real_quality()
+        report["replay_trends"] = {
+            **report["replay_trends"],
+            "stale_source_artifact_count": 2,
+            "repair_recipe_summary": {
+                **report["replay_trends"]["repair_recipe_summary"],
+                "total_pending_cases": 2,
+                "recipe_count": 1,
+            },
+        }
+        return report
+
+    monkeypatch.setattr(
+        gate,
+        "compute_browser_desktop_quality",
+        browser_quality_with_stale_artifacts,
+    )
+
+    result = gate.run_gate(min_score=95)
+
+    assert any(
+        "browser/desktop replay stale source artifacts: 2" in item
+        for item in result.failures
+    )
+    assert any(
+        "browser/desktop replay repair recipes pending: cases=2, recipes=1" in item
+        for item in result.failures
+    )
