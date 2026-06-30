@@ -68,6 +68,8 @@ export const zhCN: Translations = {
     stubResponseTitle: "模拟后端响应",
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} 返回了桩数据。在真实后端接口启用前，请把当前工作区状态视为开发 fallback。`,
+    openSidebarMenu: "打开侧栏菜单",
+    localPartnerModel: "本地伙伴模型(透传给 CLI 的 -m)",
   },
 
   // Home
@@ -1582,6 +1584,24 @@ export const zhCN: Translations = {
     libraryImages: "图片",
     libraryComputer: "本机",
     libraryAuthorizedDirs: "授权目录",
+    // Chats drawer
+    searchChats: "搜索对话",
+    noMatchingChats: "未找到匹配对话",
+  },
+
+  // Floating REC recorder overlay
+  recorder: {
+    title: "录制器",
+    close: "关闭",
+    taskNameLabel: "录什么任务?",
+    taskNamePlaceholder: "例如：导出本周对账单到飞书",
+    stopFailed: "REC 停止失败",
+  },
+
+  // Local brain readiness panel
+  localBrain: {
+    refresh: "重新检测",
+    dismiss: "不再显示",
   },
 
   // Team tasks panel
@@ -3341,6 +3361,20 @@ export const zhCN: Translations = {
         tencent: "腾讯云 · 混元",
         volcengine: "火山 · 豆包 (Ark)",
       },
+    },
+    octopusMix: {
+      title: "Octopus Mix · 多模型协同",
+      description:
+        "选 2+ 个模型作为 proposer(各自独立起草、无工具),再选一个 aggregator 综合出最终答案。聊天里选 “Octopus Mix” 即走此配置;proposer 留空则用默认模型 × 数量。",
+      proposersLabel: "Proposers(参与起草的模型)",
+      noCandidates: "暂无可选模型",
+      aggregatorLabel: "Aggregator",
+      aggregatorDefault: "默认",
+      nLabel: "无池时数量",
+      saveButton: "保存",
+      saveSuccess: "Octopus Mix 配置已保存",
+      saveFailed: (status: number) => `保存失败 (${status})`,
+      saveFailedFallback: "保存失败",
     },
     dialog: {
       dragToResize: "拖动调整大小",

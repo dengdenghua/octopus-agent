@@ -1,5 +1,6 @@
 import { MenuIcon } from "lucide-react";
 
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,12 +14,13 @@ export function ChatHeaderMenuButton({
   onClick: () => void;
   className?: string;
 }) {
+  const { t } = useI18n();
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label="打开侧栏菜单"
-      title="打开侧栏菜单"
+      aria-label={t.common.openSidebarMenu}
+      title={t.common.openSidebarMenu}
       className={cn(
         "flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground",
         "transition-colors hover:bg-muted hover:text-foreground active:scale-95",

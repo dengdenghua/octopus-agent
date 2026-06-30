@@ -27,6 +27,7 @@ import {
   stopRecording,
 } from "@/core/teach-repeat/api";
 import type { StopRecordingResponse } from "@/core/teach-repeat/types";
+import { useI18n } from "@/core/i18n/hooks";
 import { swallow } from "@/core/utils/log";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,7 @@ export function RecRecorderOverlay({
   onClose,
   onRecordingChange,
 }: RecRecorderOverlayProps) {
+  const { t } = useI18n();
   const [phase, setPhase] = useState<Phase>("idle");
   const [name, setName] = useState(defaultName);
   const [countdown, setCountdown] = useState(COUNTDOWN_FROM);
@@ -152,17 +154,17 @@ export function RecRecorderOverlay({
       setPhase("done");
       onRecordingChange?.(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "REC 停止失败");
+      toast.error(error instanceof Error ? error.message : t.recorder.stopFailed);
       setPhase("recording");
     }
-  }, [threadId, onRecordingChange]);
+  }, [threadId, onRecordingChange, t]);
 
   if (!open) return null;
 
   return (
     <div
       role="dialog"
-      aria-label="录制器"
+      aria-label={t.recorder.title}
       className="fixed bottom-5 right-5 z-[120] w-[260px] rounded-2xl border border-border/60 bg-background/95 p-4 shadow-2xl ring-1 ring-border/30 backdrop-blur"
     >
       <div className="mb-2 flex items-center justify-between">
@@ -173,14 +175,14 @@ export function RecRecorderOverlay({
               phase === "recording" && "animate-pulse text-red-500",
             )}
           />
-          录制器
+          {t.recorder.title}
         </span>
         {(phase === "idle" || phase === "done") && (
           <button
             type="button"
             onClick={onClose}
             className="text-muted-foreground transition-colors hover:text-foreground"
-            aria-label="关闭"
+            aria-label={t.recorder.close}
           >
             <XIcon className="size-4" />
           </button>
@@ -191,12 +193,12 @@ export function RecRecorderOverlay({
         <div className="space-y-3">
           <div>
             <label className="mb-1 block text-[11px] text-muted-foreground">
-              录什么任务?
+              {t.recorder.taskNameLabel}
             </label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="例如：导出本周对账单到飞书"
+              placeholder={t.recorder.taskNamePlaceholder}
               className="w-full rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-border-strong"
             />
           </div>

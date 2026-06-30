@@ -68,6 +68,8 @@ export const koKR: Translations = {
     stubResponseTitle: "Simulated backend response",
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
+    openSidebarMenu: "사이드바 메뉴 열기",
+    localPartnerModel: "로컬 파트너 모델(CLI의 -m으로 그대로 전달됨)",
   },
 
   // Home
@@ -1633,6 +1635,24 @@ export const koKR: Translations = {
     libraryImages: "Images",
     libraryComputer: "Computer",
     libraryAuthorizedDirs: "Authorized dirs",
+    // Chats drawer
+    searchChats: "채팅 검색",
+    noMatchingChats: "일치하는 채팅이 없습니다",
+  },
+
+  // Floating REC recorder overlay
+  recorder: {
+    title: "레코더",
+    close: "닫기",
+    taskNameLabel: "어떤 작업을 기록할까요?",
+    taskNamePlaceholder: "예: 이번 주 명세서를 Feishu로 내보내기",
+    stopFailed: "REC 중지에 실패했습니다",
+  },
+
+  // Local brain readiness panel
+  localBrain: {
+    refresh: "다시 감지",
+    dismiss: "다시 보지 않기",
   },
 
   // Team tasks panel
@@ -3534,6 +3554,20 @@ export const koKR: Translations = {
         tencent: "Tencent Cloud · Hunyuan",
         volcengine: "Volcano Engine · Doubao (Ark)",
       },
+    },
+    octopusMix: {
+      title: "Octopus Mix · 멀티 모델 협업",
+      description:
+        "2개 이상의 모델을 proposer(독립적으로 초안 작성, 도구 없음)로 선택하고, aggregator를 하나 선택해 최종 답변을 합칩니다. 채팅에서 “Octopus Mix”를 선택하면 이 설정을 사용하며, proposer 풀이 비어 있으면 기본 모델 × 수량으로 동작합니다.",
+      proposersLabel: "Proposers(초안을 작성하는 모델)",
+      noCandidates: "선택 가능한 모델이 없습니다",
+      aggregatorLabel: "Aggregator",
+      aggregatorDefault: "기본값",
+      nLabel: "풀이 없을 때 수량",
+      saveButton: "저장",
+      saveSuccess: "Octopus Mix 설정이 저장되었습니다",
+      saveFailed: (status: number) => `저장 실패 (${status})`,
+      saveFailedFallback: "저장 실패",
     },
     dialog: {
       dragToResize: "Drag to resize",

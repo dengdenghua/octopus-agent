@@ -182,7 +182,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索对话"
+              placeholder={t.sidebar.searchChats}
               className="h-8 pl-8 text-[12.5px]"
             />
           </div>
@@ -201,7 +201,7 @@ export function ChatsDrawer({ open, onOpenChange }: ChatsDrawerProps) {
         <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {filteredThreads.length === 0 ? (
             <div className="mt-4 rounded-md border border-dashed border-border/50 px-3 py-4 text-center text-[12px] text-muted-foreground/75">
-              {query.trim() ? "未找到匹配对话" : t.sidebar.noChatsYet}
+              {query.trim() ? t.sidebar.noMatchingChats : t.sidebar.noChatsYet}
             </div>
           ) : (
             <ul className="flex flex-col gap-px">

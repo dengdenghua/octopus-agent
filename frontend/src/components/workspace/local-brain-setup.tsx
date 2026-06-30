@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 // One plain-language readiness item from GET /api/local-brain/status. All copy
@@ -36,6 +37,7 @@ interface BrainStatus {
 const DISMISS_KEY = "octopus.localBrain.dismissed";
 
 export default function LocalBrainSetup() {
+  const { t } = useI18n();
   const [status, setStatus] = useState<BrainStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,8 +114,8 @@ export default function LocalBrainSetup() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          title="重新检测"
-          aria-label="重新检测"
+          title={t.localBrain.refresh}
+          aria-label={t.localBrain.refresh}
           className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted/60"
         >
           {loading ? (
@@ -132,8 +134,8 @@ export default function LocalBrainSetup() {
               /* ignore */
             }
           }}
-          title="不再显示"
-          aria-label="不再显示"
+          title={t.localBrain.dismiss}
+          aria-label={t.localBrain.dismiss}
           className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted/60"
         >
           <XIcon className="size-3.5" />

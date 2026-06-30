@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { authHeaders, jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 import { useModels } from "@/core/models/hooks";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ interface MixConfig {
  * Mix" in the model picker then answers via this mixture.
  */
 export function MixSettingsSection() {
+  const { t } = useI18n();
   const { models } = useModels();
   const [proposers, setProposers] = useState<string[]>([]);
   const [aggregator, setAggregator] = useState("");
@@ -74,27 +76,27 @@ export function MixSettingsSection() {
         headers: jsonAuthHeaders(),
         body: JSON.stringify({ proposers, aggregator, n }),
       });
-      if (!r.ok) throw new Error(`保存失败 (${r.status})`);
-      toast.success("Octopus Mix 配置已保存");
+      if (!r.ok) throw new Error(t.settings.octopusMix.saveFailed(r.status));
+      toast.success(t.settings.octopusMix.saveSuccess);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "保存失败");
+      toast.error(e instanceof Error ? e.message : t.settings.octopusMix.saveFailedFallback);
     } finally {
       setSaving(false);
     }
-  }, [proposers, aggregator, n]);
+  }, [proposers, aggregator, n, t]);
 
   return (
     <SettingsSection
-      title="Octopus Mix · 多模型协同"
-      description="选 2+ 个模型作为 proposer(各自独立起草、无工具),再选一个 aggregator 综合出最终答案。聊天里选 “Octopus Mix” 即走此配置;proposer 留空则用默认模型 × 数量。"
+      title={t.settings.octopusMix.title}
+      description={t.settings.octopusMix.description}
     >
       <div className="space-y-4">
         <div>
-          <div className="mb-2 text-sm font-medium">Proposers(参与起草的模型)</div>
+          <div className="mb-2 text-sm font-medium">{t.settings.octopusMix.proposersLabel}</div>
           {loading ? (
             <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
           ) : candidates.length === 0 ? (
-            <div className="text-sm text-muted-foreground">暂无可选模型</div>
+            <div className="text-sm text-muted-foreground">{t.settings.octopusMix.noCandidates}</div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {candidates.map((m) => {
@@ -121,13 +123,13 @@ export function MixSettingsSection() {
 
         <div className="flex flex-wrap items-center gap-6">
           <label className="flex items-center gap-2 text-sm">
-            Aggregator
+            {t.settings.octopusMix.aggregatorLabel}
             <select
               value={aggregator}
               onChange={(e) => setAggregator(e.target.value)}
               className="rounded-md border border-border bg-background px-2 py-1 text-sm"
             >
-              <option value="">默认</option>
+              <option value="">{t.settings.octopusMix.aggregatorDefault}</option>
               {candidates.map((m) => (
                 <option key={m.name} value={m.name}>
                   {m.display_name || m.name}
@@ -137,7 +139,7 @@ export function MixSettingsSection() {
           </label>
 
           <label className="flex items-center gap-2 text-sm">
-            无池时数量
+            {t.settings.octopusMix.nLabel}
             <input
               type="number"
               min={1}
@@ -157,7 +159,7 @@ export function MixSettingsSection() {
           ) : (
             <SaveIcon className="size-4" />
           )}
-          保存
+          {t.settings.octopusMix.saveButton}
         </Button>
       </div>
     </SettingsSection>

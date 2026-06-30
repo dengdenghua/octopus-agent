@@ -9,6 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { jsonAuthHeaders } from "@/core/auth/api";
 import { getBackendBaseURL } from "@/core/config";
+import { useI18n } from "@/core/i18n/hooks";
 
 /**
  * Model control for local CLI partners (Codex / Claude Code).
@@ -30,6 +31,7 @@ export function PartnerModelControl({
   value?: string;
   onChange: (model: string) => void;
 }) {
+  const { t } = useI18n();
   const [configModel, setConfigModel] = useState("");
   const [source, setSource] = useState("");
   const [draft, setDraft] = useState(value ?? "");
@@ -80,7 +82,7 @@ export function PartnerModelControl({
         <button
           type="button"
           data-testid="partner-model-trigger"
-          title="本地伙伴模型（透传给 CLI 的 -m）"
+          title={t.common.localPartnerModel}
           className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-xs text-muted-foreground outline-none transition hover:border-border/60 hover:bg-muted/60 hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
         >
           <span className="max-w-[140px] truncate">{label}</span>

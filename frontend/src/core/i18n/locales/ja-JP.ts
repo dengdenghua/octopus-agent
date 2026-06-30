@@ -68,6 +68,8 @@ export const jaJP: Translations = {
     stubResponseTitle: "Simulated backend response",
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
+    openSidebarMenu: "サイドバーメニューを開く",
+    localPartnerModel: "ローカルパートナーモデル(CLI の -m にそのまま渡されます)",
   },
 
   // Home
@@ -1636,6 +1638,24 @@ export const jaJP: Translations = {
     libraryImages: "Images",
     libraryComputer: "Computer",
     libraryAuthorizedDirs: "Authorized dirs",
+    // Chats drawer
+    searchChats: "チャットを検索",
+    noMatchingChats: "一致するチャットがありません",
+  },
+
+  // Floating REC recorder overlay
+  recorder: {
+    title: "レコーダー",
+    close: "閉じる",
+    taskNameLabel: "どのタスクを記録しますか?",
+    taskNamePlaceholder: "例:今週の明細を Feishu にエクスポート",
+    stopFailed: "REC の停止に失敗しました",
+  },
+
+  // Local brain readiness panel
+  localBrain: {
+    refresh: "再検出",
+    dismiss: "再表示しない",
   },
 
   // Team tasks panel
@@ -3538,6 +3558,20 @@ export const jaJP: Translations = {
         tencent: "Tencent Cloud · Hunyuan",
         volcengine: "Volcano Engine · Doubao (Ark)",
       },
+    },
+    octopusMix: {
+      title: "Octopus Mix · マルチモデル協調",
+      description:
+        "2 つ以上のモデルを proposer(独立して下書き、ツールなし)として選び、aggregator を 1 つ選んで回答を統合します。チャットで「Octopus Mix」を選択するとこの設定が使われ、proposer プールが空の場合はデフォルトモデル × 数量が使われます。",
+      proposersLabel: "Proposers(下書きに参加するモデル)",
+      noCandidates: "選択可能なモデルがありません",
+      aggregatorLabel: "Aggregator",
+      aggregatorDefault: "デフォルト",
+      nLabel: "プールなしの時の数",
+      saveButton: "保存",
+      saveSuccess: "Octopus Mix 設定を保存しました",
+      saveFailed: (status: number) => `保存に失敗しました (${status})`,
+      saveFailedFallback: "保存に失敗しました",
     },
     dialog: {
       dragToResize: "Drag to resize",

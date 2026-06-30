@@ -68,6 +68,8 @@ export const enUS: Translations = {
     stubResponseTitle: "Simulated backend response",
     stubResponseDescription: (method: string, path: string) =>
       `${method} ${path} returned stub data. Treat this workspace state as a development fallback until the real backend endpoint is enabled.`,
+    openSidebarMenu: "Open sidebar menu",
+    localPartnerModel: "Local partner model (passed straight to the CLI's -m)",
   },
 
   // Home
@@ -1639,6 +1641,24 @@ export const enUS: Translations = {
     libraryImages: "Images",
     libraryComputer: "Computer",
     libraryAuthorizedDirs: "Authorized dirs",
+    // Chats drawer
+    searchChats: "Search chats",
+    noMatchingChats: "No matching chats",
+  },
+
+  // Floating REC recorder overlay
+  recorder: {
+    title: "Recorder",
+    close: "Close",
+    taskNameLabel: "What task are you recording?",
+    taskNamePlaceholder: "e.g. Export this week's statement to Feishu",
+    stopFailed: "Failed to stop REC",
+  },
+
+  // Local brain readiness panel
+  localBrain: {
+    refresh: "Re-check",
+    dismiss: "Don't show again",
   },
 
   // Team tasks panel
@@ -3543,6 +3563,20 @@ export const enUS: Translations = {
         tencent: "Tencent Cloud · Hunyuan",
         volcengine: "Volcano Engine · Doubao (Ark)",
       },
+    },
+    octopusMix: {
+      title: "Octopus Mix · multi-model collaboration",
+      description:
+        "Pick 2+ models as proposers (each drafts independently, no tools), then pick one aggregator to merge their answers. Selecting “Octopus Mix” in chat routes through this config; if the proposer pool is empty, the default model × count is used instead.",
+      proposersLabel: "Proposers (models that draft)",
+      noCandidates: "No models available",
+      aggregatorLabel: "Aggregator",
+      aggregatorDefault: "Default",
+      nLabel: "Count when pool is empty",
+      saveButton: "Save",
+      saveSuccess: "Octopus Mix configuration saved",
+      saveFailed: (status: number) => `Save failed (${status})`,
+      saveFailedFallback: "Save failed",
     },
     dialog: {
       dragToResize: "Drag to resize",

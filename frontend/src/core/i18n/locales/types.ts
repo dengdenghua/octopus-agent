@@ -56,6 +56,8 @@ export interface Translations {
     timeAgo: (value: number, unit: string) => string;
     stubResponseTitle: string;
     stubResponseDescription: (method: string, path: string) => string;
+    openSidebarMenu: string;
+    localPartnerModel: string;
   };
 
   home: {
@@ -1427,6 +1429,24 @@ export interface Translations {
     libraryImages: string;
     libraryComputer: string;
     libraryAuthorizedDirs: string;
+    // Chats drawer
+    searchChats: string;
+    noMatchingChats: string;
+  };
+
+  // Floating REC recorder overlay
+  recorder: {
+    title: string;
+    close: string;
+    taskNameLabel: string;
+    taskNamePlaceholder: string;
+    stopFailed: string;
+  };
+
+  // Local brain readiness panel
+  localBrain: {
+    refresh: string;
+    dismiss: string;
   };
 
   // Team tasks panel
@@ -2924,6 +2944,19 @@ export interface Translations {
         tencent: string;
         volcengine: string;
       };
+    };
+    octopusMix: {
+      title: string;
+      description: string;
+      proposersLabel: string;
+      noCandidates: string;
+      aggregatorLabel: string;
+      aggregatorDefault: string;
+      nLabel: string;
+      saveButton: string;
+      saveSuccess: string;
+      saveFailed: (status: number) => string;
+      saveFailedFallback: string;
     };
     dialog: {
       dragToResize: string;
