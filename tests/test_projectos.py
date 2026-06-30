@@ -117,6 +117,48 @@ def test_qa_rejection_retries_then_passes(tmp_path) -> None:
     assert result["final_status"] == "done"  # retry recovered the rejected task
 
 
+def test_task_execution_error_retries_then_passes(tmp_path) -> None:
+    calls: dict[str, int] = {}
+
+    def flaky_execute(task: Task, context: dict) -> str:
+        calls[task.id] = calls.get(task.id, 0) + 1
+        if task.id == "MS1-T1" and calls[task.id] == 1:
+            raise RuntimeError("transient tool failure")
+        return f"ok:{task.id}"
+
+    eng = _engine(tmp_path, execute_task=flaky_execute)
+    p = eng.plan("x", "g")
+    result = eng.run(p.id, max_ticks=50)
+
+    assert result["final_status"] == "done"
+    assert calls["MS1-T1"] == 2
+    assert eng.store.get_task("MS1-T1").attempts == 2
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "task_error_retry:MS1-T1" in events
+
+
+def test_task_execution_error_blocks_project_after_retry_cap(tmp_path) -> None:
+    def failing_execute(task: Task, context: dict) -> str:
+        if task.id == "MS1-T1":
+            raise RuntimeError("persistent tool failure")
+        return f"ok:{task.id}"
+
+    eng = _engine(tmp_path, execute_task=failing_execute)
+    p = eng.plan("x", "g")
+    result = eng.run(p.id, max_ticks=20)
+
+    assert result["final_status"] == "blocked"
+    assert eng.store.get_project(p.id).status == "blocked"
+    assert eng.store.get_project(p.id).current_ms == "MS1"
+    assert eng.store.get_milestone("MS1").status == "blocked"
+    assert eng.store.get_task("MS1-T1").status == "failed"
+    assert eng.store.get_task("MS1-T1").attempts == 2
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "task_error_retry:MS1-T1" in events
+    assert "task_failed:MS1-T1" in events
+    assert "project_blocked:task_failed" in events
+
+
 def test_milestone_gate_blocks_when_criteria_unmet(tmp_path) -> None:
     def strict_gate(ms: Milestone, tasks: list[Task]) -> dict:
         return {"met": ms.id != "MS1", "reason": "MS1 forced-fail"}
@@ -124,5 +166,9 @@ def test_milestone_gate_blocks_when_criteria_unmet(tmp_path) -> None:
     eng = _engine(tmp_path, gate_milestone=strict_gate)
     p = eng.plan("x", "g")
     result = eng.run(p.id, max_ticks=20)
-    assert result["final_status"] != "done"  # blocked at MS1's gate
+    assert result["final_status"] == "blocked"
+    assert eng.store.get_project(p.id).status == "blocked"
+    assert eng.store.get_project(p.id).current_ms == "MS1"
     assert eng.store.get_milestone("MS1").status == "blocked"
+    events = [event for tick in result["history"] for event in tick["events"]]
+    assert "project_blocked:gate_failed" in events

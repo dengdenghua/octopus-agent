@@ -148,7 +148,7 @@ class ProjectEngine:
         for _ in range(max_ticks):
             r = self.tick(project_id)
             history.append(r)
-            if r["project_status"] in ("done", "failed"):
+            if r["project_status"] in ("done", "failed", "blocked"):
                 break
             if any(e == "no_runnable_milestone" for e in r["events"]):
                 break  # blocked — nothing to advance
@@ -166,6 +166,10 @@ class ProjectEngine:
         active = next((m for m in mss if m.status in ("active", "in_progress")), None)
         if active is not None:
             return active
+        blocked = next((m for m in mss if m.status == "blocked"), None)
+        if blocked is not None:
+            self._block_project(project, blocked.id, events, reason="milestone_blocked")
+            return None
         if mss and len(done) == len(mss):
             project.status = "done"
             self.store.save_project(project)
@@ -178,6 +182,7 @@ class ProjectEngine:
         )
         if nxt is None:
             events.append("no_runnable_milestone")  # all blocked on unmet deps
+            self._block_project(project, project.current_ms, events, reason="no_runnable_milestone")
             return None
         nxt.status = "active"
         self.store.save_milestone(project.id, nxt)
@@ -211,10 +216,14 @@ class ProjectEngine:
             try:
                 task.output = self._execute(task, context)
             except Exception as exc:  # noqa: BLE001 — one task failing must not kill the loop
-                task.status = "failed"
                 task.output = f"error: {type(exc).__name__}: {exc}"
+                if task.attempts >= MAX_TASK_ATTEMPTS:
+                    task.status = "failed"
+                    events.append(f"task_failed:{task.id}")
+                else:
+                    task.status = "pending"
+                    events.append(f"task_error_retry:{task.id}")
                 self.store.save_task(task)
-                events.append(f"task_failed:{task.id}")
                 continue
             verdict = self._qa(task, ms)
             task.qa_verdict = verdict
@@ -236,6 +245,7 @@ class ProjectEngine:
                 ms.status = "blocked"
                 self.store.save_milestone(project.id, ms)
                 events.append(f"milestone_blocked:{ms.id}")
+                self._block_project(project, ms.id, events, reason="task_failed")
             return
         gate = self._gate(ms, tasks)
         if gate.get("met"):
@@ -248,6 +258,21 @@ class ProjectEngine:
             ms.status = "blocked"
             self.store.save_milestone(project.id, ms)
             events.append(f"milestone_gate_failed:{ms.id}")
+            self._block_project(project, ms.id, events, reason="gate_failed")
+
+    def _block_project(
+        self,
+        project: Project,
+        milestone_id: str | None,
+        events: list[str],
+        *,
+        reason: str,
+    ) -> None:
+        project.status = "blocked"
+        if milestone_id:
+            project.current_ms = milestone_id
+        self.store.save_project(project)
+        events.append(f"project_blocked:{reason}")
 
     def _context(self, project: Project, ms: Milestone, tasks: list[Task]) -> dict[str, Any]:
         return {

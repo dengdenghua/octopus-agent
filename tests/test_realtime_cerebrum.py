@@ -729,6 +729,38 @@ def test_cowork_project_mode_reuses_active_project(
     assert second_trace["project_id"] == first_project_id
 
 
+def test_project_os_blocked_result_does_not_claim_auto_continue() -> None:
+    from runtime.sensing.gateway.realtime_cerebrum import _format_project_os_result
+
+    text = _format_project_os_result(
+        {
+            "project": {
+                "id": "P-blocked",
+                "name": "blocked project",
+                "status": "blocked",
+            },
+            "result": {"final_status": "blocked", "ticks": 2},
+            "milestones": [
+                {"id": "MS1", "name": "build", "status": "blocked"},
+            ],
+            "tasks": {
+                "MS1": [
+                    {
+                        "id": "MS1-T1",
+                        "status": "failed",
+                        "assigned_agent": "coder",
+                    }
+                ]
+            },
+            "roster": ["coder"],
+        }
+    )
+
+    assert "状态：blocked" in text
+    assert "项目已阻塞" in text
+    assert "后续回合会继续" not in text
+
+
 def test_blocked_topology_id_falls_back_to_react(
     gateway: Any,
     monkeypatch: pytest.MonkeyPatch,

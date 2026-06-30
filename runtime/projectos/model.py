@@ -18,7 +18,7 @@ from typing import Any, Literal
 TaskType = Literal["design", "code", "research", "analysis", "review"]
 TaskStatus = Literal["pending", "ready", "running", "blocked", "done", "failed", "rejected"]
 MilestoneStatus = Literal["pending", "active", "in_progress", "blocked", "done", "failed"]
-ProjectStatus = Literal["planning", "running", "done", "failed"]
+ProjectStatus = Literal["planning", "running", "blocked", "done", "failed"]
 
 # Which role owns which kind of work (L1 routing).
 ROLE_FOR_TASK: dict[str, str] = {
@@ -127,7 +127,9 @@ class Project:
             goal=str(raw.get("goal") or ""),
             milestone_ids=[str(m) for m in (raw.get("milestone_ids") or [])],
             current_ms=raw.get("current_ms"),
-            status=status if status in ("planning", "running", "done", "failed") else "planning",
+            status=status
+            if status in ("planning", "running", "blocked", "done", "failed")
+            else "planning",
         )
 
 

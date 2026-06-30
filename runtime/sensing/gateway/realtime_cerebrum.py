@@ -113,7 +113,10 @@ def _format_project_os_result(state: dict[str, Any]) -> str:
             lines.append(f"  派发：{', '.join(assignments)}")
     if len(milestones) > 6:
         lines.append(f"- 其余 {len(milestones) - 6} 个里程碑已省略，可在 Project OS 视图继续查看。")
-    if status not in {"done", "failed"}:
+    if status == "blocked":
+        lines.append("")
+        lines.append("项目已阻塞；请处理失败任务、验收条件或依赖后再继续推进。")
+    elif status not in {"done", "failed"}:
         lines.append("")
         lines.append("项目还未结束；后续回合会继续从当前 Project OS 状态推进。")
     return "\n".join(lines)
