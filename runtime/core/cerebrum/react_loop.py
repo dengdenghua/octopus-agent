@@ -711,8 +711,26 @@ def stream_react_loop(
         " 搜索时请注意信息时效性,优先引用最新来源。"
     )
     _uc = intent.user_context or {}
-    _wp = _uc.get("workspace_path") or _uc.get("metadata", {}).get("workspace_path")
     _metadata = _uc.get("metadata") or {}
+    _wp = _uc.get("workspace_path") or _metadata.get("workspace_path")
+    _personal_wp = (
+        _uc.get("personal_workspace_path")
+        or _metadata.get("personal_workspace_path")
+        or _uc.get("cwd")
+        or _metadata.get("cwd")
+    )
+    _workspace_scope_value = str(
+        _uc.get("workspace_scope") or _metadata.get("workspace_scope") or ""
+    ).strip().lower()
+    _effective_wp = _wp
+    if not (isinstance(_effective_wp, str) and _effective_wp.strip()):
+        _personal_workspace_enabled = (
+            _uc.get("personal_workspace_enabled") is True
+            or _metadata.get("personal_workspace_enabled") is True
+            or _workspace_scope_value == "personal"
+        )
+        if _personal_workspace_enabled and isinstance(_personal_wp, str) and _personal_wp.strip():
+            _effective_wp = _personal_wp
     _resume_context_prompt = _build_resume_context_prompt(_uc.get("resume_intent"))
     if _resume_context_prompt:
         volatile_parts.append(_resume_context_prompt)
@@ -731,7 +749,7 @@ def stream_react_loop(
         or _metadata.get("mode") == "code"
         or _uc.get("capability_mode")
         or _metadata.get("capability_mode")
-        or (isinstance(_wp, str) and _wp.strip())
+        or (isinstance(_effective_wp, str) and _effective_wp.strip())
     )
     # Codebase grounding for code/project chats: the same wiki + source
     # retrieval the planner uses, so interactive chat is grounded the same way
@@ -845,18 +863,28 @@ def stream_react_loop(
         _uc,
     )
     _todo_protocol_visible = False
-    if isinstance(_wp, str) and _wp.strip():
-        system_parts.append(
-            f"\n当前工作目录: {_wp.strip()}\n"
-            "所有文件操作（list_cwd / read_file / write 等）的相对路径都基于此目录。"
-            "分析项目时请从这个目录开始,不要使用其他目录。"
+    if isinstance(_effective_wp, str) and _effective_wp.strip():
+        _effective_wp_text = _effective_wp.strip()
+        _workspace_label = (
+            "个人隔离工作目录"
+            if not (isinstance(_wp, str) and _wp.strip())
+            else "当前工作目录"
         )
-        _rules = _load_project_rules(_wp.strip())
-        if _rules:
-            system_parts.append("\n<project-rules>\n" + _rules + "\n</project-rules>")
-        _profile = _build_project_profile_prompt(_wp.strip(), include_diagnostics=_is_code_mode)
-        if _profile:
-            system_parts.append("\n<project-profile>\n" + _profile + "\n</project-profile>")
+        system_parts.append(
+            f"\n{_workspace_label}: {_effective_wp_text}\n"
+            "所有文件操作（list_cwd / read_file / write 等）的相对路径都基于此目录。"
+            "分析或编程时请从这个目录开始,不要使用其他目录。"
+        )
+        if isinstance(_wp, str) and _wp.strip():
+            _rules = _load_project_rules(_effective_wp_text)
+            if _rules:
+                system_parts.append("\n<project-rules>\n" + _rules + "\n</project-rules>")
+            _profile = _build_project_profile_prompt(
+                _effective_wp_text,
+                include_diagnostics=_is_code_mode,
+            )
+            if _profile:
+                system_parts.append("\n<project-profile>\n" + _profile + "\n</project-profile>")
         if _is_code_mode:
             system_parts.append(
                 "\n<code-mode>\n"
@@ -1514,11 +1542,11 @@ def stream_react_loop(
     )
     if (
         _startup_code_context_allowed
-        and isinstance(_wp, str)
-        and _wp.strip()
+        and isinstance(_effective_wp, str)
+        and _effective_wp.strip()
         and resume_task_id is None
     ):
-        startup_context = _build_code_context_prelude(_wp.strip())
+        startup_context = _build_code_context_prelude(_effective_wp.strip())
         if startup_context:
             messages.append(Message(role="user", content=startup_context))
     messages.append(
@@ -2652,7 +2680,7 @@ def stream_react_loop(
                     resolved_name,
                     action_args or {},
                     action_args or {},
-                    workspace_path=_wp if isinstance(_wp, str) else "",
+                    workspace_path=_effective_wp if isinstance(_effective_wp, str) else "",
                 )
                 _diag_status = str(_diag_record.get("status") or "skipped")
                 _diag_reason = str(_diag_record.get("reason") or "")
@@ -2668,7 +2696,7 @@ def stream_react_loop(
                 )
                 _auto_diag = _run_auto_diagnostics(
                     stack,
-                    workspace_path=_wp if isinstance(_wp, str) else None,
+                    workspace_path=_effective_wp if isinstance(_effective_wp, str) else None,
                 )
                 if _auto_diag:
                     step.observation = (

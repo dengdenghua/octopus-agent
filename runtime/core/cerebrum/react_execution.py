@@ -139,6 +139,9 @@ def _execute_action_via_beak(
             metadata = dict(user_context.get("metadata") or {})
             for key in (
                 "workspace_path",
+                "workspace_scope",
+                "personal_workspace_path",
+                "personal_workspace_enabled",
                 "mode",
                 "capability_mode",
                 "code_mode",

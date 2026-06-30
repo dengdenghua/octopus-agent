@@ -19,7 +19,12 @@ import {
   writePreferredTeam,
   type Team,
 } from "@/core/teams";
-import { legacyTeamWorkspaceTarget } from "@/core/router/legacy-workspace-routes";
+
+function teamRealtimeTarget(threadId?: string | null): string {
+  const cleanId = threadId?.trim();
+  if (!cleanId || cleanId === "new") return "/workspace/realtime/new";
+  return `/workspace/realtime/${encodeURIComponent(cleanId)}`;
+}
 
 export default function TeamJoinPage() {
   const { t } = useI18n();
@@ -73,12 +78,7 @@ export default function TeamJoinPage() {
       dispatchTeamUpdated(result.team);
       window.dispatchEvent(new Event("octopus:teams-refresh"));
       toast.success(t.teamJoin.joinSuccess(result.team.name));
-      navigate(
-        requestedThreadId
-          ? legacyTeamWorkspaceTarget(requestedThreadId)
-          : legacyTeamWorkspaceTarget("new"),
-        { replace: true },
-      );
+      navigate(teamRealtimeTarget(requestedThreadId || "new"), { replace: true });
     } catch {
       toast.error(t.teamJoin.joinFailed);
     } finally {

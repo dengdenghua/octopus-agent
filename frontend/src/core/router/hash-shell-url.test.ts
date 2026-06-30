@@ -13,11 +13,7 @@ describe("hash router shell URL normalization", () => {
   });
 
   test("strips stale pathname when a hash route is active", () => {
-    window.history.replaceState(
-      null,
-      "",
-      "/workspace/chats/thread-1#/workspace/store",
-    );
+    window.history.replaceState(null, "", "/desktop#/workspace/store");
 
     normalizeHashRouterShellUrl();
 
@@ -25,28 +21,21 @@ describe("hash router shell URL normalization", () => {
     expect(window.location.hash).toBe("#/workspace/store");
   });
 
-  test("strips stale agent pathname when a hash agent route is active", () => {
-    window.history.replaceState(
-      null,
-      "",
-      "/workspace/agents/general/chats/old#/workspace/agents/general/chats/new",
-    );
+  test("strips stale pathname when a realtime hash route is active", () => {
+    window.history.replaceState(null, "", "/desktop#/workspace/realtime/new");
 
     normalizeHashRouterShellUrl();
 
     expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("#/workspace/realtime/new?agent=general");
+    expect(window.location.hash).toBe("#/workspace/realtime/new");
   });
 
   test("formats programmatic routes for the hash router shell", () => {
-    expect(
-      toHashRouterShellUrl("/workspace/agents/local%20codex/chats/abc"),
-    ).toBe("/#/workspace/realtime/abc?agent=local+codex");
-    expect(toHashRouterShellUrl("/workspace/team?surface=chat")).toBe(
-      "/#/workspace/realtime/new?surface=chat",
-    );
     expect(toHashRouterShellUrl("/workspace/realtime?agent=general")).toBe(
       "/#/workspace/realtime/new?agent=general",
+    );
+    expect(toHashRouterShellUrl("/workspace/agents?surface=chat")).toBe(
+      "/#/workspace/agents?surface=chat",
     );
   });
 
@@ -63,15 +52,6 @@ describe("hash router shell URL normalization", () => {
     expect(window.location.hash).toBe("#/workspace/realtime/new?agent=general");
   });
 
-  test("rewrites retired swarm entry into the realtime workspace", () => {
-    window.history.replaceState(null, "", "/#/workspace/swarm");
-
-    normalizeHashRouterShellUrl();
-
-    expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("#/workspace/realtime/new");
-  });
-
   test("rewrites workspace roots into the realtime coding screen", () => {
     window.history.replaceState(null, "", "/#/workspace");
 
@@ -86,50 +66,24 @@ describe("hash router shell URL normalization", () => {
     expect(window.location.hash).toBe("#/workspace/realtime/new");
   });
 
-  test("rewrites retired code entries into realtime threads", () => {
-    window.history.replaceState(null, "", "/#/workspace/code/code-thread");
+  test("does not rewrite unknown non-realtime workspace entries", () => {
+    window.history.replaceState(null, "", "/#/workspace/removed/thread-1");
 
     normalizeHashRouterShellUrl();
 
-    expect(window.location.hash).toBe("#/workspace/realtime/code-thread");
+    expect(window.location.hash).toBe("#/workspace/removed/thread-1");
 
-    window.history.replaceState(
-      null,
-      "",
-      "/#/workspace/code/code-thread?surface=chat",
-    );
+    window.history.replaceState(null, "", "/#/workspace/removed/new");
 
     normalizeHashRouterShellUrl();
 
-    expect(window.location.hash).toBe(
-      "#/workspace/realtime/code-thread?surface=chat",
-    );
+    expect(window.location.hash).toBe("#/workspace/removed/new");
 
     window.history.replaceState(null, "", "/#/workspace/realtime/rt-thread");
 
     normalizeHashRouterShellUrl();
 
     expect(window.location.hash).toBe("#/workspace/realtime/rt-thread");
-  });
-
-  test("rewrites retired team entries into realtime tasks", () => {
-    window.history.replaceState(null, "", "/#/workspace/team/team-thread");
-
-    normalizeHashRouterShellUrl();
-
-    expect(window.location.hash).toBe("#/workspace/realtime/team-thread");
-
-    window.history.replaceState(
-      null,
-      "",
-      "/#/workspace/team/team%20thread?surface=chat",
-    );
-
-    normalizeHashRouterShellUrl();
-
-    expect(window.location.hash).toBe(
-      "#/workspace/realtime/team%20thread?surface=chat",
-    );
   });
 
   test("keeps team invite links on the join route", () => {
@@ -143,9 +97,9 @@ describe("hash router shell URL normalization", () => {
   test("patches history writes so pathname routes become hash routes", () => {
     installHashRouterShellUrlNormalizer();
     window.history.replaceState(null, "", "/");
-    window.history.pushState(null, "", "/workspace/agents/general/chats/abc");
+    window.history.pushState(null, "", "/workspace/realtime/abc");
     expect(window.location.pathname).toBe("/");
-    expect(window.location.hash).toBe("#/workspace/realtime/abc?agent=general");
+    expect(window.location.hash).toBe("#/workspace/realtime/abc");
   });
 
   test("installs a hashchange listener so navigation keeps the URL canonical", () => {

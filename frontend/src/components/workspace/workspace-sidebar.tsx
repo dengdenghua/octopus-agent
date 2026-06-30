@@ -1350,23 +1350,13 @@ function isNavRouteActive(pathname: string, to: string) {
   if (path === PRIMARY_WORKSPACE_ROUTE) {
     return isChatSurfaceRoute(pathname);
   }
-  if (path === "/workspace/agents" && isAgentChatRoute(pathname)) {
-    return false;
-  }
   return pathname === path || pathname.startsWith(`${path}/`);
-}
-
-function isAgentChatRoute(pathname: string) {
-  return /^\/workspace\/agents\/[^/]+\/chats(?:\/|$)/.test(pathname);
 }
 
 function isChatSurfaceRoute(pathname: string) {
   return (
     pathname === "/workspace/realtime" ||
-    pathname === "/workspace/realtime/new" ||
-    pathname === "/workspace/chats" ||
-    pathname === "/workspace/chats/new" ||
-    /^\/workspace\/agents\/[^/]+\/chats\/new$/.test(pathname)
+    pathname === "/workspace/realtime/new"
   );
 }
 
@@ -1378,7 +1368,6 @@ function isBrowserSurfaceRoute(pathname: string) {
 }
 
 function isCompanySurfaceRoute(pathname: string) {
-  if (isAgentChatRoute(pathname)) return false;
   return (
     pathname === "/workspace/agents" ||
     pathname.startsWith("/workspace/agents/") ||

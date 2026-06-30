@@ -917,17 +917,17 @@ function latestArtifactFocusPathFromEvents(
  * list, composer, and Welcome state all share the same Octopus-style
  * design. No file tree, no team-mode picker — just the conversation.
  */
-export default function ChatsPage() {
+export default function RealtimePage() {
   const chatState = useThreadChat();
 
   return (
     <ArtifactsProvider threadId={chatState.threadId}>
-      <ChatsPageContent chatState={chatState} />
+      <RealtimePageContent chatState={chatState} />
     </ArtifactsProvider>
   );
 }
 
-function ChatsPageContent({
+function RealtimePageContent({
   chatState,
 }: {
   chatState: ReturnType<typeof useThreadChat>;
@@ -969,14 +969,16 @@ function ChatsPageContent({
   const [projectDetection, setProjectDetection] =
     useState<DetectResponse | null>(null);
   // Personal-space work mode (general/build/research) — only meaningful when no
-  // project dir is bound; threaded into the turn context as personal_mode.
+  // project dir is bound; threaded into the turn context as personal_mode. It no
+  // longer downgrades capability: personal space still runs against an isolated
+  // coding workspace, while a selected folder binds a user project workspace.
   const [personalMode, setPersonalMode] = useState<PersonalMode>("general");
   // REC floating recorder overlay (replaces the old confirm() start/stop flow).
   const [recOverlayOpen, setRecOverlayOpen] = useState(false);
   const [recIsRecording, setRecIsRecording] = useState(false);
-  // Work directory for Agent project/code state. Empty means personal
-  // Agent chat; selecting a local folder promotes this page into code
-  // mode without mixing it with the separate Team workspace.
+  // Work directory for Agent project/code state. Empty means the thread uses its
+  // isolated personal coding workspace; selecting a local folder binds a user
+  // project directory without mixing it with the separate Team workspace.
   const [workDir, setWorkDir] = useState<string>(() => "");
   const localStartedThreadIdRef = useRef<string | null>(null);
   const handleWorkDirChange = useCallback((dir: string) => {
@@ -1109,11 +1111,11 @@ function ChatsPageContent({
     }
   }, [params.agentName]);
   const isAgentRoute = !!routeAgentName;
+  const isRealtimeRoute = location.pathname.startsWith("/workspace/realtime");
   const memoryMode = searchParams.get("memory") ?? "";
 
-  // Unified task routes carry the selected persona in ?agent=. Legacy
-  // /workspace/agents/:agent/chats URLs still hydrate this page through the
-  // redirect shim, but no longer remain as a separate work surface.
+  // Unified task routes carry the selected persona in ?agent= while every chat
+  // thread stays on the /workspace/realtime/* surface.
   const activeAgentId = routeAgentName || queryAgentName || "general";
   const { agent: activeAgent } = useAgent(activeAgentId);
   const hintedThreadOwnerAgentId = routeState?.threadOwnerAgentId?.trim() || "";
@@ -1452,6 +1454,11 @@ function ChatsPageContent({
       : workDir;
   const projectWorkspacePath = effectiveWorkDir.trim();
   const isProjectCodeMode = !!projectWorkspacePath;
+  const isExplicitConversationMode =
+    routeMode === "chat" || routeMode === "flash" || discussionOnly;
+  const isCodingWorkspaceMode =
+    isProjectCodeMode ||
+    ((isAgentRoute || isRealtimeRoute) && !isExplicitConversationMode);
   // Code mode is available to every agent by default · per-agent unlock
   // flag removed. Tool/permission scoping lives in the skills &
   // permissions system, not a global gate.
@@ -1496,7 +1503,7 @@ function ChatsPageContent({
     () => modePresetForAgentMode(projectAgentMode),
     [projectAgentMode],
   );
-  const effectiveMode: ReasoningMode = isProjectCodeMode
+  const effectiveMode: ReasoningMode = isCodingWorkspaceMode
     ? "code"
     : isAgentRoute && routeMode === "deep"
       ? routeMode
@@ -1620,30 +1627,36 @@ function ChatsPageContent({
       reasoning_effort: effectiveReasoningEffort,
       mode: streamMode,
       workspace_path: isProjectCodeMode ? projectWorkspacePath : undefined,
-      capability_mode: isProjectCodeMode ? "code" : undefined,
-      code_mode: isProjectCodeMode ? "solo" : undefined,
-      agent_mode: isProjectCodeMode ? projectAgentMode : undefined,
-      mode_preset: isProjectCodeMode ? projectModePreset.id : undefined,
-      workflow_preset: isProjectCodeMode
+      workspace_scope: isProjectCodeMode
+        ? "project"
+        : isCodingWorkspaceMode
+          ? "personal"
+          : undefined,
+      personal_workspace_enabled:
+        !isProjectCodeMode && isCodingWorkspaceMode ? true : undefined,
+      capability_mode: isCodingWorkspaceMode ? "code" : undefined,
+      code_mode: isCodingWorkspaceMode ? "solo" : undefined,
+      agent_mode: isCodingWorkspaceMode ? projectAgentMode : undefined,
+      mode_preset: isCodingWorkspaceMode ? projectModePreset.id : undefined,
+      workflow_preset: isCodingWorkspaceMode
         ? workflowPresetForMode(projectAgentMode, auditIntensity)
         : undefined,
-      // Personal-space work mode — the inverse gate of the project fields above.
-      // Backend react_loop reads personal_mode for deep-research + the personal
-      // agent-mode prompt; only sent when NOT bound to a project dir.
+      // Personal-space work mode. Backend keeps this as scope steering while the
+      // same code capability/tool chain remains available in personal workspace.
       personal_mode: !isProjectCodeMode ? personalMode : undefined,
-      skill_pack_profile: isProjectCodeMode
+      skill_pack_profile: isCodingWorkspaceMode
         ? projectModePreset.skillPackProfile
         : undefined,
-      verification_policy: isProjectCodeMode
+      verification_policy: isCodingWorkspaceMode
         ? projectModePreset.verificationPolicy
         : undefined,
-      default_skill_packs: isProjectCodeMode
+      default_skill_packs: isCodingWorkspaceMode
         ? projectModePreset.defaultSkillPacks
         : undefined,
-      default_plugins: isProjectCodeMode
+      default_plugins: isCodingWorkspaceMode
         ? projectModePreset.defaultPlugins
         : undefined,
-      mode_contract: isProjectCodeMode
+      mode_contract: isCodingWorkspaceMode
         ? projectModePreset.promptContract
         : undefined,
       project_signals: projectSignals,
@@ -1984,15 +1997,15 @@ function ChatsPageContent({
     collaborationEnabled ||
     hasRenderableAgentWorkbench ||
     !!previewBlocks ||
-    // Code mode docks the workbench (file tree / diff / terminal) like an IDE
-    // — available from the first turn, even on a fresh thread.
-    isProjectCodeMode;
+    // Coding workspace docks the workbench (file tree / diff / terminal) like
+    // an IDE — available from the first turn, even on a fresh personal thread.
+    isCodingWorkspaceMode;
   const showAgentWorkbench =
     canOpenAgentWorkbench &&
     (agentWorkbenchManuallyOpened ||
-      // Code mode keeps the workbench docked by default (still closable —
+      // Coding workspace keeps the workbench docked by default (still closable —
       // honored via agentWorkbenchDismissed).
-      (isProjectCodeMode && !agentWorkbenchDismissed) ||
+      (isCodingWorkspaceMode && !agentWorkbenchDismissed) ||
       (collaborationEnabled && !agentWorkbenchDismissed) ||
       (hasRenderableAgentWorkbench &&
         (!agentWorkbenchDismissed || artifactsOpen || showAgentPlan))) &&
@@ -2153,7 +2166,7 @@ function ChatsPageContent({
   const handleModeChange = useCallback(
     (mode: ReasoningMode, draft?: string) => {
       if (mode === effectiveMode) return;
-      if (mode === "code") return;
+      if (mode === "code" && !isCodingWorkspaceMode) return;
       if (!isAgentRoute) {
         setDiscussionOnly(mode === "chat");
         return;
@@ -2631,7 +2644,7 @@ function ChatsPageContent({
                         isProjectCodeMode
                           ? "描述要修改、排查或验证的项目任务..."
                           : isNewThread
-                            ? "描述任务、贴链接，或输入 / 选择命令..."
+                            ? "描述要实现、生成、排查或验证的任务..."
                             : undefined
                       }
                       className={cn(
@@ -2699,7 +2712,7 @@ function ChatsPageContent({
                     // empty agent tab. Once touched / once a run produces
                     // content, defer to the normal tab state.
                     !agentWorkbenchTabTouched &&
-                    isProjectCodeMode &&
+                    isCodingWorkspaceMode &&
                     !hasRenderableAgentWorkbench
                       ? "files"
                       : agentWorkbenchTab

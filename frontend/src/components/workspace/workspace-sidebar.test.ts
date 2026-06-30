@@ -3,18 +3,16 @@ import { describe, expect, test } from "vitest";
 import { __testing } from "./workspace-sidebar";
 
 describe("workspace sidebar route activation", () => {
-  test("leaves primary nav inactive on agent-scoped chat threads", () => {
-    const pathname = "/workspace/agents/general/chats/thread-1";
+  test("leaves primary nav inactive on non-realtime agent subpaths", () => {
+    const pathname = "/workspace/agents/general/threads/thread-1";
 
     expect(
       __testing.isNavRouteActive(pathname, "/workspace/realtime/new"),
     ).toBe(false);
-    expect(__testing.isNavRouteActive(pathname, "/workspace/agents")).toBe(
-      false,
-    );
+    expect(__testing.isNavRouteActive(pathname, "/workspace/agents")).toBe(true);
   });
 
-  test("keeps primary chat active only on chat entry routes", () => {
+  test("keeps primary chat active only on realtime entry routes", () => {
     expect(
       __testing.isNavRouteActive(
         "/workspace/realtime/new",
@@ -23,10 +21,10 @@ describe("workspace sidebar route activation", () => {
     ).toBe(true);
     expect(
       __testing.isNavRouteActive(
-        "/workspace/agents/general/chats/new",
+        "/workspace/agents/general/threads/new",
         "/workspace/realtime/new",
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       __testing.isNavRouteActive(
         "/workspace/realtime/thread-1",

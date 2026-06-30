@@ -7,7 +7,7 @@
  *
  * Reused by:
  *   • `WorkspaceSidebar` — scope thread list to the active agent
- *   • `ChatsPage` (`app/workspace/chats/[id]/page.tsx`) — route the
+ *   • realtime workspace page (`app/workspace/realtime/[id]/page.tsx`) — route the
  *     turn to the active agent, and invalidate thread cache on change
  *   • anywhere else that needs to know "who am I talking to"
  *

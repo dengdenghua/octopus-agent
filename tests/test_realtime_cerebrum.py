@@ -1213,6 +1213,74 @@ def test_input_metadata_capability_mode_reaches_react_intent() -> None:
     assert intent.user_context["auto_approve"] is True
 
 
+def test_code_capability_without_project_gets_personal_workspace(tmp_path: Path) -> None:
+    from runtime.platform.runtime_policy.workspaces import WorkspaceManager
+    from runtime.protocol.items import TurnParams
+    from runtime.sensing.gateway.realtime_cerebrum import _build_intent
+
+    params = TurnParams.model_validate(
+        {
+            "threadId": "th-personal-code",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "create a tiny python script",
+                    "metadata": {
+                        "context": {
+                            "mode": "code",
+                            "capability_mode": "code",
+                            "code_mode": "solo",
+                            "personal_workspace_enabled": True,
+                        },
+                    },
+                },
+            ],
+        }
+    )
+
+    intent = _build_intent(
+        "create a tiny python script",
+        params,
+        workspaces=WorkspaceManager(tmp_path / "workspaces"),
+    )
+
+    workspace = tmp_path / "workspaces" / "th-personal-code"
+    assert intent.user_context["workspace_scope"] == "personal"
+    assert intent.user_context["personal_workspace_path"] == str(workspace.resolve())
+    assert intent.user_context["cwd"] == str(workspace.resolve())
+    assert "workspace_path" not in intent.user_context
+
+
+def test_explicit_chat_turn_does_not_inherit_personal_code_metadata(tmp_path: Path) -> None:
+    from runtime.sensing.gateway.turn_session import build_turn_metadata
+
+    class Store:
+        def get(self, thread_id: str) -> dict[str, object]:
+            assert thread_id == "th-personal-code"
+            return {
+                "metadata": {
+                    "mode": "code",
+                    "capability_mode": "code",
+                    "code_mode": "solo",
+                    "workspace_scope": "personal",
+                    "personal_workspace_enabled": True,
+                    "personal_workspace_path": str(tmp_path),
+                }
+            }
+
+    metadata = build_turn_metadata(
+        thread_id="th-personal-code",
+        body={"context": {"mode": "chat"}},
+        store=Store(),
+    )
+
+    assert metadata["mode"] == "chat"
+    assert "capability_mode" not in metadata
+    assert "code_mode" not in metadata
+    assert "workspace_scope" not in metadata
+    assert "personal_workspace_enabled" not in metadata
+
+
 def test_tool_question_keeps_react_path_when_router_exists(tmp_path: Path) -> None:
     from fastapi import FastAPI
 

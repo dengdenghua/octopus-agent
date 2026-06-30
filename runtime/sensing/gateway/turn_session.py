@@ -41,6 +41,13 @@ def build_turn_metadata(
     )
     if isinstance(mode_val, str) and mode_val:
         metadata["mode"] = mode_val
+    explicit_conversation_mode = isinstance(ctx.get("mode"), str) and ctx.get("mode") in {
+        "chat",
+        "flash",
+        "inspiration",
+        "conversation",
+        "discuss",
+    }
 
     for key in ("team_id", "team_name", "project", "agent", "agent_name"):
         value = config_meta.get(key) or ctx.get(key) or stored_meta.get(key)
@@ -79,14 +86,30 @@ def build_turn_metadata(
         "capability_mode",
         "code_mode",
         "agent_mode",
+        "workspace_scope",
+        "personal_workspace_path",
         "interaction_mode",
         "model_name",
     ):
-        value = ctx.get(key) or stored_meta.get(key)
+        if explicit_conversation_mode and key in {
+            "capability_mode",
+            "code_mode",
+            "agent_mode",
+            "workspace_scope",
+            "personal_workspace_path",
+        }:
+            value = ctx.get(key)
+        else:
+            value = ctx.get(key) or stored_meta.get(key)
         if isinstance(value, str) and value.strip():
             metadata[key] = value.strip()
         elif isinstance(value, bool):
             metadata[key] = value
+    value = ctx.get("personal_workspace_enabled")
+    if value is None and not explicit_conversation_mode:
+        value = stored_meta.get("personal_workspace_enabled")
+    if isinstance(value, bool):
+        metadata["personal_workspace_enabled"] = value
 
     project_signals = ctx.get("project_signals") or stored_meta.get("project_signals")
     if isinstance(project_signals, dict):

@@ -671,6 +671,9 @@ class CerebrumRuntime:
                 "agent",
                 "agent_name",
                 "workspace_path",
+                "workspace_scope",
+                "personal_workspace_path",
+                "personal_workspace_enabled",
                 "owner_actor_id",
                 "actor_id",
             ):

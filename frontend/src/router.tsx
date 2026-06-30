@@ -4,54 +4,11 @@ import {
   Route,
   Routes,
   useLocation,
-  useParams,
 } from "react-router-dom";
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { useI18n } from "@/core/i18n/hooks";
-import {
-  legacyAgentChatWorkspaceTarget,
-  legacyTeamWorkspaceTarget,
-} from "@/core/router/legacy-workspace-routes";
-
-/**
- * Redirect old /realtime/:id bookmarks into the workspace shell.
- */
-function RealtimeRedirect() {
-  const { threadId } = useParams<{ threadId: string }>();
-  if (!threadId) return <Navigate to="/realtime" replace />;
-  return <Navigate to={`/workspace/realtime/${threadId}`} replace />;
-}
-
-function LegacyCodeRedirect() {
-  const { threadId } = useParams<{ threadId: string }>();
-  const target =
-    !threadId || threadId === "new"
-      ? "/workspace/realtime/new"
-      : `/workspace/realtime/${threadId}`;
-  return <HashRedirect to={target} />;
-}
-
-function LegacyTeamRedirect() {
-  const { threadId } = useParams<{ threadId?: string }>();
-  const { search } = useLocation();
-  return <Navigate to={legacyTeamWorkspaceTarget(threadId, search)} replace />;
-}
-
-function LegacyAgentChatRedirect() {
-  const { agentName, threadId } = useParams<{
-    agentName?: string;
-    threadId?: string;
-  }>();
-  const { search } = useLocation();
-  return (
-    <HashRedirect
-      to={legacyAgentChatWorkspaceTarget(agentName, threadId, search)}
-    />
-  );
-}
-
 function StorageRedirect() {
   const search = window.location.hash.includes("?")
     ? window.location.hash.slice(window.location.hash.indexOf("?"))
@@ -76,7 +33,7 @@ const TopBrowserPage = lazy(() => import("./app/browser/page"));
 const PluginsPage = lazy(() => import("./app/plugins/page"));
 
 const WorkspaceLayout = lazy(() => import("./app/workspace/layout"));
-const ChatPage = lazy(() => import("./app/workspace/chats/[thread_id]/page"));
+const ChatPage = lazy(() => import("./app/workspace/realtime/[thread_id]/page"));
 const TeamJoinPage = lazy(() => import("./app/workspace/team/join/page"));
 const BrowserPage = lazy(() => import("./app/workspace/browser/page"));
 const ComputerPage = lazy(() => import("./app/workspace/computer/page"));
@@ -115,9 +72,6 @@ const ReplayPage = lazy(() => import("./app/workspace/replay/page"));
 // Reflex monitor + YAML editor. See app/workspace/reflex/page.tsx.
 const ReflexMonitorPage = lazy(() => import("./app/workspace/reflex/page"));
 const ReflexEditorPage = lazy(() => import("./app/workspace/reflex/edit/page"));
-// Standalone realtime index (outside workspace shell).
-const RealtimeIndexPage = lazy(() => import("./app/realtime/page"));
-
 function PageLoading() {
   const { t } = useI18n();
   return (
@@ -137,7 +91,7 @@ export function AppRouter() {
     const warm = () => {
       if (cancelled) return;
       void import("./app/workspace/layout").catch(() => {});
-      void import("./app/workspace/chats/[thread_id]/page").catch(() => {});
+      void import("./app/workspace/realtime/[thread_id]/page").catch(() => {});
       void import("shiki")
         .then(({ codeToHtml }) =>
           Promise.all(
@@ -192,14 +146,6 @@ export function AppRouter() {
             <Route path="/browser" element={<TopBrowserPage />} />
             <Route path="/plugins" element={<PluginsPage />} />
 
-            <Route path="/realtime" element={<RealtimeIndexPage />} />
-            {/* Backwards-compat: old /realtime/:id bookmarks */}
-            <Route path="/realtime/:threadId" element={<RealtimeRedirect />} />
-            <Route
-              path="/workspace/swarm"
-              element={<HashRedirect to="/workspace/realtime/new" />}
-            />
-
             <Route path="/workspace" element={<WorkspaceLayout />}>
               <Route index element={<Navigate to="realtime/new" replace />} />
               <Route
@@ -207,22 +153,7 @@ export function AppRouter() {
                 element={<Navigate to="/workspace/realtime/new" replace />}
               />
               <Route path="realtime/:threadId" element={<ChatPage />} />
-              <Route path="chats/:threadId" element={<ChatPage />} />
-              {/* Legacy code routes → realtime */}
-              <Route
-                path="code"
-                element={<HashRedirect to="/workspace/realtime/new" />}
-              />
-              <Route
-                path="code/new"
-                element={<HashRedirect to="/workspace/realtime/new" />}
-              />
-              <Route path="code/:threadId" element={<LegacyCodeRedirect />} />
-              {/* Legacy team routes → unified task workspace */}
-              <Route path="team" element={<LegacyTeamRedirect />} />
-              <Route path="team/new" element={<LegacyTeamRedirect />} />
               <Route path="team/join" element={<TeamJoinPage />} />
-              <Route path="team/:threadId" element={<LegacyTeamRedirect />} />
               <Route path="browser" element={<BrowserPage />} />
               <Route path="computer" element={<ComputerPage />} />
               <Route
@@ -231,10 +162,6 @@ export function AppRouter() {
               />
               <Route path="mobile" element={<MobilePage />} />
               <Route path="mcp" element={<McpPage />} />
-              <Route
-                path="agents/:agentName/chats/:threadId"
-                element={<LegacyAgentChatRedirect />}
-              />
               <Route path="agents" element={<AgentsPage />} />
               <Route path="agents/new" element={<AgentsNewPage />} />
               <Route path="skills" element={<SkillsPage />} />
@@ -247,10 +174,6 @@ export function AppRouter() {
               <Route path="architecture" element={<ArchitecturePage />} />
               <Route path="observability" element={<ObservabilityPage />} />
               <Route path="intelligence" element={<IntelligencePage />} />
-              <Route
-                path="swarm"
-                element={<HashRedirect to="/workspace/realtime/new" />}
-              />
               <Route path="knowledge" element={<KnowledgePage />} />
               <Route path="storage" element={<StoragePage />} />
               <Route path="nas" element={<StorageRedirect />} />

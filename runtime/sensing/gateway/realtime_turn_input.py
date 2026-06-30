@@ -540,6 +540,28 @@ def _safe_str(value: Any) -> str | None:
     return None
 
 
+def _context_requests_code_workspace(context: dict[str, Any]) -> bool:
+    """Return True when a turn should get a writable coding workspace.
+
+    ``workspace_path`` remains the user's bound project directory. Personal
+    threads also get a per-thread cwd; this helper decides when to expose that
+    cwd as an effective coding workspace without mislabelling it as a project.
+    """
+    mode = str(context.get("mode") or "").strip().lower()
+    capability = str(context.get("capability_mode") or "").strip().lower()
+    code_mode = str(context.get("code_mode") or "").strip().lower()
+    scope = str(context.get("workspace_scope") or "").strip().lower()
+    if mode in {"chat", "flash", "inspiration", "conversation", "discuss"}:
+        return False
+    return (
+        mode == "code"
+        or capability == "code"
+        or bool(code_mode)
+        or scope == "personal"
+        or context.get("personal_workspace_enabled") is True
+    )
+
+
 def _turn_mode(params: TurnParams) -> str:
     metadata = _input_metadata(params)
     context = metadata.get("context")
@@ -591,6 +613,17 @@ def _build_intent(
         list,
     ):
         context_payload["conversation_messages"] = conversation_messages
+    if _context_requests_code_workspace(context_payload):
+        if isinstance(context_payload.get("workspace_path"), str) and context_payload["workspace_path"].strip():
+            context_payload.setdefault("workspace_scope", "project")
+        else:
+            context_payload.setdefault("workspace_scope", "personal")
+        if (
+            context_payload.get("workspace_scope") == "personal"
+            and isinstance(cwd, str)
+            and cwd.strip()
+        ):
+            context_payload.setdefault("personal_workspace_path", cwd.strip())
     resume_intent = _parse_resume_intent(text)
     if resume_intent is not None:
         context_payload["resume_intent"] = resume_intent

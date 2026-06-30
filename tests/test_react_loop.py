@@ -296,6 +296,39 @@ def test_code_mode_injects_startup_context_before_current_goal(tmp_path) -> None
     assert user_messages[-1] == "Patch the code"
 
 
+def test_personal_code_mode_uses_cwd_as_effective_workspace(tmp_path) -> None:
+    (tmp_path / "README.md").write_text("Personal workspace notes", encoding="utf-8")
+    (tmp_path / "app.py").write_text("print('personal')", encoding="utf-8")
+    router = _CapturingRouter(["Final Answer: done"])
+    intent = _intent("Create a tiny script")
+    intent.user_context.update({
+        "mode": "code",
+        "capability_mode": "code",
+        "workspace_scope": "personal",
+        "personal_workspace_enabled": True,
+        "cwd": str(tmp_path),
+    })
+
+    result = run_react_loop(_FakeStack(router), intent, agent=None)
+
+    assert result is not None
+    messages = router.requests[0].messages
+    system_text = "\n".join(
+        message.content
+        for message in messages
+        if message.role == "system" and isinstance(message.content, str)
+    )
+    user_messages = [
+        message.content
+        for message in messages
+        if message.role == "user" and isinstance(message.content, str)
+    ]
+    assert f"个人隔离工作目录: {tmp_path}" in system_text
+    assert "startup-code-context" in user_messages[-2]
+    assert "Personal workspace notes" in user_messages[-2]
+    assert user_messages[-1] == "Create a tiny script"
+
+
 def test_code_agent_mode_prompt_distinguishes_architect_mode() -> None:
     prompt = _build_code_agent_mode_prompt("architect")
 

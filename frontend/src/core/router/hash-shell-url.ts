@@ -6,14 +6,6 @@ export function toHashRouterShellUrl(route: string) {
   return `/#${canonicalWorkspaceHashRoute(normalized).slice(1)}`;
 }
 
-function safeDecodePathSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
-}
-
 function splitRouteSearch(route: string): { pathname: string; search: string } {
   const queryIndex = route.indexOf("?");
   if (queryIndex === -1) return { pathname: route, search: "" };
@@ -34,47 +26,6 @@ function canonicalWorkspaceHashRoute(route: string): string {
     pathname === "/workspace/realtime/"
   ) {
     return `#/workspace/realtime/new${search}`;
-  }
-
-  if (pathname === "/workspace/swarm" || pathname === "/workspace/swarm/") {
-    return `#/workspace/realtime/new${search}`;
-  }
-
-  if (
-    pathname === "/workspace/code" ||
-    pathname === "/workspace/code/new" ||
-    pathname === "/workspace/team" ||
-    pathname === "/workspace/team/new"
-  ) {
-    return `#/workspace/realtime/new${search}`;
-  }
-
-  const legacyCodeThread = pathname.match(/^\/workspace\/code\/([^/?#]+)$/);
-  if (legacyCodeThread) {
-    return `#/workspace/realtime/${legacyCodeThread[1]}${search}`;
-  }
-
-  const legacyTeamThread = pathname.match(
-    /^\/workspace\/team\/(?!join(?:\/|$))([^/?#]+)$/,
-  );
-  if (legacyTeamThread) {
-    const [, threadId] = legacyTeamThread;
-    return `#/workspace/realtime/${threadId}${search}`;
-  }
-
-  const legacyAgentChat = pathname.match(
-    /^\/workspace\/agents\/([^/?#]+)\/chats\/([^/?#]+)$/,
-  );
-  if (legacyAgentChat) {
-    const [, agent, threadId] = legacyAgentChat;
-    const params = new URLSearchParams(search);
-    if (agent && !params.has("agent")) {
-      params.set("agent", safeDecodePathSegment(agent));
-    }
-    const query = params.toString() ? `?${params.toString()}` : "";
-    return threadId === "new"
-      ? `#/workspace/realtime/new${query}`
-      : `#/workspace/realtime/${threadId}${query}`;
   }
 
   return `#${normalized}`;
