@@ -1871,6 +1871,26 @@ def create_app(
     except Exception as _aw_exc:  # noqa: BLE001
         logging.getLogger(__name__).warning("agent_world_router failed to mount: %s", _aw_exc)
 
+    # ─── 资产 Registry 消费(母体接 registry · octopus-runtime SDK)──────────────
+    # 浏览公网 registry 技能 + 按需安装(下载→验签→落地 skills/public→运行时热注册)。
+    try:
+        from runtime.sensing.gateway.registry_consumer_router import (
+            create_registry_consumer_router,
+        )
+
+        app.include_router(
+            create_registry_consumer_router(
+                skill_registry=state.registry,
+                identity_store=cocoloop_identity_store,
+                require_auth=cocoloop_require_auth,
+                jwt_secret=cocoloop_jwt_secret,
+                jwt_issuer=cocoloop_jwt_issuer,
+                jwt_audience=cocoloop_jwt_audience,
+            )
+        )
+    except Exception as _reg_exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("registry_consumer_router failed to mount: %s", _reg_exc)
+
     # ─── 企业版角色资产消费(数字分身归并 C·只读)──────────────
     # 配 OCTOPUS_ENTERPRISE_URL 时,市场可列举企业版托管的角色资产;不配则
     # available=false。消费而非 fork(见 enterprise_assets_router)。

@@ -247,20 +247,22 @@ function EmailLoginForm() {
   async function sendCode() {
     const addr = email.trim();
     if (!isValidEmail(addr)) {
-      toast.error("请输入有效的邮箱地址");
+      toast.error(t.auth.errors.invalidEmail);
       return;
     }
     setSending(true);
     try {
       const r = await octAuthApi.emailSend(addr);
-      toast.success(t.auth.success.codeSent);
+      toast.success(t.auth.success.emailCodeSent);
       if (r.dev_code) toast.message(`验证码(开发模式): ${r.dev_code}`);
       setCooldown(SMS_COOLDOWN_SECONDS);
     } catch (err) {
       if (err instanceof OctApiError && err.status === 503) {
         toast.error(t.auth.errors.moliliNotEnabled);
       } else {
-        toast.error(err instanceof Error ? err.message : t.auth.errors.sendFailed);
+        toast.error(
+          err instanceof Error ? err.message : t.auth.errors.sendFailed,
+        );
       }
     } finally {
       setSending(false);
@@ -271,11 +273,11 @@ function EmailLoginForm() {
     e.preventDefault();
     const addr = email.trim();
     if (!addr || !code) {
-      toast.error(t.auth.errors.fillRequired);
+      toast.error(t.auth.errors.emailFillRequired);
       return;
     }
     if (!isValidEmail(addr)) {
-      toast.error("请输入有效的邮箱地址");
+      toast.error(t.auth.errors.invalidEmail);
       return;
     }
     setSubmitting(true);
@@ -284,7 +286,9 @@ function EmailLoginForm() {
       toast.success(t.auth.success.loginSuccess);
       navigate("/workspace");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t.auth.errors.loginFailed);
+      toast.error(
+        err instanceof Error ? err.message : t.auth.errors.loginFailed,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -343,7 +347,7 @@ function EmailLoginForm() {
         {!submitting && <ArrowRightIcon className="size-4" />}
       </Button>
       <p className="px-2 text-center text-[11px] leading-5 text-muted-foreground">
-        {t.auth.terms.autoRegister}
+        {t.auth.terms.emailAutoRegister}
         {t.auth.terms.agreeTo}{" "}
         <Link
           to="/terms"
@@ -574,7 +578,11 @@ export default function LoginPage() {
               <CardTitle className="text-xl font-semibold tracking-tight text-foreground">
                 {t.auth.page.title}
               </CardTitle>
-              <CardDescription>{t.auth.page.cardDescription}</CardDescription>
+              <CardDescription>
+                {hasOct
+                  ? t.auth.page.emailCardDescription
+                  : t.auth.page.cardDescription}
+              </CardDescription>
             </CardHeader>
             <CardContent className="pt-2">
               {!providersReady ? (
@@ -631,7 +639,9 @@ export default function LoginPage() {
 
               {authStatus?.allow_registration && (
                 <div className="mt-4 text-center text-sm text-muted-foreground">
-                  {t.auth.terms.autoRegister}
+                  {hasOct
+                    ? t.auth.terms.emailAutoRegister
+                    : t.auth.terms.autoRegister}
                   <Link
                     to="/register"
                     className="text-primary hover:text-primary/80"

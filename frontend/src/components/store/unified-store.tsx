@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Globe2, Package, Wrench } from "lucide-react";
+import { Cloud, Globe2, Package, Wrench } from "lucide-react";
 
 import { AgentWorldUnified } from "@/components/workspace/agents/agent-world-unified";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { type StoreTab } from "./store-utils";
 import { ApplicationRegistryPanel } from "./application-registry-panel";
 import { LocalSkillDirectoryPanel } from "./local-skill-directory-panel";
+import { RegistrySkillsPanel } from "./registry-skills-panel";
 
 // ── Re-exports for backward compatibility ──────────────────────────────
 export { LocalSkillDirectoryPanel } from "./local-skill-directory-panel";
@@ -72,7 +73,7 @@ export function UnifiedStore({
         className="min-h-0 flex-1 gap-0"
       >
         <div className="relative shrink-0 border-b border-border/60 bg-background px-3 py-2">
-          <TabsList className="grid h-auto w-full grid-cols-3 rounded-lg border border-border/70 bg-muted/35 p-0.5 sm:w-[24rem]">
+          <TabsList className="grid h-auto w-full grid-cols-4 rounded-lg border border-border/70 bg-muted/35 p-0.5 sm:w-[30rem]">
             <TabsTrigger
               value="agents"
               className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-none"
@@ -94,6 +95,13 @@ export function UnifiedStore({
               <Wrench className="size-4" />
               {t.unifiedStore.tabs.skills}
             </TabsTrigger>
+            <TabsTrigger
+              value="registry"
+              className="gap-1.5 rounded-sm px-3 data-[state=active]:border data-[state=active]:border-primary/35 data-[state=active]:shadow-none"
+            >
+              <Cloud className="size-4" />
+              云端
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -109,6 +117,11 @@ export function UnifiedStore({
           <TabsContent value="agents" className="m-0">
             <div className="relative min-h-[520px] overflow-hidden">
               <AgentWorldUnified />
+            </div>
+          </TabsContent>
+          <TabsContent value="registry" className="m-0">
+            <div className="workspace-panel ui-density-panel min-h-[520px] rounded-2xl border border-border/60 shadow-sm shadow-black/[0.02]">
+              <RegistrySkillsPanel />
             </div>
           </TabsContent>
         </div>

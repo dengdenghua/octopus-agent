@@ -8,7 +8,10 @@ import { renderWithProviders } from "@/test/harness";
 const navigateMock = vi.fn();
 const smsSendMock = vi.fn();
 const smsLoginMock = vi.fn();
+const emailSendMock = vi.fn();
+const emailLoginMock = vi.fn();
 const getAuthProvidersMock = vi.fn();
+const allowRegistrationMock = vi.fn();
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<
@@ -31,8 +34,9 @@ vi.mock("@/core/auth/api", () => ({
 vi.mock("@/providers/AuthProvider", () => ({
   useAuth: () => ({
     smsLogin: (phone: string, code: string) => smsLoginMock(phone, code),
+    emailLogin: (email: string, code: string) => emailLoginMock(email, code),
     guestLogin: vi.fn(),
-    authStatus: { enabled: true, allow_registration: false },
+    authStatus: { enabled: true, allow_registration: allowRegistrationMock() },
     isLoading: false,
     isAuthenticated: false,
     isGuest: false,
@@ -43,6 +47,19 @@ vi.mock("@/providers/AuthProvider", () => ({
   }),
 }));
 
+vi.mock("@/core/oct", () => ({
+  octAuthApi: {
+    emailSend: (email: string) => emailSendMock(email),
+  },
+  OctApiError: class OctApiError extends Error {
+    status: number;
+    constructor(message: string, status = 500) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
+
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
@@ -51,6 +68,19 @@ vi.mock("sonner", () => ({
 }));
 
 import LoginPage from "./page";
+
+function expectTextContentIncludes(text: string) {
+  expect(
+    screen.getByText((_, node) => elementOwnsText(node, text)),
+  ).toBeInTheDocument();
+}
+
+function elementOwnsText(node: Element | null, text: string): boolean {
+  if (!node?.textContent?.includes(text)) return false;
+  return Array.from(node.children).every(
+    (child) => !child.textContent?.includes(text),
+  );
+}
 
 function renderPage() {
   // Test strings reference zh-CN copy, so prime the I18nProvider with
@@ -80,8 +110,12 @@ describe("LoginPage", () => {
     navigateMock.mockReset();
     smsSendMock.mockReset();
     smsLoginMock.mockReset();
+    emailSendMock.mockReset();
+    emailLoginMock.mockReset();
     getAuthProvidersMock.mockReset();
+    allowRegistrationMock.mockReset();
     getAuthProvidersMock.mockResolvedValue([{ id: "molili" }]);
+    allowRegistrationMock.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -95,6 +129,33 @@ describe("LoginPage", () => {
     // Legacy password tab was removed upstream · nothing here asks
     // for a password.
     expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
+  });
+
+  it("uses email-specific copy when Oct email auth is available", async () => {
+    getAuthProvidersMock.mockResolvedValue([{ id: "oct" }]);
+
+    renderPage();
+
+    expect(await screen.findByText("邮箱验证码登录，自动绑定大模型与积分")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "邮箱" })).toBeInTheDocument();
+    expectTextContentIncludes("未注册邮箱将自动创建账号");
+    expect(screen.queryByText("手机号直接登录，自动绑定大模型与积分")).not.toBeInTheDocument();
+    expect(screen.queryByText("未注册手机号将自动创建账号")).not.toBeInTheDocument();
+  });
+
+  it("uses email-specific registration copy outside the form too", async () => {
+    getAuthProvidersMock.mockResolvedValue([{ id: "oct" }]);
+    allowRegistrationMock.mockReturnValue(true);
+
+    renderPage();
+
+    expect(await screen.findByText("邮箱验证码登录，自动绑定大模型与积分")).toBeInTheDocument();
+    expect(
+      screen.getAllByText((_, node) =>
+        elementOwnsText(node, "未注册邮箱将自动创建账号"),
+      ),
+    ).toHaveLength(2);
+    expect(screen.queryByText("未注册手机号将自动创建账号")).not.toBeInTheDocument();
   });
 
   it("获取验证码 is enabled by default; invalid phone surfaces toast error", async () => {

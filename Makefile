@@ -1,6 +1,6 @@
 .PHONY: install install-all quickstart quickstart-serve test test-fast test-unit test-integration verify-local verify-full-stack lint lint-invariants lint-ruff format fix clean tree \
         security \
-        dev \
+        dev bootstrap-skills \
         up up-full down logs restart ps rebuild \
         k8s-apply k8s-delete k8s-status \
         frontend-install frontend-dev frontend-build frontend-clean frontend-typecheck \
@@ -72,6 +72,10 @@ clean:  ## Clean caches
 # Implementation note.
 # Implementation note.
 # Implementation note.
+# ─── Registry · 停止打包(registry 为单一事实源,启动前按 lockfile 同步技能)───
+bootstrap-skills:  ## Sync registry skills from skills.lock.json → skills/public (run before serve)
+	python -m octopus_runtime bootstrap --lockfile skills.lock.json --skills-dir skills/public
+
 # Implementation note.
 dev:  ## Run local development server with config.local.yaml and .env
 	@test -f config.local.yaml || { echo "ERROR: config.local.yaml 不存在 · 先建一份真 LLM 配置（可参考 config.example.yaml 然后改 model + mock_response=null）"; exit 1; }

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type StoreTab = "agents" | "plugins" | "skills";
+export type StoreTab = "agents" | "plugins" | "skills" | "registry";
 
 export type LocalSkill = SkillInfo & {
   affinity?: string[];

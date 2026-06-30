@@ -1,0 +1,66 @@
+"""octopus-runtime · materializer(capability-plane.md §B「落地」半边)。
+
+把下载的资产落到产品**现有磁盘布局**:prompt-skill → ``<skills_dir>/<slug>/SKILL.md``,
+之后产品自己的 loader(``register_market_skills``)按现有逻辑接管(prompt handler、enabled 闸)。
+
+**安全分水岭**:只落地 ``kind=data``(prompt_pack 等声明式资产);``kind=code``(带执行器的技能/插件)
+只能作广告——执行代码永远留在产品本地、不过线(三种 skill kind 决策)。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from .client import DEFAULT_BASE, AssetPayload, RegistryClient
+
+# 可安全落地的类型:type=skill 资产 = SKILL.md prompt-pack —— body 被产品当 **prompt 注入**、
+# 从不作为代码执行,故落地安全(registry 把 skill 粗标 kind=code 是为将来签名/沙箱策略,
+# 不代表 body 是可执行码)。真正可执行的(plugin 等集成)默认不落地,需 allow_code 显式放开。
+SAFE_TYPES = {"skill"}
+
+
+def _is_prompt_pack(p: AssetPayload) -> bool:
+    return p.type in SAFE_TYPES
+
+
+def _skill_md(p: AssetPayload) -> str:
+    """registry 的 skill body 无 frontmatter → 用信封 name/description 重建,落成 agent 现有格式。"""
+    name = (p.name or p.slug).strip()
+    desc = " ".join((p.description or "").split())  # 压成单行,贴 SKILL.md frontmatter
+    return f"---\nname: {name}\ndescription: {desc}\nsource: registry\n---\n\n{p.body.strip()}\n"
+
+
+def materialize_skill(p: AssetPayload, skills_dir: Path) -> Path:
+    """落地一个 prompt-skill 到 ``<skills_dir>/<slug>/SKILL.md``,返回写入路径。"""
+    dest = Path(skills_dir) / p.slug
+    dest.mkdir(parents=True, exist_ok=True)
+    md = dest / "SKILL.md"
+    md.write_text(_skill_md(p), encoding="utf-8")
+    return md
+
+
+def sync_skills(
+    slugs: list[str],
+    skills_dir: Path | str,
+    *,
+    base_url: str = DEFAULT_BASE,
+    allow_code: bool = False,
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]], list[tuple[str, str]]]:
+    """拉取 + 校验 + 落地一批技能。返回 (ok, skipped, errors),各元素 (slug, info)。"""
+    client = RegistryClient(base_url)
+    skills_dir = Path(skills_dir)
+    ok: list[tuple[str, str]] = []
+    skipped: list[tuple[str, str]] = []
+    errors: list[tuple[str, str]] = []
+    for slug in slugs:
+        asset_id = slug if "/" in slug else f"skill/{slug}"
+        try:
+            p = client.fetch(asset_id)
+            if not _is_prompt_pack(p) and not allow_code:
+                skipped.append((slug, f"type={p.type or '?'}/kind={p.kind or '?'}:可执行资产默认不落地(--allow-code 放开)"))
+                continue
+            md = materialize_skill(p, skills_dir)
+            ok.append((slug, str(md)))
+        except Exception as exc:  # noqa: BLE001 — 单个坏不影响整批
+            errors.append((slug, str(exc)))
+    return ok, skipped, errors
