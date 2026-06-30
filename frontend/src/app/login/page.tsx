@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRightIcon,
   KeyRoundIcon,
+  MailIcon,
   SmartphoneIcon,
   SparklesIcon,
   TargetIcon,
@@ -28,6 +29,7 @@ import {
   isMoliliDisabled,
   moliliSmsSend,
 } from "@/core/auth/api";
+import { octAuthApi, OctApiError } from "@/core/oct";
 import { useI18n } from "@/core/i18n/hooks";
 import { useAuth } from "@/providers/AuthProvider";
 import { toast } from "sonner";
@@ -217,6 +219,150 @@ function SmsLoginForm() {
   );
 }
 
+function isValidEmail(raw: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw.trim());
+}
+
+function EmailLoginForm() {
+  const navigate = useNavigate();
+  const { emailLogin } = useAuth();
+  const { t } = useI18n();
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [sending, setSending] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    tickRef.current = setInterval(() => {
+      setCooldown((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current);
+    };
+  }, [cooldown]);
+
+  async function sendCode() {
+    const addr = email.trim();
+    if (!isValidEmail(addr)) {
+      toast.error("请输入有效的邮箱地址");
+      return;
+    }
+    setSending(true);
+    try {
+      const r = await octAuthApi.emailSend(addr);
+      toast.success(t.auth.success.codeSent);
+      if (r.dev_code) toast.message(`验证码(开发模式): ${r.dev_code}`);
+      setCooldown(SMS_COOLDOWN_SECONDS);
+    } catch (err) {
+      if (err instanceof OctApiError && err.status === 503) {
+        toast.error(t.auth.errors.moliliNotEnabled);
+      } else {
+        toast.error(err instanceof Error ? err.message : t.auth.errors.sendFailed);
+      }
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const addr = email.trim();
+    if (!addr || !code) {
+      toast.error(t.auth.errors.fillRequired);
+      return;
+    }
+    if (!isValidEmail(addr)) {
+      toast.error("请输入有效的邮箱地址");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await emailLogin(addr, code.trim());
+      toast.success(t.auth.success.loginSuccess);
+      navigate("/workspace");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t.auth.errors.loginFailed);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="email">邮箱</Label>
+        <div className="relative">
+          <MailIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            autoComplete="email"
+            autoFocus
+            className="pl-9"
+          />
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="email-code">{t.auth.verificationCode}</Label>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <KeyRoundIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/60" />
+            <Input
+              id="email-code"
+              type="text"
+              inputMode="numeric"
+              placeholder={t.auth.placeholders.code}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={sendCode}
+            disabled={sending || cooldown > 0}
+            className="shrink-0"
+          >
+            {cooldown > 0
+              ? `${cooldown}s`
+              : sending
+                ? t.auth.sending
+                : t.auth.sendCode}
+          </Button>
+        </div>
+      </div>
+      <Button type="submit" className="w-full" disabled={submitting}>
+        {submitting ? t.auth.loggingIn : t.auth.login}
+        {!submitting && <ArrowRightIcon className="size-4" />}
+      </Button>
+      <p className="px-2 text-center text-[11px] leading-5 text-muted-foreground">
+        {t.auth.terms.autoRegister}
+        {t.auth.terms.agreeTo}{" "}
+        <Link
+          to="/terms"
+          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
+        >
+          {t.auth.terms.userAgreement}
+        </Link>{" "}
+        {t.common.other}{" "}
+        <Link
+          to="/privacy"
+          className="text-primary underline-offset-2 hover:text-primary/80 hover:underline"
+        >
+          {t.auth.terms.privacyPolicy}
+        </Link>
+      </p>
+    </form>
+  );
+}
+
 function LocalLoginForm({
   passwordRequired,
 }: {
@@ -330,6 +476,7 @@ export default function LoginPage() {
   }, []);
 
   const providersReady = authProviders !== null;
+  const hasOct = authProviders?.some((p) => p.id === "oct") ?? false;
   const hasMolili = authProviders?.some((p) => p.id === "molili") ?? false;
   const localProvider = authProviders?.find((p) => p.id === "local") ?? null;
 
@@ -434,6 +581,25 @@ export default function LoginPage() {
                 <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
                   {t.common.loading}
                 </div>
+              ) : hasOct && localProvider ? (
+                <Tabs defaultValue="email" className="w-full">
+                  <TabsList className="mb-5 grid w-full grid-cols-2">
+                    <TabsTrigger value="email">邮箱登录</TabsTrigger>
+                    <TabsTrigger value="local">
+                      {localProvider.label ?? t.registerPage.usernameLabel}
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="email">
+                    <EmailLoginForm />
+                  </TabsContent>
+                  <TabsContent value="local">
+                    <LocalLoginForm
+                      passwordRequired={localProvider.password_required === true}
+                    />
+                  </TabsContent>
+                </Tabs>
+              ) : hasOct ? (
+                <EmailLoginForm />
               ) : hasMolili && localProvider ? (
                 <Tabs defaultValue="sms" className="w-full">
                   <TabsList className="mb-5 grid w-full grid-cols-2">

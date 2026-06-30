@@ -21,6 +21,7 @@ import {
   _writeToken,
   _clearTokens,
 } from "@/core/auth/api";
+import { octAuthApi } from "@/core/oct";
 
 import { swallow } from "@/core/utils/log";
 import type {
@@ -130,6 +131,7 @@ interface AuthContextType {
   isGuest: boolean;
   login: (request: LoginRequest) => Promise<void>;
   smsLogin: (phone: string, code: string) => Promise<void>;
+  emailLogin: (email: string, code: string) => Promise<void>;
   /** Deprecated: guest mode is disabled when auth is enabled. */
   guestLogin: () => Promise<void>;
   register: (request: RegisterRequest) => Promise<void>;
@@ -226,6 +228,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const emailLogin = useCallback(async (email: string, code: string) => {
+    // oct 账号网关:邮箱验证码登录 → agent 自有会话 JWT
+    const response = await octAuthApi.emailLogin(email, code);
+    if (response.user) {
+      const normalized = normalizeUserIdentity(
+        response.user as unknown as User,
+        null,
+        email,
+        response.credits,
+      );
+      if (response.access_token) _writeToken(response.access_token, normalized);
+      setUser(normalized);
+    }
+  }, []);
+
   const guestLogin = useCallback(async () => {
     _clearGuestState();
     setUser(null);
@@ -264,6 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isGuest,
       login,
       smsLogin,
+      emailLogin,
       guestLogin,
       register,
       logout,
@@ -277,6 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isGuest,
       login,
       smsLogin,
+      emailLogin,
       guestLogin,
       register,
       logout,
