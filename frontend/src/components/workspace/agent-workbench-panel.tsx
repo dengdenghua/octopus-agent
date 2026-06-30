@@ -29,6 +29,7 @@ import { DotProgress } from "@/components/workspace/swarm/dot-progress";
 import { BrowserPreviewPanel } from "./browser-preview-panel";
 import { LivePreviewPanel } from "./live-preview-panel";
 import { CoworkCollabBar } from "./cowork-collab-bar";
+import { CollaborationSessionPanel } from "./collaboration-session-view";
 import { WorkstationSeat } from "./workstation-seat";
 import type { ExtractedCodeBlocks } from "@/lib/extract-code-blocks";
 import {
@@ -1310,7 +1311,12 @@ export function AgentWorkbenchPanel({
       </header>
 
       {threadId ? (
-        <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
+        <>
+          <CoworkCollabBar threadId={threadId} rosterSeats={rosterSeats} />
+          <div className="px-3 pb-2">
+            <CollaborationSessionPanel threadId={threadId} onlyWhenRoomLinked />
+          </div>
+        </>
       ) : null}
 
       {effectiveEmbeddedPage ? (

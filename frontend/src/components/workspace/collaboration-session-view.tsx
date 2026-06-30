@@ -1,4 +1,9 @@
-import { LinkIcon, ListTodoIcon, MessageSquareIcon, UsersIcon } from "lucide-react";
+import {
+  LinkIcon,
+  ListTodoIcon,
+  MessageSquareIcon,
+  UsersIcon,
+} from "lucide-react";
 
 import { useCollabSession } from "@/core/cowork/hooks";
 import type { CollaborationSession } from "@/core/cowork/types";
@@ -39,7 +44,8 @@ export function CollaborationSessionView({
   session: CollaborationSession;
   t: T;
 }) {
-  const modeMeta = TEAM_MODE_META[session.mode as TeamMode] ?? TEAM_MODE_META.chat;
+  const modeMeta =
+    TEAM_MODE_META[session.mode as TeamMode] ?? TEAM_MODE_META.chat;
   const ModeIcon = modeMeta.icon;
   return (
     <div
@@ -54,8 +60,16 @@ export function CollaborationSessionView({
           <ModeIcon className="size-3.5" aria-hidden="true" />
           {modeMeta.label}
         </span>
-        <Stat icon={UsersIcon} value={session.roster.length} label={t.coworkCollab.members} />
-        <Stat icon={ListTodoIcon} value={session.tasks.length} label={t.coworkCollab.kindTask} />
+        <Stat
+          icon={UsersIcon}
+          value={session.roster.length}
+          label={t.coworkCollab.members}
+        />
+        <Stat
+          icon={ListTodoIcon}
+          value={session.tasks.length}
+          label={t.coworkCollab.kindTask}
+        />
       </div>
 
       <PresenceDots members={session.presence} t={t} />
@@ -67,10 +81,12 @@ export function CollaborationSessionView({
         >
           <span
             className="inline-flex items-center gap-1 truncate text-[11px] text-muted-foreground"
-            title={session.room_id}
+            title={`${t.coworkCollab.linkedRoom}: ${session.room_id}`}
           >
             <LinkIcon className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="truncate font-medium text-foreground">{session.room_id}</span>
+            <span className="truncate font-medium text-foreground">
+              {session.room_id}
+            </span>
           </span>
           <Stat
             icon={UsersIcon}
@@ -88,17 +104,24 @@ export function CollaborationSessionView({
   );
 }
 
-/** Live panel: fetches the unified session and renders it. */
+/** Live panel: fetches the unified session and renders it.
+ *
+ * ``onlyWhenRoomLinked`` suppresses the panel until the cowork thread is linked
+ * to a Team Room — used where a compact presence bar already covers the
+ * cowork-only case, so this panel surfaces *only* the extra linked-room surface. */
 export function CollaborationSessionPanel({
   threadId,
   className,
+  onlyWhenRoomLinked = false,
 }: {
   threadId: string;
   className?: string;
+  onlyWhenRoomLinked?: boolean;
 }) {
   const { t } = useI18n();
   const { data: session } = useCollabSession(threadId);
   if (!session) return null;
+  if (onlyWhenRoomLinked && !session.room_id) return null;
   return (
     <div className={cn("w-full", className)}>
       <CollaborationSessionView session={session} t={t} />
