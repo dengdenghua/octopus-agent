@@ -30,8 +30,19 @@ from .links import MoliliLink, MoliliLinkStore
 logger = logging.getLogger(__name__)
 
 
-def _actor_from_phone(phone: str) -> str:
-    return "molili:" + "".join(ch for ch in phone if ch.isdigit() or ch == "+")
+def _actor_from_phone(identifier: str) -> str:
+    """Stable actor id from the login identifier.
+
+    The gateway may send a phone OR an email — the mobile gateway uses email
+    login. Digits-only extraction would collapse every email to the same actor
+    (``molili:``), merging all email users into one identity; so keep digits for
+    a pure phone and fall back to the full (lowercased) identifier otherwise.
+    """
+    ident = (identifier or "").strip()
+    digits = "".join(ch for ch in ident if ch.isdigit() or ch == "+")
+    if digits and digits == ident:
+        return "molili:" + digits
+    return "molili:" + ident.lower()
 
 
 # ═══════════════════════════════════════════════════════════

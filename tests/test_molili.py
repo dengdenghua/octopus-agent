@@ -743,3 +743,18 @@ class TestCreateAppWiring:
         )
         assert account.status_code == 200
         assert account.json()["molili_user_id"] == "mock-13800001234"
+
+
+def test_actor_from_identifier_phone_vs_email() -> None:
+    """Email login must not collapse all users to a single actor.
+
+    The gateway uses email login; digits-only extraction would map every email
+    to ``molili:`` (one shared identity). Distinct emails → distinct actors;
+    pure phones still key on digits (back-compat).
+    """
+    from runtime.adapters.integrations.molili.router_auth import _actor_from_phone
+
+    assert _actor_from_phone("13800138000") == "molili:13800138000"
+    assert _actor_from_phone("+8613800138000") == "molili:+8613800138000"
+    assert _actor_from_phone("a@x.com") == "molili:a@x.com"
+    assert _actor_from_phone("a@x.com") != _actor_from_phone("b@x.com")
