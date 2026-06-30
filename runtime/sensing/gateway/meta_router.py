@@ -152,6 +152,7 @@ def create_meta_router(
     skill_library_dirs: Sequence[Path | str] | None = None,
     include_default_skill_library: bool = False,
     molili_config: Any = None,
+    oct_config: Any = None,
     local_auth_config: Any = None,
     identity_store: Any = None,
     molili_jwt_secret: str | None = None,
@@ -714,6 +715,14 @@ def create_meta_router(
         configured, don't show a broken form".
         """
         providers: list[dict[str, Any]] = []
+        if oct_config is not None and getattr(oct_config, "enabled", False):
+            providers.append({
+                "id": "oct",
+                "label": "邮箱登录",
+                "mock_mode": bool(getattr(oct_config, "mock_mode", False)),
+                "endpoint_send": "/api/auth/oct/email/send",
+                "endpoint_verify": "/api/auth/oct/email/login",
+            })
         if molili_config is not None and getattr(
             molili_config, "enabled", False,
         ):

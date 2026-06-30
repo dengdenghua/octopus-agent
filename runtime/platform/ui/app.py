@@ -1323,6 +1323,7 @@ def create_app(
             skill_library_dirs=list(dict.fromkeys(_skill_library_dirs)),
             include_default_skill_library=(registry is None or stack is not None),
             molili_config=molili_config,
+            oct_config=oct_config,
             local_auth_config=local_auth_runtime_config,
             identity_store=cocoloop_identity_store,
             molili_jwt_secret=cocoloop_jwt_secret,
