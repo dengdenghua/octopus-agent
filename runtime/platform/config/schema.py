@@ -249,6 +249,22 @@ class MoliliConfig(BaseModel):
     auth: MoliliAuthConfig = Field(default_factory=MoliliAuthConfig)
 
 
+class OctConfig(BaseModel):
+    """oct 账号网关(octopus 自己的,octopus-mobile server)· 替代 molili。"""
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    base_url: str = "https://api.octoapk.com"
+    default_model: str = "qwen3.5-flash"
+    request_timeout_seconds: float = Field(default=15.0, ge=1.0, le=600.0)
+    llm_timeout_seconds: float = Field(default=120.0, ge=1.0, le=600.0)
+    mock_mode: bool = False
+    jwt_secret: str | None = Field(default=None, min_length=32)
+    jwt_expire_seconds: int = Field(default=2_592_000, gt=0)
+    jwt_issuer: str = "octopus-agent"
+
+
 class LocalAuthConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
@@ -327,6 +343,7 @@ class AgentConfig(BaseModel):
     canary: CanaryConfig = Field(default_factory=CanaryConfig)
     drift: DriftConfig = Field(default_factory=DriftConfig)
     molili: MoliliConfig = Field(default_factory=MoliliConfig)
+    oct: OctConfig = Field(default_factory=OctConfig)
     local_auth: LocalAuthConfig = Field(default_factory=LocalAuthConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     tentacle: TentacleConfig = Field(default_factory=TentacleConfig)
